@@ -19,13 +19,7 @@ import { racePair, seedLegacySellingUnits } from "../test/fixtures.js";
 
 /**
  * Category authoring against a real database, including three pairs of transactions started
- * together.
- *
- * This replaces a real-PostgreSQL suite whose `race` helper took two pooled connections and polled
- * `pg_blocking_pids` until the second backend was seen waiting on a lock the first held. One write
- * transaction runs on the venue file at a time now; `racePair` (`test/fixtures.ts`) carries the
- * mechanism, the measurement and the control, and it is the receipt for the
- * `pg_advisory_xact_lock` and the `select … for update` that `categories.ts` used to take.
+ * together. `racePair` (`test/fixtures.ts`) carries the mechanism, the measurement and the control.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, action);
@@ -283,8 +277,6 @@ it("reports a category's dependants for the delete preview", async () => {
   expect(deps.products.find((p) => p.id === p1Id)!.reporting).toBe(true);
   expect(deps.products.find((p) => p.id === p2Id)!.reporting).toBe(false);
 });
-// The bulk add's write is one multi-row `insert … on conflict do nothing` plus one set-based
-// update. It stays here with the fixture it shares.
 async function bulkAddFixture() {
   const { a: c, b: d } = await fixture();
   const p1Id = await seedProduct();

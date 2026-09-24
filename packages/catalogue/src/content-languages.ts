@@ -20,7 +20,7 @@ import "./errors.js";
  * The single read is safe because nothing else can write the configuration while this transaction
  * runs: `withTransaction` (`packages/db/src/tenancy.ts`) opens its body inside the venue file's
  * write queue, which admits one write transaction at a time
- * (`packages/store/src/write-queue.ts`). That is what an advisory lock taken here used to arrange.
+ * (`packages/store/src/write-queue.ts`).
  */
 export async function findContentTranslationGap(
   tx: Transaction,
@@ -58,19 +58,14 @@ export async function listContentTranslationGaps(
   // `product`, `variant`, `option_list`, `option_label` and `extra_list` are the kinds whose
   // customer-facing name is optional, so the query filters a wholly-absent one (null or {}) out of
   // them: absent is not a gap, only a partly filled map is. The kinds it emits unfiltered —
-  // `category`, `unit` and `section` — have no optional customer name;
-  // their name is the only text they have and stays required. `extra_list_items` is in neither
-  // group because it holds no name at all: its columns are id, list_id, product_id, sort,
-  // max_quantity, preselected and price (drizzle/0000_catalogue_baseline.sql), so there is no map
-  // here for this report to read.
+  // `category`, `unit` and `section` — have no optional customer name; their name is the only text
+  // they have and stays required.
   // `translations` arrives as the JSON TEXT the column stores: this is a raw statement, so no
-  // drizzle column mapping runs over the result, and `json()` columns are plain `text` here
-  // (`packages/db/src/schema/columns.ts`). It is parsed below rather than compared as text.
+  // drizzle column mapping runs over the result.
   // A variant is a `products` row with a `parent_id`, so the product branch keeps to top-level
   // rows and the variant branch to the rest; otherwise each variant would be counted twice. An
-  // Inactive (removed) variant is on no menu offer (`readOfferVariants`,
-  // `packages/catalogue/src/operations.ts`), so a language it lacks reaches no diner and must not
-  // block a change of default.
+  // Inactive (removed) variant is on no menu offer, so a language it lacks reaches no diner and must
+  // not block a change of default.
   const result = await tx.execute<{
     kind: string;
     id: string;

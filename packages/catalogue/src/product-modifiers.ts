@@ -7,22 +7,14 @@ import { optionLists } from "./schema/options.js";
 import type { ProductModifierRef } from "./product-types.js";
 import "./errors.js";
 
-// The shape itself lives in `product-types.ts` with the other wire shapes, because the dashboard
-// imports it and this file imports drizzle and `@waitron/db`. Re-exported so `product-modifiers.js`
-// stays the import path it was.
 export type { ProductModifierRef } from "./product-types.js";
 
 /**
- * The two kinds of list a product's attachment list can name. A catalogue FACT, declared once: the
- * product-editor parser (`parseProductEditorInput`, product-editor-input.ts) and the management
- * API's body screen (`parseProductModifiers`, apps/server/src/catalogue-api.ts) both decide what
- * to refuse from it, so a third kind is added here and nowhere else.
+ * The two kinds of list a product's attachment list can name. Both body parsers decide what to
+ * refuse from it, so a third kind is added here and nowhere else.
  *
- * It is NOT in `product-types.ts` with the {@link ProductModifierRef} shape itself: that file is a
- * browser leaf that must emit no runtime code at all, and a `const` there fails
- * `scripts/dashboard-browser-purity.test.ts`. The `satisfies` below ties the two together in ONE
- * direction — a kind added here that the type does not have fails to compile, while a kind added
- * to the TYPE and not here compiles fine, and would then be refused by both parsers.
+ * The `satisfies` ties this to {@link ProductModifierRef} in ONE direction only: a kind added to the
+ * TYPE and not here compiles fine, and is then refused by both parsers.
  */
 export const MODIFIER_LIST_KINDS = [
   "extras",
@@ -35,40 +27,15 @@ export function isModifierListKind(value: unknown): value is ProductModifierRef[
 }
 
 /**
- * An id may arrive in either case, and settling it is this file's job rather than the column's.
- *
- * It USED to be the column's: an id was a PostgreSQL `uuid`, which compares either case in SQL and
- * hands its value back lower-cased. It is a plain `text` column now
- * (`packages/db/src/schema/columns.ts`) and text compares byte for byte, so an id the caller sent
- * in upper case finds no row at all — measured on node:sqlite (Node v26.7.0): a child naming a
- * lower-cased parent in upper case is refused `FOREIGN KEY constraint failed`, while the same
- * insert in lower case is accepted.
- *
- * Every id this file writes or looks up therefore passes through here — the LIST ids, which
- * {@link assertRefsExist} also compares in JavaScript, and the PRODUCT id, which reaches SQL as a
- * foreign key and comes back as a map key. `updateExtraList` (extras.ts) and `updateOptionList`
- * (options.ts) normalise their caller's id at the same boundary.
+ * An id may arrive in either case, and an id column compares byte for byte
+ * (packages/shared/src/ids.ts), so every id this file writes or looks up passes through here.
  */
 const normalise = (value: string) => value.toLowerCase();
 
 /**
- * Every named product's attachment list, in `sort` order, keyed by product id.
- *
- * The keys, and every list id in the values, are LOWER-CASED whatever case the caller asked in —
- * {@link normalise} settles the ids on the way in and {@link writeProductModifiers} stores them
- * that way, so a caller holding an upper-cased product id may still look one up, and may also key
- * by its own lower-cased form. `readProductEditor` (product-editor.ts) lower-cases before it asks;
- * `readProductExtras` (extra-projection.ts) hands the keys on as its own, and `listProducts`
- * (operations.ts) looks up ids that came straight out of the database and are lower-cased already.
- *
- * A product with NO attachments has no entry at all — not an empty array. Callers read `?? []`, so
- * either would work for them; "leaves a product with no attachments out of the map entirely"
- * (product-modifiers.test.ts) is what fixes which one it is.
- *
- * ONE query whatever the number of products (CLAUDE.md §3), and none at all for an empty list. The
- * tiebreak on `id` after `sort` is there so two rows a body gave the same position keep a stable
- * order between reads; nothing written through {@link writeProductModifiers} can produce that pair,
- * because it numbers the positions itself.
+ * Every named product's attachment list, in `sort` order, keyed by product id. The keys, and every
+ * list id in the values, are LOWER-CASED whatever case the caller asked in. A product with NO
+ * attachments has no entry at all — not an empty array.
  */
 export async function readProductModifiers(
   tx: Transaction,
@@ -102,21 +69,6 @@ export async function readProductModifiers(
 /** A kind-and-id pair as one key, joined by a byte no uuid can contain. */
 const refKey = (ref: ProductModifierRef) => `${ref.kind}\u0000${ref.id}`;
 
-/**
- * The list this ref names exists — `true` when the row is there, `false` when nothing holds that
- * id.
- *
- * This read used to take `for key share`, the same lock the insert in
- * {@link writeProductModifiers} takes on the row a few statements later when
- * `product_modifiers_extra_list_fk` (or its options twin) is checked, so that a concurrent delete
- * of one of these lists could not slip between the two. There is no concurrent delete: one write
- * transaction runs on the venue file at a time. `assertExtraListForWrite` (extras.ts) states the
- * mechanism and carries the receipt.
- *
- * One statement per id rather than one `in (…)`: what the loop buys is now only the ORDER the
- * refusal reports in, which {@link assertRefsExist} states. The count is the number of lists ONE
- * product attaches.
- */
 async function listExists(tx: Transaction, ref: ProductModifierRef): Promise<boolean> {
   const rows =
     ref.kind === "extras"
@@ -128,24 +80,11 @@ async function listExists(tx: Transaction, ref: ProductModifierRef): Promise<boo
 /**
  * Refuses a ref naming no list, and a list named twice, as `product.invalid` carrying that ref's
  * position in the body — so the product editor can put the message beside the input it came from.
- * Left to the database, the first surfaces as a `23503` from one of the two list keys and the
- * second as a `23505` from a unique index, both driver errors carrying no field at all.
- *
- * The foreign keys and the indexes STAY: they are the database backstop under this refusal, for a
- * write that never comes through here — the same division `assertProductsExist` and
- * `extra_list_items_list_product_uq` already make in extras.ts.
- *
- * The refusal names the FIRST entry the body sent that names nothing, which is why the reads run
- * in a sorted order and the report runs in body order. A concurrent delete of one of these lists
- * used to be a real hazard here — this read took `for key share` to hold each row against one —
- * and it is not one now: one write transaction runs on the venue file at a time
- * (`assertExtraListForWrite`, extras.ts).
+ * The foreign keys and unique indexes stay as the database backstop for a write that never comes
+ * through here.
  *
  * What this does NOT check is the product: an unknown `productId` reaches
- * `product_modifiers_product_fk` and surfaces as a `23503` driver error. Neither caller can send
- * one: `saveProductEditor` (product-editor.ts) passes the id it just created or just locked, and
- * the product routes (`apps/server/src/catalogue-api.ts`) pass the id `createProduct` returned or
- * one `assertOwned` has already resolved, all inside the one transaction.
+ * `product_modifiers_product_fk` as a driver error.
  */
 async function assertRefsExist(tx: Transaction, refs: ProductModifierRef[]): Promise<void> {
   const seen = new Set<string>();
@@ -157,8 +96,7 @@ async function assertRefsExist(tx: Transaction, refs: ProductModifierRef[]): Pro
 
   const held = new Set<string>();
   // Awaited in turn, never Promise.all: they share one transaction (CLAUDE.md §3). Duplicates are
-  // already refused, so no pair of keys is equal and the comparator never has to say two refs are
-  // the same.
+  // already refused, so the comparator never has to say two refs are equal.
   const ordered = [...refs].sort((left, right) => (refKey(left) < refKey(right) ? -1 : 1));
   for (const ref of ordered) if (await listExists(tx, ref)) held.add(refKey(ref));
 
@@ -170,29 +108,13 @@ async function assertRefsExist(tx: Transaction, refs: ProductModifierRef[]): Pro
 
 /**
  * Replaces the product's whole attachment list with `refs`, in the body's order: `sort` is the
- * position in the array, so the order an editor sent is the order {@link readProductModifiers}
- * reads back. An entry the body omits is removed, and an empty body clears the list.
+ * position in the array. An entry the body omits is removed, and an empty body clears the list.
  *
- * Deleting every one of the product's rows before inserting is what keeps a reordered body legal:
- * within this transaction the product starts from nothing, so no row the body keeps can collide
- * with a row it is replacing on `product_modifiers_product_extra_uq` or its options twin. The rows
- * are minted fresh each time — an attachment row's `id` is a surrogate nothing outside this file
- * holds, so losing it costs nothing. That is the first of the two conditions CLAUDE.md §3 puts on
- * this shape, and it is discharged the way conventions-data.md prescribes:
- * `grep -rn 'REFERENCES "public"."product_modifiers' --include='*.sql' packages apps` matches
- * NOTHING on 2026-09-20, so no key outside the table names a row of it, and no caller is handed
- * one either — `grep -rn "productModifiers\.id" packages apps --include="*.ts"` returns ONE line,
- * the `orderBy` tiebreak in {@link readProductModifiers} above, which never leaves this file. (The
- * dot is escaped in that command, so this comment quoting it is not itself a match.) The second
- * condition, serialising two writers, is the paragraph below.
- *
- * Every list the body names is read BEFORE the delete below, and the refusal order that produces
- * is on {@link assertRefsExist}.
- *
- * The second condition — serialising two writers — is met by the engine rather than by this file:
- * one write transaction runs on the venue file at a time, so two saves of one product cannot
- * overlap and no delete of a list can land between this body's statements.
- * `assertExtraListForWrite` (extras.ts) states the mechanism and carries the receipt.
+ * Delete-then-insert keeps a reordered body clear of `product_modifiers_product_extra_uq` and its
+ * options twin. The rows are minted fresh each time: no foreign key in any migration references
+ * `product_modifiers`, and `productModifiers.id` is read only by the tiebreak in
+ * {@link readProductModifiers}. Two writers are serialised by `withTransaction`, which admits one
+ * write transaction per venue file (CLAUDE.md §3).
  */
 export async function writeProductModifiers(
   tx: Transaction,

@@ -15,8 +15,8 @@ import {
 } from "./categories.js";
 import { writeContentLanguages, listContentTranslationGaps } from "./content-languages.js";
 
-// Authoring results. The two transactions started together, and the cases that used to sit in a
-// real-PostgreSQL sibling, are in categories.db.test.ts.
+// Authoring results. The cases with two transactions started together are in
+// categories.db.test.ts.
 const fx = useCatalogueDb();
 const byId = <T extends { id: string }>(rows: readonly T[]): T[] =>
   [...rows].sort((a, b) => a.id.localeCompare(b.id));

@@ -4,7 +4,7 @@ import { flag, id, money, products, table } from "@waitron/db";
 import { menuItems } from "./menu.js";
 
 /**
- * What one menu changes about a variant of the product it offers (spec §15.5, plan V13): its price
+ * What one menu changes about a variant of the product it offers: its price
  * there, or that it is switched off there. A variant follows its parent onto every menu without a
  * row; a row exists only while it overrides something, which the second check enforces.
  */

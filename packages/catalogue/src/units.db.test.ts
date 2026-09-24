@@ -19,16 +19,6 @@ import { racePair, storedUnitId } from "../test/fixtures.js";
 /**
  * Units against a real database: rollback, two transactions started together, and the bulk
  * reassignment's scoping.
- *
- * This replaces a real-PostgreSQL suite that took pooled connections and watched
- * `pg_blocking_pids`. `racePair` (`test/fixtures.ts`) carries what observes serialisation now, and
- * the measurement behind it.
- *
- * WHAT WENT, and why: "changes a product's unit even while product_units is in a publication"
- * created a PostgreSQL logical-replication PUBLICATION over `product_units` and proved the table's
- * primary key doubled as its REPLICA IDENTITY, without which the reassignment upsert's UPDATE was
- * refused. SQLite has no publications and no replica identity, so there is no statement to make and
- * no refusal to provoke. Nothing else covers it, and nothing can.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
@@ -37,8 +27,7 @@ const app = <T>(action: (tx: Parameters<typeof getUnit>[0]) => Promise<T>) =>
 
 /**
  * One product on its own catalogue. Both rows go through their drizzle tables, because `id`,
- * `created_at` and `updated_at` come from each table's `$defaultFn` rather than from a SQL default
- * — a raw insert naming the other columns is refused `NOT NULL constraint failed: catalogues.id`.
+ * `created_at` and `updated_at` come from each table's `$defaultFn` rather than from a SQL default.
  * `id` is supplied only where a test needs the rows' key order to be predictable.
  */
 async function product(id: string | null = null): Promise<string> {
@@ -138,11 +127,8 @@ it("skips a product another manager moved off the source unit while the selectio
   ]);
   await app((tx) => assignProductUnit(tx, productId, source!.id));
 
-  // **WHERE THE STALENESS COMES FROM CHANGED; WHAT IS ASSERTED DID NOT.** On PostgreSQL the read
-  // and the write sat in ONE transaction and the other manager's move landed between them. One
-  // write transaction runs on the venue file at a time, so nothing can land inside another's body;
-  // the stale selection is the one a manager is actually holding — read in an earlier request,
-  // acted on in a later one, with the move committed in between.
+  // The stale selection is read in an earlier request and acted on in a later one, with the move
+  // committed in between: nothing can land inside another write transaction's body.
   await app((tx) => getUnit(tx, source!.id));
   await app((tx) => assignProductUnit(tx, productId, other!.id));
   await app((tx) => reassignProductsToUnit(tx, source!.id, [productId], target!.id));
@@ -165,11 +151,6 @@ it("two bulk reassignments listing the same products in opposite orders both com
     await assignProductUnit(tx, second, source!.id);
   });
 
-  // The DEADLOCK this case was named for — two transactions taking the same two rows in opposite
-  // order and each ending up waiting on the other — is not a shape one writer can produce, and the
-  // `40P01` the old assertion spelled out has no counterpart. What is left, and what the two
-  // assertions below always also said, is that both reassignments complete and both products end
-  // on the target.
   const results = await racePair(
     suite.db,
     (tx) => reassignProductsToUnit(tx, source!.id, [first, second], target!.id),

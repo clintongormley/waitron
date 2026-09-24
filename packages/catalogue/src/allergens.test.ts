@@ -7,7 +7,7 @@ describe("ALLERGEN_CODES", () => {
     expect(ALLERGEN_CODES).toHaveLength(14);
     expect(ALLERGEN_CODES).toContain("gluten");
     expect(ALLERGEN_CODES).toContain("molluscs");
-    expect(new Set(ALLERGEN_CODES).size).toBe(14); // no dups
+    expect(new Set(ALLERGEN_CODES).size).toBe(14);
   });
 });
 

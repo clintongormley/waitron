@@ -379,8 +379,8 @@ describe("listMenuOffers reads a variant's blanks from its parent", () => {
 });
 
 describe("a variant's reporting category comes from the product whose category rows apply", () => {
-  // Having no `product_categories` row is how a variant stores "inherit the parent's categories"
-  // (V12), so the reporting category follows the same owner as the list. A variant with rows of its
+  // Having no `product_categories` row is how a variant stores "inherit the parent's categories",
+  // so the reporting category follows the same owner as the list. A variant with rows of its
   // own and no reporting category reads its OWN null, never the parent's category outside its list.
   it("reads its own blank reporting category beside category rows of its own", async () => {
     const wine250 = await run(async (tx) => {
@@ -415,7 +415,7 @@ describe("a variant's reporting category comes from the product whose category r
 });
 
 describe("listAvailableProducts", () => {
-  // A variant listed here would read as a product in its own right (Review Focus 4).
+  // A variant listed here would read as a product in its own right.
   it("lists the parent and neither variant", async () => {
     const { products: listed } = await run((tx) => listAvailableProducts(tx, f.locationId));
     const ids = listed.map((p) => p.id);
@@ -710,7 +710,7 @@ describe("dietary declarations on a variant", () => {
 });
 
 describe("INHERITED_KEYS", () => {
-  // Spec §1.2 minus the three names (§15.2), with the price (§15.3) and the photo (V11). Pinned
+  // Spec §1.2 minus the three names (§15.2), with the price (§15.3) and the photo. Pinned
   // whole, so a key added or dropped is a decision somebody makes here rather than by accident.
   it("inherits exactly the spec's set, and none of the names, flags or identity", () => {
     expect([...INHERITED_KEYS].sort()).toEqual(

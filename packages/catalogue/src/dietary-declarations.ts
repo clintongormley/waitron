@@ -42,8 +42,8 @@ export type DietarySuitability = (typeof DIETARY_SUITABILITY)[number];
 const SUITABILITY = new Set<string>(DIETARY_SUITABILITY);
 
 /** Validate a choice's positive suitability list against the four allowed labels; a duplicate, an
- * unknown label (including the retired `no_meat`/`no_fish`), or a non-array throws the shared
- * `diet.declaration_invalid` code (reused, never renamed — repo rule). */
+ * unknown label (including `no_meat`/`no_fish`), or a non-array throws the shared
+ * `diet.declaration_invalid` code. */
 export function validateDietarySuitability(value: unknown): DietarySuitability[] {
   if (
     !Array.isArray(value) ||

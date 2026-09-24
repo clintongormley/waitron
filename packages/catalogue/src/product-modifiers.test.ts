@@ -22,15 +22,8 @@ import { createOptionList } from "./options.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
 import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 
-// One SQLite file with the real migrations applied. There is one writer on this engine and there
-// are no roles, so neither the container twin this file used to name nor the grants walkthrough it
-// used to end with has anything left to run — both are gone, and the commit message says what each
-// proved.
-//
-// Every raw `insert into product_modifiers` below supplies its own `id`. The column's value comes
-// from the table's `$defaultFn`, which drizzle runs per insert and a raw statement never reaches,
-// so without it the row is refused `NOT NULL constraint failed: product_modifiers.id` — the wrong
-// refusal for every case here. Raw rather than through the table because what these cases prove is
+// Every raw `insert into product_modifiers` below supplies its own `id`: the column's value comes
+// from drizzle's `$defaultFn`, which a raw statement never reaches. Raw because these cases prove
 // what the DATABASE refuses, for a write that goes through no write path at all.
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
@@ -39,8 +32,7 @@ const refusal = (fn: (tx: Transaction) => Promise<unknown>) => captureError(() =
 const UNKNOWN_ID = "99999999-9999-4999-8999-999999999999";
 
 /**
- * Two dishes, two products an extras list offers, and two lists of each kind, re-made per test:
- * `useVenueDb` empties every data table after each test, so the ids are minted fresh each time.
+ * Two dishes, two products an extras list offers, and two lists of each kind, re-made per test.
  * Every fixture carries DIFFERENT text so a read that picks up the wrong row is visible
  * (CLAUDE.md §4). Products are created with `unitId: null` and `categoryId: null` so nothing else
  * points at them, which is what lets the product-delete case below name the one key it is about.
@@ -97,7 +89,6 @@ describe("what the attachment table refuses", () => {
     );
 
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
-    // A CHECK is the one refusal class SQLite names, so this half is unchanged.
     expect(engineErrorMessage(error)).toContain("product_modifiers_one_reference_ck");
   });
 
@@ -115,11 +106,9 @@ describe("what the attachment table refuses", () => {
   });
 
   it("refuses an attachment naming a product, extras list or options list that does not exist", async () => {
-    // `key` is the assertion's LABEL only. SQLite reports a foreign-key refusal as the six words
-    // `FOREIGN KEY constraint failed` and names neither the constraint nor the column, so the
-    // `toContain(<constraint name>)` half of this helper has no replacement the engine can supply
-    // (`constraintTarget`, packages/db/src/constraint-target.ts). Each statement below carries
-    // exactly one unknown id, so the class plus the statement say which key fired.
+    // `key` is the assertion's LABEL only: SQLite's foreign-key refusal names neither the
+    // constraint nor the column. Each statement below carries exactly one unknown id, so the class
+    // plus the statement say which key fired.
     const missing = async (statement: ReturnType<typeof sql>, key: string) => {
       const error = await captureError(() => Promise.resolve(fx.db.execute(statement)));
       expect(isRefusal(error, FOREIGN_KEY_VIOLATION), key).toBe(true);
@@ -143,10 +132,8 @@ describe("what the attachment table refuses", () => {
   });
 
   /**
-   * The receipt for the claim the two unique indexes rest on: a unique index treats two NULLs as
-   * DIFFERENT values, so `product_modifiers_product_option_uq` constrains only the rows that carry
-   * an options list, and leaves every extras-only row of the same product alone. Run rather than
-   * read off the documentation — and re-run on this engine, since it is SQLite answering now.
+   * The two unique indexes rest on a unique index treating two NULLs as DIFFERENT values, so
+   * `product_modifiers_product_option_uq` leaves every extras-only row of the same product alone.
    */
   it("lets one product carry many extras-only rows under the options-list unique index", async () => {
     fx.db.execute(
@@ -177,9 +164,8 @@ describe("what the attachment table refuses", () => {
       ),
     );
 
-    // SQLite names the KEY that collided rather than the index, so `refusalOn` asks the question
-    // the index name used to answer: which table and columns was this refused on
-    // (packages/db/src/constraint-target.ts).
+    // SQLite names the KEY that collided rather than the index, so `refusalOn` asks which table
+    // and columns this was refused on.
     expect(
       refusalOn(error, UNIQUE_VIOLATION, {
         table: "product_modifiers",
@@ -273,10 +259,7 @@ describe("what deleting a parent row takes with it", () => {
     );
     expect(await attachmentCount()).toBe(2);
 
-    // Direct SQL because no route deletes a product row; the dashboard marks one Inactive
-    // instead. The attachment's key is the only one of the three that is ON DELETE CASCADE from
-    // `products` in this table, and the assertion below is what shows the cascade fired rather than
-    // the delete being refused.
+    // Direct SQL because no route deletes a product row; the dashboard marks one Inactive instead.
     await fx.db.execute(sql`delete from products where id = ${dishes.burger}`);
 
     expect(await attachmentCount()).toBe(1);
@@ -344,8 +327,7 @@ describe("reading and writing a product's attachment list", () => {
 
     const read = await run((tx) => readProductModifiers(tx, [dishes.burger, dishes.salad]));
 
-    // An ABSENT key, not an empty array: the doc comment on `readProductModifiers` states it and
-    // this is what pins it, because every caller reads `?? []` and would not notice either way.
+    // An ABSENT key, not an empty array: every caller reads `?? []` and would not notice either way.
     expect(read.has(dishes.salad)).toBe(false);
     expect([...read.keys()]).toEqual([dishes.burger]);
   });
@@ -387,21 +369,9 @@ describe("reading and writing a product's attachment list", () => {
   });
 
   /**
-   * This one measures the id COLUMN, not the code: a product id may arrive in either case and the
-   * column settles it, so the row a write in upper case leaves behind is found by a read in lower
-   * case, a second write in the other case REPLACES it rather than landing beside it (which
-   * `product_modifiers_product_extra_uq` would refuse), and the map comes back keyed lower-case
-   * either way.
-   *
-   * WHO settles it changed with the engine. It was the column: a PostgreSQL `uuid` normalises its
-   * input, so the file lower-cased only the LIST ids, which it also compares in JavaScript. An id
-   * is a plain `text` column here (`packages/db/src/schema/columns.ts`) and text compares byte for
-   * byte, so the product id went unnormalised by anything — an upper-cased one reached
-   * `product_modifiers.product_id` as a foreign key naming no product and came back as a raw
-   * `FOREIGN KEY constraint failed` rather than a domain refusal. `writeProductModifiers` now
-   * normalises the product id at the same boundary it normalises the list ids, which is what this
-   * case is the RED for: put the id back unnormalised and the first write here fails with that
-   * message.
+   * A product id may arrive in either case: the row a write in upper case leaves behind is found by
+   * a read in lower case, a second write in the other case REPLACES it rather than landing beside
+   * it, and the map comes back keyed lower-case either way.
    */
   it("settles a product id sent in upper case in the database, and keys the map lower-case", async () => {
     await run((tx) =>
@@ -476,15 +446,8 @@ describe("what a product's attachment write refuses", () => {
 
   /**
    * The refusal comes BEFORE the delete, and that is only measurable INSIDE one transaction: after
-   * a rollback the caller's earlier list survives either way, because the rollback undoes the
-   * delete as readily as the check prevents it. Run in one transaction, the two orders differ —
-   * an `AppError` thrown from JavaScript leaves the transaction usable, so the read below still
-   * answers.
-   *
-   * Measured, with `assertRefsExist` (product-modifiers.ts) moved to just AFTER the delete and
-   * nothing else changed: this case alone went red, on the read, `expected Map{} to deeply equal
-   * Map{ …(1) }` — the earlier list had already been deleted. Twenty-five of the twenty-six cases
-   * here cannot see that move at all.
+   * a rollback the caller's earlier list survives either way. This is the one case here that sees
+   * the check moved after the delete.
    */
   it("refuses before deleting anything, inside the caller's own transaction", async () => {
     await run(async (tx) => {
@@ -561,14 +524,9 @@ describe("a product's attachment list in the catalogue's configuration transfer"
   const transferred = CATALOGUE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
 
   it("copies both kinds of list before the rows that point at them", () => {
-    // `importConfigurationTables` inserts in this order and deletes in its reverse
-    // (apps/server/src/configuration-transfer.ts), so both parents have to come first: a row here
-    // names an extras list or an options list, and `product_modifiers_extra_list_fk` /
-    // `product_modifiers_option_list_fk` are what refuse it otherwise.
-    // `toContain` first on all three, because `indexOf` answers -1 for a name the list does not
-    // hold and -1 is less than every index, so a missing parent would satisfy the comparisons
-    // below without being there at all. `products` is NOT asserted: the catalogue's transfer list
-    // does not hold it (it belongs to the core set), so there is no position here to compare.
+    // `importConfigurationTables` inserts in this order, so both parents have to come first.
+    // `toContain` first, because `indexOf` answers -1 for a missing name, which would satisfy the
+    // comparisons below. `products` belongs to the core set, not this list.
     for (const name of ["extra_lists", "option_lists", "product_modifiers"])
       expect(transferred).toContain(name);
     expect(transferred.indexOf("extra_lists")).toBeLessThan(

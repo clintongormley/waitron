@@ -20,11 +20,8 @@ import {
   updateOptionList,
 } from "./options.js";
 
-// One SQLite file with the real migrations applied.
 // Nothing is seeded at the suite level: with no `content_languages` row, `readContentLanguages`
-// falls back to the language passed in (packages/catalogue/src/content-languages.ts), and
-// `useVenueDb` empties every data table after each test on its own
-// (packages/db/src/testing/venue-db.ts). The tests that create products seed the taxpayer row
+// falls back to the language passed in. The tests that create products seed the taxpayer row
 // themselves.
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
@@ -102,20 +99,17 @@ describe("option list CRUD", () => {
   });
 
   it("returns the lists in sort order then id order, each with its labels in sort order", async () => {
-    // Written straight to the tables: `sort` is not part of the authoring body, so a list saved
-    // through `createOptionList` always keeps the column default. The three rows are inserted in an
-    // order that matches neither the expected order nor plain id order, so the assertion fails if
-    // either half of the ordering is dropped.
+    // Written straight to the tables: `sort` is not part of the authoring body. The three rows are
+    // inserted in an order that matches neither the expected order nor plain id order, so the
+    // assertion fails if either half of the ordering is dropped.
     const late = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     const second = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
     const third = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
     await fx.db.execute(sql`
       insert into option_lists (id, name, sort) values
         (${third}, 'Third', 1), (${second}, 'Second', 1), (${late}, 'Late', 5)`);
-    // The label ids are given explicitly and in the OPPOSITE order to the labels' `sort`, so this
-    // test's label assertion fails when the `sort` key is dropped. Left to `defaultRandom()` the
-    // two ids land in either order and the assertion passes about half the time — seen doing
-    // exactly that while proving `readOptionListsByIds` below by deletion.
+    // The label ids are given explicitly and in the OPPOSITE order to the labels' `sort`: left
+    // random, the assertion would pass about half the time with the `sort` key dropped.
     const lastLabel = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
     const firstLabel = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
     await fx.db.execute(sql`
@@ -185,8 +179,7 @@ describe("option list CRUD", () => {
   });
 
   it("updates a label whose id the body sends in upper case", async () => {
-    // Hex letters, so upper-casing the id below actually changes it. PostgreSQL stores a uuid
-    // case-insensitively and hands it back lower-cased, which is what the body has to match.
+    // Hex letters, so upper-casing the id below actually changes it.
     const labelId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
     const created = await run((tx) =>
       createOptionList(
@@ -212,11 +205,8 @@ describe("option list CRUD", () => {
   it("treats a list's own labels as its own when the list id arrives in upper case", async () => {
     const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
 
-    // A `uuid` column compares case-insensitively, so an upper-cased list id still names this list;
-    // what must not happen is the list's own labels reading as another list's because the comparison
-    // moved into JavaScript. `PATCH /management-api/modifiers/options/:id` checks only the SHAPE of
-    // the id it is given (`requireUuidParam`, apps/server/src/catalogue-api.ts), so the case a caller
-    // sends is the case this function receives.
+    // What must not happen is the list's own labels reading as another list's. The route checks
+    // only the SHAPE of the id, so the case a caller sends is the case this function receives.
     const updated = await run((tx) =>
       updateOptionList(
         tx,
@@ -258,9 +248,8 @@ describe("option list CRUD", () => {
       createOptionList(tx, { name: "Spice", labels: [{ name: "Mild" }] }, "en"),
     );
 
-    // The read-back happens INSIDE the refused save's own transaction. `withTransaction` rolls a
-    // delete back on the way out, so reading afterwards cannot tell a refusal that deleted first
-    // from one that refused first — which is the whole difference this test exists to see.
+    // The read-back happens INSIDE the refused save's own transaction: after the rollback, a
+    // refusal that deleted first and one that refused first look the same.
     const left = await withTransaction(fx.db, async (tx) => {
       const error = await captureError(() =>
         updateOptionList(
@@ -470,11 +459,10 @@ describe("option list CRUD", () => {
 
 describe("reading the named option lists", () => {
   /**
-   * Three lists written straight to the tables, because `sort` is not part of the authoring body and
-   * a list saved through `createOptionList` always keeps the column default. The ids are chosen so
-   * that sort order, id order and the order the ids are asked in are three DIFFERENT orders — an
-   * assertion on the names below therefore fails if the `sort` key is dropped, if the `id` tiebreak
-   * is dropped, or if the rows come back in the caller's order.
+   * Three lists written straight to the tables, because `sort` is not part of the authoring body.
+   * Sort order, id order and the order the ids are asked in are three DIFFERENT orders, so the
+   * assertion fails if the `sort` key or the `id` tiebreak is dropped, or if the rows come back in
+   * the caller's order.
    */
   const late = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   const second = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -484,10 +472,8 @@ describe("reading the named option lists", () => {
     await fx.db.execute(sql`
       insert into option_lists (id, name, sort) values
         (${third}, 'Third', 1), (${second}, 'Second', 1), (${late}, 'Late', 5)`);
-    // The label ids are given explicitly and in the OPPOSITE order to the labels' `sort`, so the
-    // label assertion below fails if the `sort` key is dropped. Left to `defaultRandom()` the two
-    // ids land in either order and the same assertion passes about half the time — seen doing
-    // exactly that, with `optionLabels.sort` removed from the shared helper.
+    // The label ids are given explicitly and in the OPPOSITE order to the labels' `sort`: left
+    // random, the assertion would pass about half the time with the `sort` key dropped.
     await fx.db.execute(sql`
       insert into option_labels (id, list_id, name, sort) values
         ('11111111-1111-4111-8111-111111111111', ${third}, 'Last label', 1),
@@ -549,15 +535,12 @@ describe("option lists in the catalogue's configuration transfer", () => {
   it("copies a list before the labels that point at it", () => {
     expect(transferred).toContain("option_lists");
     expect(transferred).toContain("option_labels");
-    // `importConfigurationTables` inserts in this order and deletes in its reverse
-    // (apps/server/src/configuration-transfer.ts), so the parent has to come first.
+    // `importConfigurationTables` inserts in this order, so the parent has to come first.
     expect(transferred.indexOf("option_lists")).toBeLessThan(transferred.indexOf("option_labels"));
   });
 
-  // Not "the same tables": every other package in the repository transfers a SUBSET of what it
-  // classifies (packages/db 21 of 49, identity 1 of 9, workforce 3 of 9, venue-service 5 of 8,
-  // payments 1 of 5), so equality holds here by coincidence and a catalogue table deliberately
-  // kept out of a standby copy would fail this for the wrong reason.
+  // Not "the same tables": a package may transfer a SUBSET of what it classifies, and a catalogue
+  // table deliberately kept out of a standby copy would fail an equality for the wrong reason.
   it("transfers only tables the catalogue classifies", () => {
     const classified = new Set(CATALOGUE_CLASSIFICATION.map(({ table }) => table));
 

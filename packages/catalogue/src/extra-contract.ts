@@ -7,9 +7,7 @@ import "./errors.js";
 
 export type { ExtraSelection } from "@waitron/shared";
 
-// The four shapes below live in `modifier-list-types.ts`, the browser-safe LEAF the dashboard
-// imports; this file keeps the code that validates them and re-exports them so existing imports are
-// unchanged.
+// The four shapes live in `modifier-list-types.ts`, the browser-safe leaf the dashboard imports.
 export type {
   ExtraList,
   ExtraListInput,
@@ -34,8 +32,7 @@ function staffName(value: unknown, field: string): string {
 }
 /**
  * The translated customer name: absent, null, or a map holding no text anywhere means "fall back to
- * the staff name". Same body as `option-contract.ts`'s, including its one deliberate difference from
- * the product path — a bad language key is reported with the field path rather than letting
+ * the staff name". A bad language key is reported with the field path rather than letting
  * `contentLanguageCode`'s own fieldless `content.language_invalid` out.
  */
 function translations(value: unknown, field: string): Record<string, string> | null {
@@ -62,12 +59,6 @@ function bool(value: unknown, field: string, fallback: boolean): boolean {
   if (typeof value !== "boolean") invalid(field);
   return value;
 }
-/**
- * A whole number the `integer` columns behind this contract can hold. `min_picks`, `max_picks` and
- * `max_quantity` are all `integer` (schema/extras.ts), so without the ceiling a larger number passes
- * every check here and surfaces from the driver as `22003 value out of range for type integer`,
- * carrying no field for an editor to put beside an input.
- */
 function whole(value: unknown, field: string, minimum: number): number {
   if (
     typeof value !== "number" ||
@@ -79,8 +70,7 @@ function whole(value: unknown, field: string, minimum: number): number {
   return value;
 }
 /**
- * `isUuid` accepts either case and so does a PostgreSQL `uuid` column, which hands the value back
- * lower-cased. Lower-casing here is what makes a body's own ids comparable to each other and to the
+ * `isUuid` accepts either case; lower-casing makes a body's ids comparable to each other and to the
  * stored rows — the same normalisation `product-editor-input.ts` applies.
  */
 function id(value: unknown, field: string): string {
@@ -112,28 +102,10 @@ export interface MenuExtraPublication {
  * What one menu offer publishes, as `setMenuItemExtraLists` (extras.ts) takes it: the lists it
  * carries, in the order the editor sent, each with the overrides that narrow and reprice it.
  *
- * It lives beside {@link parseExtraListInput} because every rule it needs is already here — the
- * uuid-and-lower-case `id`, the boolean `bool`, the unknown-key `keys` and the shared
- * {@link extraPrice}. Parsed by hand inside the write path instead, two of those checks were simply
- * absent, and on this engine NOTHING downstream supplies either of them.
- *
- * `available` is a `flag`, which is drizzle's `integer(..., { mode: "boolean" })`
- * (`packages/db/src/schema/columns.ts`). That column DOES declare a `mapToDriverValue`, and it
- * coerces rather than refuses: calling it directly on the column this table builds (Node v26.7.0,
- * 2026-09-22) mapped `true`/`1` to 1 and `false`/`0` to 0, and mapped `"banana"`, `{}` AND the
- * string `"false"` to 1, with `null` and `undefined` to 0. So every bad value stores a boolean
- * silently and none of them throws. `listId` has no backstop either: `id` is a plain `text` column
- * on this engine, so a value that is not a uuid is simply stored.
- *
- * That is worse than what the storage switch replaced, which is the reason to state it rather than
- * drop the paragraph: under the previous engine the driver at least threw a plain `Error` for
- * `"banana"` and `{}`, and a non-uuid `listId` came back `22P02` — both unreadable to an editor,
- * but both refusals. What {@link bool} adds now is the only refusal there is, and it carries the
- * field path an editor can put beside an input.
- *
- * The two duplicates a body can carry are refused here as well, because neither has a unique index
- * behind it that would name the offending position: one list published twice, and one product
- * overridden twice within a list.
+ * These checks are the only refusal there is: the `available` flag column coerces any value to a
+ * boolean rather than throwing, and `listId` is a plain `text` column. Duplicates — one list
+ * published twice, one product overridden twice within a list — are refused here too, so the
+ * refusal names the offending position.
  */
 export function parseMenuExtraPublications(value: unknown): MenuExtraPublication[] {
   if (!Array.isArray(value)) invalid("lists");
@@ -152,14 +124,10 @@ export function parseMenuExtraPublications(value: unknown): MenuExtraPublication
       const item = record(each, itemField);
       keys(item, ["productId", "price", "available"], itemField);
       const productId = id(item.productId, `${itemField}.productId`);
-      // One override per product per list: the primary key refuses the pair as `23505`, which
-      // carries no position for an editor to put a message beside.
       if (seenProducts.has(productId)) invalid(`${itemField}.productId`);
       seenProducts.add(productId);
       return {
         productId,
-        // The same rule that decides a LIST item's own price, so the two prices a diner can be
-        // charged cannot drift apart.
         price: extraPrice(item.price, `${itemField}.price`),
         available: bool(item.available, `${itemField}.available`, true),
         field: itemField,
@@ -236,11 +204,6 @@ export function parseExtraListInput(value: unknown): ExtraListInput {
  * `minPicks`, more than `maxPicks`, or a quantity above one item's `maxQuantity`. A pick of two
  * counts as TWO towards the list's own bounds, so "choose one bread" is `minPicks = maxPicks = 1`
  * whatever an item's `maxQuantity` allows.
- *
- * VAT is untouched here: an extra always carries its product's rate — the product's own, or its
- * parent's where a variant leaves it blank — never the dish's (spec
- * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.3), which the order path
- * resolves from the product's `products` row and, for a variant, its parent's.
  */
 export function validateExtraSelections(
   lists: readonly ExtraList[],
@@ -254,11 +217,8 @@ export function validateExtraSelections(
     keys(row, ["listId", "picks"], "extraSelections");
     const sentListId = row.listId;
     if (typeof sentListId !== "string") invalid("listId");
-    // Lower-cased for the same reason `id` above lower-cases an authored id: the stored rows come
-    // back from their `uuid` columns lower-cased, so a pick sent in upper case has to be folded
-    // before it is compared to them. Deliberately NOT `id()`: a value that is no uuid at all keeps
-    // the refusal it has today — `extras.invalid` naming the field, from the membership check
-    // below — rather than gaining a second way to be a shape fault.
+    // Lower-cased for the same reason as `id` above. Deliberately NOT `id()`: a value that is no
+    // uuid at all keeps its `extras.invalid` from the membership check below.
     const listId = sentListId.toLowerCase();
     const list = offered.get(listId);
     if (!list || answers.has(listId)) invalid("listId");

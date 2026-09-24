@@ -15,10 +15,8 @@ import type { OptionListDependants } from "./modifier-list-types.js";
 import { findContentTranslationGap } from "./content-languages.js";
 import "./errors.js";
 
-// A LIST's `sort` is read but never written from a body: it is not one of the keys
-// `parseOptionListInput` accepts, so every list saved here keeps the column default and the id
-// decides the order. A LABEL's `sort` is different — `writeLabels` writes it from the label's
-// position in the body.
+// A LIST's `sort` is never written from a body (`parseOptionListInput` does not accept it), so the
+// id decides list order. A LABEL's `sort` is its position in the body (`writeLabels`).
 const listColumns = {
   id: optionLists.id,
   name: optionLists.name,
@@ -73,12 +71,6 @@ export async function listOptionLists(tx: Transaction): Promise<OptionList[]> {
  * The named lists, in the order {@link listOptionLists} returns them, each with its labels. Two
  * queries whatever the number of ids, and none at all for an empty one. An id naming no list is
  * simply absent from the answer.
- *
- * The order path wants exactly the lists one dish attaches rather than the whole catalogue's: it has
- * to freeze a chosen label's three names onto the order line, and what it holds is the option-list
- * ids from `readProductModifiers` (product-modifiers.ts). Reading every list instead would be a
- * third query whose cost grows with the catalogue rather than with the dish. This is the options
- * twin of `readExtraListsByIds` (extras.ts).
  */
 export async function readOptionListsByIds(
   tx: Transaction,
@@ -109,17 +101,9 @@ async function assertOptionList(tx: Transaction, optionListId: string): Promise<
 }
 
 /**
- * The staff `name` and `kitchenName` are plain text and need no translation check; the optional
- * customer-facing MAP is what must have text in the venue's default content language, and a null one is legal
- * because it falls back to `name` — the rule `setProductVariants` follows (variants.ts).
- *
- * One save submits a map for the list and one per label, so they go to the database TOGETHER: the
- * plural check takes the content-language advisory lock and reads the configuration once for all of
- * them. Nothing is thrown down there — `findContentTranslationGap` RETURNS which map has the gap —
- * and the throw below attaches that map's dotted field path, so an editor can put the refusal beside
- * the input. (`metadata` in `packages/media/src/images.ts` reaches a comparable code the other way
- * round: it catches the `content.translation_required` that `validateContentTranslations` throws for
- * its single map and re-throws it as `image.translation_required`.)
+ * Only the optional customer-facing MAP must have text in the venue's default content language; a
+ * null one is legal because it falls back to `name`. The refusal carries the offending map's dotted
+ * field path, so an editor can put it beside the input.
  */
 async function validateNames(
   tx: Transaction,
@@ -133,8 +117,6 @@ async function validateNames(
       map: label.customerName,
     })),
   ].filter((entry): entry is { field: string; map: Record<string, string> } => entry.map != null);
-  // A list carrying no customer-facing name at all, on itself or on any label, has nothing to check
-  // and so touches the database not at all — no lock, no read.
   if (named.length === 0) return;
   const gap = await findContentTranslationGap(
     tx,
@@ -148,8 +130,8 @@ async function validateNames(
     });
 }
 
-// Everything on the body EXCEPT the labels, which live in their own table. Taken as "the rest"
-// rather than field by field, so a column added to `OptionListInput` later cannot be left unwritten.
+// Taken as "the rest" rather than field by field, so a column added to `OptionListInput` cannot be
+// left unwritten.
 function listValues(input: OptionListInput) {
   const { labels, ...values } = input;
   void labels; // discarded on purpose; the lint rule does not exempt a rest sibling
@@ -165,13 +147,6 @@ function listValues(input: OptionListInput) {
  * A body label carrying the id of a label this list already holds is updated in place; one with no
  * id, or with an id nothing holds, is inserted. An id that names a label of a DIFFERENT list is
  * refused as `options.invalid` rather than moving that label.
- *
- * That refusal is decided BEFORE the delete below, on a plain `select`, which takes no row locks.
- * The ordering is the point: two saves that each name the other list's label both read, both see the
- * other's label still there, and both refuse. Deciding it later instead — at the insert's
- * primary-key conflict — left each save waiting on the other's uncommitted delete, and PostgreSQL
- * ended one of them with `40P01 deadlock detected` in place of a domain refusal. Receipt in the
- * branch's review thread.
  */
 async function writeLabels(
   tx: Transaction,
@@ -203,8 +178,6 @@ async function writeLabels(
     );
   const heldIds = new Set(existing.map((row) => row.id));
   for (const [sort, label] of input.labels.entries()) {
-    // Each label's `sort` is its position in the body, so the order the editor sent is the order
-    // `listOptionLists` and `getOptionList` read back.
     const values = {
       name: label.name,
       customerName: label.customerName,
@@ -219,10 +192,6 @@ async function writeLabels(
         .where(and(eq(optionLabels.listId, optionListId), eq(optionLabels.id, label.id)));
       continue;
     }
-    // The read above locks nothing, so another transaction can claim this id between it and here.
-    // An id another transaction has already COMMITTED is refused as a domain fault rather than
-    // surfacing as a driver error. Two transactions inserting the same NEW id are not covered: each
-    // waits on the other's uncommitted insert, and a mutual wait can still end as `40P01`.
     const inserted = await tx
       .insert(optionLabels)
       .values({ id: label.id ?? randomUUID(), listId: optionListId, ...values })
@@ -232,15 +201,6 @@ async function writeLabels(
   }
 }
 
-/**
- * Nothing here takes a lock of its own on the list or its labels, and that is a decision rather
- * than an omission: the plan's Task 2 Step 6 says "No advisory lock, no order check", and spec §7
- * bars advisory locks from new code because the SQLite switch's single write queue makes them
- * redundant. `setProductVariants` (variants.ts) takes no lock of its own either — the row lock it
- * used to take on the product went with the engine, and `variants.ts` says why. What
- * `validateNames` reaches through is no longer a lock at all: `content-languages.ts` records that
- * the write queue arranges what an advisory lock there used to.
- */
 export async function createOptionList(
   tx: Transaction,
   value: unknown,
@@ -261,11 +221,7 @@ export async function updateOptionList(
   fallbackLanguage: string,
 ): Promise<OptionList> {
   const input = parseOptionListInput(value);
-  // Lower-cased once, here, and used from here on. A `uuid` column compares either case and hands
-  // its value back lower-cased, so an upper-cased id finds the list in SQL but does not match the
-  // stored `list_id` that `writeLabels` compares in JavaScript — which classified every one of the
-  // list's own labels as another list's. Same normalisation the contract's `id` applies to what a
-  // body sends (option-contract.ts).
+  // Stored ids are lower-case and an id column compares byte for byte (packages/shared/src/ids.ts).
   const optionListId = callerListId.toLowerCase();
   // The list has to exist before its names are worth checking, or updating an id that names nothing
   // reports a translation problem for a list that is not there.
@@ -278,53 +234,23 @@ export async function updateOptionList(
 
 export async function deleteOptionList(tx: Transaction, optionListId: string): Promise<void> {
   await assertOptionList(tx, optionListId);
-  // The labels go with it through `option_labels_list_fk` ... ON DELETE CASCADE
-  // (drizzle/0000_catalogue_baseline.sql). There is no open-order check: an order line carries the
-  // chosen names as text and points at nothing here (spec §2.3).
+  // The labels go with it through `option_labels_list_fk`'s cascade. There is no open-order check:
+  // an order line carries the chosen names as text and points at nothing here (spec §2.3).
   await tx.delete(optionLists).where(eq(optionLists.id, optionListId));
 }
 
-// The shape lives in `modifier-list-types.ts`, the browser-safe LEAF the dashboard imports; this
-// file keeps the code that builds it and re-exports the type so existing imports are unchanged.
 export type { OptionListDependants } from "./modifier-list-types.js";
 
 /**
  * What deleting this list would touch — the preview a delete confirmation reads. Both sides are
- * detached by the delete rather than blocking it: `product_modifiers_option_list_fk` is
- * ON DELETE CASCADE (drizzle/0000_catalogue_baseline.sql), and an order line carries the chosen
- * names as text and points at nothing here (spec
+ * detached by the delete rather than blocking it: the `product_modifiers` key cascades, and an
+ * order line carries the chosen names as text and points at nothing here (spec
  * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §2.3).
  *
- * The two sides are not the same kind of thing. A PRODUCT holds the list, through
- * `product_modifiers` (spec §5). A MENU only shows a dish that holds it — options lists have no
- * per-menu row at all (spec §2.2) — so `menus` walks the same attachment rows on to `menu_items`
- * rather than having a table of its own to read, which is where it differs from the extras twin
- * (`extraListDependants`, extras.ts). Each offer is named by the staff name of the product that
- * dish is, exactly as that twin does.
- *
- * ONE query for both sides, not two: every menu offer of a carrying dish hangs off the same
- * attachment row the product side already resolved, so a second query would filter
- * `product_modifiers` on the same list id and re-join `products` on the same product. The extras
- * twin cannot be folded the same way — its menu side reads a table of its own,
- * `menu_item_extra_lists`, which is not reached through the attachment rows at all.
- *
- * Receipt for "no other table points at an options list", over the generated migrations:
- * `grep -rn 'REFERENCES "public"."option_l' --include='*.sql' packages apps` returns two lines,
- * `option_labels`' own key into `option_lists` and `product_modifiers`' own, both in
- * drizzle/0000_catalogue_baseline.sql.
- *
- * The products come back alphabetical by staff name with the id breaking a tie, so a confirmation
- * dialog reads in a fixed order whichever ids were minted; the menus in offer-id order, as the
- * extras twin's do. An INACTIVE menu offer is listed like any other — deleting the list detaches
- * it either way.
- *
- * The products' order is the query's; the menus are sorted here, because one query has one
- * `order by` and the product side has the claim on it. A JavaScript string sort reproduces what
- * `order by menu_items.id` gave: PostgreSQL orders a `uuid` by its sixteen bytes, and the
- * canonical lower-cased hex text compares the same way. MEASURED on PostgreSQL 18 rather than read
- * off the documentation — 2000 `gen_random_uuid()` values, `string_agg(u::text, ',' order by u)`,
- * compared with the same list sorted in JavaScript: identical, and a control with one adjacent
- * pair swapped reported a difference.
+ * Options lists have no per-menu row at all (spec §2.2), so `menus` is every menu offer of a dish
+ * that holds the list, named by that product's staff name. An INACTIVE offer is listed like any
+ * other. Products come back alphabetical by staff name with the id breaking a tie; menus in
+ * offer-id order.
  */
 export async function optionListDependants(
   tx: Transaction,

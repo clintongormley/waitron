@@ -51,9 +51,7 @@ export interface SeededVenue {
  * Seed the two legacy product choices with real unit identities.
  *
  * Written through the table rather than as one raw `insert`, because `units.id` is supplied by
- * `$defaultFn` in JavaScript and not by a SQL default — a raw insert naming only the other columns
- * is refused `NOT NULL constraint failed: units.id`. Going through the table also hands the two
- * name maps to the `json()` column mapping, which is what the `::jsonb` casts used to do.
+ * `$defaultFn` in JavaScript and not by a SQL default.
  */
 export async function seedLegacySellingUnits(db: Database): Promise<void> {
   await db.insert(units).values([
@@ -74,12 +72,7 @@ export async function seedLegacySellingUnits(db: Database): Promise<void> {
   ]);
 }
 
-/**
- * Three rows written through their tables, for the reason {@link seedLegacySellingUnits} gives:
- * each carries an `id` a `$defaultFn` supplies. `invoiceLocales` also reaches its column's own
- * mapping, which stores the list as JSON text — the `array['en-GB']` constructor it replaces is not
- * SQL this engine has.
- */
+/** Three rows written through their tables, for the reason {@link seedLegacySellingUnits} gives. */
 export async function seedVenue(db: Database): Promise<SeededVenue> {
   await seedTenant(db);
   const [loc] = await db
@@ -145,16 +138,7 @@ export async function seedCatalogueFixture(
   };
 }
 
-/**
- * The migrated database, emptied between tests.
- *
- * The per-test clean-up this function used to run — nine hand-listed `delete`s and one `update`,
- * inside its own transaction — is gone because `useVenueDb` already empties EVERY data table after
- * each test and puts the append-only triggers back as it found them
- * (`buildResetPlan`/`applyReset`, `packages/db/src/testing/venue-db.ts`). That is strictly more
- * than the list here covered, so no suite loses isolation by its removal; what it does lose is a
- * hand-maintained list that had to learn each new catalogue table.
- */
+/** The migrated database, emptied between tests by `useVenueDb`. */
 export function useCatalogueDb(): { readonly db: Database } {
   return useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 }
@@ -171,23 +155,13 @@ function latch(): { waited: Promise<void>; open: () => void } {
 /**
  * Starts two write transactions together and reports how each ended.
  *
- * ## What replaced the lock observation, and the measurement behind it
- *
- * On PostgreSQL the suites that used this shape took TWO connections, held the first transaction
- * open, and polled `pg_blocking_pids` until the second backend was seen waiting on a lock the
- * first held. Neither half of that exists here: SQLite has one write connection per file, no row locks,
- * and no advisory locks. What it has instead is the venue file's write queue —
  * `withTransaction` (`packages/db/src/tenancy.ts`) runs its body inside `db.withWriteLock`, and
  * `packages/store/src/write-queue.ts` issues `begin immediate`, awaits the body, then `commit`,
- * so the next caller's `begin` does not run until that `commit` has returned.
- *
- * So the thing to observe moved: not "the second one is BLOCKED", but "the second one has not
- * STARTED". This function observes exactly that, and it is the receipt for every `for update`,
- * `for key share` and `pg_advisory_xact_lock` this package dropped. Measured 2026-09-21 on Node
- * v26.7.0 with a control in the other direction: two bodies started this way report
- * `secondStarted === false` while the first is held, and the SAME two bodies run WITHOUT
- * `withTransaction` report `true`. Both readings came from one probe run back to back, so the
- * `false` is not a probe that could never have printed anything else.
+ * so the next caller's `begin` does not run until that `commit` has returned. The thing to observe
+ * is therefore "the second one has not STARTED". Measured 2026-09-21 on Node v26.7.0 with a control
+ * in the other direction: two bodies started this way report `secondStarted === false` while the
+ * first is held, and the SAME two bodies run WITHOUT `withTransaction` report `true`. Both readings
+ * came from one probe run back to back.
  *
  * The first body is held open until the observation is taken, whether it returned or threw — the
  * `await` sits in a `finally`, so a refusal is delayed rather than swallowed and still arrives as
@@ -218,7 +192,7 @@ export async function racePair<A, B>(
   try {
     await reached.waited;
     // A real pause, not a microtask turn: this has to give the second transaction every chance to
-    // run a statement it must not run. Without the queue it takes it (measured, above).
+    // run a statement it must not run.
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(secondStarted, "the second transaction started while the first was still open").toBe(
       false,

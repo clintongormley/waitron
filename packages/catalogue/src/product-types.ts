@@ -8,9 +8,7 @@ import type { DietaryLabel } from "./dietary-declarations.js";
  * the dashboard (and any browser client) can import ONE authoritative copy instead of re-declaring
  * them by hand. This is a LEAF: type definitions only, no running code, and every type it imports is
  * itself browser-safe (nothing here reaches `@waitron/db`, drizzle or a `node:` builtin). The guard is
- * `scripts/dashboard-browser-purity.test.ts`. Each shape's operational home still owns the code that
- * builds it (`operations.ts`, `product-editor.ts`, `variants.ts`, `units.ts`) and re-exports the type
- * from here so existing imports are unchanged.
+ * `scripts/dashboard-browser-purity.test.ts`.
  */
 
 /**
@@ -21,8 +19,7 @@ import type { DietaryLabel } from "./dietary-declarations.js";
  *
  * It lives HERE rather than beside the read/write code because the dashboard's product editor sends
  * and receives it, and this file is the one the browser may import: `product-modifiers.ts` imports
- * drizzle and `@waitron/db`. Same split `Unit`, `ProductVariant` and `Product` already take, and
- * `product-modifiers.ts` re-exports it so existing imports are unchanged.
+ * drizzle and `@waitron/db`.
  */
 export interface ProductModifierRef {
   kind: "extras" | "options";
@@ -40,8 +37,7 @@ export interface Unit {
 /** A {@link Unit} plus the scale integration the till reads: `hardwareUnit` names the mass unit a
  * connected scale weighs in (`kg`/`g`/`mg`), or null for a counted (each) unit. The sell-side reads
  * ({@link ./menu-types.js#AvailableProduct}, {@link ./menu-types.js#MenuOffer}) carry it so the till
- * decides whether to weigh from the unit itself, not from the legacy `pricingUnit` flag. `units.ts`
- * owns the code that builds it and re-exports this type. */
+ * decides whether to weigh from the unit itself. */
 export interface SellableUnit extends Unit {
   hardwareUnit: "kg" | "g" | "mg" | null;
 }
@@ -104,8 +100,7 @@ export interface Product {
    * customer name falls back to `name`; `product-presentation.ts` owns that fallback. */
   customerName: Record<string, string> | null;
   /** Whether this product may be sold on its own. `false` marks a full product intended only to be
-   * referenced from elsewhere (an extra now, a recipe ingredient later) rather than offered
-   * standalone; the menu and till selection is what enforces that (a later slice). */
+   * referenced from elsewhere rather than offered standalone. */
   soldAlone: boolean;
   unitId: string;
   unit: Unit;
@@ -147,7 +142,7 @@ export interface Product {
  * and `dietaryDeclarations` are required.
  */
 export interface ProductEditorInput {
-  /** A product's parent never changes (V10): absent, or the stored parent, is accepted. */
+  /** A product's parent never changes: absent, or the stored parent, is accepted. */
   parentId?: string | null;
   name: string;
   customerName: Record<string, string> | null;

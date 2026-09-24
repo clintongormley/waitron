@@ -30,7 +30,7 @@ import {
 /**
  * Variants against a real database, plus the pure selection core. A variant is a `products` row
  * with a `parent_id` (spec §15); the per-menu settings of one live in
- * `menu_item_variant_overrides`, and a row there exists only while it overrides something (V13).
+ * `menu_item_variant_overrides`, and a row there exists only while it overrides something.
  */
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 const app = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
@@ -152,7 +152,7 @@ describe("setProductVariants stores each variant as a product under its parent",
       { ...common, id: saved[0]!.id, variant_order: 0, unit_price: null },
       { ...common, id: saved[1]!.id, variant_order: 1, unit_price: 550 },
     ]);
-    // No unit or category row of their own: that is how a variant inherits both (V12).
+    // No unit or category row of their own: that is how a variant inherits both.
     const ids = saved.map((variant) => variant.id);
     expect(
       await suite.db.select().from(productUnits).where(inArray(productUnits.productId, ids)),
@@ -431,7 +431,7 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
     const value = await app((tx) => readProductEditor(tx, f.variantId));
     expect(value).toMatchObject({ id: f.variantId, parentId: f.parentId, vatClass: null });
     const parent = await app((tx) => readProductEditor(tx, f.parentId));
-    // The parent's body names no parent, so it is refused on the variant (V10), writing nothing.
+    // The parent's body names no parent, so it is refused on the variant, writing nothing.
     await expect(
       app((tx) =>
         saveProductEditor(
@@ -679,7 +679,7 @@ it("a variant removed while its override is being written ends Inactive, the ove
 
   // One write transaction runs on the venue file at a time, so the removal runs second and sees
   // the committed override; `racePair` (`test/fixtures.ts`) carries the measurement that it does
-  // not start early. Removing is always allowed now (spec §15.6), so both succeed.
+  // not start early. Removing is always allowed (spec §15.6), so both succeed.
   const [overriding, removing] = await racePair(
     suite.db,
     (tx) => setMenuVariants(tx, f.offerId, [{ variantId: w125!.id, price: "4.00", offered: true }]),
@@ -699,7 +699,7 @@ it("a variant removed while its override is being written ends Inactive, the ove
 });
 
 // selectMenuVariant is the pure core of menu-variant resolution — no DB. It decides from the offer
-// alone (V1, V15): an offer listing any variant must name one, and the chosen one must be listed as
+// alone: an offer listing any variant must name one, and the chosen one must be listed as
 // sellable here now. It returns the six name pieces in the shape product-presentation.ts consumes,
 // and the chosen row's product id and EFFECTIVE selling values, so the order path prices and routes
 // the line from them.
@@ -775,7 +775,7 @@ describe("selectMenuVariant resolves the chosen product and its parent's names",
     expect(staffPresentationName(selected)).toBe("Coffee");
   });
 
-  // V1: an offer lists only Active variants, so a product whose variants were all removed lists
+  // An offer lists only Active variants, so a product whose variants were all removed lists
   // none and sells as itself; one listing any, even an unavailable one, must name one.
   it("requires a variant whenever the offer lists one, available or not", () => {
     for (const variants of [[large], [{ ...large, available: false }]]) {

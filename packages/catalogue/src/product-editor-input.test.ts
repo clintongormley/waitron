@@ -193,7 +193,7 @@ it.each([
 });
 it("allows memberships with no reporting category but rejects a primary outside the set", () => {
   const other = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-  // A non-empty set with a null reporting category is now accepted.
+  // A non-empty set with a null reporting category is accepted.
   expect(
     parse({ ...input, categoryIds: [categoryId], primaryCategoryId: null }).primaryCategoryId,
   ).toBeNull();
@@ -253,7 +253,7 @@ it.each([
   [{ name: "Small", unitPrice: "2.00", available: true, active: null }, "variants.0.active"],
   [{ name: "Small", unitPrice: "2.00", available: true, active: "yes" }, "variants.0.active"],
 ] as const)("rejects a malformed variant %j", (variant, field) => {
-  // A malformed variant is rejected while parsing that variant, before the min-two count check.
+  // A malformed variant is rejected while parsing that variant.
   expect(() => parse({ ...input, variants: [variant] })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field } }),
   );
@@ -370,16 +370,14 @@ it("rejects a repeated variant ID even with a different case", () => {
 
 // ── The product's ordered attachment list (`modifiers`) ────────────────────────────────────────
 //
-// It replaces the flat `modifierIds` the body used to carry: each entry names one list and which
-// KIND of list it is, and the array's order is the order a diner is offered them.
+// Each entry names one list and which KIND of list it is, and the array's order is the order a diner
+// is offered them.
 //
-// The field names below are INDEXED (`modifiers.0.kind`), where the plan's Task 6 Step 1(b) wrote a
-// bare `modifiers`. Two reasons to diverge, both checkable: the `variants` screen in this same file
-// already refuses per entry (`variants.0.id`, product-editor-input.ts), and the refusals thrown one
-// layer down when the ids are checked against the stored lists carry the indexed form too
-// (`assertRefsExist`, product-modifiers.ts:113 and :127). A bare `modifiers` here would hand the
-// editor two different field shapes for one bad input, depending on which layer caught it. The
-// whole-array refusals (not an array, absent) stay bare, because no entry is at fault.
+// The field names below are INDEXED (`modifiers.0.kind`), as the `variants` screen's are
+// (`variants.0.id`) and as the refusals `assertRefsExist` (product-modifiers.ts) throws when the ids
+// are checked against the stored lists. A bare `modifiers` here would hand the editor two different
+// field shapes for one bad input, depending on which layer caught it. The whole-array refusals (not
+// an array, absent) stay bare, because no entry is at fault.
 
 it("keeps a mixed extras-and-options list in the order the body sent, and lower-cases the ids", () => {
   const sent = [

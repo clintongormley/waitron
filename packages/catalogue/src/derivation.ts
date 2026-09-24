@@ -10,11 +10,7 @@ export interface RecipeDerivation {
 
 /** Union two allergen maps. A code present in both takes `contains` if either does (contains
  * dominates may_contain); its `source` is the distinct non-empty sources, SORTED and comma-joined
- * into one string (catalogue's type keeps `source` a single string). Sorted rather than
- * iteration-order: for recipe-derived allergens the map is built by folding ingredient rows in
- * their DB order, which is not deterministic (`recipes.ts`'s `getProductRecipe` ties on
- * created_at and falls back to a random uuid), so an unsorted join would render "egg, mayo" one
- * run and "mayo, egg" the next for the same recipe. */
+ * into one string. */
 export function mergeAllergenMaps(a: ProductAllergens, b: ProductAllergens): ProductAllergens {
   const out: ProductAllergens = {};
   for (const code of new Set([...Object.keys(a), ...Object.keys(b)])) {

@@ -180,13 +180,9 @@ describe("option list authoring contract", () => {
     );
   });
 
-  // A default is taken when a field is ABSENT and never when it is present and null — the rule
-  // `CLAUDE.md` §3 states as "default optional request fields only when absent". `value ?? default`
-  // is the shape that breaks it, and it breaks silently: an explicit null would be defaulted rather
-  // than refused. The suite that used to hold this pair went with the old modifier contract in
-  // Task 13 of `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`; this is its heir on
-  // the options side. Proven by mutation, not by passing: with `flag`'s `value === undefined`
-  // widened to `value == null`, both expectations below fail and the rest of the file stays green.
+  // A default is taken when a field is ABSENT and never when it is present and null (CLAUDE.md §3,
+  // "default optional request fields only when absent"). `value ?? default` is the shape that breaks
+  // it silently: an explicit null would be defaulted rather than refused.
   it("refuses an explicit null where a default is only taken on absence", () => {
     expect(() => parseOptionListInput({ ...cooked, active: null })).toThrowError(
       expect.objectContaining({ code: "options.invalid", params: { field: "active" } }),
@@ -357,10 +353,8 @@ describe("option selections at order time", () => {
     ]);
   });
 
-  // A `uuid` column hands its value back lower-cased, so the stored ids are lower case while a body
-  // may send the same uuid in either case — `isUuid` accepts both. The ids here carry LETTERS
-  // deliberately: the digit-only fixtures above are unchanged by `toUpperCase`, so a probe built on
-  // them would pass whether this held or not (CLAUDE.md §1).
+  // The stored ids are lower case while a body may send the same uuid in either case. The ids here
+  // carry LETTERS deliberately: the digit-only fixtures above are unchanged by `toUpperCase`.
   it("accepts an answer whose ids are upper case, and answers with the stored lower-case ids", () => {
     const letteredListId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
     const letteredLabelId = "ffffffff-eeee-4ddd-8ccc-bbbbbbbbbbbb";

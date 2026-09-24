@@ -149,8 +149,7 @@ describe("Active and Available", () => {
     });
   });
 
-  // Spec §15.4: every Active, Available product on a menu is offered to the till, sold alone or not —
-  // `sold_alone` now governs only a future customer menu, so it must not filter the till's offers.
+  // Spec §15.4: every Active, Available product on a menu is offered to the till, sold alone or not.
   it("offers an Active, Available product the till whether or not it is sold alone", async () => {
     for (const soldAlone of [true, false]) {
       await run((tx) =>

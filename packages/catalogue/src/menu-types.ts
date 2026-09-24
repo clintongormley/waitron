@@ -11,9 +11,7 @@ import type { SellableUnit } from "./product-types.js";
  * `product-types.ts`, this is a LEAF: type definitions only, no running code, and every type it
  * imports is itself browser-safe (nothing here reaches `@waitron/db`, drizzle or a `node:` builtin), so
  * the till can import ONE authoritative copy instead of re-declaring them by hand. The guard is
- * `scripts/dashboard-browser-purity.test.ts`. `operations.ts` still owns the code that builds these and
- * re-exports each type from here, so existing imports are unchanged; the till imports {@link MenuOffer}
- * (the zone-offer body it sells from) directly, which is what keeps it in step with the server.
+ * `scripts/dashboard-browser-purity.test.ts`.
  */
 
 /** One menu-item row: the id (not the product id) that selects a price when a diner orders. */
@@ -103,22 +101,19 @@ export interface AvailableProduct {
   category: string | null;
   allergens: ProductAllergens | null;
   /** The PUBLISHED diet profile (`products.diet`) — vegan/vegetarian labels, contains-tags, and any
-   * halal/kosher from the override — or null when unreviewed. The diet twin of `allergens`; Task 6's
-   * till menu filter reads it. Not part of the priceable projection. */
+   * halal/kosher from the override — or null when unreviewed. The diet twin of `allergens`. Not part
+   * of the priceable projection. */
   diet: DietProfile | null;
   /** The recipe-derived diet overlay (`products.dietDerivation`) — the folded ingredient origins + a
-   * `pending` flag — or null when there is no recipe. Carried so Task 5 can recompute the as-served
-   * diet from the base derivation plus the selected options' origin overlays. */
+   * `pending` flag — or null when there is no recipe. */
   dietDerivation: DietDerivation | null;
   /** The staff diet override (`products.dietOverride`) ALONE, or null when none — exposed distinctly
    * from `diet` (the published union) so an editor seeds its picker without double-counting, mirroring
    * `manualAllergens`. */
   dietOverride: DietOverride | null;
   dietaryDeclarations: DietaryLabel[];
-  /** The product's DEFAULT kitchen course (KDS-2 `products.course_id`), or null when it has none. The
-   * ring-time resolver reads it as the fallback (`<override> ?? course_id`), and the till's tab course
-   * picker reads it as the per-line PRE-SELECTED default. Not part of the priceable projection, so it
-   * is dropped when a row is resolved into a `PriceableProduct`. */
+  /** The product's DEFAULT kitchen course (`products.course_id`), or null when it has none. Not part
+   * of the priceable projection, so it is dropped when a row is resolved into a `PriceableProduct`. */
   courseId: string | null;
   /** The catalogue (menu) this row came from — its `catalogues.id`. A location's menu list may hold
    * several catalogues (its default plus any `location_catalogues` members), so a row is tagged with
@@ -156,10 +151,9 @@ export interface AccessibleCatalogue {
  * are put back together for a reader.
  *
  * `addAllergens` and `suitableFor` take the vocabulary of a CHILD line rather than of a product,
- * because that is what a pick becomes: the same two field names as `QueueModifier`
- * (`readQueueSubItems`, apps/server/src/working-order.ts) — the product's effective `allergens`, and
- * its effective `dietaryDeclarations` expanded the way a dish's own row is expanded. Shown BESIDE the
- * dish's own declarations, never folded into them (spec §3.4).
+ * because that is what a pick becomes: the product's effective `allergens`, and its effective
+ * `dietaryDeclarations` expanded the way a dish's own row is expanded. Shown BESIDE the dish's own
+ * declarations, never folded into them (spec §3.4).
  */
 export interface OfferedExtraItem {
   productId: string;

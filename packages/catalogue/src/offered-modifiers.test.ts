@@ -24,8 +24,6 @@ import * as productModifiers from "./product-modifiers.js";
 import * as optionsModule from "./options.js";
 import { seedVenue } from "../test/fixtures.js";
 
-/** The attachment walk is authoring configuration read back, against one SQLite file with the real
- * migrations applied. */
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS], timeoutMs: 60_000 });
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
@@ -390,7 +388,7 @@ describe("what a menu offer publishes", () => {
 });
 
 describe("an extra the till cannot sell", () => {
-  // Spec §15.6 and the plan's V16: an extra is sold like any product, so one that is Unavailable
+  // Spec §15.6: an extra is sold like any product, so one that is Unavailable
   // (sold out for now) or Inactive (removed) is not offered. Bacon and cheese take the two states
   // with the OTHER flag left set, so a read of the wrong column still offers one of them.
   it("leaves out an item whose product is Unavailable or Inactive, on both paths", async () => {
@@ -524,12 +522,6 @@ describe("listAvailableProducts and listMenuOffers", () => {
 describe("one shared resolution for a set of dishes", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  // These four assertions moved here with the code they are about: the order path used to call
-  // these readers itself, and "basket-wide modifier resolution (perf)"
-  // (apps/server/src/working-order.test.ts) watched them from there. It now calls
-  // `resolveAttachedModifiers` and counts THAT, because a spy on the `@waitron/catalogue` index
-  // cannot see a call this file makes through its own relative import.
-
   it("reads the product side alone for dishes that name no offer", async () => {
     await run(async (tx) => {
       await attach(tx, ["options", "extras"]);
@@ -550,9 +542,7 @@ describe("one shared resolution for a set of dishes", () => {
 
     expect(productExtras).toHaveBeenCalledTimes(1);
     expect(optionLists).toHaveBeenCalledTimes(1);
-    // ONCE, not twice: `readProductExtras` reads the same `product_modifiers` rows as its own first
-    // statement, and is handed the map this resolve already read instead of asking again. It calls
-    // `readProductModifiers` through the same module this spy replaces the binding on, so a second
+    // ONCE, not twice: `readProductExtras` is handed the map this resolve already read. A second
     // read would show up here as a second call.
     expect(attachments).toHaveBeenCalledTimes(1);
     expect(productExtras.mock.calls[0]![2]).toBe(await attachments.mock.results[0]!.value);

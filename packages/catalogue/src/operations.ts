@@ -74,14 +74,8 @@ export type {
 export type { ListedVariant, Product } from "./product-types.js";
 
 /**
- * Catalogue operations — CRUD over `catalogues`/`categories`/`products`, catalogue↔location
- * assignment, and the sell-side reads (`listMenuOffers`, `listAvailableProducts`).
- *
- * Every operation shares the caller's transaction.
- *
  * Deactivation is `active = false`, never DELETE: a product may sit behind historical sale-line
  * snapshots.
- * All SQL is built with Drizzle query builders — no string concatenation.
  */
 
 export interface Catalogue {
@@ -106,26 +100,23 @@ export interface CreateProductInput {
   name: string;
   /** Customer-facing translated name; omitted or null falls back to `name`. */
   customerName?: Record<string, string> | null;
-  /** The product's sellable unit. `null` = Each (no `product_units` row stored); a real id assigns
-   * that unit; omitted falls back to the legacy `pricingUnit` compat path. */
+  /** `null` = Each (no `product_units` row stored); a real id assigns that unit; omitted falls back
+   * to the legacy `pricingUnit`. */
   unitId?: string | null;
   pricingUnit?: PricingUnit;
   unitPrice: string;
   vatClass: VatClass;
-  /** Omitted leaves it null (unreviewed); validated against the EU-14 taxonomy on insert. */
+  /** Omitted leaves it null (unreviewed). */
   allergens?: ProductAllergens;
-  /** The staff diet override (forced vegan/vegetarian/halal/kosher + hand contains-tags). Omitted or
-   * `null` leaves it null (no override); checked disjoint before the write (CLAUDE.md §3). At create
-   * there is no recipe, so published `diet` = the override overlaid on the empty derived profile. */
+  /** The staff diet override. Omitted or `null` leaves no override. */
   dietOverride?: DietOverride | null;
   /** A stored photo reference (`<sha256>.<ext>`); omitted leaves it null (no picture). */
   image?: string;
-  /** Omitted leaves it active, mirroring the `products.active` column default. Set `false` to create
-   * a product that is not yet sellable at the till — atomic in the one insert, no follow-up patch. */
+  /** Omitted leaves it active. */
   active?: boolean;
-  /** Omitted leaves it available, mirroring the `products.available` column default. */
+  /** Omitted leaves it available. */
   available?: boolean;
-  /** Omitted leaves it offered standalone, mirroring the `products.sold_alone` column default. */
+  /** Omitted leaves it offered standalone. */
   soldAlone?: boolean;
   description?: Record<string, string> | null;
   kitchenName?: string | null;
@@ -142,23 +133,20 @@ export interface UpdateProductInput {
   unitPrice?: string | null;
   vatClass?: VatClass | null;
   /** `null` clears the unit (the product then reads as Each, and a variant as its parent's unit); a
-   * real id sets it; omitted leaves the unit unchanged unless the legacy `pricingUnit` compat field
-   * is supplied instead. */
+   * real id sets it; omitted leaves it unchanged unless the legacy `pricingUnit` is supplied. */
   unitId?: string | null;
   pricingUnit?: PricingUnit;
   categoryId?: string | null;
-  /** `null` clears the declaration back to unreviewed; omitted leaves it unchanged. */
+  /** `null` clears the declaration back to unreviewed. */
   allergens?: ProductAllergens | null;
-  /** Patch the staff diet override. `null` clears it (published `diet` reverts to the recipe-derived
-   * profile); omitted leaves it unchanged. Checked disjoint before the write, then republished. */
+  /** `null` clears the staff diet override; published `diet` reverts to the recipe-derived
+   * profile. */
   dietOverride?: DietOverride | null;
-  /** `null` clears the photo reference; omitted leaves it unchanged. */
   image?: string | null;
-  /** Toggle active/inactive through the edit route; omitted leaves it unchanged. */
   active?: boolean;
-  /** Toggle available/unavailable ("sold out for now"); omitted leaves it unchanged. */
+  /** `false` is "sold out for now". */
   available?: boolean;
-  /** Toggle whether the product is offered standalone; omitted leaves it unchanged. */
+  /** Whether the product is offered standalone. */
   soldAlone?: boolean;
   description?: Record<string, string> | null;
   kitchenName?: string | null;
@@ -204,7 +192,6 @@ const PRODUCT_COLUMNS = {
   hardwareUnit: units.hardwareUnit,
 };
 
-/** The joined product row as Drizzle types it back. */
 interface RawProduct {
   id: string;
   catalogueId: string;
@@ -228,10 +215,8 @@ interface RawProduct {
   available: boolean;
   allergens: ProductAllergens | null;
   manualAllergens: ProductAllergens | null;
-  // The `diet_override` jsonb column's `$type` is looser than {@link DietOverride} (its contains lists
-  // are `string[]`, not the `ContainsTag[]` the leaf narrows to), so `toProduct` re-attaches the narrow
-  // type the DB's write-side `validateDietOverride` already guarantees — the same cast the till read
-  // (`listAvailableProducts`) makes.
+  // Looser than {@link DietOverride}; `toProduct` narrows it, relying on the write-side
+  // `validateDietOverride`.
   dietOverride: {
     vegan?: "yes" | "no";
     vegetarian?: "yes" | "no";
@@ -243,9 +228,8 @@ interface RawProduct {
   image: string | null;
 }
 
-// `pricing_unit`/`vat_class` are constrained to their unions by a CHECK (catalogue.ts), so the value
-// read back is always a `PricingUnit`/`VatClass`; the cast re-attaches the type the column's runtime
-// CHECK already guarantees.
+// `pricing_unit`/`vat_class` are constrained to their unions by a CHECK (catalogue.ts), which is
+// what makes the casts below safe.
 function toProduct(
   row: RawProduct,
   categoryIds: string[],
@@ -672,9 +656,7 @@ async function readOfferVariants(
 
 /**
  * Check an untrusted catalogue id before a location-menu write, so an absent catalogue produces
- * `catalogue.not_found` (404) instead of an opaque FK failure (23503). The foreign keys on
- * `locations.catalogue_id` and `location_catalogues.catalogue_id` remain the data-layer backstop
- * for a missing reference; this read checks existence only.
+ * `catalogue.not_found` (404) instead of an opaque foreign-key failure.
  */
 export async function catalogueExists(tx: Transaction, catalogueId: string): Promise<boolean> {
   const [row] = await tx
@@ -703,17 +685,12 @@ export async function deactivateCatalogue(tx: Transaction, id: string): Promise<
 
 /**
  * Republish the computed `allergens` and/or `diet` of product `id` and of each variant of it with an
- * overlay of its own for that column. Staff author `manual_allergens` and `diet_override`; the recipe
- * module writes `recipe_derivation` and `diet_derivation`. The published allergens are `republish(
- * manual, derivation)` (derivation.ts) and the published diet `overlayDietProfile(deriveDietProfile(
- * derivation), override)` (dietary.ts), where a missing diet derivation folds as "no recipe": empty
- * origins but PENDING, so vegan and vegetarian read "unknown" rather than a positive claim.
+ * overlay of its own for that column. A missing diet derivation folds as "no recipe": empty origins
+ * but PENDING, so vegan and vegetarian read "unknown" rather than a positive claim.
  *
- * Each overlay is read through `effectiveProductColumns`, so a variant's blank overlay is its
- * parent's. A variant both of whose overlays for a column are blank stores that column blank, so its
- * read falls back to the parent's published value (variant-fallback.ts) rather than a copy that the
- * parent's next change would leave stale. A row whose computed value already equals the stored one
- * is not written. An id that names no row is a silent no-op.
+ * A variant both of whose overlays for a column are blank stores that column blank, so its read
+ * falls back to the parent's published value rather than a copy the parent's next change would
+ * leave stale. An id that names no row is a silent no-op.
  */
 async function republishOverlays(
   tx: Transaction,
@@ -770,11 +747,9 @@ async function republishOverlays(
 }
 
 /**
- * Write one recipe-derived overlay onto a top-level product and republish the column it feeds, on
- * the product and on each variant that sets its own value for it. A derivation comes from a recipe,
- * and a variant has no recipe of its own (`setProductRecipe`, packages/recipes/src/recipes.ts,
- * refuses one), so a variant's id is refused as an id naming no product. An id naming no row at all
- * is a silent no-op.
+ * A variant has no recipe of its own (`setProductRecipe`, packages/recipes/src/recipes.ts, refuses
+ * one), so a variant's id is refused as an id naming no product. An id naming no row at all is a
+ * silent no-op.
  */
 async function applyDerivation(
   tx: Transaction,
@@ -841,7 +816,6 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
   if (input.unitId === undefined && input.pricingUnit === undefined) {
     throw new AppError("product.invalid", { field: "unitId" });
   }
-  // Resolve to the unit to assign, or null for Each (no product_units row stored).
   let selectedUnit: SellableUnit | null;
   if (input.unitId === null) {
     selectedUnit = null;
@@ -856,9 +830,8 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
     // Any other legacy `pricingUnit` value is rejected at the boundary, not silently treated as weight.
     throw new AppError("product.invalid", { field: "pricingUnit" });
   }
-  // The product is created top-level with no recipe, so the published values are the two staff
-  // overlays over empty derivations — computed as `republishOverlays` would. Both overlays are
-  // validated before the insert.
+  // Created top-level with no recipe, so the published values are the two staff overlays over empty
+  // derivations — computed as `republishOverlays` would.
   const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
   const dietOverride = validateDietOverride(input.dietOverride ?? null);
   const [row] = await tx
@@ -922,7 +895,6 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
     .groupBy(products.id, units.id)
     .orderBy(products.createdAt, products.id);
   if (rows.length === 0) return [];
-  // ONE query for every product read, never one per product (CLAUDE.md §3).
   const modifiers = await readProductModifiers(
     tx,
     rows.map((row) => row.id),
@@ -939,7 +911,7 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
 }
 
 /** Every variant of each product in `productIds`, Inactive ones included, in variant order, with
- * the values it carries once its blanks read as its parent's — in ONE query (CLAUDE.md §3). */
+ * the values it carries once its blanks read as its parent's. */
 async function listedVariantsOfProducts(
   tx: Transaction,
   productIds: readonly string[],
@@ -1004,12 +976,7 @@ export async function updateProduct(
       .where(eq(products.id, id));
     if (row?.parentId != null) await assertNotOfferedAsExtra(tx, row.parentId, "active");
   }
-  // `allergens` is the MANUAL overlay now, not the published column: split it out of the generic
-  // patch and write it to `manual_allergens`, then republish. A supplied map is validated before the
-  // write; `null` (clear) and `undefined` (leave unchanged) both skip validation, and only `null`
-  // reaches `manual_allergens`. The remaining `rest` keys map 1:1 to `products` columns, so the
-  // spread stays fully typed against `.set()` — no `Record<string, unknown>` widening. Republish only
-  // when `allergens` was in the patch: an unrelated edit must not disturb the published declaration.
+  // `allergens` and `dietOverride` are the staff overlays, not the published columns.
   const {
     allergens,
     dietOverride,
@@ -1021,18 +988,9 @@ export async function updateProduct(
     ...rest
   } = patch;
   if (categoryId !== undefined) {
-    // Choosing a primary retains other memberships; clearing is allowed only for the final membership.
-    //
-    // This branch KEEPS the old coupling between the reporting category and membership on purpose,
-    // and is the only write path that still does. Clearing here refuses outright when the product
-    // has more than one membership (`category.primary_required`), and when it is allowed it clears
-    // every membership with it. `replaceProductCategories` — what the membership picker and the
-    // product editor call — treats the two independently: a product may hold memberships with no
-    // reporting category. The relaxed behaviour is not extended to this path because no first-party
-    // caller sends `categoryId` in a product patch any more (the single-select `product-form.ts` is
-    // the only thing that ever did, and nothing mounts it), so changing it would alter a legacy
-    // route's contract with nothing to gain. `docs/developers/product-categories.md` says which
-    // path is which; `docs/backlog.md` carries removing this one when a client needs it relaxed.
+    // Deliberately keeps the legacy coupling of reporting category and membership, unlike
+    // `replaceProductCategories`: no first-party caller sends `categoryId` here any more.
+    // See docs/developers/product-categories.md.
     const current = await readProductCategories(tx, id);
     if (categoryId === null && current.categoryIds.length > 1)
       throw new AppError("category.primary_required", {});
@@ -1042,17 +1000,11 @@ export async function updateProduct(
     });
   }
   if (allergens != null) validateAllergens(allergens);
-  // The diet override is split out like `allergens`: a supplied override is checked disjoint before
-  // the write (`null`/`undefined` skip it), only a non-`undefined` value reaches the `diet_override`
-  // column, and `diet` is republished only when the override was in the patch — an unrelated edit
-  // must not disturb the published diet profile. Mirrors the allergen republish guard exactly.
   if (dietOverride !== undefined) validateDietOverride(dietOverride);
   const directDietary =
     dietaryDeclarations === undefined || dietaryDeclarations === null
       ? dietaryDeclarations
       : validateDietaryDeclarations(dietaryDeclarations);
-  // Tri-state: `null` clears the unit, a real id sets it, and an omitted unit is left unchanged
-  // unless the legacy `pricingUnit` compat field is supplied instead ("each" clears, "weight" sets kg).
   type UnitAction = { kind: "keep" } | { kind: "clear" } | { kind: "set"; unit: SellableUnit };
   let unitAction: UnitAction;
   if (unitId === null) {
@@ -1127,9 +1079,6 @@ export async function setLocationDefaultCatalogue(
   locationId: string,
   catalogueId: string,
 ): Promise<void> {
-  // Only the current default matters here, so read `locations.catalogue_id` DIRECTLY rather than via
-  // `resolveAccessibleCatalogueIds` — that helper also SELECTs the `location_catalogues` members and
-  // builds a Set the demote logic never consults, a wasted round-trip on every default change.
   const [row] = await tx
     .select({ id: locations.catalogueId })
     .from(locations)
@@ -1142,10 +1091,8 @@ export async function setLocationDefaultCatalogue(
 }
 
 /**
- * Attach a NON-default catalogue to a location's accessible set (a `location_catalogues` row),
- * alongside its default `catalogue_id`. Idempotent — the primary key
- * (location_id, catalogue_id) makes a re-attach a no-op via `onConflictDoNothing`. The
- * default assignment stays with {@link assignCatalogueToLocation}; this only adds OTHER menus.
+ * Attach a NON-default catalogue to a location's accessible set (a `location_catalogues` row).
+ * Idempotent: the primary key (location_id, catalogue_id) makes a re-attach a no-op.
  */
 export async function addCatalogueToLocation(
   tx: Transaction,
@@ -1156,11 +1103,8 @@ export async function addCatalogueToLocation(
 }
 
 /**
- * Detach a catalogue from a location's accessible set (delete its `location_catalogues` row).
- * Idempotent — deleting a row that is not there is a no-op. This
- * NEVER touches the default (`locations.catalogue_id`), which is not stored as a member row, so it
- * cannot strip a location's default menu; call {@link assignCatalogueToLocation} to change the
- * default.
+ * Detach a catalogue from a location's accessible set. NEVER touches the default
+ * (`locations.catalogue_id`), which is not stored as a member row.
  */
 export async function removeCatalogueFromLocation(
   tx: Transaction,
@@ -1178,14 +1122,9 @@ export async function removeCatalogueFromLocation(
 }
 
 /**
- * The catalogue ids in a location's menu list: its default (`locations.catalogue_id`, when non-null)
- * unioned with every `location_catalogues` member, de-duplicated (a `Set`, since the default may also
- * appear as a member). Order is not meaningful — {@link listAvailableProducts} sorts by catalogue
- * name — so `ids` is just the set's insertion order. `defaultId` is the same `locations.catalogue_id`
- * the union already read (or `null` when the location has none): returned alongside so a caller that
- * needs to flag the default menu ({@link listAccessibleCatalogues}) does not re-read `locations`.
- * `invoiceLocales` is that SAME `locations` row's `invoice_locales` (empty only when the location does
- * not exist), so a caller needing both reads `locations` once.
+ * The catalogue ids in a location's menu list: its default unioned with every `location_catalogues`
+ * member, de-duplicated. The order of `ids` is not meaningful. `invoiceLocales` is empty only when
+ * the location does not exist.
  */
 export async function resolveAccessibleCatalogueIds(
   tx: Transaction,
@@ -1223,11 +1162,8 @@ export interface LocationCatalogue extends Catalogue {
 }
 
 /**
- * EVERY catalogue, each flagged with whether it is in `locationId`'s menu list
- * (`sellable`) and whether it is that location's default (`isDefault`), for
- * `GET /management-api/locations/:locationId/catalogues`. Unlike {@link listAccessibleCatalogues}
- * (which returns ONLY the location's list), this returns every catalogue. Order follows
- * {@link listCatalogues}.
+ * EVERY catalogue, each flagged with whether it is in `locationId`'s menu list (`sellable`) and
+ * whether it is that location's default (`isDefault`).
  */
 export async function listCataloguesForLocation(
   tx: Transaction,
@@ -1239,12 +1175,7 @@ export async function listCataloguesForLocation(
   return all.map((c) => ({ ...c, sellable: sellable.has(c.id), isDefault: c.id === defaultId }));
 }
 
-/**
- * The active catalogues (menus) in `locationId`'s menu list — its default plus any
- * `location_catalogues` members (see {@link resolveAccessibleCatalogueIds}). `isDefault` flags
- * the one row matching `locations.catalogue_id`. Ordered default-first, then by name.
- * Returns `[]` when the location has no accessible catalogue at all.
- */
+/** The active catalogues in `locationId`'s menu list, default first, then by name. */
 export async function listAccessibleCatalogues(
   tx: Transaction,
   locationId: string,
@@ -1263,18 +1194,9 @@ export async function listAccessibleCatalogues(
 }
 
 /**
- * The products in `locationId`'s menu list, across the WHOLE accessible catalogue set (the
- * default plus any `location_catalogues` members — see {@link resolveAccessibleCatalogueIds}), each
- * row tagged with the `catalogueId`/`catalogueName` it came from. Keeps only Active and Available
- * products of an active catalogue, with the category NAME resolved via a left join (null when the product has no
- * category). `products` is `[]` when the location has no accessible catalogue at all. Ordered by
- * catalogue name, then product `created_at`, then `id` so the result is stable and grouped by menu.
- *
- * Returns the location's `invoiceLocales` ALONGSIDE the products — both derived from the single
- * `resolveAccessibleCatalogueIds` read of `locations`. `invoiceLocales`
- * is `[]` ONLY when the `locations` row is missing; `products` empties more broadly (any location with
- * no accessible catalogue), so the two emptiness conditions are NOT equivalent — a real location with
- * an empty catalogue returns `[]` products but its actual `invoiceLocales`.
+ * The Active and Available products across `locationId`'s whole accessible catalogue set, grouped
+ * by menu. `invoiceLocales` is `[]` ONLY when the location is missing, while `products` is also
+ * `[]` for a real location with no accessible catalogue — the two emptiness conditions differ.
  */
 export async function listAvailableProducts(
   tx: Transaction,
@@ -1333,7 +1255,6 @@ export async function listAvailableProducts(
     rows.map((row) => ({ productId: row.id, menuItemId: null })),
   );
 
-  // `products` is the imported table, so the mapped rows take a local name of their own.
   const available = rows.map((row) => ({
     id: row.id,
     name: row.name,

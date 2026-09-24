@@ -46,11 +46,8 @@ describe("customerOptionSnapshotLabels", () => {
   });
 
   it("answers a full tag with the bare language the stored answers are keyed by", () => {
-    // A frozen answer is keyed by CONTENT LANGUAGE codes ("es", "en"): `buildLineExtras`
-    // (`apps/server/src/modifier-selection.ts`) copies the catalogue row's customer map through
-    // whole and widens each plain staff name under the venue's default content language. The
-    // receipt asks with the invoice locale, which can be a full tag. Matching keys exactly would
-    // miss and print whichever language the stored map happens to list first.
+    // A frozen answer is keyed by CONTENT LANGUAGE codes ("es", "en"), while the receipt asks with
+    // the invoice locale, which can be a full tag. Matching keys exactly would miss.
     expect(
       customerOptionSnapshotLabels(
         [
@@ -65,10 +62,8 @@ describe("customerOptionSnapshotLabels", () => {
   });
 
   it("prints the asked-for language's text even when an earlier key in the map is blank", () => {
-    // The requested language here is NOT blank — "es" holds text and the resolver finds it on its
-    // first pass. What this pins is that a blank sitting EARLIER in the map cannot win: the code
-    // this replaced read `Object.values(names)[0]`, which would have printed the empty "en" entry
-    // and dropped the goods identification off a legal receipt.
+    // The requested language here is NOT blank. What this pins is that a blank sitting EARLIER in
+    // the map cannot win and drop the goods identification off a legal receipt.
     expect(
       customerOptionSnapshotLabels(
         [
@@ -83,20 +78,11 @@ describe("customerOptionSnapshotLabels", () => {
   });
 
   it("falls back to the first non-blank value over sorted keys when the asked-for language is blank", () => {
-    // The case the docstring's "first non-blank value over SORTED keys" sentence is actually about.
-    // `nonBlankTranslations` keeps a map that holds text in ANY language, so the map it chose can
-    // still be blank in the language the receipt asked for — and printing that blank would drop the
-    // goods identification off a legal receipt while every other assertion still passed.
-    //
-    // Each map here holds TWO non-blank values, under keys whose sorted order differs from their
-    // insertion order: "es" is blank, so sorted keys (en, es, gl) reach the ENGLISH text first
-    // while insertion order (es, gl, en) would reach the Galician. The assertion therefore fails if
-    // the `.sort()` in `resolveSnapshotText` (`packages/shared/src/content-languages.ts`) is
-    // deleted — proven that way, and the deleted-sort run printed the Galician pair.
-    //
-    // Note the resolver sorts ALL the keys and then takes the first non-blank VALUE; it does not
-    // drop the blanks and sort what is left. The two orders coincide here, but a key that sorted
-    // before "en" and held only blanks would still be looked at and passed over.
+    // `nonBlankTranslations` keeps a map that holds text in ANY language, so the chosen map can
+    // still be blank in the language the receipt asked for. Each map here holds TWO non-blank
+    // values under keys whose sorted order (en, es, gl) differs from insertion order (es, gl, en),
+    // so the assertion fails if `resolveSnapshotText` stops taking the first non-blank value over
+    // SORTED keys.
     expect(
       customerOptionSnapshotLabels(
         [
@@ -130,10 +116,8 @@ describe("staffOptionSnapshotLabels", () => {
   });
 
   it("prints a staff map's one entry whatever language it is keyed by", () => {
-    // `buildLineExtras` (`apps/server/src/modifier-selection.ts`) writes
-    // `listName: { [defaultLanguage]: list.name }`, so the key is the venue's default content
-    // language and the map holds one entry. A builder that looked up a fixed key would print
-    // nothing for a venue whose default is not that key.
+    // The staff map's one key is whichever content language its builder resolved, so a reader
+    // that looked up a fixed key would print nothing for a venue whose default is not that key.
     expect(
       staffOptionSnapshotLabels([
         snapshot({ listName: { gl: "Punto galego" }, labelName: { gl: "Pouco feito galego" } }),
