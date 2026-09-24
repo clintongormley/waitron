@@ -1636,7 +1636,8 @@ export class TillApp extends LitElement {
         // Symmetric with `#onPlaceOrder`'s and `#onConfirmPayment`'s ready-the-order re-sync. The Hold
         // field opens BLANK (`event.detail.label` is undefined unless the operator types one), and
         // `updateWorkingOrder` writes `label ?? null`, so fall back to the STORED label — a blank re-hold
-        // must keep the retrieved order's name (e.g. "Mesa 4"), not wipe it; a typed value renames.
+        // must keep the retrieved order's name (e.g. "Mesa 4"), not wipe it. A typed value renames only
+        // when a line was also edited, because `#syncIfDirty` sends nothing otherwise (docs/backlog.md).
         await this.#syncIfDirty(id, lines, label ?? this.#store.label);
       } else {
         await this.api.parkOrder({ id, lines, label });
@@ -1658,13 +1659,9 @@ export class TillApp extends LitElement {
    * into the shared store under the retrieved order's own id, and refresh the list. The stored id keeps
    * later payment in the same idempotency slot. Stays on the counter with the basket ready to edit or pay.
    *
-   * A contextual line uses the server's stored offer snapshot, so deactivation does not remove it.
-   * A legacy product-only line that can no longer resolve is dropped and surfaces `held.product_gone`.
    * A line's extras picks and its options answers both come back as VALUES carrying none of the ids
    * the wire names, so both are matched back to the dish's live offer here (`deriveExtraSelections`
-   * and `deriveOptionSelections`, `./state/`). A still-offered options list that nothing matched
-   * surfaces `held.options_changed`: the operator has to choose again, and the list's own default is
-   * never substituted for what the diner asked for.
+   * and `deriveOptionSelections`, `./state/`).
    *
    * Each `quantity` arrives as a three-place decimal string ("2.000"); {@link displayQuantity} cleans a
    * precision-zero count's trailing zeros without touching re-pricing.
@@ -1690,6 +1687,7 @@ export class TillApp extends LitElement {
       const order = await this.api.retrieveWorkingOrder(id);
       const lines: OrderLine[] = [];
       let droppedAProduct = false;
+      let extraNotOffered = false;
       let mustChooseAgain = false;
       // The live catalogue, indexed once instead of scanned per line: every line needs today's
       // offer, and a zone's product list is as long as its menu. First entry wins under either key,
@@ -1725,11 +1723,9 @@ export class TillApp extends LitElement {
           droppedAProduct = true;
           continue;
         }
-        // A child line names no list, so the list a pick belongs to is re-derived from the offer; a
-        // pick nothing offers any more cannot be re-sent at all and leaves the basket, which the
-        // same notice as a dropped line reports.
+        // A child line names no list, so the list a pick belongs to is re-derived from the offer.
         const picks = deriveExtraSelections(product.offeredModifiers ?? [], line.extras);
-        if (picks.dropped.length > 0) droppedAProduct = true;
+        if (picks.notOffered.length > 0) extraNotOffered = true;
         // An answer comes back as six frozen names and no ids, so the ids the wire wants are
         // re-derived from the same offer. A still-offered list that nothing matched cannot be
         // answered from here at all — the server refuses the whole edit until it is answered again,
@@ -1746,15 +1742,18 @@ export class TillApp extends LitElement {
           ...(line.workingOrderLineId === undefined
             ? {}
             : { workingOrderLineId: line.workingOrderLineId }),
+          ...(live === undefined ? { notOffered: true as const } : {}),
           ...(picks.extras.length === 0 ? {} : { extras: picks.extras }),
+          ...(picks.notOffered.length === 0 ? {} : { notOfferedExtras: picks.notOffered }),
           ...(answers.options.length === 0 ? {} : { options: answers.options }),
           ...(line.optionSnapshots === undefined ? {} : { optionSnapshots: line.optionSnapshots }),
           ...(line.note === undefined ? {} : { note: line.note }),
         });
       }
       // One banner, so a DROPPED product is reported first: it has already changed what the basket
-      // will bill, where a stale answer changes nothing until the operator edits the order.
+      // will bill, where the other two change nothing until the operator edits the order.
       if (droppedAProduct) this.errorKey = "held.product_gone";
+      else if (extraNotOffered) this.errorKey = "held.extra_not_offered";
       else if (mustChooseAgain) this.errorKey = "held.options_changed";
       this.#store.loadFrom(order.id, lines, order.label ?? undefined);
       this.cardOutcome = undefined;

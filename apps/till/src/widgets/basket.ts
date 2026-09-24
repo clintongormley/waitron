@@ -31,6 +31,10 @@ function pickQuantityBadge(quantity: number): string {
   return quantity > 1 ? ` ${QTY_BADGE}${quantity}` : "";
 }
 
+function notOfferedMarker() {
+  return html` <span class="not-offered">${t("basket.not_offered")}</span>`;
+}
+
 /**
  * The running order: one row per rung-up line, each with the product's name, localized unit quantity,
  * gross line total, and a remove control. It reads the
@@ -128,6 +132,16 @@ export class TillBasket extends LitElement {
 
       .option-total {
         font-variant-numeric: tabular-nums;
+      }
+
+      .not-offered {
+        display: inline-block;
+        padding: 0 var(--wt-space-2);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-warning);
+        color: var(--wt-color-on-warning);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
       }
 
       /* The line's AS-SERVED allergen profile (modifier↔allergen, Task 7) — indented under the dish
@@ -347,7 +361,9 @@ export class TillBasket extends LitElement {
       ${lines.map(
         (line, index) => html`
           <div class="line">
-            <span class="name">${this.#lineName(line)}</span>
+            <span class="name"
+              >${this.#lineName(line)}${line.notOffered ? notOfferedMarker() : nothing}</span
+            >
             ${this.#quantityCell(line, index)}
             <span class="line-total">${formatMoney(dishGross(line))}</span>
             <wt-button
@@ -405,6 +421,16 @@ export class TillBasket extends LitElement {
                 ${own ? extraNutrition(own, `option-allergens-${index}-${i}`, `option-diet-${index}-${i}`) : nothing}
               `;
             },
+          )}
+          ${(line.notOfferedExtras ?? []).map(
+            (extra) => html`
+              <div class="option">
+                <span class="name"
+                  >${extra.name}${pickQuantityBadge(extra.quantity)}${notOfferedMarker()}</span
+                >
+                <span class="option-total">${formatMoney(extraGross(line, extra))}</span>
+              </div>
+            `,
           )}
           ${this.#answers(line).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
           ${this.#allergenRow(line, index)} ${this.#dietRow(line, index)}

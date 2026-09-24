@@ -7,6 +7,7 @@ import { TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { formatMoney } from "./i18n/format.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
@@ -2180,34 +2181,148 @@ describe("till-app", () => {
     });
   });
 
-  it("drops a retrieved pick no list offers any more, and says a product was dropped", async () => {
-    // Nothing offers `p-milk` now, so no wire entry could name it — `validateExtraSelections` refuses
-    // a pick a list does not carry, which would fail the whole edit. The pick leaves the basket and
-    // the operator is told, the same notice a dropped LINE gets.
+  /** A retrieved order whose one café line (×2) carries `heldMilk` (×2 per dish). */
+  function milkOrder(product: TillProduct = cafe) {
+    return {
+      id: "wo-customised",
+      orderNumber: 9,
+      label: "Takeaway",
+      lines: [
+        {
+          workingOrderLineId: "line-customised",
+          menuItemId: product.menuItemId,
+          productId: product.id,
+          quantity: "2.000",
+          product,
+          extras: [heldMilk],
+        },
+      ],
+    };
+  }
+
+  const basketText = (el: TillApp) =>
+    counterGrid(el)!.shadowRoot!.querySelector("till-basket")!.shadowRoot!.textContent!;
+  const totalText = (el: TillApp) =>
+    counterGrid(el)!.shadowRoot!.querySelector("till-total")!.shadowRoot!.textContent!;
+
+  it("shows a retrieved pick no list offers any more, marked, and counts it in the total", async () => {
+    // Nothing offers `p-milk` now, so the pick cannot be re-sent, but the unedited order is paid
+    // from its stored lines, which still bill it.
     const { el } = await mountApp({
-      retrieveWorkingOrder: vi.fn().mockResolvedValue({
-        id: "wo-customised",
-        orderNumber: 9,
-        label: "Takeaway",
-        lines: [
-          {
-            workingOrderLineId: "line-customised",
-            menuItemId: "menu-item-cafe-0",
-            productId: "cafe",
-            quantity: "2.000",
-            product: cafe,
-            extras: [heldMilk],
-          },
-        ],
-      }),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(milkOrder()),
     });
     const counter = await toCounter(el);
 
     emit(counter, "retrieve-order", { id: "wo-customised" });
     await flush(el);
 
-    expect(counter.store.lines[0]!.extras).toBeUndefined();
-    expect(el.shadowRoot!.textContent).toContain(t("held.product_gone"));
+    expect(basketText(el)).toContain("Leche extra ×2");
+    expect(basketText(el)).toContain(t("basket.not_offered"));
+    // Two cafés at 1.50, and two milks per café at 0.75.
+    expect(totalText(el)).toContain(formatMoney("6.00"));
+  });
+
+  it("takes a not-offered pick off the basket and the total once the order is edited", async () => {
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(milkOrder()),
+    });
+    const counter = await toCounter(el);
+    emit(counter, "retrieve-order", { id: "wo-customised" });
+    await flush(el);
+
+    counter.store.setLineQuantity(0, "3");
+    await flush(el);
+
+    expect(basketText(el)).not.toContain("Leche extra");
+    // Three cafés at 1.50, and no milk: what the server re-prices the edit to.
+    expect(totalText(el)).toContain(formatMoney("4.50"));
+  });
+
+  it("never sends a not-offered pick, whether the order is paid unedited, held, or edited", async () => {
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(milkOrder()),
+    });
+    const counter = await toCounter(el);
+    const retrieve = async () => {
+      emit(counter, "retrieve-order", { id: "wo-customised" });
+      await flush(el);
+    };
+    const plainLine = (quantity: string) => ({
+      workingOrderLineId: "line-customised",
+      menuItemId: "menu-item-cafe-0",
+      quantity,
+    });
+
+    await retrieve();
+    emit(counter, "confirm-payment", { method: "cash", amount: "10" });
+    await flush(el);
+    expect(currentApi.recordSale).toHaveBeenCalledWith(
+      [plainLine("2")],
+      { method: "cash", amount: "10" },
+      "wo-customised",
+    );
+
+    emit(counter, "new-sale");
+    await flush(el);
+    await retrieve();
+    counter.store.setLineQuantity(0, "3");
+    emit(counter, "park-order", { label: undefined });
+    await flush(el);
+    expect(currentApi.updateWorkingOrder).toHaveBeenCalledWith("wo-customised", {
+      label: "Takeaway",
+      lines: [plainLine("3")],
+    });
+    expect(currentApi.parkOrder).not.toHaveBeenCalled();
+  });
+
+  it("says a retrieved extra is no longer offered but still charged, not that it was dropped", async () => {
+    const { el } = await mountApp({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(milkOrder()),
+    });
+    const counter = await toCounter(el);
+
+    emit(counter, "retrieve-order", { id: "wo-customised" });
+    await flush(el);
+
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("held.extra_not_offered"));
+    expect(banner.textContent).not.toContain(t("held.product_gone"));
+  });
+
+  it("reports a dropped line before a not-offered extra, and a not-offered extra before a stale answer", async () => {
+    const offering: TillProduct = { ...cafe, offeredModifiers: [puntoList] };
+    const answered = {
+      workingOrderLineId: "line-answered",
+      menuItemId: "menu-item-cafe-0",
+      productId: "cafe",
+      quantity: "1.000",
+      product: cafe,
+      optionSnapshots: [{ ...frozenPunto, labelName: { es: "Muy hecho" } }],
+      extras: [heldMilk],
+    };
+    const retrieveWorkingOrder = vi
+      .fn()
+      .mockResolvedValueOnce({
+        id: "wo-both",
+        orderNumber: 12,
+        label: null,
+        lines: [answered, { productId: "ghost", quantity: "1.000" }],
+      })
+      .mockResolvedValueOnce({ id: "wo-one", orderNumber: 13, label: null, lines: [answered] });
+    const { el } = await mountApp({
+      listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [offering] }),
+      retrieveWorkingOrder,
+    });
+    const counter = await toCounter(el);
+    const banner = () => el.shadowRoot!.querySelector('[role="alert"]')!.textContent;
+
+    emit(counter, "retrieve-order", { id: "wo-both" });
+    await flush(el);
+    expect(banner()).toContain(t("held.product_gone"));
+
+    emit(counter, "retrieve-order", { id: "wo-one" });
+    await flush(el);
+    expect(banner()).toContain(t("held.extra_not_offered"));
   });
 
   it("shows a retrieved line's frozen options answers, which carry no ids to re-send", async () => {
@@ -2879,7 +2994,9 @@ describe("till-app", () => {
     emit(c, "retrieve-order", { id: "wo-seasonal" });
     await flush(el);
 
-    expect(c.store.lines).toEqual([{ product: storedProduct, quantity: "1" }]);
+    expect(c.store.lines).toEqual([{ product: storedProduct, quantity: "1", notOffered: true }]);
+    const basket = counterGrid(el)!.shadowRoot!.querySelector("till-basket")!.shadowRoot!;
+    expect(basket.querySelector(".line")!.textContent).toContain(t("basket.not_offered"));
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 

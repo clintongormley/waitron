@@ -555,7 +555,13 @@ both. Its migration adds a column and needs no reset of its own. What it left op
   §10 says marking a product unavailable must not cancel existing work. **The owner chose option A
   on 2026-09-23** (lane B question Q1): keep a sold-out line in held work, flag it on the till, and
   refuse only a quantity increase (the server already refuses the increase). A follow-up item, not
-  part of the variants plan's nine tasks. **Next action:** build it.
+  part of the variants plan's nine tasks. **Next action:** build it. (2026-09-24: the till now keeps
+  an extra no list offers on a reopened order, marked "Not offered now" and counted in the total,
+  and a line whose dish it no longer offers, rebuilt from the line's stored snapshot, carries the
+  same mark; a line with no stored snapshot whose product the till no longer offers is still
+  dropped with `held.product_gone`. See the DONE entry
+  under Task 9 below. Still open against option A: the first edit of the order removes such an
+  extra, where option A refuses only a quantity increase.)
 - **Raising a held line's quantity does not check the line's variant, or whether its menu or menu
   section has been switched off** — only its parent product and extras. Neither Task 3 nor Task 5
   (#537) took it, so it remains open. **Next action:** on a quantity raise, check the line's own
@@ -831,16 +837,37 @@ error, the table was gone and the product row kept. A
 product with Active variants is now refused on the till's plain product path, as an extras pick on
 either path, and on a raised held line (the Task 5 bullet above). (2026-09-24: B4 has since removed
 the plain product path; see "A sale needs a zone" below.) What Task 9 leaves open:
-- **Paying a held order does not re-check its lines.** A line, or an extras pick, whose product
-  gained an Active variant after the order was parked is billed as parked: the cash and card pays
-  price a retrieved order from its stored lines (`priceStoredOrder`,
-  `apps/server/src/working-order.ts`). That follows the 2026-09-20 service spec §10 (existing work
-  is not cancelled), and only a raised quantity is refused. On the till, retrieving the order drops
-  such an extra from the basket with the `held.product_gone` notice, as it drops a sold-out one
-  (`deriveExtraSelections`, `apps/till/src/state/held-extras.ts`); any edit then re-prices without
-  it, but paying with no edit still bills it, since an unedited retrieved basket sends no update
-  (`#syncIfDirty`, `apps/till/src/till-app.ts`). **Next action:** confirm with the owner
-  that paying parked work is meant to go through unchanged.
+- **DONE (#575, owner decision 2026-09-24): paying a held order bills its lines as parked, and the till
+  shows what it bills.** A line, or an extras pick, whose product gained an Active variant after
+  the order was parked is billed as parked: the cash and card pays price a retrieved order from its
+  stored lines (`priceStoredOrder`, `apps/server/src/working-order.ts`), following the 2026-09-20
+  service spec §10 (existing work is not cancelled); only a raised quantity is refused. On the till,
+  retrieving the order keeps an extra that no list offers any
+  more in the basket, marked "Not offered now" and counted in the total, and the banner says it is
+  still charged (`held.extra_not_offered`); a retrieved line whose offer the till no longer lists
+  carries the same mark. The first edit takes the extra off the basket, because the till cannot
+  send it and the server re-prices an edited order without it — pinned by "bills a parked extra
+  that gained an Active variant until an edit omits it" (`apps/server/src/till-sale.test.ts`).
+- **Retrieving a held order reads the counter's CURRENT zone offer, not the zone the order was
+  parked in.** `#onRetrieveOrder` (`apps/till/src/till-app.ts`) matches each line against the
+  till's `products`, which hold the offers of the zone the counter is showing (loaded by
+  `listDefaultZoneOffers` or `listZoneOffers`), and the retrieved order (`HeldOrder`,
+  `apps/till/src/api/client.ts`) carries no zone. An order parked in one zone and retrieved while
+  the counter shows another can therefore mark its lines and extras "Not offered now" when its own
+  zone still offers them. Found by the branch that added the "Not offered now" mark; traced through
+  the code, not run. **Next action:** send the order's zone with the retrieved order and read that
+  zone's offer on retrieve.
+- **A label typed when re-holding an unedited retrieved order is never saved.** Measured 2026-09-24
+  by the run-it review of the branch that added the "Not offered now" mark, in real headless
+  Chromium: a throwaway `till-app` test retrieved an order, made no edit, and re-held it with the
+  label "New label"; neither `updateWorkingOrder` nor `parkOrder` was called (the test printed
+  `REVIEW label calls [] []`). Re-holding a retrieved order saves only through `#syncIfDirty`
+  (`apps/till/src/till-app.ts`), which does nothing unless the order has been saved before AND a
+  line was edited, and a label change deliberately does not count as a line edit (the `#dirty`
+  comment in `apps/till/src/state/working-order.ts`). It predates that branch: the dirty check came
+  in c64b96fb7 (2026-08-07, #63), where it guarded only paying and placing an order, and re-holding
+  a retrieved order was routed through `#syncIfDirty` in 29b7234ae (2026-08-18, #101). **Next action:** give the till a way to save a label
+  without re-sending the lines, so the stored extras and locked prices are kept.
 - **An extras list whose items all have Active variants reaches the till with no items**
   (`readExtraProducts` leaves each one out), so a list that requires a pick cannot be answered from
   the till. **Next action:** decide whether

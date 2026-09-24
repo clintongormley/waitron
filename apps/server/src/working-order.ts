@@ -179,10 +179,10 @@ interface BasketModifiers extends AttachedModifiers {
  * keeps lines already rung passes `false`, so when every line of the edit is quantity-only, a line
  * kept at or below its stored quantity keeps a pick that has since sold out. For a line whose quantity rises {@link updateHeldOrder} checks the
  * dish's and its extras' states itself, and when one is not sellable sends the edit to the
- * replacement path, which passes `true`. The till's retrieve drops a pick that the dish's offer, as
- * the till last loaded it, no longer lists (`deriveExtraSelections`,
+ * replacement path, which passes `true`. The till never sends a pick that the dish's offer, as the
+ * till last loaded it, no longer lists (`deriveExtraSelections`,
  * apps/till/src/state/held-extras.ts), so from the till an extra that sold out before that load
- * leaves the basket rather than reaching this path as a kept pick.
+ * never reaches this path as a kept pick.
  */
 async function resolveBasketModifiers(
   tx: Transaction,

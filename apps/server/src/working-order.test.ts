@@ -1683,7 +1683,7 @@ describe("updateHeldOrder", () => {
   // quantity sells more of it, so the dish and every extra the line carries must then be Active and
   // Available, and the edit is refused with the code a new order naming them gets. From the real
   // till, only an extra that sold out before the till last loaded its menu is kept out of this
-  // path: retrieve drops a pick the dish's offer, as the till last loaded it, no longer lists
+  // path: the till never sends a pick the dish's offer, as the till last loaded it, no longer lists
   // (`deriveExtraSelections`, apps/till/src/state/held-extras.ts).
   async function readLines(id: string) {
     return (

@@ -48,7 +48,13 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
-import { addTabRound, createOpenOrder, openTab, voidTabLine } from "./working-order.js";
+import {
+  addTabRound,
+  createOpenOrder,
+  openTab,
+  updateHeldOrder,
+  voidTabLine,
+} from "./working-order.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -1570,6 +1576,149 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(result.lines[0]!.parentLineNo).toBeNull();
     expect(result.lines[1]!.parentLineNo).toBe(filedParent!.lineNo);
     expect(result.lines[2]!.parentLineNo).toBe(filedParent!.lineNo);
+  });
+
+  // What the server BILLS for a pick the till can no longer re-send; the till's showing and dropping
+  // of it are pinned in apps/till/src/till-app.test.ts.
+  it("bills a parked extra that gained an Active variant until an edit omits it, which re-prices without it", async () => {
+    const v = await setupModifierVenue();
+    const park = (id: string, quantity: string, baconQuantity: number) =>
+      withTransaction(suite.db, (tx) =>
+        createOpenOrder(
+          tx,
+          v.cfg,
+          id,
+          [
+            {
+              menuItemId: v.offerFor(v.burgerId),
+              quantity,
+              extras: extrasPick(v, [{ productId: v.baconId, quantity: baconQuantity }]),
+            },
+          ],
+          null,
+          { zoneId: v.zoneId },
+        ),
+      );
+    const unedited = randomUUID();
+    const edited = randomUUID();
+    await park(unedited, "2", 2);
+    await park(edited, "1", 1);
+    await withTransaction(suite.db, (tx) =>
+      setProductVariants(
+        tx,
+        v.baconId,
+        [
+          {
+            name: "Bacon ahumado",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "0.90",
+            available: true,
+          },
+        ],
+        LOCALE,
+      ),
+    );
+    const pay = (id: string) =>
+      payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "50.00" },
+      });
+
+    // 2 × 9.00 + (2 × 2) × 0.50. Counterpart: till-app.test.ts's "shows a retrieved pick no list
+    // offers any more, marked, and counts it in the total".
+    expect((await pay(unedited)).total).toBe("20.00");
+
+    const [dish] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, edited));
+    await updateHeldOrder({ db: suite.db }, v.cfg, edited, {
+      lines: [{ workingOrderLineId: dish!.id, menuItemId: v.offerFor(v.burgerId), quantity: "2" }],
+    });
+    const stored = await suite.db
+      .select({ productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, edited));
+    expect(stored).toEqual([{ productId: v.burgerId }]);
+    // Two Hamburguesas at 9.00, and no Bacon.
+    expect((await pay(edited)).total).toBe("18.00");
+  });
+
+  it("re-prices without a parked extra that gained an Active variant when an edit changes only ANOTHER line", async () => {
+    const v = await setupModifierVenue();
+    const id = randomUUID();
+    await withTransaction(suite.db, (tx) =>
+      createOpenOrder(
+        tx,
+        v.cfg,
+        id,
+        [
+          {
+            menuItemId: v.offerFor(v.burgerId),
+            quantity: "1",
+            extras: extrasPick(v, [{ productId: v.baconId, quantity: 1 }]),
+          },
+          { menuItemId: v.offerFor(v.jamonId), quantity: "0.1" },
+        ],
+        null,
+        { zoneId: v.zoneId },
+      ),
+    );
+    await withTransaction(suite.db, (tx) =>
+      setProductVariants(
+        tx,
+        v.baconId,
+        [
+          {
+            name: "Bacon ahumado",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "0.90",
+            available: true,
+          },
+        ],
+        LOCALE,
+      ),
+    );
+
+    const parked = await suite.db
+      .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    const lineOf = (productId: string) => parked.find((line) => line.productId === productId)!.id;
+    // The burger is re-sent unchanged but without the Bacon, which the till cannot name.
+    await updateHeldOrder({ db: suite.db }, v.cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: lineOf(v.burgerId),
+          menuItemId: v.offerFor(v.burgerId),
+          quantity: "1",
+        },
+        {
+          workingOrderLineId: lineOf(v.jamonId),
+          menuItemId: v.offerFor(v.jamonId),
+          quantity: "0.2",
+        },
+      ],
+    });
+
+    const stored = await suite.db
+      .select({ productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(stored.map((line) => line.productId).sort()).toEqual([v.burgerId, v.jamonId].sort());
+    // Hamburguesa 9.00 + 0.2 kg of Jamón at 24.90, and no Bacon.
+    const result = await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
+      id,
+      lines: [],
+      tender: { method: "cash", amount: "50.00" },
+    });
+    expect(result.total).toBe("13.98");
+    expect((await filedLinesOf(id)).filter((line) => line.parentLineId !== null)).toEqual([]);
   });
 
   it("settling a TAB with extras files child sale_lines linked to their parent (the primary path)", async () => {
