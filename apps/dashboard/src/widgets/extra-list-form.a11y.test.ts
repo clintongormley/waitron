@@ -7,8 +7,9 @@ afterEach(cleanupWidgets);
 
 /**
  * The form only exposes anything to the accessibility tree once it is OPEN, so every state below is
- * mounted with `open = true`. The `many` state holds an item whose product this form was given no row
- * for, so the fallback cell is scanned too.
+ * mounted with `open = true`. The list's three names read differently on purpose (CLAUDE.md §3).
+ * The `many` state holds an item whose product this form was given no row for, so the fallback cell
+ * is scanned too.
  */
 function product(id: string, name: string, unitPrice: string): Product {
   return {

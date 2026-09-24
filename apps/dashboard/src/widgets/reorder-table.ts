@@ -16,6 +16,8 @@ export interface ReorderModel {
   /** Row ids in current display order, top to bottom. The tbody renders one `<tr>` per id in this
    * order — the invariant the pointer geometry relies on. */
   order(): readonly string[];
+  /** `to` may be out of range (the pointer-drag path can pass -1); an implementation must ignore
+   * it, as `reorder()` does. */
   move(id: string, to: number): void;
   label(id: string): string;
   busy(): boolean;
@@ -74,7 +76,8 @@ export class ReorderController implements ReactiveController {
   `;
 
   /** A host adds this beside {@link ReorderController.styles} and wraps its `<table>` in
-   * `.table-wrap`. */
+   * `.table-wrap`. Hosts give that wrapper `tabindex="0"` so a keyboard can reach its horizontal
+   * scroll: with no rows yet there is no row control inside to tab into. */
   static readonly tableStyles: CSSResult = css`
     .table-wrap {
       overflow-x: auto;

@@ -6,8 +6,9 @@ import { DIETARY_ORIGINS, type DietaryOrigin } from "../api/client.js";
 
 /**
  * A leading empty "not categorised" option maps to `null`: an ingredient with a null origin is
- * UNCATEGORISED, which makes every product using it publish diet-PENDING (rather than a false
- * "vegan"), so "not categorised" must be a first-class, selectable state — never a silent absence.
+ * UNCATEGORISED, which leaves the DERIVED vegan and vegetarian labels of every product whose recipe
+ * uses it "unknown" rather than a false "vegan" (a staff override can still set them), so "not
+ * categorised" must be a first-class, selectable state — never a silent absence.
  */
 @customElement("dashboard-dietary-origin-picker")
 export class DietaryOriginPicker extends LitElement {

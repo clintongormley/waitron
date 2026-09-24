@@ -2,12 +2,13 @@ import { codeMessage, codeOf, registerCodeMessages } from "@waitron/dashboard-ki
 
 // Localised copy for the raw error/status CODES the server and client emit.
 //
-// The dashboard's API client rejects with a bare `{ code }` (see api/client.ts) and several flows
-// surface a status code directly. This module is the ONE place those codes become human copy, and it
-// carries a critical guarantee: an operator must NEVER see the raw wire code. A code that isn't in
-// the table below degrades to GENERIC ("Something went wrong, try again") rather than being rendered
-// verbatim — an unmapped code is a copy gap, not a string to show a user. So `codeMessage` cannot
-// return a code, only ever a sentence.
+// The dashboard's API client rejects with a plain object carrying `code` (plus `status` when the
+// server answered, and `params` when it sent them; see packages/dashboard-kit/src/request.ts) and
+// several flows surface a status code directly. This module is the ONE place those codes become
+// human copy, and it carries a critical guarantee: an operator must NEVER see the raw wire code. A
+// code that isn't in the table below degrades to GENERIC ("Something went wrong, try again") rather
+// than being rendered verbatim — an unmapped code is a copy gap, not a string to show a user. So
+// `codeMessage` cannot return a code, only ever a sentence.
 //
 // English is the source of truth here too, and `apps/*` is exempt from the english-only guard, so the
 // Spanish below is user-facing translation, not schema vocabulary. Add new codes with BOTH columns.

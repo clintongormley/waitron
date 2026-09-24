@@ -107,7 +107,8 @@ it("has a sentence for each in-use delete code (device-profile follow-ons)", () 
 
 describe("codeOf", () => {
   // codeOf is the companion to codeMessage: it pulls the wire CODE out of a rejected value (the
-  // dashboard API client rejects with a bare `{ code }`, see api/client.ts), so the same body that
+  // dashboard API client rejects with a plain object carrying `code`, see
+  // packages/dashboard-kit/src/request.ts), so the same body that
   // was hand-copied across the screens now lives once beside the code→message seam. Behaviour it
   // must preserve exactly: `.code` when present, else `fallback` (default `server.internal`).
   it("returns the code when the rejection carries one", () => {

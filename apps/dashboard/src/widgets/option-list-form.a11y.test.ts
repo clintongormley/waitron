@@ -7,8 +7,8 @@ afterEach(cleanupWidgets);
 
 /**
  * The form only exposes anything to the accessibility tree once it is OPEN, so every state below is
- * mounted with `open = true`. The `many` state holds a withdrawn label so the disabled preselect radio
- * is scanned too.
+ * mounted with `open = true`. The three names read differently on purpose (CLAUDE.md §3). The `many`
+ * state holds a withdrawn label so the disabled preselect radio is scanned too.
  */
 const label = (id: string, name: string, customer: string, kitchen: string, available = true) => ({
   id,
