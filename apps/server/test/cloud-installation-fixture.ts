@@ -2,7 +2,7 @@ import { generateKeyPairSync, randomUUID, sign, createHash } from "node:crypto";
 import { expect } from "vitest";
 import { cloudFixture } from "./cloud-fixture.js";
 import { createCloudConnection } from "../src/cloud-client.js";
-export async function installationFixture() {
+export async function installationFixture(capture?: Parameters<typeof cloudFixture>[0]) {
   const issuer = generateKeyPairSync("ed25519");
   const keyId = createHash("sha256")
     .update(issuer.publicKey.export({ type: "spki", format: "der" }))
@@ -17,6 +17,10 @@ export async function installationFixture() {
     failure = "";
   const f = await cloudFixture(async (values, saved, req, res) => {
     requests.push(values);
+    if (String(values[2]).startsWith("backup-") && capture) {
+      await capture(values, saved, req, res);
+      return;
+    }
     expect(req.url).toBe(`/api/installations/${values[2]}`);
     const lifecycle = saved.lifecycle as { pending: { operationId: string } };
     expect(lifecycle.pending.operationId).toBe(values[4]);

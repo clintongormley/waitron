@@ -153,3 +153,37 @@ the certificate command. Keep the gateway route disabled until it is complete. F
 local recovery first, use Waitron's existing local-certificate setup and its matching
 local management origin, then change to the staff hostname after Cloud enrollment.
 Do not copy the old staff key or delete the Cloud connection state to bypass enrollment.
+
+
+## Deliver a managed snapshot locally
+
+The paired test connection exposes `reserveCapture(id)` and `publishCapture(id, metadata)`.
+Use one UUID for the capture, keep it across retries and create the encrypted archive with
+reserve's `recoveryKey`. `uploadCloudCapture(grant, bytes)` uploads that archive directly
+with the returned temporary storage credentials. Pass the digest/size receipt plus
+`capturedAt`, `retention`, `sourceNodeId` and `modules` to publication.
+
+Capture calls wait for the current connection operation. Reserve renews the installation lease when needed. Cloud chooses the destination
+and archive key version. The client checks the reply's installation, venue and capture IDs,
+requires HTTPS storage, and keeps keys and credentials out of saved connection state.
+Upload uses a conditional PUT. If a retry finds an existing object, publication checks its
+actual bytes; upload credentials do not need read permission. Publication starts pending
+verification. A trusted Cloud worker checks the restored archive separately.
+
+Retain the same UUID, archive bytes and metadata until publication succeeds. The transport
+methods do not schedule captures or persist that archive for you. Durable local spooling
+and automatic daily/monthly capture are the next integration task. These methods refuse
+production installations; the local proof has not established production storage behavior.
+
+Run Cloud's `scripts/test-local-backups.mjs` with `WAITRON_CHECKOUT` pointing at this
+installed checkout. It calls `apps/server/scripts/cloud-capture-client-fixture.ts` only on disposable
+roots and exercises actual signatures, temporary storage access and Waitron restore hooks.
+The fixture is not an operator command for a real venue.
+
+
+The local uploader buffers at most 512 MiB and has a 30-second total request deadline.
+It makes one attempt per call. Before using scheduled uploads on real venue uplinks,
+add a deadline based on transfer size or idle time, bounded retry/backoff and streamed
+object I/O. Preserve the same archive across retries. A cancelled call currently returns
+`cloud.unavailable`, matching the connection client; the scheduler must check its abort
+signal and avoid recording an outage when it deliberately stops work.

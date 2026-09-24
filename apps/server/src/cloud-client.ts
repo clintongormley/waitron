@@ -1,4 +1,9 @@
 import {
+  reserveCloudCapture,
+  publishCloudCapture,
+  type CloudCaptureMetadata,
+} from "./cloud-backup.js";
+import {
   installationClient,
   projectCloudInstallation,
   readCloudInstallation,
@@ -295,7 +300,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       throw new AppError("cloud.unavailable", {});
     }
   }
-  async function run(work: () => Promise<CloudConnectionStatus>, wait = false) {
+  async function run<T>(work: () => Promise<T>, wait = false) {
     while (activePaths.has(path)) {
       if (!wait) throw new AppError("cloud.busy", {});
       await activePaths.get(path);
@@ -314,7 +319,24 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       release();
     }
   }
+  async function captureState(signal?: AbortSignal) {
+    const state = await read();
+    if (!state?.view?.registration || state.environment !== "test" || state.lifecycle?.revoked)
+      throw new AppError("cloud.binding_conflict", {});
+    await installationClient(state, save).refresh(signal);
+    if (state.lifecycle?.revoked) throw new AppError("cloud.binding_conflict", {});
+    return state;
+  }
   return {
+    async reserveCapture(id: string, signal?: AbortSignal) {
+      return run(async () => reserveCloudCapture(await captureState(signal), id, signal), true);
+    },
+    async publishCapture(id: string, metadata: CloudCaptureMetadata, signal?: AbortSignal) {
+      return run(
+        async () => publishCloudCapture(await captureState(signal), id, metadata, signal),
+        true,
+      );
+    },
     async status() {
       return project(await read());
     },
