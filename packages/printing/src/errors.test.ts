@@ -2,12 +2,8 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import "./index.js";
 
-// One assertion per printer.* / agent.* code: each is constructible via `new AppError(code, params)`
-// carrying the params errors.ts declares for it, and so resolves to a status through a per-surface map
-// (Task 6's print-api.ts owns that map — createErrorBoundary keys it on exactly this `.code`). The
-// construction typechecks ONLY because errors.ts's `declare module "@waitron/shared"` augmentation is
-// loaded — index.js imports it — which is what makes the codes and their param shapes real for a
-// consumer, mirroring packages/layouts/src/errors.test.ts and packages/membership/src/errors.test.ts.
+// The construction typechecks ONLY because errors.ts's `declare module "@waitron/shared"`
+// augmentation is loaded — index.js imports it.
 describe("the printer / agent error codes carry their declared params", () => {
   it("constructs printer.not_found with the printer id", () => {
     const error = new AppError("printer.not_found", { id: "prn_123" });

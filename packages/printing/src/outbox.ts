@@ -1,6 +1,4 @@
-// Side-effect only: keeps this package's `printer.*` codes (errors.ts) reachable from the file that
-// throws them — the reachability convention every code-throwing file in the tree follows, guarded
-// tree-wide by scripts/errors-reachable.test.ts. See errors.ts.
+// Keeps errors.ts's codes reachable from the throwing file (scripts/errors-reachable.test.ts).
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
@@ -10,14 +8,8 @@ import type { PrintConfig } from "./printers.js";
 import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 
 /**
- * Enqueue one outbox job (printing subsystem, §3b) — the NEVER-BLOCK guarantee (CLAUDE.md §5). This
- * is the WHOLE of what a caller (a fire, a sale, a test-print) does to print: a SINGLE DB write. It
- * opens no socket and waits on no hardware, so a slow, broken, or absent printer can never delay the
- * caller — the agent runtime (Task 5) moves the row through `printing`→`done`/`failed`
- * asynchronously. That INSERT-only shape is the never-block invariant, pinned by outbox.test.ts.
- *
- * Built SINGLE-WRITER-PER-ROW (memory: replication is shared infra; design §4): the enqueuer owns
- * creation, the pulling path owns the delivery transition.
+ * The whole of what a caller does to print: one read and one insert, with no socket and no wait on
+ * hardware, so a slow, broken or absent printer can never delay the caller (CLAUDE.md §5).
  */
 export async function enqueuePrintJob(
   tx: Transaction,
@@ -26,28 +18,13 @@ export async function enqueuePrintJob(
   payload: Uint8Array,
   kind: "document" | "drawer" = "document",
 ): Promise<{ jobId: string }> {
-  // A friendly `printer.not_found` for an absent printer, via a DB-only pre-check SELECT (indexed
-  // PK lookup — no socket, no wait). Chosen over catching the FK violation because a raised 23503
-  // would ABORT the caller's enclosing transaction (a fire/sale may enqueue mid-transaction),
-  // whereas this pre-check leaves the tx clean on the not_found path. All values bind as parameters,
-  // never concatenated. `printerId` is not shape-screened here. Management routes validate their
-  // path parameter with `requireUuidParam`; this pre-check resolves a well-formed unknown id to
-  // `printer.not_found` without aborting the caller's transaction.
-  //
-  // `active = true` treats a DEACTIVATED printer (`deactivatePrinter`) as unavailable to enqueue — an
-  // inactive printer is not enqueueable, resolved to the existing `printer.not_found` rather than a new
-  // edge code. It is the enqueue half of "deactivated = disabled"; the delivery half is the matching
-  // `p.active = true` conjunct on `claimPrintJobs`'s pull (runtime.ts). Proven load-bearing by deletion
-  // in outbox.test.ts.
+  // A deactivated printer is reported as `printer.not_found`, not a code of its own.
   const [printer] = await tx
     .select({ id: printers.id })
     .from(printers)
     .where(and(eq(printers.id, printerId), eq(printers.active, true)));
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
 
-  // The single write: a `queued` outbox row carrying the OPAQUE payload bytes verbatim. The column
-  // is `@waitron/db`'s shared `binary` helper, which takes a Uint8Array and binds the Buffer the
-  // driver wants, so nothing is converted here.
   const [job] = await tx
     .insert(printJobs)
     .values({
@@ -60,7 +37,7 @@ export async function enqueuePrintJob(
   return { jobId: job!.id };
 }
 
-/** Only documents whose automatic delivery has ended can be resent; drawer pulses cannot. */
+/** Only documents whose automatic delivery has ended can be resent; a drawer job never can. */
 export function canResendPrintJob(job: {
   kind: "document" | "drawer";
   status: string;

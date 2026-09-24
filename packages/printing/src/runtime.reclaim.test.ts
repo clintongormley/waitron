@@ -10,22 +10,12 @@ import { enqueuePrintJob } from "./outbox.js";
 import { FakeSink } from "@waitron/print-agent";
 import type { PrintConfig } from "./printers.js";
 
-// The lease reclaim, on the venue file. These cases use sequential transactions; competing agents
-// are covered by runtime.race.test.ts.
-//
-// WHAT THIS SUITE NO LONGER SHOWS. This engine has no roles, so nothing here exercises the
-// deployment role's grants on `print_jobs`. The second thing that went with PostgreSQL is `now()`: the
-// lease cutoff was the SERVER's clock, and it is now the process holding the venue file
-// (`claimPrintJobs`'s own comment records what that gives up). Every `now() - interval '2 minutes'`
-// below is therefore computed in JavaScript, in the one ISO-8601 spelling `claimed_at` is compared
-// in.
+// `claimed_at` is compared as a string, so every aged stamp below is written in the one ISO-8601
+// spelling the cutoff uses.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function setup(): Promise<PrintConfig> {
   await seedTenant(suite.db);
-  // Through the table definition, not raw SQL: `locations.id` comes from `$defaultFn(newId)` in
-  // JavaScript, and `invoiceLocales` reaches its column's JSON mapping where `array['es-ES']` used
-  // to be SQL this engine does not have.
   const [row] = await suite.db
     .insert(locations)
     .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
@@ -41,8 +31,6 @@ async function seedAgent(cfg: PrintConfig): Promise<string> {
   return row!.id;
 }
 
-/** Read the outbox row's lease columns directly — a plain observation, not the behaviour under
- * test. Through the table, so the column mapping runs. */
 async function jobRow(jobId: string): Promise<{
   status: string;
   claimedAt: string | null;
@@ -90,16 +78,13 @@ describe("print-job lease reclaim", () => {
     expect(afterClaim.status).toBe("printing");
     expect(afterClaim.claimedAt).not.toBeNull(); // the lease anchor was stamped
 
-    // Simulate the lease elapsing: age the claim well past PRINT_JOB_LEASE_MS (60s). The stamp is
-    // real wall-clock, so the row is now `printing` with a claim two minutes old — a dropped claim.
+    // Simulate the lease elapsing: age the claim well past PRINT_JOB_LEASE_MS — a dropped claim.
     await suite.db
       .update(printJobs)
       .set({ claimedAt: new Date(Date.now() - 120_000).toISOString() })
       .where(eq(printJobs.id, jobId));
 
-    // A SECOND run (a surviving agent's pull, or the same agent rebooted) re-selects the stuck job —
-    // the committed printing row is held by nobody, so nothing passes over it once the lease
-    // predicate makes it eligible — and delivers it.
+    // A SECOND run (a surviving agent's pull, or the same agent rebooted) re-selects the stuck job.
     const sink = new FakeSink();
     const result = await withTransaction(suite.db, (tx: Transaction) =>
       runAgentOnce({
@@ -143,12 +128,6 @@ describe("print-job lease reclaim", () => {
       .where(eq(printJobs.id, jobId));
     const printerId = printerRow!.printerId;
 
-    // The pull reclaims and delivers it — the `claimed_at IS NULL` alternative in the reclaim conjunct is
-    // PROVEN load-bearing by deletion: remove it and this row is never re-selected and stays stuck in
-    // `printing`; restore it and the run reclaims and delivers it. Re-taken on THIS engine,
-    // 2026-09-22 on Node v26.7.0: with `j.claimed_at is null or ` removed from `claimPrintJobs`'s
-    // reclaim conjunct (`packages/printing/src/runtime.ts`) and nothing else changed, this was the
-    // ONLY one of the three cases in this file that failed; restored, all three pass.
     const sink = new FakeSink();
     const result = await withTransaction(suite.db, (tx: Transaction) =>
       runAgentOnce({
@@ -172,8 +151,6 @@ describe("print-job lease reclaim", () => {
     const agentId = await seedAgent(cfg);
     const jobId = await seedPrinterAndJob(cfg);
 
-    // The agent claims the job and is STILL WORKING — a slow-but-live push. The claim is committed
-    // (printing, claimed_at = now) but the lease has NOT expired.
     const claimed = await withTransaction(suite.db, (tx: Transaction) =>
       claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
     );
@@ -181,15 +158,13 @@ describe("print-job lease reclaim", () => {
     const firstClaimedAt = (await jobRow(jobId)).claimedAt;
     expect(firstClaimedAt).not.toBeNull();
 
-    // A later claim (a second agent, or the same agent's next batch) must NOT reclaim it: the
-    // visibility timeout does not fire on a live claim, so the fresh printing row is left alone.
     const second = await withTransaction(suite.db, (tx: Transaction) =>
       claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
     );
     expect(second).toEqual([]);
 
     const row = await jobRow(jobId);
-    expect(row.status).toBe("printing"); // still the first claimer's, untouched
-    expect(row.claimedAt).toBe(firstClaimedAt); // lease anchor not refreshed
+    expect(row.status).toBe("printing");
+    expect(row.claimedAt).toBe(firstClaimedAt);
   });
 });

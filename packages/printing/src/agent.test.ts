@@ -10,20 +10,9 @@ import { authenticateAgent } from "./agent.js";
 import type { PrintAgentConfig } from "./agent.js";
 import "./errors.js";
 
-// One venue file: this engine has neither roles nor grants, and one process opens one file. What is
-// left is the bearer-token auth core itself — the
-// scrypt check, the revocation filter and the last-seen gate — none of which turns on who
-// connected. (Agent enrolment is join-and-accept, in apps/server/src/join-requests.ts.)
 const LOCALE = "es-ES";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-/**
- * A fresh tenant + venue. Each test gets its OWN tenant so agent/code counts are order-independent.
- *
- * Written through the table definitions rather than raw SQL: `locations.id` and `print_agents.id`
- * are supplied by `$defaultFn(newId)` in JavaScript, so a raw INSERT naming no id is refused
- * `NOT NULL constraint failed`.
- */
 async function setup(): Promise<PrintAgentConfig> {
   await seedTenant(suite.db);
   const [row] = await suite.db
@@ -37,14 +26,12 @@ async function setup(): Promise<PrintAgentConfig> {
   return { locationId: row!.id };
 }
 
-/** One transaction, the shape the Task-6 route wraps each core call in. */
 function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, async (tx) => {
     return fn(tx);
   });
 }
 
-/** This agent's recorded sighting, read through the table so the column's own mapping runs. */
 async function lastSeenAt(agentId: string): Promise<string | null> {
   const [row] = await suite.db
     .select({ lastSeenAt: printAgents.lastSeenAt })
@@ -84,23 +71,20 @@ describe("authenticateAgent", () => {
 
   it("a valid token resolves to its agentId and stamps last_seen_at", async () => {
     const { agentId, token } = await enrolled();
-    expect(await lastSeenAt(agentId)).toBeNull(); // NULL until first seen
+    expect(await lastSeenAt(agentId)).toBeNull();
 
     const result = await asApp(suite.db, (tx) => authenticateAgent(tx, token));
     expect(result.agentId).toBe(agentId);
 
-    expect(await lastSeenAt(agentId)).not.toBeNull(); // the sighting was recorded
+    expect(await lastSeenAt(agentId)).not.toBeNull();
   });
 
-  // The sighting gate's cutoff is now a bound ISO-8601 string rather than `now() - interval
-  // '1 minute'`, so both directions of the comparison are pinned: the write it must skip and the
-  // write it must still make. Time is moved by writing `last_seen_at`, not by faking the clock —
-  // the value under test is the one the gate reads.
+  // Time is moved by writing `last_seen_at`, not by faking the clock — the value under test is the
+  // one the gate reads.
   it("skips the sighting write inside the interval and makes it once the sighting is older", async () => {
     const { agentId, token } = await enrolled();
     const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 
-    // INSIDE the interval — a fresh sighting is left exactly as it was.
     const fresh = ago(1_000);
     await suite.db
       .update(printAgents)
@@ -109,7 +93,6 @@ describe("authenticateAgent", () => {
     await asApp(suite.db, (tx) => authenticateAgent(tx, token));
     expect(await lastSeenAt(agentId)).toBe(fresh);
 
-    // OUTSIDE it — the stale sighting is replaced.
     const stale = ago(90_000);
     await suite.db
       .update(printAgents)

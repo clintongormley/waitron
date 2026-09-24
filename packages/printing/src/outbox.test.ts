@@ -11,17 +11,9 @@ import { canResendPrintJob, enqueuePrintJob, resendPrintJob } from "./outbox.js"
 import type { PrintConfig } from "./printers.js";
 import "./errors.js";
 
-// One venue file (`useVenueDb`). `enqueuePrintJob` is a single INSERT plus a not_found pre-check
-// SELECT, so nothing here contends (the enrol race is agent.test.ts's). This engine has no roles
-// and no grants, so no case below says anything about a privilege, and this suite's old pointer
-// to a privilege matrix in packages/fiscal-verifactu is dropped rather than re-aimed: no suite
-// reads that matrix any more.
-//
-// The central assertion is the NEVER-BLOCK invariant (CLAUDE.md §5 / design §5): enqueue opens NO
-// socket. `node:sqlite` reaches the venue file in-process, so the database access opens no socket
-// of its own — which is what keeps "Socket.prototype.connect was never called" a clean structural
-// proof rather than one muddied by driver traffic. The spy is installed around the database work
-// too, so these cases passing IS the evidence for that second half.
+// The central assertion is the NEVER-BLOCK invariant (CLAUDE.md §5): enqueue opens NO socket.
+// `node:sqlite` reaches the venue file in-process, so the database work inside the spy's window
+// opens no socket of its own.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 afterEach(() => {
@@ -30,9 +22,6 @@ afterEach(() => {
 
 async function setup(): Promise<PrintConfig> {
   await seedTenant(suite.db);
-  // Through the table definition rather than raw SQL: `locations.id` is supplied by
-  // `$defaultFn(newId)` in JavaScript, so a raw INSERT naming no id is refused
-  // `NOT NULL constraint failed: locations.id`.
   const [row] = await suite.db
     .insert(locations)
     .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
@@ -40,12 +29,6 @@ async function setup(): Promise<PrintConfig> {
   return { locationId: row!.id };
 }
 
-/** Read one job row back (the brief's `jobRow`). Uses the drizzle `printJobs` model, so `payload`
- * is typed by the shared `binary` column: a Uint8Array. It cannot tell that column's mapping from
- * the driver's own value, because `node:sqlite` hands a BLOB back as a plain `Uint8Array` already —
- * measured 2026-09-22 on Node v26.7.0 through `openVenueDatabase`, selecting a `blob` column back:
- * `constructor.name` is `Uint8Array` and `Buffer.isBuffer` is `false`. `binary`'s `fromDriver` is a
- * copy on this driver, not a conversion (`packages/db/src/schema/columns.ts`). */
 async function jobRow(
   tx: Transaction,
   jobId: string,
@@ -60,13 +43,10 @@ async function jobRow(
 /**
  * Spy the SINGLE chokepoint every outbound TCP open funnels through. `net.connect` and
  * `net.createConnection` each construct a `net.Socket` and call `.connect()` on it, so one spy on
- * `Socket.prototype.connect` proves no socket was opened by ANY of the three entry points a
- * network_tcp transport could use. Restored in `afterEach` via `vi.restoreAllMocks()`.
+ * `Socket.prototype.connect` covers all three entry points a network_tcp transport could use.
  */
 function spyOnNoSocketOpened() {
-  // `Socket.prototype.connect` is overloaded, which `vi.spyOn` cannot type directly; cast to a single
-  // call signature. The cast is type-level ONLY — the runtime target is still the real prototype, so
-  // the spy replaces the method every outbound TCP open funnels through.
+  // `Socket.prototype.connect` is overloaded, which `vi.spyOn` cannot type directly.
   return vi.spyOn(
     net.Socket.prototype as unknown as { connect: (...args: unknown[]) => unknown },
     "connect",
@@ -83,12 +63,12 @@ describe("enqueuePrintJob (never-block outbox)", () => {
         host: "10.0.0.9",
         port: 9100,
       });
-      const noNet = spyOnNoSocketOpened(); // assert node:net never opened a socket
+      const noNet = spyOnNoSocketOpened();
       const { jobId } = await enqueuePrintJob(tx, cfg, p.id, new Uint8Array([1, 2, 3]));
 
       const row = await jobRow(tx, jobId);
       expect(row.status).toBe("queued");
-      expect([...row.payload]).toEqual([1, 2, 3]); // the opaque bytes round-trip verbatim
+      expect([...row.payload]).toEqual([1, 2, 3]);
       expect(noNet).not.toHaveBeenCalled(); // the never-block invariant
     });
   });
@@ -98,8 +78,6 @@ describe("enqueuePrintJob (never-block outbox)", () => {
     const noNet = spyOnNoSocketOpened();
     const code = await withTransaction(suite.db, async (tx) => {
       try {
-        // A well-formed uuid that names no printer: the DB-only pre-check SELECT finds nothing and
-        // throws BEFORE any insert, so the caller's transaction is never poisoned.
         await enqueuePrintJob(tx, cfg, randomUUID(), new Uint8Array([9]));
         return undefined;
       } catch (error) {
@@ -111,11 +89,8 @@ describe("enqueuePrintJob (never-block outbox)", () => {
   });
 
   it("throws printer.not_found for a DEACTIVATED printer (disabled, not merely soft-hidden)", async () => {
-    // A deactivated printer (`active = false`) is unavailable to the outbox: enqueue treats it exactly
-    // like an absent printer (`printer.not_found`), never a new code. The active-printer enqueue in the
-    // same block is the control — the ONLY difference between the two calls is the `active` flag, so a
-    // pass here means the `active = true` pre-check conjunct (not some unrelated reason) is doing the
-    // work. Without that conjunct the deactivated enqueue succeeds and this test goes red.
+    // The active-printer enqueue in the same block is the control: the ONLY difference between the
+    // two calls is the `active` flag.
     const cfg = await setup();
     const code = await withTransaction(suite.db, async (tx) => {
       const p = await createPrinter(tx, cfg, {
@@ -123,11 +98,9 @@ describe("enqueuePrintJob (never-block outbox)", () => {
         transport: "network_tcp",
         host: "10.0.0.9",
       });
-      // Control: while ACTIVE the printer enqueues a queued job.
       const { jobId } = await enqueuePrintJob(tx, cfg, p.id, new Uint8Array([1]));
       expect((await jobRow(tx, jobId)).status).toBe("queued");
 
-      // Deactivating the SAME printer makes it unavailable to the next enqueue.
       await deactivatePrinter(tx, cfg, p.id);
       try {
         await enqueuePrintJob(tx, cfg, p.id, new Uint8Array([2]));
@@ -193,7 +166,7 @@ describe("resendPrintJob", () => {
           .where(eq(printJobs.id, original.jobId));
         const [before] = await tx.select().from(printJobs).where(eq(printJobs.id, original.jobId));
         // The copy goes back to the ORIGINAL job's location, which `resendPrintJob` reads off the
-        // job row itself — the caller no longer supplies a location at all.
+        // job row itself.
         const result = await resendPrintJob(tx, original.jobId);
         expect(result.jobId).not.toBe(original.jobId);
         const [copy] = await tx.select().from(printJobs).where(eq(printJobs.id, result.jobId));

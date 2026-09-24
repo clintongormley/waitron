@@ -9,7 +9,7 @@ import type { printCharacterSet } from "@waitron/db";
  * (which CPython generates from the Unicode Consortium file MAPPINGS/VENDORS/MICSFT/WINDOWS/CP1252.TXT)
  * and its `cp858` codec (CPython's cp850 table with 0xD5 changed to the euro sign). The five bytes
  * cp1252 leaves undefined (0x81, 0x8D, 0x8F, 0x90, 0x9D) map to the same code point, as the WHATWG
- * windows-1252 decoder does. charset.test.ts pins both tables.
+ * windows-1252 decoder does.
  */
 export type CharacterSet = (typeof printCharacterSet.enumValues)[number];
 
