@@ -2234,8 +2234,8 @@ ongoing overhaul listed at the top of Track A.
   the wrong choice today** (2026-09-14; read, not run). Each binds `.value` on a `<select>` whose
   options come from a `.map(…)` and marks no option `selected` — the shape that showed "Downstairs
   bar" on the till while it sold from Deli counter, fixed by #365 (CLAUDE.md §3). Found by a text scan, checked by
-  hand: `apps/dashboard/src/screens/my-schedule-screen.ts:393`, `:407`, `:459`,
-  `apps/dashboard/src/screens/units-screen.ts:456`, and
+  hand: `apps/dashboard/src/screens/my-schedule-screen.ts:351`, `:365`, `:417`,
+  `apps/dashboard/src/screens/units-screen.ts:486`, and
   `apps/till/src/screens/till-schedule-screen.ts:390`, `:404`, `:457`. By reading, every one opens
   on its first option — an empty placeholder or the first absence type — which is what that shape
   shows anyway, so the fault stays hidden until one opens with another value. **Next action:** when
@@ -2801,11 +2801,25 @@ image constraints under *Detail → Box image*.
   `.ts` file, tests included) and `packages/ui` (#604, about 1,144 to about 503 with the `grep -cE`
   count, tests included; comments inside `css` and `html` template literals are strings and were
   left) and `packages/module` (#606, about 363 to about 200 counted with the parse-tree walk, tests
-  included). A pruning pull request
+  included) and `apps/dashboard/src/screens` (#607, about 3,170 to about 1,110 counted with the
+  parse-tree walk, tests included; the rest of `apps/dashboard` follows in two more pull requests).
+  A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604 and #606 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606 and #607 and left for the package that owns each, all
   still OPEN:
+  - Found by #607 (`apps/dashboard/src/screens`), outside the screens folder, left for the next
+    parts. "The #70 rule" for keeping a runtime import out of the browser bundle appears 29 times
+    in `apps/dashboard/src/api/client.ts` and is defined nowhere in the repository; #607 replaced it
+    in the screens with the reason (`@waitron/layouts`' main entry exports `canvas-store.js`, which
+    imports `@waitron/db`). "These methods never send a personId" is false for `requestSwap`, which
+    sends `toPersonId`: `apps/dashboard/src/api/client.ts:2847`, `apps/till/src/api/client.ts:2105`
+    and `apps/till/src/screens/till-schedule-screen.ts:66`. The fire-control modes are listed as
+    `waiter`/`kitchen` only, leaving out `expo` (`fireControlMode`,
+    `packages/db/src/schema/tenants.ts`), at `apps/dashboard/src/api/client.ts:2294` and
+    `apps/server/src/kitchen.ts:360`. Read only, not run: the recipe screen's `#loadRecipe` guard
+    compares product ids, so choosing A, then B, then A again lets the first A answer apply and turn
+    Save back on while the second A load is still running.
   - Found by #606 (`packages/module`), outside its package. `apps/server/src/provision.ts` (the
     comment above its refusal of a disabled `provision-only` module) says such a module "mints
     unrecoverable state at provision", which is untrue of `fiscal-none`; #606 dropped the same
@@ -4534,11 +4548,11 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   `main`, so it is not that branch's bug). Playwright's headless Chromium 149 refuses the attempt
   with a `NotSupportedError`; installed Chrome 153 left it pending with no error. Whether a real
   person's browser ever hits it is untested. Mechanism: the attempt's `catch`
-  (`apps/dashboard/src/screens/login-screen.ts:709-716`, from #305) stays quiet only for
+  (`apps/dashboard/src/screens/login-screen.ts:680-687`, from #305) stays quiet only for
   `NotAllowedError` and `AbortError`, and `codeOf` (`packages/dashboard-kit/src/codes.ts:36-38`)
   returns any `code` it finds, so a browser error's old numeric `code` (9 for `NotSupportedError`)
   wins over the fallback and, matching no registered message, shows the generic sentence. The
-  passkey button's `catch` (`:672-674`) has the same flaw. **Fix direction:** the automatic attempt stays silent on every browser-side failure, and
+  passkey button's `catch` (`:643-645`) has the same flaw. **Fix direction:** the automatic attempt stays silent on every browser-side failure, and
   `codeOf` accepts only a string code (check its other callers first). Seen again on 2026-09-16
   while running #378 for real: the red banner is there on a clean first load of the
   login page, before anyone types anything. It predates that branch — the swallow list it comes from
