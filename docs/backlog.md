@@ -4091,6 +4091,18 @@ column; identity's logins and sign-in ceremonies are reclassified `state`), is o
 `feat/sqlite-slice2-hashed-sessions`, PR pending. A dev venue holding `sessions` or
 `management_sessions` rows fails its migration; `wa-wt reset demo <name>` rebuilds it, and every
 existing login signs in again.
+Left by Task 1b's review, not fixed on its branch: (1) with the cookie now hashed, nothing
+fails when the UUID shape screens in `requireSession` and the till logout route are deleted —
+measured 2026-09-24, the three malformed-cookie cases in `apps/server/src/till-api.test.ts` still
+pass, because a non-UUID value hashes to no row; the screens now only save a lookup. (2) Test
+titles and comments still promising "not a 500" from PostgreSQL's `22P02` remain in
+`till-api.courses.test.ts`, `till-api.receipt.test.ts` and `till-api.reprint.test.ts`. (3) The
+mirror viewer's ambient `admin` session (`apps/server/src/mirror-session.ts`) is the one session
+whose cookie is its own fixed, public row id; if a node that seeded it is later served without
+the mirror's middleware — a promoted mirror, or a restored copy of its database — that public
+cookie may still resolve until the session idles out. Found by reading only, not run, and I believe
+it predates Task 1b (the seed dates from 2026-08-29, `338c2d794`); Task 1b's reclassification of
+`management_sessions` as `state` is what makes the row travel with a copy.
 `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
 closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
 `[""]` it still passes 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's
