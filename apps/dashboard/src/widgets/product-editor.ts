@@ -110,8 +110,8 @@ const SERVER_FIELDS: Record<string, string> = {
  * names, which is also what opens the section that field is folded into.
  */
 export function productEditorField(field: string, defaultLanguage: string): string | null {
-  const variant = /^variants\.(\d+)\.(name|unitPrice)$/.exec(field);
-  if (variant) return `variant-${variant[1]}-${variant[2] === "name" ? "name" : "price"}`;
+  const variant = /^variants\.(\d+)\.(name|unitPrice|active)$/.exec(field);
+  if (variant) return `variant-${variant[1]}-${variant[2] === "unitPrice" ? "price" : variant[2]}`;
   // A refused attachment (`modifiers.<n>.id`, thrown by packages/catalogue/src/product-modifiers.ts
   // when a list was deleted or is named twice) points at the Modifiers section's one control,
   // whatever position it names: the attached rows are a table with no input of their own.
@@ -495,7 +495,7 @@ export class ProductEditor extends LitElement {
   private recordVariantProblems(): void {
     const problems = new Map<EditorVariant, string>();
     for (const [key, message] of Object.entries(this.allErrors)) {
-      const match = /^variant-(\d+)-(?:name|price)$/.exec(key);
+      const match = /^variant-(\d+)-(?:name|price|active)$/.exec(key);
       const variant = match ? this.draft.variants[Number(match[1])] : undefined;
       if (variant && !problems.has(variant)) problems.set(variant, message);
     }

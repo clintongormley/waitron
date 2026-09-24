@@ -505,6 +505,32 @@ it("keeps a refused save in the form and puts the refusal beside the field it na
   );
 });
 
+it("puts a refusal to offer a product with Active variants beside that item's product", async () => {
+  const client = api({
+    updateExtraList: vi.fn().mockRejectedValue({
+      code: "extras.product_has_variants",
+      params: { field: "items.1.productId", productId: RYE },
+      status: 409,
+    }),
+  });
+  const el = await mount(client);
+  await clickInTable(el, "extra-lists", "edit-extra-e1");
+  const form = extraForm(el);
+  form.dispatchEvent(
+    new CustomEvent("wt-submit", {
+      detail: { value: extraList },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  const productError = () =>
+    form.shadowRoot!.querySelector('[data-test="item-1-product-error"]')?.textContent;
+  await vi.waitFor(() => expect(productError()).toBe(codeMessage("extras.product_has_variants")));
+  expect(productError()).not.toBe(codeMessage("test.unmapped_code"));
+  expect(form.shadowRoot!.querySelector('[data-test="item-0-product-error"]')).toBeNull();
+  expect(form.open).toBe(true);
+});
+
 it("shows a field-less refusal in the options form's summary and keeps it open", async () => {
   const client = api({
     createOptionList: vi.fn().mockRejectedValue({ code: "options.not_found" }),

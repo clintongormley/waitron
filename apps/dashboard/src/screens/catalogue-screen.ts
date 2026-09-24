@@ -40,6 +40,23 @@ import "../widgets/product-editor.js";
 import "../widgets/product-list.js";
 import "../widgets/unit-form.js";
 
+/** The staff names of the extras lists a `product.offered_as_extra` refusal carries. */
+function extraListNames(error: unknown): string[] {
+  const lists = (error as { params?: { extraLists?: unknown } }).params?.extraLists;
+  if (!Array.isArray(lists)) return [];
+  return lists.flatMap((list: { name?: unknown }) =>
+    typeof list.name === "string" ? [list.name] : [],
+  );
+}
+
+/** A refusal's sentence, followed by the lists `product.offered_as_extra` names: the sentence
+ * cannot say which lists the manager has to change. */
+function refusalText(code: string, extraLists: readonly string[]): string {
+  return code === "product.offered_as_extra" && extraLists.length
+    ? `${codeMessage(code)} ${extraLists.join(", ")}`
+    : codeMessage(code);
+}
+
 @customElement("dashboard-catalogue-screen")
 export class CatalogueScreen extends LitElement {
   static override styles = [
@@ -83,6 +100,8 @@ export class CatalogueScreen extends LitElement {
   @state() private editorValue: ProductEditorValue | null = null;
   @state() private busy = false;
   @state() private errorKey: string | null = null;
+  /** The extras lists the refusal in `errorKey` names, when it names any. */
+  @state() private refusedLists: string[] = [];
   @state() private languageSettingsOpen = false;
   /** The product or variant the Delete confirmation is open for. */
   @state() private deletingProduct: { id: string; name: string; isVariant: boolean } | null = null;
@@ -301,6 +320,7 @@ export class CatalogueScreen extends LitElement {
       await this.api.updateProductEditor(productId, { ...value, active: true });
     } catch (error) {
       this.errorKey = codeOf(error);
+      this.refusedLists = extraListNames(error);
       this.busy = false;
       return;
     }
@@ -341,6 +361,7 @@ export class CatalogueScreen extends LitElement {
       // also what opens the section the field is folded into. Only a refusal with nothing to point
       // at falls back to this screen's own banner, so the same problem is never said twice.
       this.errorKey = Object.keys(fieldErrors).length ? null : codeOf(error);
+      this.refusedLists = extraListNames(error);
     } finally {
       this.busy = false;
     }
@@ -358,7 +379,14 @@ export class CatalogueScreen extends LitElement {
     const params = (error as { params?: { field?: unknown; language?: unknown } }).params ?? {};
     if (typeof params.field === "string") {
       const name = productEditorField(params.field, this.contentLanguages?.defaultLanguage ?? "");
-      return name === null ? {} : { [name]: t("editor.field_rejected") };
+      if (name === null) return {};
+      const code = codeOf(error);
+      return {
+        [name]:
+          code === "product.offered_as_extra"
+            ? refusalText(code, extraListNames(error))
+            : t("editor.field_rejected"),
+      };
     }
     const code = codeOf(error);
     if (code === "content.translation_required" && typeof params.language === "string") {
@@ -506,7 +534,11 @@ export class CatalogueScreen extends LitElement {
             ></dashboard-product-list>`
           : html`<p data-test="no-catalogue">${t("catalogue.empty_prompt")}</p>`
       }
-      ${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
+      ${
+        this.errorKey
+          ? html`<p class="error" role="alert">${refusalText(this.errorKey, this.refusedLists)}</p>`
+          : nothing
+      }
       <dashboard-product-editor
         .open=${this.editorOpen}
         .busy=${this.busy}
