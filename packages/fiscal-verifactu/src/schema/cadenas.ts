@@ -13,7 +13,6 @@ import { registrosFacturacion } from "./registros.js";
  * source of truth for four values that must match the immutable row exactly — and the mutable copy
  * is the one that can drift.
  */
-// The `v8 ignore` pairs: see ./registros.ts.
 export const cadenas = table(
   "cadenas",
   {

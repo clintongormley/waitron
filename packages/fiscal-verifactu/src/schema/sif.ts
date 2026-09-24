@@ -8,7 +8,6 @@ import { count, id, label, newId, nodes, now, table, ts } from "@waitron/db";
  * old identity's registros are immutable and must keep pointing at the identity that actually
  * generated them.
  */
-// The `v8 ignore` pairs: see ./registros.ts.
 export const registroSif = table(
   "registro_sif",
   {

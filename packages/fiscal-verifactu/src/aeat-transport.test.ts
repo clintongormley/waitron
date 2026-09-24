@@ -225,6 +225,8 @@ describe("aeatClientResolver lifetime", () => {
   });
 
   // Every transport is still attempted, and a close failure is logged rather than dropped.
+  // `closeAll` runs in the drain seat's `finally` (`./slot.ts`), where a throw would replace the
+  // pass's own result or error.
   it("does not throw when a transport's close fails, and still closes the rest", async () => {
     // Two transports, built by resolving twice (see the count test above).
     await provision("sello");

@@ -302,9 +302,9 @@ export async function seedSecondChain(
 
 /**
  * Mints an INDEPENDENT chain's `registro_sif` row with an EXPLICIT `sifId`, bypassing
- * `registerSif`'s counter bookkeeping: `drain` reads only `registros_facturacion.sif_id` and
- * `envios`. The explicit id lets a test force this chain to sort deterministically under
- * `claimBatch`'s `order by r.sif_id, r.secuencia`.
+ * `registerSif`'s counter bookkeeping: `drain` never reads `registro_sif`; it groups chains by
+ * `registros_facturacion.sif_id`. The explicit id lets a test force this chain to sort
+ * deterministically under `claimBatch`'s `order by r.sif_id, r.secuencia`.
  *
  * The all-`f` literal sorts after every `registerSif`-minted id: those are `randomUUID()` v4 ids
  * in lowercase hex, compared byte by byte, and position 14 holds the version digit `4` where the

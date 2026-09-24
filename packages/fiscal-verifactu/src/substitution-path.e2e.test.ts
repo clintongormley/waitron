@@ -26,9 +26,8 @@ let till: SeededTill;
 // A SECOND series for the F3 canje invoices. The F3 draws its own number, and `sales` is unique on
 // (series_id, invoice_number), so an F3 cannot reuse a ticket's series+number. `purpose` is
 // 'standard' rather than a bespoke 'substitution' value: the invoice_series CHECK admits only
-// 'standard'/'rectificative', and giving F3 its own purpose is a core decision the BACKEND does
-// not enforce — it derives NumSerieFactura from `seriesCode`/`invoiceNumber`,
-// never from this row.
+// 'standard'/'rectificative', and giving F3 its own purpose is a core decision the BACKEND does not
+// enforce — it derives NumSerieFactura from `seriesCode`/`invoiceNumber`, never from this row.
 let substitutionSeriesId: string;
 
 const RECIPIENT: Counterparty = {
@@ -182,8 +181,8 @@ async function registro(saleId: string) {
   // The AEAT shapes, restated here because `./schema/registros.ts` declares these columns as a
   // bare `json(...)` with no `$type`, so drizzle types them `{}` and a property access on one is a
   // TS2339. `RegistroRow` (`./registro-row.ts`) carries the real types for the same columns under
-  // their snake_case names. A cast, not a runtime change: the values are
-  // already parsed by the column's own `mode: "json"` mapping.
+  // their snake_case names. A cast, not a runtime change: the values are already parsed by the
+  // column's own `mode: "json"` mapping.
   return row as typeof row & {
     facturasSustituidas: RegistroRow["facturas_sustituidas"];
     destinatarios: RegistroRow["destinatarios"];
@@ -353,7 +352,8 @@ describe("recordSubstitution against the real Veri*Factu backend", () => {
 
 describe("recordSubstitution from five callers started together", () => {
   // An F3 ALWAYS follows an existing ticket alta (recordSubstitution reads it, or throws), so the
-  // chain head always exists before any F3 runs.
+  // chain head always exists before any F3 runs: this case never exercises `readChainHead`'s
+  // create-the-head branch.
   //
   // Not a lock test. Five callers started together against the ONE handle are serialised by the
   // venue file's write queue: `withTransaction` (`packages/db/src/tenancy.ts`) runs inside

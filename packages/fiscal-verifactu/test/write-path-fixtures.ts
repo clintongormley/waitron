@@ -15,8 +15,9 @@ export const fakeClient: VerifactuClient = createFakeAeat().client();
 
 /**
  * A `resolveClient` that always returns `client` — the shape every `VerifactuBackend` in this
- * package's suites must supply SOME `resolveClient` to satisfy, for the reason `fakeClient` above documents. Do NOT reach for this in a test that cares WHEN the
- * transport is resolved, or that needs a throwing one — write a bespoke resolver instead.
+ * package's suites must supply SOME `resolveClient` to satisfy, for the reason `fakeClient` above
+ * documents. Do NOT reach for this in a test that cares WHEN the transport is resolved, or that
+ * needs a throwing one — write a bespoke resolver instead.
  */
 export function staticResolver(client: VerifactuClient): () => Promise<VerifactuClient> {
   return () => Promise.resolve(client);

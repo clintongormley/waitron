@@ -87,7 +87,9 @@ async function storeF3(record: RegistroAlta): Promise<string> {
  * Through `decodeRegistroRow`, the function the product's own raw reads call: a raw select
  * reaches no drizzle column mapper, so the JSON columns arrive as the stored TEXT and
  * `primer_registro` as `0`/`1`. Hand-parsing the columns HERE would turn this case green while
- * leaving the drainer broken, which is the one thing this case exists to catch. */
+ * leaving the drainer broken, which is the one thing this case exists to catch. Delete that call
+ * and this case fails with `Cannot read properties of undefined (reading 'map')` out of
+ * `serializeEnvio`. */
 async function rawRegistro(saleId: string): Promise<RegistroRow> {
   const { rows } = await suite.db.execute<Record<string, unknown>>(
     sql`select * from registros_facturacion where sale_id = ${saleId}`,

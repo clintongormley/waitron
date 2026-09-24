@@ -300,6 +300,7 @@ describe("appendToChain", () => {
     // unique index; rolling back to the savepoint takes the planted record with it, and the second
     // attempt passes straight through. The only thing wrapped is `transaction`, the one method
     // appendToChain calls on `tx`.
+    // The controls that fail it are in the pull request that added it.
     const decoy = await seedSale(pg.db, till, 1);
     const saleId = await seedSale(pg.db, till, 2);
     let calls = 0;

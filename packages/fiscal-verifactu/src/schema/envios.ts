@@ -11,8 +11,6 @@ import { registrosFacturacion } from "./registros.js";
  * Chain order has exactly one source of truth, and this table never reorders anything, only
  * records what happened to each row.
  */
-// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
-// never by `vitest run`, so v8 reports them as never-invoked functions.
 export const envios = table(
   "envios",
   {
@@ -43,9 +41,6 @@ export const envios = table(
     // reconcile has never had to remediate. See reconcile.ts's noTrace lifecycle.
     reconciledResubmitAt: ts("reconciled_resubmit_at"),
   },
-  // Invoked only by `drizzle-kit generate` or a `drizzle(client, { schema })` wired to this
-  // schema, never during this package's `vitest run`. The markers bracket the whole arrow
-  // function: with its closing bracket left outside the range, v8 reported that bracket uncovered.
   /* v8 ignore start */
   (t) => [
     // The drainer's access path: oldest due first.

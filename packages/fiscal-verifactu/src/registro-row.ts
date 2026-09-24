@@ -37,8 +37,9 @@ export interface RegistroRowContext {
    * From the SAME `PendingRegistro.input` the record was built from — never re-derived. The
    * instant column beside it stores UTC and nothing else — a record generated at `+02:00` stores
    * the literal `2026-07-21T17:20:30.000Z` — so the ORIGINAL offset the huella hashed cannot be
-   * recovered from the column alone. Storing this value beside it is what lets a later reader call `formatDateTime(storedInstant, storedOffsetMinutes)` and reproduce
-   * the exact literal that was hashed, rather than a value merely equal to it in wall-clock terms.
+   * recovered from the column alone. Storing this value beside it is what lets a later reader call
+   * `formatDateTime(storedInstant, storedOffsetMinutes)` and reproduce the exact literal that was
+   * hashed, rather than a value merely equal to it in wall-clock terms.
    */
   offsetMinutes: number;
   /**
@@ -220,10 +221,10 @@ export type RegistroRow = {
   fecha_expedicion_factura: string;
   nombre_razon_emisor: string;
   tipo_factura: string | null;
-  // The four AEAT rectificativa fields. All NULL on an ordinary alta and on an anulación; set on a rectificativa alta so the
-  // drainer can re-serialise them — without which AEAT rejects the filing missing its mandatory
-  // TipoRectificativa (error 1114). None is a huella input (`@waitron/verifactu` hashes 8 named fields, none
-  // of these), so rehydrating them cannot change a recomputed huella.
+  // The four AEAT rectificativa and substitution fields, stored so the drainer can re-serialise
+  // them — without which AEAT rejects the filing missing its mandatory TipoRectificativa (error
+  // 1114). None is a huella input (`@waitron/verifactu` hashes 8 named fields, none of these), so
+  // rehydrating them cannot change a recomputed huella.
   tipo_rectificativa: string | null;
   facturas_rectificadas: RegistroAlta["FacturasRectificadas"] | null;
   facturas_sustituidas: RegistroAlta["FacturasSustituidas"] | null;

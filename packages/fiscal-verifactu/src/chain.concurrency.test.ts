@@ -113,6 +113,8 @@ describe("appendToChain from many callers started together", () => {
     // `begin immediate` … `commit`, so the next caller's `begin` does not run until that `commit`
     // has returned. Same observation as `racePair` in `packages/catalogue/test/fixtures.ts`,
     // written out here because that helper lives in another package's test directory.
+    // Control: with both bodies calling `appendToChain` directly instead of through
+    // `withTransaction`, `secondStarted` was true and this case failed.
     const first = await seedSale(suite.db, node, 1);
     const second = await seedSale(suite.db, node, 2);
 

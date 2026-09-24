@@ -90,8 +90,9 @@ describe("drain resolves a client only when it has work", () => {
   });
 
   it("reports the skip-retry interval when the pass was skipped", async () => {
-    // Without the fold a skipped pass would report `null`, and a host sleeping on it stops
-    // polling for good.
+    // Without folding in `now + skipRetryMs` a skipped pass would report `null`, and a host
+    // sleeping on it stops polling for good. Not `now` either: see `DrainResult.nextDueAt` in
+    // `packages/fiscal/src/backend.ts` (fold, never assign).
     const failingSeed = await seedPendingEnvios(pg.db, { count: 1 });
 
     const result = await drain(
@@ -109,8 +110,8 @@ describe("drain resolves a client only when it has work", () => {
     expect(result.nextDueAt).toEqual(AFTER_SKIP_RETRY);
   });
 
-  // The minimum itself (two instants, the earlier reported) is pinned in `drain.test.ts`'s
-  // "nextDueAt is folded as a minimum, never assigned" describe.
+  // What this case pins is the skip arm's own instant; the minimum over two instants is pinned in
+  // `drain.test.ts`'s "drain — nextDueAt is folded as a minimum, never assigned" describe.
   it("honours an explicit skipRetryMs rather than a package constant", async () => {
     const failingSeed = await seedPendingEnvios(pg.db, { count: 1 });
 

@@ -96,7 +96,7 @@ export interface TenantTransport {
  *
  * `ca` is for a private trust root. Omitted, Node's default store applies, and the certificates
  * bundled in `material.pfx` also act as trust anchors (the "ca omitted" case in
- * `aeat-transport.test.ts`), so `ca` matters only for a PFX that does not bundle its issuer.
+ * `aeat-transport.test.ts`).
  */
 export function mtlsFetch(material: CertMaterial, ca?: string): TenantTransport {
   const dispatcher = new Agent({
@@ -165,7 +165,7 @@ export function aeatClientResolver(deps: TransportDeps, log?: FiscalDutyLog): Cl
                   message: error instanceof Error ? error.message : String(error),
                 });
               } catch {
-                // Nothing left to report with; releasing the remaining transports still matters.
+                // Nothing left to report with.
               }
             }),
         ),

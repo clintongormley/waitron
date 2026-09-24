@@ -30,9 +30,8 @@ let invoiceSequence = 0;
 /**
  * Flattens `record` through `toRegistroRow`, inserts it under a fresh sale on the shared till, and
  * returns the raw `select *` row — the snake_case `RegistroRow` shape `fromRegistroRow` reads.
- * `secuencia: 1` + a
- * `PrimerRegistro` record keeps every stored row a first record, so the tests need no chain
- * bookkeeping (`cadenas`) at all.
+ * `secuencia: 1` + a `PrimerRegistro` record keeps every stored row a first record, so the tests
+ * need no chain bookkeeping (`cadenas`) at all.
  */
 async function storeAndReadBack(record: RegistroAlta): Promise<RegistroRow> {
   invoiceSequence += 1;
@@ -94,10 +93,10 @@ function r5RectificativaInput(): AltaInput {
 
 describe("registro-row round-trip of the four AEAT rectificativa fields", () => {
   it("round-trips an R5 rectificativa including TipoRectificativa and FacturasRectificadas", async () => {
-    // A stored rectificativa must rebuild into the SAME record it was
-    // flattened from, four AEAT fields and all — otherwise the drainer files it stripped of its
-    // mandatory TipoRectificativa and AEAT rejects it (error 1114). A full deep-equal is the
-    // strongest form: it fails if ANY field the record carried fails to survive storage.
+    // A stored rectificativa must rebuild into the SAME record it was flattened from, four AEAT
+    // fields and all — otherwise the drainer files it stripped of its mandatory TipoRectificativa
+    // and AEAT rejects it (error 1114). A full deep-equal is the strongest form: it fails if ANY
+    // field the record carried fails to survive storage.
     const built = buildAltaRecord(r5RectificativaInput());
     const row = await storeAndReadBack(built);
 
@@ -230,11 +229,10 @@ describe("registro-row round-trip of the four AEAT rectificativa fields", () => 
 describe("drain serialisation files the mandatory rectificativa fields (the gap-closing test)", () => {
   it("produces AEAT XML carrying TipoRectificativa and FacturasRectificadas from a stored row", async () => {
     // A rectificativa registro is stored, then run through the path the drainer submits by
-    // (drain.ts's `toEnvioRegistro` -> serializeEnvio). If the four
-    // fields did not survive `fromRegistroRow`, the XML AEAT receives would omit the mandatory
-    // TipoRectificativa and be rejected (error 1114). Built directly via `toRegistroRow`, NOT
-    // through `recordCorrection`, so this isolates the storage round-trip and serialisation from the
-    // record-assembly path.
+    // (drain.ts's `toEnvioRegistro` -> serializeEnvio). If the four fields did not survive
+    // `fromRegistroRow`, the XML AEAT receives would omit the mandatory TipoRectificativa and be
+    // rejected (error 1114). Built directly via `toRegistroRow`, NOT through `recordCorrection`, so
+    // this isolates the storage round-trip and serialisation from the record-assembly path.
     const built = buildAltaRecord(r5RectificativaInput());
     const row = await storeAndReadBack(built);
 

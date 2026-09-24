@@ -245,9 +245,9 @@ describe("verifyChain — never blocks the sale", () => {
   });
 
   it("chains the next record anyway after a detected corruption", async () => {
-    // The teeth check, in full: corrupt a stored predecessor huella, art. 7.i detects
-    // it, and the sale STILL COMPLETES. A test asserting the sale is blocked would enforce the
-    // opposite of the requirement.
+    // The teeth check, in full: corrupt a stored predecessor huella, art. 7.i detects it, and the
+    // sale STILL COMPLETES. A test asserting the sale is blocked would enforce the opposite of the
+    // requirement.
     await appendAltas(2);
     await corrupt(1, "huella", BOGUS);
 

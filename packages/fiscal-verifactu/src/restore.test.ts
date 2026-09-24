@@ -114,9 +114,9 @@ describe("restoreFiscal", () => {
   });
 
   it("THE REUSE EXPERIMENT: restoring an older artifact cannot re-mint a number a later restore used", async () => {
-    // State A = the backup (installation 1 live, counter 2). A previous restore of A
-    // minted 2 (revoking 1). Now rebuild state A EXACTLY — no row for 2, 1 live again, counter back —
-    // which is what restoring the older artifact does, and run the hook: it must not mint 2 again.
+    // State A = the backup (installation 1 live, counter 2). A previous restore of A minted 2
+    // (revoking 1). Now rebuild state A EXACTLY — no row for 2, 1 live again, counter back — which
+    // is what restoring the older artifact does, and run the hook: it must not mint 2 again.
     await seedLiveNode();
     const counterAtBackup = counterOf();
     const later = await withTransaction(db, (tx) =>

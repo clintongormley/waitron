@@ -14,7 +14,7 @@ import { reconcile, type ReconcileDeps } from "./reconcile.js";
 /**
  * Which calendar month `reconcile` audits, and what form the date reaches an incident in.
  *
- * Its own file because every seeding helper in `../test/drain-fixtures.ts` stamps one shared
+ * Its own file because every seeding helper in `../test/drain-fixtures.ts` stamps a July 2026
  * expedition date, and a period filter tested against rows that all share a month would pass
  * whichever month it selected. This file seeds each row's date itself.
  *

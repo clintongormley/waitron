@@ -36,8 +36,7 @@ let voidSessionId: string;
  * own huella recomputable from its own stored columns, its own pending sidecar row, and it advances
  * the REAL chain head — none of which a fake backend's own bookkeeping tables can demonstrate.
  */
-// TEST_MIGRATIONS is the full manifest (identity migrates before fiscal): recordVoid calls
-// `authorize`, which reads identity's persons/sessions.
+// The full manifest: `recordVoid` authorizes through identity's persons and sessions.
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
@@ -88,11 +87,10 @@ async function rawAnulacion(saleId: string): Promise<RegistroRow> {
 
 describe("alta and anulación interleave in one chain", () => {
   it("chains the anulación onto the chronologically previous record, not the one it annuls", async () => {
-    // Sell A, sell B, then void A. The anulación's predecessor is B —
-    // the record generated immediately before it — even though the record it annuls is A. Chaining
-    // it onto A instead produces a chain that verifies against itself locally and is rejected
-    // wholesale by AEAT, and no core-level test (against a fake with no chain at all) can tell the
-    // two apart.
+    // Sell A, sell B, then void A. The anulación's predecessor is B — the record generated
+    // immediately before it — even though the record it annuls is A. Chaining it onto A instead
+    // produces a chain that verifies against itself locally and is rejected wholesale by AEAT, and
+    // no core-level test (against a fake with no chain at all) can tell the two apart.
     const a = await sell();
     const b = await sell();
     await voidSale(a.saleId);

@@ -10,8 +10,6 @@ import { registrosFacturacion } from "./registros.js";
  * with the committed envios.estado/csv it reflects. `csv` rides here because consulta can never
  * return it.
  */
-// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
-// never by `vitest run`, so v8 reports them as never-invoked functions.
 export const acks = table(
   "acks",
   {

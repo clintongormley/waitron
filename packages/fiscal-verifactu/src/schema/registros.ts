@@ -21,8 +21,6 @@ import { registroSif } from "./sif.js";
  * Query keys live in columns and structured, non-hashed payloads in `json` columns. Huella inputs
  * keep their original text representation.
  */
-// The `v8 ignore` pairs bracket thunks only `drizzle-kit generate` resolves, in its own process —
-// as in packages/db/src/schema/sales.ts.
 export const registrosFacturacion = table(
   "registros_facturacion",
   {
@@ -109,7 +107,6 @@ export const registrosFacturacion = table(
     entorno: label("entorno"),
     creadoEn: ts("creado_en").notNull().$defaultFn(now),
   },
-  // Bracketed WHOLE: v8 also reports a never-called function's own closing bracket as uncovered.
   /* v8 ignore start */
   (t) => [
     // THE backstop against two writers claiming one chain position. Keyed on the node: two tills

@@ -20,14 +20,18 @@ import { writeAck } from "./acks.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 
-/** The wait `t` assumed until AEAT has supplied a non-zero one. */
+/**
+ * The fake AEAT's own default (`FakeAeatOptions.tiempoEsperaInicial`, `@waitron/verifactu`): the
+ * wait `t` assumed until AEAT has supplied a non-zero one.
+ */
 export const TIEMPO_ESPERA_INICIAL_SEG = 60;
 
 /**
  * How long a row may sit `enviando` before a later pass treats it as abandoned. The claim commits
  * before the network call, so a crash leaves a real `enviando` row behind. Five minutes is well
  * above one AEAT round trip and well inside art. 16.4's hourly duty. A crashed run's claims are
- * requeued by `resetInFlightClaims` instead (`apps/server/src/restart-reset.ts`).
+ * requeued by `resetInFlightClaims` before the next drain of a restarted filing node
+ * (`resetBeforeFirstDrain`, `apps/server/src/restart-reset.ts`).
  */
 export const RECUPERACION_ENVIANDO_MS = 5 * 60_000;
 
@@ -142,9 +146,10 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
 
 /**
  * Each chunk is claimed in its own short transaction (T1) that commits before the network call,
- * so the venue file's single writer slot is not held across the AEAT round trip. `client.submit`
- * runs outside any transaction; the response is persisted in a second short transaction (T2), or,
- * if `client.submit` throws, the batch is backed off in one instead.
+ * so the venue file's single writer slot is not held across `client.submit`. `client.submit` runs
+ * outside any transaction; the response is persisted in a second short transaction (T2), or, if
+ * `client.submit` throws, the batch is backed off in one instead. Route B's `client.consultar` is
+ * the exception: it runs inside T2.
  *
  * AEAT's flow control: send when `TiempoEsperaEnvio` has elapsed since the last envío OR a full
  * envío has accumulated, whichever comes first.
@@ -317,9 +322,10 @@ async function requeueClaims(
  * queue issues `begin immediate` (`packages/store/src/write-queue.ts`), so a second drainer does
  * not begin until the selection and its `enviando` stamp have committed together, and then matches
  * none of those rows. What that prevents is a DUPLICATE SUBMISSION of the same batch to AEAT, so
- * the SELECT and the stamp must stay inside one `withTransaction`. A second PROCESS on this
- * database is outside that: its restart reset, `resetInFlightClaims`, assumes one process per
- * venue database.
+ * the SELECT and the stamp must stay inside one `withTransaction`, and the SELECT must stamp
+ * nothing itself: the deployment-environment cases in `drain.test.ts` go red if it does. A second
+ * PROCESS on this database is outside that: its restart reset, `resetInFlightClaims`, assumes one
+ * process per venue database.
  *
  * **The deployment-environment guard.** Each row's own `entorno` is checked against this host's
  * `environment` before the stamp. A row that disagrees, or carries none, is left untouched and

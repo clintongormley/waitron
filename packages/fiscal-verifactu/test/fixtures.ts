@@ -62,7 +62,8 @@ export const TENANT_B = {
 
 /**
  * Seed the foreign-key parents needed by insertRegistro: the taxpayer row, location, till, node,
- * invoice series, sale and SIF identity. The zero-total sale remains unsettled; settlement coverage is checked on settlement.
+ * invoice series, sale and SIF identity. The zero-total sale remains unsettled; settlement
+ * coverage is checked on settlement.
  */
 export async function seedTenantTillSif(db: Database): Promise<void> {
   await db
@@ -117,7 +118,8 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
  * Deliberately narrower than `seedTenantTillSif` above: no invoice series, no sale, no
  * pre-existing `registro_sif` row. `registerSif` is exactly what mints that row under test, so
  * seeding one here would make every "first registration" assertion false before the test body
- * even runs. The SIF is the node, so `registerSif` keys on these nodes. The tills are kept so the sale-ringing snapshot has a real till to reference.
+ * even runs. The SIF is the node, so `registerSif` keys on these nodes. The tills are kept so the
+ * sale-ringing snapshot has a real till to reference.
  */
 export async function seedTenants(db: Database): Promise<void> {
   await db
@@ -269,17 +271,20 @@ async function insertLocationTillSeries(
 
 /**
  * Seeds location -> till -> invoice series, makes sure the one taxpayer row exists, and registers a
- * LIVE Veri*Factu SIF identity (via `registerSif`) — everything `write-path.e2e.test.ts` needs for `VerifactuBackend.recordSale`'s own `currentSif` lookup to
- * succeed. `seedTenantTillSif` above is deliberately not reused for this: it seeds a
- * ready-made SALE too (for `inmutabilidad.test.ts`'s own fixed ids), which would collide with
- * `write-path.e2e.test.ts`'s own first allocated invoice number.
+ * LIVE Veri*Factu SIF identity (via `registerSif`) — everything `write-path.e2e.test.ts` needs for
+ * `VerifactuBackend.recordSale`'s own `currentSif` lookup to succeed. `seedTenantTillSif` above is
+ * deliberately not reused for this: it seeds a ready-made SALE too (for `inmutabilidad.test.ts`'s
+ * own fixed ids), which would collide with `write-path.e2e.test.ts`'s own first allocated invoice
+ * number.
  *
- * Each call mints its OWN fresh NIF and its own node; `options.nif` overrides that minting. The minted NIF comes from a module-level counter
- * (`freshNif` above), so which one a test gets is decided by how many `seedTenantWithSif` calls ran
- * before it in the same file. The NIF is a HASHED field (`IDEmisorFactura`,
- * hashed by `@waitron/verifactu`), so a test that asserts a recorded huella literal would
- * otherwise break whenever a test is added or removed ABOVE it. Pass a value no other test in the
- * same file will mint — the counter starts at `20000001K` and climbs.
+ * Each call mints its OWN fresh NIF and its own node; `options.nif` overrides that minting. The
+ * minted NIF comes from a module-level counter (`freshNif` above), so which one a test gets is
+ * decided by how many `seedTenantWithSif` calls ran before it in the same file. The NIF is a HASHED
+ * field (`IDEmisorFactura`, hashed by `@waitron/verifactu`), so a test that asserts a recorded
+ * huella literal would otherwise break whenever a test is added or removed ABOVE it. Measured: the
+ * same basket filed 16th in `write-path.e2e.test.ts` hashed to `38CCE164…` under NIF `20000016K`
+ * and to `A1AF497F…` standalone under `20000001K`; pinning the NIF made both positions agree. Pass
+ * a value no other test in the same file will mint — the counter starts at `20000001K` and climbs.
  *
  * WHAT THE OVERRIDE DOES NOT REACH. The `tenants` insert below does nothing when the row already
  * exists, so after an earlier seed the override reaches `registerSif` alone and the `tenants` row

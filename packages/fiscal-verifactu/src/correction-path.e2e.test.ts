@@ -276,7 +276,8 @@ describe("recordCorrection against the real Veri*Factu backend", () => {
 
 describe("recordCorrection from five callers started together", () => {
   // A correction ALWAYS follows an existing original alta (recordCorrection reads it, or throws), so
-  // the chain head always exists before any correction runs.
+  // the chain head always exists before any correction runs: this case never exercises
+  // `readChainHead`'s create-the-head branch.
   //
   // Not a lock test. Five callers started together against the ONE handle are serialised by the
   // venue file's write queue: `withTransaction` (`packages/db/src/tenancy.ts`) runs inside
@@ -284,6 +285,8 @@ describe("recordCorrection from five callers started together", () => {
   // The chain's own guarantee — distinct, contiguous secuencias, each record linked to its
   // predecessor's huella — is exactly what a queue that did NOT serialise would break, and
   // `registros_tenant_node_secuencia_uq` refuses a duplicate position whatever wrote it.
+  // Control: with `withTransaction` replaced by a bare `backend.recordCorrection(...)` call, this
+  // case fails with `no such savepoint`.
   const RACERS = 5;
 
   it("commits five simultaneously-started corrections into one gap-free, correctly-chained sequence", async () => {

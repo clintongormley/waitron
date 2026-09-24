@@ -118,8 +118,7 @@ async function addTill(tx: Transaction, nif: string, label: string): Promise<See
 /**
  * Inserts location → node → till → node-keyed series and registers a live Veri*Factu SIF identity
  * for the node, returning every id `appendToChain` needs. Each call gets its OWN fresh NIF and
- * node, so a suite can reseed per test without deleting from the append-only
- * `registros_facturacion`.
+ * node.
  */
 export async function seedTill(db: Database, label = "A"): Promise<SeededTill> {
   const nif = freshNif();

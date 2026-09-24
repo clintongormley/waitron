@@ -66,9 +66,9 @@ const REPORTED_DRIFT: Partial<
 };
 
 /**
- * Called only when `reported` is `AceptadaConErrores` or `Anulada`. `Anulada` never agrees with an
- * accepted local estado. `AceptadaConErrores` agrees with a local `aceptado_con_errores`: without
- * that, the row this sweep corrects would be re-classified as drift on every later sweep.
+ * Called only when `reported` is `AceptadaConErrores` or `Anulada`. `AceptadaConErrores` agrees
+ * with a local `aceptado_con_errores`: without that, the row this sweep corrects would be
+ * re-classified as drift on every later sweep.
  */
 function isDrift(localEstado: string, reported: EstadoRegistroConsulta): boolean {
   return reported !== "AceptadaConErrores" || localEstado === "aceptado";

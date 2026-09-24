@@ -169,9 +169,8 @@ describe("currentSif resolves per node", () => {
 });
 
 describe("the series↔node guard (record-sale)", () => {
-  // A sale whose input.nodeId ≠ the series' node throws
-  // sale.series_wrong_node; the matching case succeeds. Driven through @waitron/core's recordSale,
-  // the guard's real home.
+  // A sale whose input.nodeId ≠ the series' node throws sale.series_wrong_node; the matching case
+  // succeeds. Driven through @waitron/core's recordSale, the guard's real home.
   function backendFor(): VerifactuBackend {
     return new VerifactuBackend({
       deploymentEnvironment: "production",

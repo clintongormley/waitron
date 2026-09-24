@@ -5,7 +5,8 @@ import { TEST_SISTEMA } from "./testing/seed.js";
 import { validateVenueFiscalFields } from "./venue-fields.js";
 
 /**
- * The drift guard for the three `@waitron/verifactu` rules ./venue-fields.ts restates.
+ * The drift guard for the three `@waitron/verifactu` rules ./venue-fields.ts restates. Every case
+ * below is here because removing a piece of the restatement flips it.
  *
  * It deliberately does NOT pin the series code's LENGTH rule, because the two disagree on purpose:
  * the boundary refuses a base over 38 characters so a cold restore's `-<installation number>`
@@ -61,7 +62,9 @@ function validatorRefuses(record: ReturnType<typeof recordFor>, field: string): 
 
 describe("the restated character set matches the record validator's", () => {
   // Every case is far under the 60-character cap, so the only error the validator can raise
-  // against this field is the charset one.
+  // against this field is the charset one. `a_b.c` is the case that makes dropping `a-z`, `_` or
+  // `.` visible (without it all three of those drifts stayed green — measured), `A-2026` covers the
+  // hyphen, `A/B` the slash.
   it.each(["Serie A", "Série A", "FAC 1", "FS", "A-2026", "A/B", "a_b.c"])(
     "gives the same CHARACTER-SET verdict as validate() for %j",
     (code) => {
@@ -102,8 +105,9 @@ describe("the restated control characters match the record validator's", () => {
 });
 
 describe("the restated description cap matches the record validator's", () => {
-  // None of these values carries a control character, which the validator reports under the same
-  // field name.
+  // Both sides of the boundary, so moving DESCRIPTION_MAX in EITHER direction flips a case: at 500
+  // both accept, at 501 both refuse. None of these values carries a control character, which the
+  // validator reports under the same field name, so the filter reads the length rule alone.
   it.each([1, 499, 500, 501, 600])(
     "gives the same verdict for a description of %i characters",
     (length) => {

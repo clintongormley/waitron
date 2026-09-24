@@ -14,8 +14,6 @@ import { count, table, ts } from "@waitron/db";
  * `ON CONFLICT` target the drainer upserts against. Lazily created: no row means nothing has ever
  * been sent, which reads as "may send now"; the drainer upserts one after the first response.
  */
-// The bracketed thunks below are resolved by `drizzle-kit generate` in its own CLI process,
-// never by `vitest run`, so v8 reports them as never-invoked functions.
 export const envioFlujo = table(
   "envio_flujo",
   {
