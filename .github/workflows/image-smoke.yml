@@ -162,6 +162,22 @@ jobs:
             && test -s /app/third-party/libvips/versions.json \
             && grep -q "Written offer of source code" /app/third-party/README.md'
 
+      # The build's own `litestream version` ran in the full node:26 stage as root. This runs the copy
+      # the slim runtime carries, found on PATH the way the server's default finds it, as the user
+      # the server runs as. The boot above configures no bucket, so the server never started it.
+      - name: The image carries the pinned Litestream, runnable by the app user
+        run: |
+          set -euo pipefail
+          app=$(docker compose ps -q app)
+          pinned=$(sed -nE 's/^export const LITESTREAM_VERSION = "([0-9.]+)";$/\1/p' packages/stream/src/litestream.ts)
+          [ -n "$pinned" ]
+          [ "$(docker exec "$app" id -u)" = "10001" ]
+          reported=$(docker exec "$app" litestream version)
+          echo "litestream in the image: $reported; pinned: $pinned"
+          [ "$reported" = "$pinned" ]
+          docker exec "$app" sh -c 'test -s /app/third-party/licenses/Apache-2.0.txt \
+            && grep -q "^## Litestream" /app/third-party/README.md'
+
       - name: The print agent came up and picked up its server URL
         run: |
           set -euo pipefail
