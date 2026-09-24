@@ -2992,8 +2992,14 @@ image constraints under *Detail → Box image*.
     offered `insert` only inside `transaction` to offer it outside too before all 24 passed (22
     without). `insertClose` in `packages/reporting/src/record-daily-close.ts` is the same case,
     run 2026-09-24 (`docs/developers/conventions-data.md` has the probe); CLAUDE.md §3 and both
-    sites now say so. Whether to remove these two nested calls, or say why they stay, is open (a
-    code change, not made). The reason "v8 reports phantom uncovered branches" given for excluding
+    sites now say so (#587). Whether to remove these two nested calls, or say why they stay, is open
+    (a code change, not made). #587's review also found older comments still describing PostgreSQL's
+    behaviour, left alone there: `packages/store/src/node-sqlite-adapter.test.ts:90` calls keeping
+    the outer transaction usable "the whole point of the savepoint"; a test name in
+    `packages/fiscal-verifactu/src/chain.test.ts:225` says a collision would "poison the whole
+    transaction"; and `packages/reporting/src/record-daily-close.ts` keeps PostgreSQL-era comments
+    (its step 5, `date_trunc`, "On PostgreSQL that shape…"). The last two are for lane B's pruning of
+    those packages; `packages/store` was pruned by #568 before this was found. The reason "v8 reports phantom uncovered branches" given for excluding
     barrel `index.ts` files from coverage did not hold in scheduler: with the exclusion removed,
     both barrels reported 0 branches at 100% and the totals did not move. So scheduler's two barrel
     excludes in `vitest.config.ts` can go (a config change, not made), and the same reason is still
