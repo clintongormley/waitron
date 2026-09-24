@@ -35,10 +35,8 @@ import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/se
 import type { TenderMethod } from "../src/types.js";
 
 /**
- * Money crosses into the database as a count of whole cents (`columns.ts`'s `money`), so every
- * fixture below takes the decimal literal a test reads and writes `decimalToCents` of it. Keeping
- * the literals here means a reporting test still states the amount it seeds and the amount it
- * expects in the same form, and the conversion under test is the one the READ does.
+ * Fixtures take decimal literals and convert them at the insert, so a test states the amount it
+ * seeds and the amount it expects in the same form, and the conversion under test is the READ's.
  */
 
 export interface SeededVenue {
@@ -48,8 +46,6 @@ export interface SeededVenue {
   seriesId: SeriesId;
 }
 
-// The taxpayer row and the node use @waitron/db's own exported seeders (they own the NIF counter
-// and the tenants/nodes inserts); this file only adds the location/till/series db has no seeder for.
 export async function seedVenue(db: Database): Promise<SeededVenue> {
   await seedTenant(db);
   const [location] = await db
@@ -71,9 +67,8 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
 }
 
 /**
- * A SECOND node (with its own series) under an existing venue's location — for tests that need
- * two nodes in one venue, which `seedVenue` cannot express. Two nodes in one
- * database let a test tell a node-grain aggregate from a venue-wide one.
+ * A SECOND node (with its own series) under an existing venue's location, so a test can tell a
+ * node-grain aggregate from a venue-wide one.
  */
 export async function seedNodeAndSeries(
   db: Database,
@@ -88,8 +83,7 @@ export async function seedNodeAndSeries(
   return { nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
-// A venue-scoped unique index on tills(location_id, name) means two seeded tills in one
-// venue cannot share a name; the counter gives each a distinct one (seedVenue owns "Till 1").
+// Till names are unique per location; seedVenue owns "Till 1".
 let tillSeq = 1;
 
 export async function seedTill(
@@ -102,12 +96,9 @@ export async function seedTill(
 }
 
 /**
- * The filed per-rate desglose a real sale would carry on `sales.vat_breakdown`,
- * derived here from the fixture's own lines so the seeded breakdown is COHERENT with them: lines are
- * grouped by `vatRate`, each group's `base` is the summed `lineTotal`, and its `tax` is
- * `@waitron/shared`'s `percentOf` (`base * rate / 100` rounded to money scale) — the same
- * direct-method grouping `@waitron/core`'s `buildVatBreakdown` performs. The grouping is inlined
- * rather than imported (reporting does not depend on core); only the shared tax formula is reused.
+ * The filed per-rate desglose a real sale would carry on `sales.vat_breakdown`, derived from the
+ * fixture's own lines so the two agree: grouped by `vatRate`, `base` the summed `lineTotal`, `tax`
+ * `percentOf(base, rate)` — the direct method.
  */
 function breakdownFromLines(
   lines: Array<{ vatRate: string; lineTotal: string }>,
@@ -230,15 +221,12 @@ export async function seedVoid(
 }
 
 /**
- * Seeds one received supplier invoice (factura recibida) and its per-rate VAT lines directly, as the
- * connection owner for fixture setup. Inserts the raw tables rather than going
- * through `@waitron/purchasing`, so `@waitron/reporting`'s tests take no dependency on that package
- * (it reads the tables directly, exactly as it reads `sales`). `supplierInvoiceNumber` must be unique
- * per supplierTaxId.
+ * Seeds one received supplier invoice (factura recibida) and its per-rate VAT lines straight into
+ * the tables, so these tests take no dependency on `@waitron/purchasing`. `supplierInvoiceNumber`
+ * must be unique per supplierTaxId.
  */
 export async function seedPurchaseInvoice(
   db: Database,
-  // Inert: callers still pass the seeded venue; the parameter goes when they stop.
   opts: {
     supplierTaxId?: string;
     supplierInvoiceNumber: string;
@@ -290,13 +278,10 @@ export async function seedSubstitution(
 }
 
 /**
- * Fires ONE line onto an EXISTING working order — a fresh throwaway catalogue + product (this
- * package takes no dependency on `@waitron/catalogue`, and `computeOverdueOrders` never reads
- * either), a `working_order_lines` row, and its `ticket_items` row with `queued_at` backdated by
- * `opts.ageMinutes` — the same `now() - N minutes` idiom `apps/server/src/working-order.test.ts`/
- * `tables.test.ts` use to control a band's age precisely. Split out from {@link seedFiredOrder} so a
- * test can add a SECOND line to one order (proving the worst-line reduction), which minting a whole
- * new order each time cannot express. Every insert runs as the connection owner for fixture setup.
+ * Fires ONE line onto an EXISTING working order — a throwaway catalogue + product (this package
+ * takes no dependency on `@waitron/catalogue`), a `working_order_lines` row, and its `ticket_items`
+ * row with `queued_at` backdated by `opts.ageMinutes`. Split out from {@link seedFiredOrder} so a
+ * test can add a SECOND line to one order.
  */
 export async function seedFiredLine(
   db: Database,
@@ -307,20 +292,14 @@ export async function seedFiredLine(
     /** Backdates `ticket_items.queued_at` by this many minutes — the age the classifier sees. Ignored
      *  when `queuedAt` is given. */
     ageMinutes: number;
-    /** Marks the LINE served (drops it off the age clock — design §3). Defaults to unserved. */
+    /** Marks the LINE served (drops it off the age clock). Defaults to unserved. */
     served?: boolean;
-    /** An explicit ISO timestamp for `ticket_items.queued_at`, overriding `ageMinutes`. Lets a test
-     *  give TWO lines the BIT-IDENTICAL `queued_at` a real multi-line fire produces (one INSERT, one
-     *  shared `defaultNow()` — `apps/server/src/working-order.ts`'s `fireLines`) — two SEPARATE calls
-     *  each computing its own `now() - N minutes` do NOT tie exactly, since each runs in its own
-     *  implicit transaction a few milliseconds apart, which is precisely wrong for a tie-break test. */
+    /** An explicit ISO timestamp for `ticket_items.queued_at`, overriding `ageMinutes`, so two lines
+     *  can share one exactly; two calls each backdating from their own clock reading need not tie. */
     queuedAt?: string;
   },
 ): Promise<void> {
-  // One clock reading for this line's three stamps. It was `now()` — this engine has no such
-  // function, and `now()` was transaction time, so the three agreed; taking one reading here keeps
-  // them agreeing. The backdated `queued_at` is the same subtraction `now() - N * interval '1
-  // minute'` performed, moved onto a Date because there is no interval type either.
+  // One clock reading for this line's three stamps, so they agree.
   const firedAtMs = Date.now();
   const firedAt = new Date(firedAtMs).toISOString();
   const [catalogue] = await db
@@ -363,10 +342,7 @@ export async function seedFiredLine(
   });
 }
 
-/**
- * Seeds one KITCHEN order with a single fired line (via {@link seedFiredLine}) — the fixture
- * `overdue-orders.test.ts` uses for the common one-order-one-line case.
- */
+/** What {@link seedFiredOrder} needs to seed one KITCHEN order with a single fired line. */
 export interface FiredOrderSeed {
   tillId: TillId;
   nodeId: NodeId;
@@ -375,11 +351,8 @@ export interface FiredOrderSeed {
 }
 
 /**
- * Creates a bare OPEN working order with no lines — split out of {@link seedFiredOrder} so a test can
- * control the ORDER lines are fired in (via separate {@link seedFiredLine} calls) independently of
- * their `line_no`, which is exactly what a tie-break regression test needs (insertion order must be
- * able to DIFFER from `line_no` order, to prove the query's tiebreak — not insertion order — decides
- * which tied line wins).
+ * Creates a bare OPEN working order with no lines, so a test can fire lines in an order that differs
+ * from their `line_no`.
  */
 export async function seedOpenOrder(
   db: Database,
@@ -405,7 +378,7 @@ export async function seedFiredOrder(
     orderNumber: number;
     /** Backdates `ticket_items.queued_at` by this many minutes — the age the classifier sees. */
     ageMinutes: number;
-    /** Marks the LINE served (drops it off the age clock — design §3). Defaults to unserved. */
+    /** Marks the LINE served (drops it off the age clock). Defaults to unserved. */
     served?: boolean;
     /** Marks the ORDER collected (drops the whole order off the clock). Defaults to not collected. */
     collected?: boolean;
@@ -414,10 +387,8 @@ export async function seedFiredOrder(
     tableLabel?: string;
   },
 ): Promise<{ orderId: string }> {
-  // Always CREATE the order `open` and fire the line before applying a terminal status/collected_at:
-  // `working_order_lines_require_open_parent` rejects writing a line onto
-  // a non-open parent, exactly as the real fire path would (a line is fired onto an open order, and
-  // only THEN does it settle/place/abandon or get collected).
+  // Created `open` and fired before any terminal status: the
+  // `working_order_lines_require_open_parent_*` triggers refuse a line on a non-open parent.
   const { orderId } = await seedOpenOrder(db, seed, opts.orderNumber);
   await seedFiredLine(
     db,
@@ -426,13 +397,12 @@ export async function seedFiredOrder(
   );
   const status = opts.status ?? "open";
   if (status !== "open" || opts.collected) {
-    // One reading for both stamps — what `now()` gave by being transaction time.
     const terminalAt = new Date().toISOString();
     await db
       .update(workingOrders)
       .set({
         status,
-        // The settled_at CHECK (working_orders_settled_at_ck) is biconditional on status='settled'.
+        // working_orders_settled_at_ck: settled_at is set exactly when status is 'settled'.
         settledAt: status === "settled" ? terminalAt : null,
         collectedAt: opts.collected ? terminalAt : null,
       })
@@ -448,6 +418,6 @@ export async function seedFiredOrder(
   return { orderId };
 }
 
-/** Re-exported so `overdue-orders.test.ts` seeds a station without a second import path into
- * `@waitron/db/testing/seed.js` — the same convenience `seedVenue` gives for tenant/node/location. */
+/** Re-exported so `overdue-orders.test.ts` needs no second import path into
+ * `@waitron/db/testing/seed.js`. */
 export { seedKitchenStation };

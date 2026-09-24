@@ -6,8 +6,6 @@ import { DR303_LAYOUT } from "./dr303-layout.js";
 import { formatNumericField } from "./dr303.js";
 import type { VatReturn } from "./types.js";
 
-// A pure mapping over a VatReturn — no DB, so a plain unit test with constructed inputs (the DB-backed
-// aggregate that produces a VatReturn is covered by vat-return.test.ts / input-vat.test.ts).
 const d = (s: string): Decimal => decimal(s);
 
 function vatReturn(over: Partial<VatReturn> = {}): VatReturn {
@@ -72,7 +70,7 @@ describe("mapModelo303", () => {
 
   it("threads the liquidation period through and keeps the boxes period-agnostic (monthly ≡ quarterly)", () => {
     // Identical figures under a MONTH and under a QUARTER: the boxes carry no period, so they must be
-    // byte-identical; only `period` differs. (Box exactness over a wider range is inherited upstream.)
+    // byte-identical; only `period` differs.
     const figures = {
       byRate: [
         { rate: d("10.00"), base: d("160.00"), tax: d("16.00") },
@@ -184,13 +182,11 @@ describe("mapModelo303", () => {
 
 // ── Tipo-% box cross-check: the map's rate value ⇔ the DR303 layout's hardcoded constant ──
 //
-// The devengado tipo-% boxes (02 → 4 %, 05 → 10 %, 08 → 21 %, 151 → 0 %) are written TWICE by two
-// independent encodings that must always agree: `mapModelo303` writes the rate itself (e.g. "21.00")
-// into the box key, while the DR303 serializer NEVER reads that key — it emits `dr303-layout.ts`'s
-// hardcoded `constant` for the field. They currently agree because `DEVENGADO_BOXES` was transcribed
-// to match the layout, but nothing pins it, so a future edit to either side could silently diverge in
-// a live tax file. This asserts the seam: format the map's rate through the serializer's OWN numeric
-// formatter and it must be byte-identical to the layout constant.
+// The devengado tipo-% boxes (02 → 4 %, 05 → 10 %, 08 → 21 %, 151 → 0 %) are written by two
+// independent encodings that must agree: `mapModelo303` writes the rate itself (e.g. "21.00") into
+// the box key, while the DR303 serializer never reads that key — it emits `dr303-layout.ts`'s
+// `constant` for the field. Formatted through the serializer's own numeric formatter, the map's
+// rate must be byte-identical to the layout constant.
 describe("mapModelo303 rate-% boxes agree with the DR303 layout constants", () => {
   const RATE_BOXES: ReadonlyArray<{ casilla: string; rate: string }> = [
     { casilla: "02", rate: "4.00" },

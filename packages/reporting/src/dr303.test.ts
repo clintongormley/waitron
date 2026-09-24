@@ -7,7 +7,7 @@ import type { Modelo303 } from "./modelo-303.js";
 
 const d = (s: string): Decimal => decimal(s);
 
-// ── Field-formatting units (proven by deletion; each rule from the AEAT manual, manual_uso.txt) ──
+// ── Field-formatting units (each rule from the AEAT manual, manual_uso.txt) ──
 
 describe("formatNumericField — money amount field (17 chars, 15 int + 2 dec, packed, no point)", () => {
   it("right-aligns and zero-fills a positive amount into 17 chars", () => {
@@ -68,7 +68,7 @@ describe("normalizeAlfa / formatAlfa — alfanumeric (upper, accents stripped, �
   });
 
   it("PRESERVES Ñ and Ç (ISO-8859-1 language letters, not accents)", () => {
-    // manual_uso.txt keeps Ñ (ASCII 209) / Ç (ASCII 199); only accented vowels are stripped.
+    // manual_uso.txt keeps Ñ (ISO-8859-1 209) / Ç (199); only accented vowels are stripped.
     expect(normalizeAlfa("Cañón")).toBe("CAÑON");
     expect(normalizeAlfa("Barça")).toBe("BARÇA");
     expect(normalizeAlfa("Ñoño Çedilla")).toBe("ÑOÑO ÇEDILLA");
@@ -127,10 +127,9 @@ const OPTIONS = {
   declarationType: "I", // tipo de declaración
 };
 
-// Absolute 0-based byte offsets, hand-computed once from the verified DR303e26 layout (común 328 +
-// página1 1581 precede página3). The serializer derives the SAME offsets from dr303-layout.ts; asserting
-// the two agree makes the offsets load-bearing — shift any field in the layout and the derivation
-// diverges from these constants → red.
+// Absolute 0-based byte offsets, hand-computed once from the DR303e26 layout (común 328 + página1
+// 1581 precede página3). Each is asserted equal to the offset derived from dr303-layout.ts, so a
+// shifted field in the layout fails here.
 const OFFSET = {
   c04: 614,
   c06: 636,
@@ -290,14 +289,6 @@ describe("toDr303Record — envelope period must match the aggregate's liquidati
 //    (the download route derives período from the SAME period, so they cannot disagree at the caller);
 //    annual → REFUSED, because there is no modelo 303 annual período (the annual return is modelo 390). ──
 describe("toDr303Record — period-aware envelope (annual refused, quarterly threaded)", () => {
-  // PROOF BY DELETION (CLAUDE.md §4 "prove a guard by deletion"). Deleting the `p.kind === "year"`
-  // throw block in dr303.ts and running this file makes ONLY the annual test below go RED (the
-  // quarterly test still passes):
-  //   × … > refuses an annual aggregate …
-  //     → AssertionError: expected [Function] to throw an error
-  // i.e. a {kind:"year"} aggregate + período "01" no longer refuses — it emits a misleading
-  // January-stamped 2944-byte file. Restoring the throw makes the file GREEN again (27 passed).
-  // Recorded 2026-08-18.
   it("refuses an annual aggregate — there is no modelo 303 annual period (annual is modelo 390)", () => {
     const annual = { ...deliMonth(), period: { kind: "year" as const } };
     expect(() => toDr303Record(annual, { ...OPTIONS, period: "01" })).toThrow(/annual|390/);

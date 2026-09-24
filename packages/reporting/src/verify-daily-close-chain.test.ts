@@ -8,12 +8,8 @@ import { recordDailyClose } from "./record-daily-close.js";
 import { verifyDailyCloseChain } from "./verify-daily-close-chain.js";
 import type { CashCountInput, DailyCloseRecord, DailyCloseSnapshot } from "./close-types.js";
 
-// The right target for the WALK. The re-walk (contiguity, genesis, broken-link, hash recomputation
-// from the jsonb read-back) is deterministic logic over rows already committed. The break cases are
-// crafted with raw INSERTs, which the append-only trigger does NOT guard (it is BEFORE UPDATE OR
-// DELETE), so they need no bypass. The verifier's teeth against a real mutation of a COMMITTED
-// chain are proven in verify-daily-close-chain.tampered.test.ts, where that bypass is the whole
-// point. Mirrors record-daily-close.test.ts's split.
+// The break cases are staged with INSERTs, which the append-only triggers (on update and delete)
+// do not refuse. Mutations of a committed chain are in verify-daily-close-chain.tampered.test.ts.
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
@@ -36,31 +32,22 @@ function record(businessDay: string, cashCounts: CashCountInput[]): Promise<Dail
   });
 }
 
-// Verify for one node — the shape a caller (Task 5's demo) uses.
 function verify() {
   return withTransaction(suite.db, async (tx) => {
     return verifyDailyCloseChain(tx, venue.nodeId);
   });
 }
 
-// A structurally-valid snapshot for a crafted row whose CONTENT is never reached by the assertion
-// under test (a genesis/link/sequence break is caught before the hash recompute, so it need not
-// reproduce entry_hash). Only the hash-mismatch case relies on it not reproducing a chosen digest,
-// which any fixed literal does. It is the OBJECT, not its text: the column serialises its own value
-// (`json` in `columns.ts`), so handing it a string would store a JSON string rather than a document.
+// A structurally valid snapshot for a crafted row; a genesis, link or sequence break is caught
+// before the hash recompute. It is the OBJECT, not its text: the `json` column serialises its own
+// value, so a string would be stored as a JSON string rather than a document.
 const SNAPSHOT = {
   close: {},
   cashReconciliation: { byTill: [], nodeVariance: "0.00" },
 } as unknown as DailyCloseSnapshot;
 
-/** INSERT of one close row. INSERT is not what the append-only trigger guards, so no bypass is
- * needed; this is how a break is staged without mutating a committed row.
- *
- * Through the table definition rather than in raw SQL. Two things forced it, both of them the
- * engine rather than a preference: `daily_closes.id` is supplied by `$defaultFn(newId)` in
- * JavaScript, so a raw INSERT naming no id is refused `NOT NULL constraint failed`; and `snapshot`
- * is a `json` column, whose serialisation is the column's own — the `::jsonb` cast this carried has
- * no equivalent here. The snapshot is therefore passed as the OBJECT rather than as its text. */
+/** INSERT of one close row, through the table definition: `daily_closes.id` comes from a
+ * JavaScript `$defaultFn` that a raw INSERT never reaches. */
 function craftClose(opts: {
   businessDay: string;
   sequenceNo: number;
@@ -101,9 +88,8 @@ describe("verifyDailyCloseChain — the chain re-walk", () => {
   });
 
   it("detects a broken predecessor link", async () => {
-    // A valid genesis close, then a second whose prev_entry_hash does NOT point at close 1's
-    // entry_hash — the splice/reorder signature. The link check fires before the hash recompute, so
-    // close 2's own entry_hash is never examined.
+    // A second close whose prev_entry_hash does NOT point at close 1's entry_hash. The link check
+    // fires before the hash recompute, so close 2's own entry_hash is never examined.
     const first = await record("2026-08-04", []);
     expect(first.prevEntryHash).toBe(""); // guard: close 1 really is a valid genesis
     await craftClose({
@@ -142,10 +128,9 @@ describe("verifyDailyCloseChain — the chain re-walk", () => {
   });
 
   it("detects tail truncation: the head records more closes than survive", async () => {
-    // Two valid closes leave the head at sequence_no = 2. Advance the head as if a THIRD close had
-    // been recorded and its row then deleted — the surviving rows [1, 2] walk clean, so ONLY the head
-    // cross-check catches that the tip is gone. `daily_close_chain` is the mutable head (no
-    // append-only trigger), so a plain UPDATE stages this.
+    // Advance the head as if a THIRD close had been recorded and its row then deleted: the surviving
+    // rows [1, 2] walk clean, so ONLY the head cross-check catches it. `daily_close_chain` has no
+    // append-only trigger, so a plain UPDATE stages this.
     await record("2026-08-04", []);
     await record("2026-08-05", []);
     await suite.db.execute(sql`
@@ -155,9 +140,8 @@ describe("verifyDailyCloseChain — the chain re-walk", () => {
   });
 
   it("detects a head whose recorded tip hash disagrees with the surviving last close", async () => {
-    // Row count matches the head (both say 2), so the shortfall check on length passes — but the
-    // head's last_entry_hash no longer equals close 2's entry_hash, the signature of a tip replaced
-    // under a reused sequence number. Exercises the hash arm of the head cross-check.
+    // Row count matches the head (both say 2), but the head's last_entry_hash no longer equals close
+    // 2's entry_hash: a tip replaced under a reused sequence number.
     await record("2026-08-04", []);
     await record("2026-08-05", []);
     await suite.db.execute(sql`

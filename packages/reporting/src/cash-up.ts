@@ -11,17 +11,12 @@ import type {
 } from "./types.js";
 
 /**
- * Operational cash-up for one node — or the whole venue when `input.nodeId` is omitted —
- * over one business day, anchored on settlement. Reads `tenders` joined to `sales` (for node scoping
- * and till_id); groups by (till, method). `cashTakings` per till is Σ cash-method amount (design §5).
- * The node predicate is applied via `nodeScopeClause` only when a node is fixed (a venue-wide overview
- * omits it and reads the whole database, which holds one tenant). Post-settlement refunds are out of
- * scope (tenders are always positive).
+ * Operational cash-up for one node — or the whole venue when `input.nodeId` is omitted — over one
+ * business day, anchored on settlement: tenders grouped by (till, method). `cashTakings` per till is
+ * Σ cash-method amount. Post-settlement refunds are out of scope (tenders are always positive).
  */
 export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Promise<CashUp> {
-  // Both sums are counts of whole cents read raw, handed over as TEXT and converted by
-  // `rawCentsToDecimal` — see its doc comment. `till_id` needs no cast, because an id column is
-  // `text` on this engine (`columns.ts`).
+  // Both sums are counts of whole cents, handed over as TEXT for `rawCentsToDecimal`.
   const { rows } = await tx.execute<{
     till_id: string;
     method: TenderMethod;

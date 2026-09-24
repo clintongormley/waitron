@@ -19,15 +19,8 @@ import { computeCloseEntryHash } from "./daily-close-hash.js";
 import { isBusinessDayConflict, recordDailyClose } from "./record-daily-close.js";
 import type { CashCountInput, DailyCloseRecord } from "./close-types.js";
 
-// Everything this suite asserts is DETERMINISTIC LOGIC over immutable commercial rows: the snapshot
-// captures exactly what `computeDailyClose` returns, the per-till variance arithmetic, the
-// chain-position/`prev_entry_hash` bookkeeping, the hash reproduction, and the input validation.
-// Every close below is awaited before the next — there is no `Promise.all` in this file — so nothing
-// here observes two closers overlapping. That is `record-daily-close.concurrency.test.ts`, which
-// starts its closes without awaiting each other and holds the concurrent `close.already_closed` and
-// the gap-free sequence under ten racing closers. The `close.already_closed` catch path is driven by
-// a real unique violation here (the sequential second close, and the raw insert that pins the
-// refusal's table and columns) and again there, where the two closers actually contend.
+// Every close here is awaited before the next; closes started together are in
+// record-daily-close.concurrency.test.ts.
 
 const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 
@@ -105,7 +98,7 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
       { tillId: tillC, openingFloat: "30.00", payouts: "0.00", countedCash: "50.00" }, //  30+20−0 = 50.00 → 0.00 exact
     ]);
 
-    // The frozen `close` is byte-for-byte the independent computeDailyClose (8a), not a re-derivation.
+    // The frozen `close` is exactly what computeDailyClose returns, not a re-derivation.
     expect(rec.snapshot.close).toEqual(await runCompute("2026-08-04"));
 
     const byTill = rec.snapshot.cashReconciliation.byTill;
@@ -132,7 +125,7 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     expect(second.prevEntryHash).toBe(first.entryHash); // the chain link
 
     // Each record self-verifies: its stored entry_hash is exactly what re-hashing its own frozen
-    // content against its predecessor produces (the property Task 4's verifier will re-walk).
+    // content against its predecessor produces.
     for (const rec of [first, second]) {
       expect(rec.closedAt.getTime() % 1000).toBe(0); // truncated to whole seconds before hashing + storing
       expect(rec.entryHash).toBe(
@@ -275,12 +268,9 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
   });
 
   it("surfaces a sequence-key collision RAW, not masked as close.already_closed", async () => {
-    // A daily_closes_sequence_key collision cannot happen while one write transaction runs on the
-    // venue file at a time (`withTransaction`, `packages/db/src/tenancy.ts`), so if one ever
-    // does it is a genuine single-writer bug for a day that is NOT closed — it must propagate, never
-    // be reported as "already closed". Provoke it deterministically: close day 4, rewind the head's
-    // sequence_no by hand, then close a DIFFERENT day 5. That recomputes sequence 1 and collides with
-    // day 4's row on the sequence key (not the business_day key), exercising insertClose's re-throw.
+    // A sequence-key collision is a single-writer bug for a day that is NOT closed, so it must
+    // propagate. Provoked by hand: close day 4, rewind the head's sequence_no, then close day 5,
+    // which recomputes sequence 1 and collides on the sequence key, not the business-day key.
     const first = await record("2026-08-04", []);
     expect(first.sequenceNo).toBe(1);
     await suite.db.execute(sql`
@@ -299,16 +289,10 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
   });
 
   it("reports the business-day key as the table and columns insertClose recognises", async () => {
-    // The receipt behind the target `insertClose` compares against. Driven through a REAL refusal,
-    // because the result code and the key are the DRIVER's: a crafted error would only prove the
-    // parser reads the craft. A raw insert-select duplicating the committed row on (node_id,
-    // business_day) — with sequence_no moved clear — so the refusal is the business-day key's and
-    // not the sequence key's.
-    //
-    // `id` is named and bound because its default is a JavaScript `$defaultFn(newId)` that a raw
-    // INSERT never reaches. Left out, the row is refused `NOT NULL constraint failed:
-    // daily_closes.id` and the case reads back the id as the key, proving nothing about the
-    // business-day key.
+    // A REAL refusal, because the result code and the key are the driver's: a crafted error would
+    // only prove the parser reads the craft. `sequence_no` is moved clear so only the business-day
+    // key collides. `id` is bound because its default is a JavaScript `$defaultFn` that a raw
+    // INSERT never reaches; left out, the refusal would be the id's NOT NULL instead.
     await record("2026-08-04", []);
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
@@ -324,17 +308,13 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
       table: "daily_closes",
       columns: ["node_id", "business_day"],
     });
-    // The whole point of the receipt: the predicate `insertClose` gates on says yes to a REAL
-    // refusal of this key, not only to the crafted ones below.
+    // The predicate `insertClose` gates on says yes to a REAL refusal of this key.
     expect(isBusinessDayConflict(error)).toBe(true);
   });
 });
 
 describe("isBusinessDayConflict", () => {
-  // Crafted errors, no database — the walk's branches are cheap to cover directly, exactly as
-  // @waitron/db's own suite does for its (structurally identical) predicate. Each comes from
-  // `refusalError`, whose own suite holds it equal to the engine's; the two real-refusal cases above
-  // pin the same shapes through the driver.
+  // Crafted errors from `refusalError`, whose own suite holds it equal to the engine's.
   const conflict = refusalError({
     unique: { table: "daily_closes", columns: ["node_id", "business_day"] },
   });

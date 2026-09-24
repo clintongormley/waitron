@@ -19,22 +19,17 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 let venue: SeededVenue;
 
-// A civil-August instant with the default offset 0 (12:00 local Madrid = 10:00Z, but the offset is
-// irrelevant here since we only need the filed date to be 2026-08-04 either way).
+// A civil-August instant; with the default offset 0 the filed date is 2026-08-04.
 const augNoonUtc = new Date("2026-08-04T10:00:00Z").toISOString();
 
 beforeEach(async () => {
   venue = await seedVenue(suite.db);
 });
 
-// Month-only wrapper over `runPeriod` (below): the great majority of suites here file a single month,
-// so this keeps their call sites terse. Only the period construction differs from `runPeriod`.
 function run(opts: { year: number; month: number }): Promise<VatReturn> {
   return runPeriod({ kind: "month", month: opts.month }, { year: opts.year });
 }
 
-// The period-threaded read the quarterly/annual suites need (`run` being month-only). Defaults to
-// year 2026, the year every period suite below seeds into.
 function runPeriod(period: LiquidationPeriod, opts: { year?: number } = {}): Promise<VatReturn> {
   return withTransaction(suite.db, async (tx) => {
     return computeVatReturn(tx, { year: opts.year ?? 2026, period });
@@ -45,7 +40,7 @@ describe("computeVatReturn", () => {
   it("aggregates the filed difference-method breakdown across two nodes, exactly", async () => {
     // Catalogue (gross-inclusive) sales file cuotas by the DIFFERENCE method, which can land a céntimo
     // away from round(base × rate). The 303 aggregate must sum the FILED per-invoice cuotas, never
-    // re-round on the monthly base. Two nodes of the same tenant, both counted (no node predicate).
+    // re-round on the monthly base. Two nodes, both counted (no node predicate).
     const nodeB = await seedNodeAndSeries(suite.db, venue);
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,
@@ -146,7 +141,7 @@ describe("computeVatReturn", () => {
     // 22:30Z: its filed fecha de expedición (civil-local date via the snapshot offset) is 2026-08-01,
     // so it belongs to AUGUST — even though a 05:00 business-day cutover would put it in July's
     // operational day. Its mirror at 2026-07-31 23:30 local = 2026-07-31 21:30Z is filed 2026-07-31,
-    // so it belongs to JULY. The 303 buckets on the civil date, not the cutover (spec §4, D4).
+    // so it belongs to JULY. The 303 buckets on the civil date, not the cutover.
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: new Date("2026-07-31T22:30:00Z").toISOString(),
@@ -229,19 +224,15 @@ describe("computeVatReturn", () => {
   });
 
   it("throws a plain validation Error on a year outside the 4-digit range, not a silent-empty 303", async () => {
-    // A mistyped year make_date still accepts (226 AD, 20226 AD) would otherwise match no sales and
-    // return a plausible-but-EMPTY 303 — the quiet, worse direction for a fiscal filing. A year
-    // make_date rejects (0) surfaces as a raw Postgres error mid-query, not the plain `reporting:`
-    // Error. Both must be caught as a validation throw BEFORE any query — hence the pinned message.
+    // A mistyped year would match no sales and return a plausible but EMPTY 303, the quiet, worse
+    // direction for a fiscal filing, so it is refused before any query.
     await expect(run({ year: 226, month: 8 })).rejects.toThrow(/year must be/);
     await expect(run({ year: 20226, month: 8 })).rejects.toThrow(/year must be/);
     await expect(run({ year: 0, month: 8 })).rejects.toThrow(/year must be/);
   });
 
   it("returns zeros for an empty month", async () => {
-    // Extended for the deducible side (#89 slice B): with no sales AND no received invoices, the
-    // deducible aggregate is empty and the result is 0.00 − 0.00. The devengado fields
-    // (byRate/baseTotal/taxTotal) keep their #76 shape and values.
+    // No sales and no received invoices: both sides empty, and the result 0.00 − 0.00.
     expect(await run({ year: 2026, month: 3 })).toEqual({
       year: 2026,
       period: { kind: "month", month: 3 },
@@ -257,9 +248,8 @@ describe("computeVatReturn", () => {
 describe("computeVatReturn — quarterly", () => {
   it("Q1 sums January, February and March (byRate + totals + result)", async () => {
     // Three sales spread across Q1's civil months (Jan/Feb/Mar) and one general 21% purchase received
-    // 2026-02-20, all inside Q1. The quarter must aggregate the three months — 1b's generalization
-    // already does, so this is the regression LOCK for the quarter bound (which 1d proves by deletion).
-    // Offset 0 → the filed fecha de expedición is the UTC calendar date; noon keeps it unambiguous.
+    // 2026-02-20, all inside Q1. Offset 0 → the filed fecha de expedición is the UTC calendar date;
+    // noon keeps it unambiguous.
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: "2026-01-15T12:00:00Z",
@@ -337,16 +327,6 @@ describe("computeVatReturn — annual + period boundaries", () => {
     expect(y.taxTotal).toBe("42.00"); // only the two 2026 sales; 2025/2027 excluded
   });
 
-  // Proven by deletion of periodDateFilter's quarter UPPER bound (`interval '3 months'`). Widening it
-  // to `interval '4 months'` makes Q1 = [2026-01-01, 2026-05-01), so 2026-04-01 leaks into Q1 and the
-  // assertion below (q1.taxTotal) goes RED at 42.00; restoring '3 months' returns it to GREEN.
-  //   RED (mutated to '4 months'), `pnpm --filter @waitron/reporting test vat-return`:
-  //     FAIL  src/vat-return.test.ts > computeVatReturn — annual + period boundaries >
-  //       the Q1/Q2 boundary buckets 31 Mar into Q1 and 1 Apr into Q2
-  //     AssertionError: expected '42.00' to be '21.00' // Object.is equality
-  //       - Expected "21.00"  + Received "42.00"
-  //     Test Files  1 failed | 1 passed (2) ; Tests  1 failed | 15 passed (16)
-  //   GREEN (restored to '3 months'): Test Files  2 passed (2) ; Tests  16 passed (16)
   it("the Q1/Q2 boundary buckets 31 Mar into Q1 and 1 Apr into Q2", async () => {
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,
@@ -375,9 +355,8 @@ describe("computeVatReturn — quarter equals the sum of its months", () => {
     // method lands a céntimo off round(base × rate): two difference-method sales (20.99 / 21.01 on a 21%
     // base 100.00) and a difference-method purchase (41.99, not 42.00, on a 21% base 200.00). The quarter
     // aggregate must equal the byte-for-byte addDecimal sum of the three monthly aggregates — because
-    // both sum the FILED per-invoice cuotas over the same rows (decimal addition is associative), never
-    // re-rounding round(Σ base × rate). This is the receipt for "a quarter = Σ its three months" AND for a
-    // difference-method cuota being carried verbatim across the quarter. Offset 0 → filed date = UTC date.
+    // both sum the FILED per-invoice cuotas over the same rows, never re-rounding round(Σ base × rate).
+    // Offset 0 → filed date = UTC date.
     // April sales.
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,

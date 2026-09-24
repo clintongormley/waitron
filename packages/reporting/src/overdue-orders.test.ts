@@ -70,8 +70,8 @@ describe("computeOverdueOrders", () => {
       },
       { orderNumber: 3, ageMinutes: 2 },
     );
-    // A line old enough to be forgotten, but SERVED — drops off the clock entirely (design §3), so
-    // this whole order (its only line served) must not appear.
+    // A line old enough to be forgotten, but SERVED — drops off the clock entirely, so this whole
+    // order (its only line served) must not appear.
     await seedFiredOrder(
       suite.db,
       {
@@ -168,14 +168,8 @@ describe("computeOverdueOrders", () => {
       { tillId: venue.tillId, nodeId: venue.nodeId },
       1,
     );
-    // ONE shared instant for BOTH lines — a real multi-station fire inserts every line in ONE
-    // statement against a single shared `defaultNow()` (`apps/server/src/working-order.ts`'s
-    // `fireLines`), so both rows get the BIT-IDENTICAL `queued_at`. Two separate `seedFiredLine` calls
-    // each computing their own "eleven minutes ago" do NOT tie exactly (each reads the clock a few
-    // milliseconds apart) — reading the clock once and pinning it via `queuedAt` is what
-    // reproduces the real tie. The reading moved out of SQL with the engine: it was
-    // `select (now() - interval '11 minutes')::text`, and it is the same instant in the same
-    // canonical spelling the column now holds.
+    // ONE shared instant for BOTH lines, as lines fired together can share; two `seedFiredLine`
+    // calls each backdating from their own clock reading need not tie.
     const tiedQueuedAt = new Date(Date.now() - 11 * 60_000).toISOString();
     // Fire line_no 2 (station "Barra") FIRST and line_no 1 (station "Cocina") SECOND — insertion order
     // is the OPPOSITE of line_no order. If the reduction ever fell back to insertion or scan order

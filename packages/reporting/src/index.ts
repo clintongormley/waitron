@@ -51,6 +51,6 @@ export type {
   VatSummary,
 } from "./types.js";
 
-// Side-effect only: keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable
-// from this package's own public barrel, per the reachability rule in packages/shared/src/errors.ts.
+// Side-effect only: keeps errors.ts's augmentation reachable from this package's public barrel
+// (the rule is in packages/shared/src/errors.ts).
 import "./errors.js";

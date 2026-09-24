@@ -1,14 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { DR303_ENVELOPE_CLOSE_TEMPLATE, DR303_LAYOUT, type Dr303Segment } from "./dr303-layout.js";
 
-// The layout self-check. `dr303-layout.ts` is machine-generated from the official AEAT record design
-// (packages/reporting/reference/DR303e26.xlsx, md5 e42cbe6baf7f21dd95c274b4c6f11bbe) by
-// packages/reporting/reference/generate-dr303-layout.py; this suite is the runtime receipt that the
-// transcription is faithful, independent of the generator's own generation-time check. Within each
-// segment (record) every field must ABUT the next — posición + longitud === next posición — the first
-// field starts at position 1, and the last ends exactly at the segment's AEAT-declared total length. A
-// single mistranscribed pos/len breaks it. No Python runs at test time; the .xlsx + generator are the
-// provenance/regeneration path only.
+// The layout self-check. `dr303-layout.ts` is generated from the AEAT record design by
+// packages/reporting/reference/generate-dr303-layout.py; this suite checks the transcription
+// independently of the generator. Within each segment every field must ABUT the next — posición +
+// longitud === next posición — the first starts at position 1, and the last ends exactly at the
+// segment's AEAT-declared total length.
 
 /** Returns a list of contiguity/length violations in a segment (empty === faithful). */
 function contiguityErrors(segment: Dr303Segment): string[] {
@@ -101,7 +98,7 @@ describe("DR303 layout self-check (contiguity + declared length)", () => {
     // Página 3 (DP30303): % atribuible al Estado [65], resultado de la autoliquidación [71].
     expect(posOf(DR303_LAYOUT.pagina3, "65")).toBe(216);
     expect(posOf(DR303_LAYOUT.pagina3, "71")).toBe(408);
-    // Casilla 67 is absent from the current form (compensation flows via 110/78/87) — confirmed here.
+    // No casilla 67 in the emitted segments (compensation flows via 110/78/87).
     expect(posOf(DR303_LAYOUT.pagina1, "67")).toBeUndefined();
     expect(posOf(DR303_LAYOUT.pagina3, "67")).toBeUndefined();
   });

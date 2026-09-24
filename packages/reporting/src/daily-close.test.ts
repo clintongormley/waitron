@@ -60,19 +60,11 @@ describe("computeDailyClose", () => {
   });
 
   it("Mode-I straddling the day_cutover: VAT on the placing day, cash on the settlement day", async () => {
-    // Both instants fall on the SAME UTC (and Madrid-local) calendar date, 2026-08-05, only an
-    // hour apart — chosen so a wrong anchor (e.g. cash landing on D1, or VAT on D2) would visibly
-    // fail, unlike two instants a full day apart where a timezone bug could still coincidentally
-    // agree.
+    // Both instants fall on the SAME calendar date, 2026-08-05, an hour apart, so a wrong anchor
+    // fails visibly where two instants a day apart could agree by coincidence.
     //   issued  2026-08-05T02:30:00.000Z = 04:30 Europe/Madrid (CEST, +02:00) — BEFORE the 05:00
-    //     cutover, so businessDayClause's `(local - cutover)::date` rolls back to 2026-08-04.
-    //   settled 2026-08-05T03:30:00.000Z = 05:30 Europe/Madrid — AFTER the cutover, so the date
-    //     stays 2026-08-05.
-    // (The brief's draft instants dated the issuance "2026-08-04T02:30:00.000Z"; run RED against
-    // businessDayClause and that lands issuance on business day 2026-08-03, not 2026-08-04, because
-    // subtracting the cutover from a pre-cutover local time always rolls back a calendar day from
-    // whatever date the local wall clock reads. Shifting the issuance instant one day later, to
-    // 2026-08-05T02:30:00.000Z, is what actually pins D1 = 2026-08-04 / D2 = 2026-08-05.)
+    //     cutover, so business day 2026-08-04.
+    //   settled 2026-08-05T03:30:00.000Z = 05:30 Europe/Madrid — AFTER the cutover, so 2026-08-05.
     const issued = "2026-08-05T02:30:00.000Z";
     const settled = "2026-08-05T03:30:00.000Z";
     const saleId = await seedSale(suite.db, venue, {
