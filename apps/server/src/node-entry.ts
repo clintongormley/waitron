@@ -182,7 +182,8 @@ export interface EntryDeps {
   assertNotAhead?: (venueDir: string, migrationsRoot: string) => Promise<void>;
   /** Defaults to the real `clearReplacedDatabases` (restore.ts), never a no-op, for the same reason. */
   clearReplacedDatabases?: (venueDir: string, log: Logger) => Promise<void>;
-  /** Holds the venue folder from the clearing until the server starts. Default `lockVenueDatabase`. */
+  /** Defaults to the real `lockVenueDatabase`, never a no-op: the clearing is safe only while the
+   *  folder is held. */
   lockVenue?: (venueDir: string) => Promise<VenueLock>;
   /**
    * The installer's channel — the container's stdout (`docker logs`), never the `waitron.log` the
@@ -342,7 +343,7 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
  * One container start: decide the level, bring the venue directory into shape, hand the server its
  * environment, and start it — or serve the recovery page instead.
  *
- * Four orderings carry the design, and each is invisible in production if it is wrong:
+ * Five orderings carry the design, and each is invisible in production if it is wrong:
  *
  * 1. The level is read first, before anything opens the venue database: a database-side failure is
  *    exactly what puts a box in recovery.
@@ -354,6 +355,12 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
  * 4. The ahead check runs after `runStagedRestore`, which replaces the venue files, and before
  *    `startServer`, which migrates and then queries the schema. It judges a database nothing has
  *    migrated yet, which the one-directional comparison in `assertNotAhead` makes safe.
+ * 5. After the staged restore, the start holds the venue folder from clearing set-aside folders
+ *    until `startServer` settles or an earlier step throws, so another process's placement cannot
+ *    run in between: one that failed with the old database set aside would leave no `venue.db`,
+ *    this start's opens would create an empty one, and the next start would delete the folder
+ *    holding the only copy. The clearing runs before the ahead check because that check's open
+ *    creates a missing `venue.db`.
  *
  * `startServer` resolving is the signal rather than a healthy `/health`, because `/health` is 503
  * on a setup box by design, so a health-gated reset would drive every unprovisioned box into
@@ -433,12 +440,9 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       },
     });
 
-    // Held from the clearing until the server's own store holds the folder, so no placement runs
-    // in between: one that failed with its old database set aside would leave no `venue.db`, the
-    // ahead check's open would create an empty one, and the next start would clear the only copy.
+    // Ordering 5 in the doc comment above.
     const hold = await (deps.lockVenue ?? lockVenueDatabase)(deps.venueDir);
     try {
-      // Before the ahead check, whose open creates a missing `venue.db`.
       await (deps.clearReplacedDatabases ?? clearReplacedDatabases)(deps.venueDir, deps.log);
 
       // Unchecked, an ahead database would surface as an unclassified driver error in whatever

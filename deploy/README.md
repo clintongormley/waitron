@@ -248,7 +248,8 @@ command against it treat that entrypoint differently:
   move everything in the folder it names back into the venue folder before
   `docker compose start app`. If the restore succeeded but its output shows
   `restore.db.aside_kept`, the folder that line names (`folder`) holds only the replaced database;
-  the next server start deletes it, logging `restore.db.aside_removed`. A server start that finds
+  the next server start tries to delete it, logging `restore.db.aside_removed` when it does and
+  `restore.db.aside_kept` when it cannot. A server start that finds
   such a folder holding files and no `venue.db` beside it deletes nothing and refuses to start with
   `restore.database_set_aside`, naming the folder in its output: move everything in it back into
   the venue folder, or run the restore again.

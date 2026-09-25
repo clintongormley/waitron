@@ -1210,9 +1210,9 @@ refused at once, before either database file is opened: `@waitron/store` (`lockV
 code every caller outside those two packages sees. Opens inside one process share the hold, and the
 last close gives it up. A tool documented to run beside
 the server opens with `exclusive: false` and takes no lock. A command that changes the folder's files
-(the cold restore, rejoin's wipe) takes `lockVenueDatabase` before its first change. The restart
-reset of in-flight AEAT submissions (`apps/server/src/restart-reset.ts`) relies on one server
-process per folder.
+(the cold restore, rejoin's wipe, the container start's clearing of set-aside folders) takes
+`lockVenueDatabase` before its first change. The restart reset of in-flight AEAT submissions
+(`apps/server/src/restart-reset.ts`) relies on one server process per folder.
 
 **Litestream is a second process on `venue.db`, and it takes no lock.** While a primary streams its
 copy to the owner's bucket, the server runs Litestream as its own child process
@@ -1364,9 +1364,9 @@ by nothing.
 
 | Caller | Runs | Decision |
 | --- | --- | --- |
-| `apps/server/src/boot.ts` | the server | locks three times in turn: the stamp probe, the migrate, and the long-lived store, which holds it for the process's life. Between them the folder is briefly free |
+| `apps/server/src/boot.ts` | the server | locks three times in turn: the stamp probe, the migrate, and the long-lived store, which holds it for the process's life. Between them the folder is briefly free, unless the container entry (`node-entry.ts`) started the server: its hold covers those gaps |
 | `apps/server/src/backup-supervisor.ts` (`reload`) | inside the server | shares the server's hold |
-| `apps/server/src/node-entry.ts` (`assertNotAhead`) and the staged restore it runs | the container entrypoint, the same process as the server | locks, one after the other, before the server opens |
+| `apps/server/src/node-entry.ts` (`clearReplacedDatabases`, `assertNotAhead`) and the staged restore it runs | the container entrypoint, the same process as the server | the staged restore locks on its own; then `runEntry` takes `lockVenueDatabase` and holds it from clearing set-aside folders (`clearReplacedDatabases`) through the ahead check until `startServer` settles or an earlier step throws. The ahead check's opens and the server's opens during its start share that hold |
 | `apps/server/src/restore.ts` (`writeValidated`) | `waitron-restore` (server stopped) and the staged restore | takes the lock before its first change and holds it to the end; its migrate and hook open share it. Refused while another process holds the folder |
 | `apps/server/src/restore-stream.ts` (`refuseIfArchiveSourceLive`, and `readRestoredCopy` inside `prepareStreamRestore`) | `waitron-restore`, before `writeValidated`; and the setup-mode server before it stages a restore (`boot.ts`): `refuseIfArchiveSourceLive` for `/setup-api/restore` and `/setup-api/cloud-recovery/restore`, `prepareStreamRestore` for `/setup-api/restore-bucket` | each locks (default) its own scratch folder under the state folder, made fresh per run (`archive-source-check-XXXXXX` for the archive's copy, `stream-restore-XXXXXX` for the download, which is opened once), never the venue folder; no contention |
 | `apps/server/src/rejoin-command.ts` | `waitron-rejoin` (server stopped) | takes the lock before its first read and holds it through the wipe and re-migrate. Refused while another process holds the folder |

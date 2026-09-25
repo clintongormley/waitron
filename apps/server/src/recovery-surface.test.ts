@@ -407,6 +407,7 @@ describe("curated operator text", () => {
     const persistedByRunEntry = [
       "server.config_missing",
       "provisioning.database_ahead",
+      "restore.database_set_aside",
       "migrations.set_missing",
       "migrations.incomplete",
       "server.boot_incomplete",

@@ -5672,7 +5672,11 @@ open:
     `runStagedRestore` (`apps/server/src/restore-request.ts`), which deletes the staged request on
     `restore.placement_failed` and fails that start; the start after it boots what the venue folder
     holds, so the box comes back in setup mode, and the code and which database was kept are only in
-    the server's own output (`failureDetail`, `apps/server/src/node-entry.ts`). One option is to keep
+    the server's own output (`failureDetail`, `apps/server/src/node-entry.ts`). That holds when
+    nothing was moved or everything was put back (a raw error, or `kept: "previous"`); when the old
+    database was left in a set-aside folder (`kept: "set_aside"`) no `venue.db` remains, so since
+    A31 every following start is refused with `restore.database_set_aside` and the box ends on the
+    recovery page. One option is to keep
     the staged request on `restore.placement_failed`, so repeated failed starts end on the recovery
     page. **Owner decision 2026-09-25: leave it as it is.**
   - Fixed by A31 (fix/restore-clean-aside-folders): a `.venue.db-replaced-` folder left in the
