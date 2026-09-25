@@ -114,9 +114,12 @@ describe("labels", () => {
 
   it("refuses a rename or delete of an unknown label", async () => {
     await fixture();
+    await app((tx) => createLabel(tx, "Taken"));
     const missing = crypto.randomUUID();
     const writes: ((tx: Transaction) => Promise<unknown>)[] = [
       (tx) => renameLabel(tx, missing, "Anything"),
+      // An unknown label is reported as such even when the name it asks for is taken.
+      (tx) => renameLabel(tx, missing, "Taken"),
       (tx) => deleteLabel(tx, missing),
     ];
     for (const write of writes)

@@ -58,14 +58,15 @@ export async function createLabel(tx: Transaction, name: string): Promise<Label>
 
 export async function renameLabel(tx: Transaction, id: string, name: string): Promise<Label> {
   const trimmed = labelName(name);
+  const [current] = await tx.select({ id: labels.id }).from(labels).where(eq(labels.id, id));
+  if (!current) throw new AppError("label.not_found", { labelId: id });
   await assertNameFree(tx, trimmed, id);
   const [renamed] = await tx
     .update(labels)
     .set({ name: trimmed, updatedAt: now() })
     .where(eq(labels.id, id))
     .returning(columns);
-  if (!renamed) throw new AppError("label.not_found", { labelId: id });
-  return renamed;
+  return renamed!;
 }
 
 /** Deletes the label; `product_labels` cascades, so it leaves every product that carried it. */
