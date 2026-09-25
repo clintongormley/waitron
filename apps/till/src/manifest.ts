@@ -1,7 +1,5 @@
-// The till's web-app manifest. `start_url`/`scope` are "/" because the box serves the till
-// same-origin at the root; the icons resolve to the shared brand PNGs served from `publicDir`.
-// `theme_color` mirrors the brand primary token (`--wt-color-primary`, packages/ui-core/src/tokens/colors.css)
-// so the OS chrome matches the app; `purpose: "any"` because the mark has no maskable safe zone.
+// `theme_color` mirrors `--wt-color-primary` (packages/ui-core/src/tokens/colors.css). `purpose: "any"`
+// because the mark has no maskable safe zone.
 export function buildManifest() {
   return {
     name: "Waitron Till",

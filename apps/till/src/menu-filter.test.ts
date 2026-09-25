@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { filterProductsByDiet, filterProductsByMenu } from "./menu-filter.js";
 import type { DietProfile, TillProduct } from "./api/client.js";
 
-/** A minimal sellable product tagged with the menu it came from — only the fields the filter reads. */
 function product(id: string, catalogueId?: string): TillProduct {
   return {
     id,
@@ -37,7 +36,6 @@ describe("filterProductsByMenu", () => {
   });
 });
 
-/** Attach a published diet profile to an otherwise-minimal product (only the fields the filter reads). */
 function dietProduct(id: string, diet: DietProfile | null | undefined): TillProduct {
   return { ...product(id), ...(diet === undefined ? {} : { diet }) };
 }
@@ -63,7 +61,6 @@ describe("filterProductsByDiet", () => {
     vegetarian: "no",
     contains: ["fish"],
   });
-  // An unreviewed dish: diet is cautious "unknown", so it satisfies NO positive filter.
   const unknownProduct = dietProduct("misterio", {
     vegan: "unknown",
     vegetarian: "unknown",
@@ -100,8 +97,6 @@ describe("filterProductsByDiet", () => {
   });
 
   it("keeps an unknown diet under no-meat/no-fish (contains has not recorded the tag)", () => {
-    // Per spec §3.1 these read `contains` (asserted from KNOWN presence); an unreviewed dish whose
-    // `contains` is empty is kept — cautiousness is confined to the vegan/vegetarian labels.
     expect(filterProductsByDiet([unknownProduct], "no-meat")).toEqual([unknownProduct]);
     expect(filterProductsByDiet([unknownProduct], "no-fish")).toEqual([unknownProduct]);
   });

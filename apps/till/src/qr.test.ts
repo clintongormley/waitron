@@ -12,7 +12,7 @@ describe("qrSvg", () => {
     expect(svg).toContain("<svg");
     expect(svg).toContain("<path");
     // The path must carry actual module runs (a `d="M…"`), not an empty `d=""` — a blank square
-    // is not a scannable code. `M` is the moveTo that begins each dark module.
+    // is not a scannable code.
     expect(svg).toMatch(/<path[^>]*\bd="M/);
   });
 
@@ -21,11 +21,7 @@ describe("qrSvg", () => {
   });
 
   // The exact bytes the on-screen ticket draws, pinned. The assertions above cannot see a change
-  // that keeps the same element shapes: dropping the error-correction level to "L", and scaling
-  // every module by moving `cellSize` from 4 to 5, each moves the drawn bytes and each was
-  // measured to leave the three assertions in the case above green. Level M is what Orden
-  // HAC/1177/2024 art. 21.1 mandates; the four-module quiet zone around it is ISO/IEC 18004's.
-  // Both citations are in the docstring on `qrSvg` in ./qr.ts.
+  // that keeps the same element shapes, such as the error-correction level or the module size.
   it("draws the AEAT verification URL at the pinned bytes", async () => {
     const svg = qrSvg(AEAT_LINK);
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(svg));

@@ -45,14 +45,11 @@ describe("kindOfFormFactor mirror", () => {
   it("maps each known form factor to its device kind", () => {
     expect(kindOfFormFactor("till")).toBe("till");
     expect(kindOfFormFactor("kds")).toBe("kds_station");
-    // Both handheld form factors collapse to the same kind — the phone shell.
     expect(kindOfFormFactor("phone-portrait")).toBe("handheld");
     expect(kindOfFormFactor("tablet-landscape")).toBe("handheld");
   });
 
   it("returns undefined for an unknown form factor (graceful widening)", () => {
-    // A server that adds a form factor this older client does not know must not break boot: the switch
-    // falls through to the normal operator till rather than throwing.
     expect(kindOfFormFactor("hologram")).toBeUndefined();
   });
 });
