@@ -6,79 +6,33 @@ import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
 import type { BackupDestination } from "./storage-backend.js";
 import "./errors.js";
 
-/**
- * The scheduled backup config (slice 4b-ii, widened for BR-1 storage fan-out). OPT-IN and
- * fail-closed, the same posture `loadTunnelConfig` takes: with no destination configured the whole
- * thing is `undefined` and no backup duty runs. `WAITRON_BACKUP_DIR` remains the single-destination
- * convenience — it becomes one local-fs destination with `id: "primary"` — and
- * `WAITRON_BACKUP_DESTINATIONS` (a JSON array) appends any further destinations after it, so a box
- * can fan a backup out to more than one place without dropping the simple case. When at least one
- * destination is configured the operator `WAITRON_BACKUP_RECOVERY_KEY` is required — the artifact is
- * encrypted under it, so an unattended backup can never write an unencrypted artifact — with a
- * 12-char floor shared with the recovery bundle (`MIN_PASSPHRASE_LENGTH`). A blank recovery key
- * fails closed rather than resolving to a degenerate default.
- *
- * **There is no connection setting here any more.** `WAITRON_BACKUP_DATABASE_URL` named a second
- * PostgreSQL connection for `pg_dump` to run over; with one venue directory holding one database
- * file there is no second connection to name, so the setting is gone rather than deprecated. The
- * supervisor opens `config.venueDir` itself (`backup-supervisor.ts`). `backup-env-writer.ts` never
- * wrote the variable, so nothing the wizard produced carried it.
- */
 export type BackupSchedule =
   | { kind: "interval"; ms: number }
   | { kind: "wall-clock"; days: "daily" | number[]; at: { hour: number; minute: number } | "auto" };
 
 export interface BackupConfig {
-  /** Where backups are written. At least one destination when this config exists at all; a lone
-   * `WAITRON_BACKUP_DIR` becomes the single entry `{ kind: "local-fs", id: "primary", dir }`.
-   * Ids and resolved dirs are both unique — `parseDestinations` throws `backup.destinations_invalid`
-   * on a duplicate `id` (`reason: "duplicate_id"`) or a duplicate resolved `dir`
-   * (`reason: "duplicate_dir"`, including `WAITRON_BACKUP_DIR` re-listed in the destinations JSON). */
+  /** Never empty; ids and resolved dirs are both unique. */
   destinations: BackupDestination[];
-  /** The operator-held passphrase every backup artifact is encrypted under, from
-   * `WAITRON_BACKUP_RECOVERY_KEY`. Required whenever `destinations` is non-empty; a blank or missing
-   * value throws `backup.recovery_key_missing`, and one under `MIN_PASSPHRASE_LENGTH` characters
-   * throws `backup.recovery_key_too_short`. */
+  /** The operator-held passphrase every backup artifact is encrypted under. */
   recoveryKey: string;
-  /** When the backup duty runs: either a fixed `WAITRON_BACKUP_INTERVAL_MS` interval or a
-   * wall-clock cadence from `WAITRON_BACKUP_SCHEDULE_DAYS` + `WAITRON_BACKUP_AT`. The two are
-   * mutually exclusive (`backup.schedule_invalid`). Consumed by the sweep scheduler (BR-1 Task 3). */
   schedule: BackupSchedule;
-  /** How many archives to keep before the oldest is pruned, from `WAITRON_BACKUP_RETAIN` (a
-   * positive int) — the count cap of the dual-retention policy. */
+  /** The count cap: how many archives each destination keeps. */
   retain: number;
-  /** The age cap of the dual-retention policy: an archive older than this many days is pruned even
-   * if the count cap has not been reached, from `WAITRON_BACKUP_RETAIN_DAYS` (a positive int). */
+  /** The age cap: an archive older than this many days is pruned even under the count cap. */
   retainDays: number;
-  /** How long since the last successful backup before the box reports it stale (a `/health`
-   * signal, mirroring the scheduler's own `staleAfterMs`), from `WAITRON_BACKUP_STALE_AFTER_MS`. */
+  /** How long since the last successful backup before the box reports it stale. */
   staleAfterMs: number;
-  /** ISO timestamp of the last recovery-key rotation, from `WAITRON_BACKUP_KEY_ROTATED_AT`;
-   * `undefined` when never rotated. Reported in box status only — it gates no behaviour here. */
+  /** `undefined` when never rotated. Reported in box status only; it gates no behaviour. */
   keyRotatedAt: string | undefined;
 }
 
-/** A daily backup when `WAITRON_BACKUP_INTERVAL_MS` is unset — a relaxed cadence for a background
- * housekeeping copy that need not run tight. */
 const DEFAULT_BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
-/** Keep a week of daily archives when `WAITRON_BACKUP_RETAIN` is unset — enough history to recover from
- * a fault noticed a few days late without unbounded disk growth. */
 const DEFAULT_BACKUP_RETAIN = 7;
-/** Keep a month of archives by age when `WAITRON_BACKUP_RETAIN_DAYS` is unset — the age cap that runs
- * beside the count cap, so a burst of extra backups cannot silently shorten the recovery window. */
 const DEFAULT_BACKUP_RETAIN_DAYS = 30;
-/** Report the backup stale after two missed daily runs when `WAITRON_BACKUP_STALE_AFTER_MS` is
- * unset — one skipped run is tolerated, a second is an operator signal. */
 const DEFAULT_BACKUP_STALE_AFTER_MS = 2 * 24 * 60 * 60 * 1000;
 
 type Env = Record<string, string | undefined>;
 
-/**
- * The backup cadence. `WAITRON_BACKUP_INTERVAL_MS` (a fixed interval) and the wall-clock pair
- * (`WAITRON_BACKUP_SCHEDULE_DAYS` + `WAITRON_BACKUP_AT`) are mutually exclusive: setting both throws
- * `backup.schedule_invalid`. With neither set this is the legacy interval mode at
- * `DEFAULT_BACKUP_INTERVAL_MS`, so an existing interval config is unchanged.
- */
 function parseSchedule(env: Env): BackupSchedule {
   const daysRaw = env.WAITRON_BACKUP_SCHEDULE_DAYS;
   const atRaw = env.WAITRON_BACKUP_AT;
@@ -96,15 +50,12 @@ function parseSchedule(env: Env): BackupSchedule {
   return { kind: "wall-clock", days: parseDays(daysRaw), at: parseAt(atRaw) };
 }
 
-/** `"daily"` (the default when only `WAITRON_BACKUP_AT` is set) or a comma list of weekdays, each
- * `0`–`6` with Sunday = 0 (JS `getDay()` convention); deduped and sorted. An empty/whitespace-only,
- * non-integer or out-of-range token throws `backup.schedule_invalid`. */
+/** Weekdays use Sunday = 0, the `getDay()` convention. */
 function parseDays(raw: string | undefined): "daily" | number[] {
   if (isUnset(raw) || raw === "daily") return "daily";
   const parts = raw.split(",").map((s) => s.trim());
   const nums = parts.map((p) => {
-    // A blank or whitespace-only token is rejected explicitly: `Number("")` is `0`, so without this
-    // `"1, ,3"` would silently be accepted as Sunday rather than refused.
+    // `Number("")` is `0`, so without this `"1, ,3"` would be read as Sunday.
     if (p === "") throw new AppError("backup.schedule_invalid", { reason: "bad_day" });
     const n = Number(p);
     if (!Number.isInteger(n) || n < 0 || n > 6) {
@@ -116,9 +67,7 @@ function parseDays(raw: string | undefined): "daily" | number[] {
   return [...new Set(nums)].sort((a, b) => a - b);
 }
 
-/** `"auto"` (the default when only `WAITRON_BACKUP_SCHEDULE_DAYS` is set — the scheduler picks a
- * quiet time) or an `"HH:MM"` 24-hour local time. A malformed or out-of-range time throws
- * `backup.schedule_invalid`. */
+/** `"auto"` lets the scheduler pick the time; otherwise a 24-hour local `"HH:MM"`. */
 function parseAt(raw: string | undefined): { hour: number; minute: number } | "auto" {
   if (isUnset(raw) || raw === "auto") return "auto";
   const m = /^([0-9]{1,2}):([0-9]{2})$/.exec(raw);
@@ -130,14 +79,6 @@ function parseAt(raw: string | undefined): { hour: number; minute: number } | "a
   return { hour, minute };
 }
 
-/**
- * `WAITRON_BACKUP_DIR`, if set, becomes the single-destination convenience `{ kind: "local-fs",
- * id: "primary", dir }` — resolved to an absolute path at load, never `resolve("")` (the
- * `isUnset` gate above has already ruled the empty value out). `WAITRON_BACKUP_DESTINATIONS`, if set,
- * is parsed as a JSON array of `{ kind: "local-fs", id, dir }` descriptors and appended after it;
- * malformed JSON, a non-array, or a shape-invalid entry all throw `backup.destinations_invalid` with
- * a machine-readable `reason` rather than reaching the storage backend with something unusable.
- */
 function parseDestinations(env: Env): BackupDestination[] {
   const out: BackupDestination[] = [];
   const dir = env.WAITRON_BACKUP_DIR;
@@ -162,9 +103,7 @@ function parseDestinations(env: Env): BackupDestination[] {
         entry.kind !== "local-fs" ||
         typeof entry.id !== "string" ||
         typeof entry.dir !== "string" ||
-        // An empty id or dir is invalid, not merely present: `resolve("")` is cwd ("an empty
-        // connection string is a valid connection string", CLAUDE.md §3), so this fails closed
-        // BEFORE the resolve below rather than silently backing up to the process working dir.
+        // `resolve("")` is the working directory (CLAUDE.md §3).
         isUnset(entry.id) ||
         isUnset(entry.dir)
       ) {
@@ -174,10 +113,7 @@ function parseDestinations(env: Env): BackupDestination[] {
     }
   }
 
-  // Reject collisions: two destinations sharing an `id` (the key a backend is logged/pruned under)
-  // or a resolved `dir` (the same directory reached twice — most easily by re-listing
-  // `WAITRON_BACKUP_DIR` in `WAITRON_BACKUP_DESTINATIONS`) are a config mistake, not a deliberate
-  // double-write. Dirs are compared AFTER `resolve`, so `/mnt/a` and `/mnt/a/` collide.
+  // Compared after `resolve`, so `/mnt/a` and `/mnt/a/` collide.
   const seenIds = new Set<string>();
   const seenDirs = new Set<string>();
   for (const d of out) {
@@ -193,11 +129,7 @@ function parseDestinations(env: Env): BackupDestination[] {
   return out;
 }
 
-/**
- * The recovery key on its own, without the archive destination `loadBackupConfig` requires first.
- * Unset or empty is `undefined`; a key under `MIN_PASSPHRASE_LENGTH` throws
- * `backup.recovery_key_too_short`, the archive's floor.
- */
+/** The recovery key without requiring an archive destination. Unset or empty is `undefined`. */
 export function loadRecoveryKey(env: Env): string | undefined {
   const recoveryKey = env.WAITRON_BACKUP_RECOVERY_KEY;
   if (isUnset(recoveryKey)) return undefined;
@@ -208,14 +140,8 @@ export function loadRecoveryKey(env: Env): string | undefined {
 }
 
 /**
- * Enabled iff at least one destination is configured (`WAITRON_BACKUP_DIR` and/or
- * `WAITRON_BACKUP_DESTINATIONS` — see `parseDestinations`); with neither set this returns
- * `undefined` and no backup duty runs, the same off-switch `loadTunnelConfig` uses for an empty
- * relay url. When enabled, the recovery key is required: a missing/blank `WAITRON_BACKUP_RECOVERY_KEY`
- * throws `backup.recovery_key_missing`, and one shorter than `MIN_PASSPHRASE_LENGTH` throws
- * `backup.recovery_key_too_short` — fail-closed rather than letting an unattended backup ship
- * unencrypted or under a guessable key. The schedule (interval vs wall-clock) is validated by
- * `parseSchedule` (`backup.schedule_invalid`).
+ * `undefined`, and no backup duty runs, when no destination is configured. With one, the recovery
+ * key is required, so an unattended backup never writes an unencrypted artifact.
  */
 export function loadBackupConfig(env: Env): BackupConfig | undefined {
   const destinations = parseDestinations(env);

@@ -66,11 +66,7 @@ describe("readBackupStatus", () => {
     expect(await readBackupStatus([], 60_000, NOW)).toEqual({ configured: false });
   });
 
-  // Regression guard (BR-1 → BR-2): the sweep writes `waitron-<ts>.backup.enc` (BR-1 wrote
-  // `.dump.enc`), which the pre-BR-1 `DUMP_FILE_NAME = /^waitron-.*\.dump$/` filter did NOT match, so
-  // box-status reported the backup PERMANENTLY STALE while backups were landing. Scanning the real
-  // `LocalFsBackend.list("waitron-")` (prefix match, suffix-agnostic) must read a `.backup.enc` archive
-  // as FRESH. Fails against the old `.dump`-anchored reader.
+  // Pins that the reader finds the sweep's real `.backup.enc` key, through the real backend.
   describe("against a real local-fs backend holding an encrypted archive", () => {
     let dir: string;
     afterEach(async () => {

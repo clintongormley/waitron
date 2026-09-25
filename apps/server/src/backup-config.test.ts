@@ -8,18 +8,14 @@ describe("loadBackupConfig", () => {
     expect(loadBackupConfig({ WAITRON_BACKUP_DIR: "" })).toBeUndefined();
   });
   it("names no database connection, even when the retired variable is set", () => {
-    // `WAITRON_BACKUP_DATABASE_URL` named a second PostgreSQL connection for `pg_dump`. There is one
-    // venue directory now and the supervisor opens it itself, so the config carries no connection
-    // field at all. Asserted as an ABSENT KEY rather than an undefined value, because
-    // `toMatchObject` would pass on a key it was never shown: re-adding the field to the returned
-    // object is what this fails on.
+    // An absent KEY, not an undefined value: `toMatchObject` passes on a key it is never shown.
     const c = loadBackupConfig({
       WAITRON_BACKUP_DIR: "/b",
       WAITRON_BACKUP_DATABASE_URL: "postgres://x",
       WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
     })!;
     expect(Object.keys(c)).not.toContain("databaseUrl");
-    // The rest of the config still loads — the retired variable is ignored, not a refusal.
+    // Ignored, not refused.
     expect(c.destinations).toHaveLength(1);
   });
   it("builds a config with defaults", () => {
@@ -208,10 +204,7 @@ describe("loadBackupConfig destinations + recovery key", () => {
     ).toThrow(new AppError("backup.recovery_key_too_short", { min: 12 }));
   });
 
-  // Every WAITRON_BACKUP_DESTINATIONS rejection funnels through the same
-  // `backup.destinations_invalid` throw with a machine-readable `reason`; the cases differ only in
-  // the input JSON and the expected reason, so they share one table. `resolve("")` is cwd, so an
-  // empty id/dir must fail closed BEFORE the resolve (CLAUDE.md §3), which the last two cases pin.
+  // The last two pin that an empty id or dir fails closed: `resolve("")` is the working directory.
   it.each([
     ["not json", "not_json"],
     ['{"kind":"local-fs"}', "not_array"],
@@ -262,7 +255,6 @@ describe("loadRecoveryKey", () => {
   });
 
   it("returns the key with no archive destination configured", () => {
-    // loadBackupConfig answers undefined here, before it ever reads the key.
     expect(loadBackupConfig({ WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" })).toBeUndefined();
     expect(loadRecoveryKey({ WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" })).toBe("twelve-chars!");
   });

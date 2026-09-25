@@ -13,7 +13,7 @@ const FILES: BundleFiles = {
   "secrets.env": "WAITRON_CREDENTIALS_KEY=abc\nWAITRON_CREDENTIALS_KEY_VERSION=1\n",
   "tls/ca.crt": "-----BEGIN CERTIFICATE-----\nMII...\n-----END CERTIFICATE-----\n",
 };
-const PASS = "correct horse battery"; // ≥ MIN_PASSPHRASE_LENGTH
+const PASS = "correct horse battery";
 
 describe("recovery-bundle envelope", () => {
   it("round-trips the file map through encrypt→decrypt", () => {
@@ -63,15 +63,14 @@ describe("recovery-bundle envelope", () => {
 
   it("rejects an envelope whose KDF cost is out of bounds (DoS guard)", () => {
     const env = JSON.parse(encryptBundle(FILES, PASS));
-    env.kdf.N = 2 ** 30; // absurd scrypt cost
+    env.kdf.N = 2 ** 30;
     expect(() => decryptBundle(JSON.stringify(env), PASS)).toThrow(
       new AppError("recovery.bundle_invalid", { reason: "malformed" }),
     );
   });
 
   it("rejects an (N,r) pair that passes both bounds but breaches scrypt maxmem", () => {
-    // N=2^20 and r=32 each pass their individual bound (N not > MAX_SCRYPT_N; r not > 32), but
-    // 128*N*r ≈ 4GB exceeds maxmem — scryptSync would throw a RAW error without the guard.
+    // Each passes its own bound; together 128*N*r is about 4 GB.
     const env = JSON.parse(encryptBundle(FILES, PASS));
     env.kdf.N = 2 ** 20;
     env.kdf.r = 32;
@@ -97,8 +96,6 @@ describe("recovery-bundle envelope", () => {
   });
 
   it("rejects an authentic bundle whose plaintext is a JSON array, not a string-map", () => {
-    // GCM-authentic (we sealed it) but the plaintext is `[1,2,3]`, which would throw a raw error out
-    // of unpackBundleToDir. The post-decrypt shape guard must turn it into the contract error.
     const env = encryptBundle([1, 2, 3] as unknown as BundleFiles, PASS);
     expect(() => decryptBundle(env, PASS)).toThrow(
       new AppError("recovery.bundle_invalid", { reason: "malformed" }),
@@ -114,11 +111,7 @@ describe("recovery-bundle envelope", () => {
 
   it("rejects an over-long iv on STRING length, before decoding it (DoS guard)", () => {
     const env = JSON.parse(encryptBundle(FILES, PASS));
-    // Discriminating case: 16 base64 chars (= exactly 12 iv bytes) padded with 1000 newlines, which
-    // Buffer.from(..., "base64") IGNORES — so the decoded length is still 12 and the exact `!== 12`
-    // check would PASS. Only the string-length cap (>64) rejects it, proving the guard fires on the
-    // STRING length before any Buffer.from allocation. Without the cap this would decrypt to a GCM
-    // auth failure (passphrase_invalid), not malformed.
+    // Base64 decoding ignores the newlines, so only the string-length cap can refuse this.
     env.iv = "AAAAAAAAAAAAAAAA" + "\n".repeat(1000);
     expect(Buffer.from(env.iv, "base64").length).toBe(12); // guards the premise of this test
     expect(() => decryptBundle(JSON.stringify(env), PASS)).toThrow(
@@ -127,11 +120,7 @@ describe("recovery-bundle envelope", () => {
   });
 
   it("decrypts a bundle whose envelope records a non-default, in-bounds scrypt cost (self-describing KDF)", () => {
-    // A bundle is an external, operator-held artifact meant to survive indefinitely. It records its
-    // OWN kdf.N/r/p precisely so it stays decryptable after SCRYPT_PARAMS is later hardened — decrypt
-    // must derive with the ENVELOPE's recorded cost, not today's compiled default. Simulate an
-    // envelope sealed under a lighter (but still in-bounds) cost than the current default to prove
-    // that path: N=2^14 here vs the default N=2^17.
+    // A bundle must stay decryptable after SCRYPT_PARAMS is hardened.
     const lighterCost = {
       N: 2 ** 14,
       r: SCRYPT_PARAMS.r,
@@ -167,9 +156,7 @@ describe("recovery-bundle envelope", () => {
 
   it("rejects an over-large ct on STRING length, without decoding it (DoS guard)", () => {
     const env = JSON.parse(encryptBundle(FILES, PASS));
-    // A ct longer than the base64 cap for 1 MiB. Deliberately NOT valid base64 ("!" is outside the
-    // alphabet): the guard must fire on env.ct.length BEFORE any Buffer.from decode, so an invalid
-    // string that is merely too long is still rejected as ct_too_large, never decoded.
+    // Not valid base64, so only a check on the string length can report ct_too_large.
     env.ct = "!".repeat(Math.ceil((1024 * 1024) / 3) * 4 + 1);
     expect(() => decryptBundle(JSON.stringify(env), PASS)).toThrow(
       new AppError("recovery.bundle_invalid", { reason: "ct_too_large" }),

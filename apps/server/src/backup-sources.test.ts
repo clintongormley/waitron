@@ -5,11 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { collectModuleNonDbState } from "./backup-sources.js";
 
-// A non-ENOENT readdir failure (e.g. permission denied) must propagate rather than be swallowed
-// as "empty" — only ENOENT means "nothing written here yet". Mocked because staging a genuine
-// EACCES deterministically (without running as a different, unprivileged user) isn't practical;
-// every other test in this file exercises the real filesystem, the same scoping
-// `local-fs-backend.test.ts` uses for its own single mocked case.
+// Mocked only for the EACCES case, which cannot be staged reliably without another user; every
+// other case uses the real filesystem.
 const UNREADABLE_DIR_MARKER = "backup-sources-unreadable";
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
@@ -27,8 +24,6 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   };
 });
 
-// A minimal module descriptor carrying only the fields this suite reads. `migrations`/`version`/
-// `tier` are irrelevant to source resolution, but WaitronModule requires them.
 function moduleWithBackup(backup: WaitronModule["backup"]): WaitronModule {
   return {
     name: "fake",
@@ -56,7 +51,6 @@ describe("collectModuleNonDbState", () => {
     await writeFile(join(dir, "b.jpg"), Buffer.from("bee"));
     await writeFile(join(dir, "a.jpg"), Buffer.from("aye"));
     const entries = await collectModuleNonDbState([WITH_FILES], { documents: dir });
-    // Sorted by filename for a deterministic archive, regardless of write/readdir order.
     expect(entries.map((e) => e.name)).toEqual(["documents/a.jpg", "documents/b.jpg"]);
     expect(Buffer.from(entries[0].bytes).toString()).toBe("aye");
     expect(Buffer.from(entries[1].bytes).toString()).toBe("bee");
@@ -121,8 +115,6 @@ describe("collectModuleNonDbState", () => {
   });
 
   it("throws backup.source_kind_unsupported for an unknown source kind", async () => {
-    // A future NonDbSource kind added to the type without a capture branch must fail visibly rather
-    // than be given flat-dir treatment. Cast a bogus kind past the closed union to simulate that.
     const bogus = moduleWithBackup({
       nonDbState: [{ kind: "gcs-bucket", source: "documents" } as unknown as never],
     });

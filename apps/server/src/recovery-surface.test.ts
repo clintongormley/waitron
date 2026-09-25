@@ -41,8 +41,7 @@ describe("recoveryApp", () => {
       onRetry: vi.fn(),
     });
     const res = await app.request("/recovery-api/status");
-    // toEqual, not toMatchObject: an unlisted key is never checked, and this route must not leak a
-    // log path or a raw error message (CLAUDE.md §4).
+    // toEqual, not toMatchObject: an unlisted key is never checked.
     expect(await res.json()).toEqual({
       failures: 3,
       level: "recovery",
@@ -104,16 +103,9 @@ describe("recoveryApp", () => {
 });
 
 /**
- * What the log tail actually carries, run rather than reasoned about. Every piece below is the real
- * one — the shared error boundary, this process's logger, the rotating sink and the page — so what
- * it renders is what a box renders.
- *
- * It exists because `OPERATOR_TEXT`'s header used to claim that no params could reach the page. They
- * can: the boundary logs `{ ...cause.params }` into the very file the page tails
- * (`packages/server-kit/src/error-boundary.ts`). The design is unchanged and still sound (spec §5
- * names the tail as a second attacker-influenceable channel) — what keeps a SECRET off this
- * unauthenticated page is the repo's convention that an `AppError`'s params never carry one
- * (`apps/server/src/errors.ts`), not the page. This test is that claim's receipt.
+ * The real error boundary, logger, sink and page. The boundary logs an `AppError`'s params into the
+ * file the page tails, so what keeps a secret off this page is the convention that params never
+ * carry one (`apps/server/src/errors.ts`), not the page.
  */
 describe("the log tail as a second channel out of the image", () => {
   it("renders an AppError's params, escaped, after the real error boundary logs them", async () => {
@@ -126,8 +118,7 @@ describe("the log tail as a second channel out of the image", () => {
     const api = new Hono();
     api.get("/boom", (c) =>
       run(c, log, () => {
-        // A param that is NOT a secret — the convention holds here, deliberately. The point is the
-        // channel, not a leak: this value travels the same route a secret param would.
+        // Not a secret: the point is the channel, which a secret param would travel too.
         throw new AppError("server.config_invalid", {
           variable: "WAITRON_PROBE",
           reason: "<param-from-outside-the-image>",
@@ -153,12 +144,8 @@ describe("the log tail as a second channel out of the image", () => {
 });
 
 /**
- * ONE logger feeds both the container's stdout and the rotating `waitron.log` this page tails
- * (`boot.ts` → `createLogger(tee(stdoutSink, fileSink), …)`), so any module that logs a caught
- * error's own words puts them on an unauthenticated LAN page — `mdns.ts` logs `err.message`,
- * `me-api.ts` logs `error.message`, and email is configured as a URL, so a mailer failure is a
- * plausible carrier of `smtp://user:pass@host`. The file sink is what redacts, so the guarantee is
- * structural: a module written next year is covered without knowing this page exists.
+ * One logger feeds both stdout and the `waitron.log` this page tails (`boot.ts`), so a caught
+ * error's own words logged by any module reach the page. The file sink is what redacts.
  */
 describe("the caught error's own words on the page", () => {
   it("masks a URL password logged by any module, and keeps the installer's stdout copy", async () => {
@@ -183,11 +170,8 @@ describe("the caught error's own words on the page", () => {
     // assertion above would pass against a page that renders no tail at all.
     expect(body).toContain("mail.send_failed");
     expect(body).toContain("smtp://mailer:***@smtp.example:587");
-    // And the second control, for the CHOICE: stdout is the installer's channel (spec §4.4) and
-    // keeps the line whole. Redacting there too would erase the difference between a wrong password
-    // and no password at all — both mask to `***` — which is exactly what an installer chasing a
-    // refused outbound connection has to tell apart. This case drives an SMTP URL, which is the
-    // shape that still reaches the log; the box's own database is a file and carries no password.
+    // Stdout is the installer's channel and keeps the line whole: masked, a wrong password and no
+    // password would look the same.
     expect(stdout.join("")).toContain("hunter2");
   });
 });
@@ -213,9 +197,7 @@ async function pageFor(
 }
 
 describe("curated operator text", () => {
-  // Compared through `escapeHtml`, because that is what the page renders: every curated string is
-  // escaped like any other interpolation, so a title carrying an apostrophe reaches the page as
-  // `&#39;`. Using the module's own function rather than a second copy of the rule here.
+  // Through `escapeHtml`: curated strings are escaped too, so an apostrophe renders as `&#39;`.
   it("renders the title and action for every code in the table", async () => {
     for (const [code, text] of Object.entries(OPERATOR_TEXT)) {
       const body = await pageFor(code);
@@ -230,10 +212,7 @@ describe("curated operator text", () => {
     expect(body).not.toMatch(/\bwipe\b|\berase\b|\bdelete the database\b/i);
   });
 
-  // "Restore it from a backup, or reinstall" is not an action for the reader this page has: a
-  // restaurant operator with no terminal, usually no backup and no installer. Every action that says
-  // it must also name the person who can do it, or the page stops being actionable exactly where the
-  // failure is worst.
+  // The reader has no terminal and often no backup, so a restore action must name who can help.
   it("points an operator with no backup at whoever installed the box", () => {
     const restoreActions = Object.entries(OPERATOR_TEXT).filter(([, text]) =>
       /restore it from a backup, or reinstall/i.test(text.action),
@@ -246,24 +225,10 @@ describe("curated operator text", () => {
     }
   });
 
-  // The CONVERSE of the test above, over a hand-kept list: the codes `classifyBootFailure`
-  // produces, and codes `runEntry` persists — the `server.boot_incomplete` marker it writes before
-  // its steps, and codes those steps and `startServer` raise, `server.config_missing` (thrown by
-  // `loadConfig`) among them. It is NOT every code that can reach the page: the entrypoint persists
-  // `classifyBootFailure(error)` for any error out of `startServer`, and that returns an
-  // `AppError`'s OWN code, so the whole of `boot.ts` lands here. `provisioning.second_venue`
-  // (thrown by `assertSingleOperationalVenue` during boot) and the `credentials.*` family (thrown
-  // by `loadKeyRing`) both do fall to the generic line — neither is a key of `OPERATOR_TEXT`, and
-  // `operatorText` (`recovery-surface.ts`) answers `GENERIC_TEXT` for any code that is not a key of
-  // it.
-  //
-  // `deployment.environment_mismatch` is listed by hand as the one exception, because it is the
-  // `boot.ts` code a generic line fails worst: a box running against the OTHER environment's
-  // database is CLAUDE.md §5 territory (a pre-production sale burns a hole in the production
-  // series), and "Waitron could not start." would leave its operator pressing Retry.
-  //
-  // Codes `runEntry` throws without persisting need no page text, among them
-  // `server.entry_arguments_refused` and `provisioning.database_in_use`.
+  // A hand-kept list, and NOT every code that can reach the page: any `AppError` out of
+  // `startServer` is persisted under its own code, and most of those fall to the generic line.
+  // `deployment.environment_mismatch` is listed because the generic line fails it worst
+  // (CLAUDE.md §5).
   it("has an entry for every code classifyBootFailure produces and each persisted code listed here", () => {
     const classified = [
       "provisioning.database_unreachable",
@@ -285,11 +250,7 @@ describe("curated operator text", () => {
     expect(missing).toEqual([]);
   });
 
-  // `classifyBootFailure` returns `provisioning.database_unreachable` for one cause now: the engine
-  // could not open the box's database file (`boot-failure.ts`, `UNREACHABLE_RESULT_CODES`). A retry
-  // and a restart can fix it — a volume that did not come up — and nothing the operator can do at the
-  // box fixes the rest, so both halves are still asserted: the action they can take themselves, and
-  // the person to escalate to when it does not work.
+  // A retry or restart can fix a volume that did not come up; nothing else at the box can.
   it("offers a database_unreachable both a retry and the person a restart cannot replace", () => {
     const text = OPERATOR_TEXT["provisioning.database_unreachable"];
     expect(text).toBeDefined();
@@ -297,10 +258,7 @@ describe("curated operator text", () => {
     expect(text!.action).toMatch(/ask whoever installed this box/i);
   });
 
-  // A cold restore RUNS the migrations (`apps/server/src/restore.ts` → `applyMigrations`), so a
-  // restore is one of the things that can raise `migrations.incomplete` in the first place. Telling
-  // an operator whose backup is from the failing release point to restore is a loop with no exit,
-  // and this page is the only instruction they get.
+  // A cold restore runs the migrations itself, so it can raise `migrations.incomplete`.
   it("does not answer a partly-updated database with the restore that can raise it", () => {
     const text = OPERATOR_TEXT["migrations.incomplete"];
     expect(text).toBeDefined();
@@ -308,11 +266,7 @@ describe("curated operator text", () => {
     expect(text!.action).toMatch(/ask whoever installed this box/i);
   });
 
-  // The generic line used to promise the reason had been written where the installer could read it.
-  // `runEntry` writes it from ONE try/catch, and `readRecoveryState` and the pre-boot counter write
-  // both run before that block — the counter write deliberately allowed to throw — so a failed state
-  // volume escapes to the outer handler, which logs `server.boot_failed { errorCode }` and no detail
-  // at all. The page must not promise what that path does not deliver.
+  // A failure reading or counting the recovery state is logged with its code alone.
   it("does not promise the generic failure's reason was written down anywhere", () => {
     expect(GENERIC_TEXT.action).not.toMatch(/read the reason/i);
     expect(GENERIC_TEXT.action).toMatch(/ask whoever installed this box/i);
@@ -329,10 +283,8 @@ describe("curated operator text", () => {
     expect(body).toContain(GENERIC_TEXT.title);
   });
 
-  // The code is read from a file on the box and treated as attacker-influenceable, and a plain
-  // object literal inherits `Object.prototype` — so a lookup keyed on "toString" or "constructor"
-  // finds a FUNCTION, which `?? GENERIC_TEXT` does not catch and whose `.title` is undefined. The
-  // page must still render the generic line rather than throwing or printing "undefined".
+  // The code comes from a file on the box; a plain lookup of "toString" finds an inherited
+  // function.
   it("renders the generic line for an inherited property name, not a prototype value", async () => {
     for (const code of ["toString", "constructor", "__proto__", "valueOf"]) {
       const body = await pageFor(code);

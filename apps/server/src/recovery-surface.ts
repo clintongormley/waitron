@@ -12,17 +12,11 @@ const MAX_LOG_LINES = 200;
 export interface RecoveryDeps {
   state: RecoveryState;
   logDir: string;
-  /** Writes the reset counter and exits; Docker's restart policy performs the actual restart —
-   * this route never restarts the process itself. Run AFTER the response has been written, not
-   * before — see `outgoingOf`. */
+  /** Called only after the response has been written — see `outgoingOf`. */
   onRetry: (level: RecoveryLevel) => Promise<void>;
 }
 
-/** Escapes into HTML text/attribute content. This page is served before any authentication exists
- * and every string on it that came from outside the image is attacker-influenceable — the log tail
- * demonstrably so, see `OPERATOR_TEXT`, which enumerates all three — so every interpolated value
- * goes through this, never a raw template literal. Exported so the suite asserts the page's exact
- * rendered bytes against this rule rather than against a second copy of it. */
+/** The page is served before any authentication exists; see `OPERATOR_TEXT` for what reaches it. */
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -32,9 +26,7 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** The last `MAX_LOG_LINES` lines of the box's own log file. Absent, unreadable, or empty is a
- * blank tail, never a throw — a box that failed before it ever wrote a log still has to serve this
- * page. */
+/** Never throws: a box that failed before it ever wrote a log still has to serve this page. */
 async function tailLog(logDir: string): Promise<string[]> {
   let text: string;
   try {
@@ -47,13 +39,8 @@ async function tailLog(logDir: string): Promise<string[]> {
 }
 
 /**
- * The Node response this request will be written to. `@hono/node-server` puts it on `c.env`
- * (`{ incoming, outgoing }`); it is absent when the app is exercised through `app.request()`, which
- * has no Node response at all — hence the guard rather than a cast alone.
- *
- * It exists so the retry's process exit can wait for the `'finish'` EVENT instead of a delay: the
- * exit happens inside this handler's own request, and taking the process down before the socket has
- * flushed returns an empty body to the operator who just pressed the button.
+ * So the retry's process exit can wait for `'finish'`: exiting before the socket has flushed
+ * returns an empty body to the operator who pressed the button. Absent under `app.request()`.
  */
 function outgoingOf(c: Context): ServerResponse | undefined {
   return (c.env as { outgoing?: ServerResponse } | undefined)?.outgoing;
@@ -87,10 +74,8 @@ const HOLDER_NAMES: Readonly<Record<VenueHolderKind, { en: string; es: string }>
 };
 
 /**
- * The text for `provisioning.database_holder_stalled`, naming the holder through `HOLDER_NAMES`
- * alone: the kind comes from `recovery.json`, which `readRecoveryState` keeps only when it is a
- * member of the set. "Two minutes" is the holder's own watchdog bound (`WATCHDOG_KILL_MS`,
- * `packages/store/src/venue-liveness.ts`); a holder of an older image has none, hence "normally".
+ * "Two minutes" is the holder's watchdog bound (`WATCHDOG_KILL_MS`,
+ * `packages/store/src/venue-liveness.ts`).
  */
 function holderStalledText(kind: VenueHolderKind | undefined): OperatorText {
   const name = HOLDER_NAMES[kind ?? "script"];
@@ -107,71 +92,32 @@ function holderStalledText(kind: VenueHolderKind | undefined): OperatorText {
 }
 
 /**
- * The recovery-state marker for an attempt whose outcome is not known YET — `node-entry.ts` writes it
- * before the server starts, so a boot that HANGS (and therefore never produces a real code) still
- * leaves the page something true to say. Not an `AppError` code: nothing throws it, and it is in no
- * registry. A boot that does throw overwrites it with `classifyBootFailure`'s answer.
+ * Recorded before the server starts, so a boot that hangs still leaves the page something true to
+ * say. Not an `AppError` code: nothing throws it.
  *
- * It lives HERE, in the page's own module, and `node-entry.ts` imports it — not the other way round,
- * though the entrypoint is what writes it. node-entry already imports this module for `recoveryApp`,
- * so exporting it from there closes a cycle, and the cycle is not a crash but a silent wrong answer:
- * esbuild bundles the container's entry (`dist/node-entry.js`) with recovery-surface's body ahead of
- * node-entry's `var`, so the computed key below evaluated to `undefined`. Measured on that bundle —
- * `Object.keys(OPERATOR_TEXT)` printed `"undefined"` in place of `server.boot_incomplete`, while
- * every unit test passed, because vitest evaluates the two modules in the other order.
+ * It lives here, not in `node-entry.ts` which writes it: exported from there it closes an import
+ * cycle, and in the esbuild bundle the computed key below then evaluates to `undefined`.
  */
 export const BOOT_INCOMPLETE = "server.boot_incomplete";
 
-/**
- * The recovery-state marker for a start refused the venue folder by a holder whose holder file was
- * stale, missing or unreadable: `node-entry.ts` records it so the refusal counts. Like
- * `BOOT_INCOMPLETE`, nothing throws it and it is in no registry, and it lives here for the same
- * reason.
- */
+/** Like `BOOT_INCOMPLETE`: nothing throws it, and it lives here for the same reason. */
 export const HOLDER_STALLED = "provisioning.database_holder_stalled";
 
-/**
- * A code the recovery state can carry. `ErrorCode` is the shared registry's own union, so a typo in
- * a thrown code below is a typecheck failure rather than a page that silently renders the generic
- * line; `BOOT_INCOMPLETE` and `HOLDER_STALLED` are added by hand because they are in no registry.
- */
+/** Typed so a misspelled code below fails the typecheck rather than rendering the generic line. */
 type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE | typeof HOLDER_STALLED;
 
 /**
- * What the page says, keyed by error code.
+ * Every string in this table is fixed and chosen by code. Three strings on the page are not — the
+ * error code, the log tail and `lastFailureAt` — and all three are HTML-escaped; `failures` is
+ * interpolated raw because `readRecoveryState` only keeps a number.
  *
- * EVERY string in this table is fixed and chosen by code. THREE strings on the page are not: the
- * error CODE, the log TAIL and `lastFailureAt` — the last read from `recovery.json` behind nothing
- * but a `typeof === "string"` check (`recovery-state.ts`), so it is a string from outside the image
- * exactly as the other two are. All three are HTML-escaped and all three are treated as
- * attacker-influenceable. (`failures` also comes from that file; it is the one value interpolated
- * without escaping, and what makes that safe is that the same read coerces it to a number.)
- *
- * The TAIL is the widest of the three, and the caught error's own words DO reach it — the earlier
- * claim that they never leave stdout was wrong twice. The box has ONE logger, tee'd to the
- * container's stdout and to the `waitron.log` this page tails (`boot.ts`), so every module that logs
- * a caught error's message writes it onto an unauthenticated LAN page: `mdns.ts` and `me-api.ts`
- * already do, and email is configured as a URL, so a mailer failure is a plausible carrier of
- * `smtp://user:pass@host`. Two things bound that, neither of them this page:
- *
- *  - the file sink masks URL credentials on every line it writes (`log-file.ts` → `redactSecrets`),
- *    which covers the connection-string shape and NOTHING else — an error message carrying a secret
- *    in any other shape still reaches this page;
- *  - the repo's convention that an `AppError`'s params never carry a secret (the rule
- *    `apps/server/src/errors.ts` states for `server.config_invalid` and its siblings), because the
- *    shared error boundary writes those params into the same file
- *    (`packages/server-kit/src/error-boundary.ts`).
- *
- * This page is why both matter beyond a log file. Pinned by `recovery-surface.test.ts` → "the log
- * tail as a second channel out of the image" and "the caught error's own words on the page".
+ * The tail can carry a caught error's own words. What bounds it is not this page: the file sink
+ * masks URL credentials (`log-file.ts` → `redactSecrets`) and nothing else, and an `AppError`'s
+ * params never carry a secret (`apps/server/src/errors.ts`), because the error boundary logs them.
  *
  * The wording never suggests wiping or resetting anything: a real venue's database holds fiscal
  * records that cannot be re-created, so the action is always restore or reinstall (owner decision,
- * 2026-09-10).
- *
- * Every restore-or-reinstall action also names whoever installed the box: the reader has no
- * terminal, and often no backup and no installer either, so that person is their only real next
- * step.
+ * 2026-09-10). Each such action names whoever installed the box: the reader has no terminal.
  */
 export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>> = {
   "provisioning.database_ahead": {
@@ -186,31 +132,20 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
       "Restore it from a backup, or reinstall. If you do not have a backup, ask whoever installed this box for help.",
   },
   "provisioning.database_unreachable": {
-    // ONE cause wears this code now: the engine could not open the box's database file
-    // (`boot-failure.ts`, SQLITE_CANTOPEN). The three that used to — a connection wait timing out, a
-    // wrong password, a missing database — all belonged to the cluster this box no longer runs, and
-    // the wording went with them: there is no password to be wrong and nothing to still be starting
-    // up, so telling the operator to wait a minute would send them to wait for nothing. What is left
-    // is a file the software cannot read, which a restart can genuinely fix (a volume that did not
-    // mount) and otherwise cannot.
+    // The engine could not open the file (`boot-failure.ts`, SQLITE_CANTOPEN).
     title: "Waitron could not open the box's database.",
     action:
       "Press Retry. If it fails again, restart the box — that can fix a disk or a volume that did not come up. If it still fails, ask whoever installed this box for help: the box's database is a file on its disk, and the software cannot read it.",
   },
   "migrations.incomplete": {
-    // The one entry that deliberately does NOT offer the restore. A cold restore runs the migrations
-    // itself (`restore.ts` → `applyMigrations`), so a restore is one of the things that raises this
-    // code — and an operator whose backup is from the failing release point would be sent round that
-    // loop with no exit and no other instruction.
+    // Deliberately no restore: a restore runs the migrations itself, so it can raise this code.
     title: "The box's database was only partly updated.",
     action:
       "Ask whoever installed this box to look at it. Restoring a backup may not help: a restore runs the same update, and it can stop in the same place.",
   },
   "deployment.environment_mismatch": {
-    // Configuration, not a broken database — so no restore and no reinstall: neither changes which
-    // database this box points at, and a restore onto the wrong one is the worse outcome. Named
-    // rather than left to the generic line because it is a CLAUDE.md §5 case: the environments do
-    // not share a series, and a sale filed from the wrong one leaves a permanent hole in the other.
+    // No restore and no reinstall: neither changes which database this box points at. The
+    // environments must never share an invoice series (CLAUDE.md §5).
     title:
       "This box and its database do not belong to the same system: one is set up for real sales, the other for testing.",
     action: "Ask whoever installed this box to check its settings.",
@@ -236,16 +171,8 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
 };
 
 /**
- * The fallback, and what `unknown` renders: the classifier could not name this one. An unrecognised
- * code renders this and never throws — a box that failed before it ever wrote a log still has to
- * serve this page.
- *
- * The action names a person rather than promising the reason is written down somewhere. `runEntry`
- * reports the scrubbed error for every failure of the BOOT SEQUENCE — but `readRecoveryState` and
- * the pre-boot counter write both run before that try/catch, and the counter write is deliberately
- * allowed to throw, so a failed state volume reaches the outer handler, which logs
- * `server.boot_failed { errorCode }` and no detail at all. Naming the person is true in every case;
- * naming the detail was not.
+ * Names a person rather than promising the reason is written down: a failure reading or counting
+ * the recovery state reaches `node-entry.ts`'s outer handler, which logs its code and no detail.
  */
 export const GENERIC_TEXT: OperatorText = {
   title: "Waitron could not start.",
@@ -253,12 +180,8 @@ export const GENERIC_TEXT: OperatorText = {
 };
 
 /**
- * The curated text for a recorded code, or the generic line.
- *
- * `Object.hasOwn`, not a plain lookup with `??`: the code is read from a file on the box and treated
- * as attacker-influenceable, and an object literal inherits `Object.prototype`, so a code of
- * `toString` or `constructor` would find a FUNCTION — which `??` does not replace and whose `title`
- * is `undefined`, crashing the one page a failed box can still serve.
+ * `Object.hasOwn`: the code comes from a file on the box, and a code of `toString` would otherwise
+ * find an inherited function and crash the one page a failed box can still serve.
  */
 function operatorText(state: RecoveryState): OperatorText {
   const { lastErrorCode } = state;
@@ -275,10 +198,7 @@ function renderPage(state: RecoveryState, logLines: string[]): string {
   const text = operatorText(state);
   const tail =
     logLines.length === 0 ? "(no log yet)" : logLines.map((line) => escapeHtml(line)).join("\n");
-  // The curated strings go through `escapeHtml` too. They are fixed and safe, but routing every
-  // interpolation through the one escape keeps "never a raw template literal" true without an
-  // exception a reader has to check. The retry form sits ABOVE the installer detail: the operator's
-  // action is the point of the page, and the block below it is for someone else.
+  // The retry form sits above the installer detail: the operator's action is the point of the page.
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -310,9 +230,8 @@ function renderPage(state: RecoveryState, logLines: string[]): string {
 }
 
 /**
- * The page a headless box serves instead of trading when boot has failed past the retry threshold
- * (a later task puts this behind the box's own TLS). No safe-mode action: a degraded-but-trading
- * mode cannot be built on this codebase's module tiers (spec §9.1) — the one action is retry.
+ * Served instead of trading once boot has failed past the retry threshold. The one action is retry:
+ * there is no degraded-but-trading mode.
  */
 export function recoveryApp(deps: RecoveryDeps): Hono {
   const app = new Hono();
@@ -322,7 +241,7 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
     return c.html(renderPage(deps.state, logLines));
   });
 
-  // Named one by one: the state also carries the entrypoint's clear count, which is bookkeeping.
+  // Named one by one, to leave out the clear count.
   app.get("/recovery-api/status", (c) => {
     const { failures, level, lastErrorCode, lastFailureAt, holderKind } = deps.state;
     return c.json({ failures, level, lastErrorCode, lastFailureAt, holderKind });
@@ -331,7 +250,6 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
   app.post("/recovery-api/retry", (c) => {
     const outgoing = outgoingOf(c);
     if (outgoing === undefined) {
-      // No Node response to wait on (`app.request()`): nothing can be racing the flush either.
       void deps.onRetry("normal");
     } else {
       outgoing.once("finish", () => void deps.onRetry("normal"));

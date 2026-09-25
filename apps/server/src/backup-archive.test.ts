@@ -30,9 +30,6 @@ describe("backup archive", () => {
     );
   });
 
-  // A buffer shorter than the 4-byte magic itself is a distinct malformed shape from "bad magic"
-  // (which needs at least 4 bytes to compare against) — it must hit the length guard before the
-  // magic is ever read, not throw a Buffer out-of-bounds error or return garbage.
   it("rejects a buffer shorter than the magic", () => {
     expect(() => unpackArchive(Buffer.alloc(2))).toThrowError(
       expect.objectContaining({ code: "backup.archive_invalid", params: { reason: "too_short" } }),
@@ -50,22 +47,14 @@ describe("backup archive", () => {
     );
   });
 
-  // Each declared length (name length, name bytes, data length) gets its own bounds check, so each
-  // needs its own case to prove that check — not just the aggregate data-length case above — fires
-  // rather than reading past the buffer.
-  //
-  // Each case below declares TWO entries, the first padded large enough that the truncated buffer
-  // still clears the upfront `entryCount` bound (fix for the huge-entryCount case below): with a
-  // single small entry, any buffer short enough to truncate that entry's own fields is also short
-  // enough to be rejected by the upfront bound first, which would test that guard instead of the
-  // per-entry one these cases exist to prove.
+  // Each case below declares TWO entries, the first padded so the truncated buffer still clears the
+  // upfront `entryCount` bound and reaches the per-entry check the case is about.
   it("rejects a truncated name length field", () => {
     const good = packArchive([
       { name: "a".repeat(30), bytes: Buffer.from("y") },
       { name: "x", bytes: Buffer.from("y") },
     ]);
-    // First entry (name 30 bytes + 1-byte data) ends at header(9) + (4+30+8+1) = 52; cut 2 bytes
-    // into the second entry's 4-byte nameLen field, before it can be fully read.
+    // The first entry ends at header(9) + (4+30+8+1) = 52.
     expect(() => unpackArchive(good.subarray(0, 54))).toThrowError(
       expect.objectContaining({
         code: "backup.archive_invalid",
@@ -79,8 +68,6 @@ describe("backup archive", () => {
       { name: "a".repeat(30), bytes: Buffer.from("y") },
       { name: "hello", bytes: Buffer.from("y") },
     ]);
-    // First entry ends at 52; the second entry's nameLen(4) is fully readable (declares 5), so cut
-    // 2 bytes into its 5-byte name field, before it can be fully read.
     expect(() => unpackArchive(good.subarray(0, 58))).toThrowError(
       expect.objectContaining({
         code: "backup.archive_invalid",
@@ -94,8 +81,6 @@ describe("backup archive", () => {
       { name: "a".repeat(30), bytes: Buffer.from("y") },
       { name: "x", bytes: Buffer.from("y") },
     ]);
-    // First entry ends at 52; the second entry's nameLen(4)+name(1) are fully readable, so cut 3
-    // bytes into its 8-byte dataLen field, before it can be fully read.
     expect(() => unpackArchive(good.subarray(0, 60))).toThrowError(
       expect.objectContaining({
         code: "backup.archive_invalid",
@@ -104,9 +89,6 @@ describe("backup archive", () => {
     );
   });
 
-  // An oversized declared data length (not merely "one byte short") must be caught by the same
-  // guard as the off-by-one truncation case, so a corrupted (not just clipped) length field is
-  // refused too.
   it("rejects a data length that wildly overruns the buffer", () => {
     const good = packArchive([{ name: "x", bytes: Buffer.from("y") }]);
     // dataLen is the 8-byte LE field right before the 1-byte payload.
@@ -119,10 +101,6 @@ describe("backup archive", () => {
     );
   });
 
-  // A huge declared entryCount with no data behind it must be rejected upfront, before the loop
-  // below ever runs or allocates anything sized by the untrusted count — proves the O(1) entryCount
-  // bound against the buffer's actual size, computed from the header alone, is what keeps this
-  // cheap against a hostile container.
   it("rejects a huge entry count with no entries behind it, without hanging", () => {
     const header = Buffer.concat([Buffer.from("WBA1"), Buffer.from([1]), Buffer.alloc(4)]);
     header.writeUInt32LE(0xffffffff, 5);

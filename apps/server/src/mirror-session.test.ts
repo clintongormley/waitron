@@ -16,38 +16,12 @@ import {
   mirrorSession,
 } from "./mirror-session.js";
 
-/**
- * The mirror's ambient viewer session, on the engine the box now runs.
- *
- * ## What went with PostgreSQL, and is replaced by nothing
- *
- * **The role is gone and nothing replaces it.** SQLite has no roles and `pg.connectAs` has no
- * counterpart. The per-test `withAppUserDb` helper is deleted with it and every case now runs on
- * the suite's one handle. NO case was deleted: each one asserts what the middleware DOES, not what
- * a role is refused, so each survives the loss of the role with its assertions untouched. What is
- * no longer covered is the privilege claim itself — that the deployment role may make these writes
- * at all.
- *
- * ## One probe changed shape, and no assertion changed with it
- *
- * `length(pin_hash) > 0` and `ended_at is not null` are SQL booleans PostgreSQL handed back as
- * `true`/`false`; this engine has no boolean type and hands back `1`/`0` (measured 2026-09-22 —
- * `select 1 is not null` reads `1`, and `expect(1).toBe(true)` fails). Both probes now select the
- * COLUMN and decide in JavaScript, so `toBe(true)` and `toBe(false)` below still mean what they
- * meant. This is the suite's own instrument, not a product value: `mirror-session.ts` never reads
- * either expression.
- */
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   resetPerTest: false,
   timeoutMs: 60_000,
 });
 
-// One shared tenant for the whole file. The viewer is a fixed-id SINGLETON (its PK is a constant), so
-// it belongs to whichever tenant first seeds it; a fresh tenant per test would make the second test's
-// `on conflict (id) do nothing` leave the person on tenant #1 while tenant #2 looked for its own. The
-// mirror is single-tenant, so one tenant is also the faithful shape. Data only — nothing to close, so
-// no teardown (useVenueDb owns the database).
 let db: Database;
 beforeAll(async () => {
   db = suite.db;
@@ -66,19 +40,13 @@ describe("mirror ambient viewer session", () => {
       }>(sql`select role, display_name, pin_hash, password_hash
                      from persons where id = ${MIRROR_VIEWER_PERSON_ID}`),
     );
-    // admin holds every permission, so every gated dashboard read passes authorizeManager; the pin
-    // hash is non-empty (the length>0 CHECK) yet unusable, so login can never resolve it.
     expect(person.rows[0]).toMatchObject({
       role: "admin",
       display_name: "mirror viewer",
     });
 
-    // THE "viewer can never authenticate" PROPERTY, runtime-tested against the row read BACK from the
-    // DB — not merely `length > 0`. Reading is not verification (CLAUDE.md §1): a change to the
-    // sentinel format, to `verifySecret`'s parsing, or a later write path setting `password_hash` on
-    // this row would silently make the viewer loggable-in, and only this assertion would catch it.
-    // Both PIN and password login must fail closed: `verifyPin` rejects the stored sentinel for any
-    // PIN, and `password_hash IS NULL` means `loginManager` has nothing to verify.
+    // The viewer can never log in, checked against the row read back: no PIN verifies against the
+    // stored hash, and there is no password hash.
     const stored = person.rows[0]!;
     expect(stored.pin_hash.length > 0).toBe(true);
     expect(verifyPin("0000", stored.pin_hash)).toBe(false);
@@ -89,9 +57,8 @@ describe("mirror ambient viewer session", () => {
     expect(resolved).toMatchObject({ personId: MIRROR_VIEWER_PERSON_ID, role: "admin" });
   });
 
-  // What a copy of the database, or a node served without `mirrorSession`, can do with the row: the
-  // row id is a public constant, so it must not work as a cookie. Proven by deletion: storing
-  // `hashSessionToken(MIRROR_VIEWER_SESSION_ID)` again makes the public value resolve and this reddens.
+  // The row id is a public constant, so a copy of the database, or a node served without
+  // `mirrorSession`, must not be able to use it as a cookie.
   it("the viewer's public row id is refused as a cookie; only the token ensureMirrorViewer returns resolves", async () => {
     const token = await ensureMirrorViewer(db);
     await expect(
@@ -165,13 +132,8 @@ describe("mirror ambient viewer session", () => {
     ).then((r) => r.rows[0]!.last_seen_at);
   };
 
-  // Age the ambient session past the 1-minute throttle (and past the 30-minute IDLE_TIMEOUT_MS) so the
-  // next request's keepalive must fire. A fixed two-minute step — never built from a variable.
-  //
-  // The subtraction moved onto a `Date` in JavaScript: this engine has neither `now()` nor an
-  // interval type. `toISOString()` is the spelling `mirror-session.ts` and every other writer of
-  // this `tsString` column uses, which is what makes the keepalive's `<` on it a correct time
-  // ordering (`packages/printing/src/runtime.ts` has the measurement).
+  // Past the one-minute throttle. `toISOString()` is the spelling `nowIso` writes, so the keepalive's
+  // text `<` on the column orders correctly.
   const BACKDATE_MS = 2 * 60_000;
   const backdateLastSeen = (db: Database): Promise<unknown> => {
     const staleSeenAt = new Date(Date.now() - BACKDATE_MS).toISOString();
@@ -199,33 +161,25 @@ describe("mirror ambient viewer session", () => {
 
   it("mirrorSession refreshes a STALE session's last_seen_at (the idle-mirror keepalive) and sets the cookie", async () => {
     const token = await ensureMirrorViewer(db);
-    // An idle mirror: last_seen_at is older than the 1-minute throttle (and, in reality, older than the
-    // 30-minute IDLE_TIMEOUT_MS that would 401 the next request). The keepalive must refresh it.
     await backdateLastSeen(db);
     const before = await readLastSeen(db);
 
     const res = await driveOnce(db, token);
 
     expect(res.status).toBe(200);
-    // No cookie on the request → the middleware injects the ambient session's token.
     expect(res.headers.get("set-cookie")).toContain(`${MANAGEMENT_COOKIE}=${token}`);
-    // Proven by deletion: dropping the keepalive `update` in mirrorSession leaves last_seen_at at the
-    // backdated value, so `after` no longer advances past `before` and this reddens.
     const after = await readLastSeen(db);
     expect(new Date(after).getTime()).toBeGreaterThan(new Date(before).getTime());
   });
 
   it("mirrorSession SKIPS the write for a FRESH session (the throttle — no per-request amplification)", async () => {
-    const token = await ensureMirrorViewer(db); // seeds last_seen_at = now(), within the throttle
+    const token = await ensureMirrorViewer(db);
     const before = await readLastSeen(db);
 
     const res = await driveOnce(db, token);
 
     expect(res.status).toBe(200);
     expect(res.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
-    // The throttle guard (`last_seen_at < now() - interval '1 minute'`) matches no row, so last_seen_at
-    // is byte-for-byte unchanged — the amplification fix. Proven by deletion: dropping the throttle
-    // clause makes this write unconditionally and `after` advances, reddening this assertion.
     const after = await readLastSeen(db);
     expect(after).toBe(before);
   });
@@ -257,17 +211,11 @@ describe("mirror ambient viewer session", () => {
     const token = await ensureMirrorViewer(db);
     const res = await driveWithCookie(db, token, `${MANAGEMENT_COOKIE}=${token}`);
     expect(res.status).toBe(200);
-    // The request already carries the ambient session's token, so the middleware sets no new cookie.
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
   it("mirrorSession OVERWRITES a corrupted/forged non-ambient cookie with the ambient session", async () => {
     const token = await ensureMirrorViewer(db);
-    // A corrupted/non-UUID cookie (and, equally, a forged valid-UUID one) must not survive: left
-    // untouched it would fail requireManagementSession's shape check (or resolve to no row) and 401,
-    // breaking the unauthenticated dashboard posture. The middleware overwrites anything that is not
-    // already the ambient token. Proven by deletion: reverting the guard to `=== null` leaves the bad
-    // cookie in place and injects nothing, reddening the Set-Cookie assertion.
     const res = await driveWithCookie(db, token, `${MANAGEMENT_COOKIE}=not-a-valid-uuid`);
     expect(res.status).toBe(200);
     expect(res.headers.get("set-cookie")).toContain(`${MANAGEMENT_COOKIE}=${token}`);
@@ -275,8 +223,7 @@ describe("mirror ambient viewer session", () => {
 
   it("once promoted, a request WITHOUT the ambient cookie neither injects a cookie nor writes", async () => {
     const token = await ensureMirrorViewer(db);
-    // Promote (holder reads 'primary'). A fresh browser (no ambient cookie) gets nothing — real auth
-    // applies. Backdate so an UNGUARDED mirror middleware WOULD write, proving the mode guard stops it.
+    // Backdated, so a middleware without the mode check would write.
     await backdateLastSeen(db);
     const before = await readLastSeen(db);
 
@@ -285,43 +232,34 @@ describe("mirror ambient viewer session", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("set-cookie")).toBeNull();
     const after = await readLastSeen(db);
-    expect(after).toBe(before); // no keepalive write, even though last_seen_at is stale
-    expect(await isEnded(db)).toBe(false); // an untouched session is left alone
+    expect(after).toBe(before);
+    expect(await isEnded(db)).toBe(false);
   });
 
   it("once promoted, a request carrying the ambient cookie ENDS the session and CLEARS the cookie", async () => {
     const token = await ensureMirrorViewer(db);
-    // The security fix: a client holding a pre-promotion ambient cookie must NOT keep admin access once
-    // the write gate opens. Promotion drops it — ends the ambient session (resolveManagementSession then
-    // 401s it) and clears the cookie. Proven by deletion: removing the end+clear block leaves the session
-    // live (isEnded false) and sets no clearing cookie, so a promoted node still auto-logs-in an admin.
+    // A pre-promotion cookie must not keep admin access once writes open.
     const res = await driveWithCookie(db, token, `${MANAGEMENT_COOKIE}=${token}`, "primary");
     expect(res.status).toBe(200);
     expect(await isEnded(db)).toBe(true);
-    // The ambient session no longer resolves — a promoted node requires real auth.
     await expect(
       withTransaction(db, (tx) => resolveManagementSession(tx, token)),
     ).rejects.toMatchObject({ code: "management_session.required" });
-    // A clearing Set-Cookie is emitted (an expiry), so the browser stops presenting the ambient token.
     expect(res.headers.get("set-cookie")).toContain(MANAGEMENT_COOKIE);
   });
 
   it("on a mirror, the keepalive REVIVES a session whose ended_at was stamped (even if last_seen_at is fresh)", async () => {
-    const token = await ensureMirrorViewer(db); // fresh last_seen_at
-    // Defensively stamp ended_at while last_seen_at stays fresh — the throttle-only WHERE would skip the
-    // write and leave the session dead. The `or ended_at is not null` clause must revive it.
+    const token = await ensureMirrorViewer(db);
+    // Ended with a fresh `last_seen_at`: a throttle-only check would skip the write.
     await withTransaction(db, (tx) =>
       tx.execute(
-        // `nowIso()` bound in place of `now()`: this engine has no such function, and this is the
-        // spelling `mirror-session.ts` itself stamps `ended_at` with.
         sql`update management_sessions set ended_at = ${nowIso()} where id = ${MIRROR_VIEWER_SESSION_ID}`,
       ),
     );
     expect(await isEnded(db)).toBe(true);
 
-    const res = await driveOnce(db, token); // mirror mode
+    const res = await driveOnce(db, token);
     expect(res.status).toBe(200);
-    // Proven by deletion: dropping `or ended_at is not null` leaves ended_at set and this reddens.
     expect(await isEnded(db)).toBe(false);
   });
 

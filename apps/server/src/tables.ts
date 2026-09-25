@@ -138,13 +138,7 @@ export async function updateTable(
   }
 }
 
-/**
- * Deactivate, never hard-delete, because the table has order history.
- *
- * THIS VERB IS THE WHOLE GUARD, for this and the other deactivate verbs that point here: this
- * engine has no roles or grants, so a `delete from dining_tables` from any code in this process
- * would simply run.
- */
+/** Deactivate, never hard-delete, because the table has order history. */
 export async function deactivateTable(
   tx: Transaction,
   _cfg: TillConfig,

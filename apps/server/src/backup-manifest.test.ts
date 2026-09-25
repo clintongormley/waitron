@@ -23,9 +23,7 @@ describe("buildManifest", () => {
     expect(Object.keys(manifest.modules)).toEqual(
       expect.arrayContaining(ALL_MODULES.map((m) => m.name)),
     );
-    // `core` is definitely migrated by the migration manifest — it is mandatory — so its applied
-    // schema version must be a real, positive count of the journal table's rows, not the "table
-    // doesn't exist yet" 0 that `appliedSchemaVersion` returns for an unmigrated module.
+    // A real count, not the 0 an unmigrated module reads.
     expect(manifest.modules.core).toBeGreaterThan(0);
   });
 });

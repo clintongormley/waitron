@@ -9,8 +9,7 @@ import type { AdoptCredential } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 
-// A representative bundle the primary's endpoint would return. The fetcher only JSON-round-trips it,
-// so the exact row content is immaterial; what matters is that a 200 body deep-equals the input.
+// The fetcher only JSON-round-trips it, so the content is immaterial.
 const SAMPLE_BUNDLE: MirrorBundle = {
   designated: {
     locationId: "22222222-2222-2222-2222-222222222222",
@@ -40,17 +39,11 @@ const SAMPLE_BUNDLE: MirrorBundle = {
   moduleOverrides: {},
 };
 
-// The admin login the primary authenticates — the structured `AdoptCredential` the fetcher serialises
-// as the JSON request body (`{ personId, password, totp? }`, the dashboard-login shape).
 const CREDENTIAL: AdoptCredential = {
   personId: "99999999-9999-9999-9999-999999999999",
   password: "correct-horse-battery",
 };
 
-// The standby identity the mirror mints in memory (Task 3 `generateStandbyIdentity`) and the fetcher
-// sends to the primary for endorsement + number allocation — only its public half + nodeId travel.
-// `contactUrl` is the standby's own `advertisedOrigin`: the primary records it in the membership
-// document so a till can route to this node after a failover (till-reroute design §3.3).
 const STANDBY = {
   nodeId: "55555555-5555-5555-5555-555555555555",
   publicKey: "STANDBY_PUB",
@@ -59,8 +52,6 @@ const STANDBY = {
 
 const servers: ServerType[] = [];
 
-/** Boot a throwaway HTTP Hono app on an ephemeral loopback port and return its base URL. Every server
- * is torn down in `afterEach`, so no socket leaks between tests. */
 async function startServer(app: Hono): Promise<string> {
   const port = await new Promise<number>((resolve) => {
     const server = serve(
@@ -93,16 +84,8 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
 
     const bundle = await fetchMirrorBundle(base, CREDENTIAL, STANDBY);
 
-    // The body parsed back to the exact bundle the primary served — including a scalar field read, so
-    // this is a real MirrorBundle and not merely a deep-equal on opaque JSON.
     expect(bundle).toEqual(SAMPLE_BUNDLE);
     expect(bundle.boxHostname).toBe("waitron.local");
-    // The request the fetcher made: a POST to the primary's mirror-bundle path carrying the credential
-    // OBJECT plus the standby identity, serialised as the JSON body. The primary authenticates the
-    // credential fields, reserves + endorses the standby from `standbyNodeId`/`standbyPublicKey`
-    // (membership promotion R2) and records `standbyContactUrl` as the joining node's address in the
-    // membership document (till-reroute §3.3) — so all three ride the body flattened alongside the
-    // credential.
     expect(seen).toEqual({
       method: "POST",
       path: "/management-api/mirror-bundle",
@@ -131,9 +114,6 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
   });
 
   it("re-runs the SSRF guard at the fetch boundary: a private/metadata URL throws before any fetch", async () => {
-    // Defense in depth — setup-api validates before this is reached, but the fetcher must be safe for any
-    // caller. A private/link-local literal is refused as `mirror.primary_url_invalid` (not the generic
-    // `mirror.bundle_fetch_failed`), and no network request is made.
     for (const bad of [
       "http://169.254.169.254/latest",
       "https://10.0.0.5",
@@ -168,8 +148,7 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
   });
 
   it("maps a network failure (nothing listening) to mirror.bundle_fetch_failed", async () => {
-    // Boot a server, capture its port, then shut it down: a connect to that port now refuses fast and
-    // deterministically, exercising the fetcher's network-error catch without a real network round-trip.
+    // A port just closed refuses the connect fast and deterministically.
     const app = new Hono();
     const base = await startServer(app);
     const server = servers.pop()!;

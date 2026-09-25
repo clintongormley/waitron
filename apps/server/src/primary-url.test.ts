@@ -2,17 +2,6 @@ import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { assertSafePrimaryUrl, isBlockedIpLiteral, isLoopbackHost } from "./primary-url.js";
 
-/**
- * SSRF guard for the operator-supplied `primaryUrl` on the UNAUTHENTICATED `POST /setup-api/adopt`.
- * Ruling 2 (resolved in the task brief's "Decision needed"):
- *   1. reject any scheme other than http/https;
- *   2. reject any literal IP in the private/link-local/CGNAT/metadata/0.0.0.0/8 ranges (BOTH schemes),
- *      except loopback;
- *   3. loopback host (localhost / 127.0.0.0/8 / ::1) — allow over http or https;
- *   4. non-loopback DNS hostname — allow over https, reject over http;
- *   5. public literal IP — allow over https, reject over http.
- */
-
 function reason(raw: string): string {
   try {
     assertSafePrimaryUrl(raw);
@@ -60,7 +49,6 @@ describe("assertSafePrimaryUrl", () => {
   for (const [label, raw] of allowed) {
     it(`allows ${label} (${raw})`, () => {
       expect(reason(raw)).toBe("ALLOWED");
-      // returns the parsed URL, not the raw string
       expect(assertSafePrimaryUrl(raw)).toBeInstanceOf(URL);
     });
   }
@@ -113,22 +101,18 @@ describe("isBlockedIpLiteral", () => {
   });
 
   it("does not block public literals, loopback, or DNS names", () => {
-    // `::1` is inside the ::/96 block but is explicitly re-allowed as loopback (kept out of the blocked set).
+    // `::1` is inside ::/96 but is loopback.
     for (const host of ["93.184.216.34", "172.32.0.1", "127.0.0.1", "::1", "primary.example"]) {
       expect(isBlockedIpLiteral(host)).toBe(false);
     }
   });
 
   it("parses varied IPv6 forms without misclassifying public or malformed input", () => {
-    // Public IPv6 in both the `::`-compressed and the full 8-group form → not blocked.
     expect(isBlockedIpLiteral("2001:db8::1")).toBe(false);
     expect(isBlockedIpLiteral("2001:0db8:0000:0000:0000:0000:0000:0001")).toBe(false);
-    // A public IPv4-mapped literal → not blocked (the private-mapped case is blocked above).
     expect(isBlockedIpLiteral("::ffff:93.184.216.34")).toBe(false);
-    // A %zone suffix on a link-local literal is stripped before classification → still blocked.
     expect(isBlockedIpLiteral("fe80::1%eth0")).toBe(true);
-    // Malformed literals parse to null (not a literal IP), so they are not "blocked" — a non-loopback
-    // DNS-name-shaped host is instead gated by the http/https rule in assertSafePrimaryUrl.
+    // Not a literal IP, so not blocked here; the http/https rule gates such a host instead.
     for (const host of [
       "1:2:3", // too few groups, no `::`
       "1:2:3:4:5:6:7:8::", // `::` with no room for an all-zero group
