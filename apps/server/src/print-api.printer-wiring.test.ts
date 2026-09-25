@@ -35,33 +35,9 @@ import type { Logger } from "./logger.js";
 import "./errors.js";
 
 /**
- * The print agent, printer and till-configuration routes, on the engine the box now runs.
- *
- * Named `print-api.printer-wiring.test.ts` for the routes only this half of the pair drives: the
- * station ↔ printer pairing, a till's receipt printer, a location's print mode and drawer-open
- * policy, the tills list, the `/management-api/events` change stream and the job resend. Checkable:
- *     $ grep -nE -e 'stations/|receipt-printer|receipt-print-mode' \
- *         -e 'drawer-open-policy|/resend|management-api/tills|management-api/events' \
- *         apps/server/src/print-api.test.ts
- *     → (no output; exit 1, run 2026-09-22)
- * The sibling drives the agent join, pull, claim and report surface, the printer CRUD and the
- * test-print routes.
- *
- * ## Two things this file argued for that no longer exist
- *
- * Its old header said a real PostgreSQL server was MANDATORY here, for two properties a single
- * file opened by a single process cannot show. Both are gone and neither is replaced.
- *
- * 1. **The GRANT half.** SQLite has no roles and no grants: one process opens one file, so nothing
- *    below checks the table grants those routes need.
- * 2. **The cross-connection commit boundary.** The first case read the claimed job back "from a
- *    separate pooled backend" to show the claim's transaction had COMMITTED inside the request.
- *    There is one write connection now, so that read cannot distinguish a committed claim from an open
- *    one, and the case's comment is rewritten to say what it still proves.
- *
- * What survives is everything the route layer decides for itself: the `printer.manage` gate proven
- * by DELETION, the key-scoped claim eligibility, the mapping and configuration routes, the change
- * events and the resend rules.
+ * The routes only this half of the pair drives: the station ↔ printer mapping, a till's receipt
+ * printer, a location's print mode and drawer-open policy, the tills list, the change events and the
+ * job resend, plus the `printer.manage` gate and the key-scoped claim eligibility.
  */
 const noopLog: Logger = () => {};
 
@@ -79,8 +55,6 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// Tenants accumulate for the life of the database and `tenants_country_tax_id_key` is unique, so
-// each needs its own NIF — the per-suite counter the sibling suites use.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -88,10 +62,8 @@ function nextNif(): string {
 }
 
 async function seedTenantWithLocation(): Promise<Tenant> {
-  // Through the table definitions: `tenants.created_at` and `locations.id` are JavaScript
-  // `$defaultFn` generators on this engine, which a raw insert never reaches, and the locale list is
-  // encoded by the column's own write mapping — the `array[...]` constructor it replaces is a syntax
-  // error here.
+  // Through the table definitions: `tenants.created_at` and `locations.id` are `$defaultFn`
+  // generators a raw insert never reaches.
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
@@ -129,13 +101,10 @@ beforeAll(async () => {
   staffCookie = `${MANAGEMENT_COOKIE}=${staffSid}`;
 });
 
-/** One node for the whole suite: every join-request statement filters by `cfg.nodeId`, so the knock
- * (through `mountApp`'s cfg) and the in-process accept must name the same node — as production does,
- * where boot.ts hands one `till` to both the print and the join mounts. */
+/** Every join-request statement filters by `cfg.nodeId`, so the knock and the accept must name the
+ * same node. */
 const venueNodeId = brandNodeId(randomUUID());
 
-/** The FULL TillConfig for a seeded venue. The join verbs read locationId and nodeId; the fiscal ids
- * are unused, so branded random uuids stand in. */
 function cfgOf(tenant: Tenant): TillConfig {
   return {
     tillId: brandTillId(randomUUID()),
@@ -149,9 +118,6 @@ function cfgOf(tenant: Tenant): TillConfig {
   };
 }
 
-/** The print API mounted over the suite's venue database, scoped to `tenant`. The pairing window is
- * OPEN so `joinAndAccept`'s knock is admitted; `readMembership` returns no chart (the pull's
- * `servers` are proven in the sibling `print-api.test.ts`). */
 function mountApp(tenant: Tenant): Hono {
   const app = new Hono();
   const pairingMode = createPairingMode();
@@ -187,9 +153,7 @@ async function send(
   });
 }
 
-/** Knock (unauth, window open) then accept the join in-process via the verb (the accept ROUTE lives in
- * join-api.ts, proven in join-api.db.test.ts). The agent's Bearer is the knock's `${joinId}.${secret}`
- * and joinId becomes the agent id. */
+/** Accepts through the verb; the accept route is `join-api.ts`'s. */
 async function joinAndAccept(
   app: Hono,
   label: string,
@@ -220,7 +184,6 @@ async function createPrinter(app: Hono, agentId: string, name: string): Promise<
   return ((await res.json()) as { id: string }).id;
 }
 
-/** Create a usb printer keyed on `localKey` (the USB serial) via the management route. */
 async function createUsbPrinter(app: Hono, localKey: string, name: string): Promise<string> {
   const res = await send(app, "POST", "/management-api/printers", {
     cookie: managerCookie,
@@ -237,12 +200,9 @@ async function enqueue(tenant: Tenant, printerId: string, payload: Uint8Array): 
   });
 }
 
-/** Seed one kitchen station for `tenant` — the attach target the mapping routes wire a printer to. A
- * fresh unique name each call keeps `kitchen_stations_name_key` happy across the suite's one
- * database. */
 async function seedStation(tenant: Tenant, name: string): Promise<string> {
-  // Through the table definition: `id` and `created_at` are `$defaultFn` generators on NOT NULL
-  // columns here, which a raw `insert into kitchen_stations (...)` never reaches.
+  // Through the table definition: `id` and `created_at` are `$defaultFn` generators a raw insert
+  // never reaches.
   const [row] = await suite.db
     .insert(kitchenStations)
     .values({ locationId: tenant.locationId, name, isDefault: false, active: true })
@@ -250,9 +210,8 @@ async function seedStation(tenant: Tenant, name: string): Promise<string> {
   return row!.id;
 }
 
-/** Read a print agent's `active` flag off the row itself rather than through the API — the check the
- * allow/revoke tests make. Through the table definition so the `flag` column's read mapping turns
- * SQLite's stored 0/1 back into a boolean. */
+/** Through the table definition, so the `flag` column's read mapping turns the stored 0/1 into a
+ * boolean. */
 async function agentActive(agentId: string): Promise<boolean> {
   const [row] = await suite.db
     .select({ active: printAgents.active })
@@ -261,10 +220,8 @@ async function agentActive(agentId: string): Promise<boolean> {
   return row!.active;
 }
 
-/** Seed one SELF-ENROLLED print agent with a known `node_id` — the provenance the list must surface.
- * `joinAndAccept` mints only human-enrolled (node_id NULL) agents, so a row with a node stamped on it
- * is inserted here. A fresh `node_id` per call keeps `print_agents_tenant_node_key` (unique on the
- * non-NULL node) happy. */
+/** `joinAndAccept` mints only human-enrolled agents (`node_id` null), so a self-enrolled one is
+ * inserted directly. `node_id` is unique, so each call needs a fresh one. */
 async function seedNodeAgent(tenant: Tenant, nodeId: string): Promise<string> {
   const [row] = await suite.db
     .insert(printAgents)
@@ -291,10 +248,6 @@ describe("Print API — the agent lifecycle end to end", () => {
       jobId,
     ]);
 
-    // The claimed job reads `printing` the instant the response has returned. This is NOT the
-    // commit-boundary proof the PostgreSQL version of this case claimed: there is one write connection
-    // here, so the read cannot tell a committed claim from one still open on it. What it still
-    // shows is that the request wrote the status rather than only reporting it.
     const seen = await suite.db.execute<{ status: string }>(
       sql`select status from print_jobs where id = ${jobId}`,
     );
@@ -313,11 +266,6 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("derived eligibility: a usb job is NOT claimed by a box that cannot see its key", async () => {
-    // The key-scoped isolation (design §3/§5): a usb printer's job is claimed only by the box
-    // currently seeing its local_key. `mine` pulls WITHOUT the key visible, so the job stays
-    // queued. (This replaces the old agent-bound scope — network_tcp is now location-scoped, so a
-    // cross-agent claim of a network printer is expected; key visibility is the isolation.) The
-    // positive key-claim path is proven above; here the point is the negative branch.
     const app = mountApp(tenantA);
     const mine = await joinAndAccept(app, "Mine");
     const serial = `SN-${randomUUID()}`;
@@ -358,10 +306,6 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("discovered-printers reads registered keys + agent names", async () => {
-    // The two new management routes run their reads through the same `gated` transaction as the
-    // sibling list routes. This proves the discovered-printers merge — a SELECT on `printers` +
-    // `print_agents` — succeeds, and that a device the agent reports appears in the list marked
-    // against the registered set (registered → true, unregistered → false).
     const app = mountApp(tenantA);
     const { agentId, token } = await joinAndAccept(app, "Inventory");
     const registered = `SN-${randomUUID()}`;
@@ -413,27 +357,21 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("the management routes require printer.manage — 401 unauth, 403 staff, 200 manager (gate proven by deletion)", async () => {
-    // THE GUARD, proven by DELETION: a `staff`-role session holds no `printer.manage`,
-    // so `authorizeManager` (inside print-api's `gated`) throws `authorization.not_permitted` before any
-    // op runs. Deleting the `authorizeManager(...)` call from print-api.ts's `gated` makes every staff
-    // request below SUCCEED (201/200), flipping the 403 assertions red; restoring it turns them green.
+    // A `staff`-role session holds no `printer.manage`.
     const app = mountApp(tenantA);
 
-    // Unauthenticated → 401 on a representative gated route.
     const unauth = await send(app, "GET", "/management-api/printers");
     expect(unauth.status).toBe(401);
     expect((await unauth.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "management_session.required" },
     });
 
-    // Staff session → 403 (the gate refuses it).
     const staff = await send(app, "GET", "/management-api/print-agents", { cookie: staffCookie });
     expect(staff.status).toBe(403);
     expect((await staff.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "authorization.not_permitted" },
     });
 
-    // Manager session → 200 (the gate admits it).
     const manager = await send(app, "GET", "/management-api/print-agents", {
       cookie: managerCookie,
     });
@@ -441,7 +379,6 @@ describe("Print API — the agent lifecycle end to end", () => {
   });
 
   it("the discovery routes require printer.manage — 401 unauth, 403 staff, 2xx manager (gate proven by deletion)", async () => {
-    // All discovery surfaces require printer.manage, including an address check with a valid body.
     const app = mountApp(tenantA);
     const routes = [
       { method: "POST", path: "/management-api/printer-discovery/start" },
@@ -451,22 +388,18 @@ describe("Print API — the agent lifecycle end to end", () => {
 
     for (const { method, path } of routes) {
       const body = path.endsWith("/probe") ? { host: "192.168.20.247", port: 9100 } : undefined;
-      // Unauthenticated → 401 (no session) BEFORE any window mutation or DB read.
       const unauth = await send(app, method, path, { body });
       expect(unauth.status).toBe(401);
       expect((await unauth.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "management_session.required" },
       });
 
-      // Staff session → 403 (`printer.manage` refused) — a staff clerk cannot open a discovery window
-      // or read the discovered list.
       const staff = await send(app, method, path, { cookie: staffCookie, body });
       expect(staff.status).toBe(403);
       expect((await staff.json()) as { error: { code: string } }).toMatchObject({
         error: { code: "authorization.not_permitted" },
       });
 
-      // Manager session → 200 (the gate admits it).
       const manager = await send(app, method, path, {
         cookie: managerCookie,
         body,
@@ -523,10 +456,8 @@ describe("Station ↔ printer mapping routes (printer.manage)", () => {
     const byStation = `/management-api/stations/${stationId}/printers`;
     const byPrinter = `/management-api/printers/${printerId}/stations`;
 
-    // Attach → 204.
     expect((await send(app, "POST", at, { cookie: managerCookie })).status).toBe(204);
 
-    // Both reads see the pair: the station-centric list and the R-J printer-centric mirror.
     const station = (await (
       await send(app, "GET", byStation, { cookie: managerCookie })
     ).json()) as { stationId: string; printerId: string }[];
@@ -536,14 +467,12 @@ describe("Station ↔ printer mapping routes (printer.manage)", () => {
     ).json()) as { stationId: string; printerId: string }[];
     expect(printer).toContainEqual({ stationId, printerId });
 
-    // Re-attaching the same pair is an idempotent no-op (204, no duplicate row).
     expect((await send(app, "POST", at, { cookie: managerCookie })).status).toBe(204);
     expect(
       ((await (await send(app, "GET", byStation, { cookie: managerCookie })).json()) as unknown[])
         .length,
     ).toBe(1);
 
-    // Detach → 204, and both reads are empty again.
     expect((await send(app, "DELETE", at, { cookie: managerCookie })).status).toBe(204);
     expect(
       ((await (await send(app, "GET", byStation, { cookie: managerCookie })).json()) as unknown[])
@@ -561,7 +490,6 @@ describe("Station ↔ printer mapping routes (printer.manage)", () => {
     const printerId = await createPrinter(app, agent.agentId, "Miss printer");
     const stationId = await seedStation(tenantA, `Barra ${randomUUID()}`);
 
-    // Unknown station → station.not_found (404).
     const noStation = await send(
       app,
       "POST",
@@ -571,7 +499,6 @@ describe("Station ↔ printer mapping routes (printer.manage)", () => {
     expect(noStation.status).toBe(404);
     expect(await noStation.json()).toMatchObject({ error: { code: "station.not_found" } });
 
-    // Unknown printer → printer.not_found (404).
     const noPrinter = await send(
       app,
       "POST",
@@ -581,7 +508,6 @@ describe("Station ↔ printer mapping routes (printer.manage)", () => {
     expect(noPrinter.status).toBe(404);
     expect(await noPrinter.json()).toMatchObject({ error: { code: "printer.not_found" } });
 
-    // Malformed station id → shared.invalid_id (400) from requireUuidParam, before any query.
     const malformed = await send(
       app,
       "POST",
@@ -593,37 +519,29 @@ describe("Station ↔ printer mapping routes (printer.manage)", () => {
   });
 
   it("require printer.manage — 401 unauth, 403 staff, 204 manager (gate proven by deletion via the shared `gated`)", async () => {
-    // The mapping routes funnel through the SAME `gated` helper the sibling management routes use, so
-    // the by-deletion proof recorded on that block covers these too: deleting the `authorizeManager(...)`
-    // call from print-api.ts's `gated` flips this staff case from 403 to 204; restoring it turns it green.
     const app = mountApp(tenantA);
     const agent = await joinAndAccept(app, "Gate agent");
     const printerId = await createPrinter(app, agent.agentId, "Gate printer");
     const stationId = await seedStation(tenantA, `Plancha ${randomUUID()}`);
     const at = `/management-api/stations/${stationId}/printers/${printerId}`;
 
-    // Unauthenticated → 401 on a representative mapping route.
     const unauth = await send(app, "GET", `/management-api/stations/${stationId}/printers`);
     expect(unauth.status).toBe(401);
     expect(await unauth.json()).toMatchObject({
       error: { code: "management_session.required" },
     });
 
-    // Staff session → 403 (the gate refuses it).
     const staff = await send(app, "POST", at, { cookie: staffCookie });
     expect(staff.status).toBe(403);
     expect(await staff.json()).toMatchObject({
       error: { code: "authorization.not_permitted" },
     });
 
-    // Manager session → 204 (the gate admits it).
     const manager = await send(app, "POST", at, { cookie: managerCookie });
     expect(manager.status).toBe(204);
   });
 });
 
-/** Seed one till for `tenant` — the target the receipt-printer route configures. Through the table
- * definition, for the same generator reason `seedStation` states. */
 async function seedTill(tenant: Tenant, name: string): Promise<string> {
   const [row] = await suite.db
     .insert(tills)
@@ -632,7 +550,6 @@ async function seedTill(tenant: Tenant, name: string): Promise<string> {
   return row!.id;
 }
 
-/** Read a till's currently-set receipt printer id, off the row rather than through the API. */
 async function tillReceiptPrinterId(tillId: string): Promise<string | null> {
   const row = await suite.db.execute<{ receipt_printer_id: string | null }>(
     sql`select receipt_printer_id from tills where id = ${tillId}`,
@@ -640,7 +557,6 @@ async function tillReceiptPrinterId(tillId: string): Promise<string | null> {
   return row.rows[0]!.receipt_printer_id;
 }
 
-/** Read a location's currently-set receipt print mode, off the row rather than through the API. */
 async function locationPrintMode(locationId: string): Promise<string> {
   const row = await suite.db.execute<{ receipt_print_mode: string }>(
     sql`select receipt_print_mode from locations where id = ${locationId}`,
@@ -648,7 +564,6 @@ async function locationPrintMode(locationId: string): Promise<string> {
   return row.rows[0]!.receipt_print_mode;
 }
 
-/** Read a location's currently-set drawer-open policy, off the row rather than through the API. */
 async function locationDrawerPolicy(locationId: string): Promise<string> {
   const row = await suite.db.execute<{ drawer_open_policy: string }>(
     sql`select drawer_open_policy from locations where id = ${locationId}`,
@@ -663,7 +578,6 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     const printerId = await createPrinter(app, agent.agentId, "Recibos");
     const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
 
-    // Set it.
     const set = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
       cookie: managerCookie,
       body: { printerId },
@@ -671,7 +585,6 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     expect(set.status).toBe(204);
     expect(await tillReceiptPrinterId(tillId)).toBe(printerId);
 
-    // Clear it (a till with no printer just doesn't print, §2).
     const cleared = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
       cookie: managerCookie,
       body: { printerId: null },
@@ -689,12 +602,12 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     });
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({ error: { code: "printer.not_found" } });
-    expect(await tillReceiptPrinterId(tillId)).toBeNull(); // unchanged
+    expect(await tillReceiptPrinterId(tillId)).toBeNull();
   });
 
   it("400s an unknown till and a malformed printerId body", async () => {
     const app = mountApp(tenantA);
-    // Unknown till → management.request_invalid (there is no till.* code — retired at the node-id rekey).
+    // There is no `till.*` code.
     const unknown = await send(
       app,
       "PATCH",
@@ -707,7 +620,6 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     expect(unknown.status).toBe(400);
     expect(await unknown.json()).toMatchObject({ error: { code: "management.request_invalid" } });
 
-    // A body with no printerId field at all → management.request_invalid naming the field.
     const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
     const noField = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
       cookie: managerCookie,
@@ -716,7 +628,6 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     expect(noField.status).toBe(400);
     expect(await noField.json()).toMatchObject({ error: { code: "management.request_invalid" } });
 
-    // A non-uuid printerId → management.request_invalid (400, `requireBodyUuid`'s code), never a 22P02 → 500.
     const badUuid = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
       cookie: managerCookie,
       body: { printerId: "not-a-uuid" },
@@ -804,7 +715,6 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     const tillWith = await seedTill(tenantA, withPrinterName);
     const tillWithout = await seedTill(tenantA, withoutPrinterName);
 
-    // Point one till at the printer via the existing config route; leave the other unset.
     const set = await send(app, "PATCH", `/management-api/tills/${tillWith}/receipt-printer`, {
       cookie: managerCookie,
       body: { printerId },
@@ -819,7 +729,6 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
       locationId: string;
       receiptPrinterId: string | null;
     }>;
-    // Exact shape, both directions (a printer set, and null when unset — the picker's "none").
     expect(rows.find((r) => r.id === tillWith)).toEqual({
       id: tillWith,
       label: withPrinterName,
@@ -835,10 +744,6 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
   });
 
   it("GET /management-api/tills requires printer.manage — 401 unauth, 403 staff, 200 manager (gate proven by deletion via the shared `gated`)", async () => {
-    // The list route funnels through the SAME `gated` helper as the sibling config/printer routes, so
-    // the by-deletion proof recorded on the first gate block covers it too: deleting the
-    // `authorizeManager(...)` call from print-api.ts's `gated` flips this staff case from 403 to 200,
-    // turning the assertion red; restoring it turns it green.
     const app = mountApp(tenantA);
     const unauth = await send(app, "GET", "/management-api/tills");
     expect(unauth.status).toBe(401);
@@ -851,17 +756,12 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
   });
 
   it("require printer.manage on ALL config routes — 401 unauth, 403 staff, 2xx manager (gate proven by deletion via the shared `gated`)", async () => {
-    // Every config route funnels through the SAME `gated` helper as the sibling printer/mapping routes, so
-    // the by-deletion proof recorded on the first gate block covers these too: deleting the
-    // `authorizeManager(...)` call from print-api.ts's `gated` flips every staff case below from 403 to a
-    // 2xx success, turning these assertions red; restoring it turns them green.
     const app = mountApp(tenantA);
     const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
     const tillRoute = `/management-api/tills/${tillId}/receipt-printer`;
     const modeRoute = `/management-api/locations/${tenantA.locationId}/receipt-print-mode`;
     const policyRoute = `/management-api/locations/${tenantA.locationId}/drawer-open-policy`;
 
-    // Unauthenticated → 401 on each route.
     for (const route of [tillRoute, modeRoute, policyRoute]) {
       const unauth = await send(app, "PATCH", route, {
         body: { printerId: null, mode: "auto", policy: "gated" },
@@ -870,7 +770,6 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
       expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
     }
 
-    // Staff session → 403 (the gate refuses it) on each route, BEFORE any write.
     const staffTill = await send(app, "PATCH", tillRoute, {
       cookie: staffCookie,
       body: { printerId: null },
@@ -896,7 +795,6 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
       error: { code: "authorization.not_permitted" },
     });
 
-    // Manager session → 204 (the gate admits it) on each route.
     expect(
       (await send(app, "PATCH", tillRoute, { cookie: managerCookie, body: { printerId: null } }))
         .status,
@@ -982,8 +880,6 @@ describe("print job resend", () => {
       printerId,
       new Uint8Array([0, 255, 27, 64, 29, 86, 0]),
     );
-    // `now()` has no equivalent here; the clock is read in JavaScript and bound. `delivered_at` is
-    // a text column, and `nowIso()` is the canonical spelling every other writer of it uses.
     await suite.db
       .update(printJobs)
       .set({ status: "done", deliveredAt: nowIso() })
@@ -1005,10 +901,6 @@ describe("print job resend", () => {
       payload: string;
       attempts: number;
     }>(
-      // `encode(bytea, 'hex')` is PostgreSQL's; SQLite's `hex()` is the same bytes in UPPER case, so
-      // `lower()` keeps the assertion's spelling exactly. `order by status::text` loses its cast
-      // because `status` IS text here (it was a PostgreSQL enum), and 'done' still sorts before
-      // 'queued'.
       sql`select id, status, lower(hex(payload)) as payload, attempts from print_jobs where id in (${jobId}, ${originalId}) order by status`,
     );
     expect(rows.rows).toEqual([

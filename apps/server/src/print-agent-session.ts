@@ -1,37 +1,18 @@
-// Side-effect only: keeps this host's errors.ts augmentation loaded alongside the file. This module
-// throws exactly one code — `agent.unauthorized` — which is declared in @waitron/printing's own
-// errors.ts and reaches here through the VALUE import of `authenticateAgent` below (that package's
-// barrel does `import "./errors.js"`), so no apps/server code is thrown here; the import is kept for
-// symmetry with the sibling session guards (device-session.ts) and is harmless.
+// No apps/server code is thrown here (`agent.unauthorized` is @waitron/printing's); kept for symmetry
+// with the sibling session guards.
 import "./errors.js";
 import type { Context } from "hono";
 import { AppError } from "@waitron/shared";
 import { withTransaction, type Database } from "@waitron/db";
 import { authenticateAgent } from "@waitron/printing";
 
-/**
- * The deployment holds one tenant per database. Everything `requireAgent` needs: the app pool and
- * this venue's tenant, exactly the subset the other gated surfaces take. No cookie/session config
- * — a print agent authenticates with a BEARER token (the machine-to-machine shape),
- * never a browser cookie.
- */
 export interface PrintAgentSessionDeps {
   db: Database;
 }
 
 /**
- * The Bearer guard for the print-agent API (design §3a, Controller Ruling 5). Lives in apps/server
- * (not @waitron/printing) because it is the HTTP seam: it extracts `Authorization: Bearer <token>`
- * from the Hono `Context` — a Bearer parse, NOT a cookie — and hands the plain
- * token string to `@waitron/printing`'s `authenticateAgent` CORE, which owns the token split, the
- * scrypt `verifySecret`, the `active = true` revocation filter and the `last_seen_at` sighting write.
- *
- * A missing or malformed Authorization header short-circuits to `agent.unauthorized` (→ 401)
- * BEFORE any DB work — an empty-secret fail-closed — so a blank Bearer
- * never reaches `authenticateAgent`. Every other failure (an unknown selector, a REVOKED agent, a
- * secret that does not verify) folds into the SAME `agent.unauthorized` inside the core, so a
- * revoked agent fails INSTANTLY (its row is simply not found) with no oracle. The token
- * verification and the sighting write run under `withTransaction`.
+ * The Bearer guard for the print-agent API. Every failure — no token, an unknown selector, a revoked
+ * agent, a secret that does not verify — is the same `agent.unauthorized`, so none is an oracle.
  */
 export async function requireAgent(
   deps: PrintAgentSessionDeps,
@@ -39,9 +20,6 @@ export async function requireAgent(
 ): Promise<{ agentId: string }> {
   const header = c.req.header("Authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
-  // Fail closed on a blank/absent Bearer before touching the DB — an empty token can never verify, so
-  // there is nothing to gain from letting it reach `authenticateAgent`, and this keeps a header flood
-  // off the connection pool (the same posture the enrol rate-limit takes for the sale path).
   if (token.length === 0) throw new AppError("agent.unauthorized", {});
   return withTransaction(deps.db, async (tx) => {
     return authenticateAgent(tx, token);

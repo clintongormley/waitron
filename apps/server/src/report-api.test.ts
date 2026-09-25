@@ -85,11 +85,10 @@ const expectedBox27Q1 = packAeatNumeric(
   BOX_27.len,
 );
 
-/** Seeds one sale directly (fixture owner), with a single-rate filed desglose on
- * `sales.vat_breakdown` — the only column the reporting aggregate reads. */
+/** Seeds one sale directly, with a single-rate filed desglose on `sales.vat_breakdown`. */
 async function seedSale(db: Database, s: SeededSale | typeof Q1_SALE): Promise<void> {
-  // `sales.total` stores a count of whole cents; `vat_breakdown` is jsonb, not a money column, and
-  // keeps the decimal literals the aggregate reads.
+  // `sales.total` stores a count of whole cents; `vat_breakdown` is a JSON column, not a money
+  // column, and keeps the decimal literals the aggregate reads.
   await db.insert(sales).values({
     tillId,
     nodeId,
@@ -139,12 +138,9 @@ const suite = useVenueDb({
   setup: async (db) => {
     // seedTenant supplies the tax_id + legal_name the route reads back as the obligado identity.
     await seedTenant(db);
-    // The one venue's location/till/node/series, seeded directly (the demo idiom).
-    // Through the table definitions, not raw SQL: every `id` here (and `tills.created_at` /
-    // `nodes.created_at`) is a JavaScript `$defaultFn` generator on this engine, which a raw insert
-    // never reaches, and `invoice_locales` is encoded by the column's own write mapping — the
-    // `array[...]` constructor it replaces is a syntax error here. `invoice_series.next_number`
-    // keeps its column DEFAULT of 1, which drizzle leaves to the engine.
+    // The one venue's location/till/node/series, through the table definitions: the ids and
+    // `created_at`s are JavaScript `$defaultFn` generators a raw insert never reaches, and
+    // `invoice_locales` is encoded by the column's own write mapping.
     const [loc] = await db
       .insert(locations)
       .values({
@@ -177,7 +173,6 @@ const suite = useVenueDb({
 
     // A MANAGER (role `manager`, holds `report.export`) and a STAFF person (holds nothing), then a
     // live management session for each so the route tests drive the gate through a real cookie.
-    // `pin_hash` is NOT NULL, so a value is supplied though these sessions are minted directly.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [mgr] = await tx
         .insert(persons)
@@ -252,9 +247,8 @@ describe("mountReportApi — modelo 303 DR303 export", () => {
     );
     const bytes = Buffer.from(new Uint8Array(await res.arrayBuffer()));
     expect(bytes.toString("latin1", 0, 17)).toBe("<T303020261T0000>");
-    // Box 27 (Σ cuota devengada for Q1) at its documented offset == the Q1 seed's OWN cuota, DERIVED
-    // from the seed — so the route's QUARTERLY aggregation amount is verified end-to-end, not just its
-    // status/filename/envelope. A route that summed August (63.00) or the year (84.00) fails here.
+    // Box 27 for Q1, derived from the seed: a route that summed August (63.00) or the year (84.00)
+    // fails here.
     const box27 = bytes.toString("latin1", BOX_27.offset, BOX_27.offset + BOX_27.len);
     expect(box27).toBe(expectedBox27Q1);
   });
@@ -274,8 +268,8 @@ describe("mountReportApi — request screens + auth", () => {
   it.each([
     ["missing year", "?period=08&declarationType=I", "year"],
     ["bad year", "?year=20&period=08&declarationType=I", "year"],
-    // A leading-zero 4-digit year below 1000 must be REFUSED at the screen (400), not passed to
-    // computeVatReturn where validatePeriod's 1000..9999 bound throws a plain Error → opaque 500.
+    // A leading-zero year below 1000 is refused at the screen, before `validatePeriod`'s plain
+    // Error.
     ["out-of-range year (leading zeros)", "?year=0999&period=08&declarationType=I", "year"],
     ["bad period", "?year=2026&period=13&declarationType=I", "period"],
     [

@@ -8,20 +8,12 @@ import { qrModules } from "./qr-matrix.js";
 import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
 import type { TillSaleResult } from "./till-sale.js";
 
-// `formatReceipt` is a PURE byte producer (design §3b) — no database, no fiscal state — so
-// these are ordinary unit tests. The suite reads a payload's text two ways: `printedLines`
-// (`decode-ticket.ts`, via `previewPrintJob`) decodes each byte through the character-set TABLE the
-// job selects, so accented text and the € symbol come back as themselves — the printer-layout tests
-// use it; `decodeTicket` decodes byte-exact Latin-1 (each byte to its own code point), for the
-// byte-level separator and round-trip assertions. Raw bytes are inspected for the native QR command
-// and the tail cut. The builder no longer uses one blanket Latin-1 encoding — it selects a code table
-// per character set (`charset.ts`, pinned in `charset.test.ts`).
+// `formatReceipt` is pure, so these are unit tests. `printedLines` decodes each byte through the
+// character-set table the job selects (the layout tests); `decodeTicket` decodes byte-exact Latin-1
+// (the byte-level assertions).
 //
-// This is the LOAD-BEARING test of the slice (spec §4/§7): the printed paper is a factura simplificada,
-// a legal document, so the completeness test proves the paper carries EVERY mandated art. 7.1 /
-// arts. 20-21 element — never fewer than the on-screen receipt. Non-suppression of a mandated element
-// is proven BY DELETION in the implementation (see the task report): commenting out the legend line, or
-// the VAT-breakdown loop, turns the relevant assertions RED.
+// The printed paper is a factura simplificada, a legal document: the completeness test pins that it
+// carries every mandated art. 7.1 / arts. 20-21 element, never fewer than the on-screen receipt.
 
 /** GS V 0 (full cut) — the final three bytes of every ticket (`escpos.ts` / `escpos.test.ts`). */
 const CUT_BYTES = [0x1d, 0x56, 0x00];
@@ -130,17 +122,11 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       // The Veri*Factu legend — a FIXED legal string, always printed (Orden HAC/1177/2024 art. 20.1.b).
       expect(s).toContain("VERI*FACTU");
 
-      // Amounts render in the invoice locale (es-ES → comma decimals). Assert the digit portions ONLY:
-      // `s` here is the table-aware `printedLines` read, in which the € glyph's rendering varies by
-      // character set (it prints as "EUR" in the plain set) and the amount/€ separator differs between
-      // ICU builds — so pinning the digits keeps these assertions set-independent. See `formatMoney`.
+      // Digits only: the € glyph and the amount/€ separator vary by character set and ICU build.
       expect(s).toContain("12,10"); // line 1 gross
       expect(s).toContain("8,80"); // line 2 gross
       expect(s).toContain("10,00"); // base 21%
-      // IVA 21% cuota — pinned on the SAME rendered line as its label (lines are LF-separated). A bare
-      // `toContain("2,10")` would be satisfied by the "2,10" inside line-1 gross "12,10" (asserted above,
-      // a different/earlier line), so it would pass even with the 21% cuota suppressed; requiring the
-      // label and the amount on one line closes that hole while still failing if the cuota is removed.
+      // Label and amount on one line: a bare "2,10" would match inside line 1's "12,10".
       expect(s).toMatch(/IVA 21%[^\n]*2,10/u); // IVA 21% cuota
       expect(s).toContain("8,00"); // base 10%
       expect(s).toContain("0,80"); // IVA 10%
@@ -269,8 +255,8 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         printer: PRINTER_80,
       }),
     );
-    // The es-ES-less line degrades to its only description; the empty-map line prints nothing but does
-    // not throw (a catalogue defect must never block the paper — spec §4).
+    // The es-ES-less line degrades to its only description; the empty-map line prints nothing but
+    // does not throw (a catalogue defect must never block the paper).
     expect(s).toContain("Fallback only");
     expect(s).toContain("VERI*FACTU");
   });
@@ -283,17 +269,8 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
           descriptions: { "es-ES": "Jamón" },
           quantity: "0.375",
           gross: "4.50",
-          // Keyed by a BARE content-language code, which is what the DASHBOARD produces — a unit's
-          // abbreviation is keyed by the venue's content languages, and those are bare codes. It is
-          // not a shape anything enforces: `units.abbreviation` is a plain `jsonb NOT NULL` with no
-          // check constraint, the write path's `findContentTranslationGap`
-          // (`packages/catalogue/src/content-languages.ts`) puts each key through
-          // `contentLanguageCode` only to CHECK it — "es-ES" passes and is then stored verbatim —
-          // and neither `working_order_lines.unit_name` nor `sale_lines.unit_name` has a locale
-          // trigger (the two that exist are on `descriptions` and `variant_descriptions`).
-          // `packages/core/src/sale-line-rows.test.ts` files `{ "en-GB": "cup" }` today.
-          // `resolveSnapshotText` answers either shape, which is why the fix is a resolver and not
-          // a re-keying. See the multi-language case below.
+          // Keyed by a bare content-language code, as the dashboard writes it;
+          // `resolveSnapshotText` answers either shape. See the multi-language case below.
           unitName: { es: "kg" },
           unitPrecision: 3,
         },
@@ -313,20 +290,10 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
   });
 
   it("prints the unit abbreviation of the invoice language, not whichever one is stored first", () => {
-    // A unit's abbreviation map is keyed by BARE content-language codes and nothing re-keys it onto
-    // the venue's invoice locales, the way `toInvoiceLineDescriptions` re-keys a line's
-    // `descriptions`, so the receipt has to match the invoice TAG "es-ES" against the bare key
-    // "es". Reading the map's first entry instead prints a non-Spanish abbreviation either way, and
-    // WHICH one depends on the filing path. The five pairs below are `EACH_UNIT`'s
-    // (`packages/catalogue/src/units.ts`) — the unit a product with no `product_units` row reads as,
-    // and the one unit the venue seed never writes; `till-api.fiscal-sale-paths.test.ts` pins the same five on a
-    // real filed sale, with `toEqual`, which compares values and never key order. A RETRIEVED or
-    // parked order is priced from `working_order_lines.unit_name`, a `jsonb` column, and jsonb
-    // re-sorts its keys — that is this fixture's order, whose first value is the Catalan "u". A
-    // WALK-UP is filed and printed from the IN-MEMORY priced result instead
-    // (`priceBasketWithOptions` sets `unitName: item.product.unit.abbreviation`,
-    // `packages/catalogue/src/pricing.ts`), so the constant's own key order survives and the first
-    // value is the English "ea".
+    // Nothing re-keys a unit's abbreviation map onto the invoice locales (as
+    // `toInvoiceLineDescriptions` does a line's `descriptions`), so the receipt must match the tag
+    // "es-ES" against the bare key "es"; reading the first entry prints whichever language happens
+    // to come first. The pairs are `EACH_UNIT`'s (`packages/catalogue/src/units.ts`).
     const result: TillSaleResult = {
       ...FILED_SALE,
       lines: [
@@ -353,12 +320,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
   });
 
   it("groups modifier lines under their dish — dish at its price, options indented at their delta, and the lines reconcile with the filed desglose", () => {
-    // A filed sale carrying ordering modifiers (Task 8): the dish is a PARENT line
-    // (`parentLineNo == null`) and each selected option is a CHILD line (`parentLineNo` = the dish's
-    // lineNo), a real filed `sale_line` contributing to the desglose. The figures are exact and
-    // self-consistent: Σ(line.gross) === total and Σ(base + tax) === total, so the printed line list
-    // (dish + its options) still adds up to the printed total — the receipt never recomputes fiscal
-    // figures, it groups the already-filed lines.
+    // The dish is a PARENT line and each option a CHILD line pointing at it, each a filed sale
+    // line. Σ(line.gross) === total and Σ(base + tax) === total: the receipt groups the filed lines
+    // and never recomputes a fiscal figure.
     const withOptions: TillSaleResult = {
       orderLabel: null,
       orderNumber: 1,
@@ -394,9 +358,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     // running total) — all on one LF-separated line.
     expect(s).toMatch(/1\s+Hamburguesa[^\n]*10,00/u);
 
-    // Each option renders INDENTED beneath the dish (leading spaces, no quantity prefix) at its delta;
-    // the free option shows 0,00. The `\n {2,}<name>` anchor proves the indent — a flat `1  <name>`
-    // render (the pre-grouping behaviour) would put a digit, not spaces, right after the newline.
+    // Each option renders INDENTED beneath the dish (leading spaces, no quantity prefix) at its
+    // delta; the free option shows 0,00. The `\n {2,}<name>` anchor pins the indent: a flat
+    // `1  <name>` render would put a digit right after the newline.
     expect(s).toMatch(/\n {2,}Extra queso[^\n]*0,50/u);
     expect(s).toMatch(/\n {2,}Sin cebolla[^\n]*0,00/u);
 
@@ -412,10 +376,8 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
   });
 
   it("badges an option's PER-DISH count when it exceeds one, leaving a plain option unbadged", () => {
-    // Per-option quantity (landed feature): a selected modifier is a CHILD line whose filed `quantity`
-    // is the COMBINED count = dishQuantity × perOptionQuantity. The receipt shows a "×N" badge on the
-    // option ONLY when the PER-DISH count (childQuantity ÷ parentDishQuantity, an exact integer) is > 1,
-    // so a plain modifier — even on a multi-quantity dish — is byte-identical to before.
+    // A child line's filed `quantity` is the COMBINED count (dish quantity × per-option quantity).
+    // The "×N" badge appears only when the PER-DISH count is above 1.
     const withPerOptionQty: TillSaleResult = {
       orderLabel: null,
       orderNumber: 1,
@@ -434,8 +396,8 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         // An option taken ×2 per dish → filed at the COMBINED quantity 6 (3 dishes × 2). Per-dish = 2 →
         // badged "×2". Its gross is the FILED delta, unchanged by the badge.
         { descriptions: { "es-ES": "Extra queso" }, quantity: "6", gross: "1.50", parentLineNo: 1 },
-        // A plain option taken once per dish → filed at quantity 3 (== dish quantity). Per-dish = 1 → NO
-        // badge, rendered exactly as an unbadged option always was.
+        // A plain option taken once per dish → filed at quantity 3 (== dish quantity). Per-dish = 1
+        // → NO badge.
         { descriptions: { "es-ES": "Sin cebolla" }, quantity: "3", gross: "0.00", parentLineNo: 1 },
       ],
       tender: { method: "cash", change: "0.00" },
@@ -453,12 +415,11 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
 
     // The ×2 option: an indented line carrying the "×2" badge after the name, its filed gross unchanged.
     expect(s).toMatch(/\n {2,}Extra queso ×2[^\n]*1,50/u);
-    // The plain option: NO badge, and the exact pre-feature line — name, padding, then the gross.
+    // The plain option: NO badge — name, padding, then the gross.
     expect(s).toMatch(/\n {2,}Sin cebolla {2,}0,00/u);
     expect(s).not.toContain("Sin cebolla ×");
 
-    // Proven by DELETION of the badge: without it the ×2 line would read `Extra queso` unbadged, like
-    // the control — so this negative is what distinguishes the badge from its absence.
+    // Without the badge the ×2 line would read like the control.
     expect(s).not.toMatch(/\n {2,}Extra queso {2,}1,50/u);
   });
 
@@ -474,16 +435,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
   });
 
   it("normalises the amount/€ separator to an ASCII space (0x20), not NBSP/NNBSP", () => {
-    // `Intl.NumberFormat("es-ES", …)` separates the amount and the € with a NON-BREAKING space —
-    // U+00A0 (this ICU build) or a narrow no-break space U+202F on some builds. This printer's wpc1252
-    // code table (PRINTER_80) can itself encode U+00A0 (byte 0xA0), so `prepareText` does NOT drop it —
-    // without help it would reach the paper as a non-break space. `formatMoney` rewrites that separator
-    // to an ASCII 0x20 first, so the printed total reads `20,90 €` on every ICU build and every set.
-    // Proven by DELETION (ran 2026-09-14): comment out the `.replace(...)` in `formatMoney` and the
-    // `not.toMatch` no-break-space assertion below goes RED under wpc1252, because the U+00A0 the
-    // formatter emitted survives the byte-exact `decodeTicket` read as U+00A0. (The old `U+202F → 0x2F`
-    // `/`-garble was the retired blanket-Latin-1 encoder; no code table encodes U+202F, so it now falls
-    // back to a space before any byte is written — it can no longer reach the paper as `/`.)
+    // `Intl.NumberFormat("es-ES")` separates amount and € with a no-break space (U+00A0 or U+202F),
+    // and this printer's wpc1252 table can encode U+00A0, so `prepareText` keeps it; `formatMoney`
+    // must rewrite it.
     const s = decodeTicket(
       formatReceipt({
         result: FILED_SALE,
@@ -710,16 +664,11 @@ it("prints an unpaid invoice without claiming a cash or card payment", () => {
     expect(text).not.toContain(label);
 });
 
-// Two answers on one dish: the first stores customer text, the second stores none. Every one of the
-// twelve names differs, and each side's kitchen name differs again, so an assertion here cannot pass
-// while the receipt reads the staff name where a customer name exists, or the kitchen name at all.
-// Keyed by bare CONTENT LANGUAGE codes, which is what `buildLineExtras`
-// (`apps/server/src/modifier-selection.ts`) writes onto a real line: the catalogue's customer map
-// copied through whole, and each staff name widened under the venue's default content language.
-// The invoice tags the tests below ask with ("es-ES", "en-GB") are therefore NOT keys of these
-// maps, so the assertions can tell a locale resolve from an exact-key lookup. A line's own
-// `descriptions` above stay full tags — those ARE re-keyed onto the invoice locales before filing
-// (`toInvoiceLineDescriptions`, `packages/catalogue/src/invoice-descriptions.ts`).
+// Two answers on one dish: the first stores customer text, the second none. Every name differs, and
+// each kitchen name differs again, so no assertion passes while the receipt reads the staff name
+// where a customer name exists, or the kitchen name at all. Keyed by bare content-language codes,
+// as `buildLineExtras` (`apps/server/src/modifier-selection.ts`) writes them, so the invoice tags
+// asked for below are not keys: the assertions tell a locale resolve from an exact-key lookup.
 const ANSWERED_DISH: TillSaleResult = {
   ...FILED_SALE,
   lines: [

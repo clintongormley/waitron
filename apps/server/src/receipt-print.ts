@@ -16,7 +16,6 @@ import type { TillSaleResult } from "./till-sale.js";
 /** Drawer commands are separate from documents, so printing and resending never open the drawer. */
 export const DRAWER_KICK: Uint8Array = esc().kick().bytes();
 
-/** The tenant + location scope `enqueuePrintJob` runs under — `TillConfig` carries both. */
 function printConfig(cfg: TillConfig): PrintConfig {
   return { locationId: cfg.locationId };
 }
@@ -27,36 +26,9 @@ export interface ReceiptPrinter extends ReceiptPrinterSettings {
 }
 
 /**
- * Resolve the calling till's ACTIVE receipt printer, or `undefined` when none applies (no printer set,
- * or the named one is inactive). Joined `tills → printers` on `receipt_printer_id` and filtered to
- * `active = true`. Shared by all three consumers — the print-on-sale hook, the reprint, and the manual
- * drawer-open — so the ONE place a till's printer is resolved carries the active filter, and the
- * route/hook decides what "no printer" means (the hooks enqueue nothing; the drawer-open route throws
- * `drawer.no_printer`).
- *
- * ## The lock that used to be here
- *
- * On PostgreSQL this read took `FOR SHARE OF printers`. What it arranged was a gap, not a queue: it
- * held the matched printer row still so that a concurrent `deactivatePrinter` could not flip `active`
- * to false between this read and `enqueuePrintJob`'s own `active = true` re-check
- * (`packages/printing/src/outbox.ts`), whose `printer.not_found` throw would abort the caller's
- * transaction — on the sale hook, the sale (CLAUDE.md §5). It never serialised two readers.
- *
- * No other write transaction can open that gap now. Both reads run inside ONE write transaction, and
- * one write transaction runs on the venue file at a time (`packages/store/src/write-queue.ts`,
- * reached through `withTransaction` in `packages/db/src/tenancy.ts`). Checked at the writer that used
- * to be the race: the printer-deactivate route runs its UPDATE inside `gated`, which is a
- * `withTransaction` (`apps/server/src/print-api.ts`), so it lands wholly before this resolve or
- * wholly after the enqueue. The clause is DELETED rather than translated: SQLite has no row locks and
- * drizzle's SQLite query builder has no `.for()`. The argument, with its measurement and its control,
- * is stated once for the whole tree on `assertExtraListForWrite`
- * (`packages/catalogue/src/extras.ts`).
- *
- * This takes a `tx` and never opens one, so what it inherits is whatever its caller opened — the
- * convention that a route handler opens exactly one `withTransaction` per request (CLAUDE.md §3) is
- * what makes that a write transaction, not anything in this file. Checked at the one caller that is
- * not already inside a sale: the `/api/drawer/open` handler in `apps/server/src/till-api.ts` opens
- * its own `withTransaction` around both the resolve and the enqueue.
+ * The calling till's ACTIVE receipt printer, or `undefined` when none is set or it is inactive. The
+ * caller decides what "no printer" means: the hooks enqueue nothing, the drawer-open route throws
+ * `drawer.no_printer`.
  */
 export async function resolveReceiptPrinter(
   tx: Transaction,
@@ -87,10 +59,8 @@ async function buildReceiptBytes(
   const taxpayer = await readTenant(tx);
   /* v8 ignore start */
   if (taxpayer === null) {
-    // Structurally unreachable: the taxpayer row is the database's one row (provisioning wrote
-    // it), so the by-id lookup always returns it. Degrade to NOT printing
-    // rather than throwing — a throw in the sale-tx hook would roll the filed sale back (§5). The
-    // boot handler treats the same absence as corruption.
+    // Unreachable: provisioning writes the one taxpayer row. Degrade to not printing, because a
+    // throw in the sale hook would roll the filed sale back (§5).
     return undefined;
   }
   /* v8 ignore stop */
@@ -107,13 +77,8 @@ async function buildReceiptBytes(
 }
 
 /**
- * Resolve BOTH inputs an enqueue path needs — the till's ACTIVE receipt printer and the built receipt
- * bytes — or `undefined` when EITHER guard trips: no active printer (nothing to print to), or an
- * unbuildable receipt (the structurally-unreachable missing-issuer degrade). Shared by the
- * print-on-sale hook and the reprint so the resolve → build order and its two early-returns live in one
- * place; each caller returns without enqueuing on `undefined`. `resolveReceiptPrinter` carries the
- * active filter (and the note on why it no longer carries a row lock) and `buildReceiptBytes`
- * degrades rather than throwing on the missing-issuer path (§5) — both preserved here.
+ * `undefined` when there is no active printer or the receipt cannot be built; callers then enqueue
+ * nothing.
  */
 async function resolvePrinterAndReceipt(
   tx: Transaction,
@@ -145,14 +110,8 @@ export async function enqueueSaleReceipt(
 }
 
 /**
- * Re-enqueue an ALREADY-FILED sale's customer receipt to the till's printer — the manual reprint (design
- * §3d), called by `POST /api/sales/:id/reprint` (via `till-sale.ts`'s `reprintSale`, which reads the
- * filed `ticket` back first). It re-renders and re-enqueues PAPER only: it files NOTHING (the caller read
- * the immutable record), has NO `receipt_print_mode` gate (a reprint is ALWAYS available, §0 — so it
- * works even under `on_request`/`never`), and NEVER opens the drawer (no kick, no `drawer_opens`). A till
- * with no active printer resolves to none and this is a no-op (nothing to print to) — the SAME
- * "no printer → enqueue nothing" degrade the print-on-sale hook makes and the kitchen-reprint route's
- * shape. Runs on the caller's tx; a single outbox INSERT.
+ * The manual reprint of an already-filed sale: it files nothing, has no `receipt_print_mode` gate
+ * (a reprint is always available), and never opens the drawer. No active printer means no job.
  */
 export async function enqueueReceiptReprint(
   tx: Transaction,
@@ -165,18 +124,13 @@ export async function enqueueReceiptReprint(
 }
 
 /**
- * Enqueue a KICK-ONLY job to `printerId` and record a manual drawer open (design §3d + cash-drawer-
- * authorization §3) — the audited `POST /api/drawer/open`. Pure INSERTs on the caller's tx: a
- * `drawer_opens('manual')` audit row (who/when, NO sale — a manual open is drawer accountability with
- * no attached sale) and the drawer-kick outbox job (no receipt, just the pulse). The caller
- * (`till-api.ts`) resolves the printer via `resolveReceiptPrinter` and throws `drawer.no_printer` when
- * there is none, so this helper is reached only with a real printer and throws nothing itself.
+ * The audited manual drawer open: a `drawer_opens('manual')` row with no sale, and a kick-only job.
+ * The caller has already resolved the printer.
  *
- * `operatorId` (`person_id`) is who PERFORMED the open — the logged-in operator, always. `authorizedBy`
- * (`authorized_by`) is who AUTHORIZED it — the operator's own id under an `open` policy or a self-
- * authorizing supervisor, or the supervisor's id when a cashier opened via override — and `viaOverride`
- * records whether that authorization came through a supervisor override. Both are computed by the route
- * from `drawer_open_policy` + `authorize()`; this helper just persists them.
+ * `operatorId` is who PERFORMED the open, always the logged-in operator. `authorizedBy` is who
+ * AUTHORIZED it — the operator under an `open` policy or as a self-authorizing supervisor, else the
+ * overriding supervisor — and `viaOverride` records whether a supervisor override supplied it. The
+ * route computes both.
  */
 export async function enqueueManualDrawerOpen(
   tx: Transaction,

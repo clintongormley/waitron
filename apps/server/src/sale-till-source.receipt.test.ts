@@ -1,8 +1,5 @@
 // Sale writes and receipt reads through the real device-authenticated sale route, against a real
 // migrated venue database.
-//
-// Nothing here says anything about what the deployment role, which no longer exists, may read or
-// write.
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -57,8 +54,7 @@ let clock: TrustedClock;
 
 const noopLog: Logger = () => {};
 
-/** The wall clock reported as already anchored — the identical stub shape `till-api.fiscal-sale-paths.test.ts`
- *  documents. `recordSale` reads `now()` once and touches neither `anchor` nor `currentAnchor`. */
+/** An already-anchored wall clock; `recordSale` reads `now()` once and never anchors. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -100,10 +96,9 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
   };
 }
 
-/** Provision a fresh chained venue (its own tenant, so the `registros_facturacion`/`sales` counts are
- *  this test's alone — order-independent, CLAUDE.md §4), seed a catalogue + a `each` product and a
- *  login person with a known PIN. Returns the cfg (whose `tillId` is the venue's own till X), the
- *  venue's `locationId`, the sellable product, and the operator to attribute the sale to. */
+/** Provision a fresh chained venue, seed a catalogue + an `each` product and a login person with a
+ *  known PIN. Returns the cfg (whose `tillId` is the venue's own till X), the venue's `locationId`,
+ *  the sellable product, and the operator to attribute the sale to. */
 async function setupVenue(): Promise<{
   cfg: TillConfig;
   locationId: string;
@@ -177,17 +172,18 @@ async function setupVenue(): Promise<{
       update zone_service_policies set default_menu_id = ${cat.id}
       where location_id = ${cfg.locationId}
         and is_counter_default`);
-    // Through the table definition: `preparation_routes.id` is a `$defaultFn` generator
-    // (`packages/venue-service/src/schema/service.ts:180`), which a raw statement never reaches.
+    // Through the table definition: `preparationRoutes.id`
+    // (`packages/venue-service/src/schema/service.ts`) is a `$defaultFn` generator, which a raw
+    // statement never reaches.
     await tx.insert(preparationRoutes).values({
       locationId: cfg.locationId,
       categoryId: bebidas.id,
       stationId: null,
       noPreparation: true,
     });
-    // Through the table definition, never a raw insert: `persons.id` and `persons.created_at` are
-    // NOT NULL columns whose values come from `$defaultFn` generators
-    // (`packages/identity/src/schema/persons.ts:26,:67`), and a raw statement reaches no generator.
+    // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`
+    // generators (`persons` in `packages/identity/src/schema/persons.ts`), which a raw statement
+    // never reaches.
     const [person] = await tx
       .insert(persons)
       .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
@@ -209,7 +205,7 @@ async function setupVenue(): Promise<{
  *  under test), returning its id. */
 async function insertTill(locationId: string, name: string): Promise<string> {
   // Through the table definition: `tills.id` and `tills.created_at` are `$defaultFn` generators
-  // (`packages/db/src/schema/tenants.ts:232,:246`), which a raw statement never reaches.
+  // (`tills` in `packages/db/src/schema/tenants.ts`), which a raw statement never reaches.
   const [till] = await suite.db
     .insert(tills)
     .values({ locationId, name })
@@ -218,13 +214,13 @@ async function insertTill(locationId: string, name: string): Promise<string> {
 }
 
 /** Seed a `phone-portrait` (handheld) `device_profiles` row — the sale-capable form factor that
- *  binds an EXISTING register at enrol (Task 7), the register-under-test here. A per-call counter
- *  keeps the venue-unique name from colliding. */
+ *  binds an EXISTING register at enrol. A per-call counter keeps the venue-unique name apart. */
 let profileCounter = 0;
 async function seedHandheldProfile(): Promise<string> {
   profileCounter += 1;
   // Through the table definition: `device_profiles.id` and `.created_at` are `$defaultFn`
-  // generators (`packages/db/src/schema/device-profiles.ts:42,:54`), unreachable from raw SQL.
+  // generators (`deviceProfiles` in `packages/db/src/schema/device-profiles.ts`), unreachable from
+  // raw SQL.
   const [profile] = await suite.db
     .insert(deviceProfiles)
     .values({ name: `Handheld ${profileCounter}`, formFactor: "phone-portrait" })
@@ -232,12 +228,12 @@ async function seedHandheldProfile(): Promise<string> {
   return profile!.id;
 }
 
-/** Enrol a REAL sale-capable device BOUND TO an existing register (`boundTillId`), and return the
- *  `waitron_device=<id>.<token>` cookie a booting device carries — join-and-accept runs the
- *  production accept path, so the scrypt hash verifies and `tryReadDevice` resolves a genuine
- *  binding. Since Task 7 a `till` device auto-creates its OWN register, so binding a SPECIFIC
- *  existing register is the handheld leg (`registerId`); the sale route resolves `till_id` from
- *  THIS device (`requireSaleTillId`) either way. */
+/**
+ * Enrol a REAL sale-capable device BOUND TO an existing register (`boundTillId`) through the
+ * production join-and-accept path, and return its `waitron_device=<id>.<token>` cookie. A `till`
+ * device creates its own register, so binding a SPECIFIC one is the handheld leg (`registerId`);
+ * the sale route resolves `till_id` from THIS device (`requireSaleTillId`) either way.
+ */
 async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<string> {
   const profileId = await seedHandheldProfile();
   const dev = await enrolDeviceForTest(suite.db, cfg, {
@@ -248,9 +244,10 @@ async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<st
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
-/** Enrol a REAL device bound to `boundTillId` and return its raw `deviceId` (not a cookie) — the id the
- *  SP-C dev-override header (`x-waitron-dev-device`) carries in place of the cookie. Same genuine
- *  join-and-accept enrol path as {@link enrolTillCookie}. */
+/**
+ * Enrol a REAL device bound to `boundTillId` and return its raw `deviceId` — the id the
+ * dev-override header (`x-waitron-dev-device`) carries in place of the cookie.
+ */
 async function enrolTillDeviceId(cfg: TillConfig, boundTillId: string): Promise<string> {
   const profileId = await seedHandheldProfile();
   const dev = await enrolDeviceForTest(suite.db, cfg, {
@@ -274,9 +271,8 @@ function apiDeps(cfg: TillConfig): TillApiDeps {
 
 /** Log in through the HTTP surface and return the session cookie the route sets. */
 async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
-  // The login is DEVICE-GATED (§5/§6): carry an enrolled device cookie, as a sale does. This throwaway
-  // device binds to the venue's own register (`cfg.tillId`); the sale calls below carry their OWN
-  // device cookie bound to the specific till each case exercises.
+  // The login is DEVICE-GATED: this throwaway device binds to the venue's own register; each sale
+  // below carries its OWN device cookie bound to the till that case exercises.
   const deviceCookie = await enrolTillCookie(cfg, cfg.tillId);
   const res = await app.request("/api/session", {
     method: "POST",
@@ -363,15 +359,10 @@ beforeAll(() => {
 
 describe("H2 receipt: sale-time till_id resolves from the device, the chain does not (SP-A.2 §16.4)", () => {
   it("files each sale under the AUTHENTICATED device's till, changing ONLY till_id — node/series/chain untouched", async () => {
-    // Two `till`-kind devices in ONE tenant/node, bound to two DIFFERENT tills X and Y. Ringing a sale
-    // via device-X then device-Y files two records on the SAME chain (secuencia 1, 2) whose ONLY
-    // difference is the `till_id` snapshot — the device resolved the till, and nothing device-derived
-    // touched `node_id`, `series` or the hash chain.
-    //
-    // Failing case (§16.4): if the device path sourced a DIFFERENT till_id than the one it is bound to,
-    // the resolution assertion fails; if a device / canvas / hardware code path perturbed `node_id` or
-    // forked the series, the two records would NOT share one continuous chain and `node_id` would not
-    // equal `cfg.nodeId`.
+    // Two `till`-kind devices on ONE node, bound to two DIFFERENT tills X and Y. Ringing a sale via
+    // device-X then device-Y files two records on the SAME chain (secuencia 1, 2) whose ONLY
+    // difference is the `till_id` snapshot: nothing device-derived touches `node_id`, the series or
+    // the hash chain.
     const { cfg, locationId, product, operatorId } = await setupVenue();
     const tillX = cfg.tillId;
     const tillY = await insertTill(locationId, "Caja 2");
@@ -393,24 +384,20 @@ describe("H2 receipt: sale-time till_id resolves from the device, the chain does
     expect(registros).toHaveLength(2);
     const [first, second] = registros;
 
-    // (resolution + the one intended metadata change, §16.4) Each record's till_id is the till its
-    // ringing DEVICE was bound to — X then Y — not a single env value. This is the whole cutover.
+    // Each record's till_id is the till its ringing DEVICE was bound to — X then Y.
     expect(first!.tillId).toBe(tillX);
     expect(second!.tillId).toBe(tillY);
     expect(first!.tillId).not.toBe(second!.tillId);
     // The same movement on the `sales` row itself.
     expect(await saleTillIds(cfg)).toEqual([tillX, tillY]);
 
-    // (§16.4(c) nodeId untouched) BOTH records file under `cfg.nodeId` — the SIF anchor — regardless
-    // of which device rang them. A `DeviceBinding` carries no node, and `saleCfg = { ...cfg, tillId }`
-    // keeps `nodeId` from `cfg`; if the device path were ever wired to influence `nodeId`, one of these
-    // would differ and a device on another node would silently fork the SIF.
+    // BOTH records file under `cfg.nodeId` — the SIF anchor — whichever device rang them; a device
+    // that influenced `nodeId` would silently fork the SIF.
     expect(first!.nodeId).toBe(cfg.nodeId);
     expect(second!.nodeId).toBe(cfg.nodeId);
 
-    // (§16.4(b) mutation control) The two records form ONE continuous chain under the same node: the
-    // second's predecessor pointer IS the first's huella, sequence 1 -> 2, both in series A. Only the
-    // till_id moved; the chain, its ordering and its series are inert to the device's till.
+    // ONE continuous chain under the same node: the second's predecessor IS the first's huella,
+    // sequence 1 -> 2, both in series A. Only the till_id moved.
     expect(first!.secuencia).toBe(1);
     expect(first!.anteriorHuella).toBeNull();
     expect(second!.secuencia).toBe(2);
@@ -423,23 +410,17 @@ describe("H2 receipt: sale-time till_id resolves from the device, the chain does
 
 describe("SP-C: a sale posted with the dev-override header files under THAT device's till (devMode)", () => {
   it("resolves sale-time till_id from the x-waitron-dev-device header, not the env/cfg till", async () => {
-    // The §7 fiscal boundary for the dev switcher: under `devMode`, a `POST /api/sales` carrying the
-    // `x-waitron-dev-device: <id>` header (no `waitron_device` cookie) must resolve `sales.till_id` from
-    // THAT device's binding — the same `requireSaleTillId`/`tryReadDevice` path the cookie takes, reached
-    // through the dev override rather than the cookie. Device is bound to till Y (not the venue's own
-    // till X), so a pass proves the OVERRIDE drove the till, not a default to cfg.tillId.
-    //
-    // Failing case: were the override ignored (or `devMode` not forwarded to `requireSaleTillId`), the
-    // route would fall through to `device.unauthorized` (401, no cookie) — never file under till Y. This
-    // pins the composition SP-A.2's huella receipt already covers on the inertness side; till_id movement
-    // via the header is the new surface, so only that is asserted here.
+    // Under `devMode`, a `POST /api/sales` carrying the `x-waitron-dev-device: <id>` header (no
+    // `waitron_device` cookie) must resolve `sales.till_id` from THAT device's binding. The device
+    // is bound to till Y, not the venue's own till X, so a pass shows the override drove the till;
+    // were it ignored the route would answer `device.unauthorized` (401).
     const { cfg, locationId, product, operatorId } = await setupVenue();
     const tillX = cfg.tillId;
     const tillY = await insertTill(locationId, "Caja override");
     expect(tillY).not.toBe(tillX);
 
-    // devMode ON: `mountTillApi`'s deps forward `devMode` to `requireSaleTillId`, which is what makes the
-    // override header live (byte-for-byte inert otherwise — the boot.test.ts fail-closed arm proves that).
+    // devMode ON: `mountTillApi` forwards it to `requireSaleTillId`, which makes the override
+    // header live.
     const app = new Hono();
     mountTillApi(app, { ...apiDeps(cfg), devMode: true }, noopLog);
     const sessionCookie = await login(app, cfg, operatorId);

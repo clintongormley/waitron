@@ -4,14 +4,13 @@ import { codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
 /** This host's own label for the fiscal drainer. It has no `scheduled_runs` name because it is not
- * a ledger duty — see the scheduler design's amendment for why it cannot be one. */
+ * a ledger duty (`packages/scheduler/src/duty.ts` says why). */
 export const DRAIN_DUTY = "fiscal.drain";
 /** The ledger duty name, matching what `reconcilerAsDuty` writes into `scheduled_runs.duty`. */
 export const RECONCILE_DUTY = "payments.reconcile.stripe";
 
-/** The canonical duty set this host runs. Consumers that must cover every duty — `health.ts`'s
- * `DUTY_BUDGET_MS` is the reason this exists — key off `Duty` rather than `string`, so adding a
- * duty here without updating them is a compile error, not a silent gap. */
+/** Consumers that must cover every duty (`health.ts`'s `DUTY_BUDGET_MS`) key off `Duty`, so adding a
+ * duty here without updating them is a compile error. */
 export const ALL_DUTIES = [DRAIN_DUTY, RECONCILE_DUTY] as const;
 export type Duty = (typeof ALL_DUTIES)[number];
 
@@ -21,46 +20,18 @@ export interface DutyReport {
   errorCode?: string;
   nextDueAt: Date | null;
   /**
-   * How much due work this duty abandoned this pass — `DrainResult.skipped.length` for `drain`,
-   * `TickResult.skipped.length` for reconcile (their element shapes differ, which is why each is
-   * still logged under its own event in `runPass` below; this field only ever carries the count).
-   * Undefined for a duty that threw — `attempt`'s catch branch never reaches the body that would
-   * compute this, so there is no count to report, not a zero one. `health.ts` treats undefined and
-   * zero identically, so the distinction is not load-bearing, only honest about where the number
-   * came from.
-   *
-   * This is C2: a contained skip is a FAILURE of the duty, not a partial success, and
-   * `attempt` below only ever sets `ok: false` on a THROW — a `drain` or `runDue` call that returns
-   * normally with a non-empty `skipped` list still reports `ok: true` here, on purpose (§6/§7: a
-   * skipped drain has no ledger row and no incident, this pass's summary line is what carries it
-   * to a reader at all). Before this field existed, `health.ts` had nothing to read but `ok`, so a
-   * venue with due fiscal work and no usable certificate accumulated `pendiente` rows past its
-   * art. 16.4 hour while `/health` answered 200 — see `health.ts`'s own comment on `recordPass`
-   * (not `isStale`, which is about undeclared duties, not skips) for how this field closes that.
+   * How much due work this duty abandoned this pass (its result's `skipped.length`); undefined when
+   * the duty threw. A skip is a failure of the duty, yet `ok` is false only on a throw, so `/health`
+   * reads this count (`recordPass`, health.ts) to see it.
    */
   skipped?: number;
-  /** How long this duty took, from `attempt`'s own monotonic reads. Present for a duty that threw
-   * too — the elapsed time is real either way, unlike `skipped`/`parked`, which a throw leaves
-   * with no honest value. */
+  /** How long this duty took, by the monotonic clock; present when the duty threw too. */
   durationMs: number;
   /**
-   * How many of `TickResult.ran` this pass ended `outcome: "parked"` — a run that exhausted
-   * `maxAttempts` (`@waitron/scheduler`'s `parkOrRetry`), whose `completeRun` wrote
-   * `next_attempt_at = null`: terminal, and nothing will claim that (duty, period) again.
-   * This is the IDENTICAL gap `skipped` above closes, one duty over: a `runDue` call that parked
-   * every period it touched still returns normally, with an empty `skipped` list (a park is not an
-   * infrastructure failure mid-sweep, it is a duty that ran and lost every attempt), so `ok: true`
-   * here would otherwise be the whole story. `health.ts`'s `recordPass` reads this the same way it
-   * reads `skipped`, for the same reason.
-   *
-   * Deliberately EXCLUDES `outcome: "failed"` — a failed run still has a `next_attempt_at` and is
-   * retried on its own backoff, so counting it here would flip health on an ordinary transient
-   * retry rather than a genuine abandonment; see `recordPass`'s own comment for why that
-   * distinction matters. Always a number (never omitted) for a duty that returned normally — `0`
-   * for `fiscal.drain`, whose `DrainResult` has no run-level terminal outcome at all (a halted
-   * fiscal record is a different, already-persisted signal — see this file's own comment on the
-   * `drain.complete` line below, and `packages/scheduler/src/duty.ts`'s own doc comment on why
-   * `drain` cannot use this ledger). Undefined only when the duty threw, mirroring `skipped`.
+   * How many runs this pass ended `outcome: "parked"`: they exhausted `maxAttempts`, and nothing will
+   * claim that (duty, period) again. A `runDue` that parked every run still returns normally, so
+   * `recordPass` reads this as it reads `skipped`. `failed` is excluded because a failed run retries
+   * on its own backoff. Always `0` for `fiscal.drain`; undefined when the duty threw.
    */
   parked?: number;
 }
@@ -72,18 +43,14 @@ export interface PassReport {
 }
 
 /**
- * The one credential the fiscal drain reads is `fiscal.aeat` (the regime's `resolveClient` reads only
- * that purpose — `packages/fiscal-verifactu/src/aeat-transport.ts`), so a `credentials.missing` skip
- * from the drain is ALWAYS a missing AEAT signing certificate, never any other secret. That is the
- * expected state of a promoted cloud mirror: it sells and chains locally but cannot FILE until the
- * cert-distribution slice puts `fiscal.aeat` on it.
+ * The drain reads one credential, `fiscal.aeat` (`packages/fiscal-verifactu/src/aeat-transport.ts`),
+ * so a `credentials.missing` skip from it is always a missing AEAT signing certificate.
  */
 const AWAITING_CERT_ERROR = "credentials.missing";
 
 /**
- * A one-field live cell — the same holder pattern the deployment axes use — set true while the last
- * drain pass skipped its work for a missing `fiscal.aeat` credential. `runPass` writes it; box-status
- * reads it (`awaitingFiscalCertificate`). Shared by reference so a flip is observed with no restart.
+ * True while the last drain pass that had work skipped it for a missing `fiscal.aeat` credential.
+ * `runPass` writes it; box-status reads it. Shared by reference so a flip is seen with no restart.
  */
 export interface AwaitingCertStatus {
   current: boolean;
@@ -92,16 +59,11 @@ export interface AwaitingCertStatus {
 export interface PassDeps {
   drain: (now: Date) => Promise<DrainResult>;
   reconcile: (now: Date) => Promise<TickResult>;
-  /**
-   * The awaiting-fiscal-certificate cell (above). The drain contains a missing cert as a contained
-   * skip, not a throw, so this is set from `DrainResult.skipped`, not `attempt`'s catch branch.
-   */
+  /** Set from `DrainResult.skipped`: the drain reports a missing cert as a skip, not a throw. */
   awaitingCert: AwaitingCertStatus;
   /**
-   * A MONOTONIC millisecond clock — `performance.now` in `boot.ts`, injected here so the suite
-   * asserts exact durations. Deliberately not the wall-clock `now` this function already receives:
-   * an NTP step during a pass would make that produce a negative or absurd duration, in the one
-   * field an operator uses to spot a slow one.
+   * A MONOTONIC millisecond clock, not the wall-clock `now`: a clock step during a pass would make
+   * that produce a negative or absurd duration.
    */
   monotonicMs: () => number;
   log: Logger;
@@ -117,20 +79,14 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
       const result = await deps.drain(now);
       let sawMissingCert = false;
       for (const skipped of result.skipped) {
-        // Due fiscal work this pass could not submit at all is an unmet legal
-        // obligation. It has no ledger row and no incident (`incidents.till_id` is NOT NULL and a
-        // drain has no till), so this line is the only place it exists. When
-        // `drain.restart_reset_failed` is also logged, the restart reset failed before any work was
-        // looked for, and the cause is the database, not the credential (`restart-reset.ts`).
+        // Due fiscal work this pass could not submit is an unmet legal obligation with no ledger row
+        // and no incident (`incidents.till_id` is NOT NULL and a drain has no till), so this line is
+        // the only place it exists.
         deps.log("warn", "drain.tenant_skipped", skipped);
         if (skipped.errorCode === AWAITING_CERT_ERROR) sawMissingCert = true;
       }
-      // The awaiting-cert flag ONLY transitions on a pass that actually exercised the cert. A no-work
-      // pass (`tenantsWithWork === 0`) read no cert at all, so it leaves the flag UNCHANGED — clearing
-      // it there would emit `fiscal.certificate_available` when nothing arrived. A pass that DID have
-      // due work either skipped for the missing cert (→ set) or resolved the cert and drained
-      // (→ clear). `noteAwaitingCert` records the transition ONCE on box-status and in a single log
-      // line, alongside (not instead of) the per-pass `drain.tenant_skipped` trace above.
+      // A no-work pass read no cert, so it leaves the flag unchanged; clearing it there would log
+      // `fiscal.certificate_available` when nothing arrived.
       if (result.tenantsWithWork > 0) {
         noteAwaitingCert(deps, sawMissingCert);
       }
@@ -143,35 +99,11 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
         skipped: result.skipped.length,
         nextDueAt: result.nextDueAt?.toISOString() ?? null,
       });
-      // DECISION (pre-merge review, 2026-07-27): `recordsHalted`/`incidentsRaised` do NOT feed
-      // `parked` (or any other health-flipping field) the way reconcile's parked runs do below —
-      // `parked` stays a fixed `0` for this duty, always. Two reasons, not one:
-      //
-      //   1. A halted record is not an abandoned unit of work with nowhere else to look. The
-      //      moment it happens, `raiseIncident` (packages/fiscal-verifactu/src/drain.ts) has
-      //      already written it to the `incidents` table — till/sale-scoped, its own
-      //      structured code and severity, in the SAME transaction as the estado change — a
-      //      persisted, queryable trail `TickResult`'s "parked" outcome has no equivalent of (a
-      //      park writes `next_attempt_at = null` and nothing else record-shaped at all).
-      //   2. It is not necessarily a SYSTEM failure. A rejected record can be a genuine per-invoice
-      //      data problem (a malformed field AEAT itself rejects) that says nothing about whether
-      //      this host is working. Flipping `/health` on it would conflate "AEAT rejected this one
-      //      invoice" with "this process is stuck" — the false-alarm noise `skipped` above is
-      //      already careful not to produce for an ordinary retry.
-      //
-      // A venue provisioned with the WRONG `certKind` (present, naming the other kind) is, I
-      // believe, still visible, just not through `/health` — unverified: the wrong kind only picks
-      // the other AEAT endpoint, and if AEAT refuses the whole request the submit is retried and
-      // records no incident. If AEAT answers per record instead, every batch keeps
-      // landing in `recordsHalted`/`incidentsRaised` on this line, pass after pass, with no
-      // corresponding drop in what `envios.pendingCount` reports — an operator grepping
-      // `drain.complete` (or the `incidents` table directly) for a duty that never stops halting
-      // records sees exactly that shape. `apps/server/README.md`'s opening claim about what `200`
-      // covers is written to match this, not to claim more than it does.
-      //
-      // Separately, a record AEAT rejects individually is recorded as a `fiscal.` incident (a plain
-      // rejection as `fiscal.registro_rechazado`), which the dashboard bell and Alerts screen show to
-      // anyone holding `fiscal.view`.
+      // DECISION: `recordsHalted`/`incidentsRaised` do NOT feed `parked` or any other field that
+      // flips `/health`; `parked` is always `0` for this duty. A halted record is already written to
+      // the `incidents` table (`raiseIncident`, packages/fiscal-verifactu/src/drain.ts), where the
+      // dashboard's alerts show it to anyone holding `fiscal.view`; and a record AEAT rejects can be
+      // one invoice's data problem, not a sign that this process is stuck.
       return { nextDueAt: result.nextDueAt, skipped: result.skipped.length, parked: 0 };
     }),
   );
@@ -182,10 +114,7 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
       for (const skipped of result.skipped) {
         deps.log("warn", "reconcile.pair_skipped", skipped);
       }
-      // A bare count of `result.ran` cannot tell "every run swept clean" apart from "every run was
-      // abandoned for good" — both produce the same number. Breaking it down by `RunRecord.outcome`
-      // is what makes the log line answer that without a reader having to go correlate individual
-      // `reconcile.run_failed`/`reconcile.run_parked` lines just to learn there were any at all.
+      // A bare count of `result.ran` cannot tell a clean sweep from runs abandoned for good.
       const ranByOutcome = { succeeded: 0, failed: 0, parked: 0 };
       for (const record of result.ran) {
         ranByOutcome[record.outcome] += 1;
@@ -221,15 +150,12 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
 }
 
 /**
- * Runs one duty and NEVER rethrows. A duty that fails forever must be visible, not fatal: letting
- * the throw out would end art. 16.4's hourly retry on one transient blip.
+ * Runs one duty and NEVER rethrows: letting the throw out would end art. 16.4's hourly retry on one
+ * transient blip.
  *
- * A failure reports `now` as its next due time. It has no answer of its own — whatever it was going
- * to say died with the throw — and "due immediately" is the honest reading, which the loop's
- * MIN_TICK floor then turns into a prompt retry rather than a hot spin. It also has no `skipped` or
- * `parked` count of its own for the identical reason: both stay `undefined`, not `0` — `0` would
- * claim a clean sweep the throw makes no promise about. `durationMs` is the one field that stays
- * populated on both branches — elapsed monotonic time is real whether or not the body threw.
+ * A failure reports `now` as its next due time, which the loop's minimum tick turns into a prompt
+ * retry rather than a hot spin. Its `skipped` and `parked` stay undefined, not `0`, which would
+ * claim a clean sweep.
  */
 async function attempt(
   duty: string,
@@ -262,14 +188,7 @@ async function attempt(
   }
 }
 
-/**
- * Records whether this pass is awaiting the fiscal certificate, logging ONLY on a transition. The
- * holder IS the "once" guard: an unchanged state logs nothing, so a promoted mirror with no cert logs
- * `fiscal.awaiting_certificate` a single time and then stays quiet pass after pass, however long the
- * cert-distribution slice takes. When the cert finally arrives the drain stops skipping, this clears
- * to false and logs `fiscal.certificate_available` once — and a later loss would log the warning
- * again, one line per episode.
- */
+/** Records whether this pass is awaiting the fiscal certificate, logging only on a transition. */
 function noteAwaitingCert(deps: PassDeps, awaiting: boolean): void {
   if (awaiting === deps.awaitingCert.current) return;
   deps.awaitingCert.current = awaiting;
@@ -281,12 +200,8 @@ function noteAwaitingCert(deps: PassDeps, awaiting: boolean): void {
 }
 
 /**
- * One line per run that did NOT succeed, carrying its `errorCode` and enough identity to act on —
- * `duty` and `period` — rather than leaving a reader to correlate `reconcile.complete`'s
- * bare counts back to which (duty, period) they belong to. Level escalates with what the
- * outcome actually means: `failed` is still retrying on its own backoff (`warn`), `parked` has
- * exhausted `maxAttempts` and nothing will claim it again (`error`) — the identical distinction
- * `DutyReport.parked`'s own doc comment draws for why only `parked` may flip `/health`.
+ * One line per run that did not succeed: `warn` for `failed`, which still retries on its own backoff,
+ * and `error` for `parked`, which nothing will claim again.
  */
 function logNonSucceededRun(log: Logger, record: RunRecord): void {
   if (record.outcome === "succeeded") return;

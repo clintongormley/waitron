@@ -1,7 +1,5 @@
 // The fiscal half of split-bill: paying a carved check files its own registro, the items partition
 // across the checks, and a repeated pay replays rather than files twice.
-//
-// Nothing here establishes what the deployment role, which no longer exists, may read or write.
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";
@@ -47,11 +45,7 @@ const suite = useVenueDb({
 let backend: FiscalBackend;
 let clock: TrustedClock;
 
-/**
- * The wall clock at the moment this process runs, reported as already confident and anchored — the
- * identical stub shape `till-sale.test.ts`/`record-one-sale.ts` document. `recordSale` reads `now()`
- * once and touches neither `anchor` nor `currentAnchor`.
- */
+/** The wall clock at the moment this process runs, reported as already confident and anchored. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -71,9 +65,6 @@ function systemClock(): TrustedClock {
   };
 }
 
-// Every provisioned venue gets its own NIF — the same shape `till-sale.test.ts`'s `nextNif` uses.
-// The tax id is unique across tenants, and a counter costs nothing whether or not the helper's
-// per-test reset has already emptied the table.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -107,8 +98,7 @@ interface Seeded {
 
 /**
  * Stand up a fresh chained venue + registered SIF, then seed the two-product catalogue and one
- * dining table. Each test gets its OWN tenant so the `registros_facturacion` count is that test's
- * alone, order-independent (CLAUDE.md §4).
+ * dining table.
  */
 async function setupVenue(): Promise<Seeded> {
   const venue = await applyVenue(
@@ -174,9 +164,6 @@ async function setupVenue(): Promise<Seeded> {
   return { cfg, ...seeded };
 }
 
-/**
- * Run fn in one transaction.
- */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
@@ -191,17 +178,16 @@ interface ThreeChecks {
   a: string;
   b: string;
   c: string;
-  /** The paid results, in pay order — Task 2 asserts on these; Task 3 ignores them. */
+  /** The paid results, in pay order. */
   rA: TillSaleResult;
   rB: TillSaleResult;
   rC: TillSaleResult;
 }
 
 /**
- * Open the mixed-VAT origin tab (3× agua @21%, 0.300 kg jamón @10%), carve it into the three checks
- * design §3 describes (A = 1 agua + whole jamón; B = 1 agua; C = 1 agua, which empties line 1 with a
- * whole move), and pay all three via the EXISTING `payWorkingOrder`. Shared by BOTH tests so the split
- * shape is defined once (DRY): Task 2 proves the filings, Task 3 proves the partition/conservation.
+ * Open the mixed-VAT origin tab (3× agua @21%, 0.300 kg jamón @10%), carve it into three checks
+ * (A = 1 agua + whole jamón; B = 1 agua; C = 1 agua, which empties line 1 with a whole move), and pay
+ * all three.
  */
 async function splitIntoThreeChecks(
   seeded: Seeded,
@@ -225,8 +211,7 @@ async function splitIntoThreeChecks(
   );
   const { checkId: c } = await asApp(cfg, (tx) => splitOffCheck(tx, cfg, tabId, [{ lineNo: 1 }]));
 
-  // Pay all three via the EXISTING payWorkingOrder (no new verb). A check is a retrieved order, so
-  // req.lines is ignored — it files from its stored locked lines.
+  // A check is a retrieved order, so req.lines is ignored — it files from its stored locked lines.
   const rA = await payWorkingOrder(deps, cfg, {
     id: a,
     tender: { method: "cash", amount: "10.00" },
@@ -272,15 +257,7 @@ describe("split-bill: pay each check files its own registro", () => {
     const { cfg } = seeded;
     const deps = { db: suite.db, backend, clock };
 
-    // Origin tab (3× agua @21%, 0.300 kg jamón @10%) carved into 3 checks (design §3 "the 4 working
-    // orders = 3 checks + emptied origin") — A = 1 agua + whole jamón (MIXED VAT); B, C = 1 agua each,
-    // C emptying line 1 with a whole move — and all three paid. Shared with the partition test below.
     const { a, b, c, rA, rB, rC } = await splitIntoThreeChecks(seeded, deps);
-
-    // Negative control (run, then removed): a 4th `payWorkingOrder` for the emptied origin `tabId`
-    // THREW `sale.empty_basket` — `priceStoredOrder` refuses an order with no stored lines — so the
-    // origin can never file a registro and the count-of-3 assertion is load-bearing (design §3: the
-    // emptied origin is abandoned in Task 3, it files nothing).
 
     // (1) EXACTLY THREE registros_facturacion for this tenant — one per check, none from the origin.
     const rows = await asApp(cfg, (tx) => tx.select().from(registrosFacturacion));
@@ -298,11 +275,7 @@ describe("split-bill: pay each check files its own registro", () => {
 
     // (4) Coherent per-check DESGLOSE — each invoice's breakdown corresponds to its OWN items:
     //   - A carries BOTH rates (21% agua + 10% jamón); B and C carry only 21%.
-    //   - Each check's Σ(base+tax) == its own total (self-consistent, no aggregate bill to reconcile —
-    //     a per-check cent of difference-method rounding is not an error, design §4).
-    // The exact base/tax cents are the difference-method figures priceLockedLines computes — PROVEN by
-    // the real filing below (read off the RED run, CLAUDE.md §1), never hand-derived from the plan. The
-    // load-bearing checks are the RATE SET and the Σ==total identity.
+    //   - Each check's Σ(base+tax) == its own total (there is no aggregate bill to reconcile).
     expect(new Set(rA.vatBreakdown.map((v) => v.rate))).toEqual(new Set(["21.00", "10.00"]));
     expect(new Set(rB.vatBreakdown.map((v) => v.rate))).toEqual(new Set(["21.00"]));
     expect(new Set(rC.vatBreakdown.map((v) => v.rate))).toEqual(new Set(["21.00"]));
@@ -333,7 +306,6 @@ describe("split-bill: pay each check files its own registro", () => {
     const { cfg } = seeded;
     const deps = { db: suite.db, backend, clock };
 
-    // Same 3-check split as above (DRY): A = 1 agua + whole jamón; B = 1 agua; C = 1 agua.
     const { tabId, a } = await splitIntoThreeChecks(seeded, deps);
 
     const { originLines, filed, filedForOrigin } = await asApp(cfg, async (tx) => {
@@ -342,11 +314,8 @@ describe("split-bill: pay each check files its own registro", () => {
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId));
-      // Every filed sale_line across the 3 checks, joined to its sale via sales.id = sale_lines.sale_id,
-      // tagged with the check it belongs to (sales.working_order_id). sale_lines SNAPSHOTS values and
-      // carries NO product_id (packages/db/src/schema/sales.ts) — so partition by vat_rate (the single
-      // 10% jamón line vs the three 21% agua lines), never by product. These are the REAL filed rows,
-      // not a recompute of the inputs.
+      // Every filed sale_line, tagged with its check. sale_lines carries NO product_id, so partition
+      // by vat_rate (the single 10% jamón line vs the three 21% agua lines).
       const filedRows = await tx
         .select({
           workingOrderId: sales.workingOrderId,
@@ -356,8 +325,7 @@ describe("split-bill: pay each check files its own registro", () => {
         .from(saleLines)
         .innerJoin(sales, eq(sales.id, saleLines.saleId));
       // `sale_lines.vat_rate` is a count of whole basis points and `quantity` a count of whole
-      // thousandths; both become the decimal literals the partition and the conservation sum below
-      // work in, here at the row, so neither of those reads a count.
+      // thousandths; both become decimal literals here, at the row.
       const filed = filedRows.map((row) => ({
         ...row,
         vatRate: basisPointsToDecimal(row.vatRate),
@@ -370,7 +338,7 @@ describe("split-bill: pay each check files its own registro", () => {
       return { originLines, filed, filedForOrigin };
     });
 
-    // The origin is emptied and files nothing (design §4 "no double-file; the remainder shares no item").
+    // The origin is emptied and files nothing.
     expect(originLines).toEqual([]);
     expect(filedForOrigin).toEqual([]);
 
@@ -385,13 +353,6 @@ describe("split-bill: pay each check files its own registro", () => {
     // PARTITION: the 10%-rate (jamón) quantity appears on EXACTLY ONE check (no double-file).
     const checksWith10 = new Set(filed10.map((f) => f.workingOrderId));
     expect(checksWith10).toEqual(new Set([a]));
-
-    // Negative control (run once, then restored — brief Step 3): to over-allocate the aguas without
-    // the split aborting on an emptied line, the origin was temporarily opened with 4 aguas and check
-    // B took `quantity: "2"` (with a covering 10.00 tender), so the three checks filed 1 + 2 + 1 = 4.
-    // `totalAgua` came back 4 and this test FAILED at `expect(totalAgua).toBe(3)` with
-    // `expected 4 to be 3` (line ~360), proving the conservation sum catches a double-file / re-price.
-    // All three edits were reverted; the test is green as written.
   });
 
   it("paying a check twice files exactly ONE registro (sale-idempotency replay)", async () => {
@@ -408,14 +369,9 @@ describe("split-bill: pay each check files its own registro", () => {
       splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
     );
 
-    // Pay the SAME check twice (a lost-response retry), SEQUENTIALLY. A check is a working order (it
-    // already has a `working_orders` row), so the second pay reads its status, sees `settled`, and
-    // `payWorkingOrder` returns the EXISTING ticket at its step 2 — a replay, not a second filing.
-    // Nothing about this case turns on concurrency: the second call begins after the first returned,
-    // so it is the sequential retry `payWorkingOrder`'s step 2 covers, and the
-    // `sales_working_order_id_key` UNIQUE (working_order_id) backstop at its step 6 is never reached.
-    // The whole point of the split-bill split is that a check gets the same settled-status replay as
-    // any tab.
+    // Pay the SAME check twice, sequentially (a lost-response retry): the second pay sees `settled`
+    // and replays the existing ticket rather than filing again — a check gets the same replay as any
+    // tab.
     const first = await payWorkingOrder(deps, cfg, {
       id: checkId,
       tender: { method: "cash", amount: "2.00" },

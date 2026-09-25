@@ -1,55 +1,33 @@
 /**
- * Formats a fired kitchen ticket into ESC/POS bytes (design §3c) — the pure byte-producing half of
- * KDS-4. It owns no state and touches no database: it takes an already-resolved ticket and returns
- * the `print_jobs.payload` the printing outbox moves verbatim. The fire path (Task 4) builds the
- * `KitchenTicket` from the freshly-fired `ticket_items` and hands these bytes to `enqueuePrintJob`;
- * the HTTP layer (Task 5) is elsewhere again. Keeping this a pure function is what lets the whole
- * layout be pinned in a unit test with no database at all.
+ * Formats kitchen tickets and correction slips into ESC/POS bytes. Pure: no state, no database.
  *
- * `scope` is a DISCRIMINATED UNION (controller ruling R-B, which supersedes the spec §3c `courses`
- * sketch):
- *   - `station` — one physical station's copy: the station's own name heads the ticket and the items
- *     are a flat list (they were already routed to this station at fire time).
- *   - `order` — the expediter's "pass" copy: a single ticket that groups every fired item BY station,
- *     each station's lines under its own sub-header, so the pass reads the whole order at a glance.
+ * A `station` ticket is one station's copy, a flat list under the station's name. An `order` ticket
+ * is the pass copy: every fired item grouped under its station's name.
  *
- * NO emphasis/bold (ruling R-G). The ESC/POS builder — `@waitron/printing`'s `esc()` — exposes
- * `init`/`text`/`line`/`feed`/`cut`/`feedAndCut`/`kick`/`qr`/`qrRaster` (packages/printing/src/escpos.ts);
- * there is no bold verb. The plan's "bold the table/order" is therefore DEFERRED until the builder
- * gains emphasis, and adding a bold command to packages/printing is out of this task's scope. The
- * layout below uses only the existing verbs.
+ * `esc()` has no bold, so ASCII markers stand in for emphasis.
  */
 import { esc, prepareText, wrapText, type CharacterSet } from "@waitron/printing";
 
-/** The pass header for an `order`-scope ticket — the printed VALUE the expediter reads ("pass"). */
+/** The printed header of an `order`-scope ticket. */
 const ORDER_HEADER = "PASE";
 
-/** One fired line: a quantity and the product name, snapshotted at fire time by the caller.
- *  `modifiers` are the parent dish's selected options (ordering modifiers) — each a snapshotted option
- *  name, printed as indented `+ <name>` sub-text BENEATH the dish so a dish + its modifiers read as ONE
- *  kitchen item (a modifier is never its own ticket item and never routes to its own station). Absent or
- *  empty on a plain dish, so a no-modifier caller is byte-for-byte unchanged. */
+/** One fired line. `modifiers` print as indented `+ <name>` sub-lines beneath the dish, so a dish and
+ *  its modifiers read as one kitchen item. */
 export interface KitchenTicketItem {
   qty: number | string;
   unit?: string;
   name: string;
-  /** The free-text kitchen note (order-line customisation, spec §2), snapshotted at fire. Printed as its
-   *  own indented `* <note>` sub-line beneath the dish (distinct from a `+ <modifier>`). Absent/empty on a
-   *  line that carried none, so a note-free caller is byte-for-byte unchanged. */
+  /** The free-text kitchen note, printed as an indented `* <note>` sub-line beneath the dish. */
   note?: string;
   modifiers?: string[];
 }
 
-/** One station's slice of an `order`-scope ticket: the station's name and the items fired to it. */
 export interface KitchenTicketStation {
   stationName: string;
   items: KitchenTicketItem[];
 }
 
-/**
- * A ready-to-render kitchen ticket. `firedAt` is the wall-clock fire time; it prints as local HH:MM.
- * The two variants are distinguished by `scope` (R-B).
- */
+/** `firedAt` prints as local HH:MM. */
 export type KitchenTicket =
   | {
       scope: "station";
@@ -73,23 +51,16 @@ function itemLine(item: KitchenTicketItem): string {
 }
 
 /**
- * Sanitise a FREE-TEXT note before it reaches the ESC/POS byte stream. The note is operator-typed, so
- * it can carry newlines (CR/LF) and other C0 control bytes that would split it across ticket lines or
- * emit stray printer commands and garble the thermal ticket. Collapse every run of C0 control chars
- * (`\x00`–`\x1F`, which includes CR and LF) plus DEL to a single space and trim, so the note always
- * prints as ONE `* ` sub-line. Applied ONLY to the free-text note — menu-authored modifier and dish
- * names are trusted catalogue text and are left byte-for-byte unchanged.
+ * The note is operator-typed, so it can carry line breaks and other control bytes that would split it
+ * across lines or reach the printer as commands. Each run of them becomes one space. Only the note is
+ * sanitised; dish and modifier names are catalogue text.
  */
 function sanitizeNote(note: string): string {
   // eslint-disable-next-line no-control-regex -- deliberately matching C0 controls + DEL to strip them
   return note.replace(/[\x00-\x1f\x7f]+/g, " ").trim();
 }
 
-/** Emit one item — its `qty x name` line, then (order-line customisation, spec §2/§3) each selected
- *  modifier as an indented `+ <name>` line, and the free-text NOTE as an indented `* <note>` line, in
- *  that order. The ASCII markers keep a sub-line legible on any single-byte code page, there being no
- *  ESC/POS bold (ruling R-G). A plain dish (no note, no modifiers) emits exactly the one line it always
- *  did. */
+/** Emit one item's `qty x name` line, then each modifier as `+ <name>` and the note as `* <note>`. */
 function emitItem(b: ReturnType<typeof esc>, item: KitchenTicketItem, layout: KitchenLayout): void {
   // Each line wraps to the paper; a continuation starts under the text after its marker.
   const text = (s: string, indent: number): void => {
@@ -100,8 +71,7 @@ function emitItem(b: ReturnType<typeof esc>, item: KitchenTicketItem, layout: Ki
   text(itemLine(item), prepareText(prefix, layout.charset).length);
   for (const modifier of item.modifiers ?? []) text(`  + ${modifier}`, 4);
   if (item.note !== undefined && item.note !== "") {
-    // Sanitise the operator-typed note (strip CR/LF and other control bytes) so it prints as one
-    // sub-line and cannot garble the ticket. A note that is ALL control chars sanitises to "" — skip it.
+    // A note of nothing but control bytes sanitises to "" and is skipped.
     const note = sanitizeNote(item.note);
     if (note !== "") text(`  * ${note}`, 4);
   }
@@ -114,24 +84,19 @@ export interface KitchenLayout {
   characterTable: number;
 }
 
-/** Local `HH:MM`, zero-padded — the fire time as the kitchen reads it off the wall clock. */
 function hhmm(at: Date): string {
   const h = String(at.getHours()).padStart(2, "0");
   const m = String(at.getMinutes()).padStart(2, "0");
   return `${h}:${m}`;
 }
 
-/**
- * Render `ticket` to an ESC/POS payload. Pure and total: an empty `items`/`stations` array yields a
- * header-only ticket rather than throwing (the caller filters out stations with nothing fired).
- */
+/** An empty `items`/`stations` array yields a header-only ticket rather than throwing. */
 export function formatKitchenTicket(ticket: KitchenTicket, layout: KitchenLayout): Uint8Array {
   const b = esc(layout.charset, layout.characterTable).init();
   const text = (s: string): void => {
     for (const line of wrapText(prepareText(s, layout.charset), layout.columns)) b.line(line);
   };
 
-  // Header line differs by scope; the table / order / time block is shared by both.
   text(ticket.scope === "station" ? ticket.stationName : ORDER_HEADER);
   text(ticket.tableLabel);
   text(ticket.orderNumber);
@@ -150,12 +115,8 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: KitchenLayout
 }
 
 /**
- * A kitchen "correction" slip for a single already-fired line: the cook already has a copy of the
- * original ticket (this module's `formatKitchenTicket`), and this slip tells them what changed
- * without reprinting the whole order. Only two kinds exist — `VOID` (the line was cancelled after
- * firing) and `RECALLED` (the line was pulled back to held/editable). A course MOVE never produces
- * one: a course change only ever applies to a held, never-printed line, so there is nothing yet in
- * the kitchen to correct.
+ * A slip for one already-fired line, telling the cook what changed without reprinting the order:
+ * `VOID` (cancelled after firing) or `RECALLED` (pulled back to held).
  */
 export interface CorrectionSlip {
   kind: "VOID" | "RECALLED";
@@ -166,14 +127,7 @@ export interface CorrectionSlip {
   item: KitchenTicketItem;
 }
 
-/**
- * Render `slip` to an ESC/POS payload. There is no bold verb (module header note, R-G) so the
- * `*** VOID ***` / `*** RECALLED ***` asterisks stand in for emphasis. Mirrors
- * {@link formatKitchenTicket}'s envelope exactly — same `init()`/`feedAndCut()` —
- * and reuses {@link emitItem} so the item + modifier lines render byte-for-byte like the original
- * ticket the cook is correcting. `tableLabel` is only printed when non-null (e.g. a bar tab with no
- * table).
- */
+/** Reuses {@link emitItem}, so the item prints exactly as on the original ticket. */
 export function formatCorrectionSlip(slip: CorrectionSlip, layout: KitchenLayout): Uint8Array {
   const b = esc(layout.charset, layout.characterTable).init();
   const text = (s: string): void => {

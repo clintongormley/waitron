@@ -1,50 +1,20 @@
 /**
- * Formats a filed sale into the customer's ESC/POS receipt (design §3b) — the pure byte-producing
- * half of the counter-printing slice. Like {@link formatKitchenTicket} it owns no state and touches no
- * database: it takes an already-filed {@link TillSaleResult} and returns the `print_jobs.payload` the
- * printing outbox moves verbatim. The counter-print path (Task 5) reads the sale, supplies the issuer
- * identity and the receipt trim, and hands these bytes to `enqueuePrintJob`; the HTTP layer is
- * elsewhere again. Keeping this a pure function is what lets the whole layout be pinned in a unit test
- * with no database at all.
+ * Formats a filed sale into the customer's ESC/POS receipt. Pure — no database, no state — so the
+ * whole layout is pinned in a unit test.
  *
- * FISCAL SAFETY (spec §4). This function READS a `TillSaleResult` and produces bytes ONLY. It touches
- * no fiscal table, calls no filing/alta code, and imports nothing from `@waitron/core` or the alta
- * builders — the sale was already filed upstream, and the paper is a faithful RE-RENDER of that record,
- * never a second source of fiscal truth. The `TillSaleResult` import is TYPE-ONLY (erased at runtime),
- * so there is no runtime coupling to the till-sale filing path either.
+ * FISCAL SAFETY. It only reads an already-filed `TillSaleResult`: the paper is a re-render of the
+ * filed record, never a second source of fiscal truth.
  *
- * THE PAPER IS A LEGAL DOCUMENT. The printed ticket is a factura simplificada and reproduces the same
- * non-removable core the on-screen receipt does (`apps/till/src/screens/till-ticket-view.ts`), element
- * for element, so the paper never carries FEWER mandated elements than the screen (spec §4). The core
- * is RD 1619/2012 art. 7.1 plus the RRSIF/Veri*Factu QR + legend (Orden HAC/1177/2024 arts. 20-21),
- * all settled on primary source in `docs/compliance/verifactu-findings.md` §14:
+ * THE PAPER IS A LEGAL DOCUMENT: a factura simplificada carrying the same mandated core as the
+ * on-screen receipt (`apps/till/src/screens/till-ticket-view.ts`) — RD 1619/2012 art. 7.1 plus the
+ * Veri*Factu QR and legend (Orden HAC/1177/2024 arts. 20-21); sources in
+ * `docs/compliance/verifactu-findings.md` §14. The owner's non-fiscal trim renders around that core
+ * and is never read by it.
  *
- *  - issuer venue name + NIF (7.1.d) — from {@link ReceiptIssuer};
- *  - número + serie (7.1.a) and fecha de expedición (7.1.b) — `result.invoiceNumber` / `result.issuedAt`;
- *  - identification of the goods (7.1.e) — one row per `result.lines` entry: name (invoice locale),
- *    quantity, per-line gross;
- *  - the tipo(s) impositivo(s) and the base imponible per rate (7.1.f) — from `result.vatBreakdown`
- *    (per-item VAT is NOT required; the cuota per rate is shown as an allowed extra);
- *  - contraprestación total (7.1.g) — `result.total`;
- *  - QR + VERI*FACTU legend (arts. 20-21).
- *
- * Allowed operational extras: efectivo (= total + change) and cambio. The owner-authored NON-FISCAL
- * trim ({@link ReceiptTrim}) renders AROUND that core — a header subtitle under the venue name and a
- * footer message under the legend — and can never suppress or reorder a mandated element, because the
- * core below is never read from or gated on it.
- *
- * INVOICE LOCALE. The receipt is a fiscal document ISSUED IN SPAIN and is rendered in the INVOICE
- * locale (`invoiceLocale`), which is INDEPENDENT of the operator's UI language (spec §9, findings §14):
- * an English-speaking operator still hands the customer a Spanish ticket. So the fiscal LABELS are
- * fixed Spanish constants ({@link LABEL} / {@link LEGEND}), while the money, date and product names are
- * FORMATTED with `invoiceLocale`. These helpers are ported here (not imported from `apps/till`) — an
- * `apps/server` → `apps/till` dependency would be backwards — but they are the same small, pure logic
- * the screen uses, kept in lock-step deliberately.
- *
- * PRINTER LAYOUT. The receipt takes the printer's paper width, resolution and character set
- * (design 2026-09-14): text is prepared for the character set, wrapped to the column count, and the QR
- * is a raster image sized to 30-40 mm. The builder has no bold verb, so the layout is plain text. The
- * paper itself is verified manually on the real printer; `receipt-ticket.test.ts` pins the bytes.
+ * The receipt is issued in the INVOICE locale, not the operator's UI language: the fiscal labels
+ * are fixed Spanish constants, and only money, date and product names are formatted with
+ * `invoiceLocale`. The helpers shared with the till screen are copied rather than imported, because
+ * `apps/server` must not depend on `apps/till`; keep them in step.
  */
 import {
   QR_QUIET_ZONE,
@@ -75,17 +45,14 @@ export interface ReceiptIssuer {
 }
 
 /**
- * The owner-authored NON-FISCAL trim (design §8), mirroring the till's `ReceiptConfig`: a
- * `headerSubtitle` printed under the venue name and a `footerMessage` under the VERI*FACTU legend, both
- * optional. It renders AROUND the immutable art. 7.1 core, never inside it — no field here can suppress
- * or reorder a mandated element.
+ * The owner-authored NON-FISCAL trim: a subtitle under the venue name and a message under the
+ * legend. No field here can suppress or reorder a mandated element.
  */
 export interface ReceiptTrim {
   headerSubtitle?: string;
   footerMessage?: string;
 }
 
-/** The three printer settings a receipt is laid out for (design 2026-09-14). */
 export interface ReceiptPrinterSettings {
   paperWidth: PaperWidth;
   resolution: Resolution;
@@ -97,7 +64,7 @@ export interface ReceiptPrinterSettings {
 export interface FormatReceiptInput {
   /** The FILED sale to re-render — the authoritative fiscal figures and the goods composition. */
   result: TillSaleResult;
-  /** The issuer identity legally printed on the ticket (art. 7.1.d). Supplied by the caller (Task 5). */
+  /** The issuer identity legally printed on the ticket (art. 7.1.d). */
   issuer: ReceiptIssuer;
   /** The owner-authored non-fiscal header/footer trim; `{}` (or missing fields) prints no trim. */
   receipt: ReceiptTrim;
@@ -111,10 +78,8 @@ export interface FormatReceiptInput {
 }
 
 /**
- * The fiscal labels are fixed Spanish constants — the invoice locale for a Spanish (ES-común) venue is
- * es-ES, so the receipt is a Spanish legal document regardless of the operator-UI language. The
- * `invoiceLocale` input drives number/date FORMATTING only; a non-Spanish invoice locale (a future
- * non-ES territory) would need a translated label set. Kept identical to `till-ticket-view.ts`'s LABEL.
+ * Fixed Spanish legal labels, whatever the operator's language; a non-Spanish invoice locale would
+ * need its own set.
  */
 const LABEL = {
   nif: "NIF",
@@ -132,38 +97,27 @@ const LABEL = {
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
 const LEGEND = "VERI*FACTU";
 
-/** The multiplication sign of a per-dish option-quantity badge (`×2`); `receipt-ticket.test.ts` pins it. */
+/** The per-dish option-quantity badge (`×2`). */
 const QTY_BADGE = "×";
 
 /**
- * A filed line's goods name in the invoice locale (art. 7.1.e), resolved from the line's snapshotted
- * `descriptions` map exactly as the screen's `lineName` does: the invoice locale, then any description
- * the line carries, degrading to "" only for an empty map (a catalogue defect that still prints
- * something rather than blocking the paper — spec §4).
+ * A filed line's goods name (art. 7.1.e): the invoice locale, then any description; "" only for an
+ * empty map, so a catalogue defect still prints rather than blocking the paper.
  */
 function lineName(descriptions: Record<string, string>, locale: string): string {
   return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";
 }
 
-/** A dish and the option lines filed beneath it — the shape {@link groupByParent} produces. */
 interface LineGroup {
   dish: TillSaleLine;
   options: TillSaleLine[];
 }
 
 /**
- * Group the filed line list into dishes each carrying their child option lines (ordering modifiers,
- * Task 8). A parent dish has `parentLineNo == null`; a child option points at its dish's `lineNo`.
- * The filed lines arrive in emission order — dish immediately followed by its options
- * (`priceBasketWithOptions`) — so a single forward scan attaching each child to the most recent dish
- * groups them without a lookup. This does NOT recompute any figure: it re-orders the SAME already-filed
- * lines, so Σ(dish.gross + options.gross) is unchanged and still equals the filed `total`. Kept tiny and
- * in lock-step with the till's own `groupByParent` (`apps/till/src/screens/till-ticket-view.ts`), NOT
- * imported across the app boundary (an `apps/server` → `apps/till` dependency would be backwards).
- *
- * A leading child with no dish yet (structurally impossible for filed data — a dish is always emitted
- * before its options) is treated as its own dish rather than dropped, so no filed line ever vanishes
- * from a legal receipt and the printed lines always reconcile with the total (§4).
+ * Group the filed lines into dishes with their option lines. Filed lines arrive dish-first
+ * (`priceBasketWithOptions`), so one forward scan suffices; nothing is recomputed, so the printed
+ * lines still reconcile with the filed total. A child with no dish before it becomes its own group
+ * rather than being dropped, so no filed line vanishes from a legal receipt.
  */
 function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
   const groups: LineGroup[] = [];
@@ -186,12 +140,10 @@ function issueDate(iso: string, locale: string): string {
 }
 
 /**
- * Render one filed sale to an ESC/POS payload — the customer's factura simplificada. Pure and total:
- * an empty `lines`/`vatBreakdown` yields a header-and-total ticket rather than throwing, and an empty
- * `result.qr` prints no QR while still printing the legend. The element ORDER mirrors
- * `till-ticket-view.ts` element for element; only the line breaks depend on the printer. Every string
- * is prepared for the printer's character set before it is measured, so no printed line is longer than
- * the paper's column count.
+ * Render one filed sale — the customer's factura simplificada. Total: empty `lines`/`vatBreakdown`
+ * yield a header-and-total ticket, and an empty `result.qr` prints no QR but still the legend.
+ * Every string is prepared for the character set before it is measured, so no line exceeds the
+ * column count.
  */
 export function formatReceipt({
   result,
@@ -286,9 +238,8 @@ export function formatReceipt({
   } else if (t.method === "card") {
     b.line("Tarjeta");
     if (t.reference !== null) text(`Ref. ${t.reference}`);
-    // String compare: `tenders.tip_amount` stores a count of whole cents, and `readTenderBlock`
-    // (`till-sale.ts`) converts it at the row with `centsToDecimal`, which always renders two
-    // places — so the tip reaching here is canonical "0.00"/"0.50" and never an unpadded "0".
+    // String compare is safe: `readTenderBlock` renders the tip with `centsToDecimal`, always two
+    // places.
     if (t.tip !== "0.00") {
       row(LABEL.tip, formatMoney(t.tip, locale));
       row(LABEL.charged, formatMoney(t.charged, locale));

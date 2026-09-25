@@ -80,8 +80,7 @@ const drinks: ResolvedExtraList = {
   minPicks: 0,
   maxPicks: null,
   active: true,
-  // 4.50, not the wine product's own unit price: the projection has already settled the menu → list
-  // item → product chain into this field (packages/catalogue/src/extra-projection.ts).
+  // 4.50, not the wine product's own unit price: the projection has already settled the price.
   items: [
     {
       id: "item-wine",
@@ -94,9 +93,6 @@ const drinks: ResolvedExtraList = {
 };
 
 // The wine is a 21% product (`general`) while the dish it is added to is a 10% one (`reduced`).
-// `buildLineExtras` is never handed the dish's class at all, so what this fixture pins here is that
-// the child reads the PRODUCT's; the dish-beside-extra pairing itself belongs to working-order.ts,
-// the next slice.
 const products = new Map<string, ExtraProductFacts>([
   [
     "product-wine",
@@ -149,7 +145,7 @@ describe("buildLineExtras", () => {
       },
     ]);
     // Neither the list's id nor the label's reaches the line, so editing or deleting either cannot
-    // rewrite a saved order (spec §2.3).
+    // rewrite a saved order.
     expect(JSON.stringify(optionSnapshots)).not.toContain("list-cooked");
     expect(JSON.stringify(optionSnapshots)).not.toContain("label-medium-rare");
   });

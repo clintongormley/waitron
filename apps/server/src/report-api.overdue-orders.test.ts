@@ -41,9 +41,8 @@ async function seedFiredOrder(
   db: Database,
   opts: { orderNumber: number; ageMinutes: number; stationId: string; tableLabel?: string },
 ): Promise<string> {
-  // Through the table definitions: every id here is a `$defaultFn` generator on this engine, and
-  // `descriptions` is encoded by the column's own write mapping — the `::jsonb` cast it replaces is
-  // a syntax error here.
+  // Through the table definitions: every id is a `$defaultFn` generator, and `descriptions` is
+  // encoded by the column's own write mapping.
   const [catalogue] = await db
     .insert(catalogues)
     .values({ name: "Test catalogue" })
@@ -81,10 +80,7 @@ async function seedFiredOrder(
       lineTotal: 100,
     })
     .returning({ id: workingOrderLines.id });
-  // ONE clock reading, used twice. `now()` was PostgreSQL's transaction-start time and both stamps
-  // in this statement took it, so the backdated `queued_at` was exactly `ageMinutes` before
-  // `fired_at`; reading the clock once in JavaScript keeps that exact. There is no interval type
-  // here, so the subtraction happens on a `Date` and the ISO string binds.
+  // ONE clock reading, so the backdated `queued_at` is exactly `ageMinutes` before `fired_at`.
   const firedAt = new Date();
   const queuedAt = new Date(firedAt.getTime() - opts.ageMinutes * 60_000);
   await db.insert(ticketItems).values({

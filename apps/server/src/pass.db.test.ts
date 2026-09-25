@@ -15,37 +15,8 @@ import { stripeAccountResolver } from "./stripe-account.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 
 /**
- * One composed scheduler pass against a real migrated database.
- *
- * Named `pass.db.test.ts` for the one thing that separates it from its sibling: it opens a migrated
- * database and runs the REAL drain and reconcile duties against it, where `pass.test.ts` hands
- * `runPass` inline fake duties and opens no database at all — `grep -c useVenueDb
- * apps/server/src/pass.test.ts` prints 0 (run 2026-09-22).
- *
- * ## The role this file was built around is gone, and is replaced by nothing
- *
- * **SQLite has no roles**, so both cases now run on the one venue handle. What is no longer checked
- * by anything: that the deployment role can reach the vault, the reconcile tables and the scheduler
- * ledger, and no further. The two cases keep their assertions unchanged; only the handle they run
- * on changed.
- *
- * The `nonInfo` assertion in the first case was doing double duty and now does single duty. It was
- * the outside-in signal for a MISSING GRANT, because `runDue` folds a permission-denied error into
- * `TickResult.skipped` and logs a warning instead of throwing. There is no permission-denied error
- * on this engine, so what the assertion still catches is any other cause of a skip or defer.
- *
- * ## Both cases were RED on a BROKEN PRODUCT FUNCTION, and both pass now
- *
- * `credentialProvisioned` (`packages/credentials/src/store.ts`) was `select credential_tenants(?)`.
- * That function was created by a PostgreSQL-only migration this branch deleted; the SQLite
- * credentials baseline creates the table and nothing else, and SQLite has no user-defined SQL
- * functions. The disposition document records this as "BLOCKER 2", and
- * `packages/credentials/src/credentials.test.ts` carried the same red cases from the other side.
- * It is an ordinary query now and both cases below pass unadjusted.
- *
- * They were kept, converted and red, rather than deleted, because this is the ONLY suite that runs
- * `runPass` against a real database — `pass.test.ts` beside it is all fakes — so deleting them
- * would have left the composed drain + reconcile + ledger pass covered by nothing.
+ * One composed scheduler pass, with the real drain and reconcile duties, against a real migrated
+ * database. `pass.test.ts` beside it uses fake duties and no database.
  */
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 3).toString("base64"),
@@ -59,8 +30,8 @@ const suite = useVenueDb({
 });
 const ring = loadKeyRing(KEY_ENV);
 
-/** A settlement report that finds nothing — the audit's clean case. The point of this suite is the
- * database path a composed pass takes, not the audit's classification, which has its own suites. */
+/** A settlement report that finds nothing: this suite is about the pass's database path, not the
+ * audit's classification. */
 const emptyStripe = {
   balanceTransactions: {
     list: () => ({ autoPagingEach: () => Promise.resolve() }),
@@ -105,9 +76,7 @@ describe("one composed pass against a migrated database", () => {
 
     const report = await runPass(
       {
-        // No `envios` rows exist, so the drainer finds no tenants and never asks for a
-        // certificate. Its transport is covered by aeat-transport.test.ts against a real
-        // handshake; what this asserts is that the composed pass runs.
+        // No `envios` rows exist, so the drainer finds no work and never asks for a certificate.
         drain: (now) =>
           drain(
             {
@@ -131,37 +100,29 @@ describe("one composed pass against a migrated database", () => {
 
     expect(report.duties.every((entry) => entry.ok)).toBe(true);
 
-    // `runDue` catches a duty's error and folds it into `TickResult.skipped` rather than throwing,
-    // so `report.duties.every(ok)` above stays `true` through a failure. Nothing above `info` is
-    // what actually notices: a `drain.tenant_skipped` or `reconcile.pair_skipped` warning is how a
-    // broken duty looks from the outside.
+    // `runDue` folds a duty's error into `TickResult.skipped` rather than throwing, so every `ok`
+    // above stays true through a failure; a warning line is how a broken duty shows from outside.
     const nonInfo = lines
       .map((line) => JSON.parse(line) as { level: string; event: string })
       .filter((entry) => entry.level !== "info");
     expect(nonInfo).toEqual([]);
 
-    // The ledger is the proof that the pass reached the database at all: a `succeeded` row means
-    // the read, the insert and the update on `scheduled_runs` each landed.
+    // A `succeeded` row means the read, the insert and the update on `scheduled_runs` each landed.
     const rows = await suite.db.execute<{ count: string }>(
       sql`select count(*) as count from scheduled_runs
           where duty = ${RECONCILE_DUTY} and state = 'succeeded'`,
     );
     expect(Number(rows.rows[0]!.count)).toBeGreaterThan(0);
 
-    // The folded `nextDueAt` is the one composed output the row count above does not pin: it is
-    // what the real loop (`loop.ts`'s `sleepMsFor`) sleeps on. A clean sweep with nothing deferred
-    // or skipped folds in a FUTURE time — never `now` — so this fails the moment anything pushes a
-    // pair into `deferred`/`skipped`, which reports `now` instead.
+    // A clean sweep folds in a future time; a deferred or skipped pair would report `now` instead.
     expect(report.nextDueAt).not.toBeNull();
     expect(report.nextDueAt!.getTime()).toBeGreaterThan(NOW.getTime());
   });
 
   it("does not enumerate a tenant provisioned for a different purpose", async () => {
     await seedTenant(suite.db);
-    // Provisioned for `fiscal.aeat`, NOT `payments.stripe` — a tenant with no credential at ALL
-    // would pass this assertion even if `credentialProvisioned`'s `purpose` predicate were deleted
-    // outright. Giving it a DIFFERENT purpose's credential is what makes the filter, not merely the
-    // row's absence, the thing this test depends on.
+    // Provisioned for `fiscal.aeat`, not `payments.stripe`: with no credential at all this would pass
+    // even without `credentialProvisioned`'s `purpose` filter.
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, ring, {
         purpose: "fiscal.aeat",

@@ -1,10 +1,4 @@
-// Side-effect only: loads this host's errors.ts augmentation for the codes THESE routes throw
-// directly — `payment.provider_in_use`, `reader.not_found`, `reader.provider_disconnected`, plus the
-// shared management-gate codes (`management.request_invalid`, `shared.invalid_id`) and `device.not_found`.
-// The seat codes this surface relays — `payment.provider_credential_rejected` /
-// `payment.provider_merchant_ambiguous` (@waitron/payments and its adapter packages) and
-// `payment.credential_environment_mismatch` (@waitron/payments-stripe) — reach the type registry
-// through the VALUE imports of `cardProviderById` and the provider seats in `CARD_PROVIDERS`.
+// Side-effect only: loads this host's errors.ts augmentation for the codes these routes throw.
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -36,14 +30,9 @@ import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 
 /**
- * Everything `mountPaymentsApi` needs. One taxpayer per database, so a by-id read needs only the
- * id. `ring` is
- * the vault key ring the host opened once at boot: this is the FIRST dashboard write to the credential
- * vault. `pool` is the lazy card-provider pool — these routes only `evict` it so a credential change
- * takes effect without a restart; the pay path (Task 12) is what `get`s from it. `providers` is the
- * composition list (`CARD_PROVIDERS`); the routes reach a seat only through `cardProviderById`, never by
- * importing a provider package. `fetch` is injected only by tests whose seat needs it (SumUp); the live
- * host omits it and the seats fall back to the global.
+ * `pool` is only `evict`ed here, so a credential change takes effect without a restart. The routes
+ * reach a seat only through `cardProviderById`, never by importing a provider package. `fetch` is
+ * injected by tests; the live host omits it and the seats fall back to the global.
  */
 export interface PaymentsApiDeps {
   db: Database;
@@ -55,30 +44,8 @@ export interface PaymentsApiDeps {
   fetch?: typeof fetch;
 }
 
-/** The ONE permission every payments-management route is gated on — a manager/admin act, never a till
- * operator's (permissions.ts maps `payments.manage` to manager + admin). One named constant referenced
- * at the gate, the `print-api.ts` seam. */
 const PAYMENTS_MANAGE: Permission = "payments.manage";
 
-/**
- * Every AppError CODE these routes answer, and the HTTP status it maps to. CLIENT faults only: a
- * genuine SERVER fault reaches `run` as a non-AppError and becomes an opaque `server.internal` 500. A
- * registered code absent here defaults to 400 via `run`. Each surface owns its own STATUS map.
- *
- *  - The management gate (mirroring `print-api.ts`): `management_session.*` (401),
- *    `person.suspended`/`authorization.not_permitted` (403), `management.request_invalid` (400) from
- *    the body screens, and `shared.invalid_id` (400) from the path-id screen.
- *  - Provider selection: `payment.provider_unknown` (an id naming no seat, 404).
- *  - Connect: `payment.provider_credential_rejected` and `payment.credential_environment_mismatch`
- *    (422 Unprocessable — the credential is well-formed but does not verify / is the wrong
- *    environment) and `payment.provider_merchant_ambiguous` (409 — the key spans several merchants and
- *    the form must pick one, relayed with its `{ merchants }` list).
- *  - Disconnect: `payment.provider_in_use` (409 — an active reader still uses the provider).
- *  - Readers / device default: `reader.provider_disconnected` (409 — a reader op on a provider with no
- *    sealed credential), `payment.pairing_refused` (422 — SumUp refused the pairing code: bad, expired
- *    or already used), `reader.not_found` (404 — a reader id that is not this tenant's), and
- *    `device.not_found` (404 — a device id that is not this tenant's).
- */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
@@ -98,13 +65,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.not_found": 404,
 };
 
-// The one error boundary every payments route wraps its handler in.
 const run = createErrorBoundary(STATUS, "payments.failed");
 
-/** Screen the connect form body into a `Record<string,string>` the seat's `connect` accepts: every
- * value must be a string (a provider form has only text/password inputs), else
- * `management.request_invalid` naming the field. `merchantCode` (SumUp's picker re-submit) passes
- * through like any other field. */
 function screenStringMap(body: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [field, value] of Object.entries(body)) {
@@ -115,18 +77,10 @@ function screenStringMap(body: Record<string, unknown>): Record<string, string> 
 }
 
 /**
- * Mounts the payments-management routes on an existing Hono app — the `mountPrintApi` convention.
- * Every route is `requireManagementSession`-gated then funnels its DB work through the local `gated`
- * helper, which opens a transaction and `authorizeManager`s `payments.manage`
- * before the op runs, in exactly one place. Provider `connect`/reader calls reach the network, so they
- * run OUTSIDE any transaction (a `withTransaction` is never held across a provider round-trip); the gate
- * runs first, in its own `gated` call, so an unauthorised caller never reaches the provider.
+ * Provider calls reach the network, so they run outside any transaction; the `gated` authorisation
+ * runs first, in its own transaction, so an unauthorised caller never reaches the provider.
  */
 export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger): void {
-  // Open a transaction, confirm the caller's management session carries
-  // `payments.manage`, then run `fn`. Every route funnels its DB work through here so the gate is
-  // applied identically and in exactly one place (print-api.ts's seam). Proven by deletion: removing
-  // the `authorizeManager(...)` call makes a staff session succeed on every gated route.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
       await authorizeManager(tx, {
@@ -136,9 +90,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       return fn(tx);
     });
 
-  // The runtime context every provider seat call takes — the db handle, the vault key ring, and the
-  // test-injected fetch when present. Built identically at each reader call
-  // (add / status / remove), so it lives in one place.
   const runtimeDeps = (): CardProviderRuntimeDeps => ({
     db: deps.db,
     ring: deps.ring,
@@ -158,19 +109,11 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
   };
   const readerWhere = (id: string) => eq(cardReaders.id, id);
   const requireReader = async (tx: Transaction, id: string) => {
-    // Local mutations decide from this row, so Enable cannot race a committed unpair. On PostgreSQL
-    // the read took `for update`, which kept the row still between the read and the caller's own
-    // UPDATE in the same transaction. One write transaction runs on the venue file at a time
-    // (`packages/store/src/write-queue.ts`, reached through `withTransaction` in
-    // `packages/db/src/tenancy.ts`, which is what `gated` above opens), so no OTHER write transaction
-    // can run in that gap — and there is no lock to take: SQLite has none, and drizzle's SQLite query
-    // builder has no `.for()`. Stated once for the whole tree, with its measurement and its control, on
-    // `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
-    //
-    // The unpair route is the one caller this never covered and still does not: it reads here in one
-    // `gated` transaction, calls the provider, then writes in a THIRD. The lock was released at the
-    // first commit, before the network call — so that route's decision was always taken on a row it
-    // no longer held.
+    // No lock is taken: `withTransaction` (`packages/db/src/tenancy.ts`) runs one write
+    // transaction per file at a time, so no other write lands between this read and the caller's
+    // own write in the same `gated` call. The unpair route reads and writes in separate
+    // transactions with the provider call between them, so its decision is taken on a row it no
+    // longer holds.
     const [reader] = await tx.select().from(cardReaders).where(readerWhere(id));
     if (reader === undefined) throw new AppError("reader.not_found", { id });
     return reader;
@@ -264,9 +207,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             .update(cardReaders)
             .set({
               active: action === "enable",
-              // The clock is read in JavaScript and bound: `now()` is a PostgreSQL function this
-              // engine does not have. `nowIso` because `disabled_at` is a `tsString` column, the
-              // spelling `packages/payments/src/store.ts` stamps every other column here with.
               disabledAt: action === "enable" ? null : nowIso(),
             })
             .where(readerWhere(id));
@@ -276,20 +216,17 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     );
   }
 
-  // ── List every provider and whether it is connected (payments.manage) ────────────────────────────
   app.get("/management-api/payments/providers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // "Connected" = a sealed credential exists for the seat's purpose. Read the purposes the database
-      // holds (metadata only — no ciphertext, no decrypt, never a secret).
+      // "Connected" = a sealed credential exists for the seat's purpose; only purposes are read,
+      // never a secret.
       const rows = await gated(sessionId, (tx) =>
         tx.select({ purpose: tenantCredentials.purpose }).from(tenantCredentials),
       );
       const connected = new Set(rows.map((r) => r.purpose));
-      // `merchantName` is deliberately omitted here: it is not stored (only returned at connect time),
-      // and recovering it would need decrypting the credential and calling the provider. The field is
-      // optional on the contract; the connect response is where the dashboard learns it. The
-      // "simulator" state is Task 12's till-boot concern, not computed here.
+      // `merchantName` is omitted: it is not stored, and recovering it would need decrypting the
+      // credential and calling the provider. The connect response is where the dashboard learns it.
       return c.json(
         deps.providers.map((p) => ({
           providerId: p.providerId,
@@ -302,7 +239,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
-  // ── Connect a provider: verify the typed credential, seal it, evict the pool (payments.manage) ────
   app.post("/management-api/payments/providers/:id/connect", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -312,9 +248,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       // Authorise BEFORE the provider round-trip so an unauthorised caller never reaches the network.
       await gated(sessionId, async () => {});
       const seat = cardProviderById(deps.providers, id); // payment.provider_unknown on a bad id
-      // The seat verifies the credential and returns the merchant name to confirm PLUS the complete
-      // payload to seal. `environment` MUST be passed or the Stripe prefix/env guard silently no-ops
-      // (it refuses a wrong-environment key only when it knows the host's env).
+      // `environment` must be passed: the Stripe seat refuses a wrong-environment key only when it
+      // knows the host's environment.
       const { merchantName, sealedPayload } = await seat.connect(
         {
           ...(deps.fetch ? { fetch: deps.fetch } : {}),
@@ -337,15 +272,13 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
-  // ── Disconnect a provider (payments.manage) ──────────────────────────────────────────────────────
   app.post("/management-api/payments/providers/:id/disconnect", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
       await gated(sessionId, async (tx) => {
         const seat = cardProviderById(deps.providers, id); // payment.provider_unknown on a bad id
-        // Refuse while any ACTIVE reader still uses this provider — the operator disables those first.
-        // `activeReaders` is a COUNT (never a reader id or a secret).
+        // Refused while an active reader uses this provider; the operator disables those first.
         const active = await tx
           .select({ id: cardReaders.id })
           .from(cardReaders)
@@ -360,18 +293,12 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
-  // ── List this tenant's card readers (payments.manage) ────────────────────────────────────────────
   app.get("/management-api/payments/readers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // Active AND disabled: `active` on each row lets the dashboard show a disabled reader (historical
-      // payments still resolve its name). `deviceCount` comes from a SEPARATE aggregate
-      // rather than a correlated subquery over the `.from()` base — a `sql` scalar correlated to the
-      // base table binds to the subquery's table and returns a wrong answer (CLAUDE.md §3, #152).
-      // `canEnable` is derived from `unpairedAt` HERE rather than asked of the engine as
-      // `unpaired_at is null`: a `sql` predicate is an expression, not a declared column, so no read
-      // mapping reaches it and this engine answers 0/1 — which this route then put on the wire,
-      // where `apps/dashboard/src/api/client.ts` declares a boolean.
+      // `deviceCount` comes from a separate aggregate: a `sql` scalar correlated to the `.from()`
+      // base binds to the subquery's table and answers wrongly (CLAUDE.md §3). `canEnable` is
+      // derived here, not as a `sql` predicate, which the engine would answer as 0/1.
       const { readers, counts } = await gated(sessionId, async (tx) => ({
         readers: await tx
           .select({
@@ -402,7 +329,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
-  // ── Add a card reader (payments.manage) ──────────────────────────────────────────────────────────
   app.post("/management-api/payments/readers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -422,8 +348,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .where(eq(tenantCredentials.purpose, seat.credentialPurpose));
         if (cred === undefined) throw new AppError("reader.provider_disconnected", { providerId });
       });
-      // Relay to the seat (pairs SumUp / verifies Stripe) OUTSIDE any transaction — a provider
-      // round-trip. The seat reads the sealed credential itself.
       const result = await seat.readers.add(runtimeDeps(), {
         name,
         ...(code !== undefined ? { code } : {}),
@@ -448,9 +372,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         return row;
       });
       if (inserted === undefined) {
-        // The provider was disconnected mid-add. Best-effort unpair the vendor reader we just paired
-        // so it is not stranded; a remove failure is swallowed (the row was never inserted, and the
-        // operator's next action is to reconnect and add again).
+        // Disconnected mid-add: best-effort unpair the vendor reader so it is not stranded.
         await seat.readers.remove(runtimeDeps(), result.providerRef).catch(() => {});
         throw new AppError("reader.provider_disconnected", { providerId });
       }
@@ -458,12 +380,10 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
-  // ── A reader's live status (payments.manage) ─────────────────────────────────────────────────────
   app.get("/management-api/payments/readers/:id/status", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const readerId = requireUuidParam(c.req.param("id"), "CardReaderId");
-      // Load the reader BY ID — an unknown reader id is `reader.not_found`, never readable.
       const reader = await gated(sessionId, async (tx) => {
         const [row] = await tx
           .select({ provider: cardReaders.provider, providerRef: cardReaders.providerRef })
@@ -489,8 +409,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       await gated(sessionId, (tx) => requireConnected(tx, seat));
       // Vendor failure leaves the local row unchanged. Disabled rows remain addressable for retries.
       await seat.readers.remove(runtimeDeps(), reader.providerRef);
-      // One clock reading for both stamps, so the unpair lands as one moment — which is what
-      // PostgreSQL's `now()`, being transaction-start time, gave the two calls for free.
+      // One clock reading for both stamps, so the unpair lands as one moment.
       const unpairedAt = nowIso();
       await gated(sessionId, (tx) =>
         tx
@@ -502,7 +421,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
-  // ── Read a device's default reader (payments.manage) ─────────────────────────────────────────────
   app.get("/management-api/payments/devices/:id/reader", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -517,32 +435,28 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
-  // ── Set or clear a device's default reader (payments.manage) ─────────────────────────────────────
   app.put("/management-api/payments/devices/:id/reader", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const deviceId = requireUuidParam(c.req.param("id"), "DeviceId");
       const body = await readJsonBody<{ readerId?: unknown }>(c);
-      // REQUIRED field, either a reader uuid (set) or explicit null (clear). Absent → request_invalid.
+      // Required: a reader id sets the default, an explicit null clears it.
       if (!("readerId" in body)) {
         throw new AppError("management.request_invalid", { field: "readerId" });
       }
       const readerId = body.readerId === null ? null : requireBodyUuid(body.readerId, "readerId");
       await gated(sessionId, async (tx) => {
-        // The device must exist (by id) — an unknown device id is `device.not_found`, which also keeps
-        // the device foreign key from refusing with an opaque 500.
+        // So an unknown device is `device.not_found`, not a foreign-key refusal (a 500).
         const [device] = await tx
           .select({ id: devices.id })
           .from(devices)
           .where(eq(devices.id, deviceId));
         if (device === undefined) throw new AppError("device.not_found", { deviceId });
         if (readerId === null) {
-          // Clear the default = delete the row (idempotent; a device with none just has no default).
           await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.deviceId, deviceId));
           return;
         }
-        // A named reader must exist AND be active — an unknown or disabled reader is `reader.not_found`,
-        // never assignable (keeps the reader FK from a 500).
+        // A disabled reader is `reader.not_found` too: it is never assignable.
         const [reader] = await tx
           .select({ id: cardReaders.id })
           .from(cardReaders)

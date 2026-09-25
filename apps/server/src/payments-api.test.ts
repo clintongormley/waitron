@@ -31,30 +31,8 @@ import type { Logger } from "./logger.js";
 import "./errors.js";
 
 /**
- * The card-provider and card-reader management routes, on the engine the box now runs.
- *
- * ## The two properties this file was placed here for, and what is left of them
- *
- * The two properties are the table grants the routes need and the `payments.manage` gate. **The
- * grant half is gone and is replaced by nothing**: SQLite has no roles and one process opens one
- * file. The gate half is application logic in the route layer and is unaffected — `gates every new
- * route before reaching the provider` still proves it.
- *
- * Two cases changed with the engine, each recorded where it sits:
- *
- * - `runs as non-superuser app_user` is **DELETED**: there is no role to ask about, and nothing
- *   replaces what it checked.
- * - `does not enable across a concurrent committed unpair` no longer stages a race; see the comment
- *   on the case for what it proves now.
- *
- * ## A broken route this header used to declare is fixed
- *
- * `GET /management-api/payments/readers` served `canEnable` as a NUMBER: the route asked the engine
- * for it with `sql<boolean>`, and that type parameter is a cast rather than a read mapping, so
- * SQLite's integer reached the JSON body unconverted and the dashboard was handed `0` and `1` where
- * it expects `false` and `true`. The route derives the field in JavaScript now
- * (`apps/server/src/payments-api.ts`, `canEnable: unpairedAt === null`), and this file is green —
- * run on its own, 2026-09-22.
+ * The card-provider and card-reader management routes: the `payments.manage` gate, credential
+ * sealing, and reader add/adopt/enable/unpair against fake provider seats.
  */
 const noopLog: Logger = () => {};
 
@@ -68,8 +46,6 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// Each unique key must not collide within a test, so per-suite counters stand in for the NIF, the
-// reader ref and the profile/till names.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -92,13 +68,9 @@ interface Venue {
   staffCookie: string;
 }
 
-/** A fresh tenant + location + a manager and a staff person, each with a management session. Each
- * test seeds its OWN venue so reader/credential counts are its own. */
 async function seedVenue(): Promise<Venue> {
-  // Through the table definitions: `tenants.created_at` and `locations.id` are JavaScript
-  // `$defaultFn` generators on this engine, which a raw insert never reaches, and the locale list is
-  // encoded by the column's own write mapping — the `array[...]` constructor it replaces is a syntax
-  // error here.
+  // Through the table definitions: `$defaultFn` generators and the locale list's write mapping are
+  // never reached by a raw insert.
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
@@ -133,11 +105,6 @@ async function seedVenue(): Promise<Venue> {
   };
 }
 
-/** A `till`-form-factor device in `venue` — the target the device-default-reader routes point at a
- * reader. A `till` device binds a register (till_id) and no station.
- *
- * Through the table definitions: each `id`, each `created_at` and `devices.enrolled_at` is a
- * `$defaultFn` generator on a NOT NULL column here, which a raw `insert into ... ` never reaches. */
 async function seedDevice(venue: Venue): Promise<string> {
   const [profile] = await suite.db
     .insert(deviceProfiles)
@@ -160,9 +127,7 @@ async function seedDevice(venue: Venue): Promise<string> {
   return dev!.id;
 }
 
-/** A fake Stripe SDK: a good key answers with an account + an online reader; a key carrying `bad`
- * throws on the account read (the rejected-credential signal). No network — the seat's SDK factory is
- * injected, so the route path is exercised without reaching Stripe. */
+/** A fake Stripe SDK: a key carrying `bad` throws on the account read (a rejected credential). */
 function fakeStripeFor(secretKey: string): unknown {
   if (secretKey.includes("bad")) {
     return {
@@ -486,8 +451,6 @@ describe("device default reader — screens", () => {
 });
 
 describe("an injected fetch is threaded to the seat", () => {
-  // The live host omits `fetch` (the seats use the global); a caller that DOES supply one has it
-  // passed into `connect` and every `readers.*` call. This exercises that path end to end.
   function mountAppWithFetch(venue: Venue): Hono {
     const app = new Hono();
     mountPaymentsApi(
@@ -571,12 +534,7 @@ describe("disconnect", () => {
 
 describe("add reader — races with a concurrent disconnect", () => {
   it("does NOT leave an active reader whose provider was disconnected mid-add", async () => {
-    // The add's provider round-trip (`seat.readers.add`) runs OUTSIDE any transaction. If a disconnect
-    // commits between the pre-check and the final INSERT, the provider now holds no sealed credential,
-    // so inserting an ACTIVE reader would strand a row whose provider is gone. The insert transaction
-    // re-checks the credential and refuses (`reader.provider_disconnected`), best-effort unpairing the
-    // just-paired vendor reader. Reproduces the Codex run-it probe (retained
-    // /tmp/review-5510d4be-probes.pg.test.ts): pause the add, disconnect, resume the add.
+    // Pause the add inside its provider round-trip (outside any transaction), disconnect, resume.
     const venue = await seedVenue();
     let entered!: () => void;
     let release!: () => void;
@@ -740,9 +698,7 @@ describe("reader adoption and local management", () => {
     ).toBe(204);
     expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
     expect(await available()).toEqual([{ ...vendor, status: "disabled" }]);
-    // Read through the table definition, and `dated` derived in JavaScript: `active` is an integer
-    // column with a boolean read mapping here, and `disabled_at is not null` in SQL would come back
-    // as 0/1. The assertion below is the one this case has always made.
+    // `dated` is derived in JavaScript: `disabled_at is not null` in SQL would come back as 0/1.
     const disabled = (
       await suite.db
         .select({ active: cardReaders.active, disabledAt: cardReaders.disabledAt })
@@ -880,18 +836,8 @@ describe("reader adoption and local management", () => {
   });
 
   it("does not enable across a committed unpair the request never saw", async () => {
-    // WHAT THIS CASE PROVES NOW, AND WHAT IT LOST. It used to stage a race: an open transaction
-    // held the row while the enable request blocked on its lock, and a probe of `pg_stat_activity`
-    // asserted the request really was waiting before the hold was released. There is one
-    // connection and one writer per file here, so neither half can be staged — the probe has no
-    // counterpart and is deleted, and `withWriteLock` (`packages/store/src/write-queue.ts`)
-    // serialises the enable behind the unpair rather than making it wait on a lock.
-    //
-    // What survives is the OUTCOME, and it is not vacuous: the enable is issued while the unpair
-    // is still open, so the request cannot have read `unpaired_at` before it was written, and it
-    // still answers 422. The route re-reads the row inside its own transaction; that re-read is
-    // what the assertion catches. What is NO LONGER checked anywhere is what the route does when
-    // the two genuinely overlap.
+    // The enable is issued while the unpair's write transaction is still open, so it is serialised
+    // behind it and must read the committed `unpaired_at`. This pins the outcome, not an overlap.
     const venue = await seedVenue();
     const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
     await connectStripe(app, venue);
@@ -907,8 +853,6 @@ describe("reader adoption and local management", () => {
       updated = resolve;
     });
     const unpairWrite = withTransaction(suite.db, async (tx) => {
-      // ONE clock reading bound to BOTH stamps, so the two columns take the same value. Both are
-      // text columns, and `nowIso()` is their canonical spelling.
       const unpaired = nowIso();
       await tx.execute(
         sql`update card_readers set active = false, disabled_at = ${unpaired}, unpaired_at = ${unpaired} where id = ${id}`,

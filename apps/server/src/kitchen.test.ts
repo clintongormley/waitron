@@ -37,9 +37,7 @@ import {
 } from "./kitchen.js";
 import "./errors.js";
 
-// These are CONFIG verbs — plain inserts and by-id UPDATEs. The `till.configure` gate lives on the
-// ROUTE (Task 7), and the `WHERE is_default` partial-unique is proven in packages/db's
-// kitchen-stations.test.ts.
+// The one-default partial unique is pinned in packages/db/src/schema/kitchen-stations.test.ts.
 const LOCALE = "es-ES";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let db: Database;
@@ -49,12 +47,8 @@ beforeAll(() => {
 
 async function setupVenue(): Promise<TillConfig> {
   await seedTenant(db);
-  // Inserted through the table definitions, not as raw SQL: `locations.id`, `tills.id` and
-  // `tills.created_at` are JavaScript generators on this engine (`$defaultFn`), which a raw insert
-  // never reaches — `id text PRIMARY KEY NOT NULL` and `created_at text NOT NULL` in
-  // `packages/db/drizzle/0000_baseline.sql:1` and `:39`. The locale list goes over as an array
-  // because the column's own write mapping encodes it; the `array[...]` constructor it replaces is
-  // a syntax error here (`near "[?]": syntax error`).
+  // Inserted through the table definitions, not as raw SQL: the ids and `created_at` come from
+  // `$defaultFn` generators, which a raw insert never reaches.
   const [loc] = await db
     .insert(locations)
     .values({
@@ -91,9 +85,6 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
 describe("kitchen-station config", () => {
   it("creates/lists/renames/deactivates a station and flips the default atomically", async () => {
     const cfg = await setupVenue();
-    // Each verb runs in its own transaction (the tables.ts idiom) — setDefaultStation's clear-then-set
-    // atomicity is INTERNAL to that verb's own tx, so per-call transactions preserve it while keeping
-    // the name_taken abort from poisoning a shared transaction (CLAUDE.md §4 order-independence).
     const { id: a } = await asApp(cfg, (tx) =>
       createStation(tx, cfg, { name: "Cocina", isDefault: true }),
     );
@@ -113,9 +104,6 @@ describe("kitchen-station config", () => {
     await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Alpha", displayOrder: 0 }));
     await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Barra" }));
     const list = await asApp(cfg, (tx) => listStations(tx, cfg));
-    // Same display_order (0) → tie-broken by name (Alpha, Barra, Zebra). Defaults applied: displayOrder
-    // 0, isDefault false, active true, and the KDS timing-threshold columns' own defaults (5/10/15) —
-    // the exact Station shape (no createdAt).
     const defaultThresholds = {
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
@@ -150,8 +138,6 @@ describe("kitchen-station config", () => {
   });
 
   it("createStation with isDefault adopts the station as THE default, clearing any prior (single default kept)", async () => {
-    // The clear-first branch of createStation: a second default-on-create must DEMOTE the first, never
-    // trip the `WHERE is_default` partial unique nor mis-surface as station.name_taken.
     const cfg = await setupVenue();
     const { id: a } = await asApp(cfg, (tx) =>
       createStation(tx, cfg, { name: "Cocina", isDefault: true }),
@@ -213,16 +199,9 @@ describe("kitchen-station config", () => {
   });
 
   it("createStation and updateStation rethrow a NON-unique DB error raw, not as station.name_taken", async () => {
-    // Each half provokes a refusal that is NOT the name unique, so `isUniqueViolation` is false and
-    // the verb must rethrow the raw driver error rather than mistranslating it (the false branch of
-    // each catch — the negative control tables.ts's create/update verbs each carry). Both replaced
-    // an int4 `display_order` overflow, which this engine's 64-bit INTEGER no longer refuses.
-    //
-    // CREATE: a location id that names no row trips `kitchen_stations_location_fk`.
-    // UPDATE: `warmAfterMinutes` raised above the row's untouched `overdue_after_minutes` (5 → 99,
-    // default overdue 10) trips `kitchen_stations_thresholds_ordered`, the CHECK that keeps the
-    // three age bands strictly increasing. Nothing in `updateStation` validates the bands, so the
-    // constraint is the only thing that refuses it.
+    // Each half provokes a refusal that is not the name unique. CREATE: a location id naming no row
+    // fails the location foreign key. UPDATE: warm 99 above the untouched default overdue (10) fails
+    // `kitchen_stations_thresholds_ordered`.
     const cfg = await setupVenue();
     const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
     const createErr = await asApp(cfg, (tx) => createStation(tx, badCfg, { name: "Big" })).catch(
@@ -246,7 +225,6 @@ describe("kitchen-station config", () => {
       code: "station.not_found",
       params: { stationId: missing },
     });
-    // A deactivated station cannot be the fallback — requireLiveStation's `active = false` branch.
     const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Old" }));
     await asApp(cfg, (tx) => deactivateStation(tx, cfg, id));
     await expect(asApp(cfg, (tx) => setDefaultStation(tx, cfg, id))).rejects.toMatchObject({
@@ -256,8 +234,6 @@ describe("kitchen-station config", () => {
   });
 });
 
-// Read a category's / product's snapshotted routing column back — the load-bearing assertion for the
-// routing verbs (a null-only check would prove nothing about the UPDATE).
 async function categoryStation(categoryId: string): Promise<string | null> {
   const { rows } = await db.execute<{ station_id: string | null }>(
     sql`select station_id from categories where id = ${categoryId}`,
@@ -277,9 +253,6 @@ async function productCourse(productId: string): Promise<string | null> {
   return rows[0]!.course_id;
 }
 async function seedCategory(): Promise<string> {
-  // `categories.name` is a JSON column, so the object goes over as an object and the column's write
-  // mapping encodes it — the `'{"en":"Food"}'::jsonb` literal it replaces carries a cast this
-  // engine refuses. Same generated-id reason as `setupVenue` above.
   const [row] = await db
     .insert(categories)
     .values({ name: { en: "Food" } })
@@ -291,8 +264,7 @@ async function seedProduct(): Promise<string> {
     .insert(catalogues)
     .values({ name: "Menu" })
     .returning({ id: catalogues.id });
-  // `unitPrice` stays the whole number 100 the raw insert bound: `unit_price` is a money column and
-  // money is a count of whole cents (CLAUDE.md §3), so this is 1.00 EUR here exactly as before.
+  // `unit_price` counts whole cents: 1.00 EUR.
   const [row] = await db
     .insert(products)
     .values({
@@ -361,7 +333,6 @@ describe("routing config", () => {
     await expect(
       asApp(cfg, (tx) => setProductStation(tx, cfg, productId, missing)),
     ).rejects.toMatchObject({ code: "station.not_found", params: { stationId: missing } });
-    // A deactivated station is not a live routing target either — requireLiveStation's inactive branch.
     const { id: dead } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Retired" }));
     await asApp(cfg, (tx) => deactivateStation(tx, cfg, dead));
     await expect(
@@ -373,9 +344,6 @@ describe("routing config", () => {
   });
 });
 
-// KDS-2 course config verbs — mirror the station-config suite above EXACTLY, minus the default concept
-// (kitchen_courses has no `is_default`; a null course simply fires earliest, spec §2b). Config verbs
-// again — the schema's own defaults and course FKs live in packages/db's kitchen-courses.test.ts.
 describe("kitchen-course config", () => {
   it("creates/lists/updates/deactivates a course and orders by display_order then name", async () => {
     const cfg = await setupVenue();
@@ -383,19 +351,14 @@ describe("kitchen-course config", () => {
       createCourse(tx, cfg, { name: "Principales", displayOrder: 1 }),
     );
     await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 }));
-    // Same display_order tie-break by name: create two at 0 and confirm Alpha precedes Zebra.
     await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Zebra", displayOrder: 0 }));
     await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Alpha", displayOrder: 0 }));
     const list = await asApp(cfg, (tx) => listCourses(tx, cfg));
-    // Ordered display_order asc then name asc: (0)Alpha, (0)Entrantes, (0)Zebra, (1)Principales.
     expect(list.map((c) => c.name)).toEqual(["Alpha", "Entrantes", "Zebra", "Principales"]);
-    // The exact Course shape (id/name/displayOrder/active — no createdAt, no isDefault).
     expect(list[3]).toEqual({ id: a, name: "Principales", displayOrder: 1, active: true });
-    // Rename + reorder, then deactivate (deactivated courses drop out of the active-only list).
     await asApp(cfg, (tx) => updateCourse(tx, cfg, a, { name: "Segundos", displayOrder: 9 }));
     await asApp(cfg, (tx) => deactivateCourse(tx, cfg, a));
     expect((await asApp(cfg, (tx) => listCourses(tx, cfg))).some((c) => c.id === a)).toBe(false);
-    // Reactivation is updateCourse({ active: true }).
     await asApp(cfg, (tx) => updateCourse(tx, cfg, a, { active: true }));
     expect(await asApp(cfg, (tx) => listCourses(tx, cfg))).toContainEqual({
       id: a,
@@ -437,12 +400,8 @@ describe("kitchen-course config", () => {
   });
 
   it("createCourse rethrows a NON-unique DB error raw, not as course.name_taken", async () => {
-    // A location id that names no row trips `kitchen_courses_location_fk` — not the name unique, so
-    // `isUniqueViolation` is false and `createCourse` rethrows raw (the false branch of its catch).
-    // It replaced an int4 `display_order` overflow, which this engine's 64-bit INTEGER no longer
-    // refuses.
-    // The `updateCourse` half is the "refusal that is not the name unique" case at the end of this
-    // file: none of its inputs can make the UPDATE refuse otherwise, so it plants a trigger.
+    // A location id naming no row fails the location foreign key, not the name unique. The
+    // `updateCourse` half is the last suite in this file.
     const cfg = await setupVenue();
     const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
     const createErr = await asApp(cfg, (tx) => createCourse(tx, badCfg, { name: "Big" })).catch(
@@ -484,7 +443,6 @@ describe("product-course config", () => {
     await expect(
       asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, missing)),
     ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: missing } });
-    // A deactivated course is not a live routing target either — requireLiveCourse's inactive branch.
     const { id: dead } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Retired" }));
     await asApp(cfg, (tx) => deactivateCourse(tx, cfg, dead));
     await expect(

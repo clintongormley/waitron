@@ -5,11 +5,8 @@ import { AppError, compareDecimal, decimal, multiplyDecimal } from "@waitron/sha
 import type { OptionSnapshot } from "@waitron/shared";
 
 /**
- * What the order path knows about a product offered as an extra: the three names it freezes onto
- * the child line, and the VAT class that line is taxed at. Read from the `products` row (and, for a
- * variant that leaves its VAT blank, its parent's), never from the `extra_list_items` row that offers
- * it — the offer holds nothing that duplicates the product
- * (spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.1).
+ * A product offered as an extra, read from the `products` row (and, for a variant that leaves its
+ * VAT blank, its parent's), never from the `extra_list_items` row that offers it.
  */
 export interface ExtraProductFacts {
   id: string;
@@ -22,49 +19,35 @@ export interface ExtraProductFacts {
 }
 
 /**
- * One child line to be, per picked product. Every field is a value copied off the product or the
- * offer, so nothing here points back at a list or an item: deleting either cannot rewrite the order.
+ * One child line to be, per picked product. Every field is a copied value, so deleting a list or an
+ * item cannot rewrite the order.
  */
 export interface ExtraChild {
   productId: string;
   name: string;
   descriptions: Record<string, string>;
   kitchenName: string | null;
-  /** GROSS, already resolved — see {@link buildLineExtras}. */
+  /** GROSS, already resolved. */
   price: string;
-  /** The extra PRODUCT's own class, never the dish's (spec §3.3, decision 9). */
+  /** The extra PRODUCT's own class, never the dish's. */
   vatClass: VatClass;
   /**
-   * The picks for ONE dish, exactly as sent — NOT multiplied by the dish count. The pricer does
-   * that multiplication: a child is priced at dishQuantity × quantity
-   * (`priceBasketWithOptions`, `packages/catalogue/src/pricing.ts`), so multiplying here too would
-   * charge a dish ×3 with a pick ×2 nine times.
+   * The picks for ONE dish, NOT multiplied by the dish count: `priceBasketWithOptions`
+   * (`packages/catalogue/src/pricing.ts`) does that multiplication.
    */
   quantity: number;
 }
 
 /**
  * Validate one line's answers to the extras and options lists its dish offers, and freeze them:
- * options into `OptionSnapshot`s for the dish line's own column, extras into the child lines the
- * picks become (spec §2.3, §3.4).
+ * options into `OptionSnapshot`s for the dish line's own column, extras into child lines.
  *
- * Deterministic, and never the wire's order: each validator answers in the OFFERED order, and each
- * extras list's picks come back in that list's own item order. An inactive list is neither asked nor
- * answerable, and an active list answered with no picks contributes no child.
+ * `defaultLanguage` is the language the plain staff names widen under, because an `OptionSnapshot`
+ * holds locale -> text maps where an `OptionList`/`OptionLabel` holds a `string`.
  *
- * Nothing is resolved here. `price` is the offer's already-settled `price` — the projection
- * collapsed the menu → list item → product chain into that field
- * (`packages/catalogue/src/extra-projection.ts`) — and `vatClass` is the extra product's effective
- * rate, never the dish's.
- * `defaultLanguage` is the language the two plain staff names widen under, because an
- * `OptionSnapshot` holds locale -> text maps where an `OptionList`/`OptionLabel` holds a `string`.
- *
- * `products` must hold an entry for every product named by an item of an ACTIVE list in
- * `offered.extras`: a pick can only name one of those (`validateExtraSelections`,
- * `packages/catalogue/src/extra-contract.ts`, refuses any other), so a missing entry means the
- * caller resolved the list definitions without resolving their products. That is refused with
- * `product.not_found` rather than skipped, because dropping a picked extra would serve and cook it
- * unbilled.
+ * `products` must hold every product an ACTIVE list in `offered.extras` offers. A missing one is
+ * refused with `product.not_found` rather than skipped, because dropping a picked extra would serve
+ * it unbilled.
  */
 export function buildLineExtras(
   offered: { extras: readonly ResolvedExtraList[]; options: readonly OptionList[] },
@@ -115,20 +98,15 @@ export function buildLineExtras(
 }
 
 /**
- * Take one entry at a time and give it the first candidate that matches, consuming that candidate.
- * Answers the matched candidates IN ENTRY ORDER, or `null` — either because the two sides are
- * different lengths, or because an entry found nothing left to pair with.
+ * Answers the matched candidates IN ENTRY ORDER, or `null`.
  *
- * Greedy is EXACT for both callers here because each one's `matches` is equality of a KEY derived
- * from the two sides: two entries that could take the same candidate match exactly the same set of
- * candidates, so no early choice can strand a later entry. A predicate that merely OVERLAPS —
- * "close enough", a range — would need a real bipartite matching, and this helper would be wrong
- * for it.
+ * Greedy is exact only because every caller's `matches` is equality of a derived KEY: two entries
+ * that could take the same candidate match the same set, so no early choice strands a later entry.
+ * A merely overlapping predicate would need a real bipartite matching.
  *
- * Exact is not the same as MEANINGFUL, and the difference is a caller's problem, not this helper's:
- * when two candidates share a key but differ in something the key leaves out, either pairing is
- * exact and only one of them is right. {@link matchExtraChildren} rules that case out before it
- * asks.
+ * Exact is not correct: two candidates sharing a key but differing in something the key omits pair
+ * either way, and only one is right — the caller must rule that out first, as
+ * {@link matchExtraChildren} does by refusing a product more than one active list offers.
  */
 function pairOff<Entry, Candidate>(
   entries: readonly Entry[],
@@ -148,15 +126,9 @@ function pairOff<Entry, Candidate>(
 }
 
 /**
- * Whether a line's freshly rebuilt options answers say the same thing as the ones it froze — the
- * question `updateHeldOrder` asks to decide that an edit is quantity-only.
- *
- * Compared BY VALUE and without regard to either side's order, because the order both sides are
- * built in is a stored position somebody can move — `docs/developers/modifiers.md` names the
- * columns that carry it and what writes each.
- *
- * A RENAMED list still differs, and that is a settled decision rather than an oversight — the
- * reason, and the test that pins it, are in `docs/developers/modifiers.md`.
+ * Compared BY VALUE — not by JSON key order, send order or offered order, because the offered
+ * order is a stored position a save re-numbers. A RENAMED list still differs, deliberately.
+ * Receipt: docs/developers/modifiers.md.
  */
 export function sameOptionSelections(
   frozen: readonly OptionSnapshot[],
@@ -166,52 +138,14 @@ export function sameOptionSelections(
 }
 
 /**
- * Pair each rebuilt pick with the stored child line that froze it, or `null` when no such pairing
- * exists — in which case the edit is not quantity-only and takes the replacement path.
+ * Pair each rebuilt pick with the stored child line that froze it, or `null` when the edit is not
+ * quantity-only. Neither side's ORDER is part of the pairing. `dishQuantity` is the STORED dish
+ * count, since a child's stored quantity is `dishQuantity × picksPerDish`.
  *
- * A child's stored quantity is `dishQuantity × picksPerDish`, which is how the pricer wrote it
- * (`priceBasketWithOptions`, `packages/catalogue/src/pricing.ts`), so `dishQuantity` here is the
- * STORED dish count — the one the child was written against, not the one being asked for.
- *
- * Neither side's ORDER is part of the pairing. The order both sides come back in is a stored
- * position, and THREE columns hold parts of it, each re-numbered from the body of a save — the full
- * list, with what writes each one, is in `docs/developers/modifiers.md`. Two of the three are
- * reachable from a shipping route today.
- *
- * A PICKED PRODUCT THAT MORE THAN ONE OF THE DISH'S ACTIVE LISTS OFFERS REFUSES THE PAIRING. A
- * child line records the product it is, its quantity and the price it was sold at, and never the
- * list that offered it (spec §3.4). So when two lists offer the same product at two prices, nothing
- * on the stored side says which row belongs to which list, and the pairing cannot tell a quantity
- * change from a pick that MOVED between the two — it keeps the price of whichever row it lands on.
- * That is a real bill, and the two halves of it have different histories. Two picks EXCHANGED
- * between the lists is this branch's own regression, which order-independence introduced: the
- * index-wise comparison it replaced saw the quantities move at each position and replaced the line.
- * ONE pick MOVED from one list to the other predates the branch — measured in a checkout of `main`
- * at `68e36c6aa` with the same fixture, it bills the old list's 1.00 there too. Both now take the
- * replacement path, which re-prices from today's offers; the cost is that the whole order is
- * rewritten, every line losing its id and its price lock, whenever a PICKED product is offered by
- * more than one ACTIVE list. Pinned by "replaces the line when a pick moves to another list
- * offering the same product" and "replaces the line when two lists offering the same product have
- * their picks swapped" (working-order.test.ts).
- *
- * THIS IS NOT A COMPLETE GUARD, and the gap is in the word "offers": the count is taken over the
- * offers as they are NOW, while the ambiguity is a property of the offers the stored child was
- * written against. The escape is one edit — the list the STORED CHILD came off deactivated, or the
- * product taken out of it, between the park and the edit — which brings the count back to one and
- * preserves the moved pick at the old row's price. The opposite edit is closed elsewhere:
- * `validateExtraSelections` refuses a pick naming a list that no longer offers the product. Closing
- * the escape WITHOUT giving up the price lock would mean the child carrying the list it came off,
- * which spec §3.5 rules out; the alternative, and the owner decision it needs, are in
- * `docs/backlog.md`.
- *
- * Two picks naming the same product are the same rule, not a second one: `extra_list_items` holds
- * each product at most once per list (`extra_list_items_list_product_uq`, which
- * `packages/catalogue/src/extras.ts` names in `writeItems`), so a product picked twice is a product
- * two lists offer. A separate check for it was written, then deleted once removing it left every
- * case of these two suites green.
- *
- * The pairing is what the caller needs, not just its truth value: it updates each child's quantity
- * from its own pick, and the two sides are no longer index-aligned.
+ * A picked product that more than one ACTIVE list offers refuses the pairing: a child line does not
+ * record which list it came off, so a pick moved between two lists at two prices would keep the
+ * wrong price. Not a complete guard — it counts the offers as they are NOW. Receipt and the open
+ * gap: docs/developers/modifiers.md.
  */
 export function matchExtraChildren<Child extends { productId: string | null; quantity: string }>(
   offered: readonly ResolvedExtraList[],
@@ -227,7 +161,6 @@ export function matchExtraChildren<Child extends { productId: string | null; qua
     }
   }
   if (picks.some((pick) => (offerCounts.get(pick.productId) ?? 0) > 1)) return null;
-  // Each pick's expected stored quantity, computed once rather than once per probe.
   const dish = decimal(dishQuantity);
   const wanted = picks.map((pick) => ({
     productId: pick.productId,
