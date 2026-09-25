@@ -19,6 +19,7 @@ import {
   type BackupEnvInput,
 } from "./backup-env-writer.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
+import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
 import type { BackupRuntimeStatus, BackupSupervisor } from "./backup-supervisor.js";
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
@@ -218,9 +219,9 @@ function fromCurrent(
  * not the primary (409) — BEFORE any file write, then dry-validate what they will write the way boot
  * would read it (so the route rejects exactly what boot would), write `backup.env`, reload, and assert
  * the EFFECTIVE key equals the expected one (the guard against a partial env override silently
- * orphaning archives): on `apply`, the key the box holds or, holding none, the one supplied; on
- * `rotate`, the requested key. `rotate` with no destination loaded does not reload; it re-reads the
- * key from the box env files instead.
+ * orphaning archives): on `apply`, the key the box holds or, holding none long enough to use, the
+ * one supplied; on `rotate`, the requested key. `rotate` with no destination loaded does not reload;
+ * it re-reads the key from the box env files instead.
  */
 export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "backup.failed");
@@ -251,15 +252,19 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   const heldKey = async (): Promise<string | undefined> =>
     deps.supervisor.current().recoveryKey ?? (await deps.readRecoveryKey());
 
-  // Presence, not validity: a key under the length floor still counts as held, so the status answers
-  // and `rotate` can replace it. `apply` and `GET recovery-key` keep refusing such a key.
+  // Presence, not validity: a key under the length floor still counts as held, so `rotate` can
+  // replace it. `GET recovery-key` keeps refusing such a key.
   const keyPresent = async (): Promise<boolean> => (await readHeldKey(heldKey)).held;
 
-  const statusBody = async (keySet?: boolean) => ({
-    ...projectStatus(await deps.supervisor.status()),
-    recoveryKeySet: keySet ?? (await keyPresent()),
-    stream: deps.readStream(),
-  });
+  const statusBody = async (known?: { held: boolean; key: string | undefined }) => {
+    const { held, key } = known ?? (await readHeldKey(heldKey));
+    return {
+      ...projectStatus(await deps.supervisor.status()),
+      recoveryKeySet: held,
+      recoveryKeyTooShort: held && key === undefined,
+      stream: deps.readStream(),
+    };
+  };
 
   // Read the live backup status (async freshness read folded in). Never carries the recovery key.
   app.get("/api/backup/status", (c) =>
@@ -279,7 +284,8 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   );
 
   // Configure + enable backups from the wizard. Guards, validates, writes `backup.env`, hot-reloads,
-  // and confirms the effective key is the one the box holds or, holding none, the operator supplied.
+  // and confirms the effective key is the one the box holds or, holding none long enough to use, the
+  // one the operator supplied.
   app.post("/api/backup/apply", (c) =>
     run(c, log, async () => {
       await authorize(c);
@@ -287,12 +293,21 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       const body = await readApplyBody(c);
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
-        const held = await heldKey();
+        const held = await readHeldKey(heldKey);
+        // A held key under the length floor is replaced, not kept: every read of the held key goes
+        // through `loadRecoveryKey`, which refuses it, so nothing was ever locked with it.
+        if (held.held && held.key === undefined && body.recoveryKey === undefined) {
+          throw new AppError("backup.recovery_key_too_short", { min: MIN_PASSPHRASE_LENGTH });
+        }
         // One recovery key per venue: a box that already holds one keeps it; only `rotate` changes it.
-        if (held !== undefined && body.recoveryKey !== undefined && body.recoveryKey !== held) {
+        if (
+          held.key !== undefined &&
+          body.recoveryKey !== undefined &&
+          body.recoveryKey !== held.key
+        ) {
           throw new AppError("backup.recovery_key_exists", {});
         }
-        const recoveryKey = held ?? body.recoveryKey;
+        const recoveryKey = held.key ?? body.recoveryKey;
         if (recoveryKey === undefined) {
           throw new AppError("backup.request_invalid", { field: "recoveryKey" });
         }
@@ -349,7 +364,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           if ((await deps.readRecoveryKey()) !== recoveryKey) {
             throw new AppError("backup.effective_mismatch", {});
           }
-          return c.json(await statusBody(true));
+          return c.json(await statusBody({ held: true, key: recoveryKey }));
         }
         const input: BackupEnvInput = { ...fromCurrent(cur), recoveryKey, keyRotatedAt };
         loadBackupConfig(backupEnvRecord(input));

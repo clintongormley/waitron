@@ -792,12 +792,83 @@ describe("backup admin routes", () => {
       body: JSON.stringify({ recoveryKey: KEY_2 }),
     });
     expect(rot.status).toBe(200);
-    expect(await rot.json()).toMatchObject({ enabled: false, recoveryKeySet: true });
+    const rotated = await rot.json();
+    expect(rotated).toMatchObject({ enabled: false, recoveryKeySet: true });
+    expect(rotated.recoveryKeyTooShort).toBe(false);
     const file = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
     expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_2);
     expect(file.WAITRON_BACKUP_DIR).toBeUndefined();
     const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
     expect((await rk.json()).key).toBe(KEY_2);
+  }, 60_000);
+
+  it("turning archives on replaces a too-short held key with the one sent", async () => {
+    const stateDir = await makeStateDir();
+    await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RECOVERY_KEY=short\n");
+    const sc: Scenario = { stateDir, base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+    const app = buildApp(sup, stateDir, sc.base);
+    const cookie = await login(app);
+
+    const before = await app.request("/api/backup/status", { headers: { cookie } });
+    expect(await before.json()).toMatchObject({ recoveryKeySet: true, recoveryKeyTooShort: true });
+
+    const res = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinationDir: makeDestDir(),
+        recoveryKey: KEY_1,
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      enabled: true,
+      recoveryKeySet: true,
+      recoveryKeyTooShort: false,
+    });
+    const file = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
+    expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_1);
+    expect(sup.current().recoveryKey).toBe(KEY_1);
+  }, 60_000);
+
+  it("still refuses to turn archives on with a too-short held key when no key is sent", async () => {
+    const stateDir = await makeStateDir();
+    await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RECOVERY_KEY=short\n");
+    const sc: Scenario = { stateDir, base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+    const app = buildApp(sup, stateDir, sc.base);
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinationDir: makeDestDir(),
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "backup.recovery_key_too_short" } });
+    expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(
+      "WAITRON_BACKUP_RECOVERY_KEY=short\n",
+    );
+  }, 60_000);
+
+  it("does not report a held key long enough to use as too short", async () => {
+    const stateDir = await makeStateDir();
+    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+    const sc: Scenario = { stateDir, base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+    const app = buildApp(sup, stateDir, sc.base);
+    const cookie = await login(app);
+    const st = await app.request("/api/backup/status", { headers: { cookie } });
+    expect(await st.json()).toMatchObject({ recoveryKeySet: true, recoveryKeyTooShort: false });
   }, 60_000);
 
   it("reports a too-short key from the process env as set, and still answers status, with no destination", async () => {

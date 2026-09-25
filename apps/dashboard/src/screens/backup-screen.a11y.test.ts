@@ -19,6 +19,7 @@ const OFF: BackupStatusView = {
   backupStatus: { configured: false },
   archiveUnderCurrentKey: false,
   recoveryKeySet: false,
+  recoveryKeyTooShort: false,
 };
 
 const ENABLED: BackupStatusView = {
@@ -37,6 +38,7 @@ const ENABLED: BackupStatusView = {
   },
   archiveUnderCurrentKey: true,
   recoveryKeySet: true,
+  recoveryKeyTooShort: false,
 };
 
 const MANAGED: BackupStatusView = { ...OFF, managedByEnvironment: true };
@@ -111,6 +113,17 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     );
     await flush(el);
     expect(q(el, "[data-test=existing-key]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the configure wizard replacing a held key too short to use accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { api: stubApi({ ...OFF, recoveryKeySet: true, recoveryKeyTooShort: true }) },
+      theme,
+    );
+    await flush(el);
+    expect(q(el, "[data-test=short-key]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

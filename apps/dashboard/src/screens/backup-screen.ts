@@ -239,11 +239,15 @@ export class BackupScreen extends LitElement {
     return this.advancedPaste ? this.pastedKey : (this.mintedKey ?? "");
   }
 
-  /** Archives are off but the box already holds a key (the bucket copy may have set it): turning
-   * archives on uses that key, so the recovery kit stays valid, and the form neither makes nor sends
-   * one. */
+  /** Archives are off but the box already holds a usable key (the bucket copy may have set it):
+   * turning archives on uses that key, so the recovery kit stays valid, and the form neither makes
+   * nor sends one. */
   get #reusesHeldKey(): boolean {
-    return this.status?.enabled === false && this.status.recoveryKeySet;
+    return (
+      this.status?.enabled === false &&
+      this.status.recoveryKeySet &&
+      !this.status.recoveryKeyTooShort
+    );
   }
 
   get #applyDisabled(): boolean {
@@ -290,6 +294,7 @@ export class BackupScreen extends LitElement {
     if (this.#applyDisabled || (!this.#reusesHeldKey && this.#pastedKeyTooShort())) return;
     this.errorKey = null;
     this.submitting = true;
+    const replacesShortKey = this.status?.recoveryKeyTooShort === true;
     const body: BackupApplyBody = {
       destinationDir: this.destinationDir.trim(),
       ...(this.#reusesHeldKey ? {} : { recoveryKey: this.#effectiveKey }),
@@ -298,6 +303,8 @@ export class BackupScreen extends LitElement {
     };
     try {
       this.status = await this.api.applyBackup(body);
+      // The bucket copy's panel reads the same key.
+      if (replacesShortKey) this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.savedIt = false;
       this.advancedPaste = false;
       this.pastedKey = "";
@@ -702,6 +709,11 @@ export class BackupScreen extends LitElement {
       ${this.#renderDestinationField()}
 
       <h2>${t("backup.key.title")}</h2>
+      ${
+        this.status?.recoveryKeyTooShort
+          ? html`<p class="hint" data-test="short-key">${t("backup.key.too_short")}</p>`
+          : nothing
+      }
       ${
         this.#reusesHeldKey
           ? html`<p class="hint" data-test="existing-key">${t("backup.key.existing")}</p>`

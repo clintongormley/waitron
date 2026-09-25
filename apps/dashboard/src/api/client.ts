@@ -940,6 +940,8 @@ export interface BackupStatusView {
   archiveUnderCurrentKey: boolean;
   /** Whether the box holds a recovery key at all, archives on or off. */
   recoveryKeySet: boolean;
+  /** The held key is under the length floor; turning archives on replaces it. */
+  recoveryKeyTooShort: boolean;
 }
 
 /** LOCAL copy of the server's `Alert` (`packages/module/src/alerts.ts`). */
