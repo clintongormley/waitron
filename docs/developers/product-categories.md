@@ -47,9 +47,9 @@ refused with `product.variant_invalid` naming the field `labelIds`.
 ## Categories are not sections
 
 **Sections** are ordered lists of products and other sections that can be reused across menus and
-nested (`sections` and `section_members`, written by `packages/catalogue/src/sections.ts`). The
-menus plan's Task 3 builds each menu's structure from them; until it lands, menus keep their own
-`menu_sections` headings. A section only arranges products. Adding a product
+nested (`sections` and `section_members`, written by `packages/catalogue/src/sections.ts`). Each
+menu's structure is built from them, starting at the top-level list the menu owns
+(`menu_details.root_section_id`). A section only arranges products. Adding a product
 to a section, moving it, removing it or deleting the section changes neither the product's main
 reporting category nor the kitchen route it follows (the sections case in
 `apps/server/src/catalogue-api.full-manifest.test.ts`), and a product may sit in any number of
@@ -94,6 +94,12 @@ colour that is not lower-case `#rrggbb`, an image the library does not hold, or 
 `productIds` entry that is not a top-level product, a repeated `productIds` entry, or a `memberIds`
 entry that is repeated or not a member of the source. `member_duplicate` (409) is a `ref` the list
 already holds, and `member_cycle` (409) one that would make a section contain itself.
+
+A menu's own structure is read with `GET /management-api/catalogues/:id/structure` → 200,
+`{ rootSectionId, nodes }`, where each node is `{ memberId, ref }` and a section's node also carries
+its `children`; an unknown menu is `catalogue.not_found` (404). The top level is written with the
+member routes above on `rootSectionId`, and `POST /management-api/catalogues/:id/items`
+(`{ productId, grossPrice }`) puts a product on it with the menu's price in one request.
 
 ## Moving and deleting
 

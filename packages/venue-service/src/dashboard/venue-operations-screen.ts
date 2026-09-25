@@ -227,7 +227,7 @@ export class VenueOperationsScreen extends LitElement {
     );
   }
   // Cell markup handed to <wt-data-table> is styled with part=, never a class: see static styles.
-  /** An offer is always a top-level product, which owns its price (`createMenuItem` refuses a
+  /** An offer is always a top-level product, which owns its price (`addProductToMenu` refuses a
    * variant), so that product's `unitPrice` is the price a blank menu price falls back to. */
   #offerPrice(row: MenuOffer, products: readonly Product[]) {
     if (row.grossPrice === null) {
