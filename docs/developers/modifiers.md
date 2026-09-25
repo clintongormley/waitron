@@ -303,10 +303,11 @@ Six things it is worth knowing about that payload:
 - **Only ACTIVE lists are offered, and an options list offers only its AVAILABLE labels** — which
   is exactly the set `validateExtraSelections` (`extra-contract.ts`) and `validateOptionSelections`
   (`option-contract.ts`) will accept an answer from. That agreement is the reason the order path
-  and these two reads resolve their lists through ONE body, `resolveAttachedModifiers` in the same
-  file: a required list the picker never drew would refuse the order with `options.label_required`
-  or `extras.limit_exceeded`, and an offered list the server does not know about would be refused
-  as `options.invalid`.
+  and these two reads resolve their lists through ONE body, `walkAttachedModifiers`
+  (`offered-modifiers.ts`), which the order path reaches through `resolveAttachedModifiers` and
+  the two reads through `readOfferedModifiers`: a required list the picker never drew would refuse
+  the order with `options.label_required` or `extras.limit_exceeded`, and an offered list the
+  server does not know about would be refused as `options.invalid`.
 - **An extras list offers only the items whose product is Active and Available** (spec §15.6), and
   a pick of any other item in a basket priced afresh is refused as `extras.invalid` (field
   `productId`), the same refusal as a pick the list never offered. That filter is NOT in

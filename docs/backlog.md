@@ -1273,7 +1273,7 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   picker's source (`readOfferedModifiers`) keeps only the lists the product's `product_modifiers`
   attachments name, while `readMenuExtras` (`packages/catalogue/src/extra-projection.ts:131`)
   reads `menu_item_extra_lists` and nothing else, and the order path
-  (`apps/server/src/working-order.ts:438,3188`) consumes `extrasByHolder`/`optionsByProduct`
+  (`priceOrderLines` and `updateHeldOrder` in `apps/server/src/working-order.ts`) consumes `extrasByHolder`/`optionsByProduct`
   straight — so the detached list reaches it. **Not true of the other two reads, checked rather
   than generalised:** `optionsByProduct` is BUILT from the attachments
   (`packages/catalogue/src/offered-modifiers.ts:109`), and the PRODUCT-side extras read is handed
@@ -2830,12 +2830,40 @@ image constraints under *Detail → Box image*.
   two configs, part d of four (#621, about 2,660 to about 1,250, parse-tree walk, tests included;
   `till-app.ts` alone 1,286 to 349) and `apps/server`'s kitchen, print, receipt, station, report,
   payments, webhook, pass, me, transfer, served, sale, split, move and modifier files, part g (#622,
-  about 4,120 to about 1,750, parse-tree walk, tests included).
+  about 4,120 to about 1,750, parse-tree walk, tests included) and `apps/server`'s working-order,
+  tabs and tables files, part b (#623, about 4,040 to about 1,920, parse-tree walk, tests included;
+  `working-order.ts` alone 1,854 to 471).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621 and #622 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621, #622 and #623 and left for the package that owns each, all
   still OPEN:
+  - Found by #623 (`apps/server` part b: working-order, tabs, tables), not fixable in a
+    comments-only change. **Editing a held order that has already sent lines to the kitchen deletes
+    their ticket items and never re-sends the new lines.** `PUT /api/working-orders/:id` checks only
+    that the order is open; any edit that is not a pure quantity change takes `updateHeldOrder`'s
+    replacement path (`apps/server/src/working-order.ts`), which deletes every line and inserts new
+    ones, and deleting a line cascades to its ticket item. Run in the review on a real database: a
+    tab whose one line had been fired was edited to a different dish, its ticket-item count went from
+    1 to 0, and the new line was never fired. Whether a correction slip prints was not established
+    (no printer in the setup); read, not run: `updateHeldOrder` never calls
+    `enqueueCorrectionSlips`. Split-off checks may reach the same path (read, not run). Also: the
+    walk-up concurrent double-pay case in `working-order.pay-and-dispatch.test.ts` replays through
+    the settled branch and never reaches `payWorkingOrder`'s duplicate-key catch; nothing tests two
+    `openTab` calls racing on one table or concurrent rounds landing on consecutive line numbers
+    (the sequential versions are in `tabs.test.ts`); nothing checks that a location or status
+    foreign-key refusal in `tables.ts` is not reported as a zone fault; `setTablePlacement`'s raw
+    read is typed `boolean | null` where the engine returns 1/0/null (it only tests truthiness).
+    The SQL `--` comments inside `listTablesWithState`'s template text still carry "measured
+    2026-09-22", PostgreSQL's "LATERAL form" and aggregate-pair history and a "KDS-1 §3d" pointer.
+    "A line with no course fires earliest", which #623 cut from `working-order.ts` because a line
+    sent with `hold: true` is held whatever its course, is still in `apps/server/src/kitchen.ts:264`
+    and four `packages/db/src/schema` files (`catalogue.ts`, `kitchen-courses.ts`,
+    `ticket-items.ts`, `orders.ts`). Stale test titles: "lists the node's open orders" and "…not a
+    raw 23505" in `working-order.test.ts`; "the 23505 backstop" (twice) and "(Task B1, …)" in
+    `working-order.pay-and-dispatch.test.ts`; "an UNLOCKED read" in `tabs.test.ts`; "recordSale
+    UNCHANGED" in `tabs.filing.test.ts`; many "(till-reroute §3.6)", "(KDS-…)" and "(A1)"-style
+    plan tags.
   - Found by #622 (`apps/server` part g), outside its files or not fixable in a comments-only
     change. **A hard delete of a referenced row IS refused**: `tables.ts`'s `deactivateTable` note
     says "nothing below the verb objects" and that the verb is the whole guard, and
@@ -2907,10 +2935,8 @@ image constraints under *Detail → Box image*.
     comments-only change. Test titles repeat claims the branch corrected:
     `apps/till/src/state/working-order.test.ts` "previews the total via priceBasket" (the preview
     sums line totals) and `apps/till/src/api/client.test.ts` "getExpoQueue GETs this node's
-    cross-station pass queue" (the queue is venue-wide and includes placed orders);
-    `apps/server/src/working-order.ts` still calls the expo queue's orders "open" (the comments
-    above `ExpoOrder` and `listExpoQueue`, lines 4339 and 4357 on `e11e3b84`), leaving out placed
-    ones, for its own part.
+    cross-station pass queue" (the queue is venue-wide and includes placed orders); #623 fixed
+    the server's own "open" comments.
   - Found by #617 (`apps/server` part f1), not fixable in a comments-only change.
     **`fetchPeerMembershipDocument` throws on a 200 whose body is JSON `null`**
     (`apps/server/src/membership-reconcile.ts`, the final `body.document ?? null` reads a property
@@ -2939,8 +2965,7 @@ image constraints under *Detail → Box image*.
     orders" (the list is venue-wide); `station-queue.test.ts` "(nothing to release)" is false for a
     held line with no course, and several `station-queue`, `tender-pay` and `modifier-picker` test
     titles carry task numbers. `css` comments in `apps/till/src/widgets/station-queue.ts` and
-    `screens/till-expo-screen.ts` still call the courseless group "auto-fired", as does
-    `apps/server/src/working-order.ts` (around line 4488, for its own part). `apps/till/README.md` says the held list is
+    `screens/till-expo-screen.ts` still call the courseless group "auto-fired" (#623 fixed the server's copy). `apps/till/README.md` says the held list is
     shared across the registers "on a node". Read, not run: a courseless section the server held
     shows its lines greyed with no fire button (`#fireAction` in `station-queue.ts`, from #131);
     `GET /api/till` never sends `stripe_on_device`, so the offline-consent toggle cannot appear;
@@ -2989,9 +3014,8 @@ image constraints under *Detail → Box image*.
     screen's `#lineGross` "same arithmetic the server files with" (the server does not call
     `grossOf`).
   - Found by #613 (`apps/server` `till-*`), outside its files or not fixable in a comments-only
-    change. Present-tense "a malformed id becomes a 500" survives in `working-order.test.ts` (ids are text
-    columns, so no `22P02`; #615 removed the `errors.ts` zone-route claim and the
-    `catalogue-api.test.ts` and `recipe-api.test.ts` copies, #622 the `print-api` suites'). Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`,
+    change. (The present-tense "a malformed id becomes a 500" copies are gone: #615, #622 and
+    #623 removed them.) Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`,
     `finalizeSettle`) cite `provider.ts:66-83`; the checker compares tool comments character for
     character, so repointing them to `PaymentResult` in `packages/payments/src/provider.ts` is not
     a comments-only change. Test titles #613 could not touch: "lost-T2" in
@@ -3012,18 +3036,13 @@ image constraints under *Detail → Box image*.
     checked on the server (not traced). Like #607 and #610, #612 did not carry its 19 deleted
     proof-by-deletion notes into its commit message.
   - Found by #611 (`packages/venue-service`), outside its package or not fixable in a comments-only
-    change. `apps/server/src/working-order.test.ts`
-    names a key `zone_service_policies_default_menu_zone_fk`; the real one is
-    `zone_service_policies_default_allowed_fk` (from #489). `apps/server/scripts/demo-seed/seed-floor.ts`
+    change. `apps/server/scripts/demo-seed/seed-floor.ts`
     writes `department_hours` times as `HH:MM`, bypassing `storedTime`'s `HH:MM:SS` (from #489; the
     dashboard slices both forms to five characters). The venue-service `migrations.test.ts` case
     titled "… or at commit" asserts no refusal at commit, which is now testable because
     `packages/store/src/node-sqlite-adapter.ts` rolls back a refused commit (since #489); a
     commit-time case, and the title, are a test change. `operations.test.ts`'s placeholder unit id
-    no longer shows an empty string refused: `unit_id` is plain text. The PostgreSQL-deferral
-    history ("DEFERRABLE INITIALLY DEFERRED", "three statements where PostgreSQL took two") is
-    still in `apps/server/src/tabs.test.ts`,
-    `working-order.test.ts` and `testing/clear-provision-fixture.ts`.
+    no longer shows an empty string refused: `unit_id` is plain text.
   - Found by #609 (`packages/media`), not fixable in a comments-only change. **The
     `media_images` filename CHECK accepts a name with an embedded NUL**: the review stored 64 hex
     characters, `.png`, a NUL and `evil` (73 bytes) on `node:sqlite`, because `substr` stops at
@@ -3042,9 +3061,6 @@ image constraints under *Detail → Box image*.
     dashboard's copies and #614 the till's "never send a personId". Still open, read only, not run: the recipe screen's `#loadRecipe` guard
     compares product ids, so choosing A, then B, then A again lets the first A answer apply and turn
     Save back on while the second A load is still running.
-  - Found by #606 (`packages/module`), outside its package (#617 fixed its `provision.ts` half,
-    #622 `kitchen.test.ts`'s). `apps/server/src/working-order.test.ts` still says a refused statement
-    poisons the transaction ("so the 23505 poisons that one"); on this engine it backs out by itself.
   - Found by #604 (`packages/ui`), not fixable in a comments-only change. **A table with no shape
     is drawn as a rectangle and saved as round on its first edit**: `wt-table-token.ts` draws
     `shape-${t.shape ?? "rect"}`, while `wt-floor-canvas.ts` marks Round as pressed and sends
@@ -3327,9 +3343,7 @@ image constraints under *Detail → Box image*.
     reason for error-correction level M is stated in `apps/server/src/qr-matrix.ts`.
   - Found by #585's review in files outside `packages/db/src/schema`, not changed there:
     comments and test names in about ten suites (layouts, printing, catalogue, core, `apps/server`;
-    `git grep -l 23505 -- packages apps`) still cite the PostgreSQL code 23505, and
-    `apps/server/src/working-order.test.ts:2782` says the refusal "poisons" its transaction, which
-    CLAUDE.md §3's measured rule contradicts. The shipped migration
+    `git grep -l 23505 -- packages apps`) still cite the PostgreSQL code 23505. The shipped migration
     `packages/db/drizzle/0001_behavioural_triggers.sql:348` says `requireDevice` touches
     `last_seen_at` "on every authenticated request", which the review found too wide (the migration
     cannot be edited; #602 removed the same claim from `scripts/behavioural-triggers.test.ts`). Stale line pointer: the shipped
@@ -3339,7 +3353,7 @@ image constraints under *Detail → Box image*.
     making them static imports is a small code follow-up.
   - Found by #589 (`packages/db` outside `src/schema`), not changed. Line pointers from other
     packages into `packages/db/src/schema`, most of them made wrong by #585 and some pointing past
-    the end of their file: `apps/server/src/boot.test.ts:2761`, `retire.test.ts:76`, `working-order.test.ts:103` (all under `apps/server/src`)
+    the end of their file: `apps/server/src/boot.test.ts:2761`, `retire.test.ts:76` (both under `apps/server/src`)
     (the `scripts/catalogue-engine-neutral.test.ts` pointers were removed by #602,
     `packages/venue-service/src/operations.ts`'s by #611, the `till-*` ones by #613, `join-requests.test.ts`'s by #617, and `kitchen-print.test.ts`'s and
     `sale-till-source.receipt.test.ts`'s by #622)
@@ -4831,8 +4845,6 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   `r.series ?? []` branch is un-exercised; export `ID_SISTEMA_MAX_LENGTH` when either package is next
   touched; `insertNodeSeriesTx`'s held-code check is SELECT-then-INSERT; the SP-3d restore overlapping
   a live SIF registration deadlocks (`40P01`) — revisit locking before the hook runs live.
-- Two stale lock-order claims in `apps/server/src/working-order.ts` (`unjoinTable`'s "MATCHES"
-  docstring; `mergeTabs`'s "seq-scans" claim, which `EXPLAIN` contradicts). Thin on next touch.
 
 **Product decisions to take before production:**
 
