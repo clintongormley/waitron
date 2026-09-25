@@ -34,6 +34,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Check the connection details and try again.",
     es: "Revisa los datos de conexión y vuelve a intentarlo.",
   },
+  "cloud.replacement_not_restored": {
+    en: "Finish restoring and reporting the approved Cloud snapshot on this server, then request reconnection.",
+    es: "Termina la restauración de la instantánea aprobada de Cloud en este servidor y comunícala antes de solicitar la reconexión.",
+  },
 
   "connection.failed": {
     en: "This browser could not connect to Waitron. Check your connection and try again.",

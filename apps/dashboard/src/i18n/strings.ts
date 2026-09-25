@@ -1,6 +1,13 @@
 export const en = {
   "nav.cloud": "Cloud services",
   "cloud.intro": "Connect this venue to your Waitron Cloud account.",
+  "cloud.replacement_intro": "Reconnect this restored test server to its existing Cloud venue.",
+  "cloud.replacement_request": "Request reconnection",
+  "cloud.replacement_check": "Check reconnection",
+  "cloud.replacement_waiting": "Waiting for the Cloud owner to approve the replacement.",
+  "cloud.replacement_old": "Previous installation",
+  "cloud.replacement_warning":
+    "Keep the previous server out of service. Cloud access and backups need separate checks after approval.",
   "cloud.connect": "Connect to Cloud",
   "cloud.open": "Open Cloud",
   "cloud.code": "Enter this code in Cloud",
@@ -1378,6 +1385,14 @@ export type StringKey = keyof typeof en;
 export const es: Record<StringKey, string> = {
   "nav.cloud": "Servicios Cloud",
   "cloud.intro": "Conecta este local con tu cuenta de Waitron Cloud.",
+  "cloud.replacement_intro":
+    "Vuelve a conectar este servidor de prueba restaurado con su local existente en Cloud.",
+  "cloud.replacement_request": "Solicitar reconexión",
+  "cloud.replacement_check": "Comprobar reconexión",
+  "cloud.replacement_waiting": "Esperando a que el propietario de Cloud apruebe la sustitución.",
+  "cloud.replacement_old": "Instalación anterior",
+  "cloud.replacement_warning":
+    "Mantén el servidor anterior fuera de servicio. Comprueba por separado el acceso a Cloud y las copias después de la aprobación.",
   "cloud.connect": "Conectar con Cloud",
   "cloud.open": "Abrir Cloud",
   "cloud.code": "Introduce este código en Cloud",

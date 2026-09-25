@@ -345,6 +345,53 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     return state;
   }
   return {
+    async importReplacement(input: {
+      requestId: string;
+      privateKey: string;
+      publicKey: string;
+      expiresAt: string;
+      organisationName: string;
+      legalBusinessName: string;
+      registration: CloudRegistration;
+    }) {
+      return run(async () => {
+        const existing = await read();
+        if (existing) {
+          if (
+            existing.requestId !== input.requestId ||
+            existing.privateKey !== input.privateKey ||
+            existing.publicKey !== input.publicKey ||
+            JSON.stringify(existing.view?.registration) !== JSON.stringify(input.registration)
+          )
+            throw new AppError("cloud.binding_conflict", {});
+          return project(existing);
+        }
+        const state: SavedCloudState = {
+          version: 1,
+          origin: options.origin,
+          localVenueId: options.localVenueId,
+          environment: options.environment,
+          requestId: input.requestId,
+          code: "00000000",
+          privateKey: input.privateKey,
+          publicKey: input.publicKey,
+          view: {
+            requestId: input.requestId,
+            localVenueId: options.localVenueId,
+            environment: options.environment,
+            expiresAt: input.expiresAt,
+            state: "complete",
+            organisationId: input.registration.organisationId,
+            legalBusinessId: input.registration.legalBusinessId,
+            organisationName: input.organisationName,
+            legalBusinessName: input.legalBusinessName,
+            registration: input.registration,
+          },
+        };
+        await save(state);
+        return project(state);
+      });
+    },
     async reserveCapture(id: string, signal?: AbortSignal) {
       return run(
         async () => reserveCloudCapture(await captureState(signal), id, signal),

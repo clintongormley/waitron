@@ -10,10 +10,12 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import type { CloudChoice, CloudConnection } from "./cloud-client.js";
+import type { CloudReplacement } from "./cloud-replacement.js";
 import "./errors.js";
 export interface CloudApiDeps {
   db: Database;
   connection?: CloudConnection;
+  replacement?: Pick<CloudReplacement, "status" | "eligible" | "prepare" | "check">;
   managementOrigin: string;
   isPrimary: () => boolean;
 }
@@ -32,6 +34,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       "cloud.not_primary": 409,
       "cloud.not_configured": 409,
       "cloud.request_invalid": 400,
+      "cloud.replacement_not_restored": 409,
     },
     "cloud.failed",
   );
@@ -64,10 +67,50 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       const status = deps.connection
         ? await deps.connection.status()
         : { state: "not_connected", code: "" };
+      const replacement = (await deps.replacement?.status()) ?? null;
+      const replacementEligible = (await deps.replacement?.eligible()) ?? false;
       await authorize(c, true);
-      return c.json({ ...status, configured: !!deps.connection, isPrimary: deps.isPrimary() });
+      return c.json({
+        ...status,
+        replacement,
+        replacementEligible,
+        configured: !!deps.connection,
+        isPrimary: deps.isPrimary(),
+      });
     }),
   );
+  for (const action of ["prepare", "check"] as const)
+    app.post(`/management-api/cloud/replacement/${action}`, (c) =>
+      run(c, log, async () => {
+        if (c.req.header("origin") !== deps.managementOrigin)
+          return c.json({ error: { code: "authorization.not_permitted", params: {} } }, 403);
+        await authorize(c);
+        const body = await readRawJsonBody<unknown>(c);
+        if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length)
+          throw new AppError("cloud.request_invalid", {});
+        primary();
+        if (!deps.replacement) throw new AppError("cloud.not_configured", {});
+        const recheck = async () => {
+          await authorize(c, true);
+          primary();
+        };
+        const replacement =
+          action === "prepare"
+            ? await deps.replacement.prepare(recheck)
+            : await deps.replacement.check(recheck);
+        await recheck();
+        const status = deps.connection
+          ? await deps.connection.status()
+          : { state: "not_connected", code: "" };
+        return c.json({
+          ...status,
+          replacement,
+          replacementEligible: true,
+          configured: !!deps.connection,
+          isPrimary: deps.isPrimary(),
+        });
+      }),
+    );
   for (const action of ["start", "check", "complete", "refresh", "revoke"] as const)
     app.post(`/management-api/cloud/${action}`, (c) =>
       run(c, log, async () => {

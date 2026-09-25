@@ -31,9 +31,16 @@ describe("state-secrets", () => {
     await writeFile(join(dir, "cloud-recovery.json"), JSON.stringify({ privateKey }), {
       mode: 0o600,
     });
+    await writeFile(
+      join(dir, "cloud-replacement.json"),
+      JSON.stringify({ privateKey, peerPrivateKey: "distinct-private-peer-key" }),
+      { mode: 0o600 },
+    );
     const files = await collectStateSecrets(dir);
     expect(files).not.toHaveProperty("cloud-recovery.json");
+    expect(files).not.toHaveProperty("cloud-replacement.json");
     expect(JSON.stringify(files)).not.toContain(privateKey);
+    expect(JSON.stringify(files)).not.toContain("distinct-private-peer-key");
   });
 
   it("throws recovery.state_incomplete naming the first missing file", async () => {

@@ -14,6 +14,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { createCloudConnection } from "./cloud-client.js";
 import { mountCloudApi } from "./cloud-api.js";
+import type { ReplacementView } from "./cloud-replacement.js";
 import { cloudFixture } from "../test/cloud-fixture.js";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -131,6 +132,53 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
   } finally {
     await f.close();
   }
+});
+it("gates replacement requests before and after a network wait", async () => {
+  const manager = await person("manager"),
+    staff = await person("staff");
+  let primary = true;
+  let release!: () => void;
+  let entered!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const replacement = {
+    status: vi.fn(async () => null),
+    eligible: vi.fn(async () => true),
+    prepare: vi.fn(async (authorize?: () => Promise<void>) => {
+      entered();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await authorize?.();
+      return { state: "awaiting_owner" } as ReplacementView;
+    }),
+    check: vi.fn(),
+  };
+  const app = new Hono();
+  mountCloudApi(
+    app,
+    { db: suite.db, replacement, managementOrigin: "https://venue.test", isPrimary: () => primary },
+    () => {},
+  );
+  const send = (cookie: string, origin = "https://venue.test") =>
+    app.request("/management-api/cloud/replacement/prepare", {
+      method: "POST",
+      headers: { cookie, origin, "content-type": "application/json" },
+      body: "{}",
+    });
+  expect((await send("")).status).toBe(401);
+  expect((await send(staff.cookie)).status).toBe(403);
+  expect((await send(manager.cookie, "https://attacker.test")).status).toBe(403);
+  expect(replacement.prepare).toHaveBeenCalledTimes(0);
+  primary = false;
+  expect((await send(manager.cookie)).status).toBe(409);
+  primary = true;
+  const pending = send(manager.cookie);
+  await waiting;
+  primary = false;
+  release();
+  expect((await pending).status).toBe(409);
 });
 it("losing permission or primary role during the Cloud status wait prevents a completion signature", async () => {
   const f = await cloudFixture();

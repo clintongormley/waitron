@@ -863,6 +863,23 @@ export type BackupFreshness =
   { configured: false } | { configured: true; destinations: BackupDestinationStatus[] };
 
 export interface CloudConnectionStatus {
+  replacementEligible?: boolean;
+  replacement?: null | {
+    requestId: string;
+    pointId: string;
+    venueId: string;
+    oldInstallationId: string;
+    localVenueId: string;
+    nodeId: string;
+    environment: "test";
+    publicKey: string;
+    peerPublicKey: string;
+    state: "awaiting_owner" | "complete";
+    expiresAt: string;
+    organisationName: string;
+    legalBusinessName: string;
+    registration: CloudConnectionStatus["registration"] | null;
+  };
   installation?: {
     state: "pending" | "active" | "unavailable" | "revoked";
     revision: number;
@@ -2254,6 +2271,12 @@ export class DashboardApi {
   }
   checkCloudConnection(): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/check", "POST", {});
+  }
+  prepareCloudReplacement(): Promise<CloudConnectionStatus> {
+    return this.#request("/management-api/cloud/replacement/prepare", "POST", {});
+  }
+  checkCloudReplacement(): Promise<CloudConnectionStatus> {
+    return this.#request("/management-api/cloud/replacement/check", "POST", {});
   }
   completeCloudConnection(choice: {
     requestId: string;

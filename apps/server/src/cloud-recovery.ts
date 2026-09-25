@@ -382,6 +382,26 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
     return view(state, "approved", p, info.operationExpiresAt);
   }
   return {
+    async replacementIdentity(): Promise<{
+      requestId: string;
+      pointId: string;
+      publicKey: string;
+      privateKey: string;
+      phase: "restored" | "reported";
+    }> {
+      return locked(async () => {
+        const state = await read();
+        if (!state?.pointId || (state.phase !== "restored" && state.phase !== "reported"))
+          unavailable();
+        return {
+          requestId: state.requestId,
+          pointId: state.pointId,
+          publicKey: state.publicKey,
+          privateKey: state.privateKey,
+          phase: state.phase,
+        };
+      });
+    },
     async binding(): Promise<{ requestId: string; pointId?: string }> {
       return locked(async () => {
         const state = await read();

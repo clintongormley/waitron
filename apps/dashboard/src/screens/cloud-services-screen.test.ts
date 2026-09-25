@@ -14,6 +14,79 @@ async function flush(el: CloudServicesScreen) {
 function click(el: CloudServicesScreen, id: string) {
   el.shadowRoot!.querySelector<HTMLElement>(`#${id}`)!.click();
 }
+it("offers restored server reconnection and a synchronous busy guard", async () => {
+  setLocale("en");
+  let release!: (response: Response) => void;
+  const calls: string[] = [];
+  const api = new DashboardApi("", async (url) => {
+    calls.push(String(url));
+    if (String(url).endsWith("/replacement/prepare"))
+      return new Promise<Response>((resolve) => {
+        release = resolve;
+      });
+    return Response.json({
+      state: "not_connected",
+      code: "",
+      configured: true,
+      isPrimary: true,
+      replacementEligible: true,
+      replacement: null,
+    });
+  });
+  const { el, host } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
+    api,
+  });
+  await flush(el);
+  click(el, "request-reconnection");
+  click(el, "request-reconnection");
+  expect(calls.filter((url) => url.endsWith("/replacement/prepare"))).toHaveLength(1);
+  release(
+    Response.json({
+      state: "not_connected",
+      code: "",
+      configured: true,
+      isPrimary: true,
+      replacementEligible: true,
+      replacement: {
+        state: "awaiting_owner",
+        oldInstallationId: "old",
+        organisationName: "Test Org",
+        legalBusinessName: "Test Business",
+      },
+    }),
+  );
+  await expect.poll(() => el.shadowRoot!.textContent).toContain("Waiting for the Cloud owner");
+  expect(el.shadowRoot!.querySelector("#check-reconnection")).not.toBeNull();
+  await expectNoA11yViolations(host);
+});
+
+it("shows Spanish replacement approval status and keeps a non-primary from checking", async () => {
+  setLocale("es");
+  const api = new DashboardApi("", async () =>
+    Response.json({
+      state: "not_connected",
+      code: "",
+      configured: true,
+      isPrimary: false,
+      replacementEligible: true,
+      replacement: {
+        state: "awaiting_owner",
+        oldInstallationId: "old-installation",
+        organisationName: "Org",
+        legalBusinessName: "Negocio",
+      },
+    }),
+  );
+  const { el, host } = await mountWidget<CloudServicesScreen>(
+    "dashboard-cloud-services-screen",
+    { api },
+    "dark",
+  );
+  await expect.poll(() => el.shadowRoot!.textContent).toContain("Esperando a que el propietario");
+  expect(el.shadowRoot!.textContent).toContain("old-installation");
+  expect(el.shadowRoot!.querySelector("#check-reconnection")).toBeNull();
+  await expectNoA11yViolations(host);
+});
 it("offers explicit start, check and final confirmation; uses the offered business and separates service configuration", async () => {
   setLocale("en");
   const calls: { url: string; body: unknown }[] = [];

@@ -219,8 +219,33 @@ export class CloudServicesScreen extends LitElement {
               : html` ${!s.isPrimary ? html`<p>${t("cloud.not_primary")}</p>` : nothing}
                 ${
                   s.state === "not_connected"
-                    ? html`<p>${t("cloud.intro")}</p>
-                        ${s.isPrimary ? button("connect", t("cloud.connect"), () => this.api.startCloudConnection()) : nothing}`
+                    ? s.replacement || s.replacementEligible
+                      ? html`<p>${t("cloud.replacement_intro")}</p>
+                          ${
+                            s.replacement
+                              ? html`
+                                  <p role="status">${t("cloud.replacement_waiting")}</p>
+                                  <dl>
+                                    <dt>${t("cloud.replacement_old")}</dt>
+                                    <dd>${s.replacement.oldInstallationId}</dd>
+                                    <dt>${t("cloud.organisation")}</dt>
+                                    <dd>${s.replacement.organisationName}</dd>
+                                    <dt>${t("cloud.business")}</dt>
+                                    <dd>${s.replacement.legalBusinessName}</dd>
+                                  </dl>
+                                  <p>${t("cloud.replacement_warning")}</p>
+                                  ${s.isPrimary ? button("check-reconnection", t("cloud.replacement_check"), () => this.api.checkCloudReplacement()) : nothing}
+                                `
+                              : s.isPrimary
+                                ? button(
+                                    "request-reconnection",
+                                    t("cloud.replacement_request"),
+                                    () => this.api.prepareCloudReplacement(),
+                                  )
+                                : nothing
+                          }`
+                      : html`<p>${t("cloud.intro")}</p>
+                          ${s.isPrimary ? button("connect", t("cloud.connect"), () => this.api.startCloudConnection()) : nothing}`
                     : s.state === "complete"
                       ? html`<p role="status">${t("cloud.connected")}</p>
                           <p>${s.legalBusinessName}</p>

@@ -5,6 +5,7 @@ import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
 import { mountCloudPublic } from "./cloud-remote.js";
 import { runCloudWorker } from "./cloud-worker.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
+import { createCloudReplacement } from "./cloud-replacement.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { mountCloudApi } from "./cloud-api.js";
 import { liveResourceTypes } from "./live-resources.js";
@@ -2251,6 +2252,17 @@ export async function startServer(
         environment: config.environment === "production" ? "production" : "test",
       })
     : undefined;
+  const cloudReplacement =
+    cloudConnection && cloudOrigin && config.environment !== "production"
+      ? createCloudReplacement({
+          stateDir: config.stateDir,
+          origin: cloudOrigin,
+          localVenueId: till.locationId,
+          nodeId: till.nodeId,
+          connection: cloudConnection,
+        })
+      : undefined;
+  await cloudReplacement?.resume();
   const cloudPrimary = () =>
     holders.mode.current === "primary" && holders.singletonRole.current === "primary" && !fenced;
   cloudServing = cloudPrimary;
@@ -2262,6 +2274,7 @@ export async function startServer(
       // Roles can change live; fencing takes effect through a server restart.
       isPrimary: cloudPrimary,
       connection: cloudConnection,
+      replacement: cloudReplacement,
     },
     log,
   );
