@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { cp, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -1012,5 +1012,46 @@ describe("waitron-restore restore, the arguments each form accepts", () => {
     expect(out).toEqual([expect.stringMatching(/^usage: /)]);
     expect(restore).not.toHaveBeenCalled();
     expect(restoreStream).not.toHaveBeenCalled();
+  });
+});
+
+describe("waitron-restore restore, when the restored database could not be put in place", () => {
+  const PLACEMENT_FAILED: [AppError<"restore.placement_failed">, string][] = [
+    [
+      new AppError("restore.placement_failed", { kept: "previous" }),
+      "restore failed: restore.placement_failed — the restored database could not be put in place; this server's previous database is unchanged",
+    ],
+    [
+      new AppError("restore.placement_failed", {
+        kept: "set_aside",
+        folder: ".venue.db-replaced-Ab12Cd",
+      }),
+      "restore failed: restore.placement_failed — the restored database could not be put in place, and the previous database could not all be put back: what was not is in the folder .venue.db-replaced-Ab12Cd inside the venue folder; move everything in it back into the venue folder before starting the server",
+    ],
+  ];
+
+  it.each(PLACEMENT_FAILED)(
+    "says which database the archive path left: %s",
+    async (error, line) => {
+      const dir = await mkdtemp(join(tmpdir(), "restore-command-placement-"));
+      try {
+        const out: string[] = [];
+        const code = await runRestore({
+          argv: ["restore", await makeArtifact(dir)],
+          env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY, WAITRON_ENV: "preproduction" },
+          out: (line) => out.push(line),
+          restore: async () => {
+            throw error;
+          },
+        });
+        expect({ code, out }).toEqual({ code: 1, out: [COLD_RESTORE_NOTICE, line] });
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each(PLACEMENT_FAILED)("says which database the bucket path left: %s", async (error, line) => {
+    expect(await refusedWith(error)).toEqual({ code: 1, out: [BUCKET_NOTICE, line] });
   });
 });

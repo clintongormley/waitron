@@ -240,6 +240,15 @@ command against it treat that entrypoint differently:
   bucket form alone, and a backup file given together with `--from-bucket` is refused. Anything
   else prints the usage line and exits 2.
 
+  A restore moves the old database into a hidden folder in the venue folder
+  (`/var/lib/waitron/state/venue/` inside the container), named `.venue.db-replaced-` and six
+  random characters, and deletes that folder once the restored database is in place. If the command
+  reports `restore.placement_failed` and says the previous database could not all be put back,
+  move everything in the folder it names back into the venue folder before
+  `docker compose start app`. If the restore succeeded but its output shows
+  `restore.db.aside_kept`, the folder that line names (`folder`) holds only the replaced database
+  and can be deleted.
+
   Restore and rejoin are refused while another process, usually the running server, is using the
   venue folder (`provisioning.database_in_use`): rejoin before it reads or wipes anything, restore
   before it changes the venue folder, the box's identity or its secrets. A restore's earlier steps

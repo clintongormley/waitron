@@ -13,7 +13,7 @@ export type RestoreCompat = {
 };
 
 /**
- * Pure, so a restore can call it before anything in the venue directory is unlinked. A
+ * Pure, so a restore can call it before anything in the venue directory is changed. A
  * cross-environment restore is refused whatever the versions (CLAUDE.md §5: one database per
  * environment). A module the target does not run is deliberately ignored: its tables restore inert.
  */

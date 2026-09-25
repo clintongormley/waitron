@@ -5508,12 +5508,23 @@ open:
   but no dedicated error code names that case.
 - An interrupted bucket rebuild or archive check leaves its scratch folder, a full copy of the
   venue database, under the state folder; the next run makes a new one and does not remove it.
-- The placement step can lose the old database. `restoreDatabase` (`apps/server/src/restore.ts`)
-  removes `venue.db` before its sidecars, and if a sidecar cannot be removed the cleanup also
-  deletes the incoming copy, leaving neither. The run-it review reproduced it with a directory at
-  `venue.db-wal` (`{ error: 'ERR_FS_EISDIR', old: 'ENOENT' }`), and reproduced the same result with
-  the base commit's placement order, so I believe it predates this branch; both restore forms go
-  through it.
+- Fixed in (this branch): the placement step no longer loses both databases. `restoreDatabase`
+  (`apps/server/src/restore.ts`) moves the old `venue.db` and its side files into a folder beside
+  them and deletes nothing that is database content until the new file is in place; a failure puts
+  them back and says `restore.placement_failed`, naming the folder when one could not go back.
+  Still open:
+  - A setup-wizard restore whose placement fails is not retried and is not reported on the setup
+    screen, nor normally on the recovery page. The restore is placed on the next start by
+    `runStagedRestore` (`apps/server/src/restore-request.ts`), which deletes the staged request on
+    `restore.placement_failed` and fails that start; the start after it boots what the venue folder
+    holds, so the box comes back in setup mode, and the code and which database was kept are only in
+    the server's own output (`failureDetail`, `apps/server/src/node-entry.ts`). One option is to keep
+    the staged request on `restore.placement_failed`, so repeated failed starts end on the recovery
+    page; that is an owner decision.
+  - A `.venue.db-replaced-` folder can be left in the venue folder whenever its removal fails
+    (`restore.db.aside_kept` after a placed database, emptied after a full put-back), after a
+    `set_aside` failure, or when the process is killed mid-placement. Nothing removes it, and
+    nothing refuses to start beside it.
 - The bucket client sets no time limit of its own: `createS3ObjectStore` (`packages/stream`) has
   none. The command line and the setup restores wrap it for every object-store call they make
   (`boundObjectStore`, which abandons a call but never cancels it),

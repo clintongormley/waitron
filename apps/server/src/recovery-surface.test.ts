@@ -350,3 +350,14 @@ describe("a start refused by a holder that stopped", () => {
     });
   });
 });
+
+describe("a restore whose database could not be put in place, if it is the last failure", () => {
+  it("sends the operator to whoever installed the box, and not to the log on this page", async () => {
+    const text = OPERATOR_TEXT["restore.placement_failed"];
+    expect(text).toBeDefined();
+    expect(text!.action).toMatch(/ask whoever installed this box/i);
+    expect(text!.action).not.toMatch(/log below/i);
+    const body = await pageFor("restore.placement_failed");
+    expect(body).toContain(escapeHtml(text!.action));
+  });
+});
