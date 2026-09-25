@@ -6,16 +6,11 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import { UNREACHABLE_RESULT_CODES, classifyBootFailure } from "./boot-failure.js";
 
-/** The shape drizzle produces: the driver's error one level down under `cause`. */
 function wrapped(errcode: number): Error {
   return new Error("Failed query", { cause: Object.assign(new Error("driver"), { errcode }) });
 }
 
-/**
- * A REAL failure from the engine the box runs, never a hand-built stand-in: these cases are the
- * whole reason the classifier was rewritten, so a synthetic error carrying a number I chose would
- * prove exactly nothing about what a box produces.
- */
+/** A real engine failure: a hand-built error would carry a number the test chose. */
 function realSqliteError(build: (dir: string) => void): unknown {
   const dir = mkdtempSync(join(tmpdir(), "boot-failure-"));
   try {
@@ -53,10 +48,6 @@ describe("classifyBootFailure on the engine the box runs", () => {
     expect(classifyBootFailure(error)).toBe("provisioning.schema_mismatch");
   });
 
-  // The control in the other direction, and the reason the missing-table branch reads the MESSAGE
-  // rather than the result code: an ordinary mistake in a query arrives with the SAME errcode 1.
-  // Classifying on the number alone would send an operator to restore a healthy database over a
-  // typo.
   it("leaves an ordinary SQL error unknown, though it carries the same result code", () => {
     const error = realSqliteError((dir) => {
       const db = new DatabaseSync(join(dir, "venue.db"));
@@ -65,7 +56,6 @@ describe("classifyBootFailure on the engine the box runs", () => {
     expect(classifyBootFailure(error)).toBe("unknown");
   });
 
-  // Wrapped one level down, the shape drizzle produces.
   it("reads the engine's failure through a wrapper", () => {
     const inner = realSqliteError((dir) => {
       const db = new DatabaseSync(join(dir, "venue.db"));
@@ -85,9 +75,6 @@ describe("classifyBootFailure", () => {
   });
 
   it("names every pinned result code as an unreachable database", () => {
-    // Walks the pinned list, so a code added to the table without a mapping fails here. The list is
-    // the only synthetic part of this file: the case above drives a REAL `unable to open database
-    // file` through the same branch.
     for (const errcode of UNREACHABLE_RESULT_CODES) {
       expect(classifyBootFailure(Object.assign(new Error("sqlite"), { errcode }))).toBe(
         "provisioning.database_unreachable",
@@ -96,10 +83,6 @@ describe("classifyBootFailure", () => {
     }
   });
 
-  // A socket failure was classified as an unreachable database while the database was a cluster
-  // this process dialled. It is a file now, so nothing the database does can be refused by a socket,
-  // and this pins that the old mapping is gone rather than merely unused: a boot failure from
-  // somewhere else on the path must not tell the operator to go and check the database.
   it("does not treat a refused connection as a database failure", () => {
     expect(classifyBootFailure(Object.assign(new Error("connect"), { code: "ECONNREFUSED" }))).toBe(
       "unknown",
@@ -110,21 +93,12 @@ describe("classifyBootFailure", () => {
     expect(classifyBootFailure(new TypeError("x is not a function"))).toBe("unknown");
   });
 
-  // The negative control the spec requires, in the shape this engine gives it: a Node error carries
-  // a string `code` and no `errcode` at all, so nothing about it can reach a database classification.
   it("does not treat EPIPE as a database error", () => {
     expect(classifyBootFailure(Object.assign(new Error("write"), { code: "EPIPE" }))).toBe(
       "unknown",
     );
   });
 
-  /**
-   * The same case this file used to make against PostgreSQL's `22P02`, in this engine's terms: a
-   * refusal is not evidence of a missing schema, and this code's operator action is "restore from a
-   * backup, or reinstall". A real unique-index refusal is the nearest thing a boot-time write can
-   * produce, and it must stay `unknown` — `unknown` is honest here, and the installer's channel
-   * carries the driver's own message beside it.
-   */
   it("leaves a real constraint refusal unknown — it is not evidence of a schema mismatch", () => {
     const refusal = realSqliteError((dir) => {
       const db = new DatabaseSync(join(dir, "venue.db"));
@@ -139,9 +113,4 @@ describe("classifyBootFailure", () => {
     expect(classifyBootFailure("boom")).toBe("unknown");
     expect(classifyBootFailure(undefined)).toBe("unknown");
   });
-
-  // What the disjointness case that stood here guarded is now structural: there is one list of
-  // result codes and the schema branch is a message pattern, so the two cannot overlap by a code
-  // appearing in both. The pair that CAN still disagree is this file's list and
-  // `dev-migration-hint.ts`'s, which its own suite checks.
 });

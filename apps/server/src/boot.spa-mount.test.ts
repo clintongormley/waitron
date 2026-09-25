@@ -8,14 +8,8 @@ import { mountSpa } from "./spa-api.js";
 
 const noopLog: Logger = () => {};
 
-// A focused Hono-level test of the mount ORDER `boot.ts` uses — APIs first, then the two SPAs,
-// dashboard (`/manage`) before till (`` = root catch-all, mounted LAST). A full `startServer`
-// needs a migrated venue directory (see `boot.test.ts`); this proves the routing CONTRACT that
-// actually matters without one: the till's root catch-all must not shadow the APIs or `/manage`.
-// It is an ORDERING REGRESSION GUARD — it may pass on first write (Task 2's `mountSpa` is correct),
-// and its value is that it goes RED if a future edit registers the catch-all before an API or
-// mounts the till before the dashboard. Proven to bite by swapping the two `mountSpa` calls (the
-// `/manage` request then falls through to the till catch-all and serves "till", not "dashboard").
+// The mount order `boot.ts` uses: APIs, then the dashboard at `/manage`, then the till's root
+// catch-all LAST, which must not shadow the APIs or `/manage`.
 describe("SPA mounting alongside API routes (boot order)", () => {
   let tillDir: string | undefined;
   let dashDir: string | undefined;
@@ -30,19 +24,15 @@ describe("SPA mounting alongside API routes (boot order)", () => {
   });
 
   afterAll(() => {
-    // Guarded teardown (CLAUDE.md §4): a `beforeAll` that threw before `mkdtempSync` returned must
-    // not be followed by an `rmSync(undefined)` reported as a second failure beside the real one.
     if (tillDir !== undefined) rmSync(tillDir, { recursive: true, force: true });
     if (dashDir !== undefined) rmSync(dashDir, { recursive: true, force: true });
   });
 
   const build = () => {
     const app = new Hono();
-    // stand-ins for the real API + health routes, registered first exactly as boot.ts does
     app.get("/health", (c) => c.json({ ok: true }));
     app.get("/api/till", (c) => c.json({ api: "till" }));
     app.get("/management-api/staff-roster", (c) => c.json({ api: "management" }));
-    // then the SPAs, dashboard (/manage) before till (/), as boot will mount them
     mountSpa(app, { root: dashDir!, basePath: "/manage", navigationPath: "/manage" }, noopLog);
     mountSpa(app, { root: tillDir!, basePath: "", navigationPath: "/tabs" }, noopLog);
     return app;

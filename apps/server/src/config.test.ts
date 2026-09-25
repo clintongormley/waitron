@@ -5,9 +5,7 @@ import { DEFAULTS } from "@waitron/scheduler";
 import { isAppError } from "@waitron/shared";
 import { deploymentEnvironment, isDevMode, loadConfig, loadTunnelConfig } from "./config.js";
 
-// Distinct per field so a mis-wired till mapping fails the assertions below rather than passing by
-// coincidence — every id is the same 8-4-4-4-12 shape but a different value, matching
-// till-config.test.ts's own convention.
+// Distinct per field so a mis-wired till mapping fails rather than passing by coincidence.
 const TILL_ENV = {
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
@@ -15,8 +13,7 @@ const TILL_ENV = {
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 
-// `loadConfig` resolves the till identity via `tryLoadTillConfig`, so a provisioned box's happy-path
-// cases spread these; a load with none of them set is SETUP MODE, not a failure (see the setup case).
+// A load with none of these set is setup mode, not a failure.
 const MIN_ENV = { ...TILL_ENV };
 const ROOT = "/opt/waitron/drizzle";
 // A distinct protected state root exposes accidental migrations-root or cwd fallback.
@@ -29,9 +26,7 @@ const EXPECTED_TILL = {
   locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
   locale: "es-ES",
   invoiceLocales: ["es-ES"],
-  // The env card selection is gone (Task 12 — a card sale routes to its reader's provider through the
-  // pool), so `loadTillConfig` materialises no `cardProvider`/`stripeReaderId`/`sumupReaderId`; tips
-  // default off. `toEqual` would fail if any card field were materialised.
+  // No card fields: `toEqual` fails if one is materialised.
   tipsEnabled: false,
 };
 
@@ -43,55 +38,37 @@ describe("loadConfig", () => {
   it("defaults every optional value, and defaults the deployment environment to preproduction", () => {
     const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
     expect(config).toEqual({
-      // Production numbering can never be reused, so the safe environment is the default and
-      // production must be typed out. This assertion is the guard on that.
+      // Production numbering can never be reused, so production must be typed out.
       environment: "preproduction",
-      // MIN_ENV sets no WAITRON_ENV, so this is not a dev host — the dev device switcher (SP-C) is
-      // off. `devMode` is `true` only for the literal WAITRON_ENV=dev.
+      // `true` only for the literal WAITRON_ENV=dev.
       devMode: false,
       onboardingIntent: undefined,
       fiscalTestSubmissions: false,
       paymentTestProviders: false,
       httpPort: 8080,
-      // The plain-HTTP trust/landing listener defaults to port 80 (Task 3); `0` disables it.
       landingPort: 80,
-      // /health is unauthenticated (spec §9); loopback-only is the safe default.
+      // /health is unauthenticated, so loopback-only is the default.
       httpHost: "127.0.0.1",
       minTickMs: 5_000,
       maxTickMs: 3_600_000,
-      // ONE value for both `drain` and `runDue` — see the field's own doc comment in config.ts.
-      // Asserted against the scheduler's own DEFAULTS rather than a hardcoded literal: this default
-      // IS the scheduler's default, not a copy of it that happens to agree today.
+      // The scheduler's own default, not a copy that happens to agree.
       skipRetryMs: DEFAULTS.skipRetryMs,
       settlementLagMs: undefined,
       migrationsRoot: ROOT,
       litestreamBin: "litestream",
       // Unset state storage uses the boot-provided default, not cwd.
       stateDir: STATE_ROOT,
-      // No WAITRON_VENUE_DIR set, so the venue's databases default to `join(stateDir, "venue")` —
-      // under whichever state root won above (here STATE_ROOT).
       venueDir: resolve(STATE_ROOT, "venue"),
-      // No WAITRON_LOG_DIR set, so logDir defaults to `join(stateDir, "logs")` — under whichever state
-      // root won above (here STATE_ROOT). The rotation knobs take their bytes/files defaults.
       logDir: resolve(STATE_ROOT, "logs"),
       logMaxBytes: 10_000_000,
       logMaxFiles: 5,
-      // No WAITRON_TLS_* set, so the whole optional block is absent — not present-but-undefined.
-      // `tls` is omitted from the returned object entirely (see loadConfig's conditional spread).
+      // `tls` is absent from the object, not present-but-undefined.
       till: EXPECTED_TILL,
-      // No WAITRON_MANAGEMENT_* set, so the passkey Relying Party falls back to loopback dev values.
       managementRpId: "localhost",
       managementOrigin: "http://localhost:5191",
-      // No WAITRON_ADVERTISED_ORIGIN set, so the origin tills route on is the origin this box already
-      // serves the dashboard from.
       advertisedOrigin: "http://localhost:5191",
-      // No WAITRON_TENANT_DOMAIN set, so the device cookie stays host-only (no `Domain` attribute).
-      // Present-but-undefined, asserted explicitly the same way settlementLagMs above is.
       tenantDomain: undefined,
-      // No WAITRON_TILL_APP_DIR / WAITRON_DASHBOARD_APP_DIR / WAITRON_SETUP_APP_DIR set, so the box
-      // serves none of the SPAs — dev uses the Vite dev servers. Present-but-undefined, asserted
-      // explicitly the same way settlementLagMs above is, so this case pins that an unset app dir
-      // defaults to undefined.
+      // No SPA is served: dev uses the Vite dev servers.
       tillAppDir: undefined,
       dashboardAppDir: undefined,
       setupAppDir: undefined,
@@ -122,8 +99,7 @@ describe("loadConfig", () => {
 
   it("rejects a WAITRON_HTTP_LANDING_PORT outside 0..65535", () => {
     const cfg = (env: Record<string, string>) => loadConfig(env, ROOT, STATE_ROOT);
-    // Above the TCP ceiling and a negative value both throw `port_out_of_range` — 0 is the ONLY
-    // sub-positive value the bounded parser accepts (it means "disabled").
+    // 0 is the only non-positive value accepted; it means disabled.
     expect(() => cfg({ ...MIN_ENV, WAITRON_HTTP_LANDING_PORT: "70000" })).toThrow();
     expect(() => cfg({ ...MIN_ENV, WAITRON_HTTP_LANDING_PORT: "-1" })).toThrow();
     expect(() => cfg({ ...MIN_ENV, WAITRON_HTTP_LANDING_PORT: "notaport" })).toThrow();
@@ -134,10 +110,7 @@ describe("loadConfig", () => {
     expect(config.till).toEqual(EXPECTED_TILL);
   });
 
-  // Setup mode (slice 1b): an unprovisioned box has no venue, so the four WAITRON_TILL_*_ID are
-  // absent — `loadConfig` then leaves `config.till` UNDEFINED and does NOT throw (boot branches on
-  // that in a later slice-1b task). A provisioned box sets all four and `config.till` carries the
-  // identity.
+  // Setup mode: an unprovisioned box has no till identity, and loading does not throw.
   it("leaves config.till undefined when the four WAITRON_TILL_*_ID are absent, else populates it", () => {
     const setup = loadConfig({}, ROOT, STATE_ROOT);
     expect(setup.till).toBeUndefined();
@@ -167,15 +140,10 @@ describe("loadConfig", () => {
     expect(config.tls).toBeUndefined();
   });
 
-  // Both-or-neither: TLS with only the cert (no private key) cannot serve HTTPS, and only the key
-  // (no certificate) is equally unusable — a half-configured pair is a boot-time refusal, not a
-  // silent fall back to plain HTTP that an operator who set one variable would never expect.
+  // A half-configured pair is refused at boot, never a silent fall back to plain HTTP.
   it.each([
-    // [missing var, the other var supplied]. Cert set, key missing -> the error names the MISSING
-    // variable, the one the operator must add. `missing` is first so the `%s` title prints it, not the
-    // override object.
+    // [missing var, the other var supplied]; `missing` is first so the `%s` title prints it.
     ["WAITRON_TLS_KEY_FILE", { WAITRON_TLS_CERT_FILE: "/etc/waitron/tls/cert.pem" }],
-    // Key set, cert missing -> symmetric.
     ["WAITRON_TLS_CERT_FILE", { WAITRON_TLS_KEY_FILE: "/etc/waitron/tls/key.pem" }],
   ])("rejects a half-configured TLS pair, naming the missing %s", async (missing, extra) => {
     const error = await captureError(() =>
@@ -188,9 +156,6 @@ describe("loadConfig", () => {
     });
   });
 
-  // Empty string is unset (config.ts's own `isUnset`), so `WAITRON_TLS_CERT_FILE=` alongside a real
-  // key is still a half-configured pair, not a both-set one — the same `VAR=`-means-unset rule the
-  // rest of the file applies.
   it("treats an empty WAITRON_TLS_CERT_FILE as unset, so a real key beside it is still half-configured", async () => {
     const error = await captureError(() =>
       Promise.resolve(
@@ -357,18 +322,11 @@ describe("loadConfig", () => {
     expect(config.privacyNoticeUrl).toBe("http://restaurant.example/privacy");
   });
 
-  // In PRODUCTION the passkey Relying Party ID and origin are REQUIRED, not defaulted: shipping the
-  // loopback defaults to a real deployment binds every passkey ceremony to `localhost`, so a browser
-  // served from the real domain fails its origin check with an opaque 401 at LOGIN time rather than a
-  // loud boot failure. `loadConfig` throws `server.config_missing` naming the unset variable (the TLS
-  // pair is both-or-neither, a distinct shape that throws `config_invalid`, so it is not the analogy
-  // here).
+  // In production the loopback defaults would bind every passkey ceremony to `localhost`, failing
+  // at sign-in rather than at boot.
   it.each([
-    // [missing var, the other var supplied]. RP ID omitted (origin supplied) -> the error names the
-    // RP ID, the variable still to be set. `missing` is first so the `%s` title prints it, not the
-    // override object.
+    // [missing var, the other var supplied]; `missing` is first so the `%s` title prints it.
     ["WAITRON_MANAGEMENT_RP_ID", { WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com" }],
-    // Origin omitted (RP ID supplied) -> symmetric.
     ["WAITRON_MANAGEMENT_ORIGIN", { WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com" }],
   ])(
     "requires the passkey RP config in production, naming the missing %s",
@@ -383,9 +341,6 @@ describe("loadConfig", () => {
     },
   );
 
-  // Empty string is unset (config.ts's `isUnset`), so `WAITRON_MANAGEMENT_RP_ID=` in a production env
-  // file is missing, not a blank RP ID that silently reaches the ceremonies — the same
-  // `VAR=`-means-unset rule the TLS pair and every directory variable here follow.
   it("treats an empty production WAITRON_MANAGEMENT_RP_ID as missing", async () => {
     const error = await captureError(() =>
       Promise.resolve(
@@ -405,10 +360,6 @@ describe("loadConfig", () => {
     expect(isAppError(error) && error.params).toEqual({ variable: "WAITRON_MANAGEMENT_RP_ID" });
   });
 
-  // OUTSIDE production the two stay OPTIONAL: preproduction/dev keeps the loopback defaults when they
-  // are unset (the `defaults every optional value` case above), and honours them when they ARE set —
-  // this case, so a preproduction operator can still point the RP config at a non-loopback value
-  // without it being required, rejected, or ignored.
   it("honours WAITRON_MANAGEMENT_RP_ID/ORIGIN in preproduction when they are set", () => {
     const config = loadConfig(
       {
@@ -424,18 +375,12 @@ describe("loadConfig", () => {
     expect(config.managementOrigin).toBe("https://staging.example.com");
   });
 
-  // `advertisedOrigin` is what this node publishes as its `contactUrl` and what CORS treats as
-  // "self", so a box that sets nothing must still advertise an origin a till can reach: the one it
-  // already serves the dashboard from. The management origin here is deliberately NOT the loopback
-  // default, so "fell back to managementOrigin" and "took DEFAULT_MANAGEMENT_ORIGIN" cannot both
-  // print the same value.
+  // The management origin is deliberately NOT the loopback default, so "fell back to
+  // managementOrigin" and "took DEFAULT_MANAGEMENT_ORIGIN" cannot print the same value.
   it("defaults advertisedOrigin to managementOrigin when WAITRON_ADVERTISED_ORIGIN is unset or empty", () => {
     const managed = { ...MIN_ENV, WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com" };
     const unset = loadConfig(managed, ROOT, STATE_ROOT);
     expect(unset.advertisedOrigin).toBe("https://dashboard.example.com");
-    // Empty string is unset (config.ts's `isUnset`), so `WAITRON_ADVERTISED_ORIGIN=` takes the same
-    // fallback rather than putting a blank `contactUrl` into the membership document — the
-    // `VAR=`-means-unset rule the rest of this file applies.
     const empty = loadConfig({ ...managed, WAITRON_ADVERTISED_ORIGIN: "" }, ROOT, STATE_ROOT);
     expect(empty.advertisedOrigin).toBe("https://dashboard.example.com");
   });
@@ -449,26 +394,19 @@ describe("loadConfig", () => {
     expect(config.advertisedOrigin).toBe("https://box.deli.waitron.app");
   });
 
-  // WAITRON_TENANT_DOMAIN scopes the device cookie's `Domain` (§3.5; see ServerConfig.tenantDomain).
-  // Unset OR empty → undefined (host-only cookies, loopback dev); a set value is lower-cased for the
-  // case-insensitive host comparison `cookieDomainFor` makes.
+  // Lower-cased for the case-insensitive host comparison `cookieDomainFor` makes.
   it("reads WAITRON_TENANT_DOMAIN into config.tenantDomain (lower-cased), else undefined", () => {
     expect(loadConfig(MIN_ENV, ROOT, STATE_ROOT).tenantDomain).toBeUndefined();
     expect(
       loadConfig({ ...MIN_ENV, WAITRON_TENANT_DOMAIN: "Deli.Waitron.App" }, ROOT, STATE_ROOT)
         .tenantDomain,
     ).toBe("deli.waitron.app");
-    // Empty string is unset (config.ts's own `isUnset`): `WAITRON_TENANT_DOMAIN=` is host-only, never
-    // a blank `Domain` on the Set-Cookie (CLAUDE.md §3).
+    // Empty is unset: host-only, never a blank `Domain` on the Set-Cookie.
     expect(
       loadConfig({ ...MIN_ENV, WAITRON_TENANT_DOMAIN: "" }, ROOT, STATE_ROOT).tenantDomain,
     ).toBeUndefined();
   });
 
-  // A cookie `Domain` attribute is a bare registrable domain — no scheme, no port, no path, no
-  // whitespace. A value carrying `/`, `:` or whitespace is a URL, a host:port, or a typo, refused
-  // loudly at boot rather than reaching a Set-Cookie `Domain` malformed. Reuses the shipped
-  // `server.config_invalid` code (never renamed), with a `not_a_domain` reason.
   it.each([
     "https://deli.waitron.app",
     "deli.waitron.app:8443",
@@ -485,24 +423,17 @@ describe("loadConfig", () => {
     });
   });
 
-  // A `contactUrl` a till concatenates paths onto, and a CORS allow-list entry compared against a
-  // browser's `Origin` header, are both bare http(s) origins — anything carrying a path, missing a
-  // scheme, or carrying a scheme a till never fetches over is refused loudly at boot rather than
-  // silently published to every till.
   it.each([
     // No scheme at all: `new URL` cannot parse it.
     "box.deli.waitron.app",
-    // Host and port with no scheme: this DOES parse, as the non-special scheme
-    // `box.deli.waitron.app:` whose origin is the literal string "null" — refused by the
-    // origin comparison, never by the parse. The likeliest operator typo of the three.
+    // Parses, as the scheme `box.deli.waitron.app:` whose origin is "null"; refused by the
+    // origin comparison, not the parse.
     "box.deli.waitron.app:8443",
     // A path: the parsed origin drops it, so it differs from the input.
     "https://box.deli.waitron.app/till",
-    // A trailing slash is a path (`/`): same mismatch, and the likeliest way to copy an origin out
-    // of a browser's address bar wrong.
+    // A trailing slash is a path (`/`).
     "https://box.deli.waitron.app/",
-    // A WHATWG special scheme that round-trips byte-for-byte, so only the explicit http(s) check
-    // refuses it. A till fetches over http(s); a `ws://` contactUrl is unusable to it.
+    // Round-trips byte-for-byte, so only the explicit http(s) check refuses it.
     "ws://box.deli.waitron.app",
     // Not a URL in any reading.
     "not a url",
@@ -517,9 +448,8 @@ describe("loadConfig", () => {
     });
   });
 
-  // `managementOrigin` is itself a bare origin: WebAuthn compares a ceremony's `Origin` header to it
-  // byte-for-byte, and it is what `advertisedOrigin` falls back to. So it is validated under its own
-  // name, whether or not the fallback is taken.
+  // WebAuthn compares a ceremony's `Origin` header to it byte-for-byte, so it is validated under
+  // its own name whether or not the fallback is taken.
   it("refuses a WAITRON_MANAGEMENT_ORIGIN that is not a bare origin, naming that variable", async () => {
     const error = await captureError(() =>
       Promise.resolve(
@@ -537,10 +467,6 @@ describe("loadConfig", () => {
     });
   });
 
-  // The case above validates the value `advertisedOrigin` FELL BACK to; this one proves the check is
-  // on `managementOrigin` in its own right, not on whatever ended up advertised — a bare
-  // WAITRON_ADVERTISED_ORIGIN does not excuse a malformed management origin, because that value is
-  // still the WebAuthn expected-origin the dashboard's ceremonies are compared against.
   it("refuses a malformed WAITRON_MANAGEMENT_ORIGIN even when WAITRON_ADVERTISED_ORIGIN is set and bare", async () => {
     const error = await captureError(() =>
       Promise.resolve(
@@ -571,10 +497,7 @@ describe("loadConfig", () => {
     ["WAITRON_ENV", "sandbox", "not_a_deployment_environment"],
     ["WAITRON_HTTP_PORT", "http", "not_a_positive_integer"],
     ["WAITRON_HTTP_PORT", "0", "not_a_positive_integer"],
-    // Item 13 of the 2026-07-27 pre-merge review: `positiveInt` alone accepts any positive
-    // integer, including one no real TCP port can ever be — `serve()` (`boot.ts`) would otherwise
-    // throw a raw `RangeError [ERR_SOCKET_BAD_PORT]` instead of this file's own promised
-    // `server.config_invalid`. 65536 is the first value past the real ceiling (65535).
+    // Otherwise `serve()` throws a raw `RangeError [ERR_SOCKET_BAD_PORT]`.
     ["WAITRON_HTTP_PORT", "65536", "port_out_of_range"],
     ["WAITRON_MIN_TICK_MS", "-1", "not_a_positive_integer"],
     ["WAITRON_SKIP_RETRY_MS", "nope", "not_a_positive_integer"],
@@ -584,8 +507,7 @@ describe("loadConfig", () => {
       Promise.resolve(loadConfig({ ...MIN_ENV, [variable]: value }, ROOT, STATE_ROOT)),
     );
     expect(codeOf(error)).toBe("server.config_invalid");
-    // The variable NAME and a reason CODE — never the value, which is arbitrary operator input and
-    // could be a mistyped secret.
+    // Never the value, which could be a mistyped secret.
     expect(isAppError(error) && error.params).toEqual({ variable, reason });
   });
 
@@ -600,9 +522,7 @@ describe("loadConfig", () => {
       ),
     );
     expect(codeOf(error)).toBe("server.config_invalid");
-    // Both variables and both effective values, not just the one the guard happens to key off (F6
-    // of the 2026-07-27 pre-merge review): an operator staring at this error must be able to tell
-    // which of the two they actually set, whichever one that was.
+    // Both variables and both values, so an operator can tell which of the two they set.
     expect(isAppError(error) && error.params).toEqual({
       variable: "WAITRON_MIN_TICK_MS",
       value: 10_000,
@@ -623,8 +543,7 @@ describe("loadConfig", () => {
       ),
     );
     expect(codeOf(error)).toBe("server.config_invalid");
-    // F6: an operator who set only WAITRON_MIN_TICK_MS must still see it named — not just
-    // WAITRON_SKIP_RETRY_MS, which here is the untouched default.
+    // An operator who set only WAITRON_MIN_TICK_MS must still see it named.
     expect(isAppError(error) && error.params).toEqual({
       variable: "WAITRON_SKIP_RETRY_MS",
       value: 9_999,
@@ -650,13 +569,6 @@ describe("loadConfig", () => {
     expect(config.skipRetryMs).toBe(DEFAULTS.skipRetryMs);
   });
 
-  // F1 of the 2026-07-27 pre-merge review: `WAITRON_MAX_TICK_MS` alone silently capped
-  // `WAITRON_SKIP_RETRY_MS` — `sleepMsFor`'s `Math.min(maxTickMs, …)` would round a too-high
-  // configured interval back DOWN, below `minTickMs` in the concrete case (operator sets only
-  // `WAITRON_MAX_TICK_MS=5000`, `minTickMs` and `skipRetryMs` both default to their shipped
-  // values), silently restoring the 5-second-forever spin this whole design exists to remove, with
-  // every OTHER guard in this file passing. This guard closes that gap symmetrically with the
-  // below-the-floor one above.
   it("rejects a skipRetryMs above maxTickMs, which sleepMsFor's clamp would otherwise silently round back down past the floor", async () => {
     const error = await captureError(() =>
       Promise.resolve(
@@ -668,8 +580,6 @@ describe("loadConfig", () => {
       ),
     );
     expect(codeOf(error)).toBe("server.config_invalid");
-    // Same reason string the minTickMs > maxTickMs guard already uses — not a near-synonym — and
-    // the same both-variables-both-values shape as the other two tick-cadence guards.
     expect(isAppError(error) && error.params).toEqual({
       variable: "WAITRON_SKIP_RETRY_MS",
       value: 300_000,
@@ -705,28 +615,20 @@ describe("loadConfig", () => {
   });
 
   it("resolves WAITRON_STATE_DIR to an absolute path when set", () => {
-    // A relative value is resolved (resolve(value)) rather than stored verbatim — stateDir is the
-    // base the box materialises its cert PEMs + secrets under, so it must be a settled absolute path.
+    // The box writes its certificates and secrets under stateDir, so it must not shift with cwd.
     const config = loadConfig({ ...MIN_ENV, WAITRON_STATE_DIR: "some/state" }, ROOT, STATE_ROOT);
     expect(config.stateDir).toBe(resolve("some/state"));
     expect(isAbsolute(config.stateDir)).toBe(true);
   });
 
-  // The load-bearing empty-value guard (CLAUDE.md §3): an operator's `WAITRON_STATE_DIR=` (set but
-  // empty) must fall back to the default exactly as an unset one does — NEVER `resolve("")`, which is
-  // cwd. A stateDir silently pointing at cwd would materialise the box's secrets in whatever
-  // directory the process happened to start in.
+  // `resolve("")` is cwd, which would put the box's secrets wherever the process started.
   it("treats an empty WAITRON_STATE_DIR as unset, falling back to the default — never resolve('') / cwd", () => {
     const config = loadConfig({ ...MIN_ENV, WAITRON_STATE_DIR: "" }, ROOT, STATE_ROOT);
     expect(config.stateDir).toBe(STATE_ROOT);
-    // Prove the trap directly: the empty value did NOT resolve to cwd.
     expect(config.stateDir).not.toBe(resolve(""));
     expect(config.stateDir).not.toBe(process.cwd());
   });
 
-  // The rotating-log directory + rotation knobs (this task). logDir defaults to `join(stateDir, "logs")`
-  // under whichever state root actually won, so it tracks a WAITRON_STATE_DIR override rather than the
-  // boot default. The two knobs default to 10 MB / 5 files.
   it("defaults logDir to join(stateDir, 'logs') and the rotation knobs to 10MB / 5 files", () => {
     const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
     expect(config.logDir).toBe(resolve(STATE_ROOT, "logs"));
@@ -759,9 +661,7 @@ describe("loadConfig", () => {
     expect(config.logMaxFiles).toBe(3);
   });
 
-  // The load-bearing empty-value guard (CLAUDE.md §3): `WAITRON_LOG_DIR=` (set but empty) falls back to
-  // the default exactly as an unset one does — NEVER `resolve("")` / cwd, which would scatter the box's
-  // logs into whatever directory the process happened to start in.
+  // Never `resolve("")`, which is cwd.
   it("treats an empty WAITRON_LOG_DIR as unset, falling back to join(stateDir, 'logs')", () => {
     const config = loadConfig({ ...MIN_ENV, WAITRON_LOG_DIR: "" }, ROOT, STATE_ROOT);
     expect(config.logDir).toBe(resolve(STATE_ROOT, "logs"));
@@ -769,10 +669,6 @@ describe("loadConfig", () => {
     expect(config.logDir).not.toBe(process.cwd());
   });
 
-  // The venue directory — where `openVenueStore` creates `venue.db` and `node.db`
-  // (`packages/store/src/index.ts`). Defaults under whichever state root actually won, so it
-  // tracks a WAITRON_STATE_DIR override rather than the boot default root, the same way logDir above
-  // does.
   it("defaults venueDir to join(stateDir, 'venue')", () => {
     const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
     expect(config.venueDir).toBe(resolve(STATE_ROOT, "venue"));
@@ -787,17 +683,14 @@ describe("loadConfig", () => {
     expect(config.venueDir).toBe(resolve("/var/lib/waitron", "venue"));
   });
 
-  // An operator override is resolved to an absolute path, the way stateDir's is: the database files
-  // are opened by path, so a relative value must not shift with the process's cwd.
+  // The database files are opened by path, so a relative value must not shift with cwd.
   it("resolves a WAITRON_VENUE_DIR override to an absolute path", () => {
     const config = loadConfig({ ...MIN_ENV, WAITRON_VENUE_DIR: "some/venue" }, ROOT, STATE_ROOT);
     expect(config.venueDir).toBe(resolve("some/venue"));
     expect(isAbsolute(config.venueDir)).toBe(true);
   });
 
-  // The empty-value guard (CLAUDE.md §3): `WAITRON_VENUE_DIR=` (set but empty) falls back to the
-  // default exactly as an unset one does — NEVER `resolve("")` / cwd, which would put the venue's
-  // ledger files in whatever directory the process happened to start in.
+  // Never `resolve("")`, which is cwd.
   it("treats an empty WAITRON_VENUE_DIR as unset, falling back to join(stateDir, 'venue')", () => {
     const config = loadConfig({ ...MIN_ENV, WAITRON_VENUE_DIR: "" }, ROOT, STATE_ROOT);
     expect(config.venueDir).toBe(resolve(STATE_ROOT, "venue"));
@@ -805,11 +698,8 @@ describe("loadConfig", () => {
     expect(config.venueDir).not.toBe(process.cwd());
   });
 
-  // The built front-end directories the box serves same-origin (slice 1a/2c). All OPTIONAL: dev leaves
-  // them unset and uses the Vite dev servers, so an unset value must be `undefined` (nothing mounts),
-  // not a default path. Stored verbatim in config (no `resolve` here) — boot only ever
-  // `existsSync(join(dir, "index.html"))`s and hands the string to `mountSpa`, which normalises it
-  // once via `resolve` when serving; deployment (#9) sets an absolute path.
+  // Stored verbatim: `mountSpa` resolves the path when serving. Unset mounts nothing, because dev
+  // uses the Vite dev servers.
   it("reads WAITRON_TILL_APP_DIR / WAITRON_DASHBOARD_APP_DIR / WAITRON_SETUP_APP_DIR when set, else undefined", () => {
     const off = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
     expect(off.tillAppDir).toBeUndefined();
@@ -831,10 +721,7 @@ describe("loadConfig", () => {
     expect(on.setupAppDir).toBe("/srv/setup");
   });
 
-  // Empty string is unset (config.ts's own `isUnset`), the `VAR=`-means-unset rule every other
-  // optional variable in this file follows: `WAITRON_TILL_APP_DIR=` must leave the SPA unmounted
-  // (undefined), never reach boot as an empty dir whose `join("", "index.html")` would be a relative
-  // `index.html` under cwd — the "empty value is a valid value" trap (CLAUDE.md §3).
+  // `join("", "index.html")` would be a relative `index.html` under cwd.
   it("treats an empty WAITRON_TILL_APP_DIR / WAITRON_DASHBOARD_APP_DIR / WAITRON_SETUP_APP_DIR as unset (undefined, not '')", () => {
     const config = loadConfig(
       {
@@ -868,10 +755,6 @@ describe("deploymentEnvironment", () => {
   });
 
   it("refuses a value that is neither environment, naming the variable", async () => {
-    // `Promise.resolve(...)`, not a bare arrow returning `deploymentEnvironment(...)` directly:
-    // `deploymentEnvironment` throws synchronously rather than returning a rejected promise, and
-    // `captureError` is typed `() => Promise<unknown>` — the same wrapping every other
-    // synchronous-throw case in this file already uses (see `loadConfig`'s callers above).
     const error = await captureError(() =>
       Promise.resolve(deploymentEnvironment({ WAITRON_ENV: "staging" })),
     );
@@ -1034,11 +917,7 @@ describe("loadTunnelConfig", () => {
     expect(loadTunnelConfig({})).toBeUndefined();
   });
 
-  // BINDING RULING (task-5 brief): an absent OR empty WAITRON_TUNNEL_RELAY_URL means the tunnel is
-  // OFF (undefined) via isUnset — the absent-or-empty off-switch every optional loader here follows.
-  // The empty string does NOT fail closed here; returning undefined is how the empty value never
-  // reaches a dialer as "" ("an empty connection string is a valid connection string", CLAUDE.md §3).
-  // A PRESENT-but-unparseable url DOES fail closed (the cases below).
+  // Empty means off, not a refusal; a present-but-unparseable url is refused (below).
   it("returns undefined when the relay url is empty (tunnel off), never reaching a dialer as ''", () => {
     expect(loadTunnelConfig({ ...base, WAITRON_TUNNEL_RELAY_URL: "" })).toBeUndefined();
   });
@@ -1068,9 +947,7 @@ describe("loadTunnelConfig", () => {
     });
   });
 
-  // A url can parse yet name no host (`relay.example:9000` — no scheme, read as scheme + opaque path
-  // → hostname ""). A blank relayHost is exactly the "" a dialer must never see, so it fails closed
-  // too rather than being handed on (CLAUDE.md §3).
+  // No scheme, so it parses as scheme + opaque path with hostname "", which a dialer must never see.
   it("refuses a relay url that parses but names no host", async () => {
     const error = await captureError(() =>
       Promise.resolve(
@@ -1084,10 +961,7 @@ describe("loadTunnelConfig", () => {
     });
   });
 
-  // A well-formed url can still omit the port (`tcp://relay.example` → `.port` "" → `Number("")` 0).
-  // relayPort 0 is exactly the degenerate value a dialer must never see, so a portless relay url
-  // fails closed at boot — the mirror of the hostname guard, with a dedicated `no_port` reason
-  // because the url IS valid, it just lacks the port we require.
+  // `.port` is "", and `Number("")` is 0.
   it("refuses a relay url that omits the port", async () => {
     const error = await captureError(() =>
       Promise.resolve(
@@ -1101,9 +975,7 @@ describe("loadTunnelConfig", () => {
     });
   });
 
-  // An EXPLICIT port zero (`tcp://relay.example:0`) parses with `.port` "0", not "", so the empty-string
-  // check alone would let `relayPort: 0` through — you cannot connect to port 0, so it fails closed too
-  // (the `Number(url.port) === 0` guard catches both the omitted and the explicit-zero case).
+  // `.port` is "0", not "", so an empty-string check alone would let it through.
   it("refuses a relay url whose port is zero", async () => {
     const error = await captureError(() =>
       Promise.resolve(
@@ -1117,9 +989,7 @@ describe("loadTunnelConfig", () => {
     });
   });
 
-  // Box id + token are required once the tunnel is on, and a blank one fails closed (the
-  // fail-closed shape a blank required field takes here): a blank token must never mean
-  // "no auth", a blank box id names no box to the relay.
+  // A blank token must never mean "no auth".
   it("refuses a blank box id when the relay url is set", async () => {
     const error = await captureError(() =>
       Promise.resolve(loadTunnelConfig({ ...base, WAITRON_TUNNEL_BOX_ID: "" })),

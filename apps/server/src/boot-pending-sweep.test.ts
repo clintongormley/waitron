@@ -8,17 +8,12 @@ import { connectedCardProviderSweep, withPendingSweep } from "./boot.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import type { PassReport } from "./pass.js";
 
-// `withPendingSweep` is a PURE wrapper over the loop's `pass` — a stubbed `inner` and a fake provider
-// enumerator suffice (no database). It runs each connected card provider's `resolvePending` around
-// the singleton fiscal pass and returns the INNER report verbatim, so the `/health` contract is
-// untouched by a sweep that runs, logs, or throws. `connectedCardProviderSweep` (the enumerator boot
-// wires in) is the credential-gated part that DOES need a database — its own describe below uses a
-// real venue file and a fake pool.
+// `withPendingSweep` returns the inner pass's report verbatim, so `/health` is untouched by a sweep
+// that runs, logs or throws.
 
 const REPORT: PassReport = { duties: [], nextDueAt: null };
 
-/** A `PaymentProvider`-shaped double: `withPendingSweep` reads only `provider` (the name it logs) and
- * calls `resolvePending`. */
+/** `withPendingSweep` reads only `provider` and `resolvePending`. */
 function fakeProvider(
   provider: string,
   resolvePending: () => Promise<ForwardResult>,
@@ -76,9 +71,6 @@ describe("withPendingSweep", () => {
   });
 
   it("one provider's resolvePending throwing does NOT stop the others being swept (T12b)", async () => {
-    // The sweep loop is per-provider fault-isolated: provider A's `resolvePending` rejecting must not
-    // skip provider B. Before, one throwing sweep could abort the pass; each is now wrapped so B still
-    // runs and its failure is logged on its own.
     const empty: ForwardResult = { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
     const aThrows = vi.fn(async () => {
       throw new Error("A boom");
@@ -94,7 +86,6 @@ describe("withPendingSweep", () => {
 
     expect(report).toBe(REPORT);
     expect(aThrows).toHaveBeenCalledTimes(1);
-    // B is swept EVEN THOUGH A threw first.
     expect(bSweeps).toHaveBeenCalledTimes(1);
     expect(log).toHaveBeenCalledWith("warn", "resolve_pending.failed", {
       provider: "providerA",
@@ -144,7 +135,6 @@ describe("withPendingSweep", () => {
       log,
     )(new Date());
 
-    // A sweep failure never breaks the pass — the inner report is returned unchanged.
     expect(report).toBe(REPORT);
     expect(log).toHaveBeenCalledWith("warn", "resolve_pending.failed", {
       provider: "sumup",
@@ -153,7 +143,6 @@ describe("withPendingSweep", () => {
   });
 
   it("logs resolve_pending.failed and returns the inner report when the ENUMERATOR itself throws", async () => {
-    // Enumerating (a credential read / pool build) can fail; that must not propagate into the pass.
     const inner = vi.fn(async () => REPORT);
     const log = vi.fn();
     const report = await withPendingSweep(
@@ -170,9 +159,7 @@ describe("withPendingSweep", () => {
   });
 
   it("contains a SYNCHRONOUS throw from the enumerator, exactly like a rejection", async () => {
-    // A non-async enumerator (or one that throws before it awaits) throws while it is CALLED, not on a
-    // returned promise, so a bare `.catch()` would miss it and reject the whole wrapper — which would
-    // drop the fiscal PassReport. The call is wrapped so the report still returns.
+    // Thrown when the enumerator is CALLED, not on a returned promise: a bare `.catch()` misses it.
     const inner = vi.fn(async () => REPORT);
     const log = vi.fn();
     const report = await withPendingSweep(
@@ -189,9 +176,8 @@ describe("withPendingSweep", () => {
   });
 });
 
-// `connectedCardProviderSweep` gates on a SEALED CREDENTIAL, so it needs a real database and a
-// `tenant_credentials` table. The enumerator only reads the credential PRESENCE (metadata, no
-// decrypt) and pool behaviour is faked.
+// `connectedCardProviderSweep` gates on a sealed credential being present, so it needs a real
+// database; the pool is faked.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
   timeoutMs: 60_000,
@@ -205,8 +191,6 @@ const CONTRIBUTIONS = [
   { providerId: "sumup", credentialPurpose: "payments.sumup" as const },
 ];
 
-/** Records every `pool.get` call and returns a fake provider named after the requested id. The
- * provider carries no reader (the reader is a per-collect input), so `get` takes only a provider id. */
 function recordingPool(): {
   pool: CardProviderPool;
   gets: string[];
@@ -252,7 +236,6 @@ describe("connectedCardProviderSweep", () => {
       simulator: undefined,
     })();
 
-    // Stripe is connected → fetched + swept; SumUp has NO sealed credential → never fetched (control).
     expect(gets).toEqual(["stripe"]);
     expect(providers.map((p) => p.provider)).toEqual(["stripe"]);
   });
@@ -274,7 +257,7 @@ describe("connectedCardProviderSweep", () => {
       simulator,
     })();
 
-    expect(gets).toEqual([]); // no connected pooled provider
+    expect(gets).toEqual([]);
     expect(providers).toEqual([simulator]);
   });
 });

@@ -24,32 +24,13 @@ import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
 import { startServer } from "./boot.js";
 
 /**
- * The primary-only SINGLETON duties (scheduled backup, outbound tunnel client) gate on
- * `singleton_role`, not on `mode` (promotion #158 follow-on). Since swap step 4 the outbox sync
- * SOURCE and retention sweep are deleted, so two singleton duties remain; this suite pins the
- * topology no other boot suite exercises WITH THE SINGLETON-DUTY CONFIGS WIRED: a SELL-ONLY LOCAL
- * SECONDARY — `node_roles.mode='primary'` AND `singleton_role='secondary'` — which is NOT a mirror
- * (so `isMirror` is false and the old `!isMirror` gate ran all of them, the active-active
- * duplication this gate fixes) yet must run NEITHER, because the one singleton primary owns them.
- * TWO migrated venue directories holding the SAME identity: a `(primary, secondary)` one that runs
- * neither, and a default-`primary` one that runs both — the control proving the secondary's absence
- * is real, not a boot that silently wired nothing (CLAUDE.md §1).
+ * A sell-only local secondary — `node_roles.mode='primary'` with `singleton_role='secondary'` — is
+ * not a mirror, yet must run neither singleton duty (scheduled backup, outbound tunnel client),
+ * because the one singleton primary owns them. A default-`primary` directory of the same identity is
+ * the control that runs both, so the secondary's absence is not a boot that wired nothing.
  *
- * ## Two things to know about this file
- *
- * **There is no ROLE SPLIT on this engine.** Both boots below run every statement on the one
- * handle `openVenueStore` hands out, so nothing here shows that the deployment role can read
- * `deployment` and cannot write it.
- *
- * **Boot owns the file, so the suite hands over a DIRECTORY and lets go of it.** `startServer`
- * opens `config.venueDir` itself and holds it for the life of the server, and it states that it
- * never holds two opens of one directory at once (`boot.ts:830-836`). The seeding handle each
- * directory gets below is therefore closed before `startServer` is called, and no test reads the
- * database back while a server is up. `DATABASE_URL` and `WAITRON_MIGRATIONS_DATABASE_URL` are not
- * set because nothing reads them any more:
- * `grep -rn "DATABASE_URL" apps/server/src --include="*.ts" | grep -v "\.test\.ts"` returns two
- * lines and both are COMMENTS — `restore-command.ts:48` and `backup-config.ts:21` (re-run
- * 2026-09-22, after the PostgreSQL test harness was deleted).
+ * Each seeding handle is closed before `startServer` is called, and no test reads the database
+ * while a server is up.
  */
 
 vi.mock("./cloud-snapshot-worker.js", async (original) => {
@@ -68,19 +49,12 @@ vi.mock("@waitron/tunnel", async (importOriginal) => {
   };
 });
 
-// One shared module mock accumulates calls across tests, so clear the spy before each so the call-count
-// assertions stay order-independent (boot.test.ts's own rule). `mockClear` keeps the spy's
-// `vi.fn(actual.*)` call-through implementation, resetting only `mock.calls`.
 beforeEach(() => {
   vi.mocked(runTunnelClient).mockClear();
   vi.mocked(createCloudSnapshotWorker).mockClear();
   vi.mocked(runCloudSnapshotLoop).mockClear();
 });
 
-// The till's fiscal identity — the four WAITRON_TILL_*_ID that put boot into TRADING mode (a secondary is
-// a trading boot: it sells, it just files nothing and owns no singletons). Seeded in both venue
-// directories so `readOrderFlow` / `readVenueLocale` resolve and the sync source (on the primary
-// control) names this node.
 const TILL_ENV = {
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
@@ -88,17 +62,14 @@ const TILL_ENV = {
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 
-// A `modules.json` resolving the two-member fiscal slot to Veri*Factu (disabling `fiscal-none`), so a
-// trading boot does not refuse `module.fiscal_slot_ambiguous` under the default-on both-enabled set.
+// Disables `fiscal-none` so a trading boot does not refuse `module.fiscal_slot_ambiguous`.
 const STATE_ROOT = mkdtempSync(join(tmpdir(), "waitron-singleton-state-"));
 writeFileSync(
   join(STATE_ROOT, "modules.json"),
   JSON.stringify({ modules: { "fiscal-none": false } }),
 );
 const KEY_ENV = {
-  // Task 3: keep the plain-HTTP landing listener (default port 80) OUT of every boot test — 80 is
-  // privileged, and a root CI container would otherwise stand up a live service on it. Its own
-  // behaviour is proven directly in landing-listener.test.ts.
+  // Keeps the plain-HTTP landing listener off privileged port 80.
   WAITRON_HTTP_LANDING_PORT: "0",
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -112,17 +83,8 @@ let backupDir: string;
 let secondaryVenueDir: string;
 let primaryVenueDir: string;
 
-/**
- * Seed the venue identity — the taxpayer row, location, node, till and series — with the
- * WAITRON_TILL_*_ID into one already-migrated venue handle.
- */
 async function seedIdentity(db: Database): Promise<void> {
-  // Every row goes in through its TABLE DEFINITION, the same change `packages/db/src/testing/seed.ts`
-  // and `testing/fiscal-fixtures.ts` took. Two reasons: a raw insert reaches no `$defaultFn`
-  // generator, and `created_at` on `tenants`, `nodes` and `tills` is one of those on this engine; and
-  // `array['en']::text[]` is PostgreSQL array syntax with a PostgreSQL cast operator, both refused at
-  // prepare here. `on conflict do nothing` stays UNTARGETED, as the statements it replaces were —
-  // narrowing it would be a behaviour change this conversion is not making.
+  // `onConflictDoNothing` is untargeted: nothing here reads the result.
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90333333P", legalName: "Secondary SL" })
@@ -162,16 +124,7 @@ async function seedIdentity(db: Database): Promise<void> {
     .onConflictDoNothing();
 }
 
-/**
- * A fresh venue directory, migrated through the manifest and seeded, with the seeding handle CLOSED
- * again before it is returned.
- *
- * Closing is the point. `startServer` opens `config.venueDir` itself and keeps it open for the life
- * of the server, and it holds exactly one open of the directory at a time on purpose
- * (`boot.ts:830-836`); a handle left open here would be a SECOND write queue onto the same file.
- * The migration run is this suite's, not boot's, because the rows below have to exist before boot
- * reads them — boot's own `applyMigrations` over the same directory then finds nothing to do.
- */
+/** Migrated and seeded here, not by boot, because the rows have to exist before boot reads them. */
 async function migratedVenueDir(seed: (db: Database) => Promise<void>): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "waitron-singleton-venue-"));
   await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
@@ -194,18 +147,13 @@ beforeAll(async () => {
   }
   backupDir = await mkdtemp(join(tmpdir(), "waitron-singleton-backup-"));
 
-  // The sell-only local secondary: stamp preproduction (so the deployment guard passes and
-  // `setSingletonRole` finds a stamped database), then set singleton_role='secondary'. The mode
-  // keeps its default 'primary' — this is a `(primary, secondary)` node, valid under
-  // `node_roles_role_valid_ck` (a mirror could not hold 'secondary' this way; only a real
-  // primary-mode box can be a local secondary).
+  // The mode keeps its default 'primary': a `(primary, secondary)` node.
   secondaryVenueDir = await migratedVenueDir(async (db) => {
     await seedIdentity(db);
     await stampDeployment(db, "preproduction");
     await setSingletonRole(db, TILL_ENV.WAITRON_TILL_NODE_ID, "secondary");
   });
-  // The control writes no `node_roles` row, so it reads as ('primary', 'primary') through
-  // `readDeploymentAxes`'s missing-row fallback — the singleton primary that owns both.
+  // No `node_roles` row: `readDeploymentAxes` reads it as ('primary', 'primary').
   primaryVenueDir = await migratedVenueDir(async (db) => {
     await seedIdentity(db);
     await stampDeployment(db, "preproduction");
@@ -221,7 +169,7 @@ afterAll(async () => {
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
-/** An OS-assigned free port, released before use (boot.test.ts's helper — WAITRON_HTTP_PORT rejects "0"). */
+/** `WAITRON_HTTP_PORT` refuses "0", so the OS picks a free port first. */
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const probe = createServer();
@@ -233,7 +181,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-/** Poll `predicate` up to ~10s for its first defined value (boot.test.ts's shape). */
+/** Poll `predicate` up to ~10s for its first defined value. */
 async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
   for (let i = 0; i < 200; i += 1) {
     const value = predicate();
@@ -243,8 +191,7 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
   return undefined;
 }
 
-/** `boot.ts` hardcodes `process.stdout.write` as its log sink, so capturing it is the only way to observe
- * what it logs. Every chunk is forwarded to the real writer (boot.test.ts's own helper). */
+/** `boot.ts` logs to `process.stdout.write`; every chunk is still forwarded to the real writer. */
 async function withCapturedStdout<T>(fn: (lines: string[]) => Promise<T>): Promise<T> {
   const original = process.stdout.write.bind(process.stdout);
   const lines: string[] = [];
@@ -286,9 +233,7 @@ async function waitForEvent(lines: readonly string[], event: string): Promise<Lo
   return found;
 }
 
-/** True if any captured line's `event` is EXACTLY `event`. Exact, not prefix: `backup.disabled` and
- * `backup.disabled_open_failed` must be told apart — a non-primary logs the former (the duty is
- * skipped before the venue is ever opened), a primary whose venue will not open logs the latter. */
+/** Exact, not prefix: `backup.disabled` and `backup.disabled_open_failed` must be told apart. */
 function hasEvent(lines: readonly string[], event: string): boolean {
   return lines.some((line) => {
     try {
@@ -299,10 +244,8 @@ function hasEvent(lines: readonly string[], event: string): boolean {
   });
 }
 
-// The singleton duties' config, present in FULL on both boots so the ONLY thing that decides whether
-// they run is `singleton_role`. The relay is unreachable (port 1) on purpose: the real call-through
-// worker backs off — this suite asserts the WIRING (started or not), never a live connection. Each
-// boot fills in its own `WAITRON_VENUE_DIR`.
+// Full duty config on both boots, so only `singleton_role` decides whether the duties run. The relay
+// is unreachable on purpose: the suite asserts the wiring, never a live connection.
 function dutyEnv(port: number) {
   return {
     ...KEY_ENV,
@@ -315,23 +258,16 @@ function dutyEnv(port: number) {
   };
 }
 
-// The backup config goes through the RAW `base` arg (2nd `startServer` param), not the merged `env`:
-// the supervisor re-reads its config off `loadBoxEnv(base, stateDir)` each reload, so a value only in
-// `env` would never reach it.
+// Passed as `startServer`'s RAW `base`, not the merged `env`: the supervisor re-reads its config off
+// `loadBoxEnv(base, stateDir)` on each reload.
 //
-// **A LEVER THIS PAIR OF CASES LOST, stated rather than quietly worked around.** It used to point
-// the backup duty at an unreachable database (`WAITRON_BACKUP_DATABASE_URL`, port 1) so that a
-// primary — and only a primary — emitted a loud `backup.disabled_probe_failed`. That setting is
-// gone with PostgreSQL: the supervisor opens the box's own venue directory, and there is no way to
-// make THAT open fail without breaking the whole server the suite is booting. The primary case's
-// assertion below is therefore the weaker (but true) one — the primary does NOT take the
-// non-primary branch — instead of the stronger "it reached the probe and failed it". Re-founding it
-// belongs with whoever converts this suite's two-node harness; nothing in it runs today.
+// Weaker than it looks: the primary case asserts only that it does NOT take the non-primary branch,
+// not that its backup duty ran — the suite has no way to fail the supervisor's open of the venue
+// without breaking the boot.
 function backupBase() {
   return {
     WAITRON_BACKUP_DIR: backupDir,
-    // Required since BR-1 Task 4 — without it loadBackupConfig throws backup.recovery_key_missing
-    // before either boot reaches the wiring this suite asserts.
+    // Without it `loadBackupConfig` throws `backup.recovery_key_missing` before the wiring asserted.
     WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
   };
 }
@@ -347,27 +283,19 @@ describe("singleton-duty boot (node_roles.singleton_role gating)", () => {
         },
         backupBase(),
       );
-      // The loop's first sleep is logged strictly AFTER the (synchronous) boot has decided every gate
-      // above — the backup/tunnel blocks run before `runLoop` — so once this line has arrived the backup
-      // gate has been evaluated and the absence assertions below are not merely "not yet".
+      // Logged only after boot has decided every duty gate, so the absences below are not "not yet".
       await waitForEvent(captured, "loop.sleeping");
       return [started, captured] as const;
     });
     try {
-      // 1. Backup — the supervisor is built and `reload()` runs on every boot, but a NON-PRIMARY takes
-      // the disabled branch before the venue is ever opened: `backup.disabled` is logged. The primary
-      // control below does NOT log it for the identical config, so this split is the gate (duty
-      // skipped on the secondary, entered on the primary), not a missing config.
       expect(hasEvent(lines, "backup.disabled")).toBe(true);
       expect(hasEvent(lines, "backup.disabled_open_failed")).toBe(false);
 
-      // 2. Tunnel client — not dialed (the primary control dials it once).
       expect(runTunnelClient).not.toHaveBeenCalled();
       expect(createCloudSnapshotWorker).toHaveBeenCalledTimes(1);
       expect(vi.mocked(createCloudSnapshotWorker).mock.calls[0]![0].isPrimary()).toBe(false);
 
-      // The secondary still SELLS: its fiscal pass runs as the trivial empty pass (singletonPass resolves a
-      // non-singleton), so /health advances rather than draining/reconciling — the sell-only posture.
+      // The secondary still sells: its fiscal pass runs empty, so /health still advances.
       await poll(() => server.health.lastPassAt ?? undefined);
       expect(server.health.lastPassAt).not.toBeNull();
     } finally {
@@ -386,19 +314,13 @@ describe("singleton-duty boot (node_roles.singleton_role gating)", () => {
         },
         backupBase(),
       );
-      // The backup gate runs during the (synchronous) boot, so its `backup.*` line is emitted before the
-      // first `loop.sleeping` — wait for that to be sure the gate has been decided before asserting.
       await waitForEvent(captured, "loop.sleeping");
       return [started, captured] as const;
     });
     try {
-      // 1. Backup — the gate RAN: a singleton primary does not take the non-primary branch, so
-      // `backup.disabled` is ABSENT here where the secondary above logs it. The positive twin of the
-      // secondary's assertion. See `backupBase` for the stronger assertion this replaced and why its
-      // lever no longer exists.
+      // See `backupBase` for why this is the only backup assertion.
       expect(hasEvent(lines, "backup.disabled")).toBe(false);
 
-      // 2. Tunnel client — dialed once.
       expect(runTunnelClient).toHaveBeenCalledTimes(1);
       expect(createCloudSnapshotWorker).toHaveBeenCalledTimes(1);
       expect(vi.mocked(createCloudSnapshotWorker).mock.calls[0]![0].isPrimary()).toBe(true);
