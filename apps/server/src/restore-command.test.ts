@@ -982,6 +982,10 @@ describe("waitron-restore restore, the arguments each form accepts", () => {
     ["an artifact after the kit file", ["--from-bucket", KIT_FILE, ARTIFACT]],
     ["a second artifact", [ARTIFACT, ARTIFACT]],
     ["--from-bucket given twice", ["--from-bucket", KIT_FILE, "--from-bucket", KIT_FILE]],
+    [
+      "--confirm-old-box-gone given twice",
+      [ARTIFACT, "--confirm-old-box-gone", "--confirm-old-box-gone"],
+    ],
   ])("prints the one-line usage and runs nothing for %s", async (_label, args) => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-cli-args-"));
     const artifactPath = await makeArtifact(dir);
