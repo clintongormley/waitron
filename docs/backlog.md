@@ -2832,12 +2832,36 @@ image constraints under *Detail → Box image*.
   payments, webhook, pass, me, transfer, served, sale, split, move and modifier files, part g (#622,
   about 4,120 to about 1,750, parse-tree walk, tests included) and `apps/server`'s working-order,
   tabs and tables files, part b (#623, about 4,040 to about 1,920, parse-tree walk, tests included;
-  `working-order.ts` alone 1,854 to 471).
+  `working-order.ts` alone 1,854 to 471) and `apps/server`'s boot, health, SPA and dev-hint
+  files, part c1 (#624, about 1,455 to about 400, parse-tree walk, tests included; `boot.ts`,
+  `boot.test.ts` and `config.ts` are held back as c2 because the SQLite slice-2 plan's Tasks 8–10
+  change them).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621, #622 and #623 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621, #622, #623 and #624 and left for the package that owns each, all
   still OPEN:
+  - Found by #624 (`apps/server` part c1), outside its files or not fixable in a comments-only
+    change. `apps/server/src/node-entry.ts` (the comment after the boot-failure report is written)
+    says the scrubbed text "has already gone to stdout from runEntry's catch"; that is false for a
+    failure reading the recovery state or writing the boot counter, which run before the `try`
+    (receipt in #624's commit message, which moved it out of `boot-failure.ts`). Two other comments
+    in the same file, on the installer's stdout channel, call it "the one place the caught error's
+    own words may appear", which the recovery page's log tail contradicts (`recovery-surface.ts` and its "caught error's own words on the
+    page" test). `docs/developers/workflow-guide.md`'s dev migration hint section still describes the PostgreSQL
+    version (PostgreSQL 18, `23P01` on the list, `classifyBootFailure` dropping `22P02`, "the two
+    share no SQLSTATE table", remedies that are opposites); the two lists are now SQLite result
+    codes, `boot-failure.ts`'s codes lead to "retry or restart", and `dev-migration-hint.ts` still
+    names that section as its receipt. `boot.test.ts` (held back) implies a
+    `mockClear`/`mockReset` contrast that is false on Vitest 4 (both keep the implementation; #624's
+    review ran it). Tests, not comments: `boot-failure.test.ts`'s "names every pinned result code
+    as an unreachable database" cannot fail when a code is added (the review added 26 and the suite
+    passed), and two `health.test.ts` cases, "stays 200 when reconcile has failed runs but nothing
+    parked" and "does not flip health for a failed-only run (parked stays 0)", feed a clean pass, so
+    they check less than their titles say. Test titles #624 could not touch: "(T12b)" in
+    `boot-pending-sweep.test.ts`, "(prove-by-deletion)" in `boot.reconcile.test.ts`, "(C2)",
+    "(pre-merge review)", "(I1)" and "skipped a tenant" in `health.test.ts`, "the new guard" in
+    `config.test.ts`.
   - Found by #623 (`apps/server` part b: working-order, tabs, tables), not fixable in a
     comments-only change. **Editing a held order that has already sent lines to the kitchen deletes
     their ticket items and never re-sends the new lines.** `PUT /api/working-orders/:id` checks only
@@ -4986,10 +5010,11 @@ any of this code, so you can still read how something worked under PostgreSQL.
   `installAppendOnlyTriggers` (`:117`). The header also cites `venue-db.ts:169` and
   `migrate.ts:37-40`. Whether the suite still has another reason to migrate through the product's own
   `applyMigrations` is the open question; restate that reason, or delete the claim.
-- **Two suite headers in `apps/server` say their suite is RED, and both pass.**
-  `apps/server/src/boot.promote.test.ts` ("One case below is RED") and
-  `apps/server/src/awaiting-fiscal-cert.test.ts` ("This suite is RED") — run 2026-09-23, 3 of 3 and
-  1 of 1 passed. Delete both paragraphs.
+- **A suite header in `apps/server` says its suite is RED, and it passes.**
+  `apps/server/src/awaiting-fiscal-cert.test.ts` ("This suite is RED") — run 2026-09-23, 1 of 1
+  passed. Delete the paragraph. (#624 deleted `boot.promote.test.ts`'s matching "One case below is
+  RED"; `awaiting-fiscal-cert.test.ts` is held back from comment pruning while the SQLite slice-2
+  plan changes it.)
 - **Bounding the offline write-ahead log is an open design question, and the lever risk 9 names is not
   one.** Measured: while a litestream daemon is attached AND cannot reach its store, the log's space
   cannot be reclaimed at all — `PRAGMA wal_checkpoint(TRUNCATE)` blocks for seconds and shrinks
