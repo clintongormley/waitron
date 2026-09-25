@@ -5663,6 +5663,11 @@ line with what slice 2 built. Left open:
   only against a fake Litestream in the test suites (`packages/stream/src/supervisor.test.ts`
   among them); the real binary at that limit was measured by the bench rig (results note, 1b), not
   through the supervisor.
+- Read in #652's review, not reproduced: while the side file is at its limit, the supervisor's pause
+  loop asks the bucket whether it answers (`#bucketAnswers` in `packages/stream/src/supervisor.ts`)
+  through a store call nothing in that loop bounds by time, so a bucket that accepts the connection
+  and never replies may hold the pause open; a stop still ends it (`#unlessStopped`). Whether the S3
+  client's own settings bound that call was not checked.
 - The frozen-server stage records its sales with `recordOneSale`, which opens a second store with its
   own write queue, so none of them waits behind the server's `checkpointTruncate`.
 
