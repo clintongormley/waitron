@@ -58,11 +58,6 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
   }
-  // Started before the re-issue's key generation so the bucket wait overlaps it. The empty catch
-  // only marks the promise handled for when the re-issue throws first; the await below still sees
-  // a rejection.
-  const pointerRead = deps.pointerTerm?.() ?? Promise.resolve(null);
-  pointerRead.catch(() => {});
   await reissueBoxLeaf({
     stateDir: deps.stateDir,
     hostnames: deps.hostnames,
@@ -78,7 +73,7 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
         );
   // Never below the bucket's pointer: the stream supervisor refuses to replace a pointer naming a
   // higher term (slice-2 spec §5.1 step 7).
-  const pointerTerm = await pointerRead;
+  const pointerTerm = (await deps.pointerTerm?.()) ?? null;
   const next = await mintNextMembershipDocument(
     { db: deps.db, ring: deps.ring },
     {
@@ -161,10 +156,10 @@ export async function readBucketPointerTerm(
   ring: KeyRing,
   options: { openStore?: (bucket: BucketConfig) => ObjectStore; timeoutMs?: number } = {},
 ): Promise<number | null> {
-  const settings = await readStreamSettings(db, ring);
-  if (settings === null) return null;
   let read: Awaited<ReturnType<typeof readPointer>> | typeof TIMED_OUT;
   try {
+    const settings = await readStreamSettings(db, ring);
+    if (settings === null) return null;
     const store = (options.openStore ?? createS3ObjectStore)(settings.bucket);
     read = await Promise.race([
       readPointer(store, settings.venueId),

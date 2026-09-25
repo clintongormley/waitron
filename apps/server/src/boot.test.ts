@@ -1243,7 +1243,6 @@ describe("startServer, against a migrated venue directory", () => {
   it("keeps selling when a restore's first start fails, and raises restore.first_start_failed", async () => {
     const venue = await freshVenue();
     const db = venue.store.venue;
-    // No membership key is sealed for this node, so signing the next term fails.
     await seedTradingVenue(db);
     const [admin] = await db
       .insert(persons)
@@ -1289,16 +1288,21 @@ describe("startServer, against a migrated venue directory", () => {
         },
       }),
     );
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_STATE_DIR: stateDir,
-      WAITRON_VENUE_DIR: venue.directory,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "preproduction",
+    const [server, failed] = await withCapturedStdout(async (lines) => {
+      const started = await startServer({
+        ...KEY_ENV,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_VENUE_DIR: venue.directory,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "preproduction",
+      });
+      return [started, await waitForEvent(lines, "restore.first_start_failed")] as const;
     });
     const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
     try {
+      // Nothing listens on the bucket's port, so reading its pointer fails before any term is signed.
+      expect(failed.errorCode).toBe("backup.stream_request_failed");
       const health = await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
       expect(health.status).toBe(200);
       expect(((await health.json()) as { stream: unknown }).stream).toEqual({

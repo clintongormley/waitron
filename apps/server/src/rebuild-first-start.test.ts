@@ -13,6 +13,7 @@ import {
   tenants,
   withTransaction,
   writeNodeMembership,
+  type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
@@ -299,7 +300,7 @@ describe("completeRebuild", () => {
   });
 });
 
-describe("the term after a restore (plan Reconciliation N23)", () => {
+describe("the term after a restore (slice-2 spec §5.1 step 7)", () => {
   it("signs one term above the bucket's pointer when the restored copy is older than it", async () => {
     const stateDir = await rebuiltStateDir("archive");
     await completeRebuild(deps(stateDir, { pointerTerm: async () => 2 }));
@@ -324,36 +325,14 @@ describe("the term after a restore (plan Reconciliation N23)", () => {
     await stat(join(stateDir, REBUILD_MARKER));
   });
 
-  it("asks the bucket before re-issuing the certificate, so the wait overlaps the key generation", async () => {
-    const stateDir = await rebuiltStateDir("archive");
-    const leafBefore = await readFile(join(stateDir, "tls", "server.crt"), "utf8");
-    let leafWhenAsked: string | undefined;
-    await completeRebuild(
-      deps(stateDir, {
-        pointerTerm: async () => {
-          leafWhenAsked = await readFile(join(stateDir, "tls", "server.crt"), "utf8");
-          return null;
-        },
-      }),
-    );
-    expect(leafWhenAsked).toBe(leafBefore);
-    expect(await readFile(join(stateDir, "tls", "server.crt"), "utf8")).not.toBe(leafBefore);
-  });
-
-  // The read starts before the re-issue, so a re-issue that throws leaves a read nobody awaits.
-  // Vitest fails the run on an unhandled rejection.
-  it("reports the re-issue's failure, and no unhandled rejection, when the pointer read fails too", async () => {
+  it("reports the re-issue's failure without asking the bucket", async () => {
     const stateDir = await rebuiltStateDir("archive");
     await rm(join(stateDir, "tls", "ca.key"));
-    await expect(
-      completeRebuild(
-        deps(stateDir, {
-          pointerTerm: () => Promise.reject(new AppError("restore.pointer_unreadable", {})),
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "ENOENT" });
-    // Gives an unobserved rejection the turn it needs to be reported.
-    await new Promise((resolve) => setImmediate(resolve));
+    const pointerTerm = vi.fn(async () => null);
+    await expect(completeRebuild(deps(stateDir, { pointerTerm }))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(pointerTerm).not.toHaveBeenCalled();
   });
 
   it("does not ask the bucket on an ordinary start", async () => {
@@ -446,6 +425,17 @@ describe("readBucketPointerTerm", () => {
     expect(openStore).not.toHaveBeenCalled();
   });
 
+  it("refuses with restore.pointer_unreadable when reading the settings fails with no code", async () => {
+    const closed = {
+      withWriteLock: () => Promise.reject(new Error("database is closed")),
+    } as unknown as Database;
+    const openStore = vi.fn();
+    await expect(readBucketPointerTerm(closed, RING, { openStore })).rejects.toMatchObject({
+      code: "restore.pointer_unreadable",
+    });
+    expect(openStore).not.toHaveBeenCalled();
+  });
+
   it("refuses when the bucket cannot be opened", async () => {
     await storeSettings(SETTINGS);
     const openStore = () => {
@@ -468,7 +458,7 @@ describe("readBucketPointerTerm", () => {
   });
 });
 
-describe("runFirstStart (plan Reconciliation N24)", () => {
+describe("runFirstStart (slice-2 spec §5.3)", () => {
   it("opens for sales without streaming, logs restore.first_start_failed, and keeps the marker for the next start", async () => {
     const stateDir = await rebuiltStateDir("stream");
     const log = vi.fn();
