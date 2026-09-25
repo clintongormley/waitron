@@ -17,7 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { contentLanguages, menuItems, menuSections } from "./schema/menu.js";
-import { categoryDetails, productCategories } from "./schema/categories.js";
+import { categoryDetails } from "./schema/categories.js";
 import {
   extraListItems,
   extraLists,
@@ -46,7 +46,6 @@ const TABLES = [
   "menu_sections",
   "menu_items",
   "category_details",
-  "product_categories",
   "labels",
   "product_labels",
   "units",
@@ -151,7 +150,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_sections: "id",
       menu_items: "id",
       category_details: "category_id",
-      product_categories: "product_id, category_id",
       labels: "id",
       product_labels: "product_id, label_id",
       units: "id",
@@ -186,8 +184,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       "menu_items(product_id)": "products(id) on delete restrict",
       "menu_sections(menu_id)": "catalogues(id) on delete cascade",
       "option_labels(list_id)": "option_lists(id) on delete cascade",
-      "product_categories(category_id)": "categories(id) on delete restrict",
-      "product_categories(product_id)": "products(id) on delete cascade",
       "product_labels(label_id)": "labels(id) on delete cascade",
       "product_labels(product_id)": "products(id) on delete cascade",
       "product_modifiers(extra_list_id)": "extra_lists(id) on delete cascade",
@@ -259,7 +255,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_sections_menu_order_idx: { unique: false, columns: "menu_id, display_order" },
       labels_name_uq: { unique: true, columns: "name" },
       option_labels_list_sort_idx: { unique: false, columns: "list_id, sort" },
-      product_categories_category_idx: { unique: false, columns: "category_id" },
       product_labels_label_idx: { unique: false, columns: "label_id" },
       product_modifiers_product_extra_uq: { unique: true, columns: "product_id, extra_list_id" },
       product_modifiers_product_option_uq: { unique: true, columns: "product_id, option_list_id" },
@@ -267,6 +262,17 @@ describe("the catalogue migration set carries no tenant column", () => {
       product_units_unit_idx: { unique: false, columns: "unit_id" },
       units_seed_key_key: { unique: true, columns: "seed_key" },
     });
+  });
+});
+
+describe("the catalogue set keeps no category membership table", () => {
+  it("leaves no product_categories behind: a product's one main category is products.category_id", async () => {
+    const left = (
+      await db.execute<{ name: string }>(
+        sql`select name from sqlite_master where type = 'table' and name = 'product_categories'`,
+      )
+    ).rows;
+    expect(left).toEqual([]);
   });
 });
 
@@ -476,7 +482,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     );
   });
 
-  it("refuses category details and memberships whose category or product does not exist", async () => {
+  it("refuses category details whose category or parent does not exist", async () => {
     const c = await catalogue();
     await refusal(
       () => db.insert(categoryDetails).values({ categoryId: missing }),
@@ -485,14 +491,6 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     await refusal(
       () => db.insert(categoryDetails).values({ categoryId: c.categoryId, parentId: missing }),
       "category_details_parent_fk",
-    );
-    await refusal(
-      () => db.insert(productCategories).values({ productId: missing, categoryId: c.categoryId }),
-      "product_categories_product_fk",
-    );
-    await refusal(
-      () => db.insert(productCategories).values({ productId: c.productId, categoryId: missing }),
-      "product_categories_category_fk",
     );
   });
 
