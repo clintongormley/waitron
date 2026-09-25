@@ -112,6 +112,8 @@ export async function setProductLabels(tx, productId: string, labelIds: string[]
 export async function deleteCategory(tx, id: string, reassign: { productsTo: string | null; childrenTo: string | null }): Promise<void>;
 ```
 
+_2026-09-25: this code was renamed `label.name_taken` before it shipped, matching the other name-clash codes._
+
 - [ ] **Step 1: Write the failing tests:**
   - **Labels:** create, rename, delete and assign. A variant's labels read as its parent's, and
     `setProductLabels` on a variant is refused with the variant code used elsewhere (grep the

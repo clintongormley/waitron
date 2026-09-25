@@ -42,9 +42,8 @@ You can also add a customer-facing description and a picture, both under **Descr
 
 Each product has one **Main category**, chosen under **Category and labels** in the product editor.
 Categories form a tree, so the field shows each category's full path. Leave it empty and the product
-is Uncategorised. The main category is also one of the places a dish's kitchen route can come from:
-when the product's own station is left empty, the empty station field says in what order the service
-route, the main category and the venue default are tried.
+is Uncategorised. The main category also plays a part in choosing the kitchen station a dish goes to,
+as described below.
 
 Labels are for the groupings a single tree cannot hold, such as **Alcoholic** or **Happy hour
 drinks**, which cut across your categories and can overlap each other. A product can carry any
@@ -53,9 +52,11 @@ in every language. You create, rename and delete labels on the **Labels** tab of
 screen, and choose a product's labels in the same editor section as its main category. Labels never
 decide where a dish is prepared.
 
-Use the product's station and course fields, under **Kitchen**, to set its preparation routing
-directly. They save with the product now, so you can set them while creating it, and cancelling the
-editor leaves them as they were.
+Use the product's **Kitchen station** and **Default course** fields, under **Kitchen**, for its
+preparation routing. They save with the product, so you can set them while creating it, and
+cancelling the editor leaves them as they were. When a dish is sent to the kitchen, a service route
+set for the product or for its main category comes first. After that comes the product's own
+**Kitchen station**, then its main category's station, then the venue's default station.
 
 You can create a unit, a category, an extras list or an options list without abandoning a product
 you are editing. Open the nested form, save the new item and select it when you return. The unsaved
