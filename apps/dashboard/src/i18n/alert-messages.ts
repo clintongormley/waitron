@@ -2,10 +2,9 @@
 // params. Kept free of imports so the root guard (`scripts/alert-codes.test.ts`) can load it.
 //
 // No sentence promises a later check by the server: the daily payments check looks at each day once,
-// and the fiscal reconciliation sweep has no production caller. Two sentences promise a retry:
-// `alert.source_unavailable`, where an open dashboard asks for its alerts again every minute, and
-// `restore.first_start_failed`, which asks for a restart; a restart runs the first start again
-// unless that start defers it (`apps/server/src/rebuild-first-start.ts`).
+// and the fiscal reconciliation sweep has no production caller. Only `alert.source_unavailable`
+// promises an automatic retry, because an open dashboard asks for its alerts again every minute;
+// a sentence that asks for a retry or a restart asks the owner to do it.
 
 // An open payment incident swallows later detections for the same till and code, so its figures
 // are from when it was raised.

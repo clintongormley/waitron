@@ -100,7 +100,7 @@ export interface StreamHostDeps {
 export class StreamHost {
   readonly #deps: StreamHostDeps;
   #supervisor: StreamSupervisor | undefined;
-  /** Set when the settings are stored but no supervisor could start, so the alerts can say so. */
+  /** Set when the settings are stored but no supervisor could start, so the status can say why. */
   #notStarted: StreamNotStarted | undefined;
   #reloading = false;
   #stopped = false;

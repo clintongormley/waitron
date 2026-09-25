@@ -41,8 +41,8 @@ function streamAlert(alert: Pick<OngoingAlert, "code" | "params" | "since">): On
 
 function streamAlerts(stream: StreamView, now: Date): OngoingAlert[] {
   if (!("reason" in stream)) return [];
-  // A failed first start raises its own alert ({@link firstStartAlertSource}); a deferred one (a
-  // fenced node or a mirror) raises none.
+  // A failed first start raises its own alert ({@link firstStartAlertSource}); a deferred one raises
+  // none.
   if (stream.reason === FIRST_START_PENDING) return [];
   const stopped = streamAlert({
     code: "backup.stream_stopped",

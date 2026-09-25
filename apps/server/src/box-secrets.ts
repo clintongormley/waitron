@@ -145,7 +145,7 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
   await mkdir(files.tlsDir, { recursive: true, mode: 0o700 });
 
   // server.key is the presence sentinel for the whole TLS quartet: mint + write all four only when
-  // it is absent, so a reused install keeps its already-trusted cert byte-for-byte.
+  // it is absent, so a reused install keeps its CA and leaf byte-for-byte.
   if (!(await exists(files.keyFile))) {
     // Filter every candidate IP down to the CA's permitted subtrees before minting: the leaf's SANs
     // must be a SUBSET of what the box CA can vouch for, or `ca.verify(leaf)` fails on a permitted-
