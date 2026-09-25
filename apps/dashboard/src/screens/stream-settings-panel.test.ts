@@ -51,7 +51,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}, settings = OFF): Dashboa
   const getStreamSettings = vi.fn().mockResolvedValue(settings);
   return {
     getStreamSettings,
-    // As the server does, a later read of the settings finds what Save stored.
+    // As on the server, a later read of the settings answers what Save returned.
     saveStreamSettings: vi.fn(() => {
       getStreamSettings.mockResolvedValue(ON);
       return Promise.resolve(ON);
@@ -310,11 +310,11 @@ describe("stream-settings-panel: the bucket form", () => {
   });
 
   it("sends the corrected value once a refused field is fixed", async () => {
+    const api = stubApi();
     const save = vi
-      .fn()
-      .mockRejectedValueOnce({ code: "backup.stream_config_unsafe", params: { field: "bucket" } })
-      .mockResolvedValueOnce(ON);
-    const { el } = await mount(stubApi({ saveStreamSettings: save }));
+      .mocked(api.saveStreamSettings)
+      .mockRejectedValueOnce({ code: "backup.stream_config_unsafe", params: { field: "bucket" } });
+    const { el } = await mount(api);
     fillRequired(el);
     await press(el, "save");
     type(el, "bucket-name", "venue.copy");
@@ -358,6 +358,27 @@ describe("stream-settings-panel: the bucket form", () => {
     await flush(el);
     expect(q(el, "[data-test=test-passed]")).toBeNull();
   });
+
+  it.each([
+    ["changed", "untested-bucket", false],
+    ["retyped with the same value", "venue-copy", true],
+  ] as const)(
+    "says Test passed only for the settings it tested, when a field is %s while Test runs",
+    async (_n, bucket, passed) => {
+      let finish!: (value: { ok: true }) => void;
+      const api = stubApi({
+        testStreamBucket: vi.fn(() => new Promise<{ ok: true }>((r) => (finish = r))),
+      });
+      const { el } = await mount(api);
+      fillRequired(el);
+      await press(el, "test");
+      type(el, "bucket-name", bucket);
+      await flush(el);
+      finish({ ok: true });
+      await flush(el);
+      expect(q(el, "[data-test=test-passed]") !== null).toBe(passed);
+    },
+  );
 
   it("asks a password manager for a new secret, never a saved one", async () => {
     const { el } = await mount(stubApi());
@@ -943,4 +964,286 @@ describe("stream-settings-panel: once set up", () => {
       await page.viewport(1280, 900);
     }
   });
+});
+
+describe("stream-settings-panel: which kit is on screen", () => {
+  type Kit = { kit: string; keyFingerprint: string };
+
+  /** A kit read that answers only when the test says so, oldest read first. */
+  function heldKit(): {
+    read: () => Promise<Kit>;
+    answer: (value: Kit) => void;
+    refuse: (error: unknown) => void;
+  } {
+    const waiting: { resolve: (value: Kit) => void; reject: (error: unknown) => void }[] = [];
+    return {
+      read: () => new Promise<Kit>((resolve, reject) => waiting.push({ resolve, reject })),
+      answer: (value) => waiting.shift()!.resolve(value),
+      refuse: (error) => waiting.shift()!.reject(error),
+    };
+  }
+
+  const moved = (
+    change: Partial<NonNullable<StreamSettingsView["bucket"]>>,
+  ): StreamSettingsView => ({
+    ...ON,
+    bucket: { ...ON.bucket!, ...change },
+  });
+
+  it("keeps the re-issued kit when an earlier Show recovery kit request answers after it", async () => {
+    const held = heldKit();
+    const api = withBackground(stubApi({ getRecoveryKit: vi.fn(held.read) }, ON));
+    vi.mocked(api.background.getRecoveryKit).mockResolvedValue({
+      kit: NEW_KIT,
+      keyFingerprint: "ffee0011",
+    });
+    const { el } = await mount(api);
+    await press(el, "show-kit");
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    expect(text(el, "[data-test=kit]")).toBe(NEW_KIT);
+    held.answer({ kit: KIT, keyFingerprint: "ab12cd34" });
+    await flush(el);
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    expect(text(el, "[data-test=kit]")).toBe(NEW_KIT);
+    expect(text(el, "[data-test=kit-reissued]")).toBe(t("stream.kit.reissued"));
+  });
+
+  it("shows nothing of a Show recovery kit answer that arrives after the copy was turned off elsewhere", async () => {
+    const held = heldKit();
+    const api = stubApi({ getRecoveryKit: vi.fn(held.read) }, ON);
+    const { el } = await mount(api);
+    await press(el, "show-kit");
+    await refresh(el, api, OFF);
+    held.answer({ kit: KIT, keyFingerprint: "ab12cd34" });
+    await flush(el);
+    expect(q(el, "[data-test=kit]")).toBeNull();
+  });
+
+  it("keeps the kit fetched for the saved bucket when an earlier Show recovery kit request answers after Save", async () => {
+    const held = heldKit();
+    const api = stubApi({ getRecoveryKit: vi.fn(held.read) }, ON);
+    const { el } = await mount(api);
+    await press(el, "show-kit");
+    await press(el, "change");
+    type(el, "bucket-secret-access-key", "not-a-real-secret-0123456789");
+    await press(el, "save");
+    held.answer({ kit: KIT, keyFingerprint: "ab12cd34" });
+    await flush(el);
+    expect(q(el, "[data-test=kit]")).toBeNull();
+    held.answer({ kit: NEW_KIT, keyFingerprint: "ab12cd34" });
+    await flush(el);
+    expect(text(el, "[data-test=kit]")).toBe(NEW_KIT);
+  });
+
+  it("keeps the kit the owner asked for when an earlier automatic re-issue answers after it", async () => {
+    const held = heldKit();
+    const api = withBackground(stubApi({}, ON));
+    vi.mocked(api.background.getRecoveryKit).mockImplementation(held.read);
+    vi.mocked(api.getRecoveryKit).mockResolvedValue({ kit: NEW_KIT, keyFingerprint: "ffee0011" });
+    const { el } = await mount(api);
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    await press(el, "show-kit");
+    expect(text(el, "[data-test=kit]")).toBe(NEW_KIT);
+    held.answer({ kit: KIT, keyFingerprint: "ab12cd34" });
+    await flush(el);
+    expect(text(el, "[data-test=kit]")).toBe(NEW_KIT);
+  });
+
+  it.each(["arrives", "fails"] as const)(
+    "shows nothing of a re-issue that %s after a read found the bucket changed, and fetches the kit again under the new bucket",
+    async (outcome) => {
+      const held = heldKit();
+      const api = withBackground(stubApi({}, ON));
+      vi.mocked(api.background.getRecoveryKit).mockImplementation(held.read);
+      const { el } = await mount(api);
+      await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+      await refresh(el, api, {
+        ...moved({ bucket: "replacement-bucket" }),
+        keyFingerprint: "ffee0011",
+      });
+      expect(api.background.getRecoveryKit).toHaveBeenCalledTimes(2);
+      if (outcome === "arrives") held.answer({ kit: KIT, keyFingerprint: "ffee0011" });
+      else held.refuse({ code: "connection.failed" });
+      await flush(el);
+      expect(q(el, "[data-test=kit]")).toBeNull();
+      expect(q(el, "[data-test=kit-reissued]")).toBeNull();
+      expect(q(el, "[role=alert]")).toBeNull();
+      held.answer({ kit: NEW_KIT, keyFingerprint: "ffee0011" });
+      await flush(el);
+      expect(text(el, "[data-test=kit]")).toBe(NEW_KIT);
+      expect(text(el, "[data-test=kit-reissued]")).toBe(t("stream.kit.reissued"));
+    },
+  );
+
+  it("fetches the kit again for a changed key when the owner's Show recovery kit overtook the re-issue still running", async () => {
+    const held = heldKit();
+    const api = withBackground(stubApi({}, ON));
+    vi.mocked(api.background.getRecoveryKit).mockImplementation(held.read);
+    vi.mocked(api.getRecoveryKit).mockResolvedValue({ kit: NEW_KIT, keyFingerprint: "ffee0011" });
+    const { el } = await mount(api);
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    await press(el, "show-kit");
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    expect(api.background.getRecoveryKit).toHaveBeenCalledTimes(2);
+    held.answer({ kit: KIT, keyFingerprint: "ffee0011" });
+    await flush(el);
+    expect(text(el, "[data-test=kit]")).toBe(NEW_KIT);
+    expect(q(el, "[data-test=kit-reissued]")).toBeNull();
+    held.answer({ kit: NEW_KIT, keyFingerprint: "ffee0011" });
+    await flush(el);
+    expect(text(el, "[data-test=kit]")).toBe(NEW_KIT);
+    expect(text(el, "[data-test=kit-reissued]")).toBe(t("stream.kit.reissued"));
+  });
+
+  it.each([
+    ["endpoint", { endpoint: "https://s3.example.net" }],
+    ["region", { region: "eu-south-2" }],
+    ["bucket", { bucket: "replacement-bucket" }],
+    ["prefix", { prefix: "venue" }],
+    ["accessKeyId", { accessKeyId: "AKIAREPLACEMENT" }],
+  ] as const)(
+    "takes the kit away, without fetching another, when a read finds the %s changed elsewhere under the same key",
+    async (_field, change) => {
+      const api = stubApi({}, ON);
+      const { el } = await mount(api);
+      await press(el, "show-kit");
+      await refresh(el, api, moved(change));
+      expect(q(el, "[data-test=kit]")).toBeNull();
+      expect(q(el, "[data-test=show-kit]")).not.toBeNull();
+      expect(api.getRecoveryKit).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("keeps the kit across a read that finds the same bucket", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    await press(el, "show-kit");
+    await refresh(el, api, { ...ON, bucket: { ...ON.bucket! } });
+    expect(text(el, "[data-test=kit]")).toBe(KIT);
+  });
+
+  it("shows nothing of a Show recovery kit answer requested before a read found the bucket changed", async () => {
+    const held = heldKit();
+    const api = stubApi({ getRecoveryKit: vi.fn(held.read) }, ON);
+    const { el } = await mount(api);
+    await press(el, "show-kit");
+    await refresh(el, api, moved({ bucket: "replacement-bucket" }));
+    held.answer({ kit: KIT, keyFingerprint: "ab12cd34" });
+    await flush(el);
+    expect(q(el, "[data-test=kit]")).toBeNull();
+    expect(q(el, "[data-test=show-kit]")).not.toBeNull();
+  });
+
+  it("after a Save whose kit fetch fails, takes the old kit away, offers Show recovery kit, and reports the fetch apart from the save", async () => {
+    const changed = moved({ bucket: "replacement-bucket" });
+    const api = stubApi({}, ON);
+    vi.mocked(api.saveStreamSettings).mockImplementation(() => {
+      vi.mocked(api.getStreamSettings).mockResolvedValue(changed);
+      return Promise.resolve(changed);
+    });
+    const { el } = await mount(api);
+    await press(el, "show-kit");
+    vi.mocked(api.getRecoveryKit).mockRejectedValue({ code: "connection.failed" });
+    await press(el, "change");
+    type(el, "bucket-name", "replacement-bucket");
+    type(el, "bucket-secret-access-key", "not-a-real-secret-0123456789");
+    await press(el, "save");
+    expect(q(el, "wt-input")).toBeNull();
+    expect(q(el, "[data-test=kit]")).toBeNull();
+    expect(q(el, "[data-test=show-kit]")).not.toBeNull();
+    expect(q(el, "[data-test=refusal]")).toBeNull();
+    expect(text(el, "[data-test=kit-failure]")).toBe(codeMessage("connection.failed"));
+    // The read Save asks for does not take the kit failure away.
+    await refresh(el, api, changed);
+    expect(text(el, "[data-test=kit-failure]")).toBe(codeMessage("connection.failed"));
+    vi.mocked(api.getRecoveryKit).mockResolvedValue({ kit: NEW_KIT, keyFingerprint: "ab12cd34" });
+    await press(el, "show-kit");
+    expect(text(el, "[data-test=kit]")).toBe(NEW_KIT);
+    expect(q(el, "[role=alert]")).toBeNull();
+  });
+
+  it("shows the kit for the latest key, never an earlier key change's, when the key changes again while the first re-issue is running", async () => {
+    const held = heldKit();
+    const api = withBackground(stubApi({}, ON));
+    vi.mocked(api.background.getRecoveryKit).mockImplementation(held.read);
+    const { el } = await mount(api);
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    await refresh(el, api, { ...ON, keyFingerprint: "99887766" });
+    held.answer({ kit: KIT, keyFingerprint: "ffee0011" });
+    await flush(el);
+    expect(q(el, "[data-test=kit]")).toBeNull();
+    expect(q(el, "[data-test=kit-reissued]")).toBeNull();
+    expect(api.background.getRecoveryKit).toHaveBeenCalledTimes(2);
+    held.answer({ kit: NEW_KIT, keyFingerprint: "99887766" });
+    await flush(el);
+    expect(text(el, "[data-test=kit]")).toBe(NEW_KIT);
+    expect(text(el, "[data-test=kit-reissued]")).toBe(t("stream.kit.reissued"));
+    expect(q(el, "[data-test=download-kit]")!.getAttribute("download")).toBe(
+      "waitron-recovery-kit-99887766.txt",
+    );
+  });
+
+  it("does not fetch the latest key's kit a second time when an earlier key change's re-issue settles first", async () => {
+    const held = heldKit();
+    const api = withBackground(stubApi({}, ON));
+    vi.mocked(api.background.getRecoveryKit).mockImplementation(held.read);
+    const { el } = await mount(api);
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    await refresh(el, api, { ...ON, keyFingerprint: "99887766" });
+    held.answer({ kit: KIT, keyFingerprint: "ffee0011" });
+    await flush(el);
+    await refresh(el, api, { ...ON, keyFingerprint: "99887766" });
+    expect(api.background.getRecoveryKit).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["arrives", "fails"] as const)(
+    "shows nothing of a re-issue that %s after a read found the previous key back",
+    async (outcome) => {
+      let settle!: { resolve: (value: Kit) => void; reject: (error: unknown) => void };
+      const api = withBackground(stubApi({}, ON));
+      vi.mocked(api.background.getRecoveryKit).mockImplementation(
+        () => new Promise<Kit>((resolve, reject) => (settle = { resolve, reject })),
+      );
+      const { el } = await mount(api);
+      await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+      await refresh(el, api, ON);
+      if (outcome === "arrives") settle.resolve({ kit: NEW_KIT, keyFingerprint: "ffee0011" });
+      else settle.reject({ code: "connection.failed" });
+      await flush(el);
+      expect(q(el, "[data-test=kit]")).toBeNull();
+      expect(q(el, "[data-test=kit-reissued]")).toBeNull();
+      expect(q(el, "[role=alert]")).toBeNull();
+    },
+  );
+
+  it("takes a failed Show recovery kit's alert away once an automatic re-issue shows the new kit", async () => {
+    const api = withBackground(stubApi({}, ON));
+    vi.mocked(api.getRecoveryKit).mockRejectedValue({ code: "connection.failed" });
+    vi.mocked(api.background.getRecoveryKit).mockResolvedValue({
+      kit: NEW_KIT,
+      keyFingerprint: "ffee0011",
+    });
+    const { el } = await mount(api);
+    await press(el, "show-kit");
+    expect(text(el, "[data-test=kit-failure]")).toBe(codeMessage("connection.failed"));
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    expect(text(el, "[data-test=kit]")).toBe(NEW_KIT);
+    expect(q(el, "[data-test=kit-failure]")).toBeNull();
+  });
+
+  it.each([
+    ["the copy turned off elsewhere", OFF],
+    ["the bucket changed elsewhere", moved({ bucket: "replacement-bucket" })],
+  ] as const)(
+    "takes a failed Show recovery kit's alert away once a read finds %s",
+    async (_n, next) => {
+      const api = stubApi({}, ON);
+      vi.mocked(api.getRecoveryKit).mockRejectedValue({ code: "connection.failed" });
+      const { el } = await mount(api);
+      await press(el, "show-kit");
+      expect(text(el, "[data-test=kit-failure]")).toBe(codeMessage("connection.failed"));
+      await refresh(el, api, next);
+      expect(q(el, "[data-test=kit-failure]")).toBeNull();
+    },
+  );
 });

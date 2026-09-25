@@ -5321,8 +5321,19 @@ reason's text. The archive setup form no longer makes or sends a key when the bo
 The design system gained a `--wt-font-family-mono` token, which the Backups screen's key display,
 the panel's kit, the diagnostics screen's log lines and the setup app's break-glass secret read;
 `apps/dashboard/src/screens/printers-screen.ts` already asked for it with a `monospace` fallback,
-and now gets it. Left open: the Backups screen's own card width is still a
-`34rem` literal, which the no-hardcoded-chrome rule forbids in a view and no guard reads.
+and now gets it. A retroactive Codex review of #628 found faults in the panel, fixed since: an
+earlier kit fetch could answer after a later one and put the old kit back; a failed kit fetch after
+a successful Save left the previous bucket's kit on screen with no way to ask again; Test could say
+it passed for settings edited while it ran; and a bucket changed in another tab under the same key
+left the old kit showing. For that last one the panel now takes the kit away when any bucket field a
+settings read carries (endpoint, region, bucket, prefix, access key id) changes. Review of those
+fixes found one more, also fixed, that was in the panel before them: when the recovery key changed
+again, or changed back, while the automatic kit fetch for the first change was still running, that
+fetch's kit went on screen under the "download the new kit" banner, and a second change's own fetch
+was skipped. Left open: the Backups screen's own card width is still a `34rem` literal, which the
+no-hardcoded-chrome rule forbids in a view and no guard reads; and a change of the secret access key
+alone, made in another tab, still leaves the old kit showing, because a settings read does not carry
+the secret.
 Task 9a, the first start after a restore (#630). Every restore that takes on the archive's
 identity (`skipSecrets` unset) leaves `rebuild-first-start.json` in the state folder, written under the
 venue lock before anything is placed and removed if the restore throws. At the next trading start
