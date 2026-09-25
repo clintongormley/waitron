@@ -347,12 +347,6 @@ export class CategoriesScreen extends LitElement {
     this.saveError = "";
     this.confirmingMove = true;
   }
-  #moving(): number {
-    return [...this.picked].filter(
-      (id) =>
-        this.products.find((product) => product.id === id)?.primaryCategoryId !== this.selected,
-    ).length;
-  }
   async #addPicked(): Promise<void> {
     if (!this.selected || this.busy) return;
     this.busy = true;
@@ -375,6 +369,12 @@ export class CategoriesScreen extends LitElement {
   #openMainCategory(product: Product, remove = false): void {
     this.mainCategoryProduct = product;
     this.mainCategory = remove ? null : product.primaryCategoryId;
+    this.saveError = "";
+  }
+  /** A refused save's message belongs to this window, so it goes with it rather than reappearing in
+   * the products window underneath. */
+  #closeMainCategory(): void {
+    this.mainCategoryProduct = null;
     this.saveError = "";
   }
   async #saveMainCategory(): Promise<void> {
@@ -603,20 +603,14 @@ export class CategoriesScreen extends LitElement {
   /** Only called when there IS something to lose. */
   #deleteWarning(dependants: CategoryDependants): string {
     const parts = [t("categories.delete_warning_intro")];
-    if (dependants.products.length > 0)
-      parts.push(
-        t("categories.delete_warning_products").replace(
-          "{count}",
-          String(dependants.products.length),
-        ),
-      );
-    if (dependants.children.length > 0)
-      parts.push(
-        t("categories.delete_warning_children").replace(
-          "{count}",
-          String(dependants.children.length),
-        ),
-      );
+    const products = dependants.products.length;
+    const children = dependants.children.length;
+    if (products === 1) parts.push(t("categories.delete_warning_products_one"));
+    else if (products > 1)
+      parts.push(t("categories.delete_warning_products").replace("{count}", String(products)));
+    if (children === 1) parts.push(t("categories.delete_warning_children_one"));
+    else if (children > 1)
+      parts.push(t("categories.delete_warning_children").replace("{count}", String(children)));
     return parts.join(" ");
   }
   #reassignField(
@@ -843,7 +837,7 @@ export class CategoriesScreen extends LitElement {
       >`;
   }
   #moveHeading(selected: CategorySummary | undefined): string {
-    const count = this.#moving();
+    const count = this.picked.size;
     const name = selected ? this.#text(selected.name) : "";
     return (count === 1 ? t("categories.move_heading_one") : t("categories.move_heading"))
       .replace("{count}", String(count))
@@ -984,7 +978,7 @@ export class CategoriesScreen extends LitElement {
         @keydown=${this.#guardEscape}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
-          if (!this.busy) this.mainCategoryProduct = null;
+          if (!this.busy) this.#closeMainCategory();
         }}
       >
         ${this.saveError && mainProduct ? html`<p role="alert">${this.saveError}</p>` : nothing}
@@ -1010,9 +1004,7 @@ export class CategoriesScreen extends LitElement {
             slot="cancel"
             variant="secondary"
             .disabled=${this.busy}
-            @click=${() => {
-              this.mainCategoryProduct = null;
-            }}
+            @click=${() => this.#closeMainCategory()}
             >${t("action.cancel")}</wt-button
           ><wt-button
             data-test="save-main-category"

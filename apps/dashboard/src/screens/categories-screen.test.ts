@@ -472,7 +472,7 @@ it("shows one red warning at the top combining every consequence, and drops the 
   const warning = warnings[0]!;
   expect(warning.getAttribute("role")).toBe("alert");
   expect(warning.textContent!.replace(/\s+/g, " ").trim()).toBe(
-    "This cannot be undone. 1 products have it as their main category. It has 1 subcategories.",
+    "This cannot be undone. 1 product has it as its main category. It has 1 subcategory.",
   );
   // It has to LOOK like a warning: the paragraph lives in the screen's own shadow root, so the
   // screen's .error rule reaches it — read the painted colour rather than assume it.
@@ -1834,6 +1834,47 @@ it("sorts and filters a category's products by name and main category", async ()
   await members.updateComplete;
   expect(tableKeys(members)).toEqual(["p"]);
 });
+
+it("counts more than one product and subcategory in the plural in the delete warning", async () => {
+  setLocale("en-GB");
+  const { el, api } = await mount();
+  api.getCategoryDependants.mockResolvedValue({
+    products: [
+      { id: "p", name: "Toast" },
+      { id: "q", name: "Jam" },
+    ],
+    children: [
+      { id: "breakfast", name: { en: "Breakfast" } },
+      { id: "lunch", name: { en: "Lunch" } },
+    ],
+    parentId: null,
+    routes: [],
+  });
+  const { dialog } = await openFoodDelete(el);
+  expect(
+    dialog.querySelector('[data-test="delete-warning"]')!.textContent!.replace(/\s+/g, " ").trim(),
+  ).toBe(
+    "This cannot be undone. 2 products have it as their main category. It has 2 subcategories.",
+  );
+});
+
+it.each(["Cancel", "a close"])(
+  "clears a refused main-category save's message when the window is left by %s",
+  async (way) => {
+    const { el, api } = await mount();
+    api.setMainCategory.mockRejectedValueOnce({ code: "category.not_found" });
+    await openProducts(el, "food");
+    const dialog = await openMainCategory(el, true);
+    dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
+    await vi.waitFor(() => expect(dialog.querySelector('p[role="alert"]')).not.toBeNull());
+    if (way === "Cancel") dialog.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+    else dialog.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(dialog.open).toBe(false);
+    const products = el.shadowRoot!.querySelector('wt-modal[data-test="products-modal"]')!;
+    expect(products.querySelector('p[role="alert"]')).toBeNull();
+  },
+);
 
 /** Opens Food's delete dialog and waits for its preview. */
 async function openFoodDelete(el: CategoriesScreen) {

@@ -243,5 +243,6 @@ it("has a sentence for each label code and the category reassignment refusal", (
   ]) {
     expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
     expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
   }
 });

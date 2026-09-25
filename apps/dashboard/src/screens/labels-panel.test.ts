@@ -200,7 +200,7 @@ it("confirms a delete with the number of products it is taken off, then deletes"
   expect(dialog.open).toBe(true);
   expect(dialog.getAttribute("heading")).toBe("Delete Alcoholic?");
   expect(dialog.querySelector('[data-test="delete-count"]')!.textContent!.trim()).toBe(
-    "It is taken off 3 products.",
+    "Deleting it removes it from 3 products.",
   );
   dialog.querySelector<HTMLElement>('wt-button[variant="danger"]')!.click();
   await vi.waitFor(() => expect(api.deleteLabel).toHaveBeenCalledWith("l-alc"));
@@ -209,7 +209,7 @@ it("confirms a delete with the number of products it is taken off, then deletes"
 
 it.each([
   [0, "No product carries it."],
-  [1, "It is taken off 1 product."],
+  [1, "Deleting it removes it from 1 product."],
 ])("words a delete of a label on %i products", async (count, text) => {
   setLocale("en-GB");
   const fx = apiFixture();
