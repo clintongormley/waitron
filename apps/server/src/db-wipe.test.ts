@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openVenueDatabase, type VenueDatabase } from "@waitron/db";
 import { wipeVenueDatabases } from "./db-wipe.js";
 
-/** Every path the wipe is responsible for: both database files, each with its two sidecars. */
 const WIPED = [
   "venue.db",
   "venue.db-wal",
@@ -37,13 +36,8 @@ async function exists(name: string): Promise<boolean> {
 }
 
 /**
- * A venue directory in the shape a wipe actually meets: both files carrying a row, and NEITHER
- * connection closed.
- *
- * The handle is deliberately left open, because a clean `close()` checkpoints the write-ahead file
- * and deletes both sidecars — so a fixture that closed first would leave nothing for the sidecar
- * half of the wipe to remove, and the assertions below would pass over a directory that never had
- * a sidecar in it. The returned handle is closed by `afterEach`.
+ * Both files carrying a row, with the handle left open: a clean `close()` checkpoints and deletes
+ * the sidecars, leaving nothing for the sidecar half of the wipe to remove.
  */
 async function venueWithBothFilesWritten(): Promise<VenueDatabase> {
   const store = await openVenueDatabase(venueDir);
@@ -57,8 +51,7 @@ async function venueWithBothFilesWritten(): Promise<VenueDatabase> {
 describe("wipeVenueDatabases", () => {
   it("removes BOTH database files and both write-ahead sidecars of each", async () => {
     open = await venueWithBothFilesWritten();
-    // The fixture is checked before the wipe, not assumed: without this the six ENOENT assertions
-    // below would be satisfied by a directory that never held a sidecar at all.
+    // Without this the assertions after the wipe would pass over a directory that never held a sidecar.
     for (const name of WIPED) expect(await exists(name), `fixture: ${name}`).toBe(true);
     expect((await stat(join(venueDir, "venue.db-wal"))).size).toBeGreaterThan(0);
     expect((await stat(join(venueDir, "node.db-wal"))).size).toBeGreaterThan(0);

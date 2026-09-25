@@ -393,23 +393,12 @@ describe("awaitingCertAlertSource", () => {
   });
 });
 
-// The printing source reads three real tables (printers, print_agents, print_jobs). These are plain
-// SELECTs with no contention to prove.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-/** Minutes before NOW as an ISO string — the shape `last_seen_at` / `created_at` compare against. */
 function minsAgo(mins: number): string {
   return new Date(NOW.getTime() - mins * 60_000).toISOString();
 }
 
-// Every seed below inserts through its table definition rather than as raw SQL, the change
-// `apps/server/src/testing/fiscal-fixtures.ts` took. Two reasons, both fatal to the raw form on
-// this engine: each table's `id` (and `print_jobs.created_at`, `print_agents.enrolled_at`) is a
-// `$defaultFn` generator a raw insert never reaches while the column is NOT NULL, and
-// `invoice_locales` is a JSON array in a text column, which refused the `array[...]` constructor
-// with `near "['es-ES']": syntax error`. `print_jobs.payload` is a blob here, so the one-byte
-// payload is bound as bytes instead of through PostgreSQL's `decode('01', 'hex')`
-// (`no such function: decode`).
 async function seedLocation(): Promise<string> {
   const [row] = await suite.db
     .insert(locations)
@@ -474,7 +463,6 @@ async function seedJob(t: {
   });
 }
 
-/** Run the source in one transaction, exactly as the registry does. */
 async function readAlerts(now = NOW) {
   return withTransaction(suite.db, async (tx) => {
     return printingAlertSource().read({ tx, now });
@@ -509,14 +497,11 @@ describe("printingAlertSource — agent.silent", () => {
       },
     ]);
 
-    // A fresh check-in moves last_seen_at to now, so the next read finds nothing.
     await suite.db.execute(sql`update print_agents set last_seen_at = ${NOW.toISOString()} `);
     expect(await readAlerts()).toEqual([]);
   });
 
   it("gives two silent agents that share a name two distinct alerts", async () => {
-    // Names are not unique; keying the alert on the name would collide these two into one and hide a
-    // down agent. The key must be per-agent-id, so both silent agents surface.
     await seedTenant(suite.db);
     const locationId = await seedLocation();
     const first = await seedAgent({ locationId, name: "Cocina", lastSeenAt: minsAgo(6) });
@@ -609,9 +594,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 });
 
-// The battery source reads `card_readers` (a payments-module table) and calls the card-provider seat,
-// so this suite migrates the payments set on top of core, like the printing block. The provider is
-// a stub — no SumUp server — so a `batteryPercent` is whatever the test sets.
 const batterySuite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
 async function seedReader(t: {
@@ -620,10 +602,6 @@ async function seedReader(t: {
   name: string;
   active?: boolean;
 }): Promise<string> {
-  // Through the table definition, like the printing seeds above. `card_readers.id` and
-  // `created_at` are `$defaultFn` generators, and `active` is an integer column here, so a raw
-  // template binding a JavaScript boolean was refused outright with
-  // `TypeError: Provided value cannot be bound to SQLite parameter 4`.
   const [row] = await batterySuite.db
     .insert(cardReaders)
     .values({
@@ -636,9 +614,7 @@ async function seedReader(t: {
   return row!.id;
 }
 
-/** A card-provider seat whose only live method is `readers.status`: it returns the battery reading a
- * test configures per providerRef and counts each call, so a test can prove the TTL cache. Every other
- * method throws — the source never reaches them. */
+/** A card-provider seat whose only live method is `readers.status`, which counts its calls. */
 function stubProvider(opts: {
   id?: string;
   battery: (ref: string) => number | undefined;
@@ -701,7 +677,6 @@ describe("batteryAlertSource", () => {
     });
 
     const alerts = await readBattery(source);
-    // 25 is above the warning floor and pNone reports no battery, so neither raises anything.
     const byKey = new Map(alerts.map((a) => [a.key, a]));
     expect(new Set(byKey.keys())).toEqual(
       new Set([`reader.battery_low:${at10}`, `reader.battery_low:${at20}`]),
@@ -718,7 +693,6 @@ describe("batteryAlertSource", () => {
       severity: "error",
       params: { reader: "R10", percent: BATTERY_ERROR },
     });
-    // A reader at 25 is above the warning floor — assert it was skipped, not merely absent.
     expect(byKey.has(`reader.battery_low:${at25}`)).toBe(false);
   });
 
@@ -735,12 +709,10 @@ describe("batteryAlertSource", () => {
     });
 
     await readBattery(source, clock);
-    // A second read four minutes later stays inside the 5-minute window: still one provider call.
     clock = new Date(NOW.getTime() + 4 * 60_000);
     await readBattery(source, clock);
     expect(calls.n).toBe(1);
 
-    // Six minutes on, the cached reading has expired, so the source asks the provider again.
     clock = new Date(NOW.getTime() + 6 * 60_000);
     await readBattery(source, clock);
     expect(calls.n).toBe(2);
@@ -756,7 +728,6 @@ describe("batteryAlertSource", () => {
       cache: createTtlCache<number | null>({ ttlMs: 5 * 60_000, now: () => NOW }),
     });
     expect(await readBattery(source)).toEqual([]);
-    // The disabled reader was never enumerated, so the provider was never asked.
     expect(calls.n).toBe(0);
   });
 });

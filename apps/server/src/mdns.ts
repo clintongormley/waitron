@@ -2,16 +2,8 @@ import multicastDns from "multicast-dns";
 import type { Logger } from "./logger.js";
 import { isLoopbackHost } from "./primary-url.js";
 
-/**
- * A thin mDNS responder so a freshly-installed box answers to `waitron.local` on the LAN without a
- * router config or a manual `/etc/hosts` edit. It only ANSWERS — on each multicast query for our
- * hostname it replies with the box's current IPv4 addresses; it never queries and holds no cache.
- *
- * The addresses are read PER QUERY (via `getAddresses`), not captured at start, so a DHCP lease
- * change is reflected on the next resolve rather than pinning a stale address for the life of the
- * process. The socket is INJECTED (`makeSocket`) so the unit test drives a fake and needs no real
- * multicast; the default is a real `multicast-dns` instance.
- */
+// A thin mDNS responder so a box answers to `waitron.local` on the LAN. It only answers; it never
+// queries and holds no cache.
 
 /** One mDNS answer record — the subset of multicast-dns's ResourceRecord this module emits. */
 export interface MdnsAnswer {
@@ -27,11 +19,7 @@ export interface MdnsSocket {
     event: "query",
     handler: (query: { questions: { name: string; type: string }[] }) => void,
   ): void;
-  /** A BIND failure (EADDRINUSE/EACCES) arrives here — see `startMdnsResponder`. The real instance
-   *  emits `'error'` on the same EventEmitter only for that case, so an unhandled one would throw and
-   *  kill the process; the responder registers a handler that logs and swallows it. An `addMembership`
-   *  failure (no multicast route — the common case in a container) emits `'warning'` instead, which
-   *  this interface has no listener for and which never throws. */
+  /** A bind failure (EADDRINUSE/EACCES) arrives here; unhandled, it would throw and kill the process. */
   on(event: "error", handler: (err: Error) => void): void;
   respond(response: { answers: MdnsAnswer[] }): void;
   destroy(cb?: () => void): void;
@@ -56,17 +44,11 @@ export interface MdnsDeps {
 /** TTL (seconds) on the A records — short so a moved box is re-resolved quickly. */
 export const MDNS_TTL_SECONDS = 120;
 
-/** Pure: the A answers for `hostname` over `addresses` (empty when there are no addresses). */
 export function buildMdnsAnswers(hostname: string, addresses: string[]): MdnsAnswer[] {
   return addresses.map((data) => ({ name: hostname, type: "A", ttl: MDNS_TTL_SECONDS, data }));
 }
 
-/**
- * Outside development, answer mDNS A queries for a non-loopback HTTP listener. On each `"query"`, if any question asks for our
- * hostname by an A or ANY record AND we currently have at least one address, respond with one A
- * record per address; otherwise stay silent (an empty answer set is never sent — mDNS treats a
- * responder that answers with nothing as noise). `stop()` destroys the socket once and is idempotent.
- */
+/** Outside development, answer mDNS A queries for a non-loopback HTTP listener. */
 export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
   // Development must not compete with a real box for its LAN name. A loopback-only listener
   // cannot serve the LAN addresses advertised here either.
@@ -74,9 +56,6 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
     return { stop: () => Promise.resolve() };
   }
   const { hostname, getAddresses, log } = deps;
-  // Only ever runs on the real-`multicast-dns` default path — every unit test injects `makeSocket` —
-  // so it is left to the `apps/server` coverage aggregate rather than pinned by a real-socket unit
-  // test, the same real-only-path posture `discovery-api.ts`'s default `renderQrSvg` records.
   const makeSocket = deps.makeSocket ?? (() => multicastDns() as MdnsSocket);
   const socket = makeSocket();
 
