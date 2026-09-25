@@ -422,7 +422,6 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
   }, 60_000);
 
   it("boots a mirror on a non-loopback host WITH the explicit opt-in (binds 0.0.0.0, guard silenced)", async () => {
-    // Bound to 0.0.0.0 but reached over loopback, so nothing is exposed off this host.
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,

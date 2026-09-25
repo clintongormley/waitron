@@ -23,8 +23,8 @@ export interface SpaDeps {
 /** A content-addressed asset name (`app-<hash>.js`) changes only when its bytes change, so its URL is
  * safe to cache forever. */
 const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
-/** index.html and any non-hashed file carry a stable URL whose CONTENTS change on each deploy, so they
- * must be revalidated — otherwise a browser pins a stale index.html and never sees the new bundle. */
+/** index.html and any file outside `/assets/` carry a stable URL whose CONTENTS change on each deploy, so
+ * they must be revalidated — otherwise a browser pins a stale index.html and never sees the new bundle. */
 const REVALIDATE_CACHE_CONTROL = "no-cache";
 
 /**
@@ -77,7 +77,8 @@ export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
     // The adapter collapses dot segments on the way in, so what reaches this in practice is a path
     // resolving to the root directory itself, `//` among them.
     if (abs === null) return Promise.resolve(c.body(null, 404));
-    // Only hashed files under `/assets/` are cached immutably; `relPath` has `basePath` sliced off.
+    // Everything under `/assets/` is cached immutably, so only content-addressed names belong there;
+    // `relPath` has `basePath` sliced off.
     const cache = relPath.startsWith("/assets/")
       ? IMMUTABLE_CACHE_CONTROL
       : REVALIDATE_CACHE_CONTROL;

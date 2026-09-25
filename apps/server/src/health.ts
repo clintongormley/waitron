@@ -109,8 +109,7 @@ export function recordPass(state: HealthState, report: PassReport, at: Date): Du
 
 /**
  * The level comes from STALENESS, not the failure count: a count means a different time at each
- * retry cadence, while `stale` is exactly what `/health` answers 503 on, so an `error` line and a
- * 503 are the same condition.
+ * retry cadence, while `stale` is exactly what `/health` answers 503 on.
  *
  * No `errorCode`: `duty.failed` (`pass.ts`) already carries the throw's code.
  */
