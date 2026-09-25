@@ -1239,15 +1239,20 @@ describe("backup admin routes", () => {
       }),
     });
     // Long enough for a Save that does not wait its turn to finish.
-    await Promise.race([save, new Promise((resolve) => setTimeout(resolve, 500))]);
-    release();
-    const [applied, saved] = await Promise.all([apply, save]);
-    expect(await applied.json()).toMatchObject({ enabled: true });
-    expect(saved.status).toBe(200);
-    expect((await saved.json()).keyFingerprint).toBe(keyFingerprint(KEY_1));
-    const env = parseEnvFile(await readFile(join(sc.stateDir, "backup.env"), "utf8"));
-    expect(env.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_1);
-    expect(env.WAITRON_BACKUP_DIR).toBe(dest);
-    await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: "backup.stream" }));
+    try {
+      await Promise.race([save, new Promise((resolve) => setTimeout(resolve, 500))]);
+      release();
+      const [applied, saved] = await Promise.all([apply, save]);
+      expect(await applied.json()).toMatchObject({ enabled: true });
+      expect(saved.status).toBe(200);
+      expect((await saved.json()).keyFingerprint).toBe(keyFingerprint(KEY_1));
+      const env = parseEnvFile(await readFile(join(sc.stateDir, "backup.env"), "utf8"));
+      expect(env.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_1);
+      expect(env.WAITRON_BACKUP_DIR).toBe(dest);
+    } finally {
+      release();
+      await Promise.allSettled([apply, save]);
+      await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: "backup.stream" }));
+    }
   }, 60_000);
 });

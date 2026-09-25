@@ -577,6 +577,24 @@ describe("stream settings routes", () => {
     expect(await off.json()).toMatchObject({ configured: false, recoveryKeySet: true });
   });
 
+  it("Save on a box whose recovery key is too short is refused with that code, writing no key", async () => {
+    await clearBucket();
+    const { app, deps, reload } = harness({
+      readRecoveryKey: async () => {
+        throw new AppError("backup.recovery_key_too_short", { min: 12 });
+      },
+    });
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "backup.recovery_key_too_short", params: { min: 12 } },
+    });
+    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+    expect(await storedBucket()).toBeNull();
+  });
+
   it("switching off is refused on a node that is not the primary", async () => {
     const { app, reload } = harness({ isPrimary: () => false });
     const cookie = await login(app);

@@ -266,8 +266,9 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     stream: deps.readStream(),
   });
 
-  // `apply` and `rotate` each read the held key and then write one. Run concurrently, one could write
-  // back the key the other just replaced, so each runs from that read to its response alone.
+  // `apply`, `rotate` and the stream settings' Save each read the held key and then write one. Run
+  // concurrently, one could write back the key another just replaced, so each runs from that read
+  // to its response alone.
   const oneWriteAtATime = deps.turns;
 
   // Read the live backup status (async freshness read folded in). Never carries the recovery key.
