@@ -783,8 +783,8 @@ export interface ExpoItem {
   queuedAt: string;
   /** This item's OWN station's order-timing thresholds (see {@link queuedAt}). */
   thresholds: StationThresholds;
-  /** This item's age band on the DB clock at fetch time. Not read by `till-expo-screen`, which derives
-   *  the band from {@link queuedAt} and {@link thresholds}. */
+  /** This item's age band on the server's clock at fetch time. Not read by `till-expo-screen`,
+   *  which derives the band from {@link queuedAt} and {@link thresholds}. */
   band: TimingBand;
 }
 
@@ -814,8 +814,9 @@ export interface ExpoOrder {
   orderNumber: number;
   openedMinutes: number;
   courses: ExpoCourse[];
-  /** The worst age band across the order's UNSERVED lines on the DB clock at fetch time. Not read by
-   *  `till-expo-screen`, which derives the band from each item's `queuedAt` and thresholds. */
+  /** The worst age band across the order's UNSERVED lines on the server's clock at fetch time.
+   *  Not read by `till-expo-screen`, which derives the band from each item's `queuedAt` and
+   *  thresholds. */
   worstBand: TimingBand;
 }
 

@@ -271,7 +271,7 @@ declare module "@waitron/shared" {
      * A move/join TARGET table already has an OPEN tab; `mergeTabs` combines two bills instead. A
      * table whose `tab_id` points at a settled/abandoned order is free. No unique index backs the
      * rule: two concurrent moves cannot overlap because one write transaction runs on the venue
-     * file at a time (`assertAnchoredTabOpen` in `working-order.ts`).
+     * file at a time (`withTransaction`, `packages/db/src/tenancy.ts`).
      */
     "table.occupied": { tableId: string };
     /**

@@ -4378,12 +4378,12 @@ describe("addTabRound hold-on-send (A3)", () => {
   });
 });
 
-// The cross-station expo/pass read. `listExpoQueue` aggregates every OPEN order (with at least one
-// not-yet-away item), gathers its ticket items ACROSS stations, and groups them
-// by course in display_order with per-course fired/away roll-ups. Unlike `listStationQueue` (one
-// station, no station name) it joins `kitchen_stations` to label each item's station. These cases
-// prove the join, the collected/abandoned/fully-away exclusions, the course grouping and the
-// roll-ups.
+// The cross-station expo/pass read. `listExpoQueue` aggregates every order that is not abandoned or
+// collected and has an item not yet away (open, placed or settled), gathers its ticket items ACROSS
+// stations, and groups them by course in display_order with per-course fired/away roll-ups. Unlike
+// `listStationQueue` (one station, no station name) it joins `kitchen_stations` to label each
+// item's station. These cases prove the join, the collected/abandoned/fully-away exclusions, the
+// course grouping and the roll-ups.
 // ---------------------------------------------------------------------------------------------------
 describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   it("aggregates one order's two-station single-course lines into one course with station names, excluding collected/abandoned orders", async () => {

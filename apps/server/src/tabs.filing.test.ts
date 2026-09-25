@@ -41,6 +41,9 @@ import "./errors.js";
  * H2: the huella does not depend on whether the order was a tab or delivered to a table. Two
  * filings with the same huella share the AEAT identity `registros_identidad_uq` is keyed on, so each
  * goes in its own database (`secondVenueSharingNif`).
+ *
+ * Nothing here stages concurrent `openTab` or `addTabRound` calls: the one-open-tab rule and
+ * contiguous line numbers are covered only sequentially.
  */
 const LOCALE = "es-ES";
 

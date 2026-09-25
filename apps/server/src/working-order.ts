@@ -2,7 +2,8 @@ import { buildLineExtras, matchExtraChildren, sameOptionSelections } from "./mod
 import type { ExtraChild, ExtraProductFacts } from "./modifier-selection.js";
 import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
-// Side-effect only: keeps the `sale.*` codes (errors.ts) reachable from a file that throws them.
+// Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
+// its codes.
 import "./errors.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
@@ -135,7 +136,8 @@ interface BasketModifiers extends AttachedModifiers {
  *
  * `sellableOnly` drops Inactive and Unavailable products from every list, so a pick of one is
  * refused exactly as a pick the list never offered. The held-order edit that keeps lines already
- * rung passes `false`, so a kept line keeps a pick that has since sold out.
+ * rung passes `false`, so a line kept at or below its stored quantity keeps a pick that has since
+ * sold out; a raised line is checked by {@link updateHeldOrder}.
  */
 async function resolveBasketModifiers(
   tx: Transaction,
@@ -216,7 +218,7 @@ async function priceOrderLines(
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
-  // `courseId` absent = the offer's default course; present, `null` included, = an override.
+  // `courseId` absent or null = the offer's default course; a string is an override.
   // Each extras pick becomes a CHILD row taxed at the picked product's VAT class, never the dish's.
   // An ACTIVE options list must be answered even when `options` is absent.
   requestedLines: ({
@@ -1446,8 +1448,8 @@ export interface TabLine {
   unitPriceGross: string;
   servedAt: string | null;
   courseId: string | null;
-  /** Null when the line is HELD or has no ticket item at all, which a parent line can lack too: the
-   * lines a tab opens with are never fired. */
+  /** Null when the line is HELD or has no ticket item at all, which a parent line can lack too:
+   * `openTab` inserts its initial lines without firing them. */
   firedAt: string | null;
   /** Null when the line has no ticket item (always, on a child). */
   state: TicketState | null;
@@ -2371,8 +2373,11 @@ export async function updateHeldOrder(
       });
     }
     // A line whose quantity RISES sells more of its dish and its extras, so those products must be
-    // sellable now; failing that, the edit takes the replacement path, whose reads refuse it. A kept
-    // or lowered quantity is not re-checked: existing work is not cancelled.
+    // sellable now; failing that, the edit takes the replacement path, whose reads refuse it. The
+    // dish is the variant's parent on a variant line, and only the dish and its picks are
+    // re-checked: nothing else the replacement path's offer read refuses is, the variant's own
+    // Active and Available included. A kept or lowered quantity is not re-checked: existing work is
+    // not cancelled.
     const keepsEveryLine = sameBasket && rebuilt.every((entry) => entry !== null);
     const raised = keepsEveryLine
       ? rebuilt.flatMap((entry, index) =>
@@ -2447,6 +2452,8 @@ export async function updateHeldOrder(
       req.lines,
       context?.zoneId,
     );
+    // Cascades to each line's `ticket_items` row, so a fired line's kitchen ticket is deleted, not
+    // recalled, and the new lines are not fired. `working_line_contexts` is re-recorded below.
     await tx.delete(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id));
     await tx.insert(workingOrderLines).values(lineRows);
     await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts);
@@ -3159,9 +3166,10 @@ export async function listExpoQueue(
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
       openedAt: workingOrders.openedAt,
-      // A scalar subquery, not a LEFT JOIN, which would multiply the item rows when two tables match
-      // (a tab's table AND a table the order delivers to). The `order by` makes the one label picked
-      // deterministic: the tab's own table first.
+      // A scalar subquery, not a LEFT JOIN, which would multiply the item rows when several tables
+      // match (the tables joined to one tab, or a tab's table and a table the order delivers to).
+      // The `order by` makes the label picked deterministic: a table whose `tab_id` is this order
+      // first, then the lowest table id.
       tableLabel: sql<string | null>`(
         select dt.label from dining_tables dt
         where dt.location_id = ${loc}

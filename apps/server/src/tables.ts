@@ -1,3 +1,5 @@
+// Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
+// its codes.
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
@@ -26,7 +28,8 @@ function requirePlacementInt(value: number, max: number, field: string): void {
 
 /**
  * Asked BEFORE the write because the engine's foreign-key refusal names no constraint
- * (`packages/db/src/constraint-target.ts`), and `dining_tables` has three foreign keys.
+ * (`packages/db/src/constraint-target.ts`), and `dining_tables` has other foreign keys beside the
+ * zone one.
  * `dining_tables_zone_fk` still enforces the reference; this only decides what the caller is told.
  */
 async function requireZone(tx: Transaction, zoneId: string): Promise<void> {
