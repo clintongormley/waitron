@@ -44,6 +44,8 @@ export { COMMIT_GRANULARITY_MS, CommitLog, computeLag } from "./freshness.js";
 export type { LagInput } from "./freshness.js";
 export { KIT_PREFIX, encodeRecoveryKit, parseRecoveryKit } from "./kit.js";
 export type { RecoveryKit } from "./kit.js";
+export { RESTORE_CEILING_MS, RESTORE_STALL_MS, restoreGeneration } from "./restore.js";
+export type { RestoreGenerationArgs } from "./restore.js";
 
 // Side-effect only: keeps errors.ts's registry augmentation reachable from this barrel
 // (guarded tree-wide by scripts/errors-reachable.test.ts).

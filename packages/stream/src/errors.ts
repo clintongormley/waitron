@@ -46,5 +46,9 @@ declare module "@waitron/shared" {
      * check). Never carries any of the text: a kit holds the recovery key and the bucket's
      * secret key. */
     "backup.stream_kit_invalid": { reason: "not_found" | "encoding" | "shape" };
+    /** `litestream restore` did not produce the database: its exit code, or `null` when it was
+     * abandoned or could not be started; `diskFull` when its output carries the system's own "no
+     * space left on device". Its output is not carried — it can name the bucket and endpoint. */
+    "backup.stream_restore_failed": { exitCode: number | null; diskFull: boolean };
   }
 }
