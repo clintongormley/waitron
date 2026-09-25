@@ -48,6 +48,10 @@ describe("setup-done-screen", () => {
     expect(steps).toContain("opened at an IP address");
     expect(steps).toContain("port 9110");
     expect(q(el, "[data-test=backup-nudge]")).toBeNull();
+    // A fenced box neither sells nor raises an alert (`deferFirstStart`), so the screen promises
+    // neither.
+    expect(steps).not.toContain("still sells");
+    expect(steps).not.toContain("alert");
   });
 
   it("says nothing about devices reconnecting after an ordinary setup", async () => {

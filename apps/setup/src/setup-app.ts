@@ -135,7 +135,7 @@ const BUCKET_ERROR_MESSAGES: Record<string, string> = {
     "This is not a Waitron recovery kit. Upload the kit file, or paste the whole kit.",
   "restore.stream_pointer_missing": "The bucket in this kit holds no copy of this restaurant.",
   "restore.stream_pointer_unverified":
-    "The copy in the bucket was not written by the server this kit belongs to. Nothing was changed.",
+    "The copy in the bucket was not written by the server this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
   "backup.stream_pointer_invalid":
     "The bucket's record of its newest copy is damaged, so it cannot be rebuilt from. Nothing was changed.",
   "restore.stream_integrity_failed":
@@ -160,6 +160,8 @@ const BUCKET_ERROR_MESSAGES: Record<string, string> = {
   "setup.already_provisioning":
     "Setup is already in progress on this server. Wait for it to finish, then reload this page.",
   "setup.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
+  "setup.operation_conflict":
+    "This server has saved setup work for a different request. Resume the original setup or contact support.",
   "setup.request_invalid":
     "The server rejected the details. Check the kit and the environment, then try again.",
 };
@@ -553,6 +555,11 @@ export class SetupApp extends LitElement {
     this.provisionReloadLabel = undefined;
     this.screen = "provisioning";
     const request = event.detail.request;
+    // The server answered the old-server question for the file it was sent, not for another.
+    if (request.artifact !== this.restoreRequest?.artifact) {
+      this.restoreLiveSince = undefined;
+      this.restoreLiveUnknown = false;
+    }
     try {
       await this.api.restore(
         request.artifact,
@@ -572,10 +579,12 @@ export class SetupApp extends LitElement {
       this.restoreRequest = request;
       if (code === "restore.stream_source_live" && typeof params?.lastChangeAt === "string") {
         this.restoreLiveSince = params.lastChangeAt;
+        this.restoreLiveUnknown = false;
       } else if (
         code === "restore.stream_source_live" ||
         code === "restore.stream_source_unchecked"
       ) {
+        this.restoreLiveSince = undefined;
         this.restoreLiveUnknown = true;
       } else {
         this.restoreError =
@@ -592,6 +601,12 @@ export class SetupApp extends LitElement {
   ): Promise<void> {
     event.stopPropagation();
     const request = event.detail.request;
+    // The server checked the old server and named the copy for the kit it was sent, not for another.
+    if (request.kit !== this.bucketRequest?.kit) {
+      this.bucketLiveSince = undefined;
+      this.bucketLiveUnknown = false;
+      this.bucketVenue = undefined;
+    }
     this.bucketRestoreError = undefined;
     this.provisionMessage = undefined;
     this.provisionCanRetry = false;
@@ -613,10 +628,12 @@ export class SetupApp extends LitElement {
       const venue = venueToConfirm(params);
       if (code === "restore.stream_source_live" && typeof params?.lastChangeAt === "string") {
         this.bucketLiveSince = params.lastChangeAt;
+        this.bucketLiveUnknown = false;
       } else if (
         code === "restore.stream_source_live" ||
         code === "restore.stream_source_unchecked"
       ) {
+        this.bucketLiveSince = undefined;
         this.bucketLiveUnknown = true;
       } else if (code === "restore.stream_venue_unconfirmed" && venue !== undefined) {
         this.bucketVenue = venue;

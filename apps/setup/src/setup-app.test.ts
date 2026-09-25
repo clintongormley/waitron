@@ -1734,12 +1734,12 @@ describe("restore from my bucket", () => {
     [
       "restore.stream_pointer_unverified",
       undefined,
-      "The copy in the bucket was not written by the server this kit belongs to. Nothing was changed.",
+      "The copy in the bucket was not written by the server this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
     ],
     [
       "restore.stream_pointer_unverified",
       { reason: "signature" },
-      "The copy in the bucket was not written by the server this kit belongs to. Nothing was changed.",
+      "The copy in the bucket was not written by the server this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
     ],
     [
       "restore.stream_pointer_unverified",
@@ -1808,6 +1808,11 @@ describe("restore from my bucket", () => {
     ],
     ["setup.not_ready", undefined, "The server isn't ready yet. Wait a moment, then try again."],
     [
+      "setup.operation_conflict",
+      undefined,
+      "This server has saved setup work for a different request. Resume the original setup or contact support.",
+    ],
+    [
       "setup.request_invalid",
       { field: "kit" },
       "The server rejected the details. Check the kit and the environment, then try again.",
@@ -1843,6 +1848,90 @@ describe("restore from my bucket", () => {
     expect(screen.errorMessage).toBe(
       "The copy could not be restored. Check the connection and try again.",
     );
+  });
+
+  it("forgets the kit once the rebuild is staged", async () => {
+    const restoreFromBucket = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "restore.stream_disk_full", status: 507 })
+      .mockResolvedValueOnce({ restoreStaged: true, restarting: true });
+    const el = await mountSetupApp(stubApi({ restoreFromBucket }));
+    bucketRequest(el);
+    await flush(el);
+    expect(readState(el, ["bucketRequest"]).bucketRequest).not.toBeUndefined();
+    bucketRequest(el);
+    await flush(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+    expect(readState(el, ["bucketRequest"])).toEqual({ bucketRequest: undefined });
+  });
+
+  // An answer the server asked for belongs to the kit it checked; another kit is another copy.
+  it("drops the old-server time and the venue it held for another kit", async () => {
+    const restoreFromBucket = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "restore.stream_source_live",
+        params: { lastChangeAt: "2026-09-23T11:58:00.000Z" },
+        status: 409,
+      })
+      .mockRejectedValueOnce({
+        code: "restore.stream_venue_unconfirmed",
+        params: VENUE,
+        status: 409,
+      })
+      .mockRejectedValueOnce({ code: "restore.stream_disk_full", status: 507 });
+    const el = await mountSetupApp(stubApi({ restoreFromBucket }));
+    bucketRequest(el, { kit: "first" });
+    await flush(el);
+    bucketRequest(el, { kit: "first", oldBoxGone: true });
+    await flush(el);
+    let screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
+    // Same kit: the answered question is kept, so the next send still carries the answer.
+    expect({ liveSince: screen.liveSince, venue: screen.venue }).toEqual({
+      liveSince: "2026-09-23T11:58:00.000Z",
+      venue: VENUE,
+    });
+    bucketRequest(el, { kit: "second" });
+    await flush(el);
+    screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
+    expect({
+      liveSince: screen.liveSince,
+      liveUnknown: screen.liveUnknown,
+      venue: screen.venue,
+    }).toEqual({ liveSince: undefined, liveUnknown: false, venue: undefined });
+  });
+
+  it.each([
+    [
+      [
+        {
+          code: "restore.stream_source_live",
+          params: { lastChangeAt: "2026-09-23T11:58:00.000Z" },
+        },
+        { code: "restore.stream_source_unchecked", params: { reason: "clock" } },
+      ],
+      { liveSince: undefined, liveUnknown: true },
+    ],
+    [
+      [
+        { code: "restore.stream_source_unchecked", params: { reason: "clock" } },
+        {
+          code: "restore.stream_source_live",
+          params: { lastChangeAt: "2026-09-23T11:58:00.000Z" },
+        },
+      ],
+      { liveSince: "2026-09-23T11:58:00.000Z", liveUnknown: false },
+    ],
+  ])("shows only the latest old-server refusal (%o)", async ([first, second], expected) => {
+    const restoreFromBucket = vi.fn().mockRejectedValueOnce(first).mockRejectedValueOnce(second);
+    const el = await mountSetupApp(stubApi({ restoreFromBucket }));
+    bucketRequest(el);
+    await flush(el);
+    bucketRequest(el);
+    await flush(el);
+    const screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
+    expect({ liveSince: screen.liveSince, liveUnknown: screen.liveUnknown }).toEqual(expected);
   });
 
   it("forgets the refusal and the request once the owner leaves the screen", async () => {
@@ -1918,6 +2007,67 @@ describe("restoring a backup file whose old server may still be running", () => 
     expect(await screenText(el, "restore", "[data-test=server-error]")).toBe(
       "The backup could not be staged. Check the connection and try again.",
     );
+  });
+
+  it("forgets the backup and key once the restore is staged", async () => {
+    const restore = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "restore.stream_source_unchecked",
+        params: { reason: "clock" },
+      })
+      .mockResolvedValueOnce({ restoreStaged: true, restarting: true });
+    const el = await mountSetupApp(stubApi({ restore }));
+    restoreRequest(el, backup);
+    await flush(el);
+    expect(readState(el, ["restoreRequest"]).restoreRequest).not.toBeUndefined();
+    restoreRequest(el, { ...backup, oldBoxGone: true });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+    expect(readState(el, ["restoreRequest"])).toEqual({ restoreRequest: undefined });
+  });
+
+  it("drops the old-server question it held for another backup file", async () => {
+    const restore = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "restore.stream_source_live",
+        params: { lastChangeAt: "2026-09-23T11:58:00.000Z" },
+      })
+      .mockRejectedValueOnce({ code: "server.internal" });
+    const el = await mountSetupApp(stubApi({ restore }));
+    restoreRequest(el, backup);
+    await flush(el);
+    restoreRequest(el, { ...backup, artifact: new File(["other"], "other.wbk") });
+    await flush(el);
+    const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
+    expect({ liveSince: screen.liveSince, liveUnknown: screen.liveUnknown }).toEqual({
+      liveSince: undefined,
+      liveUnknown: false,
+    });
+  });
+
+  it("shows only the latest old-server refusal on the archive path", async () => {
+    const restore = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "restore.stream_source_live",
+        params: { lastChangeAt: "2026-09-23T11:58:00.000Z" },
+      })
+      .mockRejectedValueOnce({
+        code: "restore.stream_source_unchecked",
+        params: { reason: "bucket" },
+      });
+    const el = await mountSetupApp(stubApi({ restore }));
+    restoreRequest(el, backup);
+    await flush(el);
+    restoreRequest(el, backup);
+    await flush(el);
+    const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
+    expect({ liveSince: screen.liveSince, liveUnknown: screen.liveUnknown }).toEqual({
+      liveSince: undefined,
+      liveUnknown: true,
+    });
   });
 
   it("forgets the old-server question once the owner leaves the screen", async () => {

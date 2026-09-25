@@ -208,6 +208,33 @@ describe("SetupRestoreScreen", () => {
     ]);
   });
 
+  // The old-server check was made on the backup that was sent; another file is another copy.
+  it("drops the old-server answer when a different backup file is chosen", async () => {
+    const request: RestoreRequestDetail = {
+      artifact: BACKUP,
+      recoveryKey: "recovery-key",
+      environment: "production",
+      oldBoxGone: true,
+    };
+    const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
+      request,
+      liveSince: "2026-09-23T11:58:00.000Z",
+    });
+    expect(q<HTMLInputElement>(el, "[data-test=old-box-gone]")!.checked).toBe(true);
+    const other = new File(["other"], "other.backup");
+    const file = q<HTMLInputElement>(el, "[data-test=artifact]")!;
+    Object.defineProperty(file, "files", { value: [other] });
+    file.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    expect(q(el, "[data-test=live-warning]")).toBeNull();
+    const listener = vi.fn();
+    host.addEventListener("restore-requested", listener);
+    q(el, "[data-test=restore]")!.click();
+    expect(listener.mock.calls.map(([event]) => (event as CustomEvent).detail.request)).toEqual([
+      { ...request, artifact: other, oldBoxGone: false },
+    ]);
+  });
+
   it("steps back to the role screen", async () => {
     const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
     const goto = vi.fn();

@@ -231,6 +231,71 @@ describe("SetupRestoreBucketScreen", () => {
     await expect(outcome).resolves.toEqual({ ...request, venueConfirmed: "89890001K" });
   });
 
+  // The server checked the old server and named the copy for the kit it was sent. A different kit is
+  // a different copy, so an answer given for the first must not travel with the second.
+  it.each(["pasted", "read from a file"])(
+    "drops the old-server and venue answers when a different kit is %s",
+    async (how) => {
+      const request: BucketRestoreRequestDetail = {
+        kit: "WAITRON-RECOVERY-KIT-1:first",
+        environment: "production",
+        oldBoxGone: true,
+        venueConfirmed: null,
+      };
+      const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
+        "setup-restore-bucket-screen",
+        { request, liveSince: "2026-09-23T11:58:00.000Z", venue: VENUE },
+      );
+      tick(el, "[data-test=venue-confirmed]");
+      await el.updateComplete;
+      if (how === "pasted") {
+        paste(el, "WAITRON-RECOVERY-KIT-1:second");
+      } else {
+        const file = q<HTMLInputElement>(el, "[data-test=kit-file]")!;
+        Object.defineProperty(file, "files", {
+          value: [new File(["WAITRON-RECOVERY-KIT-1:second"], "kit.txt")],
+        });
+        file.dispatchEvent(new Event("change"));
+      }
+      await vi.waitFor(() =>
+        expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe(
+          "WAITRON-RECOVERY-KIT-1:second",
+        ),
+      );
+      await el.updateComplete;
+      expect(q(el, "[data-test=live-warning]")).toBeNull();
+      expect(q(el, "[data-test=venue]")).toBeNull();
+      const outcome = requested(host);
+      q(el, "[data-test=restore]")!.click();
+      await expect(outcome).resolves.toEqual({
+        kit: "WAITRON-RECOVERY-KIT-1:second",
+        environment: "production",
+        oldBoxGone: false,
+        venueConfirmed: null,
+      });
+    },
+  );
+
+  it("asks again when the kit is changed and then changed back", async () => {
+    const request: BucketRestoreRequestDetail = {
+      kit: "WAITRON-RECOVERY-KIT-1:first",
+      environment: "production",
+      oldBoxGone: true,
+      venueConfirmed: "89890001K",
+    };
+    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+      request,
+      liveUnknown: true,
+      venue: VENUE,
+    });
+    paste(el, "WAITRON-RECOVERY-KIT-1:second");
+    await el.updateComplete;
+    paste(el, request.kit);
+    await el.updateComplete;
+    expect(q<HTMLInputElement>(el, "[data-test=old-box-gone]")!.checked).toBe(false);
+    expect(q<HTMLInputElement>(el, "[data-test=venue-confirmed]")!.checked).toBe(false);
+  });
+
   it("steps back to the role screen", async () => {
     const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
       "setup-restore-bucket-screen",

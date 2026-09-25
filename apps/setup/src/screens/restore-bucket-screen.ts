@@ -98,8 +98,28 @@ export class SetupRestoreBucketScreen extends LitElement {
     }
   }
 
+  /**
+   * The owner has replaced the kit the shell's refusal was about. The server checked the old server
+   * and named the copy for THAT kit, so neither its question nor an answer to it applies to this one.
+   */
+  get #kitReplaced(): boolean {
+    return this.request !== undefined && this.kit !== this.request.kit;
+  }
+
   get #askingOldBox(): boolean {
-    return this.liveSince !== undefined || this.liveUnknown;
+    return !this.#kitReplaced && (this.liveSince !== undefined || this.liveUnknown);
+  }
+
+  get #venue(): RestoredVenue | undefined {
+    return this.#kitReplaced ? undefined : this.venue;
+  }
+
+  #setKit(kit: string): void {
+    this.kit = kit;
+    if (this.#kitReplaced) {
+      this.oldBoxGone = false;
+      this.venueConfirmed = false;
+    }
   }
 
   get #kitMissing(): boolean {
@@ -111,7 +131,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   get #venueUnconfirmed(): boolean {
-    return this.venue !== undefined && !this.venueConfirmed;
+    return this.#venue !== undefined && !this.venueConfirmed;
   }
 
   #problems(): string[] {
@@ -133,21 +153,22 @@ export class SetupRestoreBucketScreen extends LitElement {
       kit: this.kit,
       environment: this.environment,
       oldBoxGone: this.#askingOldBox && this.oldBoxGone,
-      venueConfirmed: this.venue !== undefined && this.venueConfirmed ? this.venue.taxId : null,
+      venueConfirmed: this.#venue !== undefined && this.venueConfirmed ? this.#venue.taxId : null,
     });
   }
 
   async #readFile(event: Event): Promise<void> {
     const file = (event.currentTarget as HTMLInputElement).files?.[0];
-    if (file !== undefined) this.kit = await file.text();
+    if (file !== undefined) this.#setKit(await file.text());
   }
 
   #renderVenue(): TemplateResult | typeof nothing {
-    if (this.venue === undefined) return nothing;
+    const venue = this.#venue;
+    if (venue === undefined) return nothing;
     const invalid = this.showError && this.#venueUnconfirmed;
     return html`<p data-test="venue">
-        The copy in the bucket belongs to <strong>${this.venue.legalName}</strong> (tax id
-        ${this.venue.taxId}), location ${this.venue.locationName}.
+        The copy in the bucket belongs to <strong>${venue.legalName}</strong> (tax id
+        ${venue.taxId}), location ${venue.locationName}.
       </p>
       <label class="field">
         <input
@@ -207,7 +228,7 @@ export class SetupRestoreBucketScreen extends LitElement {
           aria-describedby=${kitInvalid ? "kit-error" : nothing}
           .value=${this.kit}
           @input=${(e: Event) => {
-            this.kit = (e.currentTarget as HTMLTextAreaElement).value;
+            this.#setKit((e.currentTarget as HTMLTextAreaElement).value);
           }}
         ></textarea>
       </label>
@@ -250,8 +271,8 @@ export class SetupRestoreBucketScreen extends LitElement {
       </label>
       ${acknowledgeInvalid ? html`<p class="error" id="acknowledge-error">${ACKNOWLEDGE_PROBLEM}</p>` : nothing}
       ${oldBoxQuestion({
-        liveSince: this.liveSince,
-        liveUnknown: this.liveUnknown,
+        liveSince: this.#askingOldBox ? this.liveSince : undefined,
+        liveUnknown: this.#askingOldBox && this.liveUnknown,
         checked: this.oldBoxGone,
         invalid: this.showError && this.#oldBoxUnanswered,
         onChange: (checked) => {

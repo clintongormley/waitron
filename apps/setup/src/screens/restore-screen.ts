@@ -66,8 +66,13 @@ export class SetupRestoreScreen extends LitElement {
     }
   }
 
+  /** The owner chose another file than the one the shell's old-server refusal was about. */
+  get #artifactReplaced(): boolean {
+    return this.request !== undefined && this.artifact !== this.request.artifact;
+  }
+
   get #askingOldBox(): boolean {
-    return this.liveSince !== undefined || this.liveUnknown;
+    return !this.#artifactReplaced && (this.liveSince !== undefined || this.liveUnknown);
   }
 
   get #oldBoxUnanswered(): boolean {
@@ -189,8 +194,8 @@ export class SetupRestoreScreen extends LitElement {
       </label>
       ${this.showError && !this.acknowledged ? html`<p class="error" id="acknowledge-error">Confirm that no other running server has newer data.</p>` : nothing}
       ${oldBoxQuestion({
-        liveSince: this.liveSince,
-        liveUnknown: this.liveUnknown,
+        liveSince: this.#askingOldBox ? this.liveSince : undefined,
+        liveUnknown: this.#askingOldBox && this.liveUnknown,
         checked: this.oldBoxGone,
         invalid: this.showError && this.#oldBoxUnanswered,
         onChange: (checked) => {

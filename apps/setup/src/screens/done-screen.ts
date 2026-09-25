@@ -216,10 +216,7 @@ export class SetupDoneScreen extends LitElement {
 
   #deviceSteps(): TemplateResult {
     return html`<div class="links" data-test="device-steps">
-      <p>
-        Once it has restarted, the server copies to your bucket again by itself. If it cannot, it
-        still sells, and the dashboard shows an alert. Devices depend on how each was set up:
-      </p>
+      <p>Devices depend on how each was set up:</p>
       <ul>
         <li>
           Tills, handhelds and kitchen screens that were opened at https://waitron.local reconnect
