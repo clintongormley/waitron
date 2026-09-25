@@ -12,8 +12,10 @@ import {
   hashSessionToken,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
 import { createCloudConnection } from "./cloud-client.js";
 import { mountCloudApi } from "./cloud-api.js";
+import type { ReplacementView } from "./cloud-replacement.js";
 import { cloudFixture } from "../test/cloud-fixture.js";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -131,6 +133,86 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
   } finally {
     await f.close();
   }
+});
+it("requires manager, origin and primary, and rechecks primary before responding", async () => {
+  const manager = await person("manager"),
+    staff = await person("staff");
+  let primary = true;
+  let release!: () => void;
+  let entered!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const replacement = {
+    status: vi.fn(async () => null),
+    eligible: vi.fn(async () => true),
+    approval: vi.fn(async () => null),
+    hasProposal: vi.fn(async () => false),
+    prepare: vi.fn(async (authorize?: () => Promise<void>) => {
+      entered();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await authorize?.();
+      return { state: "awaiting_owner" } as ReplacementView;
+    }),
+    check: vi.fn(),
+  };
+  const app = new Hono();
+  mountCloudApi(
+    app,
+    { db: suite.db, replacement, managementOrigin: "https://venue.test", isPrimary: () => primary },
+    () => {},
+  );
+  const send = (cookie: string, origin = "https://venue.test") =>
+    app.request("/management-api/cloud/replacement/prepare", {
+      method: "POST",
+      headers: { cookie, origin, "content-type": "application/json" },
+      body: "{}",
+    });
+  expect((await send("")).status).toBe(401);
+  expect((await send(staff.cookie)).status).toBe(403);
+  expect((await send(manager.cookie, "https://attacker.test")).status).toBe(403);
+  expect(replacement.prepare).toHaveBeenCalledTimes(0);
+  primary = false;
+  expect((await send(manager.cookie)).status).toBe(409);
+  primary = true;
+  const pending = send(manager.cookie);
+  await waiting;
+  primary = false;
+  release();
+  expect((await pending).status).toBe(409);
+});
+it("keeps Cloud status visible with a diagnostic when saved replacement state is corrupt", async () => {
+  const manager = await person("manager");
+  const app = new Hono();
+  mountCloudApi(
+    app,
+    {
+      db: suite.db,
+      managementOrigin: "https://venue.test",
+      isPrimary: () => true,
+      replacement: {
+        status: async () => {
+          throw new AppError("cloud.replacement_state_invalid", {});
+        },
+        eligible: async () => true,
+        approval: async () => null,
+        hasProposal: async () => false,
+        prepare: vi.fn(),
+        check: vi.fn(),
+      },
+    },
+    () => {},
+  );
+  const response = await app.request("/management-api/cloud/status", {
+    headers: { cookie: manager.cookie },
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    state: "not_connected",
+    replacementError: "cloud.replacement_state_invalid",
+  });
 });
 it("losing permission or primary role during the Cloud status wait prevents a completion signature", async () => {
   const f = await cloudFixture();

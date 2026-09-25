@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { locations, openVenueDatabase } from "@waitron/db";
+import { locations, nodes, openVenueDatabase } from "@waitron/db";
 import { createCloudRecoveryClient } from "../src/cloud-recovery.js";
+import { createCloudConnection } from "../src/cloud-client.js";
+import { createCloudReplacement } from "../src/cloud-replacement.js";
 import { stageRestoreRequest, runStagedRestore } from "../src/restore-request.js";
 import { validateArtifact } from "../src/restore.js";
 import { ALL_MODULES } from "../src/modules.js";
@@ -19,7 +21,14 @@ for await (const chunk of process.stdin) {
   assert(input.length < 8192);
 }
 const request = JSON.parse(input) as {
-  command: "start" | "status" | "stage" | "restore" | "report";
+  command:
+    | "start"
+    | "status"
+    | "stage"
+    | "restore"
+    | "report"
+    | "prepareReplacement"
+    | "statusReplacement";
   origin: string;
   storageCaBase64?: string;
   expectedPointId?: string;
@@ -128,5 +137,42 @@ else if (request.command === "stage") {
 } else if (request.command === "report") {
   await client.reportRestored();
   result = { reported: true };
+} else if (request.command === "prepareReplacement" || request.command === "statusReplacement") {
+  const nodeId = parseEnvFile(
+    await readFile(join(stateDir, "trading.env"), "utf8"),
+  ).WAITRON_TILL_NODE_ID;
+  assert(nodeId);
+  if (request.expectedSourceNodeId) assert.equal(nodeId, request.expectedSourceNodeId);
+  const store = await openVenueDatabase(venueDir);
+  let localVenueId: string;
+  try {
+    const venue = await store.venue.select({ id: locations.id }).from(locations);
+    assert.equal(venue.length, 1);
+    localVenueId = venue[0]!.id;
+    const source = await store.venue
+      .select({ id: nodes.id, locationId: nodes.locationId })
+      .from(nodes);
+    assert(source.some((row) => row.id === nodeId && row.locationId === localVenueId));
+  } finally {
+    await store.close();
+  }
+  const connection = createCloudConnection({
+    stateDir,
+    origin: request.origin,
+    localVenueId,
+    environment: "test",
+  });
+  const replacement = createCloudReplacement({
+    stateDir,
+    origin: request.origin,
+    localVenueId,
+    nodeId,
+    connection,
+  });
+  const view =
+    request.command === "prepareReplacement"
+      ? await replacement.prepare()
+      : await replacement.check();
+  result = { ...view, cloudConnection: await connection.status() };
 } else throw Error("Unknown recovery command");
 console.log(JSON.stringify(result));
