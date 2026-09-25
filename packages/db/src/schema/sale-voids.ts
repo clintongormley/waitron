@@ -1,4 +1,4 @@
-import { foreignKey, unique } from "drizzle-orm/sqlite-core";
+import { foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import { id, label, newId, table, tsString } from "./columns.js";
 import { sales } from "./sales.js";
 
@@ -30,5 +30,6 @@ export const saleVoids = table(
       foreignColumns: [sales.id],
       name: "sale_voids_sale_fk",
     }).onDelete("restrict"),
+    index("sale_voids_voided_at_idx").on(t.voidedAt),
   ],
 );

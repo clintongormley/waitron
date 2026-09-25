@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { sql, type SQL } from "drizzle-orm";
+import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedSale, seedSubstitution, seedVenue, seedVoid } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -12,16 +15,18 @@ const noon = new Date("2026-08-04T10:00:00Z").toISOString();
 beforeEach(async () => {
   venue = await seedVenue(suite.db);
 });
-function run(overrides: Partial<DailyCloseInput> = {}): Promise<CloseCounts> {
-  const input: DailyCloseInput = {
+function input(overrides: Partial<DailyCloseInput> = {}): DailyCloseInput {
+  return {
     nodeId: venue.nodeId,
     businessDay: "2026-08-04",
     timeZone: "Europe/Madrid",
     dayCutover: "05:00",
     ...overrides,
   };
+}
+function run(overrides: Partial<DailyCloseInput> = {}): Promise<CloseCounts> {
   return withTransaction(suite.db, async (tx) => {
-    return computeCloseCounts(tx, input);
+    return computeCloseCounts(tx, input(overrides));
   });
 }
 const line = { vatRate: "21.00", lineTotal: "10.00" };
@@ -86,6 +91,34 @@ describe("computeCloseCounts", () => {
       substitutedSaleId: ticket,
     });
     expect(await run()).toEqual({ sales: 1, corrections: 0, voids: 0 });
+  });
+
+  it.each([
+    ["one node", () => venue.nodeId],
+    ["the whole venue", () => undefined],
+  ])("finds %s's voids by a range search on voided_at, not a scan", async (_label, nodeId) => {
+    const plan = await withTransaction(suite.db, async (tx) => {
+      const statements: SQL[] = [];
+      const recording = new Proxy(tx, {
+        get: (target, key, receiver) =>
+          key === "execute"
+            ? (query: SQL) => {
+                statements.push(query);
+                return target.execute(query);
+              }
+            : Reflect.get(target, key, receiver),
+      }) as Transaction;
+      await computeCloseCounts(recording, input({ nodeId: nodeId() }));
+      const voidCount = statements.find((q) =>
+        new SQLiteSyncDialect().sqlToQuery(q).sql.includes("sv.voided_at"),
+      );
+      return tx.execute<{ detail: string }>(sql`explain query plan ${voidCount!}`);
+    });
+    const details = plan.rows.map((r) => r.detail);
+    expect(details).toContain(
+      "SEARCH sv USING INDEX sale_voids_voided_at_idx (voided_at>? AND voided_at<?)",
+    );
+    expect(details.some((d) => d.startsWith("SCAN"))).toBe(false);
   });
 
   it("returns zeros for an empty day", async () => {

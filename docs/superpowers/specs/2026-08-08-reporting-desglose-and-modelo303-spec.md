@@ -233,7 +233,8 @@ do not rewrite.** Reasons, receipted:
    predicate sidesteps all of this by never converting a wall-clock the other way.
 2. **It only helps the VAT query.** Only `sales` has `(tenant_id, issued_at)`; the cash-up and voids
    paths (`tenders.settled_at`, `sale_voids.voided_at`) have no matching index, so a partial rewrite
-   buys an inconsistent optimisation (Debt note, `:717`).
+   buys an inconsistent optimisation (Debt note, `:717`). (2026-09-26: `sale_voids_voided_at_idx`
+   now exists, core migration 0011.)
 3. **No production scale exists.** Reporting is headless; there are no catalogue sales until the till
    runs a real venue. Correctness-first is the right trade (`CLAUDE.md`: measure, don't pre-optimise).
 
