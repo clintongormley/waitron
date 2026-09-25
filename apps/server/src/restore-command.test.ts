@@ -611,7 +611,11 @@ describe("waitron-restore restore --from-bucket", () => {
     ],
     [
       new AppError("backup.stream_restore_failed", { exitCode: 1, diskFull: false }),
-      "restore failed: backup.stream_restore_failed — the copy could not be downloaded from the bucket; check this server's network and the bucket, then run it again",
+      "restore failed: backup.stream_restore_failed — the copy could not be downloaded from the bucket, for a reason on this server, on its network or at the bucket; check this server's network, the bucket, and that this server's disk and state folder can be written, then run it again",
+    ],
+    [
+      new AppError("backup.stream_restore_failed", { exitCode: null, diskFull: false }),
+      "restore failed: backup.stream_restore_failed — the copy could not be downloaded from the bucket, for a reason on this server, on its network or at the bucket; check this server's network, the bucket, and that this server's disk and state folder can be written, then run it again",
     ],
     [
       new AppError("backup.stream_request_failed", {

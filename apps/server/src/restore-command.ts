@@ -306,7 +306,7 @@ function bucketRefusal(err: AppError): string | null {
     "provisioning.database_ahead":
       "the copy in the bucket was made by newer Waitron software than this server has; update this server first",
     "backup.stream_restore_failed":
-      "the copy could not be downloaded from the bucket; check this server's network and the bucket, then run it again",
+      "the copy could not be downloaded from the bucket, for a reason on this server, on its network or at the bucket; check this server's network, the bucket, and that this server's disk and state folder can be written, then run it again",
     "backup.stream_request_failed":
       "the bucket did not answer, or refused the kit's key; check this server's network and that the bucket and its key still exist",
   };
