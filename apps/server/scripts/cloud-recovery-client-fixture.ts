@@ -7,7 +7,7 @@ import { createCloudRecoveryClient } from "../src/cloud-recovery.js";
 import { createCloudConnection } from "../src/cloud-client.js";
 import { createCloudReplacement } from "../src/cloud-replacement.js";
 import { stageRestoreRequest, runStagedRestore } from "../src/restore-request.js";
-import { validateArtifact } from "../src/restore.js";
+import { RESTORE_STAGING_DIR, validateArtifact } from "../src/restore.js";
 import { ALL_MODULES } from "../src/modules.js";
 import { parseEnvFile } from "../src/env-file.js";
 
@@ -49,7 +49,7 @@ const client = createCloudRecoveryClient({
 });
 const validation = {
   stateDir,
-  stagingDir: join(stateDir, "restore-staging"),
+  stagingDir: join(stateDir, RESTORE_STAGING_DIR),
   migrationsRoot: null,
   modules: ALL_MODULES,
   environment: "preproduction" as const,

@@ -824,6 +824,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
       restoreFromStream({
         ...deps,
         venueDir,
+        stagingDir: join(deps.stateDir, "restore-staging"),
         environment: "preproduction",
         modules: [],
         confirmVenue: () => true,
@@ -842,6 +843,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
     await restoreFromStream({
       ...deps,
       venueDir,
+      stagingDir: join(deps.stateDir, "restore-staging"),
       environment: "preproduction",
       modules: [],
       migrate: vi.fn(async () => {}),
@@ -877,6 +879,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
       restoreFromStream({
         ...deps,
         venueDir,
+        stagingDir: join(deps.stateDir, "restore-staging"),
         environment: "preproduction",
         modules: [],
         confirmVenue: (venue) => {

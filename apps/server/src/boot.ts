@@ -127,7 +127,7 @@ import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { createMailpitClient } from "./mailpit-client.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { stageRestoreRequest } from "./restore-request.js";
-import { validateArtifact } from "./restore.js";
+import { RESTORE_STAGING_DIR, validateArtifact } from "./restore.js";
 import {
   clearStagedConfigurationImport,
   readStagedConfigurationImport,
@@ -1080,7 +1080,7 @@ export async function startServer(
                 artifact: candidate.artifact,
                 recoveryKey: candidate.recoveryKey,
                 stateDir: config.stateDir,
-                stagingDir: join(config.stateDir, "restore-staging"),
+                stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
                 migrationsRoot: config.migrationsRoot,
                 modules: ALL_MODULES,
                 environment: candidate.environment,

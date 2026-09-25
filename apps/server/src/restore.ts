@@ -57,6 +57,8 @@ const IDENTITY_KEYS = [
 ] as const;
 /** The venue database file `openVenueStore` opens inside the venue directory. */
 const VENUE_FILE = "venue.db";
+/** A restore's `stagingDir` is this folder inside the state folder. */
+export const RESTORE_STAGING_DIR = "restore-staging";
 /**
  * SQLite's write-ahead sidecars, kept beside the main file and named from its PATH. A committed row
  * can live in `-wal` alone, so these are part of the database, not scratch.
@@ -107,6 +109,9 @@ export interface RestoreDeps extends ValidationDeps {
  * neither the venue directory nor a {@link Logger} belongs in its parameter — a caller that had to
  * supply one would be supplying a value the function cannot use.
  */
+/** What writing an already validated artifact reads. */
+export type PlacementDeps = Omit<RestoreDeps, "artifact" | "recoveryKey">;
+
 export interface ValidationDeps {
   readonly artifact: Uint8Array;
   readonly recoveryKey: string;
@@ -168,8 +173,6 @@ export async function validateArtifact(deps: ValidationDeps): Promise<ValidatedA
   return validateEntries(unpackArchive(plaintext), deps);
 }
 
-/** What {@link validateEntries} reads: it starts from entries already opened, so it needs neither
- * the ciphertext nor its key. */
 export type EntryValidationDeps = Omit<ValidationDeps, "artifact" | "recoveryKey">;
 
 /**
@@ -253,10 +256,7 @@ export async function validateEntries(
  * {@link restoreDatabase} writes its incoming file beside the target and removes it itself on a
  * failed write.
  */
-async function placeValidated(
-  validated: ValidatedArtifact,
-  deps: Omit<RestoreDeps, "artifact" | "recoveryKey">,
-): Promise<void> {
+async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps): Promise<void> {
   const { log } = deps;
   if (!deps.skipSecrets) await setAsideExistingIdentity(deps.stateDir, log);
   await restoreDatabase({
@@ -305,7 +305,7 @@ async function placeValidated(
  */
 export async function writeValidated(
   validated: ValidatedArtifact,
-  deps: Omit<RestoreDeps, "artifact" | "recoveryKey">,
+  deps: PlacementDeps,
 ): Promise<void> {
   const lock = await (deps.lockVenue ?? lockRestoreTarget)(deps.venueDir);
   try {

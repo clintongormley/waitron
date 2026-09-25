@@ -24,7 +24,7 @@ import type { Logger } from "./logger.js";
 import {
   validateEntries,
   writeValidated,
-  type RestoreDeps,
+  type PlacementDeps,
   type ValidatedArtifact,
 } from "./restore.js";
 import { readSealedStateRow, unsealNodeState } from "./sealed-state.js";
@@ -332,7 +332,7 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
   }
 }
 
-export interface WriteStreamArgs extends Omit<RestoreDeps, "artifact" | "recoveryKey"> {
+export interface WriteStreamArgs extends PlacementDeps {
   databaseBytes: Uint8Array;
   entries: ArchiveEntry[];
 }
@@ -354,8 +354,7 @@ export async function writeStreamRestore(args: WriteStreamArgs): Promise<void> {
  */
 export async function restoreFromStream(
   deps: PrepareStreamDeps &
-    Omit<RestoreDeps, "artifact" | "recoveryKey" | "stagingDir"> & {
-      stagingDir?: string;
+    PlacementDeps & {
       confirmVenue: (venue: RestoredVenue) => boolean;
     },
 ): Promise<void> {
@@ -366,7 +365,6 @@ export async function restoreFromStream(
     }
     await writeStreamRestore({
       ...deps,
-      stagingDir: deps.stagingDir ?? join(deps.stateDir, "restore-staging"),
       databaseBytes: await readFile(prepared.databasePath),
       entries: prepared.entries,
     });

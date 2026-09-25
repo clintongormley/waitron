@@ -15,7 +15,7 @@ import { deploymentEnvironment, resolveConfigDir, type DeploymentEnvironment } f
 import { isUnset } from "./env-value.js";
 import { createLogger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import { restoreFromArtifact, type RestoreDeps } from "./restore.js";
+import { RESTORE_STAGING_DIR, restoreFromArtifact, type RestoreDeps } from "./restore.js";
 import { refuseIfArchiveSourceLive, restoreFromStream } from "./restore-stream.js";
 import "./errors.js";
 
@@ -151,7 +151,7 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
     // unset or EMPTY takes `<stateDir>/venue`, never `resolve("")` — which is the working directory.
     venueDir: resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(resolvedStateDir, "venue")),
     stateDir: resolvedStateDir,
-    stagingDir: join(resolvedStateDir, "restore-staging"),
+    stagingDir: join(resolvedStateDir, RESTORE_STAGING_DIR),
     migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,
     modules: ALL_MODULES,
     environment,
@@ -305,7 +305,7 @@ async function runBucketRestore(deps: CommandDeps, kitPath: string): Promise<num
       environment,
       stateDir,
       venueDir: resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, "venue")),
-      stagingDir: join(stateDir, "restore-staging"),
+      stagingDir: join(stateDir, RESTORE_STAGING_DIR),
       migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,
       modules: ALL_MODULES,
       litestreamBin: resolveLitestreamBin(deps.env),

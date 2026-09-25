@@ -6,7 +6,7 @@ import type { DeploymentEnvironment } from "./config.js";
 import { writeFileAtomic } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import { restoreFromArtifact, type RestoreDeps } from "./restore.js";
+import { RESTORE_STAGING_DIR, restoreFromArtifact, type RestoreDeps } from "./restore.js";
 import { writeStreamRestore, type WriteStreamArgs } from "./restore-stream.js";
 
 const ARTIFACT = "restore-request.artifact";
@@ -134,7 +134,7 @@ export async function runStagedRestore(
   const common = {
     venueDir: deps.venueDir,
     stateDir: deps.stateDir,
-    stagingDir: join(deps.stateDir, "restore-staging"),
+    stagingDir: join(deps.stateDir, RESTORE_STAGING_DIR),
     migrationsRoot: deps.migrationsRoot,
     modules: ALL_MODULES,
     environment,
