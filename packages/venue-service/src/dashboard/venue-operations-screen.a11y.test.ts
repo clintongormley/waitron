@@ -87,6 +87,9 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
             customerName: null,
             grossPrice: "4.50",
             unitPrice: "4.50",
+            active: true,
+            placements: [[]],
+            topLevelMember: { sectionId: "root-m1", memberId: "member-p1" },
             variants: [
               {
                 id: "v2",
@@ -153,6 +156,9 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
             customerName: null,
             grossPrice: null,
             unitPrice: "3.00",
+            active: true,
+            placements: [[]],
+            topLevelMember: { sectionId: "root-m1", memberId: "member-p1" },
             variants: [],
           },
         ],
@@ -176,7 +182,7 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
     await expectNoA11yViolations(host);
   });
 
-  test("keeps a struck-out and a greyed-out price in the offers list readable", async () => {
+  test("keeps the offers list readable: struck-out and greyed-out prices, and a switched-off product", async () => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
     const el = document.createElement("dashboard-venue-operations-screen") as VenueOperationsScreen;
@@ -197,6 +203,9 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
       customerName: null,
       grossPrice,
       unitPrice: grossPrice ?? "3.00",
+      active: true,
+      placements: [[]],
+      topLevelMember: { sectionId: "root-m1", memberId: `member-${productId}` },
       variants: [],
     });
     el.api = {
@@ -212,7 +221,15 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
         stations: [],
         floorZones: [],
         products: [product("p1", "Olives", "3.00"), product("p2", "Almonds", "4.00")],
-        offers: [offer("i1", "p1", "Olives", null), offer("i2", "p2", "Almonds", "3.50")],
+        offers: [
+          offer("i1", "p1", "Olives", null),
+          {
+            ...offer("i2", "p2", "Almonds", "3.50"),
+            active: false,
+            placements: [["sec-snacks"]],
+            topLevelMember: null,
+          },
+        ],
       }),
     } as unknown as VenueServiceApi;
     host.append(el);

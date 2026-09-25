@@ -107,6 +107,9 @@ const model: VenueServiceView = {
       customerName: { en: "House Aperitivo" },
       grossPrice: "11.00",
       unitPrice: "11.00",
+      active: true,
+      placements: [[]],
+      topLevelMember: { sectionId: "root-m1", memberId: "member-p1" },
       variants: [
         {
           id: "v1",
@@ -421,6 +424,9 @@ describe("venue operations screen", () => {
         customerName: { en: "Patatas bravas" },
         grossPrice: "5.00",
         unitPrice: "5.00",
+        active: true,
+        placements: [[]],
+        topLevelMember: { sectionId: "root-m1", memberId: "member-bravas" },
         variants: [],
       },
     ],
@@ -703,12 +709,12 @@ describe("venue operations screen", () => {
     ).not.toBeNull();
   });
 
-  it("edits and removes an offer from the shared data table", async () => {
+  it("edits an offer and removes it from the menu's top level", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),
       updateMenuItem: vi.fn().mockResolvedValue(undefined),
       setMenuVariants: vi.fn().mockResolvedValue(undefined),
-      deactivateMenuItem: vi.fn().mockResolvedValue(undefined),
+      removeMenuMember: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "menus");
@@ -725,10 +731,161 @@ describe("venue operations screen", () => {
       { variantId: "v1", price: "16.50", offered: true },
     ]);
     expect(api.updateMenuItem).toHaveBeenCalledWith("m1", "i1", { grossPrice: "12.50" });
+    expect(find(el, '[data-test="switch-offer-i1"]')).toBeNull();
     await action(el, "remove-offer-i1");
-    expect(api.deactivateMenuItem).not.toHaveBeenCalled();
+    expect(api.removeMenuMember).not.toHaveBeenCalled();
+    // Only the top level holds it, so taking it off clears what this menu set for it.
+    expect(modal(el)!.textContent).toContain("Its menu price and variant settings are cleared.");
     await action(el, "save-editor");
-    expect(api.deactivateMenuItem).toHaveBeenCalledWith("m1", "i1");
+    expect(api.removeMenuMember).toHaveBeenCalledWith("root-m1", "member-p1");
+    expect(api.updateMenuItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("adds a product again after it was removed from the menu's top level", async () => {
+    const removed: VenueServiceView = { ...model, offers: [] };
+    const api = {
+      load: vi.fn().mockResolvedValueOnce(model).mockResolvedValue(removed),
+      removeMenuMember: vi.fn().mockResolvedValue(undefined),
+      addProductToMenu: vi.fn().mockResolvedValue({ id: "i1" }),
+      setMenuVariants: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "remove-offer-i1");
+    await action(el, "save-editor");
+    expect(api.removeMenuMember).toHaveBeenCalledWith("root-m1", "member-p1");
+    await settle(el);
+    expect(table(el, "menu-offers-m1").shadowRoot!.textContent).not.toContain("Negroni");
+    expect(table(el, "menu-offers-m1").shadowRoot!.textContent).toContain("No entries yet.");
+    await action(el, "new-offer-m1");
+    expect(field(el, "offer-product-m1").value).toBe("p1");
+    await action(el, "save-editor");
+    expect(api.addProductToMenu).toHaveBeenCalledWith("m1", { productId: "p1", grossPrice: null });
+    expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i1", [
+      { variantId: "v1", price: null, offered: true },
+    ]);
+    expect(modal(el)).toBeNull();
+  });
+
+  // Negroni sits on the top level AND in Cocktails; Olives only in Cocktails, switched off here.
+  const nestedModel: VenueServiceView = {
+    ...model,
+    products: [
+      ...model.products,
+      {
+        id: "p2",
+        name: "Olives",
+        customerName: { en: "Manzanilla Olives" },
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        active: true,
+      },
+    ],
+    offers: [
+      { ...model.offers[0]!, placements: [[], ["sec-cocktails"]] },
+      {
+        id: "i2",
+        menuId: "m1",
+        productId: "p2",
+        name: "Olives",
+        customerName: { en: "Manzanilla Olives" },
+        grossPrice: null,
+        unitPrice: "3.00",
+        active: false,
+        placements: [["sec-cocktails"]],
+        topLevelMember: null,
+        variants: [],
+      },
+    ],
+  };
+
+  it("says where each product sits, and whether it is switched off on this menu", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(nestedModel),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "menus");
+    const rows = [...table(el, "menu-offers-m1").shadowRoot!.querySelectorAll("tbody tr")].map(
+      (row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent!.trim()),
+    );
+    expect(rows.map((cells) => cells.slice(0, 1).concat(cells.slice(2, 4)))).toEqual([
+      ["Negroni", "Top level and in a section", "On"],
+      ["Olives", "In a section", "Switched off"],
+    ]);
+  });
+
+  it("switches a product reached through a section off and on, and never removes it", async () => {
+    const on: VenueServiceView = {
+      ...nestedModel,
+      offers: [nestedModel.offers[0]!, { ...nestedModel.offers[1]!, active: true }],
+    };
+    const api = {
+      load: vi.fn().mockResolvedValueOnce(on).mockResolvedValue(nestedModel),
+      updateMenuItem: vi.fn().mockResolvedValue(undefined),
+      removeMenuMember: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    expect(find(el, '[data-test="remove-offer-i2"]')).toBeNull();
+    expect(find(el, '[data-test="switch-offer-i2"]')!.textContent).toContain(
+      "Switch off on this menu",
+    );
+    await action(el, "switch-offer-i2");
+    expect(api.updateMenuItem).toHaveBeenCalledWith("m1", "i2", { active: false });
+    await settle(el);
+    expect(find(el, '[data-test="switch-offer-i2"]')!.textContent).toContain(
+      "Switch on on this menu",
+    );
+    await action(el, "switch-offer-i2");
+    expect(api.updateMenuItem).toHaveBeenLastCalledWith("m1", "i2", { active: true });
+    expect(api.removeMenuMember).not.toHaveBeenCalled();
+  });
+
+  it("says a product removed from the top level stays on the menu through its section", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(nestedModel),
+      removeMenuMember: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "remove-offer-i1");
+    expect(modal(el)!.textContent).toContain("It stays on this menu through its section.");
+    expect(modal(el)!.textContent).not.toContain("cleared");
+    await action(el, "save-editor");
+    expect(api.removeMenuMember).toHaveBeenCalledWith("root-m1", "member-p1");
+  });
+
+  it("adds a product with no variants without carrying another product's variants", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        products: [
+          ...model.products,
+          {
+            id: "p2",
+            name: "Olives",
+            customerName: { en: "Manzanilla Olives" },
+            pricingUnit: "each",
+            unitPrice: "3.00",
+            active: true,
+          },
+        ],
+      }),
+      addProductToMenu: vi.fn().mockResolvedValue({ id: "i2" }),
+      setMenuVariants: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "new-offer-m1");
+    expect(field(el, "offer-product-m1").value).toBe("p2");
+    field(el, "offer-price-m1").value = "5.00";
+    await action(el, "save-editor");
+    expect(api.addProductToMenu).toHaveBeenCalledWith("m1", {
+      productId: "p2",
+      grossPrice: "5.00",
+    });
+    // Olives has no variants of its own, so the menu overrides nothing — least of all for the
+    // Negroni variant the same model carries.
+    expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i2", []);
   });
 
   it("routes a product exception for one zone", async () => {

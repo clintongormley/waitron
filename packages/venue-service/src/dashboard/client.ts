@@ -123,7 +123,19 @@ export interface MenuOffer {
   grossPrice: string | null;
   /** The price the offer is charged at: `grossPrice`, else the product's own. */
   unitPrice: string;
+  /** This menu's own switch for the product; a switched-off product is not sold on the menu. */
+  active: boolean;
+  /** Each path of section ids from the menu's top level to a list holding the product; `[]` is
+   * the top level itself. */
+  placements: string[][];
+  /** The product's membership of the menu's top level, when it has one: what taking it off the
+   * top level removes. Joined in by `load` from the menu's structure. */
+  topLevelMember: { sectionId: string; memberId: string } | null;
   variants?: MenuOfferVariant[];
+}
+interface MenuStructure {
+  rootSectionId: string;
+  nodes: { memberId: string; ref: { kind: "product"; productId: string } | { kind: "section" } }[];
 }
 export type VenueServiceView = VenueServiceModel & VenueServiceChoices;
 
@@ -150,7 +162,7 @@ export class VenueServiceApi {
       this.#read<VenueServiceChoices["stations"]>("/management-api/stations"),
       this.#read<FloorZone[]>("/management-api/zones"),
     ]);
-    const [productLists, offerLists] = await Promise.all([
+    const [productLists, offerLists, structures] = await Promise.all([
       Promise.all(
         menus.map((menu) =>
           this.#read<Product[]>(`/management-api/catalogues/${menu.id}/products`),
@@ -158,13 +170,32 @@ export class VenueServiceApi {
       ),
       Promise.all(
         menus.map((menu) =>
-          this.#read<MenuOffer[]>(`/management-api/catalogues/${menu.id}/offers`),
+          this.#read<Omit<MenuOffer, "topLevelMember">[]>(
+            `/management-api/catalogues/${menu.id}/offers`,
+          ),
+        ),
+      ),
+      Promise.all(
+        menus.map((menu) =>
+          this.#read<MenuStructure>(`/management-api/catalogues/${menu.id}/structure`),
         ),
       ),
     ]);
     const products = [
       ...new Map(productLists.flat().map((product) => [product.id, product])).values(),
     ];
+    const offers = offerLists.flatMap((list, index) => {
+      const { rootSectionId, nodes } = structures[index]!;
+      return list.map((offer) => {
+        const member = nodes.find(
+          (node) => node.ref.kind === "product" && node.ref.productId === offer.productId,
+        );
+        return {
+          ...offer,
+          topLevelMember: member ? { sectionId: rootSectionId, memberId: member.memberId } : null,
+        };
+      });
+    });
     return {
       ...model,
       menus,
@@ -172,7 +203,7 @@ export class VenueServiceApi {
       stations,
       floorZones,
       products,
-      offers: offerLists.flat(),
+      offers,
     };
   }
 
@@ -219,10 +250,11 @@ export class VenueServiceApi {
     return this.request(`/management-api/catalogues/${menuId}/items`, "POST", input);
   }
 
+  /** `active` is the menu's own switch for the product. */
   updateMenuItem(
     menuId: string,
     menuItemId: string,
-    input: { grossPrice: string | null },
+    input: { grossPrice?: string | null; active?: boolean },
   ): Promise<void> {
     return this.request(`/management-api/catalogues/${menuId}/items/${menuItemId}`, "PATCH", input);
   }
@@ -241,8 +273,9 @@ export class VenueServiceApi {
     );
   }
 
-  deactivateMenuItem(menuId: string, menuItemId: string): Promise<void> {
-    return this.request(`/management-api/catalogues/${menuId}/items/${menuItemId}`, "DELETE");
+  /** Takes one member off a list, such as a product off a menu's top level. */
+  removeMenuMember(sectionId: string, memberId: string): Promise<void> {
+    return this.request(`/management-api/sections/${sectionId}/members/${memberId}`, "DELETE");
   }
 
   replaceHours(departmentId: string, hours: Omit<HoursInterval, "departmentId">[]): Promise<void> {

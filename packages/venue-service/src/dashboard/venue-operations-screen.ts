@@ -42,7 +42,7 @@ type Editor =
   | { kind: "zone"; row: FloorZone }
   | { kind: "assignment"; zoneId: string; menuId?: string }
   | { kind: "route"; row?: PreparationRoute }
-  | { kind: "delete"; name: string; action: () => Promise<unknown> };
+  | { kind: "delete"; name: string; detail?: string; action: () => Promise<unknown> };
 type Action = { key: string; label: string; run: () => void; disabled?: boolean };
 
 @customElement("dashboard-venue-operations-screen")
@@ -418,8 +418,8 @@ export class VenueOperationsScreen extends LitElement {
       ${this.#actions(label, actions)}
     </div>`;
   }
-  #confirm(name: string, action: () => Promise<unknown>): void {
-    this.#open({ kind: "delete", name, action });
+  #confirm(name: string, action: () => Promise<unknown>, detail?: string): void {
+    this.#open({ kind: "delete", name, action, ...(detail === undefined ? {} : { detail }) });
   }
   #readinessMessage(issue: VenueReadinessIssue): string {
     switch (issue.code) {
@@ -620,24 +620,19 @@ export class VenueOperationsScreen extends LitElement {
                   sortValue: (row) => Number(row.unitPrice),
                 },
                 {
+                  key: "placement",
+                  label: t("venue.placement"),
+                  cell: (row) => this.#placement(row),
+                },
+                {
+                  key: "switch",
+                  label: t("venue.status"),
+                  cell: (row) => t(row.active ? "venue.offer_on" : "venue.offer_off"),
+                },
+                {
                   key: "actions",
                   label: t("venue.actions"),
-                  cell: (row) =>
-                    this.#actions(row.name, [
-                      {
-                        key: `edit-offer-${row.id}`,
-                        label: t("venue.edit"),
-                        run: () => this.#open({ kind: "offer", menuId: menu.id, row }),
-                      },
-                      {
-                        key: `remove-offer-${row.id}`,
-                        label: t("venue.remove_offer"),
-                        run: () =>
-                          this.#confirm(row.name, () =>
-                            this.api.deactivateMenuItem(menu.id, row.id),
-                          ),
-                      },
-                    ]),
+                  cell: (row) => this.#actions(row.name, this.#offerActions(menu.id, row)),
                 },
               ],
               (row) => row.id,
@@ -645,6 +640,47 @@ export class VenueOperationsScreen extends LitElement {
           : nothing
       }
     </section>`;
+  }
+  #placement(row: MenuOffer): string {
+    const inSection = row.placements.some((path) => path.length > 0);
+    if (row.topLevelMember === null) return t("venue.placement_section");
+    return t(inSection ? "venue.placement_both" : "venue.placement_top");
+  }
+  /** A product the menu's top level holds is taken off it; one the menu reaches only through a
+   * section cannot be, so it keeps the menu's own switch instead. */
+  #offerActions(menuId: string, row: MenuOffer): Action[] {
+    const member = row.topLevelMember;
+    const actions: Action[] = [
+      {
+        key: `edit-offer-${row.id}`,
+        label: t("venue.edit"),
+        run: () => this.#open({ kind: "offer", menuId, row }),
+      },
+    ];
+    if (member !== null)
+      actions.push({
+        key: `remove-offer-${row.id}`,
+        label: t("venue.remove_offer"),
+        run: () =>
+          this.#confirm(
+            row.name,
+            () => this.api.removeMenuMember(member.sectionId, member.memberId),
+            t(
+              row.placements.some((path) => path.length > 0)
+                ? "venue.remove_offer_stays"
+                : "venue.remove_offer_resets",
+            ),
+          ),
+      });
+    if (member === null || !row.active)
+      actions.push({
+        key: `switch-offer-${row.id}`,
+        label: t(row.active ? "venue.switch_offer_off" : "venue.switch_offer_on"),
+        run: () => {
+          void this.#save(() => this.api.updateMenuItem(menuId, row.id, { active: !row.active }));
+        },
+      });
+    return actions;
   }
   #zones() {
     const model = this.model!;
@@ -1143,7 +1179,8 @@ export class VenueOperationsScreen extends LitElement {
       case "delete":
         return {
           heading: t("venue.confirm_remove"),
-          body: html`<p>${editor.name}</p>`,
+          body: html`<p>${editor.name}</p>
+            ${editor.detail === undefined ? nothing : html`<p class="hint">${editor.detail}</p>`}`,
           save: () => {
             void this.#save(editor.action);
           },

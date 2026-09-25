@@ -64,7 +64,21 @@ describe("VenueServiceApi", () => {
       .mockResolvedValueOnce(
         jsonResponse([{ id: "p1", name: "Negroni", customerName: { en: "House Aperitivo" } }]),
       )
-      .mockResolvedValueOnce(jsonResponse([{ id: "i1", productId: "p1", grossPrice: "9.00" }]));
+      .mockResolvedValueOnce(
+        jsonResponse([
+          { id: "i1", productId: "p1", grossPrice: "9.00" },
+          { id: "i2", productId: "p2", grossPrice: null },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          rootSectionId: "root-m1",
+          nodes: [
+            { memberId: "mem-s9", ref: { kind: "section", sectionId: "s9" }, children: [] },
+            { memberId: "mem-p1", ref: { kind: "product", productId: "p1" } },
+          ],
+        }),
+      );
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
 
     await expect(api.load()).resolves.toMatchObject({
@@ -72,7 +86,16 @@ describe("VenueServiceApi", () => {
       categories: [{ id: "c1", name: { en: "Cocktails" }, image: null, parentId: null }],
       stations: [{ id: "s1", name: "Bar" }],
       floorZones: [{ id: "z1", name: "Upstairs" }],
-      offers: [{ id: "i1", productId: "p1", grossPrice: "9.00" }],
+      // Only the product the top level holds carries a membership to take off it.
+      offers: [
+        {
+          id: "i1",
+          productId: "p1",
+          grossPrice: "9.00",
+          topLevelMember: { sectionId: "root-m1", memberId: "mem-p1" },
+        },
+        { id: "i2", productId: "p2", grossPrice: null, topLevelMember: null },
+      ],
     });
     expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
       "/management-api/venue-service",
@@ -82,6 +105,7 @@ describe("VenueServiceApi", () => {
       "/management-api/zones",
       "/management-api/catalogues/m1/products",
       "/management-api/catalogues/m1/offers",
+      "/management-api/catalogues/m1/structure",
     ]);
   });
 
@@ -105,7 +129,8 @@ describe("VenueServiceApi", () => {
     await api.createMenu("Terrace drinks");
     await api.addProductToMenu("m1", { productId: "p1", grossPrice: "11.00" });
     await api.updateMenuItem("m1", "i1", { grossPrice: "12.50" });
-    await api.deactivateMenuItem("m1", "i1");
+    await api.updateMenuItem("m1", "i2", { active: false });
+    await api.removeMenuMember("root-m1", "mem-p1");
 
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
       ["/management-api/venue-service/departments", "POST"],
@@ -118,12 +143,14 @@ describe("VenueServiceApi", () => {
       ["/management-api/catalogues", "POST"],
       ["/management-api/catalogues/m1/items", "POST"],
       ["/management-api/catalogues/m1/items/i1", "PATCH"],
-      ["/management-api/catalogues/m1/items/i1", "DELETE"],
+      ["/management-api/catalogues/m1/items/i2", "PATCH"],
+      ["/management-api/sections/root-m1/members/mem-p1", "DELETE"],
     ]);
     expect(JSON.parse(fetchImpl.mock.calls[8]![1].body as string)).toEqual({
       productId: "p1",
       grossPrice: "11.00",
     });
+    expect(JSON.parse(fetchImpl.mock.calls[10]![1].body as string)).toEqual({ active: false });
   });
 
   it("replaces a menu offer's variant overrides in one PUT", async () => {
@@ -154,7 +181,13 @@ describe("VenueServiceApi", () => {
     };
     const fetchImpl = vi.fn((path: string) =>
       Promise.resolve(
-        jsonResponse(path === "/management-api/venue-service" ? empty : [{ id: "m1" }]),
+        jsonResponse(
+          path === "/management-api/venue-service"
+            ? empty
+            : path.endsWith("/structure")
+              ? { rootSectionId: "root-m1", nodes: [] }
+              : [{ id: "m1" }],
+        ),
       ),
     );
     const onSuccess = vi.fn();
@@ -167,7 +200,7 @@ describe("VenueServiceApi", () => {
     expect(background.liveData).toBe(liveData);
 
     await background.load();
-    expect(fetchImpl).toHaveBeenCalledTimes(7);
+    expect(fetchImpl).toHaveBeenCalledTimes(8);
     for (const [, init] of fetchImpl.mock.calls as unknown as [string, RequestInit][]) {
       expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
     }
@@ -175,10 +208,10 @@ describe("VenueServiceApi", () => {
 
     fetchImpl.mockClear();
     await api.load();
-    expect(fetchImpl).toHaveBeenCalledTimes(7);
+    expect(fetchImpl).toHaveBeenCalledTimes(8);
     for (const [, init] of fetchImpl.mock.calls as unknown as [string, RequestInit][]) {
       expect(new Headers(init.headers).get("x-waitron-live")).toBeNull();
     }
-    expect(onSuccess).toHaveBeenCalledTimes(7);
+    expect(onSuccess).toHaveBeenCalledTimes(8);
   });
 });
