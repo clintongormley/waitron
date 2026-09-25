@@ -13,24 +13,11 @@ import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 
 /**
- * The layout-canvas CRUD and tenant-theme routes end to end, over HTTP, with the manager and staff
+ * The layout-canvas CRUD and theme routes end to end, over HTTP, with the manager and staff
  * sessions a real sign-in mints.
- *
- * ## What went with PostgreSQL
- *
- * SQLite has no roles and no grants, and every call below runs on the one handle. Nothing
- * here now says anything about which identity the routes reach the database as. The 403 and 401
- * gates are `authorizeManager` and `requireManagementSession` rather than privileges, so they are
- * unaffected — and still pass.
- *
- * The `canvas.in_use` case below is NOT in that category and keeps its subject: the
- * `device_profiles.canvas_id` → `canvases.id` key survived the regeneration with `ON DELETE
- * restrict` (`packages/db/drizzle/0000_baseline.sql`), the store opens with
- * `pragma foreign_keys = on` (`packages/store/src/index.ts`), and `translateWriteError` already
- * reads this engine's restrict code (`packages/layouts/src/canvas-store.ts`).
  */
 const LOCALE = "es-ES";
-const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
+const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 
@@ -40,39 +27,32 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-/** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// One NIF per provisioned venue. The counter stays because `provisionTenant` is not structurally
-// once-only — `setupTenant`'s memo is what makes it so.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(74_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** A canvas name unique within the tenant, so tests are order-independent (CLAUDE.md §4) —
- *  `resetPerTest` is off, so the canvas set accumulates across tests and `(name)` is unique. */
+/** Canvas names are unique and the database is not reset between tests. */
 function uniqueName(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
 
-/** A valid phone canvas with a distinguishing title, so a stored row is never mistaken for a default
- *  and two round-trips can be told apart. Mirrors `canvas-store.db.test.ts`'s helper. */
+/** The title tells a stored row from a default, and one round-trip from another. */
 function phoneCanvas(title: string): CanvasDef {
   const base = DEFAULT_CANVASES["phone-portrait"];
   return { ...base, tabs: [{ ...base.tabs[0]!, title }, ...base.tabs.slice(1)] };
 }
 
-/** The suite's one venue. The database holds one tenant and is not reset between tests, so both
- *  groups share the venue provisioned on first use rather than provisioning another. */
+/** The database is not reset between tests, so every group shares the venue provisioned first. */
 let provisioned: Promise<Record<string, never>> | undefined;
 function setupTenant(): Promise<Record<string, never>> {
   provisioned ??= provisionTenant();
   return provisioned;
 }
 
-/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function provisionTenant(): Promise<Record<string, never>> {
   await applyVenue(
     planVenue(
@@ -108,9 +88,8 @@ async function provisionTenant(): Promise<Record<string, never>> {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  // Seeded through the table definitions, not by raw SQL: `persons.id` and `persons.created_at` are
-  // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
-  // NOT NULL (`apps/server/src/testing/fiscal-fixtures.ts` took the same change).
+  // Through the table definitions: `persons.id` and `persons.created_at` are `$defaultFn`
+  // generators, which a raw SQL insert never reaches.
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(persons).values([
       {
@@ -138,9 +117,6 @@ function mountApp(): Hono {
     app,
     {
       db: suite.db,
-      // nodeId sentinel: the canvas/theme management routes never read cfg.nodeId, but
-      // mountManagementApi's cfg requires it (identity-config flow-down, #195). Matches the
-      // sibling management tests (management-api.accounts-and-receipt-config.test.ts, …-status/-passkey).
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
@@ -151,7 +127,6 @@ function mountApp(): Hono {
   return app;
 }
 
-/** Log in over HTTP by `email`, returning the `waitron_management_session=…` cookie pair. */
 async function login(app: Hono, email: string): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
@@ -273,9 +248,7 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
 
   it("DELETE a canvas a device profile still references → 409 canvas.in_use, canvas survives", async () => {
     const app = mountApp();
-    // Create a canvas, then bind a device profile to it as the owner (fixture setup). The
-    // FK device_profiles_canvas_fk is ON DELETE RESTRICT, so the DELETE trips a 23001 the
-    // store translates to canvas.in_use → the house 409.
+    // `device_profiles.canvas_id` is ON DELETE RESTRICT.
     const created = await app.request("/management-api/canvases", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -296,7 +269,6 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "canvas.in_use" },
     });
-    // The canvas survived the refused delete (RESTRICT): GET still returns it.
     const got = await app.request(`/management-api/canvases/${id}`, {
       headers: { cookie: managerCookie },
     });
@@ -316,7 +288,6 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
 
   it("POST with an invalid definition → 400 canvas.invalid", async () => {
     const app = mountApp();
-    // `{}` has no formFactor — validateCanvas refuses it (canvas.invalid) after authorize.
     const res = await app.request("/management-api/canvases", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -436,8 +407,6 @@ describe("Management API — layout-canvas CRUD (Task 11)", () => {
   it("refuses every canvas route for a STAFF-role session with 403 (the authorizeManager gate)", async () => {
     const app = mountApp();
     const staffCookie = await login(app, STAFF_EMAIL);
-    // Seed a canvas as the manager so the GET-by-id / PUT / DELETE targets exist (the 403 must fire
-    // regardless — the gate runs before any read/write).
     const created = await app.request("/management-api/canvases", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -539,7 +508,7 @@ describe("Management API — tenant theme (Task 11)", () => {
       error: { code: "management.request_invalid", params: { field: "theme" } },
     });
 
-    // A JSON null body → readJsonBody coerces to {} → same field screen (not a TypeError → 500).
+    // A JSON `null` body is read as `{}`, so the same field screen answers.
     const nul = await app.request("/management-api/theme", {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },

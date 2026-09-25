@@ -1,11 +1,4 @@
-// Side-effect only: loads errors.ts's augmentation for the host code this file THROWS
-// (`management.request_invalid`) under the "every file that throws one of these imports ./errors.js"
-// convention errors.ts states. The shared `error-boundary.ts` these routes wrap through is what
-// answers with `server.internal` now, emitting it as a bare literal, so it needs no such import of
-// its own. `@waitron/identity`'s own error-code augmentations
-// (`password.invalid`, `person.*`, `totp.invalid`, `management_session.*`, `authorization.*`, …)
-// load transitively via the value imports from that package below, so no bare
-// `import "@waitron/identity"` is needed on top of them.
+// Side-effect only: registers host codes this file throws (`zone.not_found`, …).
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -118,7 +111,7 @@ import {
   setManagementCookie,
 } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
-import type { Logger } from "./logger.js"; // the same Logger till-api.ts's routes take
+import type { Logger } from "./logger.js";
 import type { AccountEmailSender } from "./account-email.js";
 import { exchangeGoogleCode, type GoogleOidcConfig } from "./google-oidc.js";
 import {
@@ -128,35 +121,23 @@ import {
 } from "./account-rate-limit.js";
 
 /**
- * Everything the dashboard's management HTTP routes need. The management surface reads and writes only
- * this box's own identity records, so — unlike `TillApiDeps` — it wires no fiscal backend, clock or
- * card provider. `secureCookies` follows the resolved trading transport (operator TLS, persisted
- * box leaf, or leaf-less HTTP development), mirroring `TillApiDeps.secureCookies`.
+ * Everything the dashboard's management HTTP routes need. Unlike `TillApiDeps` it wires no fiscal
+ * backend, clock or card provider.
  */
 export interface ManagementApiDeps {
   db: Database;
-  /** This node's own id. */
   cfg: { nodeId: string };
   /**
-   * The venue's own config — the LOCATION the floor-zone and table config routes (FP-1) scope
-   * their reads and writes to. The zone/table verbs are location-scoped (`floor_zones` / `dining_tables`
-   * carry a `location_id`), so those routes need the venue's location, which the `cfg` above does not
-   * carry; `boot.ts` threads the deployed `till` config here, the SAME value `mountTillApi` receives, so
-   * the dashboard "Sala" config surface and the operator till surface CRUD the same tables under one
-   * scope. Only `locationId` is read on this surface (the fiscal ids a `TillConfig` also
-   * carries are inert here — these are config routes that touch no fiscal path). OPTIONAL so the
-   * identity/passkey unit-test harnesses, which never exercise the zone/table routes, can omit it; a
-   * request that reaches one of those routes without it fails closed (see `requireVenueCfg`).
+   * The venue config whose location the zone, table, station and course routes are scoped to — the
+   * same value `mountTillApi` receives. Optional so harnesses that never reach those routes can omit
+   * it; a request that does reach one without it fails closed (`requireVenueCfg`).
    */
   venueCfg?: TillConfig;
   secureCookies: boolean;
-  /** The WebAuthn Relying Party ID the passkey ceremonies below bind credentials to (`config.ts`'s
-   * `managementRpId`, defaulted to `localhost` for dev). A passkey is bound to its RP ID, so this is
-   * config threaded from boot, never a constant in `@waitron/identity` (spec §4c). */
+  /** The WebAuthn Relying Party ID passkeys are bound to (`config.ts`'s `managementRpId`). */
   rpId: string;
-  /** The exact served origin `@simplewebauthn/server` verifies each ceremony's response against
-   * (`config.ts`'s `managementOrigin`, defaulted to `http://localhost:5191`). Carries scheme + port,
-   * unlike the bare-domain `rpId`. */
+  /** The exact served origin, scheme and port included, that each ceremony's response is verified
+   * against. */
   origin: string;
   /** Venue default used when the recipient has not chosen their own UI language. */
   venueLocale?: string;
@@ -212,20 +193,8 @@ async function deliverAccountAction(
 }
 
 /**
- * Every AppError CODE the management API answers, and the HTTP status it maps to — the management
- * parallel of till-api.ts's `STATUS`. Defined ONCE here and shared by every route Task 4 adds to
- * `mountManagementApi` too, which is why it already lists the credential codes those gated routes
- * surface (`pin.too_short`, `password.too_short`, `person.not_found`, `authorization.not_permitted`).
- * CLIENT faults only: a genuine SERVER fault never appears here — it reaches `run` as a NON-AppError
- * and becomes an opaque 500. A registered code absent from this table defaults to 400, which is why
- * `run` needs the `?? 400`.
- *
- * `shared.invalid_id` is listed for completeness of the branded-id family but is not, on today's
- * routes, reachable on this surface: request ids are screened with `isUuid` and passed to the identity
- * functions as plain strings — the only thrower is
- * `@waitron/shared`'s branded-id constructor, which no route here calls with request input. Left in
- * rather than dropped so a future route that DOES construct a branded id gets the 400 rather than the
- * `?? 400` default; see this task's report for the reviewer note.
+ * Every AppError code the management API answers, and its HTTP status. Client faults only: a
+ * non-AppError becomes a 500. A code absent from this table answers 400.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -239,37 +208,15 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "google.second_factor_required": 401,
   "account_action.invalid": 400,
   "account_action.rate_limited": 429,
-  // Passkey (WebAuthn) ceremony faults, thrown by the two `finishPasskey*` calls the verify routes
-  // below wrap (the `beginPasskey*` options calls never throw these). Both authentication-failure codes
-  // are 401 — the auth-verify route IS the login,
-  // so a credential that is not registered (`passkey.not_registered`) or an assertion that fails to
-  // verify (`passkey.verification_failed`, also thrown on registration verify) is a failed credential
-  // check, the same family as `password.invalid`. `passkey.challenge_expired` is a 400: the request was
-  // well-formed but its challenge lapsed past `CHALLENGE_TTL_MS`, a client-retryable request-timing
-  // fault rather than a rejected credential. Non-active credential owners get the same verification
-  // failure as an unknown credential, so the public response does not disclose account status.
+  // The passkey login is a credential check, so its failures are 401 like `password.invalid`; an
+  // expired challenge is a retryable timing fault, not a rejected credential.
   "passkey.not_registered": 401,
   "passkey.verification_failed": 401,
   "passkey.challenge_expired": 400,
-  // A duplicate credential on register/verify: `finishPasskeyRegistration` translated a
-  // `credential_id` duplicate-key refusal into this code. 409 Conflict, the house convention for a
-  // "already exists" collision (`table.label_taken`, `tab.already_open`, `roster.already_published`,
-  // `purchase.duplicate` all → 409) — not the `?? 400` default, which would still be a 4xx but the
-  // wrong one.
   "passkey.already_registered": 409,
-  // This map is shared with authenticated staff routes, where 404/403 remain the correct semantics.
-  // Public password login folds unknown and suspended accounts into `password.invalid`; public
-  // passkey verification folds missing credentials and non-active owners into
-  // `passkey.verification_failed`. Authenticated session resolution still surfaces suspension.
   "person.suspended": 403,
   "person.self_deactivation": 403,
   "person.not_found": 404,
-  // The email write boundary: a malformed address is a request-shape
-  // fault (400), a `persons_tenant_email_uq` collision (one login address per database, compared with
-  // accents and case folded — `packages/identity/src/fold.ts`) is a
-  // "already exists" conflict
-  // (409, the house convention — `passkey.already_registered`/`table.label_taken` map the same way,
-  // not the `?? 400` default).
   "person.email_invalid": 400,
   "person.telephone_invalid": 400,
   "person.email_taken": 409,
@@ -281,196 +228,77 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.too_short": 400,
   "password.too_short": 400,
   "management.request_invalid": 400,
-  // The layouts service's receipt-validation fault, surfaced by the PUT receipt route below when
-  // `putReceipt` rejects an invalid `receipt` (design D8, fail-closed): 400 — a well-formed request
-  // whose payload the validator refuses. The `?? 400` default already covers it, but it is listed
-  // explicitly as the house style requires (see this map's doc).
   "receipt.invalid": 400,
-  // Canvas CRUD + tenant theme (Task 11). A GET-by-id (or a malformed id screened to it by
-  // `requireCanvasId`) that names no canvas the tenant owns → 404 (`canvas.not_found`); a duplicate
-  // canvas name collides on the `(name)` unique, translated by `canvas-store.ts`
-  // → 409 (`canvas.name_taken`), the same conflict shape a taken station/zone name has. An invalid
-  // `definition`/`theme` payload is refused by the store's validator → 400 (`canvas.invalid` /
-  // `theme.invalid`), the same family as the layout/receipt validation faults above. The `?? 400`
-  // default already covers the two 400s, but they are listed explicitly as the house style requires.
   "canvas.not_found": 404,
   "canvas.name_taken": 409,
-  // A DELETE of a canvas a device profile still references (the FK `device_profiles_canvas_fk`,
-  // ON DELETE RESTRICT) → 409, translated from the driver's 23001 by `canvas-store.ts`. The house
-  // conflict convention (the same 409 a `*.name_taken` collision has), not the `?? 400` default.
   "canvas.in_use": 409,
   "canvas.invalid": 400,
   "theme.invalid": 400,
   "shared.invalid_id": 400,
-  // Service-status config CRUD (TS-2). An unknown status id (or a malformed one screened to it at the
-  // PATCH/DELETE routes) names no status → 404 (`status.not_found`); a duplicate label collides on the
-  // `(label)` unique → 409 (`status.label_taken`), the same conflict shape a taken table label
-  // has on the till surface. (`status.inactive` is a till-surface set-time fault, not reachable on this
-  // config surface, so it is deliberately absent here.)
   "status.not_found": 404,
   "status.label_taken": 409,
-  // Floor-zone + table config CRUD (FP-1). An unknown zone/table id (or a malformed one screened to it
-  // at the PATCH/DELETE routes) names no row → 404 (`zone.not_found` / `table.not_found`); a duplicate
-  // name/label collides on the `(location, …)` unique → 409 (`zone.name_taken` /
-  // `table.label_taken`), the same conflict shape a taken status label has. `zone.not_found` is ALSO
-  // surfaced by the table routes when a `zoneId` names no `floor_zones` row (the FK, mapped in
-  // the verb). The code's own semantics already imply these statuses, but they are listed explicitly as
-  // the house style requires (see this map's doc) — an unmapped code would default to 400, the wrong 4xx.
   "zone.not_found": 404,
   "zone.name_taken": 409,
   "table.not_found": 404,
   "table.label_taken": 409,
-  // Floor-plan spatial placement (FP-2). A `posX`/`posY`/`rotation` out of range or a `shape` naming no
-  // `floor_table_shape` enum member — `setTablePlacement`'s per-field guards — is a well-formed request
-  // whose payload the verb refuses → 400, the same family as `management.request_invalid` (which the
-  // placement route's own body-shape/type screens throw for a MISSING or wrong-TYPE field). Registered
-  // in `errors.ts` (Task 2) where it already defaults to 400; listed explicitly as the house style
-  // requires (see this map's doc, and `errors.ts`'s note that the route task would list it here).
   "placement.invalid": 400,
-  // Kitchen-station config CRUD (KDS-1). An unknown station id (or a malformed one screened to it at the
-  // PATCH/DELETE/default routes), OR a deactivated station named as a routing/default target, names no
-  // LIVE station → 404 (`station.not_found`); a duplicate name collides on the `(location, name)`
-  // unique → 409 (`station.name_taken`), the same conflict shape a taken zone name has. (`station.no_default`
-  // is a FIRE-time code on the till surface, never thrown by these config routes, so it is absent here.)
   "station.not_found": 404,
   "station.name_taken": 409,
-  // Kitchen-course config CRUD (KDS-2, design §3a). An unknown course id (or a malformed one screened to
-  // it at the PATCH/DELETE routes), OR a retired/cross-venue course named as a product's default route,
-  // names no LIVE course → 404 (`course.not_found`); a duplicate name collides on the
-  // `(location, name)` unique → 409 (`course.name_taken`), the same conflict shape a taken
-  // station name has. Courses are a management/config concern, so both codes are mapped HERE — beside the
-  // station codes above; `course.not_found` is ALSO mapped on the till surface (`till-api.ts`), where the
-  // OPERATIONAL fire route surfaces it. The code's own semantics imply these statuses, but they are
-  // listed explicitly as the house style requires (an unmapped code would default to 400, the wrong 4xx).
   "course.not_found": 404,
   "course.name_taken": 409,
-  // Device-profile CRUD (Task 4, design 2026-09-05 §5.1). A GET/PUT/DELETE-by-id (or a malformed id
-  // screened to it by `requireDeviceProfileId`) that names no profile the tenant owns → 404
-  // (`device_profile.not_found`); a duplicate profile name collides on the `(name)` unique,
-  // translated by `device-profile-store.ts` → 409 (`device_profile.name_taken`), the same
-  // conflict shape a taken canvas name has. An unknown capability flag (fail-closed `validateCapabilities`)
-  // OR a `canvasId` naming no canvas (the foreign key) is refused → 400 (`device_profile.invalid`,
-  // params `{ reason: "bad_capabilities" | "bad_canvas_ref" }`), the same 400 family as `canvas.invalid`.
-  // The `?? 400` default already covers the 400, but it is listed explicitly as the house style requires.
   "device_profile.not_found": 404,
   "device_profile.name_taken": 409,
-  // A DELETE of a profile a device still references (the FK `devices_device_profile_fk`, ON
-  // DELETE RESTRICT) → 409, translated from the driver's 23001 by `device-profile-store.ts`. The house
-  // conflict convention (the same 409 a `*.name_taken` collision has), not the `?? 400` default.
-  // Mirrors `canvas.in_use`.
   "device_profile.in_use": 409,
   "device_profile.invalid": 400,
 };
 
-// The one error boundary every management route wraps its handler in — the shared
-// `createErrorBoundary` (see `error-boundary.ts` for its full behaviour) closed over this surface's
-// `STATUS` map and its `management.failed` log tag, the management counterpart of till-api.ts's
-// exported `run`. Local, not exported: Task 4's gated routes live in this same file and reach it
-// directly.
 const run = createErrorBoundary(STATUS, "management.failed");
 
 /**
- * Screen a `/management-api/staff/:id` path param as a UUID before it reaches a query, returning
- * it. Every id column is plain `text`, so a malformed id passed straight into a query is refused by
- * nothing below and simply matches no row (the id-screen note on `shared.invalid_id` in `till-api.ts`); refusing
- * it here as `person.not_found` (a caller-supplied uuid, safe to echo) makes that silent miss a
- * clean 404. This screens SHAPE only — it does NOT check existence: a WELL-FORMED id that names
- * no row passes this guard; the identity operation then returns `person.not_found`. Every staff
- * route that takes a person id shares this shape guard before its lookup.
+ * The `require*Id` screens below refuse a malformed path id as the resource's own not-found code. Id
+ * columns are plain `text`, so a malformed id would otherwise reach the query and match nothing.
+ * They screen shape only; the verb reports a well-formed id that names no row.
  */
 function requirePersonId(id: string): string {
   if (!isUuid(id)) throw new AppError("person.not_found", { personId: id });
   return id;
 }
 
-/**
- * Screen a `/management-api/service-statuses/:id` path param as a UUID before it reaches a query,
- * returning it. Mirrors `requirePersonId` for the status routes: nothing below refuses a malformed
- * id, so refusing it here as `status.not_found` (a caller-supplied uuid, safe to echo) makes a silent
- * miss a clean 404. Proven by deletion in `management-api.status.test.ts`.
- * Shared by the PATCH and DELETE `:id` routes below.
- */
 function requireStatusId(id: string): string {
   if (!isUuid(id)) throw new AppError("status.not_found", { statusId: id });
   return id;
 }
 
-/**
- * Screen a `/management-api/zones/:id` path param as a UUID, returning it. Mirrors `requireStatusId`
- * for the zone routes: nothing below refuses a malformed id, so refusing it here as `zone.not_found`
- * (a caller-supplied uuid, safe to echo) makes a silent miss a clean 404. Shared by the PATCH and DELETE `:id` zone routes below.
- */
 function requireZoneId(id: string): string {
   if (!isUuid(id)) throw new AppError("zone.not_found", { zoneId: id });
   return id;
 }
 
-/**
- * Screen a `/management-api/tables/:id` path param as a UUID, returning it. Mirrors `requireStatusId`
- * for the table routes: without this a malformed id reaches the query unrefused and matches nothing,
- * so it is refused as `table.not_found` (a caller-supplied uuid, safe to echo) for a clean 404 — the same screen
- * `till-api.ts`'s `PATCH`/`DELETE /api/tables/:id` routes apply inline. Shared by the PATCH and DELETE
- * `:id` table routes below.
- */
 function requireTableId(id: string): string {
   if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
   return id;
 }
 
-/**
- * Screen a `/management-api/stations/:id` path param as a UUID, returning it. Mirrors `requireZoneId`
- * for the kitchen-station routes: without this a malformed id reaches the query unrefused and matches
- * nothing, so it is refused as `station.not_found` (a caller-supplied uuid, safe to echo) for a clean 404 — the SAME code an absent
- * station gets from the by-id station verbs. Shared by the PATCH, DELETE and set-default `:id` routes.
- */
 function requireStationId(id: string): string {
   if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
   return id;
 }
 
-/**
- * Screen a `/management-api/courses/:id` path param as a UUID, returning it. Mirrors `requireStationId`
- * for the kitchen-course routes: without this a malformed id reaches the query unrefused and matches
- * nothing, so it is refused as `course.not_found` (a caller-supplied uuid, safe to echo) for a clean 404 — the SAME code an absent
- * course gets from the by-id course verbs. Shared by the PATCH and DELETE `:id` course routes.
- */
 function requireCourseId(id: string): string {
   if (!isUuid(id)) throw new AppError("course.not_found", { courseId: id });
   return id;
 }
 
-/**
- * Screen a `/management-api/canvases/:id` path param as a UUID, returning it. Nothing below refuses a
- * malformed id, so refusing it here as `canvas.not_found` makes a silent miss a clean 404 — the same screen the sibling `require*Id` helpers apply. UNLIKE those
- * siblings it echoes NO id: `canvas.not_found` carries no params by design (errors.ts), so a
- * well-formed-but-absent id (the GET-by-id 404 below) and a malformed one give the identical 404 body.
- * Shared by the GET, PUT and DELETE `:id` canvas routes.
- */
 function requireCanvasId(id: string): string {
   if (!isUuid(id)) throw new AppError("canvas.not_found", {});
   return id;
 }
 
-/**
- * Screen a `/management-api/device-profiles/:id` path param as a UUID, returning it. The twin of
- * `requireCanvasId` for the device-profile routes: nothing below refuses a malformed id, so refusing
- * it here as `device_profile.not_found` makes a silent miss a clean 404. Like `canvas.not_found`, `device_profile.not_found` carries NO params (errors.ts), so a
- * well-formed-but-absent id (the GET/PUT/DELETE-by-id 404) and a malformed one give the identical 404
- * body. Shared by the GET, PUT and DELETE `:id` device-profile routes.
- */
 function requireDeviceProfileId(id: string): string {
   if (!isUuid(id)) throw new AppError("device_profile.not_found", {});
   return id;
 }
 
-/**
- * The venue config the floor-zone + table config routes need (`deps.venueCfg`), or a fail-closed throw.
- * `venueCfg` is OPTIONAL on `ManagementApiDeps` (the identity/passkey harnesses omit it), so a route that
- * reaches a config verb has to narrow `TillConfig | undefined` to `TillConfig` first. `boot.ts` always
- * supplies it for a real venue server, so the throw is structurally unreachable in production and is a
- * misconfiguration guard, not a request fault — the same posture `readOrderFlow`'s "no location" guard
- * takes (`till-config.ts`).
- */
 function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
   /* v8 ignore start -- boot always threads venueCfg; only a harness that omits it AND hits a zone/table
      route reaches this, which no suite does — a config error, surfaced as an opaque 500 by `run`. */
@@ -481,12 +309,7 @@ function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
   return deps.venueCfg;
 }
 
-/**
- * The authorize gate the zone, table, table-placement, station, station-assignment, bump-mode,
- * course, product-course and fire-control routes run their database work through: open a
- * transaction, confirm the caller's management session carries `venue.configure`, then run `fn`.
- * The route's own `requireManagementSession` (→ 401) runs before this.
- */
+/** Runs `fn` in one transaction after confirming the session holds `venue.configure`. */
 function withVenueAuth<T>(
   deps: ManagementApiDeps,
   sessionId: string,
@@ -499,22 +322,12 @@ function withVenueAuth<T>(
 }
 
 /**
- * Parse and validate a `displayOrder` request field, shared by the status POST and PATCH routes. An
- * absent field stays `undefined` (a legitimate no-op — POST then defaults it, PATCH leaves it
- * untouched); a PRESENT value must be an integer NUMBER, else it is refused as
- * `management.request_invalid` naming the FIELD (never the value). The `typeof value !== "number"`
- * screen comes FIRST and is deliberate — matching the typeof checks the sibling label/color/active
- * fields use — so a non-number is REJECTED rather than coerced. An earlier `Number(value)` +
- * `Number.isInteger` check silently ACCEPTED `null`/`true`/`""`/`[]` (they coerce to 0/1/0/0), which
- * let an explicit `null` on PATCH reset displayOrder to 0. The dashboard sends `Number(...) || 0`
- * (already a number), so it is unaffected.
+ * An absent `displayOrder` stays `undefined`; a present one must be an integer number in int4 range,
+ * never coerced, so an explicit `null` is refused rather than stored as 0. The range check is the
+ * only bound: SQLite's INTEGER is 64-bit (`packages/db/src/schema/columns.ts`).
  */
 function parseDisplayOrder(value: unknown): number | undefined {
   if (value === undefined) return undefined;
-  // typeof + integer + int4 RANGE. The range half is now the ONLY bound: `display_order` is declared
-  // `integer`, but this engine's INTEGER is 64-bit whatever the declared type says, so a value outside
-  // int4's range is stored rather than refused (`packages/db/src/schema/columns.ts` carries the
-  // measurement) — the same class the `capacity` / `line_no` guards close.
   if (
     typeof value !== "number" ||
     !Number.isInteger(value) ||
@@ -525,18 +338,7 @@ function parseDisplayOrder(value: unknown): number | undefined {
   return value;
 }
 
-/**
- * Parse and validate a `capacity` request field for the table config routes, shared by the table POST
- * and PATCH routes. An absent field stays `undefined` (a legitimate no-op — POST leaves the column NULL,
- * PATCH leaves it untouched); a PRESENT value must be a non-negative integer NUMBER in int4 range, else
- * it is refused as `management.request_invalid` naming the FIELD (never the value). The `typeof` screen
- * comes first (matching `parseDisplayOrder`), so a non-number such as `null` is REJECTED rather than
- * coerced; the int4 upper bound is now the ONLY bound, because `capacity` is declared `integer` and
- * this engine's INTEGER is 64-bit whatever the declared type says
- * (`packages/db/src/schema/columns.ts` carries the measurement). "Plazas" is only its Spanish UI
- * label. The same rule `till-api.ts`'s `requireCapacity`
- * applies to the operator table routes.
- */
+/** `parseDisplayOrder`'s rule for a table's `capacity`, which must also be non-negative. */
 function parseCapacity(value: unknown): number | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 2_147_483_647)
@@ -545,15 +347,8 @@ function parseCapacity(value: unknown): number | undefined {
 }
 
 /**
- * Parse and validate one of the station PATCH route's three KDS timing-threshold fields
- * (`warmAfterMinutes`/`overdueAfterMinutes`/`forgottenAfterMinutes`, design §8). An absent field
- * stays `undefined` (the PATCH route decides what that means for the trio as a group, below); a
- * PRESENT value must be a POSITIVE integer NUMBER in int4 range — `< 1` rather than `parseCapacity`'s
- * `< 0`, since a station's fastest band cannot be zero minutes — else it is refused as
- * `management.request_invalid` naming the FIELD (never the value), the same typeof-first,
- * int4-range-bounded shape `parseDisplayOrder`/`parseCapacity` use. This screens only the SHAPE of one
- * field; the cross-field ordering (`warm < overdue < forgotten`, the `kitchen_stations_thresholds_ordered`
- * CHECK) is the caller's job once all three have been parsed.
+ * `parseDisplayOrder`'s rule for one KDS timing threshold, which must be at least one minute. The
+ * ordering across the three thresholds is the caller's check.
  */
 function parseThresholdMinutes(value: unknown, field: string): number | undefined {
   if (value === undefined) return undefined;
@@ -563,15 +358,8 @@ function parseThresholdMinutes(value: unknown, field: string): number | undefine
 }
 
 /**
- * Screen the device-profile `inactivityTimeoutSeconds` body field for SHAPE only, shared by the profile
- * POST and PUT routes. An absent or `null` value is `null` (the app default / "never"); a present value
- * must be an integer NUMBER in int4 range (the column is declared `integer`, though nothing below
- * enforces that width any more), else it is refused as `management.request_invalid` naming the
- * FIELD — the same typeof-first, int4-bounded shape `parseThresholdMinutes` uses, and the screen is
- * what closes the class. The DOMAIN rule (a
- * non-null value must be `>= 1`, and a `kds` profile coerces to null) is `validateInactivityTimeout`'s
- * (`@waitron/layouts`), which the store applies — so `0`/`-5` pass this screen and surface as the store's
- * 400 `device_profile.invalid`, exactly as `capabilities` reaches its own validator unscreened here.
+ * Shape only: absent or `null` is `null`; otherwise an integer number in int4 range. The domain rule
+ * is `validateInactivityTimeout`'s (`@waitron/layouts`), which the store applies.
  */
 function parseInactivityTimeoutSeconds(value: unknown): number | null {
   if (value === undefined || value === null) return null;
@@ -585,8 +373,7 @@ function parseInactivityTimeoutSeconds(value: unknown): number | null {
   return value;
 }
 
-/** Screen the UUID challenge handle and object response shared by registration and authentication.
- * Registration's optional name is passed unchanged to the domain validator. */
+/** A malformed challenge handle would just miss in the `text` id column, so it is refused here. */
 async function parsePasskeyVerifyBody(
   c: Context,
 ): Promise<{ challengeHandle: string; response: object; name?: unknown }> {
@@ -602,13 +389,6 @@ async function parsePasskeyVerifyBody(
   return { challengeHandle: body.challengeHandle, response: body.response, name: body.name };
 }
 
-/**
- * Mounts the dashboard's management-session routes on an existing Hono app: the staff roster
- * (read post-login by `my-schedule-screen.ts`), login and logout. Task 4 adds the gated staff
- * CRUD routes to THIS same function, each handler wrapped in `run` (above) so the whole surface
- * maps errors identically. Mirrors `mountTillApi`'s shape — `withTransaction(deps.db, …)` on every
- * DB touch, in the database holding this dashboard's tenant.
- */
 export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logger): void {
   const accountActionCodeKey = deps.accountActionCodeKey ?? randomBytes(32);
   const credentialKeyRing = deps.credentialKeyRing ?? {
@@ -737,17 +517,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       return c.redirect(`${deps.origin}/manage/?login=google`);
     }),
   );
-  // The deployment holds one tenant per database. Roster of active persons. Deliberately
-  // UNAUTHENTICATED — it exposes no secret, so it calls `listActiveStaff` under `withTransaction`
-  // rather than `requireManagementSession`. One dashboard screen fetches it via
-  // `api.getStaffRoster()` at HEAD: `my-schedule-screen.ts`'s staff self-service view (the
-  // colleague picker + name resolution). The login screen no longer uses it — spec §4.4's
-  // email-login migration landed, so `login-screen.ts`'s `#submit` now POSTs `{ email }`
-  // (`loginManager` resolves the person by email), not the old `{ personId }` roster picker. So
-  // the route stays for `my-schedule-screen.ts`. (The till has its OWN active-staff route, `GET
-  // /api/staff` in till-api.ts — not this one.) `listActiveStaff` returns `{ personId,
-  // displayName }` only: no password material, role or status, so there is nothing here a
-  // bystander must not see.
+  // Deliberately unauthenticated: `listActiveStaff` returns only `{ personId, displayName }`.
   app.get("/management-api/staff-roster", (c) =>
     run(c, log, async () => {
       const roster = await withTransaction(deps.db, async (tx) => {
@@ -757,33 +527,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // The deployment holds one tenant per database. Login: EMAIL + password (+ TOTP iff the person
-  // is enrolled) → management-session cookie. Runs under `withTransaction`, in this database.
-  // `loginManager` resolves the person by EMAIL
-  // (not a client-supplied id) and hardens against enumeration: an unknown email and a wrong
-  // password BOTH surface as `password.invalid` (401), so the response never reveals which
-  // addresses have accounts. A suspended person gets that same result. Once the password succeeds,
-  // a missing enrolled factor surfaces as `totp.required`; a wrong factor uses `totp.invalid`. The
-  // body is read via `readJsonBody` (`read-json-body.ts`), which coerces an
-  // empty/malformed/`null` body to `{}` so it never reaches `run` as an opaque 500 — see its doc
-  // for the two degenerate-body cases it handles. This is the representative site the other
-  // body-parsing routes point at: a degenerate body falls through to the screen as the route's
-  // OWN 4xx. (A JSON primitive/array body needs no coercion — a field access on it is
-  // `undefined`, not a throw.) The body is then screened: a missing/empty `email` (not a string,
-  // or a string that trims to empty), a non-string `password`, or a `totp` present but not a
-  // string, is refused as `password.invalid` — the SAME code a wrong password or unknown email
-  // gets, so nothing in the response tells an unauthenticated caller which field failed. Email
-  // FORMAT is validated at the account write boundary, not here:
-  // login screens only that a non-empty string was supplied and leaves a well-formed-but-unknown
-  // address to `loginManager`, which answers `password.invalid` uniformly. (Screening `totp` does
-  // NOT avert a 500: `verifyTotp` fails closed — probed against otplib@13.5.0, `verifyTotp`
-  // returns `false` for a non-string `totp` (number/null/undefined/object/boolean/non-six-digit
-  // string all tested): v13's `verifySync` throws on such input and `verifyTotp`'s catch swallows
-  // the throw, so the wrapper never surfaces it — a non-string `totp` reaching `loginManager`
-  // yields `totp.invalid` when the person is enrolled and is ignored when they are not, never a
-  // throw. It is screened for response uniformity and to keep the runtime value matching its
-  // declared `string` type; see this task's fix report for the correction to the review's "totp →
-  // 500" claim.)
+  // A malformed body is refused as `password.invalid`, the same code `loginManager` gives an unknown
+  // email or a wrong password, so the response does not say which field failed.
   app.post("/management-api/session", (c) =>
     run(c, log, async () => {
       const body = await readJsonBody<{
@@ -801,9 +546,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       ) {
         throw new AppError("password.invalid", {});
       }
-      // Bind the validated fields to locals: the guard narrows `body.email`/`body.password` to
-      // `string` HERE, but that narrowing does not survive into the `withTransaction` closure below (TS
-      // resets a captured property to its declared `string | undefined`), so the closure reads these.
       const { email, password, totp, recoveryCode } = body;
       const finishAttempt = passwordThrottle.begin(email);
       let session;
@@ -816,14 +558,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
             recoveryCode,
             totpKeyRing: credentialKeyRing,
           });
-          // Whether to offer this person a passkey, read on the same connection and inside the same
-          // transaction as the sign-in that asks the question, so it sees what the sign-in has just
-          // written and not yet committed, and it commits or rolls back together with the session
-          // row. That second half is a deliberate trade: if this read throws, the sign-in goes with
-          // it — no session row, no cookie, a 500 — because a session left half open is worse than
-          // one that plainly failed. Only a sign-in that has already succeeded reaches here, so the
-          // answer never reaches an unauthenticated caller and says nothing about anyone but the
-          // person now signed in.
+          // Deliberately in the sign-in's transaction: if this read throws, the sign-in fails with
+          // it rather than leaving a session half open.
           return {
             ...opened,
             offerPasskey: await shouldOfferPasskey(tx, {
@@ -845,8 +581,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Recovery delivers setup links to pending accounts and reset links to active accounts. The
-  // same 202 response keeps account membership and status out of this public response.
+  // Past the rate limit, the answer is 202 whether or not the address has an account.
   app.post("/management-api/password-reset", (c) =>
     run(c, log, async () => {
       const body = await readJsonBody<{ email?: unknown }>(c);
@@ -862,17 +597,15 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
             email: body.email as string,
           });
         });
-        // Do not make a known address wait for SMTP while an unknown address returns immediately:
-        // that would expose account membership through a large timing difference. The action has
-        // already committed, and delivery handles its own failure without rejecting this promise.
+        // Not awaited, so a known address does not wait on SMTP while an unknown one returns at once.
+        // `deliverAccountAction` catches its own failure.
         if (issued !== null) void deliverAccountAction(deps, log, issued);
       }
       return c.body(null, 202);
     }),
   );
 
-  // Inspection validates the emailed bearer token without consuming it. Completion
-  // repeats the check and performs the credential change atomically.
+  // Inspection validates the emailed token without consuming it.
   app.post("/management-api/account-actions/inspect", (c) =>
     run(c, log, async () => {
       const body = await readJsonBody<{
@@ -931,12 +664,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Logout: end the management session and clear the cookie. Idempotent — a request with no cookie, or
-  // one whose cookie is not even UUID-shaped (so it names no session), still clears the cookie and
-  // answers 204, so a double logout or a stale tab is never an error. `readManagementSessionToken` +
-  // `isUuid` skip the DB touch in exactly those cases (the till's `/api/session` logout shape); a
-  // UUID-shaped token ends its session under `withTransaction`, and `endManagementSession` is a
-  // no-op on an already-ended session or a token that names none.
+  // Idempotent: with no cookie, or one naming no session, it still clears the cookie and answers 204.
   app.delete("/management-api/session", (c) =>
     run(c, log, async () => {
       const token = readManagementSessionToken(c);
@@ -950,20 +678,11 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // GET /management-api/membership — a cloud peer fetches THIS node's current signed membership chart
-  // (Ruling C7). It is how a returning box reconciles at boot: a box that died before it was fenced
-  // comes back naming itself serving-primary, and must learn the promoted cloud's higher-term chart
-  // before it opens the sale path, or two nodes file under one NIF (CLAUDE.md §5, unrecoverable). The
-  // held document is a SIGNED, self-verifying artifact, so the caller re-verifies it against its trust
-  // set regardless; the auth here keeps the chart off arbitrary readers. It reuses the mirror-bundle
-  // credential shape + primitives, NOT a new auth: `loginManagerById` (personId + password + totp) then
-  // the admin-only `mirror.create`, exactly as `POST /management-api/mirror-bundle`. The credential
-  // rides in the `x-waitron-peer-credential` HEADER as JSON, not a body — a GET carries no body (undici
-  // refuses one). A malformed/absent header, a non-UUID personId, a wrong password or a non-string totp
-  // is refused `password.invalid` (401) — the same code and no-enumeration shape the mirror-bundle route
-  // gives, so the response never says which field failed. The session exists only to authorize this one
-  // read: no cookie is set and it is ended in the same transaction. Returns `{ document }` — the held
-  // signed document verbatim, or `null` when this node has never adopted a chart.
+  // A peer fetches this node's signed membership chart (`null` when none was adopted). The caller
+  // re-verifies the signature regardless; the credential keeps the chart off arbitrary readers. It
+  // rides in a header because a GET carries no body. Every malformed credential is `password.invalid`,
+  // so the response does not say which field failed. The session authorizes this read alone and is
+  // ended in the same transaction; no cookie is set.
   app.get("/management-api/membership", (c) =>
     run(c, log, async () => {
       const raw = c.req.header("x-waitron-peer-credential");
@@ -1006,11 +725,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // The deployment holds one tenant per database. List every person of the tenant (roles, status,
-  // credential BOOLEANS — never secrets). Gated: `requireManagementSession` refuses an
-  // unauthenticated request with 401 before any DB work, then `listPersons`'s own
-  // `authorizeManager` enforces `person.manage`. The admin-roster counterpart of the
-  // unauthenticated `staff-roster` above.
   app.get("/management-api/staff", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1021,8 +735,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Create a pending person and issue their invitation in the same transaction. Body validation
-  // happens before the transaction; identity owns authorization and the uniqueness check.
+  // Creates a pending person and issues their invitation in one transaction.
   app.post("/management-api/staff", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1135,8 +848,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Clear a person's PIN and end their open device sessions. The person chooses the replacement in
-  // their own profile; an administrator never handles it.
+  // The person chooses the replacement PIN in their own profile; an administrator never handles it.
   app.post("/management-api/staff/:id/reset-pin", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1207,23 +919,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // ── Receipt configuration (Task 7; receipt rehomed in SP-B4) ──────────────────────────────────
-  // The deployment holds one taxpayer per database. The dashboard's receipt-trim editor
-  // surface. Both routes are gated (`requireManagementSession` first, 401 before any DB work) and
-  // every DB touch runs under `withTransaction`, in this database; the receipt store
-  // upserts on `id = 1`. The receipt routes read/write the database's one
-  // `tenant_receipts` row (SP-B4 — the trim moved out of the old widget-layout model, now
-  // removed). The PUT delegates the authorize + validate + upsert to `@waitron/layouts`'s
-  // `putReceipt`; the GET calls `getReceipt`, which does NOT authorize (it is shared with the
-  // unauthenticated till boot read), so it carries its own explicit gate.
-
-  // Read the tenant's authored receipt trim, or the built-in default (`getReceipt` returns
-  // DEFAULT_RECEIPT `{}` on absence — SP-B4, from its own `tenant_receipts` row). Gated on
-  // `layout.configure` via the explicit `authorizeManager`, NOT merely on holding a session —
-  // `getReceipt` itself does NOT authorize (it is shared with the
-  // unauthenticated till boot read), so this route carries its own gate. Proven by deletion in
-  // `management-api.accounts-and-receipt-config.test.ts`: dropping this `authorizeManager` call flips the staff-role case from
-  // 403 to 200.
+  // `getReceipt` does not authorize (the till's unauthenticated boot read shares it), so this route
+  // carries its own gate.
   app.get("/management-api/receipt", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1238,10 +935,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Author (full replacement) the tenant's receipt trim, into its own `tenant_receipts` row (SP-B4).
-  // Same gating + body-screen shape as `PUT /management-api/theme`: `putReceipt` enforces
-  // `layout.configure` and validates the receipt (400 `receipt.invalid`); the body-shape screen refuses a
-  // non-object body or an absent `receipt` key as `management.request_invalid` naming the FIELD.
   app.put("/management-api/receipt", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1265,21 +958,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // ── Canvases + tenant theme (Task 11) ──────────────────────────────────────────────────────
-  // The deployment holds one taxpayer per database. The dashboard's reusable-canvas CRUD
-  // and the box's base theme (design §4/§9, SP-A.2 §16.3). All routes are gated
-  // (`requireManagementSession` first, 401 before any DB work) and every DB touch runs
-  // `withTransaction`, in this database; the theme store upserts on `id = 1` and
-  // the canvas store reads by id alone. The READS (`GET /canvases`, `/canvases/:id`, `/theme`) carry their own
-  // explicit `authorizeManager(..., "layout.configure")` — `listCanvases`/`getCanvas`/
-  // `getTenantTheme` do NOT self-authorize (mirroring `GET /management-api/receipt`) — while the
-  // WRITES delegate the gate to the store fns
-  // (`createCanvas`/`updateCanvas`/`deleteCanvas`/`putTenantTheme`, covered by the store suites).
-  // A malformed body field is refused as `management.request_invalid` naming the FIELD before the
-  // store call, the receipt/theme shape.
-
-  // The tenant's canvases, for the editor list. Gated on `layout.configure` via the explicit
-  // `authorizeManager` (the read fns do not gate). Returns `{ canvases: [{id,name,definition}] }`.
+  // ── Canvases and theme ──
+  // The layouts READ functions do not authorize, so each read route carries its own gate; the write
+  // functions authorize themselves.
   app.get("/management-api/canvases", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1294,8 +975,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // One canvas by id, or 404 `canvas.not_found`. `:id` screened by `requireCanvasId` (malformed →
-  // the same 404). Gated on `layout.configure` via the explicit `authorizeManager`.
   app.get("/management-api/canvases/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1312,10 +991,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Create a canvas. Body { name, definition }; a non-object body or a non-string `name` or an absent
-  // `definition` → `management.request_invalid` naming the FIELD; `createCanvas` then enforces
-  // `layout.configure`, validates the definition (400 `canvas.invalid`) and translates a duplicate name
-  // to 409 `canvas.name_taken`. Returns the new id at 201, matching every other create route.
   app.post("/management-api/canvases", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1329,9 +1004,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (!("definition" in body)) {
         throw new AppError("management.request_invalid", { field: "definition" });
       }
-      // Bind the narrowed fields to locals: the `typeof`/`in` guards narrow `body.name` HERE, but that
-      // narrowing does not survive into the `withTransaction` closure (TS resets a captured property to its
-      // declared type), so the closure reads these — the create-person/create-status pattern above.
       const { name, definition } = body;
       const result = await withTransaction(deps.db, async (tx) => {
         return createCanvas(tx, {
@@ -1344,11 +1016,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Replace a canvas's name + definition. Same body-screen as POST; `updateCanvas` enforces
-  // `layout.configure`, validates (400 `canvas.invalid`) and maps a duplicate name to 409. An absent id
-  // (matched zero rows via `.returning`) → 404 `canvas.not_found`, the by-id config-CRUD idiom the
-  // sibling zone/table/status verbs use — so a PUT to a since-deleted canvas is a 404, not a masked
-  // "saved" 204. → 204 on success.
   app.put("/management-api/canvases/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1376,9 +1043,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Delete a canvas. `:id` screened by `requireCanvasId`; `deleteCanvas` enforces `layout.configure`.
-  // An absent id (matched zero rows via `.returning`) → 404 `canvas.not_found`, mirroring the
-  // deactivate* sibling verbs. → 204 on success.
   app.delete("/management-api/canvases/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1393,9 +1057,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // The tenant's authored theme override, or `{ theme: null }` when it has never picked one
-  // (`getTenantTheme` returns undefined → JSON null; the client falls back to the design-system
-  // defaults). Gated on `layout.configure` via the explicit `authorizeManager` (the read fn does not gate).
   app.get("/management-api/theme", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1410,11 +1071,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Author (create or replace) the tenant's base theme. Body { theme }; a non-object body or an absent
-  // `theme` key → `management.request_invalid` naming the FIELD; `putTenantTheme` then enforces
-  // `layout.configure` and validates the override (400 `theme.invalid`, fail-closed on an un-allowlisted
-  // token) before the upsert. The body is coerced to `{}` by `readJsonBody` so a `null`/malformed body
-  // hits the same field screen rather than TypeError-ing → 500. → 204.
   app.put("/management-api/theme", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1433,23 +1089,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // ── Device profiles (Task 4) ───────────────────────────────────────────────────────────────────
-  // The deployment holds one tenant per database. The dashboard's reusable
-  // device-profile CRUD (design 2026-09-05 §5.1) — a named capability set + optional default
-  // canvas that a device (a later task's reassign route) points at. Mirrors the canvas block: all
-  // routes are gated (`requireManagementSession` first, 401 before any DB work) and every DB
-  // touch runs `withTransaction`, in this database; the device-profile store reads by
-  // id alone. The READS (`GET /device-profiles`, `/device-profiles/:id`) carry
-  // their own explicit `authorizeManager(..., "layout.configure")` —
-  // `listDeviceProfiles`/`getDeviceProfile` do NOT self-authorize (the canvas-read shape) — while
-  // the WRITES delegate the gate to the store fns (`createDeviceProfile`/`updateDeviceProfile`/
-  // `deleteDeviceProfile`, covered by the store suite). A malformed body field is refused as
-  // `management.request_invalid` naming the FIELD before the store call; the store then maps an
-  // unknown capability / bad canvas reference to `device_profile.invalid` (400), a duplicate name
-  // to `device_profile.name_taken` (409), and an absent id to `device_profile.not_found` (404).
-
-  // The tenant's device profiles, for the editor list. Gated on `layout.configure` via the explicit
-  // `authorizeManager` (the read fn does not gate). Returns `{ deviceProfiles: [{id,name,canvasId,capabilities}] }`.
+  // ── Device profiles ──
+  // Gated like the canvases: each read route carries its own gate, the write functions authorize
+  // themselves.
   app.get("/management-api/device-profiles", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1464,9 +1106,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // One device profile by id, or 404 `device_profile.not_found`. `:id` screened by
-  // `requireDeviceProfileId` (malformed → the same 404). Gated on `layout.configure` via the explicit
-  // `authorizeManager`.
   app.get("/management-api/device-profiles/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1483,12 +1122,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Create a device profile. Body { name, canvasId?, capabilities }; a non-object body, a non-string
-  // `name`, an absent `capabilities`, or a `canvasId` that is present but not a UUID string →
-  // `management.request_invalid` naming the FIELD; `createDeviceProfile` then enforces `layout.configure`,
-  // validates the capability set (400 `device_profile.invalid` {bad_capabilities}), maps a bad canvas
-  // reference to 400 `device_profile.invalid` {bad_canvas_ref} and a duplicate name to 409
-  // `device_profile.name_taken`. Returns the stored row at 201.
   app.post("/management-api/device-profiles", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1508,23 +1141,12 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (!("capabilities" in body)) {
         throw new AppError("management.request_invalid", { field: "capabilities" });
       }
-      // Bind the narrowed fields to locals: the `typeof`/`in` guards narrow the properties HERE, but
-      // that narrowing does not survive into the `withTransaction` closure (TS resets a captured property to
-      // its declared type), so the closure reads these — the create-canvas pattern above. `canvasId` is
-      // screened for UUID SHAPE via the shared `requireBodyUuid` (an omitted or `null` key → `null`; a
-      // malformed string → 400 `management.request_invalid`; the `canvas_id` column is plain `text` and
-      // would store it without complaint).
       const { name, capabilities } = body;
       const canvasId =
         body.canvasId === undefined || body.canvasId === null
           ? null
           : requireBodyUuid(body.canvasId, "canvasId");
-      // The auto-logout idle timeout — SHAPE-screened here (absent/null → null), DOMAIN-validated by the
-      // store. Threaded like `canvasId`; an omitted key stores NULL (full-replace, matching `canvasId`).
       const inactivityTimeoutSeconds = parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds);
-      // The device's FORM FACTOR (the picker that sends it is Task 15) — screened against the closed
-      // `FORM_FACTORS` set (`management.request_invalid` naming the field on a bad/absent value), so the
-      // `device_form_factor` enum column never sees a value it cannot hold.
       const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
       const result = await withTransaction(deps.db, async (tx) => {
         return createDeviceProfile(tx, {
@@ -1540,11 +1162,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Replace a device profile's name, canvas reference and capabilities. Same body-screen as POST;
-  // `updateDeviceProfile` enforces `layout.configure`, validates (400 `device_profile.invalid`), maps a
-  // duplicate name to 409 and an absent id (matched zero rows via `.returning`) to 404
-  // `device_profile.not_found` — so a PUT to a since-deleted profile is a 404, not a masked "saved".
-  // Returns the stored row at 200.
+  // Full replacement: an omitted `canvasId` or `inactivityTimeoutSeconds` stores null.
   app.put("/management-api/device-profiles/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1565,18 +1183,12 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (!("capabilities" in body)) {
         throw new AppError("management.request_invalid", { field: "capabilities" });
       }
-      // `canvasId` screened for UUID SHAPE via the shared `requireBodyUuid` (an omitted or `null` key →
-      // `null`; a malformed string → 400 `management.request_invalid`, which is the only refusal there
-      // is).
       const { name, capabilities } = body;
       const canvasId =
         body.canvasId === undefined || body.canvasId === null
           ? null
           : requireBodyUuid(body.canvasId, "canvasId");
-      // The auto-logout idle timeout — SHAPE-screened here, DOMAIN-validated by the store. Full-replace:
-      // an omitted key stores NULL (wiping any prior value), matching `canvasId`'s full-replace semantics.
       const inactivityTimeoutSeconds = parseInactivityTimeoutSeconds(body.inactivityTimeoutSeconds);
-      // The device's FORM FACTOR — screened against the closed `FORM_FACTORS` set, the same as POST.
       const formFactor = requireEnum(body.formFactor, "formFactor", FORM_FACTORS);
       const result = await withTransaction(deps.db, async (tx) => {
         return updateDeviceProfile(tx, {
@@ -1593,9 +1205,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Delete a device profile. `:id` screened by `requireDeviceProfileId`; `deleteDeviceProfile` enforces
-  // `layout.configure`. An absent id (matched zero rows via `.returning`) → 404 `device_profile.not_found`,
-  // mirroring `deleteCanvas`. → 204 on success.
   app.delete("/management-api/device-profiles/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1610,14 +1219,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // ── Service-status configuration (TS-2) ──────────────────────────────────────────────────────────
-  // The deployment holds one tenant per database. The dashboard's service-status
-  // editor surface (design §3a), mirroring the layout/receipt routes above. All four are gated
-  // (`requireManagementSession` first, 401 before any DB work); each verb's own
-  // `authorizeManager(..., "venue.configure")` enforces the write gate in this database.
-
-  // Create a status. Body { label, color, displayOrder? }; a bad shape → management.request_invalid
-  // naming the FIELD; a duplicate label → status.label_taken (409); a bad color → request_invalid.
+  // ── Service statuses ──
+  // Each status verb authorizes `venue.configure` itself.
   app.post("/management-api/service-statuses", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1632,10 +1235,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (typeof body.color !== "string")
         throw new AppError("management.request_invalid", { field: "color" });
       const displayOrder = parseDisplayOrder(body.displayOrder);
-      // Bind the validated fields to locals: the `typeof` guards narrow `body.label`/`body.color` to
-      // `string` HERE, but that narrowing does not survive into the `withTransaction` closure (TS resets a
-      // captured property to its declared type), so the closure reads these — the login/create-person
-      // pattern above.
       const { label, color } = body;
       const result = await withTransaction(deps.db, async (tx) => {
         return createStatus(tx, {
@@ -1649,7 +1248,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // The whole status set (active + inactive), for the editor. Gated on venue.configure via listStatuses.
   app.get("/management-api/service-statuses", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1660,8 +1258,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Edit a status (label/color/displayOrder/active — any subset). Malformed :id → status.not_found (a
-  // bad id names no status), not a 500. A present field with the wrong type → management.request_invalid.
   app.patch("/management-api/service-statuses/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1704,13 +1300,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           throw new AppError("management.request_invalid", { field: "active" });
         patch.active = body.active;
       }
-      // A patch carrying no mutable field is a no-op — the SAME shape the staff PATCH route treats an
-      // empty/`null` body as (`PATCH /management-api/staff/:id` → 204, no write). Return 204 WITHOUT
-      // touching the DB rather than reaching `updateStatus`'s `.set()` with an empty object, which
-      // Drizzle rejects ("No values to set") — a non-AppError the boundary would turn into an opaque
-      // 500. A `null`/`{}`/malformed body coerces to `{}` above (via `readJsonBody`), so this is where a degenerate PATCH
-      // body maps to a clean 204 rather than a 500, the same null-body discipline the sibling
-      // layout/receipt PUT routes follow.
+      // An empty patch is a 204 no-op: Drizzle refuses an empty `.set()` ("No values to set"), which
+      // would answer 500. The zone, table, station and course PATCH routes do the same.
       if (
         patch.label === undefined &&
         patch.color === undefined &&
@@ -1726,9 +1317,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Deactivate a status (DELETE = deactivate; the verb is the only thing keeping it one —
-  // (`tables.ts`'s `deactivateTable` note)). Malformed :id →
-  // status.not_found.
+  // DELETE deactivates; the verb is the whole guard (`tables.ts`'s `deactivateTable` note).
   app.delete("/management-api/service-statuses/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1743,18 +1332,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // ── Floor-plan zone + table configuration (FP-1) ──────────────────────────────────────────────────
-  // The dashboard "Sala" config screen (design §3d): CRUD the venue's floor zones and — as thin
-  // wrappers over TS-1's table verbs — its dining tables. All eight routes are gated exactly like the
-  // layout `GET` above: `requireManagementSession` first (401 before any DB work), then each route calls
-  // `authorizeManager(…, "venue.configure")` EXPLICITLY inside `withTransaction` (unlike the
-  // status verbs, the zone/table verbs do NOT authorize themselves — they take a plain venue `cfg` — so
-  // the gate lives at the route, the layout-`GET` shape). The verbs are location-scoped, so each reads
-  // the venue's config via `requireVenueCfg`. Body-shape screens mirror the service-status routes above.
-
-  // Create a zone. Body { name, displayOrder? }; a bad shape → management.request_invalid naming the
-  // FIELD; a duplicate name → zone.name_taken (409). Returns the new id at 201, matching every other
-  // management-surface create (createPerson/staff, createStatus).
+  // ── Zones and tables ──
+  // Unlike the status verbs, the zone, table, station and course verbs do not authorize, so these
+  // routes gate through `withVenueAuth`.
   app.post("/management-api/zones", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1766,9 +1346,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (typeof body.name !== "string")
         throw new AppError("management.request_invalid", { field: "name" });
       const displayOrder = parseDisplayOrder(body.displayOrder);
-      // Bind the validated field to a local: the `typeof` guard narrows `body.name` to `string` HERE,
-      // but that narrowing does not survive into the `withTransaction` closure (TS resets a captured property
-      // to its declared type), so the closure reads this — the login/create-person pattern above.
       const { name } = body;
       const result = await withVenueAuth(deps, sessionId, (tx) =>
         createZone(tx, cfg, { name, displayOrder }),
@@ -1777,7 +1354,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // The venue's ACTIVE zones, by display order, for the editor. Gated on venue.configure.
   app.get("/management-api/zones", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1787,10 +1363,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Edit a zone (name/displayOrder/active — any subset). Malformed :id → zone.not_found (a bad id names
-  // no zone), not a 500. A present field with the wrong type → management.request_invalid. A patch
-  // carrying no mutable field is a 204 no-op (the sibling status PATCH shape) — returned WITHOUT reaching
-  // updateZone's empty `.set()`, which Drizzle rejects ("No values to set") as an opaque 500.
   app.patch("/management-api/zones/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1828,8 +1400,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Deactivate a zone (DELETE = deactivate; the verb is the only thing keeping it one —
-  // (`tables.ts`'s `deactivateTable` note)). Malformed :id → zone.not_found.
+  // DELETE deactivates; the verb is the whole guard (`tables.ts`'s `deactivateTable` note).
   app.delete("/management-api/zones/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1840,11 +1411,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Create a table (thin wrapper over TS-1's `createTable`). Body { label, zoneId?, capacity? }; a bad
-  // shape → management.request_invalid naming the FIELD; a duplicate label → table.label_taken (409); a
-  // `zoneId` naming no floor_zones row → zone.not_found (404), raised by the verb's own zone read
-  // (`requireZone`, `tables.ts`) before the insert, and NOT re-mapped here. Returns the new id at 201 (the management-surface
-  // create convention; TS-1's till POST returns 200, but this surface is 201 throughout).
   app.post("/management-api/tables", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1859,17 +1425,11 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (body.zoneId !== undefined) {
         if (typeof body.zoneId !== "string")
           throw new AppError("management.request_invalid", { field: "zoneId" });
-        // A string-typed but MALFORMED zoneId passes the `typeof` screen above, then un-screened would
-        // be STORED in `zone_id` unchallenged. Screen it as a UUID and give it the SAME
-        // `zone.not_found` a well-formed-but-missing zoneId gets (from the verb's own zone read) — the
-        // till surface's create/patch routes screen it identically.
+        // A malformed zoneId gets the same `zone.not_found` a well-formed missing one does.
         if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
         zoneId = body.zoneId;
       }
       const capacity = parseCapacity(body.capacity);
-      // Bind the validated `label` to a local: the `typeof` guard narrows `body.label` to `string` HERE,
-      // but that narrowing does not survive into the `withTransaction` closure (a captured property resets to
-      // its declared type), so the closure reads this local — the login/create-person pattern above.
       const { label } = body;
       const result = await withVenueAuth(deps, sessionId, (tx) =>
         createTable(tx, cfg, { label, zoneId, capacity }),
@@ -1878,7 +1438,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // The venue's ACTIVE tables, by label (thin wrapper over TS-1's `listTables`). Gated on venue.configure.
   app.get("/management-api/tables", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1888,11 +1447,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Edit a table — label/zoneId/capacity, any subset (thin wrapper over TS-1's `updateTable`). Malformed
-  // :id → table.not_found; an unknown id → table.not_found; a label collision → table.label_taken; a
-  // `zoneId` naming no zone → zone.not_found (verb-mapped). A present field with the wrong type →
-  // management.request_invalid; a patch with no mutable field is a 204 no-op (avoids updateTable's empty
-  // `.set()` 500, the sibling status/zone PATCH shape).
   app.patch("/management-api/tables/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1911,9 +1465,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (body.zoneId !== undefined) {
         if (typeof body.zoneId !== "string")
           throw new AppError("management.request_invalid", { field: "zoneId" });
-        // Screen a string-typed but MALFORMED zoneId as a UUID (same as the POST route above):
-        // un-screened it would be stored in `zone_id` unchallenged, so it gets the SAME
-        // `zone.not_found` a well-formed-but-missing zoneId does.
         if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
         patch.zoneId = body.zoneId;
       }
@@ -1928,9 +1479,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Deactivate a table (DELETE = deactivate; the verb is the only thing keeping it one — the table
-  // has order history, and (`tables.ts`'s `deactivateTable` note) says what used to refuse it).
-  // Malformed :id → table.not_found (thin wrapper over TS-1's `deactivateTable`).
+  // DELETE deactivates; the verb is the whole guard (`tables.ts`'s `deactivateTable` note).
   app.delete("/management-api/tables/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1941,24 +1490,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // ── Floor-plan spatial placement (FP-2) ───────────────────────────────────────────────────────────
-  // The dashboard "Sala" editor's place / un-place actions (design §placement): thin wrappers over Task
-  // 2's `setTablePlacement` / `clearPlacement`. Same gating and mapping as the FP-1 zone/table routes
-  // above — `requireManagementSession` first (401 before any DB work), then `withVenueAuth` runs the verb
-  // under `withTransaction` + `authorizeManager(…, "venue.configure")`, so a staff session is
-  // refused 403 before any write (proven by dropping the authorize in `withVenueAuth`, the deletion-proof
-  // the test names). `requireTableId` screens `:id` (malformed → table.not_found, and that screen is
-  // the only refusal); the verbs own the placement VALUE validation (`placement.invalid`) and the live-table /
-  // live-zone reads (`table.not_found` / `zone.not_found`).
-
-  // Place a table (PUT = full placement). Body { zoneId, posX, posY, shape, rotation }; the body-shape
-  // screen mirrors the sibling table routes — a non-object body → management.request_invalid naming
-  // "body", each MISSING or wrong-TYPE field → the same code naming THAT field. A string-typed but
-  // MALFORMED `zoneId` is screened to zone.not_found (as the sibling POST/PATCH do: un-screened it
-  // reaches the zone read, which neither refuses it nor matches it). The narrowed fields are bound to locals before the
-  // closure (the login/create-person pattern). Value/range faults (posX/posY 0..1000, shape enum,
-  // rotation 0..359) are the verb's `placement.invalid`; a missing/inactive table or zone is its
-  // table.not_found/zone.not_found. Returns 204 (the sibling PATCH/DELETE convention on this surface).
+  // ── Table placement ──
+  // The route screens types; the verb owns the value ranges (`placement.invalid`).
   app.put("/management-api/tables/:id/placement", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1976,9 +1509,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       }
       if (typeof body.zoneId !== "string")
         throw new AppError("management.request_invalid", { field: "zoneId" });
-      // Screen a string-typed but MALFORMED zoneId as a UUID (the sibling table POST/PATCH shape): the
-      // verb reads `floor_zones … where id = ${zoneId}`, which neither refuses an un-screened non-UUID
-      // nor matches it. Give it the SAME zone.not_found a well-formed-but-missing one gets.
       if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
       if (typeof body.posX !== "number")
         throw new AppError("management.request_invalid", { field: "posX" });
@@ -1988,10 +1518,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("management.request_invalid", { field: "shape" });
       if (typeof body.rotation !== "number")
         throw new AppError("management.request_invalid", { field: "rotation" });
-      // Bind the narrowed fields to locals (the typeof narrowings above do not survive into the
-      // `withVenueAuth` closure — a captured property resets to its declared type). `shape` is cast to
-      // `FloorTableShape` here; the verb re-validates enum membership (→ placement.invalid), so the cast
-      // asserts nothing the verb does not check.
+      // The verb re-checks `shape`'s membership, so the cast asserts nothing it does not check.
       const { zoneId, posX, posY, rotation } = body;
       const shape = body.shape as FloorTableShape;
       await withVenueAuth(deps, sessionId, (tx) =>
@@ -2001,9 +1528,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Un-place a table (DELETE = clear placement; NULLs the four columns, leaves zone_id as-is). Malformed
-  // :id → table.not_found; an absent row → table.not_found (the verb's row-count check). Same gate as the
-  // PUT above; mirrors the sibling `DELETE /management-api/tables/:id` shape exactly. Returns 204.
   app.delete("/management-api/tables/:id/placement", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2014,18 +1538,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // ── Kitchen-station + routing configuration (KDS-1, design §3a/§3f) ────────────────────────────────
-  // The dashboard "Cocina" config screen: CRUD the venue's kitchen stations, pick the default, route
-  // categories/products to a station, and set the whole-ticket `bump_mode`. All gated exactly like the
-  // FP-1 zone/table routes above — `requireManagementSession` first (401 before any DB work), then
-  // `withVenueAuth` runs the verb under `withTransaction` + `authorizeManager(…, "venue.configure")`,
-  // so a staff session is refused 403 before any write (proven by dropping the authorize in `withVenueAuth`,
-  // the deletion-proof the tests name). The verbs are location-scoped, so each reads the venue's config via
-  // `requireVenueCfg`. Body-shape screens mirror the service-status / zone routes above.
-
-  // Create a station. Body { name, displayOrder?, isDefault? }; a bad shape → management.request_invalid
-  // naming the FIELD; a duplicate name → station.name_taken (409). Marking it default ADOPTS it as THE
-  // default (the verb clears any prior default in the same tx). Returns the new id at 201.
+  // ── Kitchen stations and routing ──
   app.post("/management-api/stations", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2047,9 +1560,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           throw new AppError("management.request_invalid", { field: "isDefault" });
         isDefault = body.isDefault;
       }
-      // Bind the validated `name` to a local: the `typeof` guard narrows `body.name` to `string` HERE,
-      // but that narrowing does not survive into the `withVenueAuth` closure (a captured property resets
-      // to its declared type), so the closure reads this local — the login/create-person pattern above.
       const { name } = body;
       const result = await withVenueAuth(deps, sessionId, (tx) =>
         createStation(tx, cfg, { name, displayOrder, isDefault }),
@@ -2058,8 +1568,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // The venue's ACTIVE stations, by display order then name (the picker's own read shape). Gated on
-  // venue.configure.
   app.get("/management-api/stations", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2069,22 +1577,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Edit a station (name/displayOrder/active/timing-thresholds — any subset; NOT is_default, which only
-  // the set-default route flips). Malformed :id → station.not_found (a bad id names no station), not a
-  // 500; an unknown id → station.not_found; a name collision → station.name_taken. A present field with
-  // the wrong type → management.request_invalid; a patch carrying no mutable field is a 204 no-op (the
-  // sibling zone PATCH shape) — returned WITHOUT reaching updateStation's empty `.set()`, which Drizzle
-  // rejects.
-  //
-  // The three KDS timing-threshold fields (design §8) travel as ONE group, the same
-  // `displayName|role|pin` compound-field shape the staff-create route uses for its own required trio:
-  // each is shape-screened individually (`parseThresholdMinutes`, positive int4), then — if ANY of the
-  // three is present — all three must be present and strictly ordered `warm < overdue < forgotten`,
-  // mirroring the `kitchen_stations_thresholds_ordered` CHECK exactly so that CHECK is never
-  // reached from here. A patch that edits only one or two of the three cannot be ordering-checked
-  // without reading the row's current values, which this route deliberately does not do — the config
-  // editor's form always saves the trio together (design §8), so "all or none" costs nothing a real
-  // caller needs and keeps the validation a pure function of the request body.
+  // The three timing thresholds travel together: if any is present, all three must be, strictly
+  // ordered `warm < overdue < forgotten` (the `kitchen_stations_thresholds_ordered` CHECK). A partial
+  // set could be ordering-checked only by reading the row, which this route deliberately does not do.
   app.patch("/management-api/stations/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2166,8 +1661,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Deactivate a station (DELETE = deactivate, and the verb is the only thing keeping it one — a `ticket_items.station_id`
-  // snapshot may reference it). Malformed :id → station.not_found; an unknown id → station.not_found.
+  // DELETE deactivates; the verb is the whole guard (`tables.ts`'s `deactivateTable` note).
   app.delete("/management-api/stations/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2178,9 +1672,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Make a station the venue's single default (the counter/pass fallback). Malformed :id →
-  // station.not_found; a retired or foreign station → station.not_found (the verb's live-station check,
-  // which runs BEFORE any write so a bad id never clears the existing default). Returns 204.
   app.post("/management-api/stations/:id/default", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2191,14 +1682,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Route a CATEGORY (its default route) or a PRODUCT (its override, winning over the category default)
-  // to a station — byte-identical PUTs but for the resource segment and the setter verb, so ONE factory
-  // registers both. Body { stationId: string | null } (null clears it). A non-null stationId must be a
-  // LIVE station of this venue (the verb → station.not_found); a malformed one is screened to that SAME
-  // code before the DB touch. A malformed :id names no such entity — the verb no-ops on an unknown one, so
-  // it is the same no-op (INSIDE `withVenueAuth`, so the gate still runs first for a validly-shaped
-  // request). KDS-1 mints no `category.not_found`/`product.not_found` (spec §6).
-  // Returns 204.
+  // Routes a category, or a product (which overrides its category), to a station; `null` clears it.
+  // A malformed `:id` gets the verb's unknown-id no-op, inside `withVenueAuth` so the gate still runs.
   const registerStationRoute = (
     segment: string,
     setStation: (
@@ -2222,7 +1707,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           throw new AppError("station.not_found", { stationId });
         }
         await withVenueAuth(deps, sessionId, async (tx) => {
-          if (!isUuid(id)) return; // malformed id names no entity → the verb's unknown-id no-op
+          if (!isUuid(id)) return;
           await setStation(tx, cfg, id, stationId);
         });
         return c.body(null, 204);
@@ -2232,10 +1717,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
   registerStationRoute("categories", setCategoryStation);
   registerStationRoute("products", setProductStation);
 
-  // Set the venue's whole-ticket bump mode (KDS-1 §2e) — body { mode: "line" | "ticket" }. A missing or
-  // non-{line,ticket} value is a request-shape fault → management.request_invalid naming the FIELD (which
-  // also keeps a bad value off the `bump_mode` enum column). `setBumpMode` writes `locations.bump_mode`
-  // scoped to this venue. Returns 204.
   app.put("/management-api/bump-mode", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2244,25 +1725,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (body.mode !== "line" && body.mode !== "ticket") {
         throw new AppError("management.request_invalid", { field: "mode" });
       }
-      // Bind `mode` to a local (the narrowing above does not survive into the `withVenueAuth` closure).
       const mode: BumpMode = body.mode;
       await withVenueAuth(deps, sessionId, (tx) => setBumpMode(tx, cfg, mode));
       return c.body(null, 204);
     }),
   );
 
-  // ── Kitchen-course + fire-control configuration (KDS-2, design §3a) ────────────────────────────────
-  // The dashboard "Cursos" panel: CRUD the venue's coursing sequence, route a product to its default
-  // course, and read/write the fire-control setting. All gated exactly like the KDS-1 station routes above
-  // — `requireManagementSession` first (401 before any DB work), then `withVenueAuth` runs the verb under
-  // `withTransaction` + `authorizeManager(…, "venue.configure")`, so a staff session is refused 403
-  // before any write (proven by dropping the authorize in `withVenueAuth`, the deletion-proof the tests
-  // name). The verbs are location-scoped, so each reads the venue's config via `requireVenueCfg`.
-  // Body-shape screens mirror the station / service-status routes above.
-
-  // Create a course. Body { name, displayOrder? }; a bad shape → management.request_invalid naming the
-  // FIELD; a duplicate name → course.name_taken (409). No default concept (courses have none, spec §2b),
-  // so no isDefault field. Returns the new id at 201, matching every other management-surface create.
+  // ── Kitchen courses and fire control ──
   app.post("/management-api/courses", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2274,8 +1743,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       if (typeof body.name !== "string")
         throw new AppError("management.request_invalid", { field: "name" });
       const displayOrder = parseDisplayOrder(body.displayOrder);
-      // Bind the validated `name` to a local: the `typeof` guard narrows `body.name` HERE, but that
-      // narrowing does not survive into the `withVenueAuth` closure — the login/create-person pattern.
       const { name } = body;
       const result = await withVenueAuth(deps, sessionId, (tx) =>
         createCourse(tx, cfg, { name, displayOrder }),
@@ -2284,7 +1751,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // The venue's ACTIVE courses, by display order then name (the coursing SEQUENCE). Gated on venue.configure.
   app.get("/management-api/courses", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2294,10 +1760,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Edit a course (name/displayOrder/active — any subset). Malformed :id → course.not_found (a bad id
-  // names no course), not a 500; an unknown id → course.not_found; a name collision → course.name_taken.
-  // A present field with the wrong type → management.request_invalid; a patch carrying no mutable field is
-  // a 204 no-op (the sibling station PATCH shape) — returned WITHOUT reaching updateCourse's empty `.set()`.
   app.patch("/management-api/courses/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2335,8 +1797,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Deactivate a course (DELETE = deactivate, and the verb is the only thing keeping it one — a `ticket_items.course_id`
-  // snapshot may reference it). Malformed :id → course.not_found; an unknown id → course.not_found.
+  // DELETE deactivates; the verb is the whole guard (`tables.ts`'s `deactivateTable` note).
   app.delete("/management-api/courses/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2347,12 +1808,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Set (or clear, with null) a PRODUCT's default kitchen course (the catalogue config, spec §3a). Body
-  // { courseId: string | null }. A non-null courseId must be a LIVE course of this venue (the verb's
-  // `requireLiveCourse` → course.not_found); a malformed one is screened to that SAME code before the DB
-  // touch. A malformed PRODUCT :id names no such product — the verb no-ops on an unknown one, so it is the
-  // same no-op (INSIDE `withVenueAuth`, so the gate still runs first for a validly-shaped request).
-  // The sibling of the `PUT /management-api/products/:id/station` route above. Returns 204.
+  // `null` clears the product's course. A malformed `:id` is handled as in `registerStationRoute`.
   app.put("/management-api/products/:id/course", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2367,15 +1823,13 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         throw new AppError("course.not_found", { courseId });
       }
       await withVenueAuth(deps, sessionId, async (tx) => {
-        if (!isUuid(id)) return; // malformed id names no product → the verb's unknown-id no-op
+        if (!isUuid(id)) return;
         await setProductCourse(tx, cfg, id, courseId);
       });
       return c.body(null, 204);
     }),
   );
 
-  // Read the venue's fire-control setting (spec §3a: read AND written with the other venue config, for the
-  // dashboard's toggle). Gated on venue.configure. Returns { mode: "waiter" | "kitchen" | "expo" }.
   app.get("/management-api/fire-control", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2385,15 +1839,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Set the venue's fire-control setting — body { mode: "waiter" | "kitchen" | "expo" }. A missing or
-  // out-of-enum value is a request-shape fault → management.request_invalid naming the FIELD (which also
-  // keeps a bad value off the `fire_control_mode` enum column). The valid set is DERIVED from the DB enum
-  // (`fireControlMode.enumValues`, re-exported by `@waitron/db`'s barrel just like the sibling `orderFlow`
-  // this file's neighbours import), so a new `ADD VALUE 'x'` in the migration is accepted here with no
-  // hand-edit — this is the one drift site typecheck cannot protect (`const mode: FireControl = body.mode`
-  // only rejects an EXTRA member, never a MISSING one, so a stale literal list would silently 400 a valid
-  // mode). `setFireControl` writes `locations.fire_control` scoped to this venue. Sibling of
-  // `PUT /management-api/bump-mode`. Returns 204.
+  // The valid set is read from the schema's `fireControlMode.enumValues`, not a literal list: a stale
+  // list missing a member would refuse a valid mode, and the type check cannot catch a missing member.
   app.put("/management-api/fire-control", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2405,24 +1852,15 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       ) {
         throw new AppError("management.request_invalid", { field: "mode" });
       }
-      // Membership above verifies `mode` is a real enum value; narrow it for the `withVenueAuth` closure.
       const mode = body.mode as FireControl;
       await withVenueAuth(deps, sessionId, (tx) => setFireControl(tx, cfg, mode));
       return c.body(null, 204);
     }),
   );
 
-  // ── Passkey (WebAuthn) ceremonies ─────────────────────────────────────────────────────────────
-  // Each ceremony is the WebAuthn two-phase handshake the browser drives: an `options` call issues
-  // (and stores) the challenge the authenticator signs, and a `verify` call checks the signed response
-  // against that stored challenge. `rpId`/`origin` come from `deps` (config threaded from boot, never
-  // hardcoded — a passkey is bound to its RP ID + origin, spec §4c). REGISTRATION is GATED
-  // (`requireManagementSession` before any DB work): a signed-in operator enrolls a passkey for
-  // themselves, and the person is resolved from the session, never a client id. AUTHENTICATION is
-  // UNGATED because it IS the login — the exact parallel of `POST /management-api/session` — so a
-  // caller with no session can complete it, and the verify half sets the management cookie itself.
-
-  // Begin passkey registration (gated): issue + store the creation options for the signed-in person.
+  // ── Passkeys ──
+  // Registration enrols a passkey for the signed-in person, resolved from the session, never a
+  // client-supplied id. Authentication is ungated because it IS the login.
   app.post("/management-api/passkey/register/options", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2447,22 +1885,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Finish passkey registration (gated): verify the signed response against the stored challenge and
-  // persist the credential. The parsed body is coerced to `{}` (via `readJsonBody`, see the login route for why a
-  // `null`/non-object body must not TypeError → 500) and `challengeHandle` is screened to a UUID (else
-  // `management.request_invalid` naming the FIELD, matching the sibling write routes). The UUID screen
-  // is the only one: `challengeHandle` flows into `eq(webauthnChallenges.id, …)` against a plain
-  // `text` PK column, which neither refuses a non-UUID value nor matches it, so without the screen a
-  // forged handle would fall through as an unexplained miss instead of a named 400 — the same reason
-  // `requirePersonId`'s `isUuid` screen above exists. `response` is then required to be a non-null
-  // object (else the same `management.request_invalid`) before it reaches the verifier.
-  //
-  // `finishPasskeyRegistration`'s `@simplewebauthn/server` verify call throws a GENERIC `Error` on a
-  // bad/mismatched response (a missing/non-base64url credential id, wrong origin/RPID, a malformed
-  // attestation) — NOT a mapped `passkey.*` code — so `finishPasskeyRegistration` wraps it and throws
-  // `passkey.verification_failed` (also the code for a `verified:false` return). The ceremony's TTL is
-  // OUR check inside that function, not the library's: it throws `passkey.challenge_expired` when the
-  // stored challenge has lapsed past `CHALLENGE_TTL_MS`. Both map via `STATUS` (401 / 400).
   app.post("/management-api/passkey/register/verify", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -2482,8 +1904,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Begin passkey authentication (UNGATED — this IS the login): issue + store the discoverable request
-  // options. No session and no body: the person is unknown until the assertion is verified on finish.
   app.post("/management-api/passkey/auth/options", (c) =>
     run(c, log, async () => {
       const out = await withTransaction(deps.db, async (tx) => {
@@ -2493,21 +1913,9 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // Finish passkey authentication (UNGATED — this IS the login): verify the signed assertion, open a
-  // management session for the credential's owner, set the cookie, and return the person id — the exact
-  // shape of the password login route. Same body coercion + `challengeHandle` UUID screen as
-  // register/verify above; the screen matters MORE here because this route is UNAUTHENTICATED, and it
-  // is the only thing looking at the handle's shape — the `text` PK column refuses nothing — the same
-  // reason the write routes run `requirePersonId`'s `isUuid` screen
-  // (the password login route no longer screens a UUID: it screens a non-empty `email` string).
-  // `response` is then required to be a non-null object (else `management.request_invalid`): this route
-  // is UNAUTHENTICATED and `finishPasskeyAuthentication` reads `response.id` to resolve the credential,
-  // so a missing/non-object `response` must be a clean 400 here rather than an unauthenticated fault.
-  //
-  // `finishPasskeyAuthentication` wraps a bad assertion, an unknown credential and a non-active
-  // owner as `passkey.verification_failed`; malformed response ids remain
-  // `passkey.not_registered`. The route therefore reveals neither credential ownership nor account
-  // status. `passkey.challenge_expired` remains a retryable request-timing failure.
+  // `finishPasskeyAuthentication` answers a bad assertion, an unknown credential and a non-active
+  // owner with the same `passkey.verification_failed`; a non-string response id is
+  // `passkey.not_registered`.
   app.post("/management-api/passkey/auth/verify", (c) =>
     run(c, log, async () => {
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);

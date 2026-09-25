@@ -1,53 +1,12 @@
 /**
- * The dashboard's sign-in and staff-administration surface end to end, on the engine the box now
- * runs: login, logout and session reuse, the people roster and its gate, invitations and resends,
- * password reset, the identical answers that hide whether an account exists, Google linking,
- * degenerate bodies mapping to 4xx rather than 500, and receipt configuration.
+ * The dashboard's sign-in and staff-administration routes end to end — login, logout, the roster
+ * and its gate, invitations, password reset, Google linking, degenerate bodies answering 4xx rather
+ * than 500 — and receipt configuration. `management-api.test.ts` holds the venue-layout routes.
  *
- * ## What went with PostgreSQL
- *
- * SQLite has no roles and no grants, so every call below runs on the one handle and nothing
- * here now says anything about which identity the routes reach the database as. No case was deleted
- * for it: each one names a route's behaviour, and every case still runs.
- *
- * ## TWO CASES KEPT THEIR ANSWERS AND CHANGED SUBJECT, which is worth more than a passing count
- *
- * `lets only one concurrent invitation claim a live display name` and `preserves one active admin
- * when two admins concurrently demote themselves` each fire two requests with `Promise.all` and
- * expect one success and one 409. Both still pass, and neither is staging a race any more.
- *
- * Measured here 2026-09-22, in three steps, with the control in the other direction each time.
- *
- * 1. **The two request bodies do not overlap.** Two `withTransaction` calls issued together logged
- *    `in-A out-A in-B out-B`, never `in-A in-B`. `withTransaction` is `withWriteLock`
- *    (`packages/db/src/tenancy.ts`), and SQLite admits one writer per file, so the second request's
- *    whole transaction — its pre-check included — runs after the first has committed.
- * 2. **The 409 now comes from the application pre-check, not from the unique index.** The
- *    discriminating pair is two names differing only in the case of an ACCENTED letter, because
- *    SQLite's `lower()` folds ASCII only while JavaScript's `toLocaleLowerCase` folds everything:
- *    `persons_tenant_live_display_name_uq` indexes `lower(trim(display_name))` and so cannot see
- *    such a pair, while `assertDisplayNameAvailable` (`packages/identity/src/staff.ts`) compares
- *    that same SQL expression against the JavaScript-lowercased input and can. Inserting
- *    `Ánxela uno` and `ánxela uno` straight into `persons` was NOT refused and stored two rows —
- *    the index is blind to the pair. The same pair of names driven through the concurrent invitation
- *    route still answered 201 and 409, with `person.display_name_taken`. Only the pre-check can
- *    produce that.
- * 3. `person.last_admin` has no index behind it at all — it is the `activeAdmins.length === 1`
- *    branch in the same file — so with the bodies serialised the second demotion simply reads the
- *    committed state.
- *
- * Both cases are kept: what they now pin is that the pre-checks refuse, which is the behaviour the
- * dashboard depends on. What NOTHING in this repository now checks is the other half — that the
- * unique index catches a pair of writers the pre-check let through. On one file with one writer
- * there is no way to stage it here.
- *
- * ## Which of the two `management-api` end-to-end suites this is
- *
- * This file is `management-api.accounts-and-receipt-config.test.ts`. Its `describe` blocks are the
- * sign-in and staff-administration routes and the two receipt-configuration routes;
- * `management-api.test.ts`'s are the venue-layout routes — zones, dining tables, table placement,
- * kitchen stations and kitchen courses — plus a two-case sign-in block that mints the cookie those
- * routes need.
+ * The two concurrent cases (`lets only one concurrent invitation claim a live display name`,
+ * `preserves one active admin when two admins concurrently demote themselves`) stage no race:
+ * `withTransaction` serialises writers (`packages/db/src/tenancy.ts`), so they pin the application
+ * pre-checks. Nothing here checks that a unique index catches writers a pre-check let through.
  */
 import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -67,13 +26,7 @@ import { ALL_MODULES } from "./modules.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 
 const LOCALE = "es-ES";
-const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
-// Dashboard sign-in resolves the person by EMAIL (not a client-supplied id), so each seeded person
-// carries a login email. `persons_tenant_email_uq` is unique on `lower(email)` across the WHOLE
-// database, so what makes one pair of constants safe for every `setupTenant()` call is this suite's
-// per-test reset (`useVenueDb`'s `resetPerTest` default), which empties `persons` between tests —
-// not any per-tenant scoping. `tenants` is a singleton row (id = 1), so the same reset is what lets
-// each test provision its own venue.
+const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 const ACCOUNT_ACTION_CODE_KEY = Buffer.alloc(32, 21);
@@ -83,11 +36,8 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-/** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// A per-file NIF counter, kept rather than fixed because `setupTenant` is called from several places
-// and `tenants_country_tax_id_key` is unique — the same shape `till-api.fiscal-sale-paths.test.ts` uses.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -110,7 +60,6 @@ function invitationBody(
   };
 }
 
-/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
   await applyVenue(
     planVenue(
@@ -146,10 +95,8 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  // Through the table definition, never a raw insert: `persons.id` and `persons.created_at` are NOT
-  // NULL columns whose values come from `$defaultFn` generators
-  // (`packages/identity/src/schema/persons.ts`), and a raw statement reaches no generator —
-  // `NOT NULL constraint failed: persons.id`.
+  // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`
+  // generators, which a raw SQL insert never reaches.
   const { managerId, staffId } = await withTransaction(suite.db, async (tx) => {
     const [manager] = await tx
       .insert(persons)
@@ -184,15 +131,10 @@ function mountApp(
   },
 ): Hono {
   const app = new Hono();
-  // `secureCookies: false` so the session cookie rides the non-TLS `app.request` (mirrors
-  // `till-api.fiscal-sale-paths.test.ts`'s `apiDeps`). `rpId`/`origin` are the loopback passkey Relying Party
-  // values (these suites exercise the staff routes, not the passkey ceremonies — those are covered
-  // in Task 5 — but the widened `ManagementApiDeps` requires both).
   mountManagementApi(
     app,
     {
       db: suite.db,
-      // These cases do not assert sync attribution, so use the default all-zero origin.
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
@@ -216,9 +158,7 @@ function mountApp(
   return app;
 }
 
-/** Log in over HTTP by `email` with `password`, returning just the `waitron_management_session=…`
- * cookie pair (the part a browser echoes back). Asserts the 200 so a caller never carries a stale
- * or absent cookie forward silently. */
+/** Returns only the session cookie pair; asserts the 200 so no caller carries an absent cookie. */
 async function login(app: Hono, email: string, password = PASSWORD): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
@@ -229,8 +169,6 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-/** Count the persons named `displayName`, read back — the proof a real row landed, not merely
- * that a route returned a success status. */
 async function countPersonsNamed(displayName: string): Promise<number> {
   const rows = await withTransaction(suite.db, async (tx) => {
     const r = await tx.execute<{ display_name: string }>(
@@ -259,8 +197,6 @@ describe("Management API staff + session routes", () => {
       }),
     ]);
     expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
-    // No `::int` here or below: `count(*)` already comes back as a JavaScript number, and the cast
-    // operator is a syntax error to this parser (`unrecognized token: ":"`).
     const matching = await suite.db.execute<{ count: number }>(sql`
       select count(*) as count from persons
       where lower(display_name)='same till name'`);
@@ -412,13 +348,11 @@ describe("Management API staff + session routes", () => {
     expect(await response.json()).toEqual({ error: { code: "totp.required", params: {} } });
     expect(finish).toHaveBeenCalledWith("error");
   });
-  // ── The four required core assertions (task-6 brief) ───────────────────────────────────────────
 
   it("login → list → create → verify persistence", async () => {
     await setupTenant();
     const app = mountApp();
 
-    // Log in through the HTTP surface and capture the session cookie the route sets.
     const loginRes = await app.request("/management-api/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -428,13 +362,11 @@ describe("Management API staff + session routes", () => {
     const cookie = loginRes.headers.get("set-cookie")!.split(";")[0];
     expect(cookie).toMatch(/^waitron_management_session=/);
 
-    // The gated admin roster lists the manager we logged in as.
     const listed = await app.request("/management-api/staff", { headers: { cookie } });
     expect(listed.status).toBe(200);
     const people = (await listed.json()) as { displayName: string }[];
     expect(people.some((p) => p.displayName === "The Manager")).toBe(true);
 
-    // Create a new staff member over the gated route.
     const created = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -443,8 +375,6 @@ describe("Management API staff + session routes", () => {
     expect(created.status).toBe(201);
     expect((await created.json()) as { id: string }).toHaveProperty("id");
 
-    // Re-read: exactly one 'Ada' row landed through the route — proving a real write, not just a
-    // 201.
     expect(await countPersonsNamed("Ada")).toBe(1);
   });
 
@@ -472,7 +402,6 @@ describe("Management API staff + session routes", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "password.invalid" },
     });
-    // No session was minted, so the failed login must not have set a cookie.
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
@@ -492,18 +421,14 @@ describe("Management API staff + session routes", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "authorization.not_permitted" },
     });
-    // The refusal was before any write: nobody named 'Nope' landed.
     expect(await countPersonsNamed("Nope")).toBe(0);
   });
-
-  // ── Additional coverage: the remaining routes + guard branches ─────────────────────────────────
 
   it("logs out — ends the session, clears the cookie, and a reused cookie is refused", async () => {
     await setupTenant();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
-    // The cookie works before logout.
     expect((await app.request("/management-api/staff", { headers: { cookie } })).status).toBe(200);
 
     const out = await app.request("/management-api/session", {
@@ -511,10 +436,8 @@ describe("Management API staff + session routes", () => {
       headers: { cookie },
     });
     expect(out.status).toBe(204);
-    // The cookie is cleared (expired) by the response.
     expect(out.headers.get("set-cookie")).toMatch(/waitron_management_session=;/);
 
-    // The now-ended session is refused — resolveManagementSession no longer finds a live row.
     const after = await app.request("/management-api/staff", { headers: { cookie } });
     expect(after.status).toBe(401);
   });
@@ -534,7 +457,6 @@ describe("Management API staff + session routes", () => {
     const res = await app.request("/management-api/staff-roster");
     expect(res.status).toBe(200);
     const roster = (await res.json()) as { personId: string; displayName: string }[];
-    // The seeded active persons are present; the payload carries only id + name (no role/secrets).
     expect(roster.map((r) => r.displayName)).toEqual(
       expect.arrayContaining(["The Manager", "The Clerk"]),
     );
@@ -760,8 +682,6 @@ describe("Management API staff + session routes", () => {
     expect(sent).toHaveLength(3);
     expect(sent[2]!.email).toBe("pending-resend@x.com");
     expect(sent[2]!.code).toBeUndefined();
-    // `cast(… as text)`, not `::text`: the cast operator is a syntax error to this parser, and a
-    // bare `count(*)` comes back as a JavaScript number rather than the string this case pins.
     const hiddenCodes = await suite.db.execute<{ count: string }>(
       sql`select cast(count(*) as text) as count from management_account_actions where purpose='invitation' and (code_hash is not null or code_expires_at is not null)`,
     );
@@ -781,7 +701,6 @@ describe("Management API staff + session routes", () => {
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
 
-    // The gated admin roster carries the login email straight through `listPersons`'s projection.
     const listed = await app.request("/management-api/staff", { headers: { cookie } });
     const people = (await listed.json()) as { personId: string; email: string | null }[];
     expect(people.find((p) => p.personId === id)?.email).toBe("owner@x.com");
@@ -812,8 +731,7 @@ describe("Management API staff + session routes", () => {
   });
 
   it("create with a duplicate email → 409 person.email_taken, no row lands", async () => {
-    // The seeded manager already holds MANAGER_EMAIL, so a second person claiming
-    // it collides on `persons_tenant_email_uq` → `person.email_taken` (409), before the row lands.
+    // The seeded manager already holds MANAGER_EMAIL.
     await setupTenant();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
@@ -848,8 +766,6 @@ describe("Management API staff + session routes", () => {
   });
 
   it("create with a non-string email → 400 management.request_invalid (field email)", async () => {
-    // A PRESENT-but-non-string email is refused by the route's typeof screen naming the FIELD (never
-    // the value), the same shape as the sibling create/PATCH field screens — it never reaches identity.
     await setupTenant();
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
@@ -917,7 +833,6 @@ describe("Management API staff + session routes", () => {
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
-    // POST /staff missing fields → management.request_invalid (400).
     const badCreate = await app.request("/management-api/staff", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -936,7 +851,7 @@ describe("Management API staff + session routes", () => {
     });
     expect(badPw.status).toBe(404);
 
-    // Non-UUID id on the credential routes → person.not_found (404), screened before any DB work.
+    // A non-UUID id on the credential routes → person.not_found (404).
     const resetBadId = await app.request("/management-api/staff/not-a-uuid/reset-pin", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -955,8 +870,7 @@ describe("Management API staff + session routes", () => {
     await setupTenant();
     const app = mountApp();
 
-    // An email that resolves to no person is indistinguishable from a wrong password — both throw
-    // `password.invalid`, so nothing in the response reveals whether the address has an account.
+    // An unknown email gets the same `password.invalid` as a wrong password.
     const res = await app.request("/management-api/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -969,12 +883,8 @@ describe("Management API staff + session routes", () => {
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
-  // ── null / non-object request bodies map to the route's own 4xx, never a 500 ────────────────────
-  // A body of the literal JSON `null` parses (via `c.req.json()`) to `null`, on which a field access
-  // or destructure throws a TypeError → `run`'s non-AppError branch → opaque `server.internal` 500.
-  // Each route coerces the parsed body with `?? {}` so a degenerate body yields its documented 4xx
-  // (or, for PATCH, the empty-body 204) instead. `body: "null"` is 4 bytes of valid JSON — confirmed
-  // against Hono here that `c.req.json()` returns `null` for it, the exact shape these guards defend.
+  // A literal JSON `null` body is read as `{}` (`readJsonBody`), so each route answers its own 4xx
+  // rather than a 500.
 
   it("login with a null JSON body → 401 password.invalid, no cookie", async () => {
     await setupTenant();
@@ -989,7 +899,6 @@ describe("Management API staff + session routes", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "password.invalid" },
     });
-    // A rejected login must mint nothing, so no cookie is set.
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
@@ -997,10 +906,8 @@ describe("Management API staff + session routes", () => {
     await setupTenant();
     const app = mountApp();
 
-    // The seeded manager has a correct password and is NOT TOTP-enrolled, so `loginManager` would
-    // otherwise ignore `totp` entirely and mint a session (200). This proves the new typecheck
-    // rejects a non-string `totp` at the API boundary — as `password.invalid`, leaking no field —
-    // before it can reach `loginManager`/`verifyTotp`.
+    // The manager is not TOTP-enrolled, so without the route's screen `loginManager` would ignore
+    // `totp` and sign in.
     const res = await app.request("/management-api/session", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1053,13 +960,9 @@ describe("Management API staff + session routes", () => {
     const { staffId } = await setupTenant();
     const app = mountApp();
 
-    // `c.req.json()` throws a SyntaxError on a malformed body; the shared `readJsonBody` coerces that
-    // throw to `{}`, exactly as a literal JSON `null` body is coerced, so each route answers its own
-    // documented 4xx (or the PATCH no-op 204) rather than an opaque `server.internal` 500. This is the
-    // same three cases as the `null JSON body` tests above, with a malformed body in place of `"null"`.
+    // `readJsonBody` reads an unparseable body as `{}`, as it does a JSON `null`.
     const malformedHeaders = { "content-type": "application/json" };
 
-    // Login is unauthenticated → the same `password.invalid` 401 a `{}`/null body yields, and no cookie.
     const loginRes = await app.request("/management-api/session", {
       method: "POST",
       headers: malformedHeaders,
@@ -1071,7 +974,6 @@ describe("Management API staff + session routes", () => {
     });
     expect(loginRes.headers.get("set-cookie")).toBeNull();
 
-    // An authenticated write route → the field-screen 400.
     const cookie = await login(app, MANAGER_EMAIL);
     const create = await app.request("/management-api/staff", {
       method: "POST",
@@ -1093,10 +995,6 @@ describe("Management API staff + session routes", () => {
   });
 });
 
-// Exercise receipt configuration GET and PUT through the real manager authorization path.
-
-/** GET the current receipt trim as `cookie` (its own `tenant_receipts`-backed route, SP-B4), asserting
- * the 200 and returning the parsed `{ receipt }` a round-trip test reads back after a PUT. */
 async function getReceiptOverHttp(app: Hono, cookie: string): Promise<{ receipt: unknown }> {
   const res = await app.request("/management-api/receipt", { headers: { cookie } });
   expect(res.status).toBe(200);
@@ -1109,8 +1007,6 @@ describe("Management API — receipt routes (Task 7)", () => {
     const app = mountApp();
     const json = { "content-type": "application/json" };
 
-    // requireManagementSession runs FIRST on each route, so an unauthenticated request is refused
-    // before any DB work — the same 401 the gated staff routes give.
     const cases = [
       app.request("/management-api/receipt"),
       app.request("/management-api/receipt", {
@@ -1130,8 +1026,7 @@ describe("Management API — receipt routes (Task 7)", () => {
   it("refuses both routes for a STAFF-role session with 403 (the authorizeManager gate — differential)", async () => {
     await setupTenant();
     const app = mountApp();
-    // A staff person CAN log in (login checks the credential, not the role) but holds no
-    // `layout.configure`, so each route is refused 403 before any read/write.
+    // A staff person can log in but holds no `layout.configure`.
     const cookie = await login(app, STAFF_EMAIL);
     const json = { "content-type": "application/json" };
 
@@ -1157,8 +1052,7 @@ describe("Management API — receipt routes (Task 7)", () => {
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
-    // A fresh tenant has no `tenant_receipts` row — getReceipt returns DEFAULT_RECEIPT (`{}`), the
-    // built-in trim the till boots against, rather than seeding one (no backfill, SP-B4).
+    // A fresh venue has no `tenant_receipts` row, so the built-in default comes back.
     const body = await getReceiptOverHttp(app, cookie);
     expect(body).toEqual({ receipt: DEFAULT_RECEIPT });
   });
@@ -1177,7 +1071,6 @@ describe("Management API — receipt routes (Task 7)", () => {
     expect(put.status).toBe(204);
     expect(await put.text()).toBe("");
 
-    // The receipt reads back verbatim from its own `tenant_receipts` route (SP-B4).
     expect(await getReceiptOverHttp(app, cookie)).toEqual({ receipt });
   });
 
@@ -1186,7 +1079,6 @@ describe("Management API — receipt routes (Task 7)", () => {
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
-    // An unknown receipt field is rejected fail-closed (design D8) as `receipt.invalid`, 400.
     const res = await app.request("/management-api/receipt", {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
@@ -1204,9 +1096,7 @@ describe("Management API — receipt routes (Task 7)", () => {
     const cookie = await login(app, MANAGER_EMAIL);
     const json = { "content-type": "application/json" };
 
-    // Each degenerate body is refused as `management.request_invalid` naming the FIELD, before the
-    // service is called: an object without the required key, and a JSON `null` (coerced to `{}` so it
-    // hits the same guard rather than TypeError-ing → 500).
+    // An object without the `receipt` key, and a JSON `null` read as `{}`.
     const receiptEmpty = await app.request("/management-api/receipt", {
       method: "PUT",
       headers: { ...json, cookie },

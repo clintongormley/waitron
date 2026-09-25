@@ -1,15 +1,19 @@
-// A bare side-effect import, not a value used here: it makes TypeScript treat "@waitron/shared" as
-// a real module to augment rather than declaring a fresh ambient one — the same idiom
-// packages/payments/src/errors.ts and packages/credentials/src/errors.ts use.
+// A bare side-effect import: it makes TypeScript augment "@waitron/shared" rather than declare a
+// fresh ambient module.
 import "@waitron/shared";
 
 /**
- * This host's contribution to the shared error registry, by declaration merging. The convention is
- * the DOMAIN CONCEPT, lowercase and dot-namespaced; `server.*` is reserved for facts about the
- * process itself. Application-owned operations retain their domain prefixes.
+ * This host's contribution to the shared error registry, by declaration merging. A code names the
+ * DOMAIN CONCEPT, lowercase and dot-namespaced, never the throwing package; `server.*` is reserved
+ * for facts about the process itself. Codes are never renamed once shipped, and a code nothing
+ * raises any more keeps its entry.
+ *
+ * No code's params may carry a secret: the shared error boundary
+ * (`packages/server-kit/src/error-boundary.ts`) writes them into the response and the log, and the
+ * unauthenticated recovery page shows the log's tail.
  *
  * Reachability: every file that throws one of these imports "./errors.js" directly, and this
- * package has no public barrel to keep them reachable from — it is an application, not a library.
+ * package has no public barrel — it is an application, not a library.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
@@ -33,18 +37,13 @@ declare module "@waitron/shared" {
     /** A required environment variable is absent or empty. `variable` is our own declared name. */
     "server.config_missing": { variable: string };
     /**
-     * A supplied environment variable cannot be used. Carries the variable NAME and a reason CODE
-     * and, for most reasons, never the value: an operator who pasted a secret into the wrong
-     * variable must not have it land in an error's params, the same leak
-     * `credentials.invalid_payload` avoids by reporting a count instead of field names.
+     * A supplied environment variable cannot be used. Carries the variable NAME and a reason CODE,
+     * never the value: an operator who pasted a secret into the wrong variable must not have it land
+     * in an error's params.
      *
-     * `value`/`otherVariable`/`otherValue` are the deliberate exception, used only by `config.ts`'s
-     * three tick-cadence cross-checks (`minTickMs` vs `maxTickMs`, `skipRetryMs` vs each). Those
-     * compare TWO variables, and either one may be the one the operator actually set — naming only
-     * the one the guard happens to key off (F6 of the 2026-07-27 pre-merge review: an operator who
-     * set only `WAITRON_MIN_TICK_MS` got an error naming `WAITRON_SKIP_RETRY_MS`, a variable they
-     * never touched) leaves the message unreadable half the time. A millisecond integer is not a
-     * secret the way an arbitrary env value can be, so both effective values travel too.
+     * `value`/`otherVariable`/`otherValue` are the one exception, used only by `config.ts`'s
+     * tick-cadence cross-checks: those compare TWO variables, either of which may be the one the
+     * operator set, and a millisecond integer is not a secret.
      */
     "server.config_invalid": {
       variable: string;
@@ -54,157 +53,79 @@ declare module "@waitron/shared" {
       otherValue?: number;
     };
     /**
-     * A required `WAITRON_TILL_*` environment variable is unset — absent, or the empty string (an
-     * `VAR=` line, which `till-config.ts` treats as unset for the same reason `config.ts`'s `isUnset`
-     * does). `key` is the variable NAME, our own declared identifier, and is the ONLY field: the
-     * value is never echoed, so an operator who pasted a secret into the wrong `WAITRON_TILL_*`
-     * variable cannot have it land in an error's params — the same no-leak discipline
-     * `server.credential_unusable` and `payment.webhook_signature_invalid` follow.
-     *
-     * `server.*`, not a fiscal-domain prefix, even though the values it guards ARE the till's four
-     * fiscal ids: WHICH till this process is is a fact about the process's own configuration
-     * (provisioning stamps the deployed till's identity into the environment; `till-config.ts` reads
-     * it back), exactly the class `server.config_missing` above covers for the rest of the host's
-     * config. A value that is present but malformed is `server.till_config_invalid` below; this code
-     * is for one that is simply not there.
+     * A required `WAITRON_TILL_*` environment variable is unset (absent, or the empty string). `key`
+     * is the variable NAME and is the only field: the value is never echoed, so a secret pasted into
+     * the wrong variable cannot land in an error's params.
      */
     "server.till_config_missing": { key: string };
     /**
-     * A `WAITRON_TILL_*` value is present but not usable — a branded-id constructor
-     * (`@waitron/shared`'s `tillId`/`nodeId`/`seriesId`/`locationId`) rejected it as not a
-     * uuid. `key` names the variable and is again the only field; the rejected value is NOT carried,
-     * for the same reason as `server.till_config_missing` above, and `server.*` for the same reason
-     * too.
+     * A `WAITRON_TILL_*` value is present but a branded-id constructor rejected it. `key` names the
+     * variable and is the only field; the rejected value is not carried, for the reason
+     * `server.till_config_missing` gives.
      */
     "server.till_config_invalid": { key: string };
     /**
-     * A tenant's credential exists but this host cannot use it — a field the purpose registry now
-     * declares is absent from a row sealed under an older field list, or its value is not one of
-     * the accepted ones. `field` is a name from `PURPOSES`, so it is ours to echo. Spec §5.1: this
-     * is the read-side half of `rotate`'s coupling to the registry, and it fails one tenant loudly
-     * rather than defaulting to a wrong AEAT host in silence.
+     * A tenant's credential exists but this host cannot use it — a field the purpose registry
+     * declares is absent from the sealed row, or its value is not one of the accepted ones. `field`
+     * is a name from `PURPOSES`, so it is ours to echo.
      */
     "server.credential_unusable": { purpose: string; field: string };
     /**
-     * No such tenant. `id` is echoed because it is an operator-supplied argument and not a secret —
-     * a mistyped UUID identifies nothing on its own, so an error that withheld it would be
-     * unactionable.
-     *
-     * Deliberately NOT `server.*`, unlike its neighbours here: the prefix names the DOMAIN CONCEPT,
-     * never the package that happens to throw (packages/shared/src/errors.ts's design note, and
-     * `series.not_found` — renamed twice to converge on exactly this rule). "There is no such
-     * tenant" is a fact about a tenant. It is declared in this file rather than in packages/db,
-     * which owns the table, only because `@waitron/db`'s exports map is enumerated and deliberately
-     * publishes no path to its `errors.ts` — so a consumer cannot follow this repo's "the throwing
-     * file imports the registry directly" convention across that boundary. Move both codes down if
-     * a package ever needs to throw them.
-     *
-     * It has NO production thrower today: the last one was `provisionNode`'s own tenant read, which
-     * SP-3c moved into the fiscal module's seed (`packages/fiscal-verifactu/src/provisioning.ts`
-     * reads `tenants.tax_id` and throws a plain `Error` for an absent row — an empty `tenants` is a
-     * half-provisioned database, not a domain state). It stays because this
-     * file's other codes cite the note above as their naming rule, and because the error-boundary
-     * and till-api suites use it as their sample code.
+     * No such tenant. `id` is an operator-supplied argument, not a secret. Nothing in production
+     * raises it today.
      */
     "tenant.not_found": { id: string };
-    /**
-     * No such node with this id. The SIF is the compute node (#33), so provisioning registers a
-     * node, not a till (node-id rekey, 2026-08-03). One tenant per database, so a node is named by
-     * its id alone: `nodeLocation`, called by `provisionNode`, looks the node up by id and
-     * throws this when the id matches no row.
-     *
-     * The id is echoed because it is a caller-supplied uuid the caller already holds, not a secret —
-     * an id that matches nothing is unactionable if withheld, the same fail-closed reasoning the
-     * codes citing this note rely on. `node.*`, not `server.*`: it is a fact about a node, the rule
-     * `tenant.not_found`'s own note gives.
-     *
-     * (The former `till.not_found` was removed with the rekey — pre-production, no bwc — since its
-     * only thrower, `provisionTill`'s ownership check, is now `provisionNode`'s and throws this.)
-     */
+    /** No node with this id. The id is a caller-supplied uuid, not a secret. */
     "node.not_found": { id: string };
     /**
-     * A write reached a node running as a read-only MIRROR. A mirror serves the dashboard read-only and
-     * refuses every non-GET at the HTTP layer (the read-only gate, `read-only-gate.ts`), because
-     * this node's `node_roles.mode = 'mirror'`. `node.*`, not `server.*`: it is a
-     * fact about the node's role in the topology, not about the process. No params — the refusal names no
-     * row, so a log line leaks nothing. Cleared by promotion
-     * (`node_roles.mode = 'primary'`), read live so no restart is needed.
+     * A write reached a node running as a read-only MIRROR (`node_roles.mode = 'mirror'`): the
+     * read-only gate (`read-only-gate.ts`) refuses every non-GET. Cleared by promotion, read live.
      */
     "node.read_only": Record<string, never>;
     /**
-     * A node booting as PRIMARY discovered, by reconciling with its cloud peer, that a higher-term
-     * membership document fences it (Ruling C7 — the boot-time replacement for the deleted gossip). It
-     * died before it was fenced and came back with a stale serving-primary chart; the peer's current
-     * chart supersedes it, so it boots READ-ONLY rather than sell while the promoted cloud is also
-     * primary (two nodes filing under one NIF — CLAUDE.md §5, unrecoverable). LOGGED, never thrown: a
-     * fenced boot is a STATE, not a crash — `reconcileMembershipOnBoot` persists the superseding
-     * document and boot then runs the same read-only posture a mirror or a rejoin-fenced node runs.
-     * `node.*`, not `server.*`: it is a fact about the node's role in the topology, not the process. No
-     * params — the refusal names no row, the `node.read_only` no-leak discipline.
+     * A node booting as primary found, by reconciling with its cloud peer, a higher-term membership
+     * document that fences it, so it boots read-only rather than sell beside the promoted primary
+     * (two nodes filing under one NIF — CLAUDE.md §5). Logged, never thrown: a fenced boot is a
+     * state, not a crash.
      */
     "node.membership_superseded_on_boot": Record<string, never>;
-    /** `POST /api/node/enrol-self` reached from a non-loopback address. On-node self-enrol is a
-     * loopback-only trust gate (design §1.1): anything that can reach the box's loopback can already
-     * read its vault, so enrolling a loopback caller grants nothing new; a LAN caller must not.
-     * Mapped to HTTP 403 by node-enrol-api.ts's local STATUS map, not here. */
+    /** `POST /api/node/enrol-self` reached from a non-loopback address. Self-enrol is a
+     * loopback-only trust gate: anything that can reach the box's loopback can already read its
+     * vault, so enrolling a loopback caller grants nothing new; a LAN caller must not. */
     "node.enrol_not_local": Record<string, never>;
-    /** This node cannot self-enrol a print agent because it is not the primary: the route refuses
-     * unless its `isPrimary` dep is true (`node-enrol-api.ts`). The defensive refusal for a non-primary
-     * node the read-only gate does not cover — a real mirror's POST is refused earlier with
-     * `node.read_only`, because that gate refuses every non-GET at the HTTP layer (spec §5). It is NOT
-     * "a mirror refuses every write": the gate reads the HTTP VERB, so an internal SQL write inside a
-     * GET handler still runs on a mirror — `read-only-gate.ts`'s own header names the management-session
-     * keepalive, and boot's own `if (isMirror)` branch calls `ensureMirrorViewer`, which upserts a
-     * viewer person and its ambient session.
-     * Mapped to HTTP 409 by node-enrol-api.ts's local STATUS map, not here. */
+    /** This node cannot self-enrol a print agent because it is not the primary (`node-enrol-api.ts`).
+     * A real mirror's POST is refused earlier by the read-only gate with `node.read_only`; this
+     * covers a non-primary node that gate does not. */
     "node.enrol_unavailable": Record<string, never>;
     /**
-     * The HTTP listener's socket failed to bind. `code` is the raw OS error Node attaches to the
-     * `'error'` event (`EADDRINUSE` for the common case of a fixed default port already taken,
-     * `EACCES` for a privileged port with no permission) — never the `Error` itself, whose
-     * `.message` can embed the bind address; this package's own convention is a structured code
-     * over prose regardless of whether that particular detail would actually be sensitive.
+     * The HTTP listener's socket failed to bind. `code` is the raw OS error code (`EADDRINUSE`,
+     * `EACCES`) — never the `Error` itself, whose `.message` can embed the bind address.
      */
     "server.listen_failed": { port: number; code: string };
     /**
-     * `StartedServer.close()` rejected during a signal-initiated shutdown. `errorCode` is
-     * `codeOf`'s structured classification, never the caught value's `.message`: this path's most
-     * likely source is `db.close()` (a `pg` pool `end()`), whose driver messages can carry the
-     * connection string the pool was built from — and the same rule `pass.ts` and `loop.ts` follow
-     * for every other caught value applies no less because this one happens on the way out.
+     * `StartedServer.close()` rejected during a signal-initiated shutdown. `errorCode` is `codeOf`'s
+     * structured classification, never the caught value's `.message`.
      */
     "server.shutdown_failed": { errorCode: string };
     /**
-     * Shutdown did not finish within the deadline, so the process is exiting anyway (a box's restart
-     * mechanism is SIGTERM → shutdown → exit → Docker restarts it, so a shutdown that never finishes
-     * is a box that never comes back). Logged only, on the way out; carries just the deadline. Not
-     * logged when `close()` has already rejected: that shutdown exits 1 under
-     * `server.shutdown_failed`, and the deadline only guarantees the exit if that line's write never
-     * completes.
+     * Shutdown did not finish within the deadline, so the process is exiting anyway (a box restarts
+     * by SIGTERM → shutdown → exit → Docker restart, so a shutdown that never finishes is a box that
+     * never comes back). Logged only. Not logged when `close()` has already rejected: that exit is
+     * `server.shutdown_failed`.
      */
     "server.shutdown_timeout": { deadlineMs: number };
     /**
      * A caught value that is NOT an AppError reached the till API's `run` wrapper — an unclassified
-     * fault (a driver error, a request-body parse failure, a bug), surfaced to the client as an
-     * opaque 500 so nothing internal leaks. `run` logs the structured `codeOf` classification under
-     * `till.failed`; the RESPONSE carries only this code and no params, telling the client nothing
-     * about the cause — the same no-message discipline `server.shutdown_failed` follows for its own
-     * caught value.
+     * fault. The response carries only this code and no params, so nothing internal leaks; `run`
+     * logs the `codeOf` classification under `till.failed`.
      */
     "server.internal": Record<string, never>;
     /**
-     * A MIRROR node was asked to bind its HTTP listener to a NON-loopback host without the explicit
-     * `WAITRON_MIRROR_ALLOW_EXPOSED` opt-in. A mirror serves an UNAUTHENTICATED admin dashboard
-     * (`ensureMirrorViewer` seeds a full-admin viewer, `mirrorSession` auto-injects its cookie), so
-     * the ONLY thing keeping that surface off the network is the loopback default of
-     * `WAITRON_HTTP_HOST`. The boot FAILS CLOSED here (`assertMirrorBindSafe`, before `serve`) rather
-     * than expose it. `server.*` — a fact about the PROCESS refusing to bind, not about a sale,
-     * payment or credential; the guard is a property of THIS host's configuration.
-     *
-     * `host` is the operator's own `WAITRON_HTTP_HOST` value, echoed to name the unsafe bind — it is
-     * this host's own config, never attacker-supplied and never a secret, exactly as
-     * `server.config_missing`'s `variable` and `server.listen_failed`'s `port` are. Never renamed
-     * once shipped.
+     * A MIRROR node was asked to bind its HTTP listener to a NON-loopback host without the
+     * `WAITRON_MIRROR_ALLOW_EXPOSED` opt-in. A mirror serves an UNAUTHENTICATED admin dashboard, so
+     * the loopback default of `WAITRON_HTTP_HOST` is the only thing keeping it off the network; boot
+     * fails closed here (`assertMirrorBindSafe`) rather than expose it. `host` is the operator's own
+     * `WAITRON_HTTP_HOST` value, not a secret.
      */
     "server.mirror_bind_exposed": { host: string };
     /**
@@ -215,1006 +136,357 @@ declare module "@waitron/shared" {
      */
     "server.entry_arguments_refused": Record<string, never>;
     /**
-     * The cluster never accepted a connection within a bounded wait — the database is down, still
-     * starting, or reachable at a different address. NOTHING RAISES IT TODAY: the storage switch
-     * deleted both the connection retry this described (`waitForPostgres`) and the networked
-     * cluster it waited for. It survives as one of the two codes `classifyBootFailure`
-     * (`boot-failure.ts`) can still return, and the recovery page still has wording for it.
-     *
-     * `attempts` is the only param, and the driver's caught value is deliberately dropped: a `pg`
-     * connection failure's `.message` can embed the host and the connection string it was built
-     * from, and this code's whole audience is the recovery page, which renders it to an
-     * unauthenticated operator. `server.shutdown_failed` applies the same withholding to its own
-     * caught value.
-     *
-     * `provisioning.*`, not `server.*`, though it is thrown from this host: the DOMAIN CONCEPT is
-     * the cluster this node provisions, and `server.*` is reserved for facts about the process
-     * itself (CLAUDE.md §3). Never renamed once shipped.
+     * The database could not be reached. Nothing constructs it; `classifyBootFailure`
+     * (`boot-failure.ts`) returns it and the recovery page has wording for it. `attempts` is the
+     * only param: this code's audience is the unauthenticated recovery page, so a driver's caught
+     * value is never carried.
      */
     "provisioning.database_unreachable": { attempts: number };
     /**
-     * A driver failure whose message says the database does not carry the schema this image expects
-     * — a table or a column the software asked for and the file does not have.
-     *
-     * `classifyBootFailure` (`boot-failure.ts`) returns this and `provisioning.database_unreachable`
-     * above from the same function, so the two live in the same registry. Nothing constructs it with
-     * params today: it is a CLASSIFICATION of an already-thrown driver error, and the page renders
-     * fixed text keyed on the code alone. `errcode` is declared because it is the one fact a future
-     * thrower would carry and a shipped code's params cannot be widened later; it replaced
-     * `sqlState` when the engine stopped producing SQLSTATEs at all, which nothing had to migrate
-     * because nothing ever constructed this code with params.
-     * `provisioning.database_unreachable`, the other code `classifyBootFailure` returns, carries no
-     * such field at all — it reports `attempts` — so it is not a precedent for this shape.
-     *
-     * `provisioning.*`, not `server.*`, for the reason those two siblings record: the domain concept
-     * is the deployment's database, and `server.*` is reserved for facts about the process itself
-     * (CLAUDE.md §3). Declared here rather than in `packages/provisioning/src/errors.ts` — where the
-     * spec's §4.1 put it — because this host is its only producer; §9's addendum records the
-     * deviation. Never renamed once shipped.
+     * A driver failure whose message says the database lacks a table or column this image expects.
+     * A classification by `classifyBootFailure` (`boot-failure.ts`) of an already-thrown error;
+     * nothing constructs it with params, and the recovery page renders fixed text keyed on the code.
      */
     "provisioning.schema_mismatch": { errcode: number | null };
     /**
      * This host is configured for one environment and the database belongs to another. Thrown
-     * before migrations run, so nothing is written.
-     *
-     * `deployment.*` rather than `server.*`: it is a fact about which deployment this database
-     * belongs to, not about the process. Neither value is a secret — both are already in the
-     * host's own configuration.
+     * before migrations run, so nothing is written. Neither value is a secret — both are already in
+     * the host's own configuration.
      */
     "deployment.environment_mismatch": { databaseEnvironment: string; hostEnvironment: string };
     /**
-     * An inbound hosted-payment webhook failed signature verification. The signature is the sole
-     * gate (design §2): nothing acts on the event until the database's `payments.stripe`
-     * `webhookSecret` verifies the raw bytes. Answered with HTTP 400.
-     *
-     * `payment.*`, not `server.*`: a signature failure is a fact about a payment event, not about
-     * the process (`tenant.not_found`'s note above gives the rule). Carries NOTHING — never the
-     * signature, the raw body or the secret, the same no-leak discipline
-     * `server.credential_unusable` follows.
+     * An inbound hosted-payment webhook failed signature verification; nothing acts on the event
+     * until the `payments.stripe` `webhookSecret` verifies the raw bytes. Carries NOTHING — never the
+     * signature, the raw body or the secret.
      */
     "payment.webhook_signature_invalid": Record<string, never>;
     /**
-     * A verified webhook whose `external_ref` resolves to no local `initiated` payment — a crash
-     * between minting the Checkout Session and writing its row, or an event for a session this host
-     * never minted. LOG-ONLY (a structured field, never thrown-and-caught): the route acks 2xx so
-     * Stripe stops retrying, and `reconcile`'s `missing_local` class backstops the settlement
-     * per-tenant. Not modelled on the credential-purpose key `payments.stripe` — that is a purpose,
-     * not an error (design §4).
+     * A verified webhook whose `external_ref` resolves to no local `initiated` payment. Log-only,
+     * never thrown: the route acks 2xx so Stripe stops retrying, and `reconcile`'s `missing_local`
+     * class backstops the settlement.
      */
     "payment.webhook_unresolved": { provider: string; externalRef: string };
     /**
-     * A card provider cannot be disconnected while a card reader that uses it is still active — the
-     * dashboard must disable those readers first. `activeReaders` is a COUNT so the message can say
-     * how many; never a reader id or a secret. Thrown by the payments API's disconnect route
-     * (`payments-api.ts`); `payment.*` because it is a fact about the payment provider, not the
-     * process.
+     * A card provider cannot be disconnected while a card reader that uses it is still active.
+     * `activeReaders` is a COUNT; never a reader id or a secret.
      */
     "payment.provider_in_use": { activeReaders: number };
-    /**
-     * A card reader id named in a request is not this tenant's, or does not exist — the by-id
-     * isolation refusal every reader route makes (one-tenant-per-db is not the query's boundary,
-     * CLAUDE.md §3). `id` is the reader uuid the caller already holds, not a secret. Thrown by the
-     * payments API (`payments-api.ts`).
-     */
+    /** No card reader with this id. `id` is the reader uuid the caller already holds, not a secret. */
     "reader.not_found": { id: string };
     /** Adoption names a reference absent from the provider account. Public provider id only. */
     "reader.not_listed": { providerId: string };
     /**
-     * A reader operation was asked for a provider that has no sealed credential — the provider must
-     * be connected first. `providerId` is the public provider token (`"sumup"`/`"stripe"`), never a
-     * credential. Thrown by the payments API's add-reader route (`payments-api.ts`).
+     * A reader operation was asked for a provider that has no sealed credential. `providerId` is the
+     * public provider token (`"sumup"`/`"stripe"`), never a credential.
      */
     "reader.provider_disconnected": { providerId: string };
     /**
-     * An active card reader's provider reports its battery at or below the warning/error floor — an
-     * ongoing dashboard alert, not a thrown request error. `reader` is the reader's display name and
-     * `percent` its whole-percent battery reading; neither is a secret. Raised by the battery alert
-     * source (`alert-sources.ts`).
+     * An active card reader's battery is at or below the warning floor — a dashboard alert, not a
+     * thrown request error (`alert-sources.ts`). `reader` is the display name, `percent` a whole
+     * percentage; neither is a secret.
      */
     "reader.battery_low": { reader: string; percent: number };
     /**
-     * NOTHING RAISES THIS ANY MORE. It named a product a basket line asked for that the location's
-     * catalogue did not sell; a sale line now names a zone's menu offer, and one not offered there
-     * is refused `service_zone.offer_not_allowed` instead (`priceOrderLines`,
-     * `apps/server/src/working-order.ts`). Registered and kept because a shipped code is never
-     * removed.
-     *
-     * `productId` was a uuid the caller already held, not a secret.
-     *
-     * `sale.*`, not `server.*`: it is a fact about the SALE the till is ringing, not about the
-     * process (`tenant.not_found`'s note above gives the rule). Registered here by the same
-     * `declare module` this file uses for its other codes; `@waitron/core` owns the rest of the
-     * `sale.*` family, and this adds to it by declaration merging rather than colliding with it.
+     * NOTHING RAISES THIS ANY MORE: a basket line named a product the catalogue did not sell. A line
+     * not offered in its zone is now `service_zone.offer_not_allowed` (`priceOrderLines`).
      */
     "sale.unknown_product": { productId: string };
-    /**
-     * The till was asked to ring a sale with no lines. A sale must have at least one line to price
-     * and to file, so this is refused before any catalogue read or fiscal write. No params: there is
-     * nothing to carry beyond the code itself.
-     */
+    /** The till was asked to ring a sale with no lines; refused before any catalogue read or fiscal write. */
     "sale.empty_basket": Record<string, never>;
     /**
-     * A tender method this till does not support. The counter POS supports `"cash"` (slice 1) and a
-     * manual `"card"` tender (slice 3, the "datáfono" case); `"voucher"`/`"transfer"`/`"other"` are
-     * refused before touching the database. `method` echoes the request so a translator can name what
-     * was attempted; it is caller-supplied text, never a secret.
+     * A tender method this till does not support. `method` echoes the request so a translator can
+     * name what was attempted; it is caller-supplied text, never a secret.
      */
     "sale.unsupported_tender": { method: string };
     /**
-     * NOTHING RAISES THIS ANY MORE. It named an `option_group_item_id` that belonged to no ACTIVE
-     * option group of the product being ordered; the order path no longer takes option-group items
-     * at all, and an extras pick naming a product no offered list carries is refused by the extras
-     * contract instead (`extras.invalid` on `productId`,
-     * `packages/catalogue/src/extra-contract.ts`). Registered and kept because a shipped code is
-     * never removed; `options.in_use` beside it has the same posture.
-     *
-     * `optionGroupItemId` and `productId` were caller-supplied uuids the till already holds, not
-     * secrets. Do not go looking for the table the first of them named: `option_group_items` was
-     * dropped by `packages/db/drizzle/0049_drop_option_groups.sql` and no schema file declares it,
-     * so that param name is the shipped SHAPE of a retired code and points at nothing. `option.*`
-     * names the DOMAIN CONCEPT (a menu option), never the throwing package; SINGULAR because it
-     * named ONE option. It is NOT in this surface's `STATUS` map, so it was answered 400 by
-     * `createErrorBoundary`'s default rather than the 404 an earlier version of this comment
-     * claimed.
+     * NOTHING RAISES THIS ANY MORE: an option-group item that belonged to no active option group of
+     * the product. The table `optionGroupItemId` named no longer exists.
      */
     "option.not_found": { optionGroupItemId: string; productId: string };
     /** NOTHING RAISES THIS ANY MORE — the legacy option payload it validated is gone. An unanswered
      *  options list is now `options.label_required` and a pick outside a list's limits is
      *  `extras.limit_exceeded`, both from the contracts in `@waitron/catalogue`. */
     "options.selection_invalid": { productId: string; groupId: string; reason: string };
-    /**
-     * NOTHING RAISES THIS ANY MORE. It refused an extras pick on a dish that is not priced `each`,
-     * under the `options.` prefix the legacy option payload used. That refusal is now
-     * `extras.unsupported_product` below, which names the domain concept the pick belongs to and
-     * reads beside the rest of the `extras.*` family. Registered and kept because a shipped code is
-     * never removed; `option.not_found` and `options.selection_invalid` above have the same posture.
-     */
+    /** NOTHING RAISES THIS ANY MORE: the `options.`-prefixed twin of `extras.unsupported_product`. */
     "options.unsupported_product": { productId: string; pricingUnit: string };
     /** An extras pick on a dish that is not priced `each`. A child line is priced at the dish's
      *  quantity times the pick count, so a dish sold by weight would bill a fraction of an extra.
      *  Raised by `priceOrderLines` (working-order.ts); `pricingUnit` echoes what the dish resolved
-     *  to. Neither `productId` nor `pricingUnit` is a secret: both are values the caller's own
-     *  request resolved to.
-     *
-     *  `extras.*` names the DOMAIN CONCEPT — the picks the line sent — never the throwing package
-     *  (`tenant.not_found`'s note above gives the rule), beside `extras.invalid`,
-     *  `extras.limit_exceeded`, `extras.not_found` and `extras.in_use`, which
-     *  `packages/catalogue/src/errors.ts` declares; this adds to that family by declaration
-     *  merging. A CLIENT request fault → 400, which is what the till surface's STATUS map default
-     *  gives it (`apps/server/src/till-api.ts` names no `extras.*` code). Never renamed once
-     *  shipped: the `options.`-prefixed code it replaces is retired above rather than deleted. */
+     *  to. */
     "extras.unsupported_product": { productId: string; pricingUnit: string };
     /**
-     * A ring-time line carried a free-text kitchen `note` longer than the 200-character limit (per-line
-     * customisation, spec §2). The note is trimmed first, so trailing whitespace never trips this; a
-     * genuinely over-long instruction is refused before the line is priced or persisted, the server
-     * being the gate (the till's field caps at 200 too, but the client is never trusted). NON-FISCAL —
-     * `note` lives only on `working_order_lines`/`ticket_items`, never the sale.
-     *
-     * `length` is the TRIMMED note's length and `limit` the cap (200), echoed so the message can say by
-     * how much it overran; neither is a secret. `working_order.*` names the DOMAIN CONCEPT (a working
-     * order's line), never the throwing package (`tenant.not_found`'s note gives the rule), beside the
-     * six `working_order.*` codes below; the sole thrower is `priceOrderLines` (`working-order.ts`).
-     * A CLIENT request-shape fault → mapped to 400 (the STATUS map's default, as the `options.*`
-     * codes are). Never renamed once shipped.
-     *
-     * (The former `working_order.invalid_doneness` sat beside this one and was removed with the
-     * built-in doneness field — pre-production and no bwc, the grounds `till.not_found` above also
-     * gives. It differs from that one in having NO successor: `till.not_found`'s thrower moved and
-     * kept throwing, while this code refused a value outside an enum that no longer exists, so
-     * nothing throws in its place. The nearest analogous refusal belongs to a different concept and
-     * a different package — an options list left unanswered is `options.label_required`
-     * (`packages/catalogue/src/errors.ts`), not any of the three `options.*`/`option.*` entries in
-     * THIS file, every one of which is itself retired.)
+     * A line's free-text kitchen `note`, after trimming, is longer than the limit. `length` is the
+     * trimmed length and `limit` the cap.
      */
     "working_order.note_too_long": { length: number; limit: number };
     /**
      * An operation needed an open shift session and none was supplied — the till's session cookie was
-     * absent or named no open session. A fact about the REQUEST, so the operator-scoped routes
-     * Tasks 5/6 add (`GET /api/staff`, `POST /api/sales`) refuse with this before doing any work. No
-     * params: there is nothing to carry beyond the code, and the missing cookie's value is never
-     * echoed.
-     *
-     * `session.*`, not `server.*`, for the reason `tenant.not_found`'s note above gives (the prefix
-     * names the DOMAIN CONCEPT, never the throwing package). `@waitron/identity` owns the rest of the
-     * `session.*` family (`session.not_open`); this adds to it by declaration merging, and belongs
-     * there once a package other than this host needs to throw it — the same note `tenant.not_found`
-     * carries about its own placement.
+     * absent or named no open session. The cookie's value is never echoed.
      */
     "session.required": Record<string, never>;
     /**
-     * No OPEN working order with this id in the venue. The id names none, or it names one already
-     * `settled`/`abandoned` — both report THIS one code (the read is venue-wide since till-reroute
-     * §3.6, so a same-tenant order on another node IS reachable and is no longer a not_found reason).
-     * To a till that only wants to rebuild a parked basket they are the same fact ("nothing to
-     * retrieve"), and a distinct "it exists but is closed" code would confirm a closed order exists —
-     * the same fail-closed reasoning `node.not_found` and `sale.series_not_found` use.
-     *
-     * `workingOrderId` is echoed because it is a caller-supplied uuid the till already holds, not a
-     * secret — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s
-     * note gives). The field is QUALIFIED (`workingOrderId`, not a bare `id`) to match the
-     * domain-record not_found family — `sale.not_found`'s `saleId`, `series.not_found`'s `seriesId`:
-     * a working order is the mutable pre-sale record those sit beside, not an infrastructure object
-     * like the `tenant`/`node` whose bare `id` this file's two other not_founds carry.
-     *
-     * `working_order.*`, not `server.*`: it is a fact about a working order, not the process
-     * (`tenant.not_found`'s note gives the rule). `@waitron/core` owns the rest of the order/sale
-     * domain, so this belongs there once a package other than this host throws it — the same note
-     * `sale.unknown_product` carries about its own placement.
+     * No OPEN working order with this id. An order that exists but is settled or abandoned reports
+     * this same code, so the answer does not confirm a closed order exists.
      */
     "working_order.not_found": { workingOrderId: string };
     /**
-     * A working order this caller tried to MODIFY is not `open` — it names one already
-     * `settled`/`abandoned`, or it names none (an absent id; the read is venue-wide since
-     * till-reroute §3.6, so an order on another node IS reachable and editable). All of those report
-     * THIS one code: to a till trying to edit or abandon a draft the distinction between "closed" and
-     * "never existed" is the same fact ("there is no open draft to change"), and a distinct
-     * "it exists but is closed" code would confirm a closed order exists — the same
-     * fail-closed reasoning `working_order.not_found` uses for the RETRIEVE side. Mapped to HTTP
-     * 409 in Task 8, the mutation counterpart to `not_found`'s 404: the id may be perfectly
-     * valid, but the order's state forbids the edit.
-     *
-     * The database is the backstop, not this code: `working_orders_enforce_transition` rejects
-     * any UPDATE of a non-open row and `working_order_lines_require_open_parent` rejects a line
-     * write under a non-open parent, so an update that slipped past the app check would still fail —
-     * just with a raw trigger error instead of this actionable one. `updateHeldOrder` and
-     * `abandonHeldOrder` throw this from the app side so the caller gets the domain code.
-     *
-     * `workingOrderId` is echoed and qualified for the same reasons `working_order.not_found` gives
-     * (a caller-supplied uuid, not a secret; qualified to match the domain-record family). And
-     * `working_order.*`, not `server.*`, and destined for `@waitron/core` once a package other than
-     * this host throws it — the same note `working_order.not_found` and `sale.unknown_product` carry.
+     * A working order this caller tried to MODIFY is not `open` (settled, abandoned, or absent — one
+     * code for all). The triggers `working_orders_enforce_transition` and
+     * `working_order_lines_require_open_parent` are the database backstop; this code gives the
+     * caller a domain answer instead of a raw trigger error.
      */
     "working_order.not_open": { workingOrderId: string };
     /**
-     * The deployment holds one tenant per database. A working order this caller tried to CANCEL
-     * or AMEND is not `placed` — it names one still `open` (edit it silently via updateHeldOrder
-     * instead), one already `settled`/`abandoned`, or none at all (absent in this database). All
-     * report THIS one code, the same fail-closed shape `working_order.not_open` uses for the
-     * modify side. Mapped to 409 (the state forbids the operation). `working_order.*`, not
-     * `server.*`, and destined for @waitron/core once a package other than this host throws it —
-     * the note `working_order.not_open` carries.
+     * A working order this caller tried to CANCEL or AMEND is not `placed` (still open, settled,
+     * abandoned, or absent — one code for all).
      */
     "working_order.not_placed": { workingOrderId: string };
     /**
-     * A logged amendment (a cancel, art. 29.2.j) was requested with no reason — the field was absent,
-     * empty, or whitespace-only. The app enforces it because `order_amendments` carries NO DB CHECK
-     * forcing a reason on `order_cancelled` (that column is nullable, null being the genesis
-     * `order_placed`'s legitimate value — see the schema comment), so nothing but this guard stops a
-     * reasonless cancel from writing an accountability-empty entry. Its OWN code, deliberately NOT
-     * `working_order.not_placed`: this guard fires BEFORE the order is locked and its status read
-     * (`cancelPlacedOrder` checks the reason first), so the order's state is unknown at this point — it
-     * may be open, settled, abandoned or absent. A missing reason is a client/request-shape error
-     * independent of that state, so `not_placed` would mislabel it as a state conflict (CLAUDE.md §1).
-     * Carried through 7c's carry-forward from Task 3's review, which required the reason-non-null
-     * contract be enforced by the app.
-     *
-     * A client error (the request omitted a required field), distinct from `not_placed`'s state
-     * conflict — a 400 to that code's 409, mapped in the route layer (Task 8+). `workingOrderId` is
-     * echoed and qualified for the same reasons the family's other codes give (a caller-supplied uuid,
-     * not a secret). `working_order.*`, not `server.*`, and destined for `@waitron/core` once a package
-     * other than this host throws it — the note `working_order.not_open` carries.
+     * A cancel was requested with no reason (absent, empty or whitespace-only). The app enforces it
+     * because `order_amendments`' reason column is nullable. Its own code, not `not_placed`: the
+     * reason is checked before the order's status is read, so the order's state is unknown here.
      */
     "working_order.reason_required": { workingOrderId: string };
     /**
-     * The deployment holds one tenant per database. A working order this caller tried to SEND TO
-     * PREP (`sendToPrep`, the Mode-P pickup — design §5) is not `settled`. It names one still
-     * `open` (never paid), one `placed` (Modes I/T enqueue their OWN prep row at PLACING, via
-     * `placeOrder` — `sendToPrep` is never their route, so a `placed` order here means the wrong
-     * path was called, not a legitimate double-enqueue), one `abandoned`, or it names none at all
-     * (absent in this database). All report THIS one code, the same fail-closed shape
-     * `working_order.not_open`/`not_placed` use for their own state guards — to a caller trying
-     * to enqueue a Mode-P pickup, "wrong status" and "doesn't exist" are the same fact ("there is
-     * no settled order here to send to prep"). Mapped to 409: the id may be valid, but the
-     * order's state forbids the move (fix round 1 — a valid-but-wrong-state or valid-but-absent
-     * id was previously reaching a raw `order_prep_order_fk` violation, an opaque 500).
-     * `working_order.*`, not `server.*`, for the reason `working_order.not_open`'s note gives.
+     * A working order this caller tried to send to prep (`sendToPrep`, the pickup mode) is not
+     * `settled` (open, placed, abandoned, or absent — one code for all). A placed order enqueues its
+     * own prep at placing, so reaching here with one means the wrong path was called.
      */
     "working_order.not_settled": { workingOrderId: string };
     /**
-     * A working order this caller tried to hand to the customer (`markCollected`, the Mode-P counter
-     * handover — KDS-1 §3e) is ALREADY collected: its order-level `collected_at` marker is set. The old
-     * order-level `advancePrep('collected')` refused a repeat the same way; `markCollected` catches it
-     * HERE, before the write, because `working_orders_enforce_transition` permits the collected_at stamp
-     * only on a NULL → non-null transition, so a second stamp would RAISE (P0001) and surface as an
-     * opaque `server.internal` 500. This gives it a clean domain code instead. Distinct from
-     * `working_order.not_settled`: an already-collected order IS settled, so that code would mislabel the
-     * state (CLAUDE.md §1). Mapped to 409 (the id is valid, but the order's handover state forbids a
-     * second collect) — the same fail-closed 409 shape the rest of the `working_order.*` state guards use.
-     * `workingOrderId` is the caller-supplied uuid the display already holds, not a secret (the rule
-     * `tenant.not_found`'s note gives). `working_order.*`, not `server.*`, for the reason
-     * `working_order.not_open`'s note gives. Never renamed once shipped.
+     * `markCollected` found the order ALREADY collected. Caught before the write because
+     * `working_orders_enforce_transition` permits the `collected_at` stamp only from NULL, so a
+     * second stamp would surface as a raw trigger error. Not `not_settled`: a collected order is
+     * settled.
      */
     "working_order.already_collected": { workingOrderId: string };
-    /**
-     * A prep operation is not legal given the order's current prep state (design §5's prep
-     * surface):
-     * - `advancePrep`: the requested `to` is not the order's IMMEDIATE next state (queued →
-     *   preparing → ready → collected — no skip, no repeat, no jump backwards), or the order has
-     *   no prep record to advance at all (never sent to prep, or an absent id — the same
-     *   fail-closed shape `working_order.not_open` uses), or `to` is `"queued"` itself: no prep
-     *   state legally advances TO queued — reaching `queued` is `sendToPrep`'s job (an INSERT),
-     *   never a transition.
-     * - `sendToPrep`: the order is settled and ELIGIBLE (already past the
-     *   `working_order.not_settled` guard above) but already has a prep record (`order_prep_pk`)
-     *   — a double send-to-prep, not a fresh enqueue. A fact about the order's PREP, not the
-     *   process. Mapped to 409 (the id may be valid, but the prep state forbids the move — the
-     *   same shape `working_order.not_open`/`not_placed` use for their own state machines).
-     *   `order_prep.*` names the domain concept (order preparation), the rule
-     *   `tenant.not_found`'s note above gives.
-     */
+    /** NOTHING RAISES THIS ANY MORE: an order-level prep move that was not legal. */
     "order_prep.invalid_transition": { workingOrderId: string };
-    /**
-    // `table.not_found` is declared in @waitron/db's errors.ts (dining_tables is a core table with a
-    // cross-package thrower). Codes are never renamed, only relocated.
-    /**
-     * A dining table label already exists in this venue — the `(location_id, label)` unique
-     * (`dining_tables_location_label_key`) rejected the insert/update. `label` is the operator-supplied
-     * human id ("12", "Terraza 3"), not a secret, so echoing it is what makes the error actionable.
-     * `table.*`, not `server.*`, for the reason `tenant.not_found`'s note gives.
-     */
+    /** A dining table label already exists in this venue. `label` is the operator's own text. */
     "table.label_taken": { label: string };
-    /**
-     * A dining table exists but is deactivated, so no tab may be opened on it. `tableId` is the
-     * caller-supplied uuid (not a secret). `table.*`, not `server.*`, for the reason `tenant.not_found`'s
-     * note gives. Distinct from `table.not_found` (which covers a foreign/absent table): this one says
-     * the table is real but closed for service. Mapped to 409 in the route layer.
-     */
+    /** A dining table exists but is deactivated, so no tab may be opened on it. */
     "table.inactive": { tableId: string };
     /**
-     * A move/join TARGET dining table already has an OPEN tab, so a party may not be relocated or
-     * extended onto it — use `mergeTabs` to combine the two bills instead (design §3). A table is "free"
-     * when its `tab_id` is null or points at a settled/abandoned order (a stale pointer, TS-1 §2b);
-     * `table.occupied` fires only when it points at a STILL-OPEN order. There is no partial-unique
-     * index behind the rule, so what makes two concurrent moves onto one free table serialise — the
-     * loser reading the winner's `tab_id` and surfacing THIS code — is that they cannot overlap: one
-     * write transaction runs on the venue file at a time (`assertAnchoredTabOpen` in
-     * `apps/server/src/working-order.ts` carries the chain and the receipt). `tableId` — the
-     * occupied target — is caller-supplied, not a secret. `table.*` names the DOMAIN CONCEPT (the dining
-     * table), never the throwing package (the rule `tenant.not_found`'s note gives). Mapped to 409 (the
-     * table's state forbids the move), the sibling of TS-1's `tab.already_open`.
+     * A move/join TARGET table already has an OPEN tab; `mergeTabs` combines two bills instead. A
+     * table whose `tab_id` points at a settled/abandoned order is free. No unique index backs the
+     * rule: two concurrent moves cannot overlap because one write transaction runs on the venue
+     * file at a time (`assertAnchoredTabOpen` in `working-order.ts`).
      */
     "table.occupied": { tableId: string };
     /**
-     * The deployment holds one tenant per database. A table this caller tried to UN-JOIN is not
-     * part of the named tab — its `tab_id` points at a different open tab, at a settled/abandoned
-     * one, or is NULL (a free table), or the id names none at all (absent in this database). All
-     * report THIS one code, the same fail-closed shape `tab.not_open`/`table.occupied` use: to an
-     * operator un-joining a table, "not joined to this tab" and "no such table here" are the same
-     * fact, and a distinct code would confirm a foreign/other-tab table exists. Mapped to 409 in
-     * the route layer (the id may be valid, but the table's join state forbids the un-join).
-     * `tableId`/`tabId` are caller-supplied uuids the till already holds, not secrets. `table.*`,
-     * not `server.*`: it is a fact about a table, not the process (the rule `tenant.not_found`'s
-     * note gives); destined for `@waitron/core` once a package other than this host throws it,
-     * the note the `working_order.*` family carries.
+     * A table this caller tried to UN-JOIN is not part of the named tab — it points at another tab,
+     * at a closed one, at none, or the id names no table. One code for all, so the answer does not
+     * confirm another tab's table exists.
      */
     "table.not_joined": { tableId: string; tabId: string };
     /**
-     * A caller tried to un-join a table's items onto a new tab, but this table is the SOLE table anchoring
-     * the named tab — it does not SHARE its tab with any other table, so there is no join to carve it out
-     * of. An ordinary single-table tab is settled or moved, not un-joined; only a genuine ≥2-table join
-     * splits. Rejecting here is honest: the WITH-items un-join would otherwise repoint this table away and
-     * leave the tab anchorless, and the downstream back-pointer check would throw a MISLEADING
-     * `tab.not_open` on a tab that is in fact open. `tableId`/`tabId` are caller-supplied uuids the till
-     * already holds, not secrets. `table.*`, not `server.*`: it is a fact about a table's join state, not
-     * the process (the rule `tenant.not_found`'s note gives); destined for `@waitron/core` once a package
-     * other than this host throws it, the note the `table.not_joined` family carries. Mapped to 409 in the
-     * route layer (the ids may be valid, but the table's un-shared state forbids the un-join), the sibling
-     * of `table.not_joined`.
+     * An un-join named the SOLE table anchoring the tab, so there is no join to carve it out of.
+     * Refused because the un-join would otherwise leave the tab with no table.
      */
     "table.not_shared": { tableId: string; tabId: string };
     /**
-     * A table's `tab_id` already points at an OPEN working order, so a second tab may not be opened (at
-     * most one open tab per table, design §2b). `openTab` reads the `dining_tables` row and checks its
-     * `tab_id`; there is NO partial-unique index, so what makes two concurrent openTabs serialise —
-     * the second surfacing THIS code — is that they cannot overlap: one write transaction runs on the
-     * venue file at a time (`openTab` in `apps/server/src/working-order.ts` carries the chain and the
-     * receipt). A stale `tab_id`
-     * (pointing at a settled/abandoned order) reads as free and is overwritten, so it does NOT trigger
-     * this. `tab.*` names the DOMAIN CONCEPT (the running tab), never the throwing package. `tableId` —
-     * the occupied table — is caller-supplied, not a secret. Mapped to 409 (the table's state forbids a
-     * new tab).
+     * A table's `tab_id` already points at an OPEN working order, so a second tab may not be opened.
+     * No unique index backs the rule: two concurrent `openTab`s cannot overlap because one write
+     * transaction runs on the venue file at a time (`openTab` in `working-order.ts`). A stale
+     * `tab_id` (a settled/abandoned order) reads as free and is overwritten.
      */
     "tab.already_open": { tableId: string };
-    // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts. Codes are never
-    // renamed, only relocated with their thrower.
+    // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts.
     /**
-     * The deployment holds one tenant per database. A tab verb found the working order it was
-     * asked to modify is not an OPEN tab — it is not `open` (already settled/abandoned), no
-     * `dining_tables.tab_id` points at it (a walk-up or a counter delivery — a tab is an OPEN
-     * order a table points at, design §2b), or it names none (absent in this database). All the
-     * tab verbs share THIS one code for that state — the round/void guard and the TS-3
-     * move/join/merge family alike — the fail-closed shape `working_order.not_open` uses for the
-     * held-order modify side. (A non-enumerating phrasing on purpose: the earlier
-     * `addTabRound`/`voidTabLine` list went stale the moment the move/join/merge verbs began
-     * throwing it too.) `tabId` — the caller-supplied uuid — is echoed and qualified to match the
-     * tab-verb vocabulary. `tab.*`, not `server.*`, for the reason `tenant.not_found`'s note
-     * gives. Mapped to 409 (the order's state forbids the tab edit).
+     * A tab verb found the order it was asked to modify is not an OPEN tab — not `open`, not pointed
+     * at by any `dining_tables.tab_id`, or absent. Every tab verb shares this code for that state.
      */
     "tab.not_open": { tabId: string };
-    /**
-     * A per-line void named no line on the OPEN tab — the `line_no` matches nothing on it (already
-     * voided, or never existed). Pre-fiscal: nothing is filed for an open tab, so a void is a plain
-     * delete with no fiscal record or amendment. `tabId` + `lineNo` are caller-supplied and echoed
-     * (neither a secret). `tab.*`, not `server.*`, for the reason `tenant.not_found`'s note gives.
-     * Mapped to 404 (the line named does not exist).
-     */
+    /** A per-line void named no line on the open tab. Pre-fiscal: a void of an open tab files nothing. */
     "tab.line_not_found": { tabId: string; lineNo: number };
     /**
-     * A tab named as BOTH source and destination of a line-move — `mergeTabs(intoTabId === fromTabId)`,
-     * or the line-move `moveOrderLines(fromTabId === toTabId)` behind `moveTabLines`. Refused before any line move or lock: moving a tab's lines onto itself would move
-     * them then abandon it (`mergeTabs`), or append duplicates the trailing delete then removes wholesale,
-     * emptying the tab (`moveOrderLines`). `tabId` is the caller-supplied uuid (not a secret). `tab.*` names
-     * the DOMAIN CONCEPT (the running tab), never the throwing package (the rule `tenant.not_found`'s note
-     * gives). A request-shape error — the two arguments are equal regardless of any tab's STATE — so it
-     * is mapped to 400 (a bad request), distinct from the state-conflict `tab.not_open` (409).
+     * A tab named as BOTH source and destination of a line-move (`mergeTabs`, or `moveOrderLines`
+     * behind `moveTabLines`). Refused first: moving a tab's lines onto itself would abandon it or
+     * empty it.
      */
     "tab.merge_self": { tabId: string };
-    /**
-     * A transfer named the SAME tab as source and destination (`fromTabId === toTabId`). Refused
-     * before any check or line read — moving items from a tab to itself is a no-op the caller did not
-     * mean, and letting it through would check the same tab's row twice. `tabId` is the
-     * caller-supplied uuid (both ids are equal here), echoed because it is not a secret. A CLIENT
-     * request-shape fault (400), distinct from the state conflict `tab.not_open` (409): the ids are
-     * well-formed, they are just equal. `tab.*` names the DOMAIN CONCEPT, not the throwing package
-     * (`tenant.not_found`'s note gives the rule); never renamed once shipped.
-     */
+    /** A transfer named the SAME tab as source and destination. */
     "tab.transfer_self": { tabId: string };
     /**
-     * A transfer named a `quantity` outside `0 < quantity ≤ line.quantity` (design §3): zero, negative,
-     * more than the line holds, or a malformed decimal literal. Refused before the split — a zero would
-     * leave a zero-quantity remnant (violating `working_order_lines_quantity_ck`), an over-quantity would
-     * invent stock, and a malformed value cannot be priced. `lineNo` and the offending `quantity` (the
-     * caller's own text, not a secret) are echoed so a translator can name what was attempted. A CLIENT
-     * request-shape fault (400), distinct from the state conflict `tab.not_open` (409). `tab.*` names the
-     * DOMAIN CONCEPT (`tenant.not_found`'s note gives the rule); never renamed once shipped.
+     * A transfer named a `quantity` outside `0 < quantity ≤ line.quantity`, or one that is not a valid
+     * decimal. `quantity` is the caller's own text.
      */
     "tab.transfer_quantity_invalid": { tabId: string; lineNo: number; quantity: string };
     /**
-     * A transfer batch named the SAME source `line_no` more than once (design §3). Refused BEFORE any
-     * lock or write. A repeated line_no does not conserve quantity: every entry is validated against a
-     * STATIC pre-batch snapshot of the line's quantity (never updated between entries) and the split
-     * write sets the source to `original − q` rather than a cumulative decrement — so two partial "1"s
-     * off a café×3 line both pass and the destination gains 1+1 while the source only drops to 2 (4
-     * from 3). A whole-line + partial pair on one line is worse and contradictory ("move it all" AND
-     * "move part"): the whole-line move DELETEs the source line and the split's UPDATE then matches
-     * nothing while its INSERT still fabricates a destination line. Neither shape can be folded into a
-     * cumulative decrement, so a duplicate line_no is simply refused. `lineNo` is the FIRST line_no that
-     * repeats; `tabId` is the source tab. A CLIENT request-shape fault (400) — the batch is malformed
-     * regardless of any tab's STATE — the same shape `tab.transfer_self`/`tab.transfer_quantity_invalid`
-     * carry, distinct from the state conflict `tab.not_open` (409). `tab.*` names the DOMAIN CONCEPT
-     * (`tenant.not_found`'s note gives the rule); never renamed once shipped.
+     * A transfer batch named the same source `line_no` more than once. Refused because each entry is
+     * checked against the line's quantity before the batch, so repeats would not conserve quantity.
+     * `lineNo` is the first that repeats.
      */
     "tab.transfer_duplicate_line": { tabId: string; lineNo: number };
     /**
-     * A transfer would separate a modifier from its dish (ordering modifiers). Two shapes reach it,
-     * both refused before any line is moved or split:
-     *  - a transfer entry names a CHILD modifier line directly (its `line_no` carries a
-     *    `parent_line_id`) — a modifier is part of its dish, so it moves only WITH the dish: naming the
-     *    parent whole-line move cascades its children automatically, and naming the child on its own is
-     *    refused here rather than orphaning it (the source child would reference a deleted parent,
-     *    which the foreign key refuses as an opaque 500; the destination child would land ungrouped);
-     *  - a PARTIAL split (`quantity` < the line's quantity) names a PARENT dish that carries modifier
-     *    children — there is no per-option quantity this slice, so splitting the dish would desync its
-     *    modifiers' quantity from the dish; refused rather than filing an inconsistent draft.
-     * The client is never the gate: the till's transfer picker offers whole dishes, but a crafted
-     * request could name a child or split a modified dish, so the server refuses both here.
-     *
-     * `lineNo` is the offending source line (a child, or the parent asked to split); `tabId` the source
-     * tab. Both caller-supplied and echoed (neither a secret). A CLIENT request-shape fault (400) — the
-     * batch is malformed regardless of any tab's STATE — the same shape `tab.transfer_self`/
-     * `tab.transfer_duplicate_line` carry, distinct from the state conflict `tab.not_open` (409). `tab.*`
-     * names the DOMAIN CONCEPT (`tenant.not_found`'s note gives the rule); never renamed once shipped.
+     * A transfer would separate a modifier from its dish: an entry names a CHILD modifier line (it
+     * moves only with its dish), or a PARTIAL split names a dish that carries modifier children
+     * (their quantity would no longer match the dish's). `lineNo` is the offending source line.
      */
     "tab.transfer_modifier_line": { tabId: string; lineNo: number };
-    /**
-     * The deployment holds one tenant per database. No such service status for this tenant.
-     * `statusId` is a caller-supplied uuid the dashboard/till already holds, not a secret — an id
-     * that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s note
-     * gives). `status.*` names the DOMAIN CONCEPT (a table's manual service status), never the
-     * throwing package; destined for @waitron/tables if that package is extracted. An absent id
-     * in this database reports THIS one code. Mapped to 404.
-     */
+    /** No service status with this id. */
     "status.not_found": { statusId: string };
-    /**
-     * A service status exists but is deactivated (`active = false`), so a table may not be set to it —
-     * `setTableStatus` refuses it. `statusId` is the caller-supplied uuid (not a secret). Distinct from
-     * `status.not_found` (absent/foreign): this says the status is real but retired from service.
-     * `status.*`, not `server.*`, for the reason `tenant.not_found`'s note gives. Mapped to 409 (the
-     * status's state forbids the assignment).
-     */
+    /** A service status exists but is deactivated, so a table may not be set to it. */
     "status.inactive": { statusId: string };
-    /**
-     * A service-status label already exists in this venue — the `(label)` unique
-     * (`table_service_statuses_tenant_label_key`) rejected the insert/update. `label` is the
-     * operator-supplied human name ("Bill requested"), not a secret, so echoing it is what makes the
-     * error actionable. `status.*`, not `server.*`, for the reason `tenant.not_found`'s note gives.
-     * Mapped to 409.
-     */
+    /** A service-status label already exists. `label` is the operator's own text. */
     "status.label_taken": { label: string };
-    /**
-     * The deployment holds one tenant per database. No such floor-plan zone (FP-1) for this
-     * tenant. `zoneId` is a caller-supplied uuid the dashboard already holds, not a secret — an
-     * id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s note
-     * gives). Qualified `zoneId` to match the domain-record not_found family (`table.not_found`'s
-     * `tableId`, `status.not_found`'s `statusId`). `zone.*` names the DOMAIN CONCEPT, never the
-     * throwing package (`tenant.not_found`'s note). An absent id in this database reports THIS
-     * one code — the same fail-closed shape `table.not_found`/`status.not_found` use. Mapped to
-     * 404 by whichever route surface Task 3 wires the zone CRUD verbs into, matching
-     * `table.not_found`/`status.not_found`. A DEACTIVATED-but-real zone is a different fact,
-     * should Task 3 need one — `table.inactive`/`status.inactive`'s shape, not this code.
-     */
+    /** No floor-plan zone with this id. */
     "zone.not_found": { zoneId: string };
-    /**
-     * A floor-plan zone (FP-1) name already exists in this venue — the
-     * `(location_id, name)` unique (`floor_zones_name_key`, `floor-zones.ts`) rejects the
-     * insert/update. `name` is the operator-supplied human label ("Comedor", "Terraza"), not a
-     * secret, so echoing it is what makes the error actionable — the same shape `table.label_taken`'s
-     * `label` and `status.label_taken`'s `label` use, renamed here to match the column
-     * `floor_zones.name` actually carries. `zone.*`, not `server.*`, for the reason
-     * `tenant.not_found`'s note gives. Mapped to 409 by whichever route surface Task 3 wires the
-     * zone CRUD verbs into, matching `table.label_taken`/`status.label_taken`.
-     */
+    /** A floor-plan zone name already exists in this venue. `name` is the operator's own text. */
     "zone.name_taken": { name: string };
-    /**
-     * A kitchen-station name already exists in this venue (KDS-1) — the `(location_id, name)`
-     * unique (`kitchen_stations_name_key`) rejected the insert/update. `name` is the operator-supplied
-     * human label ("Cocina", "Plancha", "Barra"), not a secret, so echoing it is what makes the error
-     * actionable — the same shape `zone.name_taken`'s `name` and `table.label_taken`'s `label` use,
-     * named `name` to match the column `kitchen_stations.name` actually carries. `station.*`, not
-     * `server.*`, for the reason `tenant.not_found`'s note above gives (the prefix names the DOMAIN
-     * CONCEPT — a kitchen station — never the throwing package). Mapped to 409 by the route surface
-     * Task 7 wires the station config verbs into, matching `zone.name_taken`. Never renamed once shipped.
-     */
+    /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */
     "station.name_taken": { name: string };
     /**
-     * No such kitchen station for this tenant + venue (KDS-1), OR one that is DEACTIVATED.
-     * `createStation` maps only a NAME collision (above); `updateStation` and `deactivateStation`
-     * update by id and reject a zero-row result. The deployment holds one tenant per database.
-     * `setDefaultStation` and the routing verbs `setCategoryStation`/`setProductStation`
-     * also require an active station
-     * in `cfg.locationId`. All of those fold into the one code, the same fail-closed shape
-     * `zone.not_found`/`status.not_found`/`table.not_found` use — to a caller picking a
-     * routing/default target, "gone", "foreign" and "retired" are the same fact ("there is no
-     * live station here to use"). The inactive case is deliberately folded in (not a distinct
-     * `station.inactive`): the spec enumerates only name_taken/not_found/no_default for KDS-1,
-     * and a routing target that cannot be used reads the same whether it is absent or retired —
-     * unlike `table.inactive`/`status.inactive`, which exist because a deactivated row is still
-     * addressable by the CRUD editor there.
-     *
-     * `stationId` is echoed because it is a caller-supplied uuid the dashboard/till already holds, not a
-     * secret — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s note
-     * gives). Qualified `stationId` to match the domain-record not_found family (`table.not_found`'s
-     * `tableId`, `zone.not_found`'s `zoneId`, `status.not_found`'s `statusId`). `station.*`, not `server.*`,
-     * for the reason `tenant.not_found`'s note gives. Mapped to 404. Never renamed once shipped.
+     * No kitchen station with this id in this venue, or one that is DEACTIVATED. Folded into one
+     * code: to a caller picking a routing or default target, absent and retired are the same fact.
      */
     "station.not_found": { stationId: string };
     /**
-     * A line was fired to the kitchen but its venue has NO default kitchen station (KDS-1, §2b). Station
-     * resolution is `product.station_id ?? category.station_id ?? the location's default station`; when a
-     * line resolves neither a product- nor category-level route AND the location has no `is_default`
-     * station, there is nowhere to send the food. This is a MISCONFIGURATION the venue must fix, so firing
-     * FAILS LOUD with this code rather than silently dropping the line from the kitchen (§2b: "fail loud,
-     * do not silently drop food"). Declared here in Task 2 with the other `station.*` codes; the sole
-     * thrower is Task 3's fire-time resolver (`fireLines`) — no verb in this task throws it yet.
-     *
-     * `locationId` names the misconfigured venue and is echoed because it is the venue's OWN id, already in
-     * the till's config, not a secret — naming which location has no default is exactly what makes the
-     * error actionable. `station.*` names the DOMAIN CONCEPT (a kitchen station, or here its absence),
-     * never the throwing package (`tenant.not_found`'s note gives the rule). A configuration conflict that
-     * blocks firing → mapped to 409 by the fire route's surface in Task 7. Never renamed once shipped.
+     * A line was fired but resolves no product- or category-level station and the venue has no
+     * default station. Firing fails loud rather than silently dropping food from the kitchen.
+     * `locationId` names the misconfigured venue.
      */
     "station.no_default": { locationId: string };
     /**
-     * The deployment holds one tenant per database. A per-line kitchen ticket-item bump is not
-     * legal given the item's current state (KDS-1 §3c) — the `ticket_items` successor to
-     * `order_prep.invalid_transition` (which stays declared but loses its throw sites with the
-     * KDS-1 rework, spec §6). Task 4's `advanceTicketItem` is the thrower: each bump is a single
-     * conditional UPDATE `set state = to where id = … and state = <the one legal predecessor>`,
-     * so the legality of the move IS the write — a skip, a repeat, a jump backwards, or an absent
-     * item in this database all match no row, and the empty `returning` throws THIS. `to =
-     * 'queued'` is refused too: no state legally advances INTO queued (only firing reaches it).
-     * The same fail-closed conditional-UPDATE shape `working_order.not_open`/the prep family use
-     * for their own state machines.
-     *
-     * A fact about the ticket ITEM's state, not the process → mapped to 409 (the id may be valid, but the
-     * item's state forbids the move). `ticketItemId` names the affected item's OWN id — a ticket item
-     * advances per LINE, so the id that failed is the line's ticket item, not the order (unlike the
-     * order-level `order_prep.invalid_transition`, which named the `workingOrderId` of a one-row-per-order
-     * model). It is a caller-supplied uuid the display already holds, not a secret, so echoing it is what
-     * makes the error actionable (the rule `tenant.not_found`'s note gives). `ticket.*` names the DOMAIN
-     * CONCEPT (a kitchen ticket item), never the throwing package (that same note); destined for a
-     * @waitron/kitchen package if one is ever extracted. Never renamed once shipped.
+     * A per-line kitchen ticket-item bump is not legal from the item's current state (a skip, a
+     * repeat, backwards, INTO `queued`, or an absent item). `advanceTicketItem`'s conditional UPDATE
+     * is the check: an illegal move matches no row.
      */
     "ticket.invalid_transition": { ticketItemId: string };
     /**
-     * A line was fired to the kitchen that ALREADY has a ticket item (KDS-1) — a re-fire. Every fire
-     * point funnels through `fireLines` (`working-order.ts`), which inserts one `ticket_items` row per
-     * line; a second fire of a line already sent collides on `ticket_items`' per-line
-     * `(working_order_line_id)` unique. `fireLines` catches that violation
-     * (`isUniqueViolation`) and throws THIS instead of letting the raw constraint error surface as an
-     * opaque `server.internal` 500. The reachable path is a double `sendToPrep` (Mode-P's pickup fires a
-     * settled order's lines; sending the same order twice re-fires them); `placeOrder` can't re-fire (its
-     * open→placed guard blocks a second call) and `addTabRound` fires only its freshly-inserted lines, so
-     * neither reaches this in practice — but the catch lives at the shared `fireLines` choke point so ALL
-     * fire paths are covered by construction.
-     *
-     * Deliberately NOT `ticket.invalid_transition`: that code is `advanceTicketItem`'s per-ITEM state-bump
-     * refusal and carries the failed item's own `ticketItemId`, which a re-fire has no clean handle on (the
-     * INSERT of N items fails atomically; the colliding row is a PRE-EXISTING item this catch never reads).
-     * Broadening it would stretch a shipped code's documented meaning and force a wrong/looked-up param, the
-     * §1 defect class — so a re-fire gets its own code. Nor is it the RETIRED `order_prep.invalid_transition`,
-     * whose double-send throw site the KDS-1 rework removes (spec §6). `workingOrderId` names the order whose
-     * fire was refused — the caller-supplied uuid `sendToPrep`'s route already holds, not a secret, so echoing
-     * it is what makes the error actionable (the rule `tenant.not_found`'s note gives); an order-scoped param
-     * on a `ticket.*` code exactly as `tab.already_open` carries a `tableId`. A state conflict (the order's
-     * lines are already in the kitchen) → mapped to 409 by the fire route's surface (Task 7), the same 409
-     * family `working_order.not_settled`/`tab.already_open` sit in. `ticket.*` names the DOMAIN CONCEPT (a
-     * kitchen ticket item), never the throwing package (`tenant.not_found`'s note). Never renamed once shipped.
+     * A line was fired that already has a ticket item — a re-fire. `fireLines` catches the per-line
+     * unique violation on `ticket_items`, so every fire path is covered. Its own code because the
+     * colliding item is never read, so there is no `ticketItemId` to report.
      */
     "ticket.already_fired": { workingOrderId: string };
     /**
-     * A working order this caller tried to hand to the customer (`markCollected`, the Mode-P counter
-     * handover — KDS-1 §3e) was NEVER fired to the kitchen: it has no `ticket_items`, so there is nothing
-     * on any station display to hand over. A settled Mode-P order that has not yet been sent to prep is a
-     * reachable state, and stamping `collected_at` on it would be worse than a no-op — a LATER `sendToPrep`
-     * would fire lines that `listStationQueue`'s `collected_at IS NULL` filter immediately hides (food
-     * silently dropped from the display). So `markCollected` refuses it rather than stamping. The inverse
-     * of `ticket.already_fired` (which refuses a DOUBLE fire); `ticket.*` names the DOMAIN CONCEPT (the
-     * kitchen ticket), never the throwing package (`tenant.not_found`'s note). `workingOrderId` names the
-     * order whose handover was refused — a caller-supplied uuid the display already holds, not a secret,
-     * and order-scoped on a `ticket.*` code exactly as `ticket.already_fired` carries a `workingOrderId`.
-     * Mapped to 409 (the id is valid, but the order's kitchen state forbids the handover) — the same 409
-     * family `ticket.already_fired`/`working_order.not_settled` sit in. Never renamed once shipped.
+     * `markCollected` found an order that was never fired to the kitchen. Refused rather than
+     * stamped: a later `sendToPrep` would fire lines the station queue hides for a collected order.
      */
     "ticket.not_fired": { workingOrderId: string };
     /**
-     * A per-line ticket-item bump was refused because the line is still HELD (KDS-2 hold-and-fire) — its
-     * course has not been fired to the kitchen yet (`ticket_items.fired_at IS NULL`, greyed on the station
-     * display). A later KDS-2 task's `advanceTicketItem` adds a `fired_at IS NOT NULL` gate to its
-     * conditional bump UPDATE: a held item is on no station's active queue, so there is nothing to advance,
-     * and the bump throws THIS rather than silently matching no row (the same fail-loud shape the coursing
-     * model uses — held food is displayed, not dropped). Distinct from `ticket.invalid_transition`, which
-     * refuses an ILLEGAL move (a skip, a repeat, a jump backwards) on a line that HAS been fired: item_held
-     * is the orthogonal fact that the line is not yet in the kitchen at all. Firing the line's course
-     * (stamping `fired_at`) is the caller's remedy; only then does the bump become legal.
-     *
-     * A fact about the ticket ITEM's kitchen state, not the process → mapped to 409 by the till route's
-     * surface in a later task (the same 409 the state-conflict `ticket.*` codes sit in); the id may be
-     * valid, but the item's held state forbids the move. `ticketItemId` names the affected item's OWN id —
-     * a ticket item is held/advanced per LINE, so the id that failed is the line's ticket item, not the
-     * order — mirroring `ticket.invalid_transition`'s `ticketItemId` exactly. A caller-supplied uuid the
-     * display already holds, not a secret, so echoing it is what makes the error actionable (the rule
-     * `tenant.not_found`'s note gives). `ticket.*` names the DOMAIN CONCEPT (a kitchen ticket item), never
-     * the throwing package (that same note). Never renamed once shipped.
+     * A ticket-item bump was refused because the line is still HELD (`fired_at IS NULL`): its course
+     * has not been fired. Distinct from `ticket.invalid_transition`, an illegal move on a fired line.
      */
     "ticket.item_held": { ticketItemId: string };
     /**
-     * A recall was asked for a line the kitchen has already STARTED — its `ticket_items.state` is
-     * `preparing`/`ready`, not `queued` (coursing editing A4). `recallLines` un-fires a not-yet-started
-     * line back to HELD (`fired_at → NULL`), which is clean only while nothing is cooking; once started the
-     * food is real, so the correction is a CANCEL (void), not a recall — the till offers that instead. The
-     * inverse-direction sibling of `ticket.already_fired` (which refuses a DOUBLE fire) and `ticket.not_fired`
-     * (which refuses a handover of an UN-fired order): this refuses UN-firing a line the kitchen has moved
-     * PAST fired. Distinct from `ticket.item_held`, the orthogonal fact that a line is not yet in the kitchen
-     * at all — `already_started` is a line that has gone too FAR, `item_held` a line that has not gone far
-     * enough. The items are read BEFORE the un-fire so the refusal can name the exact offending item.
-     *
-     * `ticketItemId` names the affected item's OWN id — a line is recalled/started per LINE, so the id that
-     * failed is the line's ticket item, not the order — mirroring `ticket.item_held`'s / `ticket.invalid_transition`'s
-     * `ticketItemId` exactly. It is an opaque uuid the station display already holds, not a secret, so echoing
-     * it is what makes the error actionable (the rule `tenant.not_found`'s note gives). `ticket.*` names the
-     * DOMAIN CONCEPT (a kitchen ticket item), never the throwing package (that same note). A fact about the
-     * item's kitchen state, not the process → mapped to 409 by the till route's surface (the same 409 the
-     * state-conflict `ticket.*` codes sit in). Never renamed once shipped.
+     * A recall was asked for a line the kitchen has already started (`preparing`/`ready`, not
+     * `queued`). Recalling un-fires a line back to held, which is clean only while nothing is
+     * cooking; the correction for a started line is a cancel.
      */
     "ticket.already_started": { ticketItemId: string };
-    /**
-     * A kitchen-course name already exists in this venue (KDS-2) — the `(location_id, name)`
-     * unique (`kitchen_courses_name_key`) rejected the insert/update. `name` is the operator-supplied
-     * human label ("Entrantes", "Principales", "Postres"), not a secret, so echoing it is what makes the
-     * error actionable — the same shape `station.name_taken`'s `name` and `zone.name_taken`'s `name` use,
-     * named `name` to match the column `kitchen_courses.name` actually carries. `course.*`, not `server.*`,
-     * for the reason `tenant.not_found`'s note gives (the prefix names the DOMAIN CONCEPT — a kitchen
-     * course — never the throwing package). Mapped to 409 by the management route surface a later KDS-2
-     * task wires the course config verbs into, matching `station.name_taken`. Never renamed once shipped.
-     */
+    /** A kitchen-course name already exists in this venue. `name` is the operator's own text. */
     "course.name_taken": { name: string };
     /**
-     * The deployment holds one tenant per database. No such kitchen course for this tenant +
-     * venue (KDS-2), OR one that is DEACTIVATED. The course update/deactivate verbs select by id
-     * and reject an absent row in this database. The product-course routing verb also requires an
-     * active course in `cfg.locationId`. All of those fold into the one code, the same
-     * fail-closed shape `station.not_found`/`zone.not_found` use — to a caller picking a course,
-     * "gone", "foreign" and "retired" are the same fact (there is no live course here to use).
-     * The inactive case is deliberately folded in (not a distinct `course.inactive`), exactly as
-     * `station.not_found` folds its own.
-     *
-     * `courseId` is echoed because it is a caller-supplied uuid the dashboard/till already holds, not a
-     * secret — an id that matches nothing is unactionable if withheld (the rule `tenant.not_found`'s note
-     * gives). Qualified `courseId` to match the domain-record not_found family (`station.not_found`'s
-     * `stationId`, `zone.not_found`'s `zoneId`). `course.*`, not `server.*`, for the reason
-     * `tenant.not_found`'s note gives. Mapped to 404. Never renamed once shipped.
+     * No kitchen course with this id in this venue, or one that is DEACTIVATED — folded into one
+     * code as `station.not_found` folds its own.
      */
     "course.not_found": { courseId: string };
     /**
-     * A table-placement field failed validation (FP-2 spatial floor plan) — `setTablePlacement`'s
-     * per-field guards: a `posX`/`posY` outside `0..1000`, a `rotation` outside `0..359`, or a
-     * `shape` naming no `floor_table_shape` enum member. A missing/inactive table or zone is NOT this
-     * code — those are checked first and surface `table.not_found`/`zone.not_found`.
-     *
-     * `field` carries the offending field NAME only — `"posX"`/`"posY"`/`"shape"`/`"rotation"` — and
-     * NEVER the value behind it. An out-of-range coordinate is not itself a secret, but this file's
-     * no-leak discipline is uniform (echo names, never values — `management.request_invalid`,
-     * `server.till_config_missing`) precisely so no field becomes the exception where a value leaks
-     * (CLAUDE.md §1).
-     *
-     * `placement.*` names the DOMAIN CONCEPT (a table's spatial placement), never the throwing
-     * package (the rule `tenant.not_found`'s note gives); venue layout only, nowhere near the fiscal
-     * huella. A request-shape fault → HTTP 400: it is listed explicitly as 400 in BOTH route `STATUS`
-     * maps (`till-api.ts`, `management-api.ts`), beside `management.request_invalid`, per house style —
-     * though 400 is also the DEFAULT a registered code takes when absent from a map (`till-api.ts`'s
-     * `STATUS` note), so the mapping would hold either way. Never renamed once shipped.
+     * A table-placement field failed validation (`setTablePlacement`): a coordinate or rotation out
+     * of range, or an unknown shape. `field` carries the field NAME only, never the value.
      */
     "placement.invalid": { field: string };
     // `management.request_invalid` is declared in `@waitron/server-kit` (`src/errors.ts`) with the
     // request screens that throw it, and reaches this program through their package barrel.
-    // Codes are never renamed once shipped.
     /**
-     * A request to a device-authenticated route (a KDS station display, device-identity-1 §3c) carried
-     * no usable device identity — the `waitron_device` cookie was absent, malformed (no `.` separator,
-     * or a non-uuid selector), named no device, carried a token that did not `verifySecret` against the
-     * row's `token_hash`, or named a device that has been REVOKED (`active = false`, instant revocation).
-     * All of those fold into THIS one code: to the presenter "no such device", "wrong token" and
-     * "revoked" are the same fact ("this cookie does not authenticate here"), and a distinct code for any
-     * of them would confirm a device's existence or revocation state to whoever asked — the same
-     * fail-closed reasoning `node.not_found` and `payment.webhook_signature_invalid` use. NO params: the
-     * cookie's selector and token are a bearer secret and must never land in an error's params (the
-     * no-leak discipline `session.required` and `payment.webhook_signature_invalid` follow), and there
-     * is nothing non-secret left to carry.
-     *
-     * `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package
-     * (`tenant.not_found`'s note above gives the rule); `server.*` is reserved for facts about the
-     * process itself, and a failed device authentication is a fact about the request. Mapped to HTTP 401
-     * by `device-api.ts`'s local STATUS map (Task 5), not here — this file only DECLARES the code, the
-     * route layer owns the status, the same split every other code in this file follows. Never renamed
-     * once shipped.
+     * A request to a device-authenticated route carried no usable device identity — the
+     * `waitron_device` cookie was absent, malformed, named no device, carried a wrong token, or
+     * named a revoked device. One code for all, so the answer does not confirm a device's existence
+     * or revocation. NO params: the cookie is a bearer secret.
      */
     "device.unauthorized": Record<string, never>;
     /**
-     * A device tried to advance a kitchen ticket item that belongs to a DIFFERENT station than the one
-     * it is bound to (device-identity-1 §3d — least privilege: a device reads and bumps only its OWN
-     * station). `device-api.ts`'s advance route fetches the item's `station_id` and asserts it equals the
-     * requesting device's own `stationId` BEFORE calling `advanceTicketItem`; a mismatch throws THIS.
-     * `stationId` names the ITEM's station — the station the device is not bound to and may not touch —
-     * echoed because a station id is a within-tenant uuid this codebase treats as non-secret
-     * (`station.not_found` echoes its own `stationId` the same way), and naming which station the item is
-     * on is what makes the refusal actionable. Qualified `stationId` to match the domain-record family
-     * (`station.not_found`'s `stationId`).
-     *
-     * `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package
-     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 403 by `device-api.ts`'s local STATUS
-     * map (Task 5), not here. Never renamed once shipped.
+     * A device tried to advance a ticket item on a station it is not bound to. `stationId` names the
+     * ITEM's station.
      */
     "device.forbidden_station": { stationId: string };
     /**
-     * A handheld device tried a fiscal/cash action it may not perform. A handheld takes and fires orders,
-     * and — since the owner reversal (2026-08-30, widened same day) — may SETTLE a sale on `POST /api/sales`
-     * for cash OR a manual card tender, because the fiscal chain is keyed by the submitting NODE (`nodeId`),
-     * not the till (record-sale.ts:79-82), so a handheld sale files under its node's SIF exactly like the
-     * fixed till's (the manual card is the datáfono leg — a separate bank terminal the POS never talks to,
-     * no reader). What a handheld may NOT do still throws THIS: the INTEGRATED card reader (`/api/pay`,
-     * `pay`), reprint, drawer open, place, collect, cancel — every fiscal/cash route settled at the fixed
-     * till other than the node-keyed sale. `assertNotHandheld` (`device-session.ts`) enforces this ON THE
-     * SERVER, so the boundary holds even if the client were bypassed; it guards an UNRECOVERABLE fiscal
-     * record (CLAUDE.md §5 — `registros_facturacion` is append-only and hash-chained). `action` names the
-     * refused operation (e.g. `pay`, `reprint`) — a within-app symbol the caller passes, not a
-     * secret, echoed so the refusal is actionable, the same non-secret-param shape
-     * `device.forbidden_station` uses for its `stationId`.
-     *
-     * `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package
-     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 403 by `till-api.ts`'s local STATUS map,
-     * not here — the route layer owns the status, the split every other code in this file follows.
-     * Distinct from `device.forbidden_station` (a device touching another station's item, KDS least
-     * privilege): this is the fiscal boundary — a handheld is fenced on the integrated reader
-     * (`/api/pay`), reprint, drawer, place, collect and cancel but may settle a cash or manual-card sale.
-     * Never renamed once shipped.
+     * A device tried an action it may not perform: a handheld (`assertNotHandheld`) or a device whose
+     * profile lacks the capability (`assertDeviceCapability`), both in `device-session.ts` and both
+     * enforced on the server. `action` names the refused operation, a symbol the route passes.
      */
     "device.forbidden_action": { action: string };
     /**
-     * The deployment holds one tenant per database. No such device for this tenant — the device
-     * management surface (`POST /management-api/devices/:id/ revoke` and the list,
-     * device-identity-1 §3e) named a device id that matches nothing: absent, in this database
-     * (reporting THIS one code, the fail-closed shape `node.not_found`/`station.not_found` use).
-     * Deliberately DISTINCT from `device.unauthorized`: this is the MANAGER-facing surface (an
-     * authenticated `device.manage` holder acting on a device by id), where echoing the id is
-     * safe and actionable — a mistyped uuid identifies nothing on its own; `device.unauthorized`
-     * is the DEVICE-auth guard, which folds "unknown id" in and carries NO params precisely so it
-     * cannot confirm a device's existence to an unauthenticated caller. `deviceId` is the
-     * caller-supplied uuid the dashboard already holds, not a secret; qualified `deviceId` to
-     * match the domain-record not_found family (`station.not_found`'s `stationId`).
-     *
-     * `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package
-     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 404 by `device-api.ts`'s local STATUS
-     * map (Task 5), not here. Never renamed once shipped.
+     * The device-management surface named a device id that matches nothing. Unlike
+     * `device.unauthorized`, this surface is for an authenticated manager, so the id is echoed.
      */
     "device.not_found": { deviceId: string };
     /**
-     * A join request was ACCEPTED under a STATION-BINDING profile (`kds_station`) with NO station —
-     * `resolveDeviceBinding`'s `stationId` was `null` for a form factor that requires one. A VALIDATION
-     * failure, not a lookup miss: nothing was looked up, so there is no caller-supplied station id to
-     * echo. Distinct from `station.not_found`, which `requireLiveStation` raises when a station WAS
-     * supplied but is unknown/foreign/retired (that path echoes the supplied uuid).
-     *
-     * NO params: there is no station id (it was null), and a "name a station" validation carries nothing
-     * else non-secret. `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing
-     * package (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by the route's local STATUS
-     * map (a request that named no station), not here — the route layer owns the status. Never renamed
-     * once shipped.
+     * A join request was accepted under a station-binding profile (`kds_station`) with NO station.
+     * Distinct from `station.not_found`, raised when a station WAS supplied but is unusable.
      */
     "device.station_required": Record<string, never>;
     /**
-     * A device whose binding carries no `till_id` reached a path that requires one — `requireSaleTillId`
-     * on the sale routes (the guard lives in `device-session.ts`) and the roster-login guard in
-     * `till-api.ts`; both are `till-api.ts` routes. What actually trips it is a NON-sale-capable binding
-     * on a till-only path, in practice a `kds_station`: every sale-capable form factor holds a non-null
-     * `till_id` by the `device_binding_rule_insert` / `_update` triggers
-     * (`packages/db/drizzle/0001_behavioural_triggers.sql`, whose non-kds arm refuses a null
-     * `till_id`), so the sale-capable case the code's NAME suggests is unrepresentable. A SETUP
-     * precondition surfaced before any fiscal write, not a per-sale block (CLAUDE.md §5).
-     *
-     * NO params: the fault names the PROBLEM, not a value — the missing till id carries
-     * nothing non-secret worth echoing, the same no-param shape `device.station_required` uses. Grep
-     * `"device.` in this file for the family: `station_required` / `register_required` /
-     * `register_name_taken` / `pairing_closed` / `join_full` / `join_rate_limited` / `join_mismatch` /
-     * `unauthorized` are the param-less device siblings, while
-     * `forbidden_station` / `not_found` echo an id — this one takes after the former. `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package
-     * (`tenant.not_found`'s note gives the rule). Mapped to 400 by BOTH surfaces' local STATUS maps —
-     * `till-api.ts`, which answers it, and `device-api.ts`, which maps it without throwing it so the
-     * code has one status everywhere — not here; the routes own the status.
-     * Never renamed once shipped.
+     * A device whose binding carries no `till_id` reached a path that requires one
+     * (`requireSaleTillId` in `device-session.ts`, and the roster-login guard in `till-api.ts`). In
+     * practice a `kds_station`: the `device_binding_rule_insert`/`_update` triggers refuse a null
+     * `till_id` for every other form factor.
      */
     "device.till_required": Record<string, never>;
     /**
-     * A join request was ACCEPTED under a REGISTER-BINDING profile (a `phone-portrait`/`tablet-landscape`
-     * handheld) with NO register. A handheld rings sales under its node's
-     * SIF and must name the `tills` row it files against, so `resolveDeviceBinding` refuses it before any
-     * write (a `till`-form-factor device does not reach this — it MINTS its own register). The twin of
-     * `device.station_required` on the other binding: a required binding was omitted at accept.
-     *
-     * NO params: the fault names the PROBLEM, not a value — the missing register carries nothing
-     * non-secret worth echoing, the same no-param shape `device.station_required` uses. Distinct from
-     * `device.binding_invalid` (a register WAS named but matches no row of this venue, which echoes the
-     * FIELD). `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package
-     * (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by the route's local STATUS map,
-     * not here. Never renamed once shipped.
+     * A join request was accepted under a register-binding (handheld) profile with NO register. A
+     * handheld must name the `tills` row it files against; a `till`-form-factor device mints its own.
      */
     "device.register_required": Record<string, never>;
     /**
-     * Accepting a `till`-form-factor device tried to auto-create its cash register under a name
-     * already used by another register at the same venue. `resolveDeviceBinding` names the register after
-     * the device and reject-not-suffixes the clash (the admin renames the device), so two
-     * indistinguishable registers can never exist at one location — the `tills_tenant_location_name_key`
-     * unique index (`packages/db/drizzle/0000_baseline.sql:49`) is the guard, and this is its refusal
-     * translated to a clean domain code rather than a raw 500.
-     *
-     * NO params: a "rename the device" validation carries nothing non-secret worth echoing (the
-     * colliding name is the operator's own input), the same no-param shape `device.station_required`
-     * uses. `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing package or the
-     * `tills` table (`tenant.not_found`'s note gives the rule). Mapped to HTTP 409 by the route's local
-     * STATUS map, not here. Never renamed once shipped.
+     * Accepting a `till`-form-factor device tried to create its register under a name another
+     * register at the venue already uses (`tills_tenant_location_name_key`). The admin renames the
+     * device.
      */
     "device.register_name_taken": Record<string, never>;
     /**
-     * A request named a device binding id — a `till_id`, `receipt_printer_id` or `device_profile_id` —
-     * that matches no row in this database. Every raise is a READ taken BEFORE the write, and all
-     * three live in `device.ts`: `requireDeviceBinding` for the assign-device-profile UPDATE and the
-     * hardware PATCH, and `requireLiveRegister` for the accept path's register, which also checks
-     * the venue a foreign key cannot. A `null` target clears the binding, names no row, and is
-     * accepted without a read.
-     *
-     * NOTHING translates a database refusal into this code, and nothing could: this engine reports a
-     * foreign-key refusal as `errcode 787` with the whole message `FOREIGN KEY constraint failed` —
-     * no table, no column, no constraint name (measured on Node v26.7.0 against `node:sqlite`; the
-     * predicate that reads it is `packages/db/src/constraint-target.ts`). `devices` carries several
-     * foreign keys, so one refusal cannot be told from another, which is exactly why the check moved
-     * in front of the write. `device.ts` states that reasoning where the read is taken.
-     *
-     * `field` carries the offending binding's FIELD NAME only — one of the string literals `"tillId"`,
-     * `"receiptPrinterId"`, `"deviceProfileId"` — and NEVER the offending id value: a request-shape
-     * fault names the field, not the value, the same no-leak, echo-the-name discipline
-     * `management.request_invalid` and `setup.request_invalid` follow (grep `{ field: string }` in this
-     * file for that family). `device.*` names the DOMAIN CONCEPT (an enrolled device), never the throwing
-     * package (`tenant.not_found`'s note gives the rule). Mapped to HTTP 400 by `device-api.ts`'s local
-     * STATUS map (a request naming a binding that does not exist), not here. Never renamed once shipped.
+     * A request named a device binding id that matches no row. Checked by a read before the write in
+     * `device.ts`, because this engine's foreign-key refusal does not say which key failed.
+     * `device.ts` states that reasoning where the read is taken. `field` carries the FIELD NAME
+     * only, never the id value.
      */
     "device.binding_invalid": {
       field: "tillId" | "receiptPrinterId" | "deviceProfileId";
     };
-    /**
-     * DORMANT — currently unthrown and unmapped. Nothing selects a profile on a device's behalf any
-     * more: the accept dialog takes an explicit `profileId`, so a missing profile surfaces as
-     * `device_profile.not_found` (404) instead. Absent from every STATUS map, so it maps nowhere. Kept
-     * REGISTERED — codes are never removed once shipped (§3) — so a future consumer can revive it;
-     * `device.*` names the DOMAIN CONCEPT (an enrolled device),
-     * never the throwing package. Never renamed once shipped.
-     */
+    /** NOTHING RAISES THIS ANY MORE: a missing profile on accept is now `device_profile.not_found`. */
     "device.profile_missing": Record<string, never>;
     /**
-     * A knock arrived at `POST /api/device/join` while pairing mode is SHUT (design §1.1). The window
-     * is a deliberate admin act, so this is the ORDINARY state, not an anomaly — the device shows "ask
-     * the manager to switch on pairing mode" and the operator has a real next step. NO params — nothing
-     * about the window is the joiner's business. HTTP 403. Never renamed once shipped.
+     * A knock arrived at `POST /api/device/join` while pairing mode is shut — the ordinary state, not
+     * an anomaly. NO params: nothing about the window is the joiner's business.
      */
     "device.pairing_closed": Record<string, never>;
     /**
-     * This node already holds the cap of pending DEVICE join requests (design §1.2's decoy rule
-     * needs room, and an uncapped pending list is a denial-of-service on the admin's attention). Per
-     * KIND, so ten agents mid-install cannot lock devices out. HTTP 429.
+     * This node already holds the cap of pending DEVICE join requests; an uncapped list is a
+     * denial-of-service on the admin's attention. Per kind, so agents mid-install cannot lock
+     * devices out.
      */
     "device.join_full": Record<string, never>;
     /**
-     * Too many knocks reached `POST /api/device/join` in one fixed window — the per-process, GLOBAL,
-     * in-memory limiter (`enrol-rate-limit.ts`) refused this one at the TOP of the handler, BEFORE the
-     * body is parsed, BEFORE the window is consulted and BEFORE any DB work, so a flood creates no row
-     * and draws no connection from the pool (CLAUDE.md §5). NO params: a blanket throttle is not a fact
-     * about the caller. HTTP 429.
+     * Too many knocks in one fixed window — the per-process, global, in-memory limiter
+     * (`enrol-rate-limit.ts`) refused this one before any database work. NO params: a blanket
+     * throttle is not a fact about the caller.
      */
     "device.join_rate_limited": Record<string, never>;
     /**
-     * The admin tapped a number that is not this request's (design §1.2). The request is DELETED, not
-     * offered again: a wrong tap denies, which is what makes one-in-three an acceptable guess rate. The
-     * device's recovery is its own "Try again", which knocks afresh with a new number. HTTP 400.
+     * The admin tapped a number that is not this request's. The request is DELETED, not offered
+     * again: a wrong tap denies, which is what makes one-in-three an acceptable guess rate.
      */
     "device.join_mismatch": Record<string, never>;
     /**
-     * A node's own print agent asked to self-enrol against a row that was deliberately REVOKED
-     * (`active = false`); self-enrol refuses rather than silently reactivating it, so a revoke sticks
-     * until an admin re-allows the node (on-node auto-enrolment design §4). NO params: the fact is the
-     * refusal, not the node — nothing non-secret worth echoing. The enrol route maps it to HTTP 403.
+     * A node's own print agent asked to self-enrol against a row that was deliberately revoked;
+     * self-enrol refuses rather than reactivating it, so a revoke sticks until an admin re-allows it.
      */
     "device.join_revoked": Record<string, never>;
     /**
-     * No pending join request with that id held by this node — never existed, already accepted or
-     * denied, or lapsed past its TTL. All fold into one code: the admin's recovery is the same in
-     * every case, and the joiner must knock again.
-     * `join_request.*` names the domain concept. HTTP 404.
+     * No pending join request with that id — never existed, already accepted or denied, or lapsed.
+     * One code for all: the admin's recovery is the same, and the joiner must knock again.
      */
     "join_request.not_found": Record<string, never>;
     /**
-     * A self-signed server certificate was asked for with no hostname to put on the leaf — the
-     * `hostnames` list was empty. The box mints its own CA + server cert on first boot to serve
-     * setup-mode HTTPS (onboarding slice 2a), and a leaf with no `dNSName` SAN authenticates no
-     * request (a TLS client matches the name it dialled against the cert's SANs), so the minter
-     * refuses it BEFORE generating any keypair rather than emitting a cert that can never complete a
-     * handshake. NO params: an empty list carries nothing non-secret worth echoing, and the fix is
-     * simply to supply at least one hostname — the same no-param shape `sale.empty_basket` uses for
-     * its own "you gave me nothing to work with" guard.
-     *
-     * `setup.*` names the DOMAIN CONCEPT (the box's first-boot setup mode, the same concept the
-     * `setup.mode_active` log event and `setup-api.ts` name), never the throwing file
-     * (`tenant.not_found`'s note above gives the rule); `server.*` is reserved for facts about the
-     * process itself, and "no hostname to certify" is a fact about the setup input, not the process.
-     * Never renamed once shipped.
+     * A self-signed server certificate was asked for with an empty `hostnames` list. A leaf with no
+     * `dNSName` SAN can never complete a handshake, so the minter refuses before generating a key.
      */
     "setup.cert_hostnames_empty": Record<string, never>;
     /**
-     * A setup-mode provision was asked to run on a box that ALREADY holds this tenant — a second
-     * `provisionVenue` for the same taxpayer (country + NIF).
-     * `applyVenue`'s location/till/node/SIF carry no business key, so a re-run would ADD a shop and
-     * mint a FRESH SIF/hash chain rather than resume the existing venue (venue-apply.ts's own header),
-     * and a stray fiscal chain is unrecoverable (CLAUDE.md §5). So `provisionVenue` refuses here,
-     * BEFORE stamping or minting anything — the double-POST guard the boot-mode flip only protects
-     * across a restart, not within one setup session.
-     *
-     * Carries nothing: the box holds ONE taxpayer, so there is no id that would tell the operator
-     * anything their own request did not already say.
-     *
-     * `setup.*` names the DOMAIN CONCEPT (the box's first-boot setup/onboarding, the same concept
-     * `setup.cert_hostnames_empty` and `setup-api.ts` name), never the throwing file — `server.*` is
-     * reserved for facts about the process itself, and "this box is already provisioned" is a fact
-     * about the setup, not the process (the rule `tenant.not_found`'s note above gives). Never renamed
-     * once shipped.
+     * A setup-mode provision was asked to run on a box that already holds this tenant. A re-run would
+     * add a shop and mint a fresh fiscal chain rather than resume the venue, and a stray chain is
+     * unrecoverable (CLAUDE.md §5), so `provisionVenue` refuses before writing anything.
      */
     "setup.already_provisioned": Record<string, never>;
     /** A setup or provisioning field cannot be used. Fiscal venue validators also raise this code;
@@ -1222,26 +494,9 @@ declare module "@waitron/shared" {
      * never its value, because certificate fields can contain credentials. */
     "setup.request_invalid": { field: string };
     /**
-     * A provision of an environment that DEMANDS the fiscal regime's provisioning secret arrived
-     * without it (onboarding slice 2b, spec §10). The regime decides through its
-     * `provisioningSecret.required(environment)` seat — for Veri*Factu a PRODUCTION provision must
-     * carry the AEAT signing certificate, because a production till files its registros to the real
-     * AEAT and cannot do so without a sealed `fiscal.aeat` credential. The provision is refused BEFORE
-     * `provisionVenue` runs — nothing is stamped and no SIF/chain is minted (an unrecoverable write,
-     * CLAUDE.md §5). A preproduction provision is exempt: it records its chain locally and never
-     * submits, so the secret is optional there.
-     *
-     * `module` is the fiscal module's own id (e.g. `"verifactu"`) — this host's config, never a
-     * secret — so a translator/operator can name which regime demanded the secret. The PFX/passphrase
-     * are NEVER echoed (they are not even present here). Renamed from `setup.aeat_cert_required` when
-     * the cert moved behind the generic provisioning-secret seat (fiscal-none slice): the code no
-     * longer names AEAT, the regime-specific thing, but the generic concept the host knows.
-     *
-     * `setup.*` names the DOMAIN CONCEPT (the box's first-boot setup/onboarding, the same concept
-     * `setup.request_invalid` and `setup-api.ts` name), never the throwing file; `server.*` is
-     * reserved for facts about the process itself, and "this provision needs its secret to go live" is
-     * a fact about the setup request, the rule `tenant.not_found`'s note above gives. A request-shape
-     * fault → HTTP 400 by `setup-api.ts`'s provision route, matching `setup.request_invalid`.
+     * A provision of an environment for which the fiscal regime demands its provisioning secret
+     * (`provisioningSecret.required(environment)`) arrived without it; refused before
+     * `provisionVenue` runs. `module` is the fiscal module's id. The secret itself is never echoed.
      */
     "setup.provisioning_secret_required": { module: string };
     /** First production activation lacks an accepted test submission bound to its fiscal inputs. */
@@ -1251,276 +506,104 @@ declare module "@waitron/shared" {
     /** A different request owns the box's persisted incomplete first-boot operation. */
     "setup.operation_conflict": Record<string, never>;
     /**
-     * A first-boot setup POST arrived before the box wired the dependencies that action needs
-     * (onboarding slice 2b). BOTH first-boot routes have a synchronous deps gate that returns THIS,
-     * and `mountSetup` makes those deps OPTIONAL so the slice-1b setup surface still mounts without
-     * them: the provision route needs the `provisionVenue` binding, the trading-config persister, the
-     * restart trigger and the composed DB URLs; the adopt route (the mirror-side sibling, C2b Task 9)
-     * needs the `adopt` binding and the restart trigger. A POST to either route when its deps are
-     * absent is answered with THIS rather than an opaque `server.internal` 500 — the box is up but not
-     * ready to run that action.
-     *
-     * NO params: naming which dep is missing would leak nothing useful to a wizard that cannot wire it
-     * anyway, and the fix is an operator/boot concern, not a request one — the same no-param shape the
-     * other "nothing to work with" setup guards use.
-     *
-     * `setup.*` names the DOMAIN CONCEPT (the box's first-boot setup/onboarding), never the throwing
-     * file. A service-not-ready fault → HTTP 503 by `setup-api.ts`'s provision and adopt routes
-     * (deliberately not a 4xx: the request is well-formed; the box simply cannot serve it yet). Never
-     * renamed once shipped.
+     * A first-boot setup POST arrived before the box wired the dependencies that action needs; the
+     * box is up but cannot serve it yet.
      */
     "setup.not_ready": Record<string, never>;
     /**
-     * A session-gated open-drawer request (`POST /api/drawer/open`, counter receipt/drawer printing
-     * design §5/§6) has no printer to kick the drawer through: `tills.receipt_printer_id` is unset for
-     * the requesting till. There is no ESC/POS device to send the kick command to, so the request is
-     * refused before any outbox enqueue — the same "nothing to work with" shape `sale.empty_basket`
-     * and the `setup.*` no-param guards use, except this one DOES have something non-secret to name.
-     *
-     * `tillId` names the MISCONFIGURED till, not a printer id — there is no printer id to echo, only
-     * the till that lacks one. Mirrors `station.no_default`'s `locationId`, which names the venue that
-     * lacks a default station rather than any station id, for exactly the same "the failure is an
-     * absence, so name the entity missing the resource" reason. `tillId` is the till's own id, already
-     * in its config (`till-config.ts`'s `TillConfig.tillId`), not a secret — the same non-leak
-     * discipline every id-echoing code in this file follows (`tenant.not_found`'s note).
-     *
-     * `drawer.*` names the DOMAIN CONCEPT — the physical cash drawer, kicked through a receipt
-     * printer — never the throwing package (`tenant.not_found`'s note above gives the rule). Not
-     * `printer.*`: that family is `printer.not_found` (an absent/inactive PRINTER id, reused unchanged
-     * from Slice A), a different fact from "this till has no printer configured at all". Not `till.*`
-     * either: that prefix was retired with the node-id rekey (`node.not_found`'s note above) and is not
-     * revived here. Not `server.*`: which till lacks a printer is a fact about the till's OWN
-     * configuration, not about this process (the rule `tenant.not_found`'s note gives).
-     *
-     * Mapped to HTTP 400 (binding spec, design §6) — a configuration gap the operator must fix via the
-     * dashboard's printer picker before a manual kick can work, not a state conflict on any record, so
-     * it takes the request-shape 400 `placement.invalid`/`setup.request_invalid` use rather than a 409.
-     * The route surface Task 6 wires `POST /api/drawer/open` into may list it explicitly in its own
-     * STATUS map (matching `placement.invalid`'s BOTH-maps precedent) or rely on `createErrorBoundary`'s
-     * `status[code] ?? 400` default (`error-boundary.ts`) — the mapping holds either way, and this file
-     * only DECLARES the code; the route layer owns the status, the same split every other code here
-     * follows. This task registers the code only; the throw site is Task 6, not this one. Never renamed
-     * once shipped.
+     * A manual open-drawer request found no receipt printer set for the requesting till, so there is
+     * nothing to send the kick through. `tillId` names the misconfigured till.
      */
     "drawer.no_printer": { tillId: string };
     /**
-     * A promote was requested without an operator attestation that the OLD node is physically
-     * neutralised (promotion runbook design §6). Software cannot verify a partitioned peer, so the promote
-     * action REFUSES to claim the singleton duties — two submitters under one NIF would race the AEAT
-     * flow-control budget (#33 §6). Thrown BEFORE any state change (before the point-of-no-return), so the
-     * node is left exactly as it was. No params: the refusal names nothing, and there is nothing non-secret
-     * to carry. `promotion.*` names the DOMAIN CONCEPT (a node promotion), never the throwing package —
-     * the rule `tenant.not_found`'s note above gives; `server.*` is reserved for facts about the process.
-     * Never renamed once shipped.
+     * A promote was requested without the operator attesting that the OLD node is physically
+     * neutralised. Software cannot verify a partitioned peer, and two submitters under one NIF is
+     * unrecoverable, so the promote refuses before any state change.
      */
     "promotion.fence_not_attested": Record<string, never>;
     /**
-     * A local-secondary promote (promotion runbook design §5a) was called on a node that is a
-     * read-only MIRROR (its `node_roles.mode` is `'mirror'`). A mirror is not the submitter and
-     * cannot become it by a bare `singleton_role` flip — it needs the mirror→primary path
-     * (`promoteMirrorToPrimary`, promote.ts; §5b). Refused with THIS code
-     * BEFORE the write, giving a clean domain error rather than the raw `node_roles_role_valid_ck`
-     * CHECK violation the `(mirror, primary)` write would otherwise raise (the CHECK is the
-     * backstop). `mode` is the node's own configured role, already in its config and not a secret —
-     * echoing it is what tells the operator which path to use, the same shape
-     * `deployment.environment_mismatch` follows. `promotion.*`, not `server.*`, for the reason
-     * `promotion.fence_not_attested` gives. Never renamed once shipped.
+     * A local-secondary promote was called on a read-only MIRROR, which needs the mirror→primary
+     * path (`promoteMirrorToPrimary`) instead. `mode` is the node's own configured role.
      */
     "promotion.not_a_local_secondary": { mode: string };
     /**
-     * A mirror→primary promote (R3b) minted a membership document at term N+1 over the held term N, but a
-     * concurrent gossip-adopt had already landed a document at term ≥ N+1 by the time the point-of-no-return
-     * transaction ran. The term-guarded write (`persistNodeMembershipIfNewerTx`, inside the promote's own
-     * PONR transaction) refused it — writing would regress the org chart (parent spec §8 "R3 sharp edge") —
-     * so the WHOLE promote transaction aborts and
-     * the mode/singleton flip does not commit: the node stays a mirror. Idempotent re-run recovers (it reads
-     * the now-newer held term and mints over it). `heldTerm`/`mintedTerm` are org-chart generation counters,
-     * not secrets. `promotion.*` names the domain concept; never renamed once shipped.
+     * A mirror→primary promote minted a membership document at term N+1 over the held N, but a
+     * document at term ≥ N+1 had landed meanwhile; the term-guarded write
+     * (`persistNodeMembershipIfNewerTx`) refused it, so the whole promote transaction aborts and the
+     * node stays a mirror. A re-run recovers.
      */
     "promotion.membership_superseded": { heldTerm: number; mintedTerm: number };
     /**
-     * A promote was refused because THIS node's held membership document marks it fenced
-     * (`sell-only`/`evicted`) — it has been superseded by a carrier that is already serving. Membership
-     * rejoin R1 reconciles a fenced node to the SAME deployment axes as a healthy local secondary
-     * (`mode='primary'`, `singleton_role='secondary'`), so the axis guards (`not_a_local_secondary`,
-     * the already-primary no-op) cannot catch it; only this fence check can. Promoting it in place would
-     * resume the fiscal submitter duties on a SUPERSEDED chain — two submitters under one NIF, the exact
-     * unrecoverable failure the whole design exists to prevent (CLAUDE.md §5). Thrown BEFORE any state
-     * change (before the point-of-no-return), so the node is left exactly as it was. A fenced node
-     * returns to service via wipe-and-restore (a fresh boot that clears the fence), never by in-place
-     * promotion. Thrown from BOTH promote paths (`assertNotFenced`, `promote.ts`): the local-secondary
-     * promote (the R1-axes-evade case above) and the mirror→primary promote (a fenced mirror that was
-     * superseded — guarded there alongside `membership_superseded`). `standing` names the fenced standing
-     * (`sell-only`/`evicted`) for diagnosis — a topology fact already in the served membership document,
-     * not a secret. `promotion.*` names the DOMAIN
-     * CONCEPT, never the throwing package — the rule `promotion.fence_not_attested` gives. Never renamed
-     * once shipped.
+     * A promote was refused because this node's held membership document marks it fenced
+     * (`sell-only`/`evicted`). Promoting it would resume fiscal submission on a superseded chain —
+     * two submitters under one NIF (CLAUDE.md §5). Thrown from both promote paths
+     * (`assertNotFenced`, `promote.ts`) before any state change.
      */
     "promotion.node_fenced": { standing: "sell-only" | "evicted" };
     /**
-     * The offline break-glass fallback for an authenticated promote was presented wrong or absent —
-     * the secret did not match, or none was supplied where one was required. Refused BEFORE any state
-     * change (before the point-of-no-return), so the node is left exactly as it was. No params: a wrong
-     * credential carries no enumerable, non-secret detail, the same shape `password.invalid` follows —
-     * echoing anything would leak. `promotion.*` names the DOMAIN CONCEPT, never the throwing package —
-     * the rule `promotion.fence_not_attested` gives. Never renamed once shipped.
+     * The break-glass secret for a promote was wrong or absent; refused before any state change. No
+     * params: a wrong credential has nothing to echo safely.
      */
     "promotion.break_glass_invalid": Record<string, never>;
     /**
-     * `retireSelf` (retire/evict R3) was invoked on a node that is NOT fenced — a node with a
-     * `serving-primary`/`serving-secondary` standing in the held chart, a node ABSENT from the chart,
-     * or a node holding no membership document at all. Only a fenced (`sell-only`) node leaves for
-     * good; a serving node is still trading and is not retirable (design fact (ii)'s "N/A (serving)"
-     * distinction). Refused BEFORE any write. `node.*`, not `server.*`: it is a fact about this node's
-     * role/state in the topology, the same rule `node.read_only` gives — never about the process. No
-     * params: the refusal names no row, so a log line leaks nothing (the `node.read_only` no-leak
-     * discipline). Never renamed once shipped.
+     * `retireSelf` was invoked on a node that is NOT fenced (serving, absent from the chart, or with
+     * no membership document). Only a fenced node leaves for good.
      */
     "node.retire_not_fenced": Record<string, never>;
     /**
-     * `retireSelf` found the node fenced (`sell-only`) but its held document names no serving-primary
-     * CARRIER — so there is no survivor to carry the venue forward and nothing for this node to hand
-     * over to. Refused FAIL-SAFE (design fact (ii)'s "fenced, undrainable (no carrier)", DISTINCT from
-     * `node.retire_not_fenced`): checked directly against the held chart (`servingPrimaryNodeId`).
-     * `node.*`, not `server.*`: it is a fact about this node's state in the topology (`node.read_only`'s
-     * rule). No params — the refusal names no row (the `node.read_only` no-leak discipline). Never
-     * renamed once shipped.
+     * `retireSelf` found the node fenced but its held document names no serving-primary carrier, so
+     * there is no survivor to hand over to.
      */
     "node.retire_no_carrier": Record<string, never>;
     /**
-     * `retireSelf` minted a `sell-only → evicted` document at term N+1 over the held term N, but a
-     * concurrent gossip-adopt had already landed a document at term ≥ N+1 by the time the term-guarded
-     * persist (`persistNodeMembershipIfNewer`) ran. The guard refused it — writing would regress the
-     * org chart — so the eviction was NOT applied and the held (newer) chart stands. Idempotent re-run
-     * recovers: it re-reads the now-newer held term and, if that document already evicts this node, is
-     * a no-op. Mirrors `promotion.membership_superseded`'s shape and reasoning. `heldTerm`/`mintedTerm`
-     * are org-chart generation counters, not secrets. `node.*` names the domain concept — a fact about
-     * this node's state in the topology; never renamed once shipped.
+     * `retireSelf`'s eviction document lost its term race to a newer one
+     * (`persistNodeMembershipIfNewer`), so the eviction was not applied. A re-run recovers.
      */
     "node.retire_superseded": { heldTerm: number; mintedTerm: number };
     /**
-     * `rejoinAsSecondary` (rejoin R3 — wipe + restore a returned ex-primary as a clean secondary) was
-     * invoked on a node that is NOT fenced — a node holding `serving-primary`/`serving-secondary` in the
-     * held chart, a node ABSENT from the chart, or a node holding no membership document at all. Only a
-     * fenced (`sell-only`/`evicted`) node may be wiped; a serving node is still trading and must NEVER be
-     * wiped (its own-origin tail could still be un-shipped). Refused BEFORE any irreversible step (no
-     * pool close, no wipe). `rejoin.*` names the DOMAIN CONCEPT — a fact about a rejoin ACTION, not about
-     * the process (`server.*`) — the same rule `node.retire_not_fenced` gives. No params: the refusal
-     * names no row, so a log line leaks nothing (the `node.read_only` no-leak discipline). Never renamed
-     * once shipped.
+     * `rejoinAsSecondary` was invoked on a node that is NOT fenced. A serving node must never be
+     * wiped (its own tail could still be unshipped); refused before any irreversible step.
      */
     "rejoin.not_fenced": Record<string, never>;
     /**
-     * `rejoinAsSecondary` found the node fenced but the held document names no serving-primary CARRIER —
-     * so there is no survivor to re-adopt from after the wipe. Refused FAIL-SAFE (DISTINCT from
-     * `rejoin.not_fenced`): checked directly against the held chart
-     * (`servingPrimaryNodeId`). `rejoin.*`, not `server.*`: a fact about this node's state in the topology
-     * (`node.retire_no_carrier`'s rule). No params — the refusal names no row (the `node.read_only`
-     * no-leak discipline). Never renamed once shipped.
+     * `rejoinAsSecondary` found the node fenced but its held document names no serving-primary
+     * carrier, so there is nothing to re-adopt from after the wipe.
      */
     "rejoin.no_carrier": Record<string, never>;
     /**
-     * A mirror could not be assembled because the PRIMARY it was pointed at has no stamped environment
-     * (sync cloud-mirror C2b — the read-only mirror topology `node.read_only` describes). The operator's assemble flow asks the primary for a bundle; a primary
-     * whose `deployment` row carries no environment has never been provisioned, so there is nothing to
-     * mirror and the assemble is refused BEFORE any bundle fetch or apply. A primary-side PRECONDITION,
-     * so it is reported to the operator as HTTP 409 (the resource is not in a state that can serve the
-     * request) by the assemble route's local STATUS map in a later C2b task, not here — the same
-     * declare-here / status-in-route split every code in this file follows.
-     *
-     * NO params: the refusal names no row, so a log line leaks nothing — the same no-leak
-     * discipline `node.read_only` follows, and there is nothing non-secret to carry beyond the
-     * code (the fix is to provision the primary first). `mirror.*` names the DOMAIN CONCEPT — a read-only
-     * mirror node — never the throwing package (`tenant.not_found`'s note above gives the rule); `server.*`
-     * is reserved for facts about the process itself, and "the primary is not provisioned" is a fact about
-     * the mirror-assembly precondition. Never renamed once shipped.
+     * A mirror could not be assembled because the primary has no stamped environment — it was never
+     * provisioned, so there is nothing to mirror.
      */
     "mirror.not_provisioned": Record<string, never>;
     /**
-     * A mirror was pointed at a primary whose deployment environment does not match this box's own
-     * One database serves exactly one environment (CLAUDE.md §5, the one-database-per-environment
-     * invariant) — a preproduction mirror can never hold a production venue's series, or a production
-     * sale would leave a permanent hole. Refused BEFORE adopt writes anything. `expected` is this box's
-     * environment, `actual` the primary's — both two-valued config facts already in the host's own
-     * configuration (`production`/`preproduction`), never secrets, the same shape
-     * `deployment.environment_mismatch` carries. `mirror.*` names the DOMAIN CONCEPT — the read-only
-     * mirror adoption — never the throwing package (`tenant.not_found`'s note gives the rule); a
-     * CLIENT/precondition fault mapped to 400 by the adopt route's STATUS map. Never renamed once shipped.
+     * A mirror was pointed at a primary of a different deployment environment. One database serves
+     * one environment (CLAUDE.md §5); refused before adopt writes anything. `expected` is this box's
+     * environment and `actual` the primary's.
      */
     "mirror.environment_mismatch": { expected: string; actual: string };
-    /**
-     * A mirror could not fetch a bundle because the PRIMARY has no tunnel/relay configured (sync
-     * cloud-mirror C2b). The bundle endpoint the mirror pulls from reaches the primary through the
-     * outbound snitun tunnel / relay (the on-prem box always dials outbound); a primary with no relay
-     * endpoint has nowhere for the mirror to fetch from, so the bundle request is refused. A primary-side
-     * PRECONDITION on a well-formed request, reported to the operator as HTTP 400 by the bundle route's
-     * local STATUS map in a later C2b task, not here (the declare-here / status-in-route split).
-     *
-     * NO params: the refusal names no row, the same no-leak discipline
-     * `mirror.not_provisioned`/`node.read_only` follow; the relay endpoint is infrastructure config, not
-     * echoed, and the fix is to configure the relay. `mirror.*` names the DOMAIN CONCEPT — a read-only
-     * mirror node — never the throwing package (`tenant.not_found`'s note gives the rule). Never renamed
-     * once shipped.
-     */
+    /** A mirror bundle was requested from a primary that has no relay configured to reach it through. */
     "mirror.no_relay": Record<string, never>;
     /**
-     * A mirror-bundle request carried a malformed STANDBY identity (membership promotion R2) — the
-     * `standbyNodeId` was absent or not a UUID, the `standbyPublicKey` was absent or empty, or the
-     * `standbyContactUrl` was absent, not a string, or a non-empty value that is not a bare http(s)
-     * origin (`""` IS accepted — a standby that advertises no origin is still a member; anything else
-     * the primary would sign into the org chart and every till would dial must pass the same
-     * `isBareOrigin` rule `config.ts` applies to this node's own advertised origin). The primary reserves the standby's fiscal identity, endorses its key
-     * and records its address in the membership document, so all three are required on every request.
-     * A CLIENT request-shape fault, reported as HTTP 400 by the bundle route's local STATUS map —
-     * deliberately NOT folded into `password.invalid` (401): a bad standby identity is a distinct fault
-     * from a bad credential, and mislabelling it as a credential error would mislead the operator (the
-     * rule §1's error-code conventions give).
-     *
-     * NO params: the request is refused by shape and names no row, so a log line leaks nothing — the
-     * same no-leak discipline `mirror.no_relay`/`node.read_only` follow, and the
-     * standby's key is not echoed. `mirror.*` names the DOMAIN CONCEPT — here the cloud-mirror
-     * adoption handshake, specifically the standby identity a bundle request must carry for the primary
-     * to reserve + endorse — never the throwing package (`tenant.not_found`'s note above gives the
-     * rule); `server.*` is reserved for facts about the process itself, and "the standby identity is
-     * malformed" is a fact about the mirror-bundle request, not the process. Never renamed once shipped.
+     * A mirror-bundle request carried a malformed STANDBY identity: `standbyNodeId` absent or not a
+     * UUID, `standbyPublicKey` absent or empty, or `standbyContactUrl` absent, not a string, or a
+     * non-empty value that is not a bare http(s) origin (`""` is accepted). Not
+     * `password.invalid`: a bad identity is not a bad credential. The standby's key is not echoed.
      */
     "mirror.standby_invalid": Record<string, never>;
     /**
-     * A mirror could not FETCH or PARSE the bundle from the primary (sync cloud-mirror C2b) — the pull
-     * over the tunnel/relay failed (a network error, a non-2xx from the primary's bundle endpoint) or the
-     * bytes it returned were not a bundle the mirror could parse. This is a MIRROR-SIDE upstream failure,
-     * not a fault in the operator's request, so it is reported as HTTP 502 (the mirror is a gateway and
-     * its upstream — the primary — failed) by the assemble route's local STATUS map in a later C2b task,
-     * not here. Distinct from `mirror.no_relay` (the primary has no endpoint to fetch from at all) and
-     * `mirror.not_provisioned` (the primary exists but has nothing to mirror): this is the fetch/parse of
-     * a configured, provisioned primary FAILING in flight.
-     *
-     * NO params: the refusal names no row and never echoes the upstream error's `.message` (which can
-     * embed a URL or connection detail — the same no-leak discipline `server.shutdown_failed` and
-     * `node.read_only` follow for their own caught values); the structured cause is logged, not put on the
-     * wire, so there is nothing non-secret to carry. `mirror.*` names the DOMAIN CONCEPT — a read-only
-     * mirror node — never the throwing package (`tenant.not_found`'s note gives the rule). Never renamed
-     * once shipped.
+     * A mirror could not fetch or parse the bundle from the primary. Never carries the upstream
+     * error's `.message`, which can embed a URL or connection detail; the cause is logged, not put on
+     * the wire.
      */
     "mirror.bundle_fetch_failed": Record<string, never>;
     /**
-     * The venue's membership document could not be written because every read-mint-write round lost
-     * its term race — a concurrent writer committed a term at least as high each time, so this mint
-     * was built on a chart that is already stale. Thrown by the mirror-bundle adopt handshake
-     * (`mirror-bundle-api.ts`), which retries against `persistNodeMembershipIfNewer`'s term guard and
-     * refuses rather than force a write that would drop the winner's node from the chart.
-     *
-     * Reported as HTTP 503 by the bundle route's local STATUS map (the declare-here / status-in-route
-     * split): TRANSIENT and server-side, so the caller retries the whole adopt — not a fault in the
-     * request, which is why it is not a 4xx. `attempts` is the round bound the loop exhausted, a
-     * constant of this process; it names no row, no node and no address, so the no-leak discipline
-     * `mirror.no_relay` follows is kept. `membership.*` names the DOMAIN CONCEPT — the org chart —
-     * never the throwing package (`tenant.not_found`'s note above gives the rule), and sits beside
-     * `membership.key_invalid` in @waitron/membership. Never renamed once shipped.
+     * The membership document could not be written because every read-mint-write round lost its
+     * term race. The mirror-bundle adopt handshake refuses rather than force a write that would drop
+     * the winner's node from the chart; transient, so the caller retries. `attempts` is the round
+     * bound, a constant of this process.
      */
     "membership.write_contended": { attempts: number };
-    /** The recovery-bundle download request carried no `passphrase` string (or an empty one). A
-     * client error — the operator must supply the passphrase the bundle will be encrypted under. */
+    /** The recovery-bundle download request carried no `passphrase` string (or an empty one). */
     "recovery.passphrase_required": Record<string, never>;
     /** A recovery-bundle passphrase shorter than the minimum. `min` is `MIN_PASSPHRASE_LENGTH`. */
     "recovery.passphrase_too_short": { min: number };
@@ -1536,17 +619,14 @@ declare module "@waitron/shared" {
     "recovery.state_incomplete": { missing: string };
     /** A `reload()` on `BackupSupervisor` or `StreamHost` was called while another reload on the
      * same object was still in flight; the second is refused rather than allowed to interleave its
-     * teardown with the first. No params. */
+     * teardown with the first. */
     "backup.reload_in_progress": Record<string, never>;
     /** A backup artifact's binary frame is malformed (bad magic, version, or truncated header)
      * before decryption is even attempted. `reason` is a short machine tag. */
     "backup.artifact_invalid": { reason: string };
-    /** The backup ARCHIVE container (the pack of named entries — manifest, DB dump, media,
-     * secrets — that gets encrypted as a single `backup.artifact_invalid`-checked frame) is
-     * malformed: bad magic, unsupported version, or any declared length (entry count, name
-     * length, data length) that would read past the buffer. Distinct from `backup.artifact_invalid`,
-     * which is the OUTER encryption frame — this is the INNER container it decrypts to. `reason`
-     * is a short machine tag, never the offending bytes. */
+    /** The backup ARCHIVE container — the inner pack of named entries the encrypted frame decrypts
+     * to — is malformed: bad magic, unsupported version, or a declared length that would read past
+     * the buffer. `reason` is a short machine tag, never the offending bytes. */
     "backup.archive_invalid": { reason: string };
     /** A backup destination is configured but WAITRON_BACKUP_RECOVERY_KEY is unset — refused at load
      * so an unattended backup can never write an unencrypted or box-key-encrypted artifact. */
@@ -1560,97 +640,61 @@ declare module "@waitron/shared" {
      * machine tag. */
     "backup.schedule_invalid": { reason: string };
     /**
-     * A module declared `backup.nonDbState` naming a `source` the composition root's resolver map
-     * carries no entry for (BR-2 Task 4). Every source ref a module declares must be resolvable to an
-     * absolute directory by the caller — `collectModuleNonDbState`'s `resolvers` parameter — or the
-     * module's non-DB state would be silently skipped from the archive rather than captured; this
-     * fails the backup loudly instead. `source` is the module's own declared identifier (e.g.
-     * `"media"`), not a secret, so echoing it is what makes the gap actionable. Never renamed once
-     * shipped.
+     * A module declared a `backup.nonDbState` `source` the resolver map carries no entry for. Fails
+     * the backup loudly rather than skip that state. `source` is the module's own identifier.
      */
     "backup.source_unresolved": { source: string };
     /**
      * A module declared a `backup.nonDbState` source whose `kind` `collectModuleNonDbState` has no
-     * branch for. `NonDbSource.kind` is a closed union (only `"content-addressed-dir"` today); a
-     * future member added to the type without a capture branch here would otherwise be silently
-     * given flat-dir treatment. The exhaustiveness guard fails the backup loudly instead. `kind` is
-     * the module's own declared discriminant, not a secret, so echoing it names the missing branch.
+     * branch for. Fails the backup loudly rather than treat a new kind as a flat directory.
      */
     "backup.source_kind_unsupported": { kind: string };
     /**
-     * A backup admin route (`apply`/`rotate`) was refused because this box's backup config is owned by
-     * the ENVIRONMENT, not the wizard: at least one `WAITRON_BACKUP_*` var is set in the raw base env
-     * (`isManagedByEnvironment`, spec §3.2). Writing `backup.env` would be silently overridden on the
-     * next reload, so the route refuses BEFORE any write rather than let the operator believe a change
-     * took that the env will mask. No params — the refusal names no value (an env var could hold the
-     * recovery key). Mapped to 409 (the box's config-ownership state forbids the write). Never renamed. */
+     * A backup admin route (`apply`/`rotate`) was refused because a `WAITRON_BACKUP_*` variable is
+     * set in the environment, which would override a written `backup.env` on the next reload. No
+     * params: an env var could hold the recovery key. */
     "backup.managed_by_environment": Record<string, never>;
     /**
-     * A backup admin route (`apply`/`rotate`) was refused because this node is not the singleton
-     * PRIMARY (`current().isPrimary` is false). Only the primary runs the backup duty (spec §3.4), so a
-     * secondary/mirror configuring backups would write a `backup.env` that never takes effect here. No
-     * params. Mapped to 409 (the node's role forbids the write). Never renamed once shipped. */
+     * A backup admin route (`apply`/`rotate`) was refused because this node is not the primary; only
+     * the primary runs the backup duty. */
     "backup.not_primary": Record<string, never>;
     /**
-     * A recovery key the operator supplied cannot be stored VERBATIM in the `KEY=value` `backup.env`
-     * file: it carries a `\r`/`\n`/control char or leading/trailing whitespace, OR it does not survive
-     * the env-file round-trip byte-for-byte (`parseEnvFile(formatEnvFile({K:key})).K !== key`). Refused
-     * before writing, because a key that round-trips to a DIFFERENT string would have the box encrypt
-     * archives under a string the operator never recorded — unrecoverable (CLAUDE.md §5). `reason` is a
-     * short machine tag (`"whitespace_or_control"`/`"round_trip"`), never the key. Mapped to 400. Never
-     * renamed once shipped. */
+     * A supplied recovery key cannot be stored verbatim in `backup.env`: it carries a control
+     * character or leading/trailing whitespace, or does not survive the env-file round-trip
+     * byte-for-byte. A key that round-trips to a different string would encrypt archives under one
+     * the operator never recorded — unrecoverable (CLAUDE.md §5). `reason` is a short machine tag,
+     * never the key. */
     "backup.recovery_key_unstorable": { reason: string };
     /**
-     * After `apply`/`rotate` wrote `backup.env` and the supervisor reloaded, the EFFECTIVE recovery key
-     * (`current().recoveryKey`, what the box will actually encrypt under) does not equal the key that
-     * was written — on `apply`, the key the box already held or, holding none, the one supplied. On
-     * `rotate` with no destination loaded there is no reload: the key re-read from the box env files is
-     * compared with the requested one. The guard against a partial env override silently orphaning
-     * archives: the route fails LOUD rather than leave the operator recording a key the box will not
-     * use. No params — the keys are secrets. Mapped to 400. Never renamed once shipped. */
+     * After `apply`/`rotate`, the EFFECTIVE recovery key the box will encrypt under does not equal
+     * the key that was written. The route fails loud rather than let the operator record a key the
+     * box will not use. No params — the keys are secrets. */
     "backup.effective_mismatch": Record<string, never>;
     /**
-     * A backup admin route body failed shape validation before any write — a missing/blank
-     * `destinationDir`, a blank or missing `recoveryKey` (on `apply`, missing only when the box holds
-     * none), or a malformed `schedule`/`retention`; or `field: "config"` when `rotate` finds no
-     * destination loaded and no key held. `field` names the offending field (our own declared name,
-     * never the value, which could be the recovery key). Mapped to 400. Never renamed once shipped. */
+     * A backup admin route body failed shape validation before any write; or `field: "config"` when
+     * `rotate` finds no destination loaded and no key held. `field` names the offending field, never
+     * the value, which could be the recovery key. */
     "backup.request_invalid": { field: string };
     /**
      * `apply` was given a recovery key different from the one this box already holds. One recovery
-     * key per venue: a second is refused before any write rather than silently replacing the held
-     * one; `rotate` is the way to change it. No params — the keys are
-     * secrets. Mapped to 409. Never renamed once shipped. */
+     * key per venue; `rotate` is the way to change it. No params — the keys are secrets. */
     "backup.recovery_key_exists": Record<string, never>;
     /**
-     * The operator-supplied `primaryUrl` a mirror was pointed at is not a URL the mirror may fetch from
-     * (sync cloud-mirror hardening) — it fails to parse, uses a scheme other than http/https, or names a
-     * host the SSRF policy refuses (a private/link-local/CGNAT/metadata literal IP over ANY scheme, or a
-     * non-loopback host over plain http). `POST /setup-api/adopt` is UNAUTHENTICATED, so this validation
-     * is the choke point that stops an attacker driving the mirror to POST its admin credential at a
-     * private/metadata literal IP (e.g. `169.254.169.254`) or a non-https target. It covers LITERAL-IP
-     * SSRF only: a public DNS hostname over https is still trusted (no resolve-time IP pinning), so
-     * DNS-rebinding to an internal address is NOT blocked here — that is the deferred first-contact
-     * trust-bootstrap concern (C2b #4; the adjacent TRUST BOOTSTRAP note in `mirror-bundle-fetch.ts`
-     * carries the same caveat), out of scope until real hosting. A CLIENT fault — the request is malformed —
-     * so it is reported as HTTP 400 by the adopt route's local STATUS map (`ADOPT_STATUS` in setup-api.ts),
-     * the declare-here / status-in-route split every code in this file follows. Distinct from
-     * `mirror.bundle_fetch_failed` (a well-formed request whose UPSTREAM primary then failed, a 502).
+     * The `primaryUrl` a mirror was pointed at fails to parse, uses a scheme other than http/https,
+     * or names a host the SSRF policy refuses (a private/link-local/CGNAT/metadata literal IP over
+     * any scheme, or a non-loopback host over plain http). `POST /setup-api/adopt` is
+     * UNAUTHENTICATED, so this is what stops an attacker driving the mirror to send its admin
+     * credential to such a target. It covers LITERAL-IP SSRF only: a public DNS hostname over https
+     * is trusted, so DNS rebinding to an internal address is NOT blocked here.
      *
-     * NO params: the URL is attacker-controlled and is NEVER echoed — it can carry a credential in its
-     * userinfo or an internal host that a log line would leak — the same no-leak
-     * discipline `mirror.bundle_fetch_failed`/`node.read_only` follow. `mirror.*` names the DOMAIN CONCEPT
-     * — a read-only mirror node — never the throwing package (`tenant.not_found`'s note gives the rule);
-     * `server.*` is reserved for facts about the process itself, and "the primary URL is invalid" is a
-     * fact about the adopt request, not the process. Never renamed once shipped.
+     * NO params: the URL is attacker-controlled and is never echoed — it can carry a credential in
+     * its userinfo or an internal host.
      */
     "mirror.primary_url_invalid": Record<string, never>;
-    // A diagnostics verbosity request named a level outside {debug,info} or a ttl outside its bounds.
-    // `reason` is a fixed enum string (never a raw input value) — the redaction discipline holds.
+    // `reason` is a fixed enum string, never a raw input value.
     "diagnostics.invalid_verbosity": { reason: "level" | "ttl" };
-    /** No incident with this id exists in this venue. Also answered for a malformed id, for another
-     * tenant's incident, and to a session holding no alert permission even for a real id, so the
-     * answer never reveals which. */
+    /** No incident with this id exists in this venue. Also answered for a malformed id and to a
+     * session that can see no alerts. */
     "alert.not_found": { id: string };
     /** An alert source failed while being read. Its alerts are replaced by this one, under the
      * source's own area and permission. Built as data, never thrown. */
@@ -1665,95 +709,50 @@ declare module "@waitron/shared" {
      * backups alert source, never thrown. */
     "backup.disabled": Record<string, never>;
     /**
-     * BR-3's restore compatibility gate (`restore-gate.ts`) refused: the backup manifest's
-     * `environment` differs from the restoring binary's own target environment. Refusing this here,
-     * before the venue file is replaced, is what stops a preproduction archive landing on a
-     * production venue (or the reverse) — CLAUDE.md §5's "one database per environment": a
-     * cross-environment restore would leave `invoice_series.next_number` inherited from the wrong
-     * series, a permanent hole once real sales resume. `backup`/`target` are both a
-     * `DeploymentEnvironment` string (`"production"`/`"preproduction"`), never a secret, so echoing
-     * both is what makes the refusal actionable. `restore.*` names the DOMAIN CONCEPT — restoring a
-     * backup onto a target — never the throwing package (`tenant.not_found`'s note gives the rule).
-     * Never renamed once shipped.
+     * The restore gate (`restore-gate.ts`) refused: the backup's environment differs from the
+     * restoring binary's. One database per environment (CLAUDE.md §5): a cross-environment restore
+     * would carry the wrong series' `next_number`, a permanent hole once real sales resume.
      */
     "restore.environment_mismatch": { backup: string; target: string };
     /**
-     * BR-3's restore compatibility gate refused: for some module the manifest's applied schema
-     * version is NEWER than the restoring binary's own `expectedVersions` entry for that module —
-     * this binary's migrations don't go that far forward, so it cannot safely read (or later migrate)
-     * what the backup contains. A module the manifest lists that the target does not run at all (absent
-     * from `expectedVersions`) is a different case and is silently IGNORED, not refused — its tables
-     * restore inert. `module` is the module's own declared name, `backup`/`target` the two applied
-     * schema versions being compared, none of them secrets. `restore.*`, not `backup.*`: the backup
-     * artifact itself is fine, it is this restore attempt, onto this binary, that is refused. Never
-     * renamed once shipped.
+     * The restore gate refused: for some module the backup's applied schema version is NEWER than
+     * this binary's. A module the target does not run at all is ignored, not refused.
      */
     "restore.schema_too_new": { module: string; backup: number; target: number };
     /**
      * An archive entry name is unsafe or repeats a destination already named in the archive.
-     * Duplicate destinations are refused by `validateArtifact`; traversal by `restore-entry-guard.ts` before ANY
-     * write happened. Two layers, mirroring `unpackBundleToDir`'s (`state-secrets.ts`): a LEXICAL
-     * one — `name` is absolute, or `resolve(join(destRoot, name))` does not land under `destRoot`
-     * (a `../` escape) — and a SYMLINK-aware one that catches what the lexical check cannot: a
-     * lexically-fine name (`tls/ca.crt`) whose parent directory is a PRE-EXISTING symlink pointing
-     * outside `destRoot`, where `realpath` reveals the escape the string comparison alone would miss.
-     * GCM/tar integrity proves the archive's BYTES are authentic, never that its entry NAMES are the
-     * well-behaved `db.dump`/`media/*`/`secrets/*` set BR-3 expects, so a crafted-but-authentic
-     * archive still has to be refused here before the venue file is replaced or any other file
-     * write touches disk.
-     *
-     * `name` is the archive's own entry name — attacker-influenced, but not a secret, so echoing it
-     * is what makes the refusal actionable, the same as `backup.source_kind_unsupported`'s `kind`.
-     * `restore.*`, not `server.*`: a fact about this restore's own archive, not the process
-     * (`tenant.not_found`'s note gives the rule), beside `restore.environment_mismatch`/
-     * `restore.schema_too_new`. Never renamed once shipped.
+     * Duplicates are refused by `validateArtifact`; escapes by `restore-entry-guard.ts`, before any
+     * write, both lexically (an absolute name or a `../` escape) and through symlinks (a parent
+     * directory that is a pre-existing symlink out of the target). The archive's integrity check
+     * proves its bytes are authentic, not that its entry names are safe. `name` is
+     * attacker-influenced but not a secret.
      */
     "restore.unsafe_entry_path": { name: string };
     /**
-     * BR-3's restore orchestrator (`restore.ts`) refused: the decrypted archive is missing a
-     * structurally-required entry — the `manifest.json` index it must read to run the compatibility
-     * gate, or the `db.dump` entry it must put in place as the venue file — that name is kept from
-     * the PostgreSQL era and now holds a whole SQLite database. A backup without either is not a partial
-     * backup to salvage, it is an archive this binary cannot restore from at all, so it fails LOUD
-     * and names the absent entry rather than proceeding to a half-restore. `missing` is the fixed
-     * entry name (`"manifest.json"` or `"db.dump"`), never attacker input or a secret. `restore.*`,
-     * not `backup.*`: the fault is in what THIS restore attempt received, beside
-     * `restore.unsafe_entry_path`/`restore.environment_mismatch`/`restore.schema_too_new`. Never
-     * renamed once shipped.
+     * The decrypted archive lacks `manifest.json` or `db.dump`, without which nothing can be
+     * restored. `missing` is the fixed entry name.
      */
     "restore.archive_incomplete": { missing: string };
     /**
-     * BR-3's restore orchestrator (`restore.ts`) found a top-level archive entry it does not know how
-     * to route — one that is neither `manifest.json` nor `db.dump`, and whose top-level segment is
-     * neither `media/` nor `secrets/`. BR-2 emits exactly those four shapes today, so this never
-     * fires now; it fails LOUD the day a second non-DB source id starts emitting `<source>/...` blobs
-     * and the restore consumer has not been taught to route them — silently DROPPING an unrecognised
-     * entry would lose that data on the one path (cold recovery) that must not (CLAUDE.md §5). The
-     * fix when it fires is to update the restore consumer to route the new entry, never to widen this
-     * to accept it. `name` is the archive's own entry name — attacker-influenced but not a secret, so
-     * echoing it is what makes the refusal actionable, the same as `restore.unsafe_entry_path`'s
-     * `name`. `restore.*`, not `server.*`: a fact about this restore's own archive, not the process
-     * (`tenant.not_found`'s note gives the rule), beside the other `restore.*` codes above. Never
-     * renamed once shipped.
+     * The restore met a top-level archive entry it does not know how to route. Fails loud rather
+     * than drop data on the cold-recovery path (CLAUDE.md §5); the fix is to teach the restore to
+     * route the new entry, never to widen this. `name` is attacker-influenced but not a secret.
      */
     "restore.unexpected_entry": { name: string };
     /** The artifact's `secrets/trading.env` is absent or lacks one of the identity keys the restore
      * hooks need (`WAITRON_TILL_NODE_ID`/`LOCATION_ID`/`SERIES_ID`; an empty value is
      * missing). Validation refuses with the target intact, before identity set-aside or database
-     * restore. A backup of a box that never finished provisioning has no node to re-register.
-     * `missing` is the fixed key or file name. Never renamed once shipped. */
+     * restore. `missing` is the fixed key or file name. */
     "restore.identity_incomplete": { missing: string };
-    /** The artifact's identity names a node the restored database does not hold: the identity must
-     * be one this backup knows. Both ids are uuids, not secrets. Never renamed once shipped. */
+    /** The artifact's identity names a node the restored database does not hold. */
     "restore.identity_unknown": { nodeId: string };
     /** More than one module's restore hook returned replacement series; only one may own the node's
-     * numbering. `modules` is the comma-joined list of their names. Never renamed once shipped. */
+     * numbering. `modules` is the comma-joined list of their names. */
     "restore.series_conflict": { modules: string };
     /** A module's restore hook, or the series work its outcome led to, threw an `AppError`: `module`
      * is the module's name (`core` when the node's own series contract failed with no module
      * returning series) and `code` the inner code, so the CLI's `restore.*` reporting shows both
-     * without learning any module's namespaces. A non-`AppError` throw is not wrapped. Never renamed
-     * once shipped. */
+     * without learning any module's namespaces. A non-`AppError` throw is not wrapped. */
     "restore.hook_failed": { module: string; code: string };
     // The server's working-order paths throw these contributed venue-service codes directly.
     "order.service_context_missing": { workingOrderId: string };

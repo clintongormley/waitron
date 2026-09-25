@@ -10,11 +10,8 @@ import "./errors.js";
 const ENTRY = "configuration.json";
 
 /**
- * A location's `invoice_locales` as read by RAW SQL — the JSON text the column stores.
- *
- * The column is a JSON list on this engine and a raw select bypasses its read mapping, so the value
- * arrives as `["es"]` rather than as `["es"]` the array. Anything else is an artifact this code did
- * not write, and is refused rather than guessed at.
+ * A location's `invoice_locales` as read by RAW SQL, which bypasses the column's read mapping and
+ * so hands back the JSON text the column stores. Anything but a list of strings is refused.
  */
 function parseLocaleList(value: string): string[] {
   let parsed: unknown;
@@ -73,8 +70,6 @@ export async function buildConfigurationBundle(
 ): Promise<ConfigurationBundle> {
   const venue = await db.execute<
     Omit<PreparedVenue["location"], "invoiceLocales"> & {
-      // A raw read never reaches a column's read mapping, so this arrives as the JSON TEXT the
-      // column stores rather than as the list. Parsed below.
       invoiceLocales: string;
       country: string;
       taxId: string;
@@ -117,9 +112,6 @@ export async function buildConfigurationBundle(
     invoiceLocales,
     ...rest
   } = row;
-  // `day_cutover` lost its `::text` cast in the select above: the column is TEXT on this engine, so
-  // the cast is both unnecessary and a syntax error here (`unrecognized token: ":"`) — the same
-  // change, for the same reason, as `packages/provisioning/src/venue-apply.ts`.
   const location = { ...rest, invoiceLocales: parseLocaleList(invoiceLocales) };
   const transferred = await exportConfigurationTables(db, modules);
   return {
@@ -145,10 +137,7 @@ export async function applyPreparedLocation(
   target: { locationId: string },
   location: PreparedVenue["location"],
 ): Promise<void> {
-  // The column holds a JSON list as TEXT, checked by `locations_invoice_locales_len`
-  // (`json_array_length(...) between 1 and 2`). A raw write never reaches the column's own encoder,
-  // so the list is serialised here; the PostgreSQL `array[...]::text[]` constructor it replaces has
-  // no equivalent on this engine.
+  // A raw write never reaches the column's own encoder, so the JSON list is serialised here.
   const invoiceLocales = JSON.stringify(location.invoiceLocales);
   await tx.execute(sql`
     update locations set
@@ -214,28 +203,15 @@ function declarations(modules: readonly WaitronModule[]): ConfigurationTransferT
 }
 
 /**
- * The bundle is JSON, and this engine hands a BLOB column back as a `Uint8Array`, which
- * `JSON.stringify` renders as an object keyed by index — bytes that no importer can read back.
- * So a BLOB travels as the `\x<hex>` spelling PostgreSQL's driver used to produce.
- *
- * **The spelling is not ours to choose.** `packages/media/src/configuration-transfer.ts` validates
- * every image's bytes against `/^\\x(?:[a-fA-F0-9]{2})+$/` before any configuration is written, and
- * it hashes what it decodes to check the filename. A bundle carrying an image in any other
- * encoding is refused with `image.invalid_metadata` — which is what the whole database path did on
- * this branch until this pair existed.
+ * A BLOB is read back as a `Uint8Array`, which `JSON.stringify` renders as an object keyed by
+ * index, so it travels as `\x<hex>`. The spelling is not ours to choose:
+ * `packages/media/src/configuration-transfer.ts` refuses an image's bytes in any other encoding.
  */
 function encodeBytes(value: Uint8Array): string {
   return `\\x${Buffer.from(value).toString("hex")}`;
 }
 
-/**
- * What this engine will bind. It refuses a JS boolean outright — `TypeError: Provided value cannot
- * be bound to SQLite parameter 5`, measured on the `print_agents.active` flag this function sets
- * below — and a boolean column holds 0 or 1, which is what every row that came OUT of a venue
- * already carries. So the conversion is here, at the bind, rather than at each of the three places
- * that overwrite a flag: a value read from a bundle never needs it, and one written here always
- * does.
- */
+/** This engine refuses to bind a JS boolean; a boolean column holds 0 or 1. */
 function bindable(value: unknown): unknown {
   return typeof value === "boolean" ? (value ? 1 : 0) : value;
 }
@@ -257,11 +233,6 @@ export async function exportConfigurationTables(
   const tables: ConfigurationBundle["tables"] = {};
   const reconnect: string[] = [];
   for (const declaration of declarations(modules)) {
-    // `select *`, not PostgreSQL's `to_jsonb(t)`: this engine has no such function, and a raw read
-    // already hands back one plain object per row. The values are the driver's — a JSON column
-    // arrives as its TEXT and a flag as 0 or 1 — and `importConfigurationTables` writes those same
-    // values straight back, so the round trip carries the stored bytes rather than a re-rendering
-    // of them.
     const result = await db.execute<Record<string, unknown>>(sql`
       select * from ${sql.identifier(declaration.name)}
     `);
@@ -429,18 +400,12 @@ export async function importConfigurationTables(
   validateConfigurationBundle(bundle, modules, targetVersions);
   const checked = checkedRows(bundle, modules);
   const columns = new Map<string, Set<string>>();
-  // Which columns hold bytes, so the bundle's `\x<hex>` strings go back in as BYTES. Written as
-  // text instead they would be stored as text — this engine keeps whatever it is given, whatever a
-  // column declares — and every later read of that image would hand back the hex.
+  // Which columns hold bytes, so the bundle's `\x<hex>` strings go back in as BYTES: this engine
+  // stores a text value as text whatever the column declares.
   const blobColumns = new Map<string, Set<string>>();
   for (const [declaration] of checked) {
-    // This engine has no `information_schema`; a table's columns come from the PRAGMA function.
-    // The table-valued `pragma_table_info(?)` BINDS its argument — measured 2026-09-22 on Node
-    // v26.7.0 against `node:sqlite`, with a literal-argument control returning the same two rows
-    // and an unknown name returning none. That is not the same call as the `pragma table_info(?)`
-    // STATEMENT, which is refused at prepare with `near "?": syntax error`
-    // (`packages/db/src/deployment.ts` records that one). An unknown table yields no rows, which
-    // the empty check below already treats as a refusal.
+    // The table-valued `pragma_table_info(?)` binds its argument, unlike the `pragma table_info`
+    // statement. An unknown table yields no rows, which the empty check below refuses.
     const result = await tx.execute<{ column_name: string; column_type: string }>(sql`
       select name as column_name, type as column_type from pragma_table_info(${declaration.name})
     `);
@@ -475,14 +440,11 @@ export async function importConfigurationTables(
     where id = ${target.locationId}
   `);
 
-  // The declared tables hold at least one FK CYCLE — `zone_menus.zone_id` points at
+  // The declared tables hold at least one foreign-key cycle — `zone_menus.zone_id` points at
   // `zone_service_policies`, whose `(zone_id, default_menu_id)` points back at `zone_menus` — so no
-  // delete order satisfies a per-statement check, and this engine refused the `zone_menus` delete
-  // with `FOREIGN KEY constraint failed` (measured on this branch, with the pragma removed as the
-  // control). The pragma moves the check to COMMIT, where every table in the cycle is already
-  // empty; it holds only until this transaction ends, and the caller's commit still validates the
-  // final state. `packages/db/src/testing/venue-db.ts` empties a whole venue the same way and
-  // carries the mechanism.
+  // delete order satisfies a per-statement check. The pragma moves the check to COMMIT; it holds
+  // only until this transaction ends, and the caller's commit still validates the final state.
+  // `packages/db/src/testing/venue-db.ts` empties a whole venue the same way.
   await tx.execute(sql`pragma defer_foreign_keys = on`);
   for (const [declaration] of [...checked].reverse()) {
     if (declaration.name === "persons") {
@@ -533,10 +495,8 @@ export async function importConfigurationTables(
         row.active = false;
       }
       if (declaration.name === "printers") row.active = false;
-      // An explicit column list with each value bound, in place of PostgreSQL's
-      // `jsonb_populate_record`, which this engine does not have. Every key was checked against
-      // `pragma_table_info` above, so `sql.identifier` names a real column of a real table and
-      // nothing here is concatenated; the values bind, exactly as the jsonb document's did.
+      // Every key was checked against `pragma_table_info` above, so `sql.identifier` names a real
+      // column of a real table; the values bind.
       const fields = Object.keys(row);
       await tx.execute(sql`
         insert into ${sql.identifier(declaration.name)}

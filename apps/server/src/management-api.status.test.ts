@@ -14,25 +14,12 @@ import { ALL_MODULES } from "./modules.js";
  * The `/management-api/service-statuses` surface end to end: create, list, edit, deactivate, the
  * body screens, and both gates (a staff session 403, no session 401).
  *
- * ## What went with PostgreSQL
- *
- * SQLite has no roles and no grants, and every call below runs on the one handle. Nothing here
- * now says anything about which identity the routes reach the database as. The 403 and 401 gates
- * are unaffected: both are `authorizeManager` and `requireManagementSession`, never a privilege,
- * and both cases still pass.
- *
- * **Two deletion receipts written into the cases below are retired by the column types, and are
- * flagged where they sit** (the int4-range screen at `parseDisplayOrder`, and the `isUuid` screen
- * on `:id`). Measured 2026-09-22 on Node v26.7.0 against `node:sqlite` directly, over the columns
- * `packages/db/drizzle/0000_baseline.sql:516-523` now declares for this table — `id` text primary
- * key, `display_order` integer: the out-of-int4-range insert is ACCEPTED and stores 2147483648, and
- * `where id = 'not-a-uuid'` returns zero rows rather than raising. Neither case can any longer
- * tell its screen from the absence of it; both still pin the response.
+ * The out-of-int4-range `displayOrder` case and the malformed-`:id` cases pin the response only:
+ * the engine would store the value and match no row for the id, so none tells its screen from its
+ * absence.
  */
 const LOCALE = "es-ES";
-const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
-// Dashboard sign-in resolves the person by EMAIL, so each seeded person carries a login email
-// (unique on `lower(email)` across the database — persons_tenant_email_uq).
+const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 
@@ -42,24 +29,19 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-/** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// One NIF per provisioned venue. Kept as a counter rather than a constant because `setupTenant` is
-// exported and a second caller inside this database would need a second NIF.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(72_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** A label unique within the tenant, so tests are order-independent (CLAUDE.md §4) — `resetPerTest`
- *  is off, so the status set accumulates across tests and a fixed label would collide. */
+/** Labels are unique and the database is not reset between tests. */
 function uniqueLabel(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
 
-/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 export async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
   await applyVenue(
     planVenue(
@@ -95,9 +77,8 @@ export async function setupTenant(): Promise<{ managerId: string; staffId: strin
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  // Seeded through the table definition, not by raw SQL: `persons.id` and `persons.created_at` are
-  // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
-  // NOT NULL (`apps/server/src/testing/fiscal-fixtures.ts` took the same change).
+  // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`
+  // generators, which a raw SQL insert never reaches.
   const { managerId, staffId } = await withTransaction(suite.db, async (tx) => {
     const seed = async (displayName: string, email: string, role: "manager" | "staff") => {
       const [person] = await tx
@@ -126,8 +107,6 @@ function mountApp(): Hono {
     app,
     {
       db: suite.db,
-      // The all-zero node id (the capture default): this suite exercises the staff-status routes, not
-      // origin attribution, so the sentinel keeps its enrolled writes' origin exactly as before Task 6.
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
@@ -138,7 +117,6 @@ function mountApp(): Hono {
   return app;
 }
 
-/** Log in over HTTP by `email`, returning just the `waitron_management_session=…` cookie pair. */
 async function login(app: Hono, email: string): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
@@ -149,9 +127,7 @@ async function login(app: Hono, email: string): Promise<string> {
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-// One provisioned tenant + a manager and a staff cookie, shared across the tests. Each test uses a
-// UNIQUE label so the accumulating status set never collides (CLAUDE.md §4) and every list assertion is
-// a membership check, never an exact-list one.
+// The status set accumulates across tests, so every list assertion is a membership check.
 let app: Hono;
 let managerCookie: string;
 let staffCookie: string;
@@ -164,7 +140,6 @@ beforeAll(async () => {
   staffCookie = await login(app, STAFF_EMAIL);
 });
 
-/** POST/GET/PATCH/DELETE a `/management-api/service-statuses[...]` path with the given cookie. */
 async function request(path: string, init: RequestInit, cookie?: string): Promise<Response> {
   return app.request(`/management-api/service-statuses${path}`, {
     ...init,
@@ -180,7 +155,6 @@ describe("/management-api/service-statuses", () => {
       { method: "POST", body: JSON.stringify({ label, color: "#ef4444", displayOrder: 0 }) },
       managerCookie,
     );
-    // 201 Created, matching every other management-surface create (createPerson/staff, catalogues).
     expect(create.status).toBe(201);
     const { id } = (await create.json()) as { id: string };
     expect(id).toBeDefined();
@@ -241,8 +215,7 @@ describe("/management-api/service-statuses", () => {
   });
 
   it("POST body screens: a null body, a missing/non-string label/color, a non-integer OR non-number displayOrder → 400", async () => {
-    // null body → coerced to {} then the label screen fires (field "body" only fires for a non-object
-    // truthy body such as an array).
+    // A `null` body is read as `{}`, so the label screen fires, not the "body" one.
     const nullBody = await request("", { method: "POST", body: "null" }, managerCookie);
     expect(nullBody.status).toBe(400);
     expect(await nullBody.json()).toMatchObject({ error: { code: "management.request_invalid" } });
@@ -287,9 +260,7 @@ describe("/management-api/service-statuses", () => {
       error: { code: "management.request_invalid", params: { field: "displayOrder" } },
     });
 
-    // A NON-NUMBER displayOrder (here `null`) is rejected, not coerced: a bare `Number(null)` is 0, so
-    // the pre-fix `Number` + `Number.isInteger` check silently accepted it (→ displayOrder 0). The
-    // typeof-first screen refuses it — the prove-by-behaviour for the `parseDisplayOrder` type check.
+    // A `null` displayOrder is refused, not coerced to 0.
     const nullOrder = await request(
       "",
       {
@@ -303,11 +274,6 @@ describe("/management-api/service-statuses", () => {
       error: { code: "management.request_invalid", params: { field: "displayOrder" } },
     });
 
-    // An integer OUTSIDE int4 range is refused with a clean 400 by `parseDisplayOrder`'s range bound.
-    // The receipt that bound was written against is gone: it rested on a PostgreSQL `integer` column
-    // raising 22003, and `display_order` is now a SQLite INTEGER which stores 2147483648 without
-    // complaint (measured, see this file's header). The case pins the 400; it no longer shows the
-    // range check is needed.
     const hugeOrder = await request(
       "",
       {
@@ -374,10 +340,6 @@ describe("/management-api/service-statuses", () => {
     expect(unknown.status).toBe(404);
     expect(await unknown.json()).toMatchObject({ error: { code: "status.not_found" } });
 
-    // The `if (!isUuid(id))` guard used to be provable here: without it a malformed id reached a
-    // PostgreSQL `uuid` column and came back a 500 (raw `22P02`). `id` is a text column now, so the
-    // same query matches nothing and the route answers 404 either way (measured, see this file's
-    // header). The 404 is still the right answer; the guard is what has stopped being observable.
     const malformed = await request(
       "/not-a-uuid",
       { method: "PATCH", body: JSON.stringify({ label: uniqueLabel("X") }) },
@@ -388,7 +350,7 @@ describe("/management-api/service-statuses", () => {
   });
 
   it("PATCH body screens: an array body → 400 (field body); non-string label/color, non-integer OR non-number displayOrder, non-boolean active → 400", async () => {
-    const id = randomUUID(); // a well-formed uuid, so the isUuid screen passes and the body screens fire
+    const id = randomUUID();
 
     // A JSON array is a non-object body → field "body".
     const arrayBody = await request(`/${id}`, { method: "PATCH", body: "[]" }, managerCookie);
@@ -427,8 +389,7 @@ describe("/management-api/service-statuses", () => {
       error: { code: "management.request_invalid", params: { field: "displayOrder" } },
     });
 
-    // A NON-NUMBER displayOrder (here `null`) is rejected, not coerced — an explicit `null` on PATCH
-    // would otherwise have reset displayOrder to 0 (`Number(null)` → 0). See the POST screen above.
+    // A `null` displayOrder is refused, not coerced to 0.
     const nullOrder = await request(
       `/${id}`,
       { method: "PATCH", body: JSON.stringify({ displayOrder: null }) },
@@ -451,9 +412,6 @@ describe("/management-api/service-statuses", () => {
   });
 
   it("PATCH with a null / empty body → 204 no-op (never a 500), the status unchanged", async () => {
-    // A `null` body coerces to `{}` (`?? {}`) and carries no mutable field: the route answers a 204
-    // no-op WITHOUT reaching updateStatus's empty `.set()` (which Drizzle rejects → a 500). Mirrors the
-    // staff PATCH route's "null body → 204 no-op" (management-api.accounts-and-receipt-config.test.ts).
     const { id } = (await (
       await request(
         "",
@@ -476,7 +434,6 @@ describe("/management-api/service-statuses", () => {
     const emptyBody = await request(`/${id}`, { method: "PATCH", body: "{}" }, managerCookie);
     expect(emptyBody.status).toBe(204);
 
-    // The status is untouched by either no-op.
     const list = (await (await request("", { method: "GET" }, managerCookie)).json()) as {
       id: string;
       color: string;
@@ -525,10 +482,7 @@ describe("/management-api/service-statuses", () => {
   });
 
   it("a STAFF session is refused on every route (403 authorization.not_permitted)", async () => {
-    // A staff person CAN log in but holds no `venue.configure`, so each verb's `authorizeManager`
-    // refuses it 403 — after the route's session guard + body/id screens, before any write. Deleting
-    // the authorize call from a verb flips its case to a 2xx (proven by deletion in
-    // `service-statuses.test.ts`); here the same 403 is exercised end-to-end over HTTP.
+    // A staff person can log in but holds no `venue.configure`.
     const someId = randomUUID();
     const cases = [
       request(
@@ -551,8 +505,6 @@ describe("/management-api/service-statuses", () => {
   });
 
   it("no session → 401 management_session.required on every route", async () => {
-    // `requireManagementSession` runs FIRST on each route, so an unauthenticated request is refused
-    // before any DB work — the deletion proof for the route-level session gate.
     const someId = randomUUID();
     const cases = [
       request(

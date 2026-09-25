@@ -11,24 +11,12 @@ import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { mountMeApi } from "./me-api.js";
 
-// This file proves OUR ROUTE WIRING around the passkey ceremonies — gating, body screening, the
-// cookie the auth-verify login sets, and that a credential row really lands — not the crypto. The
-// ceremony LOGIC (options issued/stored/consumed, credential persisted, counter bumped) is proven at
-// the unit layer in `@waitron/identity`'s `passkey.test.ts`. The register route is GATED on a
-// management-session cookie, which needs a migrated database (persons + management_sessions).
+// Pins the route wiring around the passkey ceremonies — gating, body screening, the login cookie and
+// the credential row — not the crypto, which `@waitron/identity`'s `passkey.test.ts` covers.
 //
-// WHAT WENT WITH POSTGRESQL. SQLite has no roles and no grants, and every call below runs on the
-// one handle. Nothing here now says anything about which identity the routes reach the database
-// as. One in-case receipt is retired with the column type and is flagged where it sits — the
-// `isUuid` screen on `challengeHandle`.
-//
-// The WebAuthn ceremony is mocked the same way `@waitron/identity`'s `passkey.test.ts` mocks it:
-// `generateRegistrationOptions`/`generateAuthenticationOptions` run FOR REAL (they mint a random
-// challenge server-side, no browser needed), and only the two VERIFY calls are stubbed, because a
-// genuine authenticator response cannot be synthesised in a test. The mock intercepts the imports made
-// by `@waitron/identity`'s `passkey.ts` (consumed as source here); `@simplewebauthn/server` is a
-// devDependency of this package so the specifier resolves to the same physical module the identity
-// source imports, which is what makes `vi.mock` match across the package boundary.
+// Only the two verify calls are stubbed: a genuine authenticator response cannot be synthesised in a
+// test. `@simplewebauthn/server` is a devDependency here so the specifier resolves to the same module
+// the identity source imports, which is what lets `vi.mock` match across the package boundary.
 vi.mock("@simplewebauthn/server", async (orig) => ({
   ...(await orig<typeof import("@simplewebauthn/server")>()),
   verifyRegistrationResponse: vi.fn(),
@@ -41,9 +29,7 @@ import { ALL_MODULES } from "./modules.js";
 const mockVerifyReg = vi.mocked(verifyRegistrationResponse);
 const mockVerifyAuth = vi.mocked(verifyAuthenticationResponse);
 
-/** A fully-typed `verified: true` registration result — our route only persists `credential`, but the
- * discriminated union requires the rest, so building it in full keeps the mock honest against the library's
- * real `VerifiedRegistrationResponse` shape (Tasks 2/3 confirmed it). */
+/** Built in full so the mock stays honest against the library's `VerifiedRegistrationResponse`. */
 function regVerified(id: string): Awaited<ReturnType<typeof verifyRegistrationResponse>> {
   return {
     verified: true,
@@ -61,10 +47,7 @@ function regVerified(id: string): Awaited<ReturnType<typeof verifyRegistrationRe
   };
 }
 
-/** A fully-typed `verified: true` authentication result. Our route reads only `verified` and
- * `authenticationInfo.newCounter`; `VerifiedAuthenticationResponse` is NOT a discriminated union
- * (`authenticationInfo` is required even when `verified` is false), so building it in full keeps the
- * mock honest against the real shape. */
+/** Built in full so the mock stays honest against the library's `VerifiedAuthenticationResponse`. */
 function authVerified(
   newCounter: number,
 ): Awaited<ReturnType<typeof verifyAuthenticationResponse>> {
@@ -83,9 +66,7 @@ function authVerified(
 }
 
 const LOCALE = "es-ES";
-const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's seeded password.
-// Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
-// (unique on `lower(email)` across the database — persons_tenant_email_uq).
+const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
 
 const suite = useVenueDb({
@@ -93,19 +74,14 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-/** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// Every test provisions its own venue and the per-test reset empties `tenants` in between
-// (`packages/db/src/testing/venue-db.ts`), so the counter is belt and braces rather than the thing
-// keeping the inserts apart.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(70_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<{ managerId: string }> {
   await applyVenue(
     planVenue(
@@ -141,9 +117,8 @@ async function setupTenant(): Promise<{ managerId: string }> {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  // Seeded through the table definition, not by raw SQL: `persons.id` and `persons.created_at` are
-  // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
-  // NOT NULL (`apps/server/src/testing/fiscal-fixtures.ts` took the same change).
+  // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`
+  // generators, which a raw SQL insert never reaches.
   const { managerId } = await withTransaction(suite.db, async (tx) => {
     const [manager] = await tx
       .insert(persons)
@@ -162,15 +137,10 @@ async function setupTenant(): Promise<{ managerId: string }> {
 
 function mountApp(): Hono {
   const app = new Hono();
-  // `secureCookies: false` so the session cookie rides the non-TLS `app.request`. `rpId`/`origin`
-  // are the loopback passkey Relying Party values `ManagementApiDeps` requires — the same values the
-  // mocked `verify*` calls receive.
   mountManagementApi(
     app,
     {
       db: suite.db,
-      // The all-zero node id (the capture default): this suite exercises the passkey ceremonies, not
-      // origin attribution, so the sentinel keeps its enrolled writes' origin exactly as before Task 6.
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
@@ -181,8 +151,7 @@ function mountApp(): Hono {
   return app;
 }
 
-/** The same app with the me API mounted beside the management API, as `boot.ts` mounts them: the
- * passkey offer is answered by sign-in on one surface and recorded as resolved on the other. */
+/** The me API beside the management API, as `boot.ts` mounts them. */
 function mountAppWithMe(): Hono {
   const app = mountApp();
   mountMeApi(
@@ -198,8 +167,6 @@ function mountAppWithMe(): Hono {
   return app;
 }
 
-/** Sign in over HTTP as the seeded manager and hand back the whole response, so a caller can read the
- * body as well as the cookie — `login` below returns only the cookie. */
 async function signIn(app: Hono, email = MANAGER_EMAIL): Promise<Response> {
   return app.request("/management-api/session", {
     method: "POST",
@@ -208,9 +175,7 @@ async function signIn(app: Hono, email = MANAGER_EMAIL): Promise<Response> {
   });
 }
 
-/** Log in over HTTP by `email` with `password`, returning just the `waitron_management_session=…`
- * cookie pair (the part a browser echoes back). Asserts the 200 so a caller never carries a stale or
- * absent cookie forward silently. */
+/** Returns only the session cookie pair; asserts the 200 so no caller carries an absent cookie. */
 async function login(app: Hono, email: string, password = PASSWORD): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
@@ -221,8 +186,6 @@ async function login(app: Hono, email: string, password = PASSWORD): Promise<str
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-/** Read every `webauthn_credentials` row — the proof a real credential row landed, not merely that a
- * route returned 200. */
 function readCredentials(): Promise<
   { credential_id: string; person_id: string; name: string | null }[]
 > {
@@ -235,9 +198,6 @@ function readCredentials(): Promise<
   );
 }
 
-/** Register a passkey for the signed-in manager end-to-end over HTTP: begin (real options + stored
- * challenge) then verify (mocked to succeed), persisting a credential with id `credentialId`. Returns
- * nothing — callers assert on `readCredentials`. */
 async function registerPasskey(app: Hono, cookie: string, credentialId: string): Promise<void> {
   const options = await app.request("/management-api/passkey/register/options", {
     method: "POST",
@@ -266,14 +226,12 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     await setupTenant();
     const app = mountApp();
 
-    // No cookie → refused before any DB work.
     const anon = await app.request("/management-api/passkey/register/options", { method: "POST" });
     expect(anon.status).toBe(401);
     expect((await anon.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "management_session.required" },
     });
 
-    // The manager's cookie → the ceremony's creation options + an opaque challenge handle.
     const cookie = await login(app, MANAGER_EMAIL);
     const res = await app.request("/management-api/passkey/register/options", {
       method: "POST",
@@ -291,7 +249,6 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
-    // Begin, then finish with the ceremony mocked to verify.
     const options = await app.request("/management-api/passkey/register/options", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
@@ -309,8 +266,6 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     expect(verify.status).toBe(200);
     expect((await verify.json()) as { credentialId: string }).toEqual({ credentialId: "cred-abc" });
 
-    // Re-read: exactly one credential landed, owned by the manager — a real write, not merely a
-    // 200.
     const creds = await readCredentials();
     expect(creds).toHaveLength(1);
     expect(creds[0]).toMatchObject({
@@ -325,15 +280,9 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
-    // First registration of `cred-dup` succeeds.
     await registerPasskey(app, cookie, "cred-dup");
 
-    // A SECOND ceremony returning the SAME credential id collides on the (credential_id) unique
-    // constraint. `finishPasskeyRegistration` runs the refusal through `isUniqueViolation`, which
-    // reads this engine's codes (`packages/db/src/unique-violation.ts`), and throws
-    // `passkey.already_registered`, which STATUS maps to 409 — a raw driver error would instead reach
-    // `run` as an opaque `server.internal` 500, the "every surfaced code is a 4xx" invariant this fix
-    // restores.
+    // The same credential id again collides on the `credential_id` unique constraint.
     const options = await app.request("/management-api/passkey/register/options", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
@@ -353,7 +302,6 @@ describe("Management API passkey routes (mocked ceremony)", () => {
       error: { code: "passkey.already_registered" },
     });
 
-    // Still exactly one credential — the collision landed no second row.
     const creds = await readCredentials();
     expect(creds).toHaveLength(1);
     expect(creds[0]).toMatchObject({ credential_id: "cred-dup", person_id: managerId });
@@ -368,7 +316,6 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     const body = (await res.json()) as { challengeHandle: string; options: { challenge: string } };
     expect(body.challengeHandle).toBeTruthy();
     expect(body.options.challenge).toBeTruthy();
-    // A discoverable-login ceremony sets no cookie — the person is unknown until the assertion verifies.
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
@@ -376,11 +323,9 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     const { managerId } = await setupTenant();
     const app = mountApp();
 
-    // Register "cred-abc" for the manager first (the credential auth/verify resolves the person from).
     const cookie = await login(app, MANAGER_EMAIL);
     await registerPasskey(app, cookie, "cred-abc");
 
-    // A fresh, cookieless authentication ceremony: begin (ungated) then verify.
     const options = await app.request("/management-api/passkey/auth/options", { method: "POST" });
     expect(options.status).toBe(200);
     const { challengeHandle } = (await options.json()) as { challengeHandle: string };
@@ -392,12 +337,11 @@ describe("Management API passkey routes (mocked ceremony)", () => {
       body: JSON.stringify({ challengeHandle, response: { id: "cred-abc" } }),
     });
     expect(verify.status).toBe(200);
-    // The verify half IS the login: it returns the credential owner's id and mints a session cookie.
     expect((await verify.json()) as { personId: string }).toEqual({ personId: managerId });
     const setCookie = verify.headers.get("set-cookie");
     expect(setCookie).toMatch(/^waitron_management_session=/);
 
-    // Prove the minted cookie is a live session: it opens the gated staff roster.
+    // The minted cookie is a live session: it opens the gated staff roster.
     const gated = await app.request("/management-api/staff", {
       headers: { cookie: setCookie!.split(";")[0] },
     });
@@ -408,12 +352,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     await setupTenant();
     const app = mountApp();
 
-    // The `isUuid` screen turns a non-UUID handle into a clean 400 naming the field, and the verifier
-    // is never reached. The receipt that screen was written against is gone: it rested on a
-    // PostgreSQL `uuid` primary key raising 22P02 — an opaque 500 on an UNAUTHENTICATED route — and
-    // `webauthn_challenges.id` is `text PRIMARY KEY` now
-    // (`packages/identity/drizzle/0000_baseline.sql:110-115`), which simply matches nothing. The case
-    // pins the 400 and the never-called verifier; it no longer shows what the screen is preventing.
+    // Pins the 400 naming the field and the never-called verifier.
     const badUuid = await app.request("/management-api/passkey/auth/verify", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -426,8 +365,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
       error: { code: "management.request_invalid", params: { field: "challengeHandle" } },
     });
 
-    // A `null` JSON body is coerced to `{}` (the `?? {}` guard): `challengeHandle` is then undefined, so
-    // the typeof half of the screen fires — the same 400, never a TypeError → 500.
+    // A `null` body is read as `{}`, so the handle is undefined: the same 400, never a 500.
     const nullBody = await app.request("/management-api/passkey/auth/verify", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -458,7 +396,6 @@ describe("Management API passkey routes (mocked ceremony)", () => {
       error: { code: "management.request_invalid", params: { field: "challengeHandle" } },
     });
 
-    // A `null` JSON body → `?? {}` → undefined handle → the same 400 via the typeof half of the screen.
     const nullBody = await app.request("/management-api/passkey/register/verify", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -466,7 +403,6 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     });
     expect(nullBody.status).toBe(400);
 
-    // Neither malformed request reached the verifier or wrote a credential.
     expect(mockVerifyReg).not.toHaveBeenCalled();
     expect(await readCredentials()).toHaveLength(0);
   });
@@ -475,9 +411,6 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     await setupTenant();
     const app = mountApp();
 
-    // A well-formed challengeHandle but NO `response`. This route is UNAUTHENTICATED and
-    // `finishPasskeyAuthentication` reads `response.id` to resolve the credential, so a missing/non-object
-    // response must be a clean 400 naming the field, never an unauthenticated fault reaching the driver.
     const validHandle = "00000000-0000-4000-8000-000000000000";
     const missing = await app.request("/management-api/passkey/auth/verify", {
       method: "POST",
@@ -491,7 +424,6 @@ describe("Management API passkey routes (mocked ceremony)", () => {
       error: { code: "management.request_invalid", params: { field: "response" } },
     });
 
-    // A non-object `response` (a JSON string) fails the same screen.
     const nonObject = await app.request("/management-api/passkey/auth/verify", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -502,7 +434,6 @@ describe("Management API passkey routes (mocked ceremony)", () => {
       error: { code: "management.request_invalid" },
     });
 
-    // The verifier was never reached — the screen fires before any DB work.
     expect(mockVerifyAuth).not.toHaveBeenCalled();
   });
 
@@ -511,8 +442,6 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
 
-    // A well-formed challengeHandle but NO `response`: the same non-null-object screen the auth route
-    // applies, refused as management.request_invalid naming the field.
     const missing = await app.request("/management-api/passkey/register/verify", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
@@ -531,12 +460,8 @@ describe("Management API passkey routes (mocked ceremony)", () => {
 });
 
 /**
- * The sign-in passkey offer, which the sign-in route reads back out of the database inside its own
- * transaction.
- *
- * The offer's story spans BOTH dashboard surfaces: sign-in answers it (management API) and the route
- * that records it as resolved lives on the me API, so the round-trip test mounts both on one app,
- * exactly as `boot.ts` does.
+ * Sign-in answers the passkey offer on the management API and the me API records it as resolved, so
+ * the round-trip test mounts both.
  */
 describe("the sign-in passkey offer", () => {
   it("tells a first-time signer-in to offer a passkey", async () => {

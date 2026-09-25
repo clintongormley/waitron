@@ -16,20 +16,11 @@ import { mountRecipeApi } from "./recipe-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
-// The recipe-authoring ROUTES end to end in-process: the request/response boundary, the body + id
-// screens and the `recipe.manage` gate wiring, the same way `catalogue-api.test.ts` proves the
-// catalogue routes. The ingredients/recipe_lines tables live in CORE_MIGRATIONS and the management
-// session/persons in IDENTITY_MIGRATIONS, so those sets plus CATALOGUE_MIGRATIONS are what this
-// suite migrates rather than the whole manifest.
-//
-// There are no roles on this engine, and every call below runs on the one handle, so a
-// refusal here is the route gate alone. The wider five-route sweep, with a manager's 201 and 200 as
-// positive controls, is `recipe-api.gate-sweep.test.ts`.
+// The recipe-authoring ROUTES end to end in-process: the body and id screens and the
+// `recipe.manage` gate. The gate over all five routes is `recipe-api.gate-sweep.test.ts`.
 const noopLog: Logger = () => {};
 
-// The uuid handed to `mountRecipeApi`'s `cfg.nodeId`. No route reads it (`recipe-api.ts`'s
-// `RecipeApiDeps` doc says why the field survives at all) and `withTransaction` takes no origin —
-// it is `(db, fn)`, `packages/db/src/tenancy.ts` — so any valid uuid serves.
+// No route reads `cfg.nodeId` (`recipe-api.ts`'s `RecipeApiDeps` doc), so any valid uuid serves.
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 let managerCookie: string;
@@ -42,14 +33,10 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    // Seed a MANAGER (role `manager`, holds `recipe.manage`) and a STAFF person (role `staff`, holds
-    // nothing) under the tenant, mint a live management session for each, and seed one catalogue +
-    // product for the recipe routes to hang lines on. `pin_hash` is NOT NULL, so a value is supplied
-    // even though these sessions are minted directly rather than via a PIN/password login.
-    //
-    // Through the table definition, not raw SQL: `persons.id` is a JavaScript `$defaultFn` generator
-    // on a NOT NULL column (`packages/identity/src/schema/persons.ts`), which a raw insert never
-    // reaches — the refusal is `NOT NULL constraint failed: persons.id`.
+    // A MANAGER (holds `recipe.manage`) and a STAFF person (holds nothing), each with a live
+    // management session, and one product for the recipe routes to hang lines on. Through the table
+    // definition, not raw SQL: `persons.id` is a `$defaultFn` generator, which a raw insert never
+    // reaches.
     const seeded = await withTransaction(db, async (tx) => {
       const [mgr] = await tx
         .insert(persons)
@@ -349,9 +336,7 @@ describe("mountRecipeApi", () => {
   });
 
   it("rejects a PUT recipe with a malformed (non-uuid) ingredientId element → 400, not an opaque 500", async () => {
-    // A well-formed array of strings passed the shape check but reached `recipe_lines.ingredient_id`
-    // (a uuid column) as a bound param → 22P02 → a non-AppError → an opaque `server.internal` 500.
-    // Screening each element as a UUID up front makes it the clean 400 the boundary convention mandates.
+    // Each element is screened as a UUID up front; this pins the response the screen gives.
     const res = await send(mountApp(), "PUT", `/management-api/products/${productId}/recipe`, {
       body: { ingredientIds: ["not-a-uuid"] },
       cookie: managerCookie,
@@ -362,9 +347,8 @@ describe("mountRecipeApi", () => {
     });
   });
 
-  // A literal `null` JSON body parses to `null`, which the `?? {}` coalescing in each write route turns
-  // into an empty object so the field screens answer with a 400 rather than TypeErroring into an opaque
-  // 500 (the catalogue null-body convention). One representative case per write route.
+  // `readJsonBody` turns a literal `null` body into `{}`, so the field screens answer. One case per
+  // write route.
   it("coerces a null body on POST/PATCH/PUT to the field-screen 400 (not a 500)", async () => {
     const app = mountApp();
     const id = await createIngredient(app, "pimentón");
@@ -392,9 +376,7 @@ describe("mountRecipeApi", () => {
     });
   });
 
-  // A malformed body makes `c.req.json()` throw; the shared `readJsonBody` coerces that throw to `{}`,
-  // the same shape the null-body test above relies on, so each write route answers its field-screen
-  // 4xx (or the PATCH no-op 204) instead of an opaque 500. Sent raw — `send` would JSON.stringify.
+  // `readJsonBody` coerces a malformed body to `{}` too. Sent raw — `send` would JSON.stringify.
   it("coerces a malformed body on POST/PATCH/PUT to the field-screen 4xx (not a 500)", async () => {
     const app = mountApp();
     const id = await createIngredient(app, "pimentón");

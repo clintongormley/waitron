@@ -13,21 +13,9 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
 /**
- * The recipe-authoring write group's `recipe.manage` gate, on the engine the box now runs.
- *
- * ## The one thing that went with PostgreSQL
- *
- * **There are no roles on this engine**: there is no `connectAs`, and every call below runs on the
- * one handle. Nothing now checks that the deployment role's grants are part of the refusal.
- *
- * What survives is the reason the file is worth keeping beside `recipe-api.test.ts`, and the reason
- * it is now named `recipe-api.gate-sweep.test.ts`: that sibling gates the ingredients LIST route
- * only ("rejects an absent session with 401 and a staff session with 403" — its one `staffCookie`
- * case, 2026-09-22), and the case below sweeps all five authoring routes with the PATCH and the two `/recipe`
- * routes aimed at ids that really exist, so a 403 cannot be a not-found in disguise.
- *
- * The per-suite NIF counter went with the shared container: `useVenueDb` opens one fresh SQLite venue
- * per file, so the one venue provisioned here needs no unique-tax-id dance.
+ * The recipe-authoring routes' `recipe.manage` gate over all five routes, with the PATCH and the two
+ * `/recipe` routes aimed at ids that really exist, so a 403 cannot be a not-found in disguise.
+ * `recipe-api.test.ts` gates the ingredients LIST route only.
  */
 const LOCALE = "es-ES";
 
@@ -39,8 +27,7 @@ const suite = useVenueDb({
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// The uuid handed to `mountRecipeApi`'s `cfg.nodeId`. No route reads it (`recipe-api.ts`'s
-// `RecipeApiDeps` doc), so any valid uuid serves.
+// No route reads `cfg.nodeId` (`recipe-api.ts`'s `RecipeApiDeps` doc), so any valid uuid serves.
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 
 interface Venue {
@@ -89,9 +76,8 @@ async function setupVenue(): Promise<Venue> {
   );
 
   const { managerSid, staffSid, productId } = await withTransaction(suite.db, async (tx) => {
-    // Through the table definition, not raw SQL: `persons.id` is a JavaScript `$defaultFn` generator
-    // on this engine (`id text PRIMARY KEY NOT NULL`), which a raw insert never reaches — the
-    // refusal is `NOT NULL constraint failed: persons.id`.
+    // Through the table definition, not raw SQL: `persons.id` is a `$defaultFn` generator, which a
+    // raw insert never reaches.
     const [mgr] = await tx
       .insert(persons)
       .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -127,9 +113,6 @@ async function setupVenue(): Promise<Venue> {
   };
 }
 
-/** A Hono app with the recipe routes mounted — the same per-suite shape
- * `purchasing-api.gate-sweep.test.ts` uses. `mountRecipeApi` reads `cfg.nodeId` in no route
- * (`recipe-api.ts`'s `RecipeApiDeps` doc), so the app is bound to nothing but `db`. */
 function mountApp(): Hono {
   const app = new Hono();
   mountRecipeApi(app, { db: suite.db, cfg: { nodeId: NODE_ID } }, noopLog);
@@ -165,24 +148,13 @@ async function createIngredient(app: Hono, cookie: string, name: string): Promis
 
 describe("Recipe API — the recipe.manage gate over every authoring route", () => {
   it("refuses every recipe-authoring route to a staff-role session — 403 authorization.not_permitted", async () => {
-    // Prove the `recipe.manage` gate BY DELETION. A `staff`-role management session holds no
-    // `recipe.manage`, so `authorizeManager` (inside `gated`) throws `authorization.not_permitted`
-    // before any op runs on all five routes, while the manager (who holds it) gets 200 on the same list.
-    //
-    // GUARD-BY-DELETION (authorizeManager), re-run on this engine 2026-09-22 — the receipt it replaces
-    // was taken against postgres:18, which this branch retired: deleted the
-    //   `await authorizeManager(tx, { managementSessionId: sessionId, permission: RECIPE_WRITE_PERMISSION });`
-    // call from `recipe-api.ts`'s `gated` helper and ran this file. It FAILED at the FIRST staff
-    // assertion, `expected 200 to be 403` on `GET /management-api/ingredients`. (The other four routes
-    // funnel through the SAME `gated` chokepoint, so they lose the gate identically; the run stops at
-    // the first failed assertion, so 200 on the list is the only status this deletion was OBSERVED to
-    // produce.) Restored from a byte-for-byte copy, verified with `cmp`, and the file passed again.
+    // A `staff`-role management session holds no `recipe.manage`, so `authorizeManager` (inside
+    // `gated`) throws `authorization.not_permitted` before any op runs.
     const { managerCookie, staffCookie, productId } = await setupVenue();
     const app = mountApp();
 
-    // A real ingredient the manager owns, so the staff PATCH targets an id that DOES exist — the refusal
-    // is the gate, not a not_found masking it. Also proves the manager (who holds `recipe.manage`) is
-    // NOT refused: this create is a 201.
+    // A real ingredient, so the staff PATCH targets an id that DOES exist — the refusal is the gate,
+    // not a not_found masking it.
     const ingredientId = await createIngredient(app, managerCookie, "GATE-ing");
 
     // The manager gets 200 on the list — the positive control the gate must let through.

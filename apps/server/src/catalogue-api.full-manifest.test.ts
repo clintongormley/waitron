@@ -15,27 +15,9 @@ import { ALL_MODULES } from "./modules.js";
 import "./errors.js";
 
 /**
- * The catalogue write group, on the engine the box now runs.
- *
- * ## What this file does not check
- *
- * **There are no roles on this engine**, and every call below runs on the one handle. Nothing
- * checks that the deployment role holds the SELECT, INSERT, UPDATE and DELETE this group needs — on
- * `preparation_routes`, `kitchen_stations`, `floor_zones`, `product_categories`, `products` or
- * `product_modifiers`.
- *
- * The file is worth keeping beside `catalogue-api.test.ts` because this suite migrates the FULL
- * manifest, so venue-service's `preparation_routes` exists and
- * `categoryDependants` takes its optional-table branch. The sibling migrates core + catalogue +
- * identity only and covers the absent-table arm, asserting `routes: []`.
- *
- * That is what the file is now named for — `catalogue-api.full-manifest.test.ts` — and the property
- * to check is the `migrations:` argument each suite hands `useVenueDb`:
- * `migrationOptionsFor(manifestSets(), null)` here, against the three-entry
- * `[CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, IDENTITY_MIGRATIONS]` list in the sibling.
- *
- * The per-suite NIF counter went with the shared container: `useVenueDb` opens one fresh SQLite venue
- * per file and empties it between tests, so the venue provisioned here needs no unique-tax-id dance.
+ * The catalogue routes over the FULL migration manifest, so venue-service's `preparation_routes`
+ * exists and `categoryDependants` takes its optional-table branch. `catalogue-api.test.ts` migrates
+ * core + catalogue + identity only and covers the absent-table arm.
  */
 const LOCALE = "es-ES";
 
@@ -96,9 +78,8 @@ async function setupVenue(): Promise<Venue> {
   );
 
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
-    // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are JavaScript
-    // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
-    // NOT NULL — the refusal is `NOT NULL constraint failed: persons.id`.
+    // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
+    // `$defaultFn` generators, which a raw insert never reaches.
     const [mgr] = await tx
       .insert(persons)
       .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -179,15 +160,11 @@ async function createProduct(
 
 describe("category dependants and bulk add", () => {
   it("reads a category's preparation routes and cascades them away on delete", async () => {
-    // This suite migrates the FULL manifest, so venue-service's `preparation_routes` IS present and
-    // `categoryDependants` takes its optional-table branch. `catalogue-api.test.ts` migrates core +
-    // catalogue + identity only and covers the absent-table arm, asserting `routes: []`.
     const v = await setupVenue();
     const app = mountApp();
     const categoryId = await createCategory(app, v.managerCookie, { [LOCALE]: "Frituras" });
-    // Fixture rows, not the behaviour under test, and seeded through the table definitions for the
-    // `$defaultFn` reason `setupVenue` states. `no_preparation` is a `flag`, which this engine
-    // stores as 0/1 — the column's own write mapping is what encodes the boolean.
+    // Fixture rows, seeded through the table definitions for the `$defaultFn` reason `setupVenue`
+    // states.
     const [zone] = await suite.db
       .insert(floorZones)
       .values({ locationId: v.locationId, name: "Terraza" })
@@ -278,14 +255,6 @@ describe("Catalogue API — option groups, gates, by-id FKs", () => {
   it("refuses every catalogue write route to a staff-role session — 403 authorization.not_permitted", async () => {
     // Every write shares the permission gate; invalid resource ids must not reveal lookup results
     // to a staff session that cannot manage the catalogue.
-    //
-    // GUARD-BY-DELETION (authorizeManager), run on this engine 2026-09-22: deleted the
-    //   `await authorizeManager(tx, { managementSessionId: sessionId, permission: CATALOGUE_WRITE_PERMISSION });`
-    // call from `catalogue-api.ts`'s `gated` helper and ran this file. THREE cases went red — this
-    // one at `expected 201 to be 403`, the modifier-list sweep below at `expected 400 to be 403`,
-    // and the bulk-add case's staff arm at `expected 204 to be 403`, which is the one that matters
-    // most: without the gate a staff session really did write. Restored from a byte-for-byte copy,
-    // verified with `cmp`, and the file passed again.
     const { staffCookie } = await setupVenue();
     const app = mountApp();
 
@@ -344,13 +313,9 @@ describe("Catalogue API — option groups, gates, by-id FKs", () => {
   });
 
   it("refuses every modifier-list write route to a staff-role session — 403 authorization.not_permitted", async () => {
-    // The `person.manage` gate covers the modifier-list authoring routes too. A `staff` session
-    // holds no `person.manage`, so `authorizeManager` inside `gated` throws before any list op runs.
-    // The deletion receipt is on the catalogue-write case above, which shares the same `gated`
-    // chokepoint; this case's own observed failure in that run was `expected 400 to be 403` — the
-    // ungated request reaching the body parser instead.
-    //
-    // Both segments, both kinds of write: `mountListSurface` registers one set of handlers per kind
+    // A `staff` session holds no `person.manage`, so `authorizeManager` inside `gated` throws before
+    // any list op runs. Both segments, both kinds of write: `mountListSurface` registers one set of
+    // handlers per kind
     // and each closes over its own `surface`, so one kind passing says nothing about the other.
     const { staffCookie } = await setupVenue();
     const app = mountApp();

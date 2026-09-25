@@ -12,22 +12,9 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
 /**
- * The purchase-invoice write group's `purchase.manage` gate, on the engine the box now runs.
- *
- * ## The one thing that went with PostgreSQL
- *
- * **There are no roles on this engine**: there is no `connectAs`, and every call below runs on the
- * one handle. Nothing now checks that the deployment role's grants are part of the refusal.
- *
- * What survives is the reason the file is worth keeping beside `purchasing-api.test.ts`, and the
- * reason it is now named `purchasing-api.gate-sweep.test.ts`: that sibling gates the POST route only
- * (`purchasing-api.test.ts`, "POST as a staff-role session → 403 authorization.not_permitted" — its
- * one `staffCookie` case, 2026-09-22), and the case below sweeps
- * all five routes with PATCH and DELETE aimed at an id that really exists, so a 403 cannot be a
- * not-found in disguise.
- *
- * The per-suite NIF counter went with the shared container: `useVenueDb` opens one fresh SQLite venue
- * per file, so the one venue provisioned here needs no unique-tax-id dance.
+ * The purchase-invoice routes' `purchase.manage` gate over all five routes, with PATCH and DELETE
+ * aimed at an id that really exists, so a 403 cannot be a not-found in disguise.
+ * `purchasing-api.test.ts` gates the POST route only.
  */
 const LOCALE = "es-ES";
 
@@ -83,9 +70,8 @@ async function setupVenue(): Promise<Venue> {
   );
 
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
-    // Through the table definition, not raw SQL: `persons.id` is a JavaScript `$defaultFn` generator
-    // on this engine (`id text PRIMARY KEY NOT NULL`), which a raw insert never reaches — the
-    // refusal is `NOT NULL constraint failed: persons.id`.
+    // Through the table definition, not raw SQL: `persons.id` is a `$defaultFn` generator, which a
+    // raw insert never reaches.
     const [mgr] = await tx
       .insert(persons)
       .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -105,8 +91,7 @@ async function setupVenue(): Promise<Venue> {
   };
 }
 
-/** One Hono app per venue — `mountPurchasingApi` takes only `db`, so each venue's
- * routes need their own app (mirrors `catalogue-api.full-manifest.test.ts`). */
+/** One Hono app per venue — `mountPurchasingApi` takes only `db`. */
 function mountApp(): Hono {
   const app = new Hono();
   mountPurchasingApi(app, { db: suite.db }, noopLog);
@@ -158,16 +143,8 @@ async function createInvoice(app: Hono, cookie: string, number: string): Promise
 
 describe("Purchasing API — the purchase.manage gate over every write route", () => {
   it("refuses every purchase-invoice write route to a staff-role session — 403 authorization.not_permitted", async () => {
-    // Prove the `purchase.manage` gate BY DELETION. A `staff`-role management session holds no
-    // `purchase.manage`, so `authorizeManager` (inside `gated`) throws `authorization.not_permitted`
-    // before any op runs on all four write/read routes.
-    //
-    // GUARD-BY-DELETION (authorizeManager), re-run on this engine 2026-09-22 — the receipt it replaces
-    // was taken against postgres:18, which this branch retired: deleted the
-    //   `await authorizeManager(tx, { managementSessionId: sessionId, permission: PURCHASE_WRITE_PERMISSION });`
-    // call from `purchasing-api.ts`'s `gated` helper and ran this file. It FAILED at the first
-    // assertion, `expected 200 to be 403` — the ungated staff GET served the list. Restored from a
-    // byte-for-byte copy, verified with `cmp`, and the file passed again.
+    // A `staff`-role management session holds no `purchase.manage`, so `authorizeManager` (inside
+    // `gated`) throws `authorization.not_permitted` before any op runs.
     const { managerCookie, staffCookie } = await setupVenue();
     const app = mountApp();
 
