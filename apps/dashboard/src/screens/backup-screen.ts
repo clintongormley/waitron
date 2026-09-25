@@ -315,6 +315,8 @@ export class BackupScreen extends LitElement {
     this.submitting = true;
     try {
       this.status = await this.api.rotateBackupKey({ recoveryKey: this.#effectiveKey });
+      // The bucket copy's kit carries the key, so its panel has to read the new one now.
+      this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.savedIt = false;
       this.advancedPaste = false;
       this.pastedKey = "";
@@ -500,10 +502,7 @@ export class BackupScreen extends LitElement {
           : nothing
       }
       <div class="card">
-        <dashboard-stream-settings
-          .api=${this.api}
-          .keyFingerprint=${s?.keyFingerprint}
-        ></dashboard-stream-settings>
+        <dashboard-stream-settings .api=${this.api}></dashboard-stream-settings>
       </div>
     `;
   }

@@ -189,6 +189,17 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=reload]")).toBeNull();
   });
 
+  it("sets the break-glass secret in the design system's monospace font", async () => {
+    const { el, host } = await mountWidget<SetupDoneScreen>("setup-done-screen", {
+      api: apiWith(() => new Promise(() => {})),
+      startDelayMs: 0,
+      breakGlassSecret: "bg-9f3a",
+    });
+    host.style.setProperty("--wt-font-family-mono", "serif");
+    const secret = q(el, "[data-test=break-glass-secret]")!;
+    expect(getComputedStyle(secret).fontFamily).toBe("serif");
+  });
+
   it("tells the operator what the break-glass secret is for on a trading server", async () => {
     const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "bg-9f3a" });
     expect(q(el, "[data-test=break-glass-secret]")?.textContent).toBe("bg-9f3a");

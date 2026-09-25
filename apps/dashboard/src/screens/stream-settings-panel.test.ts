@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -46,14 +47,41 @@ const ON: StreamSettingsView = {
 const KIT = `WAITRON-RECOVERY-KIT-1:${"eyJ2ZXJzaW9uIjoxLCJ2ZW51ZUlkIjoi".repeat(12)}`;
 
 function stubApi(overrides: Partial<DashboardApi> = {}, settings = OFF): DashboardApi {
+  const getStreamSettings = vi.fn().mockResolvedValue(settings);
   return {
-    getStreamSettings: vi.fn().mockResolvedValue(settings),
-    saveStreamSettings: vi.fn().mockResolvedValue(ON),
+    getStreamSettings,
+    // As the server does, a later read of the settings finds what Save stored.
+    saveStreamSettings: vi.fn(() => {
+      getStreamSettings.mockResolvedValue(ON);
+      return Promise.resolve(ON);
+    }),
     testStreamBucket: vi.fn().mockResolvedValue({ ok: true }),
     turnOffStream: vi.fn().mockResolvedValue(OFF),
     getRecoveryKit: vi.fn().mockResolvedValue({ kit: KIT, keyFingerprint: "ab12cd34" }),
+    liveData: new LiveData(),
     ...overrides,
   } as unknown as DashboardApi;
+}
+
+/** A background client beside `api`, as the real one has, whose kit read is its own mock. */
+function withBackground(api: DashboardApi): DashboardApi & { background: DashboardApi } {
+  const background = {
+    ...api,
+    getRecoveryKit: vi.fn().mockResolvedValue({ kit: KIT, keyFingerprint: "ffee0011" }),
+  } as unknown as DashboardApi;
+  return Object.assign(api, { background });
+}
+
+/** What a later automatic read of the settings brings: the box's settings as they now are. */
+async function refresh(
+  el: StreamSettingsPanel,
+  api: DashboardApi,
+  next: StreamSettingsView | { code: string },
+): Promise<void> {
+  if ("code" in next) vi.mocked(api.getStreamSettings).mockRejectedValue(next);
+  else vi.mocked(api.getStreamSettings).mockResolvedValue(next);
+  api.liveData.invalidate([{ type: "backup_status" }]);
+  await flush(el);
 }
 
 function withStatus(status: StreamStatusView): StreamSettingsView {
@@ -319,6 +347,22 @@ describe("stream-settings-panel: the bucket form", () => {
     await press(el, "toggle-secret");
     expect(field(el, "bucket-secret-access-key").type).toBe("password");
   });
+
+  it("takes back the passed message once a field is changed after Test", async () => {
+    const { el } = await mount(stubApi());
+    fillRequired(el);
+    await press(el, "test");
+    expect(q(el, "[data-test=test-passed]")).not.toBeNull();
+    type(el, "bucket-name", "another-bucket");
+    await flush(el);
+    expect(q(el, "[data-test=test-passed]")).toBeNull();
+  });
+
+  it("asks a password manager for a new secret, never a saved one", async () => {
+    const { el } = await mount(stubApi());
+    const inner = field(el, "bucket-secret-access-key").shadowRoot!.querySelector("input")!;
+    expect(inner.autocomplete).toBe("new-password");
+  });
 });
 
 describe("stream-settings-panel: once set up", () => {
@@ -406,7 +450,7 @@ describe("stream-settings-panel: once set up", () => {
   });
 
   it.each([
-    [17 * 60_000, `17 ${t("stream.status.minutes")}`],
+    [17 * 60_000, t("stream.status.lag_minutes").replace("{minutes}", "17")],
     [30_000, t("stream.status.lag_under_minute")],
   ])("reports %i ms of waiting changes as %s", async (lagMs, shown) => {
     const { el } = await mount(stubApi({}, withStatus({ ...STREAMING, lagMs })));
@@ -474,29 +518,105 @@ describe("stream-settings-panel: once set up", () => {
 
   it("re-issues the kit when the recovery key changes, with the keep-the-old-kit banner", async () => {
     const api = stubApi({}, ON);
-    const { el } = await mount(api, { keyFingerprint: "ab12cd34" });
+    const { el } = await mount(api);
     expect(q(el, "[data-test=kit-reissued]")).toBeNull();
-    el.keyFingerprint = "ffee0011";
-    await flush(el);
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
     expect(api.getRecoveryKit).toHaveBeenCalledOnce();
     expect(text(el, "[data-test=kit-reissued]")).toBe(t("stream.kit.reissued"));
   });
 
   it("does not re-issue on the first fingerprint it is given", async () => {
-    const api = stubApi({}, ON);
+    const api = stubApi({}, { ...ON, keyFingerprint: null });
     const { el } = await mount(api);
-    el.keyFingerprint = "ab12cd34";
-    await flush(el);
+    await refresh(el, api, ON);
+    await refresh(el, api, ON);
     expect(api.getRecoveryKit).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=kit-reissued]")).toBeNull();
   });
 
   it("does not fetch a kit when the key changes on a box with no bucket copy", async () => {
-    const api = stubApi();
-    const { el } = await mount(api, { keyFingerprint: "ab12cd34" });
-    el.keyFingerprint = "ffee0011";
-    await flush(el);
+    const held = { ...OFF, recoveryKeySet: true, keyFingerprint: "ab12cd34" };
+    const api = stubApi({}, held);
+    const { el } = await mount(api);
+    await refresh(el, api, { ...held, keyFingerprint: "ffee0011" });
     expect(api.getRecoveryKit).not.toHaveBeenCalled();
   });
+
+  it("re-issues the kit through the background client, so an unattended screen stays passive", async () => {
+    const api = withBackground(stubApi({}, ON));
+    const { el } = await mount(api);
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    expect(api.background.getRecoveryKit).toHaveBeenCalledOnce();
+    expect(api.getRecoveryKit).not.toHaveBeenCalled();
+    expect(text(el, "[data-test=kit-reissued]")).toBe(t("stream.kit.reissued"));
+  });
+
+  it("fetches the kit the owner asks for through the ordinary client", async () => {
+    const api = withBackground(stubApi({}, ON));
+    const { el } = await mount(api);
+    await press(el, "show-kit");
+    expect(api.getRecoveryKit).toHaveBeenCalledOnce();
+    expect(api.background.getRecoveryKit).not.toHaveBeenCalled();
+  });
+
+  it("tells the Backups screen to read its status again once Save has stored the bucket", async () => {
+    const api = stubApi();
+    const invalidate = vi.spyOn(api.liveData, "invalidate");
+    const { el } = await mount(api);
+    fillRequired(el);
+    await press(el, "save");
+    expect(invalidate).toHaveBeenCalledWith([{ type: "backup_status" }]);
+  });
+
+  it("does not tell the Backups screen anything when Save is refused", async () => {
+    const api = stubApi({
+      saveStreamSettings: vi.fn().mockRejectedValue({ code: "backup.reload_in_progress" }),
+    });
+    const invalidate = vi.spyOn(api.liveData, "invalidate");
+    const { el } = await mount(api);
+    fillRequired(el);
+    await press(el, "save");
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it("drops a failed automatic read's alert once a later read succeeds", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    await refresh(el, api, { code: "connection.failed" });
+    expect(text(el, "[role=alert]")).toBe(codeMessage("connection.failed"));
+    await refresh(el, api, ON);
+    expect(q(el, "[role=alert]")).toBeNull();
+  });
+
+  it("keeps a refused Test's alert when an automatic read succeeds afterwards", async () => {
+    const api = stubApi({
+      testStreamBucket: vi.fn().mockRejectedValue({ code: "backup.stream_test_failed" }),
+    });
+    const { el } = await mount(api);
+    fillRequired(el);
+    await press(el, "test");
+    await refresh(el, api, OFF);
+    expect(text(el, "[role=alert]")).toBe(codeMessage("backup.stream_test_failed"));
+  });
+
+  it.each(["save", "kit"] as const)(
+    "explains, in this panel's words, a %s refused because the box's recovery key is too short",
+    async (which) => {
+      const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
+      const api =
+        which === "save"
+          ? stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) })
+          : stubApi({ getRecoveryKit: vi.fn().mockRejectedValue(refusal) }, ON);
+      const { el } = await mount(api);
+      if (which === "save") {
+        fillRequired(el);
+        await press(el, "save");
+      } else {
+        await press(el, "show-kit");
+      }
+      expect(text(el, "[role=alert]")).toBe(t("stream.error.recovery_key_too_short"));
+    },
+  );
 
   it("explains, in this panel's words, a kit refused because the box holds no recovery key", async () => {
     const api = stubApi(
@@ -529,6 +649,7 @@ describe("stream-settings-panel: once set up", () => {
     const { el } = await mount(api);
     await press(el, "show-kit");
     await press(el, "turn-off");
+    await press(el, "turn-off");
     expect(api.turnOffStream).toHaveBeenCalled();
     expect(q(el, "[data-test=kit]")).toBeNull();
     expect(field(el, "bucket-region")).not.toBeNull();
@@ -541,8 +662,64 @@ describe("stream-settings-panel: once set up", () => {
     );
     const { el } = await mount(api);
     await press(el, "turn-off");
+    await press(el, "turn-off");
     expect(text(el, "[role=alert]")).toBe(codeMessage("backup.reload_in_progress"));
     expect(text(el, "[data-test=stream-state]")).toBe(t("stream.state.streaming"));
+  });
+
+  it("turns off only on a second, confirming tap", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    await press(el, "turn-off");
+    expect(api.turnOffStream).not.toHaveBeenCalled();
+    expect(text(el, "[data-test=turn-off]")).toBe(t("stream.turn_off_confirm"));
+    await press(el, "turn-off");
+    expect(api.turnOffStream).toHaveBeenCalledOnce();
+  });
+
+  it("forgets a first Turn off tap when the owner goes to change the bucket instead", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    await press(el, "turn-off");
+    await press(el, "change");
+    await press(el, "cancel");
+    expect(text(el, "[data-test=turn-off]")).toBe(t("stream.turn_off"));
+    await press(el, "turn-off");
+    expect(api.turnOffStream).not.toHaveBeenCalled();
+  });
+
+  it("holds Turn off while its request is running, so a further tap sends nothing", async () => {
+    let finish!: (value: StreamSettingsView) => void;
+    const api = stubApi(
+      { turnOffStream: vi.fn(() => new Promise<StreamSettingsView>((r) => (finish = r))) },
+      ON,
+    );
+    const { el } = await mount(api);
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    const button = q(el, "[data-test=turn-off]") as HTMLElement & { disabled: boolean };
+    expect(button.disabled).toBe(true);
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    expect(api.turnOffStream).toHaveBeenCalledOnce();
+    finish(OFF);
+    await flush(el);
+    expect(field(el, "bucket-region")).not.toBeNull();
+  });
+
+  it("holds Show recovery kit while the kit is being fetched", async () => {
+    type Kit = { kit: string; keyFingerprint: string };
+    let finish!: (value: Kit) => void;
+    const api = stubApi({ getRecoveryKit: vi.fn(() => new Promise<Kit>((r) => (finish = r))) }, ON);
+    const { el } = await mount(api);
+    await press(el, "show-kit");
+    const button = q(el, "[data-test=show-kit]") as HTMLElement & { disabled: boolean };
+    expect(button.disabled).toBe(true);
+    await press(el, "show-kit");
+    expect(api.getRecoveryKit).toHaveBeenCalledOnce();
+    finish({ kit: KIT, keyFingerprint: "ab12cd34" });
+    await flush(el);
+    expect(text(el, "[data-test=kit]")).toBe(KIT);
   });
 
   it("says why when the settings cannot be read", async () => {

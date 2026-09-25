@@ -1,11 +1,12 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { LiveData } from "@waitron/dashboard-kit";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./backup-screen.js";
 import type { BackupScreen } from "./backup-screen.js";
 import type { BackupStatusView, DashboardApi } from "../api/client.js";
 
 /**
- * Scanned in five shapes, including the advanced paste + pick-weekdays + fixed-time branches so every
+ * Scanned in several shapes, including the advanced paste + pick-weekdays + fixed-time branches so every
  * conditional control is scanned. The screen loads on connect, so the stub must resolve or a stray
  * rejection pollutes the run.
  */
@@ -55,6 +56,7 @@ function stubApi(status: BackupStatusView, overrides: Partial<DashboardApi> = {}
       recoveryKeySet: false,
       keyFingerprint: null,
     }),
+    liveData: new LiveData(),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -98,6 +100,17 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     selectValue(el, "[data-test=days-mode]", "weekdays");
     selectValue(el, "[data-test=time-mode]", "fixed");
     await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the configure wizard reusing a key the box already holds accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { api: stubApi({ ...OFF, recoveryKeySet: true }) },
+      theme,
+    );
+    await flush(el);
+    expect(q(el, "[data-test=existing-key]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

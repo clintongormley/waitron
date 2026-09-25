@@ -44,6 +44,15 @@ describe("diagnostics-screen", () => {
     expect(el.shadowRoot!.querySelectorAll("h1").length).toBe(1);
   });
 
+  it("sets the log lines in the design system's monospace font", async () => {
+    const { el, host } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    host.style.setProperty("--wt-font-family-mono", "serif");
+    expect(getComputedStyle(q(el, "[data-test=log]")!).fontFamily).toBe("serif");
+  });
+
   it("shows the empty state when the ring is empty", async () => {
     const api = stubApi({}, []);
     const { el } = await mountWidget<DiagnosticsScreen>("dashboard-diagnostics-screen", { api });

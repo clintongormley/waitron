@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import type { DashboardApi, StreamSettingsView } from "../api/client.js";
@@ -36,14 +37,28 @@ const PAUSED: StreamSettingsView = {
   recoveryKeySet: true,
   keyFingerprint: "ab12cd34",
 };
+const STREAMING: StreamSettingsView = {
+  ...PAUSED,
+  status: {
+    state: "streaming",
+    generation: "gen-0-n-20260923T101500Z",
+    lastConfirmedUploadAt: "2026-09-23T10:16:00.000Z",
+    lagMs: 3 * 60_000,
+    reason: null,
+    stateSince: "2026-09-23T10:15:00.000Z",
+    bucketProblem: null,
+  },
+};
 
-function stubApi(settings: StreamSettingsView): DashboardApi {
+function stubApi(settings: StreamSettingsView, testPasses = false): DashboardApi {
   return {
     getStreamSettings: vi.fn().mockResolvedValue(settings),
-    testStreamBucket: vi.fn().mockRejectedValue({
-      code: "backup.stream_test_failed",
-      params: { reason: "write_failed" },
-    }),
+    testStreamBucket: testPasses
+      ? vi.fn().mockResolvedValue({ ok: true })
+      : vi.fn().mockRejectedValue({
+          code: "backup.stream_test_failed",
+          params: { reason: "write_failed" },
+        }),
     saveStreamSettings: vi.fn().mockRejectedValue({
       code: "backup.stream_config_unsafe",
       params: { field: "bucket" },
@@ -51,6 +66,7 @@ function stubApi(settings: StreamSettingsView): DashboardApi {
     getRecoveryKit: vi
       .fn()
       .mockResolvedValue({ kit: "WAITRON-RECOVERY-KIT-1:abc", keyFingerprint: "ab12cd34" }),
+    liveData: new LiveData(),
   } as unknown as DashboardApi;
 }
 
@@ -75,10 +91,10 @@ function fillRequired(el: StreamSettingsPanel): void {
 }
 
 describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)", (theme) => {
-  async function mount(settings: StreamSettingsView, props: Partial<StreamSettingsPanel> = {}) {
+  async function mount(settings: StreamSettingsView, testPasses = false) {
     const mounted = await mountWidget<StreamSettingsPanel>(
       "dashboard-stream-settings",
-      { api: stubApi(settings), ...props },
+      { api: stubApi(settings, testPasses) },
       theme,
     );
     await flush(mounted.el);
@@ -114,8 +130,12 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
   });
 
   it("configured and paused with a failing bucket check, the kit and the re-issue banner", async () => {
-    const { el, host } = await mount(PAUSED, { keyFingerprint: "ab12cd34" });
-    el.keyFingerprint = "ffee0011";
+    const { el, host } = await mount(PAUSED);
+    vi.mocked(el.api.getStreamSettings).mockResolvedValue({
+      ...PAUSED,
+      keyFingerprint: "ffee0011",
+    });
+    el.api.liveData.invalidate([{ type: "backup_status" }]);
     await flush(el);
     await expectNoA11yViolations(host);
   });
@@ -123,6 +143,27 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
   it("changing the bucket, with Cancel", async () => {
     const { el, host } = await mount(PAUSED);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=change]")!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("a passed Test, with the secret shown as plain text", async () => {
+    const { el, host } = await mount(OFF, true);
+    fillRequired(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=toggle-secret]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=test]")!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("a copy running normally, several minutes behind", async () => {
+    const { host } = await mount(STREAMING);
+    await expectNoA11yViolations(host);
+  });
+
+  it("Turn off waiting for its confirming tap", async () => {
+    const { el, host } = await mount(STREAMING);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=turn-off]")!.click();
     await flush(el);
     await expectNoA11yViolations(host);
   });

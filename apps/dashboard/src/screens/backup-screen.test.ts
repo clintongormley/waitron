@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
-import type { BackupStatusView, DashboardApi } from "../api/client.js";
+import type { BackupStatusView, DashboardApi, StreamSettingsView } from "../api/client.js";
 import { BackupScreen } from "./backup-screen.js";
 
 afterEach(cleanupWidgets);
@@ -38,6 +38,21 @@ const ENABLED: BackupStatusView = {
 
 const MANAGED: BackupStatusView = { ...OFF, managedByEnvironment: true };
 
+const STREAM_ON: StreamSettingsView = {
+  isPrimary: true,
+  configured: true,
+  bucket: {
+    endpoint: null,
+    region: "eu-west-1",
+    bucket: "venue-copy",
+    prefix: "",
+    accessKeyId: "AKIAEXAMPLE",
+  },
+  status: { state: "off" },
+  recoveryKeySet: true,
+  keyFingerprint: "ab12cd34",
+};
+
 function stubApi(
   overrides: Partial<DashboardApi> = {},
   status: BackupStatusView = OFF,
@@ -56,9 +71,16 @@ function stubApi(
       recoveryKeySet: false,
       keyFingerprint: null,
     }),
+    getRecoveryKit: vi
+      .fn()
+      .mockResolvedValue({ kit: "WAITRON-RECOVERY-KIT-1:abc", keyFingerprint: "ffee0011" }),
+    liveData: new LiveData(),
     ...overrides,
   } as unknown as DashboardApi;
 }
+
+const panelOf = (el: BackupScreen) =>
+  el.shadowRoot!.querySelector("dashboard-stream-settings")!.shadowRoot!;
 
 async function flush(el: BackupScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -136,13 +158,81 @@ describe("backup-screen", () => {
     const api = stubApi({}, ENABLED);
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
     await flush(el);
-    const panel = q(el, "dashboard-stream-settings") as HTMLElement & {
-      api: DashboardApi;
-      keyFingerprint?: string;
-    };
+    const panel = q(el, "dashboard-stream-settings") as HTMLElement & { api: DashboardApi };
     expect(panel.api).toBe(api);
-    expect(panel.keyFingerprint).toBe("ab12cd34");
     expect(api.getStreamSettings).toHaveBeenCalled();
+  });
+
+  it("stops offering its minted key as soon as the bucket copy's Save has given the box one", async () => {
+    const api = stubApi({ saveStreamSettings: vi.fn().mockResolvedValue(STREAM_ON) });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    expect(q(el, "[data-test=minted-key]")).not.toBeNull();
+    vi.mocked(api.getBackupStatus).mockResolvedValue({ ...OFF, recoveryKeySet: true });
+    const panel = panelOf(el);
+    for (const [name, value] of [
+      ["bucket-region", "eu-west-1"],
+      ["bucket-name", "venue-copy"],
+      ["bucket-access-key-id", "AKIAEXAMPLE"],
+      ["bucket-secret-access-key", "not-a-real-secret-0123456789"],
+    ]) {
+      panel
+        .querySelector(`wt-input[name=${name}]`)!
+        .dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+        );
+    }
+    await el.updateComplete;
+    panel.querySelector<HTMLElement>("[data-test=save]")!.click();
+    // Well inside the status's own refresh interval, so only the Save's word can have done it.
+    await vi.waitFor(() => expect(q(el, "[data-test=existing-key]")).not.toBeNull(), {
+      timeout: 2_000,
+    });
+    expect(q(el, "[data-test=minted-key]")).toBeNull();
+  });
+
+  it("lets the bucket copy re-issue its kit when the key changes while archives are off", async () => {
+    const api = stubApi(
+      { getStreamSettings: vi.fn().mockResolvedValue(STREAM_ON) },
+      { ...OFF, recoveryKeySet: true },
+    );
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    vi.mocked(api.getStreamSettings).mockResolvedValue({
+      ...STREAM_ON,
+      keyFingerprint: "ffee0011",
+    });
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() =>
+      expect(panelOf(el).querySelector("[data-test=kit-reissued]")).not.toBeNull(),
+    );
+    expect(api.getRecoveryKit).toHaveBeenCalledOnce();
+  });
+
+  it("has the bucket copy re-issue its kit as soon as a rotate here changes the key", async () => {
+    const api = stubApi(
+      {
+        getStreamSettings: vi.fn().mockResolvedValue(STREAM_ON),
+        rotateBackupKey: vi.fn().mockResolvedValue({ ...ENABLED, keyFingerprint: "ffee0011" }),
+      },
+      ENABLED,
+    );
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    q(el, "[data-test=show-old-key]")!.click();
+    await flush(el);
+    tickCheckbox(el, "[data-test=saved-it]");
+    await el.updateComplete;
+    vi.mocked(api.getStreamSettings).mockResolvedValue({
+      ...STREAM_ON,
+      keyFingerprint: "ffee0011",
+    });
+    q(el, "[data-test=rotate-confirm]")!.click();
+    await vi.waitFor(
+      () => expect(panelOf(el).querySelector("[data-test=kit-reissued]")).not.toBeNull(),
+      { timeout: 2_000 },
+    );
+    expect(api.getRecoveryKit).toHaveBeenCalledOnce();
   });
 
   it("exports prepared configuration under a confirmed passphrase", async () => {
@@ -475,8 +565,8 @@ describe("backup-screen", () => {
 });
 
 it("refreshes backup status without minting another recovery key", async () => {
-  const liveData = new LiveData();
-  const api = Object.assign(stubApi(), { liveData });
+  const api = stubApi();
+  const { liveData } = api;
   const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
   await flush(el);
   expect(api.mintBackupKey).toHaveBeenCalledOnce();

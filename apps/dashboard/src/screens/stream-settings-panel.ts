@@ -1,4 +1,4 @@
-import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing, svg } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -79,10 +79,11 @@ const UNSAFE_FIELD_KEYS: Partial<Record<Field, StringKey>> = {
   secretAccessKey: "stream.field.key_characters",
 };
 
-/** The two refusals whose wording elsewhere does not fit what this panel was doing. */
+/** Refusals whose wording elsewhere does not fit what this panel was doing. */
 const PANEL_CODE_KEYS: Readonly<Record<string, StringKey>> = {
   "backup.managed_by_environment": "stream.error.managed_by_environment",
   "backup.recovery_key_missing": "stream.error.recovery_key_missing",
+  "backup.recovery_key_too_short": "stream.error.recovery_key_too_short",
 };
 
 function isField(value: unknown): value is Field {
@@ -113,11 +114,16 @@ interface Failure {
   reason: string | null;
 }
 
+function failureOf(error: unknown): Failure {
+  const reason = (error as { params?: Record<string, unknown> }).params?.reason;
+  return { code: codeOf(error), reason: typeof reason === "string" ? reason : null };
+}
+
 /**
  * The bucket copy on the Backups screen: the bucket settings, Test, how current the copy is, and
- * the recovery kit. `keyFingerprint` is the Backups screen's running key fingerprint; a change after
- * the first value means the key was changed, so the kit is fetched again with a banner, because
- * copies made before the change still need the old kit.
+ * the recovery kit. When a later read of the settings brings a different key fingerprint, the key
+ * was changed, so the kit is fetched again with a banner, because copies made before the change
+ * still need the old kit.
  */
 @customElement("dashboard-stream-settings")
 export class StreamSettingsPanel extends LitElement {
@@ -213,12 +219,13 @@ export class StreamSettingsPanel extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  @property({ attribute: false }) keyFingerprint?: string;
 
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => this.#fail(error),
+    (error) => {
+      this.readFailure = failureOf(error);
+    },
   );
 
   @state() private settings?: StreamSettingsView;
@@ -227,16 +234,19 @@ export class StreamSettingsPanel extends LitElement {
   @state() private errors: Partial<Record<Field, string>> = {};
   @state() private submitting = false;
   @state() private testPassed = false;
+  /** A refusal of something the owner did; it stays until the owner acts again. */
   @state() private failure: Failure | null = null;
+  /** A failed read of the settings; the next successful read takes it away. */
+  @state() private readFailure: Failure | null = null;
   @state() private kit: string | null = null;
   @state() private kitFingerprint: string | null = null;
   @state() private kitReissued = false;
   @state() private secretVisible = false;
+  @state() private turnOffArmed = false;
+  @state() private busy = false;
 
   /** Applied in `updated`, so the message beside the field is on screen when focus lands. */
   #focusField: Field | null = null;
-  /** The last fingerprint given; the Backups screen passes none while its status is loading. */
-  #seenFingerprint: string | undefined;
   #blobUrls = new Map<string, string>();
 
   override connectedCallback(): void {
@@ -250,18 +260,6 @@ export class StreamSettingsPanel extends LitElement {
     super.disconnectedCallback();
   }
 
-  protected override willUpdate(changed: PropertyValues<this>): void {
-    const fingerprint = this.keyFingerprint;
-    if (changed.has("keyFingerprint") && fingerprint !== undefined) {
-      const seen = this.#seenFingerprint;
-      this.#seenFingerprint = fingerprint;
-      if (seen !== undefined && seen !== fingerprint && this.settings?.configured === true) {
-        this.kitReissued = true;
-        void this.#loadKit();
-      }
-    }
-  }
-
   protected override updated(): void {
     const focus = this.#focusField;
     if (focus !== null) {
@@ -273,18 +271,33 @@ export class StreamSettingsPanel extends LitElement {
 
   async #load(): Promise<void> {
     try {
-      await this.#queries.watch("getStreamSettings", [], (value) => {
-        this.settings = value;
-      });
+      await this.#queries.watch("getStreamSettings", [], (value) => this.#arrived(value));
     } catch (error) {
-      this.#fail(error);
+      this.readFailure = failureOf(error);
+    }
+  }
+
+  /** The first key the panel sees is no change; a later different one is. */
+  #arrived(value: StreamSettingsView): void {
+    const before = this.settings?.keyFingerprint;
+    this.settings = value;
+    this.readFailure = null;
+    const after = value.keyFingerprint;
+    if (
+      value.configured &&
+      before !== undefined &&
+      before !== null &&
+      after !== null &&
+      after !== before
+    ) {
+      this.kitReissued = true;
+      void this.#loadKit(this.api.background ?? this.api);
     }
   }
 
   #fail(error: unknown): void {
     const code = codeOf(error);
-    const params = (error as { params?: Record<string, unknown> }).params ?? {};
-    const named = params.field;
+    const named = (error as { params?: Record<string, unknown> }).params?.field;
     if (
       (code === "backup.stream_config_unsafe" || code === "backup.request_invalid") &&
       isField(named)
@@ -294,8 +307,7 @@ export class StreamSettingsPanel extends LitElement {
       this.#focusField = named;
       return;
     }
-    const reason = params.reason;
-    this.failure = { code, reason: typeof reason === "string" ? reason : null };
+    this.failure = failureOf(error);
   }
 
   #clearMessages(): void {
@@ -355,9 +367,11 @@ export class StreamSettingsPanel extends LitElement {
     this.submitting = true;
     try {
       this.settings = await this.api.saveStreamSettings(this.#body());
+      // Save can give the box its first recovery key; the Backups screen must stop offering its own.
+      this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.editing = false;
       this.draft = { ...EMPTY };
-      await this.#loadKit();
+      await this.#loadKit(this.api);
     } catch (error) {
       this.#fail(error);
     } finally {
@@ -365,20 +379,42 @@ export class StreamSettingsPanel extends LitElement {
     }
   }
 
+  /** Turning off deletes the stored bucket settings, secret included, so it takes a second,
+   * confirming tap. */
   async #turnOff(): Promise<void> {
+    if (this.busy) return;
+    if (!this.turnOffArmed) {
+      this.turnOffArmed = true;
+      return;
+    }
+    this.turnOffArmed = false;
     this.#clearMessages();
+    this.busy = true;
     try {
       this.settings = await this.api.turnOffStream();
       this.kit = null;
       this.kitReissued = false;
     } catch (error) {
       this.#fail(error);
+    } finally {
+      this.busy = false;
     }
   }
 
-  async #loadKit(): Promise<void> {
+  async #showKit(): Promise<void> {
+    if (this.busy) return;
+    this.#clearMessages();
+    this.busy = true;
     try {
-      const { kit, keyFingerprint } = await this.api.getRecoveryKit();
+      await this.#loadKit(this.api);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  async #loadKit(client: DashboardApi): Promise<void> {
+    try {
+      const { kit, keyFingerprint } = await client.getRecoveryKit();
       this.kit = kit;
       this.kitFingerprint = keyFingerprint;
     } catch (error) {
@@ -398,6 +434,7 @@ export class StreamSettingsPanel extends LitElement {
     };
     this.errors = {};
     this.#clearMessages();
+    this.turnOffArmed = false;
     this.editing = true;
   }
 
@@ -421,15 +458,16 @@ export class StreamSettingsPanel extends LitElement {
 
   override render(): TemplateResult {
     const s = this.settings;
+    const failure = this.failure ?? this.readFailure;
     return html`
       <section aria-labelledby="stream-title">
         <h2 id="stream-title">${t("stream.title")}</h2>
         <p class="hint">${t("stream.explanation")}</p>
         ${s === undefined ? nothing : this.#renderBody(s)}
         ${
-          this.failure === null
+          failure === null
             ? nothing
-            : html`<p class="error" role="alert">${this.#failureText(this.failure)}</p>`
+            : html`<p class="error" role="alert">${this.#failureText(failure)}</p>`
         }
       </section>
     `;
@@ -450,10 +488,8 @@ export class StreamSettingsPanel extends LitElement {
                   ? html`<wt-button
                       variant="secondary"
                       data-test="show-kit"
-                      @click=${() => {
-                        this.#clearMessages();
-                        void this.#loadKit();
-                      }}
+                      ?disabled=${this.busy}
+                      @click=${() => void this.#showKit()}
                       >${t("stream.show_kit")}</wt-button
                     >`
                   : nothing
@@ -461,8 +497,12 @@ export class StreamSettingsPanel extends LitElement {
               <wt-button variant="secondary" data-test="change" @click=${() => this.#startEdit()}
                 >${t("stream.change")}</wt-button
               >
-              <wt-button variant="ghost" data-test="turn-off" @click=${() => void this.#turnOff()}
-                >${t("stream.turn_off")}</wt-button
+              <wt-button
+                variant="ghost"
+                data-test="turn-off"
+                ?disabled=${this.busy}
+                @click=${() => void this.#turnOff()}
+                >${t(this.turnOffArmed ? "stream.turn_off_confirm" : "stream.turn_off")}</wt-button
               >
             </div>`
       }
@@ -495,7 +535,7 @@ export class StreamSettingsPanel extends LitElement {
         ? t("stream.status.lag_none")
         : minutes === 0
           ? t("stream.status.lag_under_minute")
-          : `${minutes} ${t("stream.status.minutes")}`;
+          : t("stream.status.lag_minutes").replace("{minutes}", String(minutes));
     return html`
       <dt>${t("stream.status.lag")}</dt>
       <dd data-test="stream-lag">${lag}</dd>
@@ -574,12 +614,13 @@ export class StreamSettingsPanel extends LitElement {
       label=${t(f.labelKey)}
       .required=${f.requiredKey !== undefined}
       type=${secret && !this.secretVisible ? "password" : "text"}
-      autocomplete="off"
+      autocomplete=${secret ? "new-password" : "off"}
       .value=${this.draft[f.field]}
       .error=${this.errors[f.field] ?? ""}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
         this.draft = { ...this.draft, [f.field]: event.detail.value };
+        this.testPassed = false;
       }}
       >${
         secret

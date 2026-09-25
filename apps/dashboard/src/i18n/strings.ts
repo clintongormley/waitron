@@ -868,7 +868,7 @@ export const en = {
   "stream.status.lag": "Changes not yet in the bucket",
   "stream.status.lag_none": "None",
   "stream.status.lag_under_minute": "Under a minute waiting",
-  "stream.status.minutes": "min waiting",
+  "stream.status.lag_minutes": "{minutes} min waiting",
   "stream.status.last": "Last confirmed copy",
   "stream.status.never": "None yet",
   "stream.status.bucket_check": "Bucket check",
@@ -899,9 +899,12 @@ export const en = {
     "This box's backup settings come from its environment and it holds no recovery key, so the bucket copy cannot be turned on from this page.",
   "stream.error.recovery_key_missing":
     "This box holds no recovery key, so there is no recovery kit to show.",
+  "stream.error.recovery_key_too_short":
+    "The recovery key this box holds is too short, so the bucket copy cannot use it. It has to be replaced with a longer key first.",
   "stream.show_kit": "Show recovery kit",
   "stream.change": "Change bucket",
   "stream.turn_off": "Turn off",
+  "stream.turn_off_confirm": "Tap again to turn off",
   "stream.kit.title": "Recovery kit",
   "stream.kit.warning":
     "Anyone holding this kit can read every sale and every stored credential in the bucket copy. Keep it as safe as the recovery key: offline, and never in the bucket itself. It is the only thing a rebuild asks for.",
@@ -2247,7 +2250,7 @@ export const es: Record<StringKey, string> = {
   "stream.status.lag": "Cambios que aún no están en el bucket",
   "stream.status.lag_none": "Ninguno",
   "stream.status.lag_under_minute": "Menos de un minuto de espera",
-  "stream.status.minutes": "min de espera",
+  "stream.status.lag_minutes": "{minutes} min de espera",
   "stream.status.last": "Última copia confirmada",
   "stream.status.never": "Ninguna todavía",
   "stream.status.bucket_check": "Comprobación del bucket",
@@ -2278,9 +2281,12 @@ export const es: Record<StringKey, string> = {
     "Los ajustes de copia de este equipo vienen de su entorno y no tiene clave de recuperación, así que la copia en el bucket no se puede activar desde esta página.",
   "stream.error.recovery_key_missing":
     "Este equipo no tiene clave de recuperación, así que no hay kit de recuperación que mostrar.",
+  "stream.error.recovery_key_too_short":
+    "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Primero hay que sustituirla por una clave más larga.",
   "stream.show_kit": "Mostrar el kit de recuperación",
   "stream.change": "Cambiar de bucket",
   "stream.turn_off": "Desactivar",
+  "stream.turn_off_confirm": "Toca de nuevo para desactivar",
   "stream.kit.title": "Kit de recuperación",
   "stream.kit.warning":
     "Quien tenga este kit puede leer todas las ventas y todas las credenciales guardadas en la copia del bucket. Guárdalo con el mismo cuidado que la clave de recuperación: fuera de línea y nunca en el propio bucket. Es lo único que pide una reconstrucción.",
