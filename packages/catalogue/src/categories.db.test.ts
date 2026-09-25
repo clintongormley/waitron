@@ -374,7 +374,7 @@ it("bulk-adds products by setting each one's main category, moving it from where
   expect(await mainCategoryOf(p2Id)).toBe(cId);
 });
 it("a repeated bulk add and an empty list change nothing further", async () => {
-  const { cId, dId, p1Id, p2Id } = await bulkAddFixture();
+  const { cId, p1Id, p2Id } = await bulkAddFixture();
   await app(async (tx) => {
     await addProductsToCategory(tx, cId, [p2Id]);
     await addProductsToCategory(tx, cId, [p2Id]);
@@ -382,7 +382,6 @@ it("a repeated bulk add and an empty list change nothing further", async () => {
   });
   expect(await mainCategoryOf(p2Id)).toBe(cId);
   expect(await mainCategoryOf(p1Id)).toBeNull();
-  expect(dId).not.toBe(cId);
 });
 it("refuses a bulk add whose product ids are not an array", async () => {
   const { cId } = await bulkAddFixture();

@@ -56,8 +56,10 @@ Deleting a category never strands a product or a subcategory, so the delete asks
 - `childrenTo` becomes the parent of each of its direct subcategories.
 
 Leave either out and it defaults to the deleted category's parent. For a top-level category that
-means its products become Uncategorised and its subcategories move to the top level. The delete
-also drops the category's preparation routes.
+default is none: its subcategories move to the top level, and each product that named it has its
+main category cleared. The same happens when you send `productsTo: null`. A cleared top-level
+product is Uncategorised. A cleared variant follows its parent's main category, as any variant with
+none of its own does. The delete also drops the category's preparation routes.
 
 A target that is the deleted category itself is refused with `category.reassign_invalid`, and so is
 a `childrenTo` that sits anywhere below it, because the subcategories would then hang from one of
@@ -67,8 +69,9 @@ before anything is written, so a refused delete changes nothing.
 ## API
 
 All routes require a manager session holding the catalogue write permission
-(`CATALOGUE_WRITE_PERMISSION` in `apps/server/src/catalogue-api.ts`, `person.manage` today). Reads
-return arrays directly, following the existing catalogue client convention. Create returns status
+(`CATALOGUE_WRITE_PERMISSION` in `apps/server/src/catalogue-api.ts`, `person.manage` today). A read
+of a list (categories, labels, a category's products) returns the array directly, following the
+existing catalogue client convention. Create returns status
 201, update returns the saved object, and delete returns an empty 204. A body of the wrong shape is
 refused with `management.request_invalid`, naming the field.
 
