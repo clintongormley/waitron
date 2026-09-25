@@ -3727,6 +3727,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       getLocationSettings: pending(),
       listDeviceProfiles: pending(),
       getBackupStatus: pending(),
+      getStreamSettings: pending(),
       getCloudStatus: pending(),
       getEmailInbox: pending(),
       listPaymentProviders: pending(),

@@ -1,11 +1,12 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { LiveData } from "@waitron/dashboard-kit";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./backup-screen.js";
 import type { BackupScreen } from "./backup-screen.js";
 import type { BackupStatusView, DashboardApi } from "../api/client.js";
 
 /**
- * Scanned in five shapes, including the advanced paste + pick-weekdays + fixed-time branches so every
+ * Scanned in several shapes, including the advanced paste + pick-weekdays + fixed-time branches so every
  * conditional control is scanned. The screen loads on connect, so the stub must resolve or a stray
  * rejection pollutes the run.
  */
@@ -17,6 +18,7 @@ const OFF: BackupStatusView = {
   destinations: [],
   backupStatus: { configured: false },
   archiveUnderCurrentKey: false,
+  recoveryKeySet: false,
 };
 
 const ENABLED: BackupStatusView = {
@@ -34,6 +36,7 @@ const ENABLED: BackupStatusView = {
     ],
   },
   archiveUnderCurrentKey: true,
+  recoveryKeySet: true,
 };
 
 const MANAGED: BackupStatusView = { ...OFF, managedByEnvironment: true };
@@ -45,6 +48,15 @@ function stubApi(status: BackupStatusView, overrides: Partial<DashboardApi> = {}
     applyBackup: vi.fn().mockResolvedValue(ENABLED),
     getBackupRecoveryKey: vi.fn().mockResolvedValue({ key: "OLD-KEY-xyz789012345" }),
     rotateBackupKey: vi.fn().mockResolvedValue(ENABLED),
+    getStreamSettings: vi.fn().mockResolvedValue({
+      isPrimary: true,
+      configured: false,
+      bucket: null,
+      status: { state: "off" },
+      recoveryKeySet: false,
+      keyFingerprint: null,
+    }),
+    liveData: new LiveData(),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -88,6 +100,17 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     selectValue(el, "[data-test=days-mode]", "weekdays");
     selectValue(el, "[data-test=time-mode]", "fixed");
     await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the configure wizard reusing a key the box already holds accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { api: stubApi({ ...OFF, recoveryKeySet: true }) },
+      theme,
+    );
+    await flush(el);
+    expect(q(el, "[data-test=existing-key]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

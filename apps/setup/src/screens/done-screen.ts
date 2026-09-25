@@ -39,7 +39,7 @@ export class SetupDoneScreen extends LitElement {
         display: block;
         margin-top: 0.5rem;
         padding: 0.5rem 0.75rem;
-        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-family: var(--wt-font-family-mono);
         font-size: 1.1rem;
         word-break: break-all;
         user-select: all;

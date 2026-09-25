@@ -5108,17 +5108,17 @@ key alone, `writeRecoveryKey` sets it in `backup.env` keeping the other settings
 the key of a box that holds a key and has no destination loaded, and `apply` reuses a key the box already holds,
 refusing a different one with `backup.recovery_key_exists`; every status answer carries
 `recoveryKeySet`; apply and rotate take turns, so a concurrent pair cannot put the old key
-back), landed as #557. The dashboard words
-`backup.recovery_key_exists` (a stopgap wording Task 8b replaces) but does not yet read
-`recoveryKeySet`. The gap that leaves: the Backups screen's setup form
+back), landed as #557. Until Task 8b the Backups screen's setup form
 (`apps/dashboard/src/screens/backup-screen.ts`, shown on a writable box whose backups are not
-enabled) sends a freshly made key unless the operator pastes one, so on a box that holds a key while
+enabled) sent a freshly made key unless the operator pasted one, so on a box that holds a key while
 backups are off — for instance one whose venue failed to open, which clears the running config while
-`backup.env` keeps the key — the apply is refused with that code. On that failed-venue box pasting
-the held key does not help either: the apply writes, reloads, the venue fails to open again, and the
-route answers `backup.effective_mismatch`. The edit-settings form can also meet
+`backup.env` keeps the key — the apply was refused with that code. Task 8b made the form read
+`recoveryKeySet` and make and send no key when the screen's last status read says the box holds one. That does not rescue the
+failed-venue box: an apply there that reuses the held key takes the path a pasted held key took
+before — it writes, reloads, the venue fails to open again, and the route answers
+`backup.effective_mismatch` (read from the route, not run, for Task 8b). The edit-settings form can also meet
 `backup.recovery_key_exists`, when a rotate (from another tab or admin) lands after it fetched the
-key. Making the setup form reuse the held key through `recoveryKeySet` is Task 8b's. Left open: the
+key. Left open: the
 "key rotated" date `rotate` writes is dropped by a later `apply`, because `readApplyBody` always
 passes `keyRotatedAt: undefined` — this predates Task 2a (a settings re-apply already dropped it),
 and the value is what the Backups screen shows as the date the key was rotated.
@@ -5185,7 +5185,7 @@ each answers, is not established; a provider that refuses it with any other stat
 prune, which is logged as `stream.prune_failed`. `probeBucket` (`packages/stream/src/probe.ts`),
 which the supervisor runs before opening a generation, again while streaming (at most every ten
 minutes after a failed bucket read or while a bucket problem is flagged, otherwise once a day), and
-which the settings screen's Test button is to run, deletes one object at a time, so neither can reveal such a provider. Open: having the bucket check
+which the bucket-copy panel's Test and Save both run, deletes one object at a time, so neither can reveal such a provider. Open: having the bucket check
 delete its test object through `deleteMany` would reveal one. The other
 choice #569 left, one code for a listed file outside the folder asked for, is taken: the S3 store
 now reports it as `backup.stream_name_invalid` with `field: "listedKey"`, the code and field
@@ -5217,7 +5217,7 @@ note §1b: the restore after the restart held every sale, and Litestream uploade
 database at level 0). Left for later tasks: `/health` must treat the supervisor's
 `supervisor_failed` stop as a problem, not as streaming switched off (done by Task 7); the settings route
 must reload the stream only after its save commits, and refuse a bucket name holding capitals or
-`_` (both done by Task 8a; the screen's wording is Task 8b's). Left open by #590's review, the owner's call (the PR description has the
+`_` (both done by Task 8a; the screen's wording by Task 8b). Left open by #590's review, the owner's call (the PR description has the
 detail): (1) no S3 call has a request timeout, so a pointer write that never gets an answer holds up the
 supervisor's retry until the server stops or reloads — Litestream stays stopped meanwhile, so the side
 file is not at risk; (2) `StreamHost.reload()` can leave the old supervisor's pointer write in flight,
@@ -5267,8 +5267,9 @@ bucket copy that is on and current. Left open:
   listener registered when it began) is not counted, so the lag reads low for it.
 - Whether Litestream uploads anything while the side file is unchanged is not measured; Task 10's
   loop test is the natural place.
-- The alerts send the owner to the Backups page for the bucket's settings, which Task 8b adds; the
-  status gained a third shape, a copy set up but not started, which Task 8b's panel must show.
+- The alerts send the owner to the Backups page for the bucket's settings, which Task 8b added; the
+  status gained a third shape, a copy set up but not started, which Task 8b's panel shows as "Not
+  running".
 - Of the four places boot hands the copy's state to, three are held by the compiler, which refuses
   a boot call that leaves the key out, and `/health` by a boot test. A boot test also pins the
   sealed-state alert's registration.
@@ -5285,8 +5286,22 @@ configuration runs, refusing with `backup.stream_config_unsafe` naming the field
 name, the fix is lowercase letters, digits, dots and hyphens only), and refuse a prefix of a single
 `-`, which the vault would store as no prefix. The routes and the kit's decoder read the bucket settings through
 one reader (`packages/stream/src/bucket-config.ts`), and the kit is sent with `Cache-Control: no-store`.
-The screen is Task 8b's. Left open: the pointer write left open under
+Left open: the pointer write left open under
 Task 6, item (2), one from a process that has since died, landing after the restart.
+Task 8b, the Backups screen's bucket-copy panel and the archive setup reusing a held recovery key
+(#628). The panel (`apps/dashboard/src/screens/stream-settings-panel.ts`) takes the bucket's
+settings with Test and Save, turns the copy off after a second, confirming tap, shows the copy's
+state, how many minutes of changes wait and the last confirmed copy, and the recovery kit with a copy
+button and a download; when a settings read of a set-up copy shows a different recovery key, it
+fetches the kit again and tells the owner to keep the old one for seven days. A refusal
+naming a bucket setting is shown beside that field; a failed Test names the failed check in words,
+and a check with no sentence of its own falls back to the refusal's own wording rather than the
+reason's text. The archive setup form no longer makes or sends a key when the box already holds one.
+The design system gained a `--wt-font-family-mono` token, which the Backups screen's key display,
+the panel's kit, the diagnostics screen's log lines and the setup app's break-glass secret read;
+`apps/dashboard/src/screens/printers-screen.ts` already asked for it with a `monospace` fallback,
+and now gets it. Left open: the Backups screen's own card width is still a
+`34rem` literal, which the no-hardcoded-chrome rule forbids in a view and no guard reads.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence

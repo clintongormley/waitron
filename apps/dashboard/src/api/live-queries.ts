@@ -110,6 +110,7 @@ export const QUERY_DEPENDENCIES = {
   getGoogleConfig: ["google_config"],
   getEmailInbox: ["email_inbox"],
   getBackupStatus: ["backup_status"],
+  getStreamSettings: ["backup_status"],
   listAlerts: ["incidents"],
   listHandledAlerts: ["incidents", "persons"],
 } as const;
@@ -138,7 +139,7 @@ export function dashboardQuery<N extends DashboardQueryName>(
         ? 30_000
         : name === "pairingMode" || name === "listDiscoveredPrinters"
           ? 5_000
-          : name === "getEmailInbox" || name === "getBackupStatus"
+          : name === "getEmailInbox" || name === "getBackupStatus" || name === "getStreamSettings"
             ? 10_000
             : 60_000,
   };

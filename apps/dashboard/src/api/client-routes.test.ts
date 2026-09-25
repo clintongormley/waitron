@@ -242,6 +242,41 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("drives the bucket copy's settings, test, switch-off and recovery kit routes", async () => {
+    const view = { isPrimary: true, configured: false, bucket: null, status: { state: "off" } };
+    const bucket = {
+      endpoint: "",
+      region: "eu-west-1",
+      bucket: "venue-copy",
+      prefix: "",
+      accessKeyId: "AKIAEXAMPLE",
+      secretAccessKey: "not-a-real-secret",
+    };
+    const kit = { kit: "WAITRON-RECOVERY-KIT-1:abc", keyFingerprint: "ab12cd34" };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(view))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse(view))
+      .mockResolvedValueOnce(jsonResponse(view))
+      .mockResolvedValueOnce(jsonResponse(kit));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getStreamSettings()).resolves.toEqual(view);
+    await expect(api.testStreamBucket(bucket)).resolves.toEqual({ ok: true });
+    await expect(api.saveStreamSettings(bucket)).resolves.toEqual(view);
+    await expect(api.turnOffStream()).resolves.toEqual(view);
+    await expect(api.getRecoveryKit()).resolves.toEqual(kit);
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/api/backup/stream", "GET", undefined],
+      ["/api/backup/stream/test", "POST", bucket],
+      ["/api/backup/stream", "PUT", bucket],
+      ["/api/backup/stream", "DELETE", undefined],
+      ["/api/backup/stream/kit", "GET", undefined],
+    ]);
+  });
+
   it("lists card providers and readers, disconnects a provider, and reads and sets a device's reader", async () => {
     const providers = [{ id: "sumup", name: "SumUp", state: "connected" }];
     const readers = [{ id: "r-1", name: "Bar", providerId: "sumup", active: true, devices: 1 }];

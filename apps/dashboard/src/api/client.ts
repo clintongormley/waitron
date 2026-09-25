@@ -910,6 +910,8 @@ export interface BackupStatusView {
   keyRotatedAt?: string;
   backupStatus: BackupFreshness;
   archiveUnderCurrentKey: boolean;
+  /** Whether the box holds a recovery key at all, archives on or off. */
+  recoveryKeySet: boolean;
 }
 
 /** LOCAL copy of the server's `Alert` (`packages/module/src/alerts.ts`). */
@@ -933,9 +935,55 @@ export interface AlertsResponse {
 
 export interface BackupApplyBody {
   destinationDir: string;
-  recoveryKey: string;
+  /** Omitted when the box already holds a key: the server uses that one. */
+  recoveryKey?: string;
   schedule: BackupSchedule;
   retention: { count: number; days: number };
+}
+
+/** LOCAL copy of `@waitron/stream`'s `StreamStatus`: a supervisor's state, running or stopped. */
+export interface StreamSupervisorStatus {
+  state: "off" | "opening" | "streaming" | "paused" | "refused";
+  generation: string | null;
+  reason: string | null;
+  stateSince: string;
+  bucketProblem: { reason: string; since: string } | null;
+  lagMs: number;
+  lastConfirmedUploadAt: string | null;
+}
+
+/** LOCAL copy of `@waitron/stream`'s `StreamView`: a supervisor's status; a copy whose
+ * settings are stored but that has no supervisor, with why; or plain off. */
+export type StreamStatusView =
+  StreamSupervisorStatus | { state: "off"; reason: string; stateSince: string } | { state: "off" };
+
+/** `GET /api/backup/stream` — LOCAL copy of `apps/server/src/stream-api.ts`'s `StreamSettingsView`.
+ * Never carries the secret access key. */
+export interface StreamSettingsView {
+  isPrimary: boolean;
+  configured: boolean;
+  bucket: {
+    endpoint: string | null;
+    region: string;
+    bucket: string;
+    prefix: string;
+    accessKeyId: string;
+  } | null;
+  status: StreamStatusView;
+  /** True for a key under the length floor too, which has no fingerprint. */
+  recoveryKeySet: boolean;
+  keyFingerprint: string | null;
+}
+
+/** The bucket form's body: a blank `endpoint` means an Amazon bucket, a blank `prefix` the bucket
+ * root. */
+export interface StreamBucketBody {
+  endpoint: string;
+  region: string;
+  bucket: string;
+  prefix: string;
+  accessKeyId: string;
+  secretAccessKey: string;
 }
 
 // ── Card payments (providers + readers) ──────────────────────────────────────────────────────────
@@ -2274,6 +2322,29 @@ export class DashboardApi {
   /** Archives taken before the rotate still need the old key. */
   rotateBackupKey(body: { recoveryKey: string }): Promise<BackupStatusView> {
     return this.#request<BackupStatusView>("/api/backup/rotate", "POST", body);
+  }
+
+  getStreamSettings(): Promise<StreamSettingsView> {
+    return this.#request<StreamSettingsView>("/api/backup/stream", "GET");
+  }
+
+  /** Tests the bucket, stores the settings and switches the copy on. */
+  saveStreamSettings(body: StreamBucketBody): Promise<StreamSettingsView> {
+    return this.#request<StreamSettingsView>("/api/backup/stream", "PUT", body);
+  }
+
+  /** Runs the bucket checks and stores nothing. */
+  testStreamBucket(body: StreamBucketBody): Promise<{ ok: true }> {
+    return this.#request<{ ok: true }>("/api/backup/stream/test", "POST", body);
+  }
+
+  /** What is already in the bucket stays there. */
+  turnOffStream(): Promise<StreamSettingsView> {
+    return this.#request<StreamSettingsView>("/api/backup/stream", "DELETE");
+  }
+
+  getRecoveryKit(): Promise<{ kit: string; keyFingerprint: string }> {
+    return this.#request<{ kit: string; keyFingerprint: string }>("/api/backup/stream/kit", "GET");
   }
 
   // ── Card payments (providers + readers) ──────────────────────────────────────────────────────────

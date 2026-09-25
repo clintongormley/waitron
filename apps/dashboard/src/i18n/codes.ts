@@ -628,8 +628,32 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La clave guardada no se aplicó; inténtalo de nuevo",
   },
   "backup.recovery_key_exists": {
-    en: "This box already has a different recovery key — use that key; changing it needs a key rotation",
-    es: "Esta caja ya tiene otra clave de recuperación; usa esa clave o rótala para cambiarla",
+    en: "This box holds a different recovery key from the one this page sent. Reload the page and try again. To replace the key, use “Change the recovery key”, which appears while backups are on.",
+    es: "Este equipo tiene una clave de recuperación distinta de la que ha enviado esta página. Vuelve a cargar la página e inténtalo de nuevo. Para sustituir la clave, usa «Cambiar la clave de recuperación», que aparece mientras las copias están activadas.",
+  },
+  "backup.reload_in_progress": {
+    en: "The box is still applying an earlier change. Wait a moment and try again.",
+    es: "El equipo todavía está aplicando un cambio anterior. Espera un momento y vuelve a intentarlo.",
+  },
+  "backup.stream_config_unsafe": {
+    en: "The bucket copy cannot use one of these settings as written.",
+    es: "La copia en el bucket no puede usar uno de estos ajustes tal como está escrito.",
+  },
+  "backup.stream_test_failed": {
+    en: "The bucket failed the test. Check the address, the key and the bucket's permissions.",
+    es: "El bucket no ha superado la prueba. Revisa la dirección, la clave y los permisos del bucket.",
+  },
+  "backup.stream_not_configured": {
+    en: "Set up the bucket copy first.",
+    es: "Configura primero la copia en el bucket.",
+  },
+  "backup.stream_signer_missing": {
+    en: "This server has no signing key, so it cannot issue a recovery kit.",
+    es: "Este servidor no tiene clave de firma, así que no puede emitir un kit de recuperación.",
+  },
+  "backup.stream_request_failed": {
+    en: "The bucket did not answer. Check this server's internet connection and the bucket's address.",
+    es: "El bucket no ha respondido. Revisa la conexión a internet de este servidor y la dirección del bucket.",
   },
   "reader.not_listed": {
     en: "This reader is no longer listed by the payment provider. Check the list and try again.",

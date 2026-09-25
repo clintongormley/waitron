@@ -6,6 +6,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import "./stream-settings-panel.js";
 import type {
   BackupApplyBody,
   BackupSchedule,
@@ -115,7 +116,7 @@ export class BackupScreen extends LitElement {
       }
       /* The one-time key reveal: a monospace block so every character of the key is legible. */
       .key {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-family: var(--wt-font-family-mono);
         font-size: var(--wt-font-size-sm);
         word-break: break-all;
         padding: var(--wt-space-2) var(--wt-space-3);
@@ -217,7 +218,9 @@ export class BackupScreen extends LitElement {
       await this.#queries.watch("getBackupStatus", [], (value) => {
         this.status = value;
       });
-      if (this.status!.isPrimary && !this.status!.managedByEnvironment) await this.#mint();
+      if (this.status!.isPrimary && !this.status!.managedByEnvironment && !this.#reusesHeldKey) {
+        await this.#mint();
+      }
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -236,7 +239,15 @@ export class BackupScreen extends LitElement {
     return this.advancedPaste ? this.pastedKey : (this.mintedKey ?? "");
   }
 
+  /** Archives are off but the box already holds a key (the bucket copy may have set it): turning
+   * archives on uses that key, so the recovery kit stays valid, and the form neither makes nor sends
+   * one. */
+  get #reusesHeldKey(): boolean {
+    return this.status?.enabled === false && this.status.recoveryKeySet;
+  }
+
   get #applyDisabled(): boolean {
+    if (this.#reusesHeldKey) return this.submitting || this.destinationDir.trim() === "";
     return (
       this.submitting ||
       !this.savedIt ||
@@ -276,12 +287,12 @@ export class BackupScreen extends LitElement {
   }
 
   async #apply(): Promise<void> {
-    if (this.#applyDisabled || this.#pastedKeyTooShort()) return;
+    if (this.#applyDisabled || (!this.#reusesHeldKey && this.#pastedKeyTooShort())) return;
     this.errorKey = null;
     this.submitting = true;
     const body: BackupApplyBody = {
       destinationDir: this.destinationDir.trim(),
-      recoveryKey: this.#effectiveKey,
+      ...(this.#reusesHeldKey ? {} : { recoveryKey: this.#effectiveKey }),
       schedule: this.#buildSchedule(),
       retention: { count: this.retainCount, days: this.retainDays },
     };
@@ -304,6 +315,8 @@ export class BackupScreen extends LitElement {
     this.submitting = true;
     try {
       this.status = await this.api.rotateBackupKey({ recoveryKey: this.#effectiveKey });
+      // The bucket copy's kit carries the key, so its panel has to read the new one now.
+      this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.savedIt = false;
       this.advancedPaste = false;
       this.pastedKey = "";
@@ -488,6 +501,9 @@ export class BackupScreen extends LitElement {
           ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
           : nothing
       }
+      <div class="card">
+        <dashboard-stream-settings .api=${this.api}></dashboard-stream-settings>
+      </div>
     `;
   }
 
@@ -686,7 +702,11 @@ export class BackupScreen extends LitElement {
       ${this.#renderDestinationField()}
 
       <h2>${t("backup.key.title")}</h2>
-      ${this.#renderKeyStep()}
+      ${
+        this.#reusesHeldKey
+          ? html`<p class="hint" data-test="existing-key">${t("backup.key.existing")}</p>`
+          : this.#renderKeyStep()
+      }
 
       <h2>${t("backup.schedule.title")}</h2>
       ${this.#renderPolicy()}

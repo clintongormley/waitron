@@ -66,3 +66,9 @@ it.each([
     expect(query.dependencies).toEqual(types.map((type) => ({ type })));
   },
 );
+
+it("refreshes the bucket copy's settings every ten seconds, and depends on `backup_status` alone", () => {
+  const query = dashboardQuery(new DashboardApi("", vi.fn()), "getStreamSettings", []);
+  expect(query.dependencies).toEqual([{ type: "backup_status" }]);
+  expect(query.refreshMs).toBe(10_000);
+});

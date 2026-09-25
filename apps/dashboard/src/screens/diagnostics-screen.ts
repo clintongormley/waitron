@@ -47,7 +47,7 @@ export class DiagnosticsScreen extends LitElement {
         background: var(--wt-color-surface);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-family: var(--wt-font-family-mono);
         font-size: var(--wt-font-size-sm);
       }
       .log li {
