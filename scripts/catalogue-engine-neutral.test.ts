@@ -3,9 +3,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * The extras-and-options files listed below contain none of three PostgreSQL-only constructs: an
- * advisory lock, the JSON containment operators, and a `pgEnum` declaration. `pgEnum` is checked in
- * the catalogue files only; the order and sale path files are not scanned for it.
+ * The catalogue and order-path files listed below contain none of three PostgreSQL-only
+ * constructs: an advisory lock, the JSON containment operators, and a `pgEnum` declaration.
+ * `pgEnum` is checked in the catalogue files only; the order and sale path files are not scanned
+ * for it.
  *
  * READS TEXT, so it is weaker than "proves engine neutrality":
  *
@@ -20,7 +21,7 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = join(import.meta.dirname, "..");
 
-/** The extras-and-options schema and CRUD files. */
+/** The catalogue's extras, options, labels, product-modifier and sale-classification files. */
 const CATALOGUE_FILES = [
   "packages/catalogue/src/schema/options.ts",
   "packages/catalogue/src/schema/extras.ts",
@@ -39,6 +40,7 @@ const CATALOGUE_FILES = [
 const ORDER_PATH_FILES = [
   "apps/server/src/modifier-selection.ts",
   "apps/server/src/working-order.ts",
+  "apps/server/src/issuance-pass.ts",
   "packages/db/src/schema/orders.ts",
   "packages/core/src/record-sale.ts",
   "packages/core/src/sale-line-rows.ts",
