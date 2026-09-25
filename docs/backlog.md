@@ -3874,6 +3874,21 @@ three branches bookings' coverage still leaves uncovered. **Next action:** decid
 does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
 may make one or both of those branches reachable, or show they can go.
 
+**The till reports a failed list refresh after a SUCCESSFUL write as a failed write — OPEN (found
+2026-09-25 by the retroactive Codex review of #621; its comment fixes landed as #632).** CLAUDE.md
+§3 says a successful write followed by a failed refresh is a load failure, not a failed save; three
+handlers in `apps/till/src/till-app.ts` put the refresh inside the write's `try`:
+`#onParkOrder` clears the basket and then awaits `#refreshHeldOrders`, so a refresh failure shows
+`held.park_error` with the basket already gone (Codex's probe, stubbed API: `lines 0`,
+`held.park_error`); `#onConfirmPayment` shows the ticket and then refreshes, so a network failure of
+that refresh shows `sale.unconfirmed` over a sale whose answer arrived (probe: ticket shown,
+`sale.unconfirmed`); and `#onPlaceOrder` sets the `collect` stage and then awaits
+`#refreshStationQueue` under the same catch (read, not run). **Next action:** test-first, move each
+refresh out of the write's `try` and give its failure a load-error message of its own, which needs
+new English and Spanish strings. Beside it, not changeable in a comments-only PR: the test title at
+`apps/till/src/till-app.test.ts` "a failing listStaff leaves the roster empty…" is true only of the
+first login — a later login's failure keeps the roster it had (#632).
+
 **The units screen puts a missing abbreviation's refusal beside the name — OPEN (found
 2026-09-23, dashboard coverage, PR #538).** `apps/dashboard/src/screens/units-screen.ts` (about
 line 190) shows every `content.translation_required` refusal beside the unit's NAME field. The server
