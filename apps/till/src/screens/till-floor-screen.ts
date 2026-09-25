@@ -419,6 +419,8 @@ export class TillFloorScreen extends LitElement {
     const visible = this.tables.filter((table) =>
       activeKey === null ? isTableZoneless(table, knownZoneIds) : table.zoneId === activeKey,
     );
+    // The server writes and nulls the four placement columns together, so `posX` alone tells placed
+    // from unplaced.
     const placed = visible.filter(
       (table): table is TableState & { posX: number; posY: number } =>
         table.posX != null && table.posY != null,

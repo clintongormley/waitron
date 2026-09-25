@@ -219,7 +219,8 @@ export class TillLockScreen extends LitElement {
   }
 
   /** Guarded so an empty PIN or a throttled screen never calls the API, even if Log in is force-clicked
-   * past its disabled state. */
+   * past its disabled state. Only a still-connected screen remembers the operator and announces
+   * `logged-in`: those are side effects, not state writes. */
   async #submit(): Promise<void> {
     const person = this.selected;
     if (person === undefined || this.pin === "" || this.throttleRemaining > 0) return;

@@ -14,7 +14,7 @@ const POLL_MS = 2_000;
 /**
  * The device front door's JOIN screen, for a FRESH (unenrolled) browser; the dev chooser embeds it too.
  * It asks only for a name: the profile and the binding are chosen by an admin in the dashboard's accept
- * dialog, so an unapproved device reads no catalogue.
+ * dialog, so this screen reads no catalogue.
  *
  * On approval it emits `enrolled` carrying `{ deviceId }` and never routes itself. The id is the join
  * response's `joinId`: accept carries the request's id onto the `devices` row

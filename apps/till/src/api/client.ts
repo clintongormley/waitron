@@ -1067,9 +1067,8 @@ export interface ExpoItem {
    *  items can span several stations each with different thresholds (see {@link queuedAt}). */
   thresholds: StationThresholds;
   /** This item's age band against its own station's thresholds, computed on the DB clock at fetch
-   *  time. Authoritative for the very first paint; `till-expo-screen` re-derives it locally afterward
-   *  (via {@link queuedAt}/{@link thresholds}) so a lagging item keeps escalating between refreshes
-   *  with no new fetch. */
+   *  time. Not read by `till-expo-screen`, which derives the band from {@link queuedAt} and
+   *  {@link thresholds}. */
   band: TimingBand;
 }
 
@@ -1111,11 +1110,8 @@ export interface ExpoOrder {
    * The worst age band across the order's UNSERVED lines, computed on the DB clock at fetch time
    * (design §3 — a served line drops off the clock, so the reduction skips it; `"fresh"` when none
    * are aging). A LOCAL mirror of the server's `ExpoOrder.worstBand`
-   * (`apps/server/src/working-order.ts`), NOT imported (the bundle rule). Authoritative for the very
-   * first paint only: `till-expo-screen` re-derives a card's LIVE worst band locally, via `worstBand`
-   * (`@waitron/shared`) over each visible item's own re-ticked {@link ExpoItem.band}, so the accent
-   * keeps escalating between refreshes under its `TickingClock` — this field is not read directly by
-   * that recompute, but rides for parity with the server payload.
+   * (`apps/server/src/working-order.ts`), NOT imported (the bundle rule). Not read by
+   * `till-expo-screen`, which derives the band from each item's `queuedAt` and thresholds.
    */
   worstBand: TimingBand;
 }
@@ -2102,7 +2098,7 @@ export class TillApi {
   }
 
   // --- Staff schedule (the till-session-gated request path, `apps/server/src/schedule-api.ts`). The
-  // requester is ALWAYS the session's operator server-side; these methods never send a personId. ---
+  // server takes the requester from the session, never from the request body. ---
 
   /** My shifts over a half-open `[from, to)` window (`YYYY-MM-DD`) → `GET /api/schedule/shifts`. */
   listMyShifts(from: string, to: string): Promise<MyShift[]> {

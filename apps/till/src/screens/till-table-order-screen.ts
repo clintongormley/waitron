@@ -362,7 +362,8 @@ export class TillTableOrderScreen extends LitElement {
   @property() orderId?: string;
   /** The visible half of the app's single-flight fiscal guard. */
   @property({ type: Boolean }) busy = false;
-  /** `false` hides the pay section. UI honesty only: the server is the real guarantee. */
+  /** `false` hides the pay section. The server accepts a handheld's cash or manual-card tender on
+   * `/api/sales` and fences only the integrated reader (`/api/pay`). */
   @property({ type: Boolean }) canSettle = true;
   /** Mounted inside a card host, which supplies the header; the drawer handle and its badge stay. */
   @property({ type: Boolean }) embedded = false;
@@ -1190,7 +1191,8 @@ export class TillTableOrderScreen extends LitElement {
       .filter((error) => error !== "");
   }
 
-  /** Full quantities omit `quantity`; partial plain dishes carry their exact selected decimal. */
+  /** Full quantities omit `quantity`; partial plain dishes carry their exact selected decimal. Modifier
+   * children are absent from the picker and move with their whole parent on the server. */
   #confirmSplit(): void {
     if (this.splitQuantities.size === 0) return;
     this.splitAttempted = true;

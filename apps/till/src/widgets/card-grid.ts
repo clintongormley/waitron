@@ -279,7 +279,8 @@ export class TillCardGrid extends LitElement {
         // The tab (table-order) screen (SP-B2.2), mounted EMBEDDED like the floor/expo/station screens.
         // The app owns every write and reload; the grid host only threads the props through. `canSettle`
         // is left the screen's DEFAULT `true` — a card-mounted tab settles like the standalone screen
-        // (cash + manual-card tenders), the server firewall being the real guarantee — so it is not passed.
+        // (cash + manual-card tenders; the server fences only the integrated reader, `/api/pay`) — so it
+        // is not passed.
         return html`<till-table-order-screen
           embedded
           .lines=${this.tabLines}
