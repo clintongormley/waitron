@@ -93,6 +93,9 @@ export interface RestoreDeps extends ValidationDeps {
   readonly lockVenue?: (directory: string) => Promise<VenueLock>;
   /** Recorded in the first-start marker. Default `"archive"`. */
   readonly rebuildSource?: RebuildSource;
+  /** Runs after validation and before anything is written, when the archive's identity is taken
+   * on. Refusing stops the restore. */
+  readonly checkSourceLive?: (validated: ValidatedArtifact) => Promise<void>;
   readonly log: Logger;
 }
 
@@ -346,6 +349,7 @@ async function lockRestoreTarget(directory: string): Promise<VenueLock> {
  */
 export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
   const validated = await validateArtifact(deps);
+  if (!deps.skipSecrets) await deps.checkSourceLive?.(validated);
   await writeValidated(
     deps.managedCloud
       ? {

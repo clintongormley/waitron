@@ -387,6 +387,42 @@ setInterval(() => db, 1000);`;
     await expectVenueUntouched();
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  // Plan Reconciliation N23: the archive's old-box check runs after validation and before anything
+  // is placed.
+  it("stops before anything is placed when the source check refuses", async () => {
+    await writeFile(join(stateDir, "trading.env"), TRADING_ENV);
+    const checkSourceLive = vi.fn(async () => {
+      throw new AppError("restore.stream_source_live", {
+        lastChangeAt: "2026-09-23T11:58:00.000Z",
+      });
+    });
+    await expect(restoreFromArtifact(deps({ checkSourceLive }))).rejects.toMatchObject({
+      code: "restore.stream_source_live",
+    });
+    expect(checkSourceLive).toHaveBeenCalledOnce();
+    expect(checkSourceLive).toHaveBeenCalledWith(
+      expect.objectContaining({ dumpEntry: expect.objectContaining({ name: "db.dump" }) }),
+    );
+    await expectVenueUntouched();
+    await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
+    await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("does not run the source check for a restore that keeps the box's own identity", async () => {
+    const checkSourceLive = vi.fn(async () => {});
+    await restoreFromArtifact(deps({ skipSecrets: true, checkSourceLive }));
+    expect(checkSourceLive).not.toHaveBeenCalled();
+    await expectVenueRestored();
+  });
+
+  it("restores once the source check lets it through", async () => {
+    const checkSourceLive = vi.fn(async () => {});
+    await restoreFromArtifact(deps({ checkSourceLive }));
+    expect(checkSourceLive).toHaveBeenCalledOnce();
+    await expectVenueRestored();
+  });
 });
 
 describe("the first-start marker (rebuild-first-start.ts)", () => {
