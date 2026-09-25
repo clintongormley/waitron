@@ -977,11 +977,10 @@ describe("till-app", () => {
     expect(currentApi.listWorkingOrders).not.toHaveBeenCalled();
   });
 
-  // Handheld face-set containment (§6a): the phone shell may reach ONLY `HANDHELD_FACES`
-  // (`lock`/`floor`/`table-order`). A `back-to-counter` — whether from the floor's Back affordance or
-  // bubbled from any child — must NOT land the handheld on the counter POS (from which `station`/`expo`/
-  // `schedule` are reachable). The floor's Back affordance is suppressed in handheld mode
-  // (`canExitToCounter`).
+  // Handheld face-set containment (§6a): a `back-to-counter` — whether from the floor's Back
+  // affordance or bubbled from any child — must NOT land the handheld on the counter POS (from
+  // which `station`/`expo`/`schedule` are reachable). The floor's Back affordance is suppressed in
+  // handheld mode (`canExitToCounter`).
   describe("handheld face-set containment (§6a)", () => {
     /** Boots a HANDHELD, logs the waiter in, and returns the app on the floor (the post-login face). */
     async function toHandheldFloor(): Promise<TillApp> {
@@ -6204,9 +6203,8 @@ describe("till-app", () => {
 
     it("clears the open drill and resets the active tab on logout (Finding 2 — no stale receipt into the next shift)", async () => {
       // Operator A finishes a sale (a `ticket` drill holds A's receipt), then taps Logout (NOT New sale)
-      // from the non-inert shell header. Unless logout clears `drill`/`activeTabKey`, operator B's fresh
-      // login would re-mount A's ticket over B's counter. Assert the STATE is cleared (not merely that
-      // the shell unmounted at `lock`, which would mask it).
+      // from the non-inert shell header. Assert the STATE is cleared (not merely that the shell
+      // unmounted at `lock`, which would mask it).
       const el = await toShellCounter();
       const c = counter(el)!;
       c.store.addProduct(cafe, "2");

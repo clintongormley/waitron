@@ -5,7 +5,8 @@ import { devServerProxy } from "../../scripts/dev-server-proxy.js";
 
 import { buildManifest } from "./src/manifest.js";
 
-// Emitted rather than placed in `publicDir`, which is the brand directory shared with the dashboard.
+// Emitted rather than placed in `publicDir`, which is the brand directory shared with the other
+// front-ends.
 function webManifest(): PluginOption {
   const json = JSON.stringify(buildManifest(), null, 2);
   return {
@@ -24,8 +25,9 @@ function webManifest(): PluginOption {
 
 export default defineConfig({
   plugins: [webManifest()],
-  // A relative path, not `import.meta.resolve`: `@waitron/ui` has no `exports` map. This line is read
-  // as text by `scripts/brand-icons.test.ts`.
+  // Favicons and app icons are served from the ONE brand directory in packages/ui, so a redrawn
+  // mark cannot go stale. A relative path, not `import.meta.resolve`: `@waitron/ui` has no
+  // `exports` map. This line is read as text by `scripts/brand-icons.test.ts`.
   publicDir: fileURLToPath(new URL("../../packages/ui/brand/public", import.meta.url)),
   server: {
     port: 5190,

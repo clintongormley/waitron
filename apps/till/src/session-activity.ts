@@ -54,8 +54,9 @@ export class SessionActivity {
   #active = false;
   #sentinel: WakeLockSentinelLike | undefined;
   #timer: number | undefined;
-  /** Bumped by every acquire and release, so a `wakeLock.request` that resolves after being superseded
-   * releases its sentinel rather than storing it and stranding the screen awake. */
+  /** Bumped whenever a wake-lock request starts and on every release, so a `wakeLock.request` that
+   * resolves after being superseded releases its sentinel rather than storing it and stranding the
+   * screen awake. */
   #wakeGeneration = 0;
   /** When the idle logout is due; a timer that fires before it re-arms for the remainder. */
   #deadline = 0;

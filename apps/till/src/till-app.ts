@@ -86,7 +86,7 @@ type Drill = { kind: "table-order" | "ticket" | TillDestination };
 /** A handheld's screens, in order; `#onLoggedIn` lands it on `HANDHELD_FACES[1]`. */
 const HANDHELD_FACES: Screen[] = ["lock", "floor", "table-order"];
 
-/** Display only: a whole-count unit's three-place server quantity reads "2", not "2.000". */
+/** A whole-count unit's three-place server quantity reads "2", not "2.000". */
 function displayQuantity(product: TillProduct, quantity: string): string {
   if (productUnit(product).precision !== 0 || !quantity.includes(".")) return quantity;
   return quantity.replace(/0+$/, "").replace(/\.$/, "");
@@ -94,8 +94,8 @@ function displayQuantity(product: TillProduct, quantity: string): string {
 
 /**
  * Sale refusals a retry can never clear: the same basket files the same refused record. Every handler
- * whose call reaches `recordSale` checks them. The settle paths show `sale.refused`, because money may
- * already have been taken; `#onPlaceOrder` takes no tender and shows `place.refused`.
+ * whose server call reaches `recordSale` checks them. The settle paths show `sale.refused`, because
+ * money may already have been taken; `#onPlaceOrder` takes no tender and shows `place.refused`.
  */
 const PERMANENT_SALE_REFUSALS = new Set([
   "fiscal.record_invalid",
@@ -403,7 +403,8 @@ export class TillApp extends LitElement {
   /**
    * Single-flight guard: two chained fiscal records for one purchase cannot be repaired. Set
    * synchronously before the first await of {@link TillApp.#onConfirmPayment}, so a second
-   * `confirm-payment` is a no-op; disabling the button is only the visible feedback.
+   * `confirm-payment` before the first settles is a no-op; disabling the button is only the visible
+   * feedback.
    */
   @state() private submitting = false;
   /** Re-entry guard for {@link TillApp.#onParkOrder}, set before its first await. */
@@ -1578,8 +1579,9 @@ export class TillApp extends LitElement {
   /**
    * Refuses a screen outside {@link HANDHELD_FACES} for a handheld. Only the no-shell arm of
    * {@link #onBackToCounter} calls it: inside the shell a handheld has no counter tab, and
-   * {@link #pushDrill} refuses its drill-ins because {@link #affordances} gives it none. The no-shell
-   * arms of the other counter-side handlers call {@link #setScreen} unchecked.
+   * {@link #pushDrill} refuses its station, expo and schedule drill-ins because
+   * {@link #affordances} gives it none. The no-shell arms of the other counter-side handlers call
+   * {@link #setScreen} unchecked.
    */
   #goToScreen(target: Screen): void {
     if (this.handheldMode && !HANDHELD_FACES.includes(target)) return;
@@ -1595,8 +1597,8 @@ export class TillApp extends LitElement {
   /**
    * The else-arms that set `screen` are also reached by an async handler whose answer arrives after
    * logout, and setting `screen` there takes the till off the lock screen, which is why
-   * {@link #showTicket} and {@link #onOpenTable} check for `lock` first. {@link #onShowFloor} does not,
-   * and nothing emits `show-floor` (docs/backlog.md, "Till code that no test can reach").
+   * {@link #showTicket} and {@link #onOpenTable} check for `lock` first. {@link #onShowFloor} does
+   * not (docs/backlog.md, "Till code that no test can reach").
    */
   #inShell(): boolean {
     return this.canvas !== undefined && this.#shellActive();
@@ -1642,7 +1644,7 @@ export class TillApp extends LitElement {
   /**
    * Inside the shell only a till reaches this: a handheld's order tab is `embedded` and emits no
    * `back-to-floor`. Neither `openTab` nor a round updates `.tables`, so a bare pop would show the
-   * just-opened table as free, and a re-tap would open it again (`tab.already_open`).
+   * just-opened table as free.
    */
   #onBackToFloor(): void {
     if (this.#inShell()) {
@@ -1660,8 +1662,7 @@ export class TillApp extends LitElement {
     // the till unlocked. The server logout is best-effort.
     this.operatorName = "";
     this.canEdit = false;
-    // `screen = "lock"` resets neither the drill nor the tab, so without this the previous operator's
-    // ticket would re-mount over the next operator's session.
+    // `screen = "lock"` resets neither the drill nor the tab.
     this.drill = undefined;
     this.#setActiveTab(this.canvas?.tabs[0]?.key, true);
     this.#url.write({ "till-zone": null }, true);
@@ -1719,7 +1720,7 @@ export class TillApp extends LitElement {
 
   /**
    * Station, Expo and Schedule surfaces not authored as tabs, offered as buttons. A handheld gets none:
-   * it cannot open any of them. Called only from {@link willUpdate}.
+   * it cannot open any of them.
    */
   #affordances(): ShellAffordance[] {
     if (this.handheldMode) return [];
