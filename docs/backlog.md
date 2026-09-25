@@ -6150,7 +6150,7 @@ What the preparation tasks left, with F1's own answers where it found them:
     cents, so `decimalToCents("999999999999.995")` returned `100000000000000`, an amount with thirteen integer
     digits that `assertMoney` refused (measured 2026-09-23 on #529's branch). `main` then checked in
     the same order (`toScale(assertMoney(value), MONEY_SCALE)`), so it predated #529.
-    **DONE 2026-09-26 (lane A's A32, branch `chore/delete-assert-money`):** `assertMoney` is
+    **DONE 2026-09-26 (lane A's A32, **PR #662**, main `fd5511324`):** `assertMoney` is
     deleted, with its export from `packages/shared/src/index.ts` and its tests. After #583 it had no
     product caller, and it checked the digits BEFORE rounding, the order #583 removed from
     `decimalToCents`. The money bound is `decimalToCents`'s, pinned in
