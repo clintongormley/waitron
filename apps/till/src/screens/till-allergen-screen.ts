@@ -312,7 +312,7 @@ export class TillAllergenScreen extends LitElement {
     return html`<div class="detail-diet">${badges}</div>`;
   }
 
-  /** Always present, driven by `selected`, so escape/backdrop closes flow back through `wt-close` into
+  /** Always present, driven by `selected`, so Escape closes flow back through `wt-close` into
    * `selected` rather than fighting the `.open` binding. */
   #detail() {
     const product = this.selected;

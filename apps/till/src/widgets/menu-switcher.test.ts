@@ -7,7 +7,6 @@ const twoMenus = [
   { id: "cat-drinks", name: "Drinks", isDefault: false },
 ];
 
-/** The interactive option nodes the switcher renders (one per menu). */
 function options(el: TillMenuSwitcher): HTMLElement[] {
   return [...el.shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="menu-"]')];
 }

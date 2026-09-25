@@ -4,7 +4,6 @@ import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import { segmentedOptionStyles } from "./segmented-control-styles.js";
 
-/** One of the zone's menus offered to the switcher; `isDefault` marks the zone's default menu. */
 interface SwitcherMenu {
   id: string;
   name: string;
@@ -12,23 +11,8 @@ interface SwitcherMenu {
 }
 
 /**
- * The till's MENU SWITCHER: a segmented control listing the service zone's menus (catalogues),
- * rendered above the product grid. Tapping one asks the parent to show that menu; the widget holds NO
- * state — the parent (`till-app`) owns `selectedCatalogueId` and re-filters the grid, then feeds the
- * new `selectedId` back down. Props in, event out, mirroring `till-language-chooser`.
- *
- * It renders NOTHING when there is one menu or none (`menus.length <= 1`), so a single-menu venue — the
- * common case — looks exactly as it did before multi-menu: no switcher chrome above the grid at all.
- *
- * Accessibility: the options are NATIVE `<button>` elements — the real focusable nodes — inside a
- * `role="group"` labelled by the `menu.switcher` string, each carrying `aria-pressed` for its
- * selected state. This mirrors `till-language-chooser`'s own choice of native buttons over `wt-button`
- * for its menu options: a `wt-button` forwards only `disabled`/`aria-label` to its inner button, so a
- * role or `aria-pressed` set on a `wt-button` host would land on the non-interactive host and be lost
- * to the screen reader. Keeping the state on the native button puts it on the element the AT reaches.
- * (`aria-pressed` is the valid selection attribute for a button; `aria-selected` is only valid on
- * `tab`/`option` roles.) The `min-height: var(--wt-tap-min)` preserves the POS tap target `wt-button`
- * would otherwise give for free.
+ * The options are NATIVE `<button>`s carrying `aria-pressed`, not `wt-button`s: `wt-button` does not
+ * forward `aria-pressed` to its inner button, so the state would stay on the non-interactive host.
  */
 @customElement("till-menu-switcher")
 export class TillMenuSwitcher extends LitElement {
@@ -51,13 +35,10 @@ export class TillMenuSwitcher extends LitElement {
     segmentedOptionStyles,
   ];
 
-  /** The zone's menus, in the zone's display order. */
   @property({ attribute: false }) menus: SwitcherMenu[] = [];
 
-  /** The currently-shown menu's catalogue id — owned by the parent, echoed here to mark the active option. */
   @property() selectedId = "";
 
-  /** Ask the parent to switch to `id`. The widget does not change its own selection — see the class doc. */
   #pick(id: string): void {
     this.dispatchEvent(
       new CustomEvent<{ id: string }>("menu-selected", {
@@ -69,7 +50,6 @@ export class TillMenuSwitcher extends LitElement {
   }
 
   override render() {
-    // A single menu (or none) needs no switcher — render nothing so the grid looks exactly as before.
     if (this.menus.length <= 1) return nothing;
     return html`
       <div class="switcher" role="group" aria-label=${t("menu.switcher")}>

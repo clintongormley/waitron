@@ -518,10 +518,9 @@ export class TillApp extends LitElement {
    * empty rather than blocking the counter. */
   @state() private staff: StaffMember[] = [];
   /**
-   * The node's OPEN parked orders (the cross-till held list), handed to the counter's held-orders
-   * widget. Refreshed from `listWorkingOrders` on entering the counter and after every park, retrieve,
-   * discard and successful pay — the moments the set changes — so a register always shows the current
-   * parked orders, including ones parked on a different register.
+   * Every OPEN working order in the venue (the cross-till held list), handed to the counter's
+   * held-orders widget. Refreshed from `listWorkingOrders` on entering the counter and after every park,
+   * retrieve, discard and successful pay.
    */
   @state() private heldOrders: HeldOrderSummary[] = [];
   /** The venue's active floor-plan zones (FP-1), loaded on entering the floor screen and handed to it.
@@ -667,11 +666,9 @@ export class TillApp extends LitElement {
    */
   @state() private canvas?: CanvasDef;
   /**
-   * The CALLING device's CAPABILITY set (device-profile design 2026-09-05 §5.3, Task 9) — read from
-   * `GET /api/till` on boot, relocated OFF the canvas onto the device profile. Threaded to the card grid,
-   * which HIDES a card whose `requiredCapability` is absent (`tender-pay` → `integrated-card-payment`,
-   * `kds-board` → `act-as-kds`). Defaults to `[]` (nothing capability-gated shows) — the value a
-   * no-profile / cookieless boot resolves to.
+   * The CALLING device's CAPABILITY set — read from `GET /api/till` on boot. Threaded to the card grid,
+   * which HIDES a card whose `requiredCapability` is absent — except `tender-pay`, which also takes cash.
+   * Defaults to `[]`, the value a no-profile or cookieless boot resolves to.
    */
   @state() private capabilities: CapabilityFlag[] = [];
   /**
@@ -1228,11 +1225,11 @@ export class TillApp extends LitElement {
       this.result = await this.api.recordSale(lines, tender, id);
       this.#showTicket(id);
       // A settled PARKED order must drop off the cross-till held list immediately — mirror the
-      // park/retrieve/discard refresh (the four moments the node's open set changes). Without this a
-      // just-paid retrieved order lingers in the in-memory `heldOrders` and re-appears on the counter
-      // after "New sale" until the next park/retrieve/discard. Only on the success path; a walk-up
-      // simply re-reads an unchanged list. Self-heals even if it fails — a retrieve of the settled
-      // order 404s → `held.stale` → refresh — and cannot double-file (pay is idempotent, spec §3).
+      // park/retrieve/discard refresh. Without this a just-paid retrieved order lingers in the in-memory
+      // `heldOrders` and re-appears on the counter after "New sale" until the next park/retrieve/discard.
+      // Only on the success path; a walk-up simply re-reads an unchanged list. Self-heals even if it fails —
+      // a retrieve of the settled order 404s → `held.stale` → refresh — and cannot double-file (pay is
+      // idempotent, spec §3).
       await this.#refreshHeldOrders();
     } catch (error) {
       // A rejected {code} must not lose the sale in progress: stay on the counter, basket intact, and

@@ -14,7 +14,6 @@ const authorizers: StaffMember[] = [
   { personId: "adm-1", displayName: "Administradora" },
 ];
 
-/** Mount the dialog with a set of authorizers, in the shipped default locale (en-GB). */
 async function mount(props: Partial<TillSupervisorOverrideDialog> = {}) {
   setLocale("en-GB");
   return mountWidget<TillSupervisorOverrideDialog>("till-supervisor-override-dialog", {
@@ -23,18 +22,15 @@ async function mount(props: Partial<TillSupervisorOverrideDialog> = {}) {
   });
 }
 
-/** The dialog's own shadow root — where the picker buttons, pad and action buttons live. */
 const root = (el: TillSupervisorOverrideDialog) => el.shadowRoot!;
 const pad = (el: TillSupervisorOverrideDialog) =>
   root(el).querySelector<HTMLElement & { value: string }>("till-numeric-pad");
 
-/** Pick a supervisor by id, entering PIN mode. */
 async function pick(el: TillSupervisorOverrideDialog, personId: string): Promise<void> {
   root(el).querySelector<HTMLElement>(`[data-person="${personId}"]`)!.click();
   await el.updateComplete;
 }
 
-/** Type a PIN by clicking the pad's digit keys, exactly as the operator does. */
 async function typePin(el: TillSupervisorOverrideDialog, digits: string): Promise<void> {
   for (const digit of digits) {
     pad(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-key="${digit}"]`)!.click();
@@ -53,7 +49,7 @@ describe("till-supervisor-override-dialog", () => {
     const { el } = await mount();
     expect(root(el).querySelector('[data-person="sup-1"]')).not.toBeNull();
     expect(root(el).querySelector('[data-person="adm-1"]')).not.toBeNull();
-    expect(pad(el)).toBeNull(); // picker mode: no pad yet
+    expect(pad(el)).toBeNull();
   });
 
   it("shows the no-supervisors state for an empty authorizer list", async () => {
@@ -65,9 +61,8 @@ describe("till-supervisor-override-dialog", () => {
   it("choosing a supervisor enters PIN mode for that person", async () => {
     const { el } = await mount();
     await pick(el, "sup-1");
-    expect(root(el).textContent).toContain("Responsable"); // the chosen operator's name
+    expect(root(el).textContent).toContain("Responsable");
     expect(pad(el)).not.toBeNull();
-    // The pad is in pin mode (no decimal key).
     expect(pad(el)!.shadowRoot!.querySelector('[data-key="."]')).toBeNull();
   });
 
@@ -83,10 +78,8 @@ describe("till-supervisor-override-dialog", () => {
     root(el).querySelector<HTMLElement>(".authorize")!.click();
     await el.updateComplete;
 
-    // The PIN reaches the parent ONLY through the event detail — the authorizing supervisor's id + PIN.
     expect(confirmed).toHaveBeenCalledTimes(1);
     expect(confirmed).toHaveBeenCalledWith({ personId: "sup-1", pin: "4321" });
-    // And it is wiped from the component the instant it is dispatched: the pad's value is empty again.
     expect(pad(el)!.value).toBe("");
   });
 
@@ -96,7 +89,6 @@ describe("till-supervisor-override-dialog", () => {
     el.addEventListener("override-confirm", confirmed);
 
     await pick(el, "sup-1");
-    // Force-click Authorize with no PIN entered — the guard refuses it.
     root(el).querySelector<HTMLElement>(".authorize")!.click();
     await el.updateComplete;
     expect(confirmed).not.toHaveBeenCalled();
@@ -110,11 +102,9 @@ describe("till-supervisor-override-dialog", () => {
 
     root(el).querySelector<HTMLElement>(".back")!.click();
     await el.updateComplete;
-    // Back at the picker with both authorizers, no pad, PIN discarded.
     expect(pad(el)).toBeNull();
     expect(root(el).querySelector('[data-person="sup-1"]')).not.toBeNull();
 
-    // Re-selecting starts from a blank PIN (the discarded "12" did not carry over).
     await pick(el, "sup-1");
     expect(pad(el)!.value).toBe("");
   });
@@ -131,7 +121,6 @@ describe("till-supervisor-override-dialog", () => {
     const { el } = await mount();
     const cancelled = vi.fn();
     el.addEventListener("override-cancel", cancelled);
-    // wt-dialog re-emits the native dialog's close (Escape / backdrop) as a composed wt-close.
     root(el)
       .querySelector("wt-dialog")!
       .dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
@@ -139,8 +128,6 @@ describe("till-supervisor-override-dialog", () => {
   });
 
   it("shows the pin.invalid retry copy when the parent passes that error after a failed attempt", async () => {
-    // The real retry sequence: the operator is already in PIN mode when the parent's failed authorize
-    // sets the error and keeps the dialog open.
     const { el } = await mount();
     await pick(el, "sup-1");
     el.error = "pin.invalid";
@@ -151,17 +138,15 @@ describe("till-supervisor-override-dialog", () => {
   });
 
   it("dismisses a shown error as soon as the operator starts retyping", async () => {
-    // Start in PIN mode with the error already set (a re-render after a failed attempt).
     const { el } = await mount({ error: "pin.invalid" });
     await pick(el, "sup-1");
-    // The dialog dismisses on select; a fresh error re-arms it via willUpdate.
+    // Selecting dismissed the error; a fresh one re-arms it.
     el.error = null;
     await el.updateComplete;
     el.error = "pin.invalid";
     await el.updateComplete;
     expect(root(el).querySelector('[role="alert"]')).not.toBeNull();
 
-    // Typing a digit dismisses the stale message.
     await typePin(el, "1");
     expect(root(el).querySelector('[role="alert"]')).toBeNull();
   });

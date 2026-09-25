@@ -23,7 +23,6 @@ function product(over: Partial<TillProduct> = {}): TillProduct {
   };
 }
 
-// setLocale mutates module-level state; put it back so the default the other suites rely on holds.
 beforeEach(() => setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] }));
 
 afterEach(() => {
@@ -38,8 +37,6 @@ describe("productName", () => {
   });
 
   it("renders the staff name under every content-language setting", () => {
-    // The staff name is plain text, so nothing about the enabled languages or the site default can
-    // move it. Both halves would read "Café recién hecho" if the customer map were consulted.
     setLocale("fr-FR");
     setContentLanguages({ defaultLanguage: "es", languages: ["es", "fr", "en"] });
     expect(productName(product())).toBe("Coffee");
@@ -59,9 +56,6 @@ describe("productName", () => {
 
 describe("customerProductName", () => {
   it("reads an EXPLICIT locale over the current one — the printed sheet renders in the invoice locale", () => {
-    // The operator UI is Spanish, but the printed allergen sheet asks for the English customer text
-    // by locale: customer names are data keyed by locale, so passing one overrides the module-level
-    // current locale. This is the assertion the old `productName(product, "en")` test made.
     setLocale("es-ES");
     setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
     expect(customerProductName(product(), "en")).toBe("Freshly ground coffee");

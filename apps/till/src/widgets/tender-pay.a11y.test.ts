@@ -94,10 +94,6 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  // Integrated card terminal (sub-project 7, Task 9): the collecting spinner (entered via a real
-  // Card tap) and the card_outcome screen (entered reactively off `cardOutcome`, driven directly into
-  // the state below rather than through a round trip — see the widget's own `willUpdate` doc), plus
-  // the idle-screen tip/offline-consent affordances, in BOTH themes.
   it("has no violations on the collecting screen (integrated card, entered via a real Card tap)", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");
@@ -132,8 +128,6 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  // The payment-time reader picker (Task 17): the idle screen's reader name + "use a different
-  // reader" control, and the dialog it opens.
   const readers = [
     { id: "r1", name: "Front counter", provider: "stripe_terminal" as const },
     { id: "r2", name: "Bar", provider: "stripe_terminal" as const, online: false },

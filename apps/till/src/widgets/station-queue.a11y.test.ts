@@ -5,11 +5,9 @@ import "./station-queue.js";
 import type { TillStationQueue } from "./station-queue.js";
 import type { StationQueueGroup } from "../api/client.js";
 
-// The station's KDS order-timing thresholds (design §4/§6) — the shipped DB defaults, reused across
-// every fixture below. No fixture injects `now`, so every ticket ages off the REAL wall clock against
-// its fixed `queuedAt` — every one of these fixtures predates "now" by far more than 15 minutes, so
-// each ticket renders `forgotten` (flashing, unless the test browser's `prefers-reduced-motion` is on)
-// and the header's overdue-count badge appears too; the sweep below covers exactly that state.
+// The shipped DB defaults. No fixture injects `now`, so every ticket ages off the REAL wall clock
+// against its fixed `queuedAt` and renders `forgotten`, and the header's overdue-count badge appears
+// too; the sweep below covers exactly that state.
 const DEFAULT_THRESHOLDS: StationThresholds = {
   warmAfterMinutes: 5,
   overdueAfterMinutes: 10,
@@ -77,7 +75,7 @@ const groups: StationQueueGroup[] = [
   },
 ];
 
-// A coursed order (KDS-2 §5a) for the course-grouping / held-greying / kitchen-fire a11y sweep: a fired
+// A coursed order for the course-grouping / held-greying / kitchen-fire a11y sweep: a fired
 // null course (no header), a fired named course, and a HELD later course (greyed lines + the fire button).
 const coursedGroups: StationQueueGroup[] = [
   {
@@ -120,8 +118,6 @@ const coursedGroups: StationQueueGroup[] = [
   },
 ];
 
-// A dish with two selected options (ordering modifiers, Task 14) — the indented "+ name" sub-text is
-// non-interactive plain text under the same tappable line, so it must not introduce any new violation.
 const modifierGroups: StationQueueGroup[] = [
   {
     orderId: "wo-mod",
@@ -148,9 +144,6 @@ const modifierGroups: StationQueueGroup[] = [
   },
 ];
 
-// A dish carrying the per-line customisation (order-line customisation, Task 5): a muted free-text
-// note as indented sub-text under the tappable line, so axe sweeps its contrast in both themes and
-// confirms no new violation.
 const customisationGroups: StationQueueGroup[] = [
   {
     orderId: "wo-cust",
@@ -174,10 +167,6 @@ const customisationGroups: StationQueueGroup[] = [
   },
 ];
 
-// A dish carrying its OWN allergen profile (modifier↔allergen): a CONTAINS-milk chip, and a second,
-// PENDING item (unreviewed base ⇒ the "not reviewed" warning). The chip/warning use a data-driven
-// colour + text weight, so axe sweeps their contrast in both themes here (colour is never the only
-// signal — the sweep confirms the colour that IS there also passes).
 const allergenGroups: StationQueueGroup[] = [
   {
     orderId: "wo-al",
@@ -211,10 +200,6 @@ const allergenGroups: StationQueueGroup[] = [
   },
 ];
 
-// A dish carrying an as-served DIET profile (dietary-classification, Task 7): a vegan+vegetarian
-// success-toned badge pair, a contains-meat chip on a second item, and a PENDING item (the neutral
-// "not reviewed" note). The badges/chips carry a data-driven colour plus a text label, so axe sweeps
-// their contrast in both themes here (colour is never the only signal).
 const dietGroups: StationQueueGroup[] = [
   {
     orderId: "wo-di",
@@ -343,8 +328,6 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
   });
 
   it("the reprint rail (per-order Reprint wt-button on each card, KDS-4) has no violations", async () => {
-    // showReprint on → a secondary reprint wt-button at every card foot (beside the settled order's
-    // collect button), so axe sweeps the reprint control's colour pairing + accessible name in both themes.
     const { host } = await mountWidget<TillStationQueue>(
       "till-station-queue",
       { groups, stationId: "st-1", view: "rail", showReprint: true },

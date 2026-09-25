@@ -26,7 +26,6 @@ describe("till-tab-shell", () => {
   it("marks the first tab active when activeTabKey is unset or unknown, and tabs are type=button", async () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", { tabs }); // no activeTabKey
     const active = el.shadowRoot!.querySelectorAll<HTMLElement>('.tab[aria-selected="true"]');
-    // Exactly one tab is selected — the first — mirroring the app's #activeTab() fallback body.
     expect(active.length).toBe(1);
     expect(active[0]!.textContent).toContain("Counter");
     // Native tab buttons are type=button so they never submit an enclosing form.
@@ -100,7 +99,6 @@ describe("till-tab-shell", () => {
     const { el } = await mountWidget<TillTabShell>("till-tab-shell", {
       tabs,
       activeTabKey: "counter",
-      // The chooser only renders when loadLocales is supplied (guards a throw on open without it).
       loadLocales: async () => [
         { code: "en-GB", label: "English" },
         { code: "es-ES", label: "Español" },

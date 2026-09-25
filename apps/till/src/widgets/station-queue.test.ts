@@ -7,26 +7,20 @@ import { allergenName } from "../i18n/allergen-names.js";
 import { TillStationQueue } from "./station-queue.js";
 import type { StationQueueGroup } from "../api/client.js";
 
-// The station's KDS order-timing thresholds (KDS order-timing alerts, design §4/§6) — the shipped
-// DB defaults (warm 5 / overdue 10 / forgotten 15 minutes), reused across every fixture below so the
-// existing minute-based scenarios keep meaning what they said before the two-band `#ageBucket` became
-// the shared three-band `classifyBand`.
+// The shipped DB defaults.
 const DEFAULT_THRESHOLDS: StationThresholds = {
   warmAfterMinutes: 5,
   overdueAfterMinutes: 10,
   forgottenAfterMinutes: 15,
 };
 
-// Two orders' worth of lines at one station: order 5 has a queued + a preparing line, order 6 a ready
-// line — one item in each of the three kitchen states, so the kanban columns and the rail cards can be
+// One item in each of the three kitchen states, so the kanban columns and the rail cards can be
 // asserted from a single mount.
 const groupA: StationQueueGroup = {
   orderId: "wo-1",
   orderNumber: 5,
   label: "Mesa 4",
   queuedAt: "2026-08-17T10:00:00.000Z",
-  // A fired-at-placing Mode-I/T order awaiting the FISCAL collect — NOT collectable via the Mode-P
-  // handover, so its card shows no collect button.
   status: "placed",
   thresholds: DEFAULT_THRESHOLDS,
   items: [
@@ -36,8 +30,6 @@ const groupA: StationQueueGroup = {
       state: "queued",
       name: "Paella",
       quantity: "2.000",
-      // KDS-1 world: no courses, everything auto-fired (advanceable). KDS-2's course-grouping /
-      // held-greying cases live in their own `describe` below with their own fixtures.
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
     },
@@ -58,8 +50,6 @@ const groupB: StationQueueGroup = {
   orderNumber: 6,
   label: null,
   queuedAt: "2026-08-17T10:05:00.000Z",
-  // A SETTLED Mode-P pickup awaiting its counter handover — COLLECTABLE, so its rail card shows the
-  // collect button.
   status: "settled",
   thresholds: DEFAULT_THRESHOLDS,
   items: [
@@ -125,7 +115,6 @@ describe("till-station-queue", () => {
       el.shadowRoot!.querySelector('[data-column="preparing"] [data-item="ti-2"]'),
     ).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[data-column="ready"] [data-item="ti-3"]')).not.toBeNull();
-    // Each column is headed by its localised state name.
     const queuedCol = el.shadowRoot!.querySelector('[data-column="queued"]')!;
     expect(queuedCol.textContent).toContain(t("station.state.queued"));
   });
@@ -140,7 +129,6 @@ describe("till-station-queue", () => {
     expect(tickets).toHaveLength(2);
     expect(tickets[0]!.textContent).toContain("5");
     expect(tickets[0]!.textContent).toContain("Mesa 4");
-    // Both of order 5's lines render inside its own card.
     expect(tickets[0]!.querySelector('[data-item="ti-1"]')).not.toBeNull();
     expect(tickets[0]!.querySelector('[data-item="ti-2"]')).not.toBeNull();
   });
@@ -184,7 +172,6 @@ describe("till-station-queue", () => {
     });
     const cell = el.shadowRoot!.querySelector('[data-column="queued"] [data-item="ti-1"]')!;
     expect(cell.textContent).toContain("2× Paella");
-    // The order-number context (which order this dish belongs to) is preserved for the cook.
     expect(cell.textContent).toContain("5");
   });
 
@@ -218,8 +205,6 @@ describe("till-station-queue", () => {
   });
 
   describe("ordering modifiers (Task 14): selected options as indented sub-text under the dish", () => {
-    // A fired dish with TWO selected options — the wire shape `listStationQueue` already returns
-    // (Task 7), the KDS widget just doesn't render it yet.
     const withModifiers: StationQueueGroup = {
       orderId: "wo-9",
       orderNumber: 9,
@@ -254,7 +239,6 @@ describe("till-station-queue", () => {
       expect(item.textContent).toContain("1× Cortado");
       expect(item.textContent).toContain("+ Grande");
       expect(item.textContent).toContain("+ Leche avena");
-      // The dish precedes its modifiers in DOM order (kitchen-print ticket style: dish, then options).
       const html = item.innerHTML;
       expect(html.indexOf("Cortado")).toBeLessThan(html.indexOf("Grande"));
       expect(html.indexOf("Grande")).toBeLessThan(html.indexOf("Leche avena"));
@@ -320,8 +304,6 @@ describe("till-station-queue", () => {
   });
 
   describe("per-line customisation (Task 5): the snapshotted note as sub-text under the dish", () => {
-    // A fired dish carrying the snapshotted note the server surfaces (order-line customisation) — the
-    // KDS renders it as sub-text.
     const withCustomisation: StationQueueGroup = {
       orderId: "wo-c",
       orderNumber: 12,
@@ -403,9 +385,6 @@ describe("till-station-queue", () => {
   });
 
   describe("as-served allergens: the dish's own contains chips + not-reviewed note", () => {
-    // A fired dish carrying the server-attached OWN allergen profile: it CONTAINS milk — the exact shape
-    // `listStationQueue` returns, which the KDS renders as the chips this suite asserts below. No modifier
-    // contribution: each dish shows its own figures, and each extra's own list is shown separately.
     const withAllergens: StationQueueGroup = {
       orderId: "wo-a",
       orderNumber: 11,
@@ -427,8 +406,6 @@ describe("till-station-queue", () => {
       ],
     };
 
-    // A dish whose OWN allergens are unreviewed (a null base) — the profile is `pending`, so the
-    // KDS must warn the cook the plate is not verified rather than read it as allergen-free.
     const pendingItem: StationQueueGroup = {
       orderId: "wo-p",
       orderNumber: 12,
@@ -489,9 +466,6 @@ describe("till-station-queue", () => {
     });
   });
 
-  // ── As-served diet & contains badges (dietary-classification, Task 7) ────────────────────────
-  // The server projects each item's `asServedDiet`; the KDS renders vegan/vegetarian/halal/kosher
-  // badges + contains chips beside the allergen chips, with a NEUTRAL "not reviewed" note when pending.
   describe("as-served diet badges", () => {
     const veganItem: StationQueueGroup = {
       orderId: "wo-v",
@@ -607,7 +581,6 @@ describe("till-station-queue", () => {
       groups,
       stationId: "st-1",
     });
-    // The item is still shown, but as an inert element — never a button.
     expect(el.shadowRoot!.querySelector('[data-item="ti-3"]')).not.toBeNull();
     expect(el.shadowRoot!.querySelector('button[data-item="ti-3"]')).toBeNull();
   });
@@ -623,7 +596,6 @@ describe("till-station-queue", () => {
     el.addEventListener("advance-ticket-item", (e) => item((e as CustomEvent).detail));
     el.addEventListener("advance-ticket", (e) => ticket((e as CustomEvent).detail));
     el.shadowRoot!.querySelector<HTMLElement>('[data-item="ti-1"]')!.click();
-    // The whole-ticket convenience fires instead of the per-line one.
     expect(item).not.toHaveBeenCalled();
     expect(ticket).toHaveBeenCalledWith({ orderId: "wo-1", stationId: "st-1", to: "preparing" });
   });
@@ -687,8 +659,6 @@ describe("till-station-queue", () => {
   });
 
   it("advanceOnly: suppresses the collect button on a settled order (device mode has no collect route, §3d)", async () => {
-    // In device mode the queue is advance-only: there is no device collect route, so the Mode-P handover
-    // button must not render (a button that isn't there can't emit a no-op mark-collected).
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups, // groupB (wo-2) is settled → normally collectable
       view: "rail",
@@ -699,7 +669,6 @@ describe("till-station-queue", () => {
   });
 
   it("rail: showReprint renders a per-order reprint button on every card; off by default", async () => {
-    // Default (showReprint unset) — the counter/app widget instances embed it WITHOUT reprint.
     const off = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
       view: "rail",
@@ -707,8 +676,7 @@ describe("till-station-queue", () => {
     });
     expect(off.el.shadowRoot!.querySelector("[data-reprint]")).toBeNull();
 
-    // showReprint on — one reprint button per order (both a placed and a settled order get it: reprint is
-    // status-independent, unlike collect).
+    // Both a placed and a settled order get it: reprint is status-independent, unlike collect.
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups,
       view: "rail",
@@ -862,14 +830,6 @@ describe("till-station-queue", () => {
   });
 });
 
-// KDS-2 (design §5a): the station display groups each order's lines BY COURSE (a header per course, in
-// `display_order`, with the null course — the auto-fired earliest — first). A HELD course (every line
-// `firedAt == null`) renders greyed + non-advanceable; a fired course behaves as KDS-1. When
-// `fire_control = 'kitchen'` the display owns the fire, so each held course shows an "Empezar curso"
-// button → `fire-course { orderId, courseId }`; under `waiter` (the default) it shows none. Course
-// grouping + fire live on the RAIL lens (a per-order card action, like the collect handover), while the
-// held-greying invariant applies to the cross-order kanban cells too.
-//
 // The fixture is one order with three courses listed OUT of display order — a held later course first,
 // then a fired middle course, then the fired null (bread) course — so a passing grouping test proves the
 // widget re-orders (null, then by display_order) rather than echoing the item order.
@@ -907,7 +867,7 @@ const coursedOrder: StationQueueGroup = {
       state: "queued",
       name: "Pan",
       quantity: "1.000",
-      // The null course — auto-fired earliest — must render FIRST, and carries no header.
+      // The null course must render FIRST, and carries no header.
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
     },
@@ -922,9 +882,7 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
       stationId: "st-1",
     });
     const sections = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-course]")];
-    // Three course sections in display order: the null course, then Entrantes (1), then Principales (2).
     expect(sections.map((s) => s.dataset.course)).toEqual(["none", "co-start", "co-main"]);
-    // The null course carries no header; the named courses show their name.
     expect(sections[0]!.querySelector(".course-head")).toBeNull();
     expect(sections[0]!.querySelector('[data-item="it-bread"]')).not.toBeNull();
     expect(sections[1]!.querySelector(".course-head")!.textContent).toContain("Entrantes");
@@ -939,7 +897,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     });
     const held = el.shadowRoot!.querySelector('[data-item="it-main"]')!;
     expect(held.classList.contains("held")).toBe(true);
-    // Non-advanceable: it is the inert span, not the tappable button (so no advance can be emitted).
     expect(el.shadowRoot!.querySelector('button[data-item="it-main"]')).toBeNull();
     expect(held.tagName).toBe("SPAN");
   });
@@ -964,7 +921,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
     });
     const spy = vi.fn();
     el.addEventListener("advance-ticket-item", (e) => spy((e as CustomEvent).detail));
-    // Entrantes is fired + preparing → tappable, advances to ready.
     el.shadowRoot!.querySelector<HTMLElement>('button[data-item="it-start"]')!.click();
     expect(spy).toHaveBeenCalledWith({ itemId: "it-start", to: "ready" });
   });
@@ -994,8 +950,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
       stationId: "st-1",
       fireControl: "kitchen",
     });
-    // Only the held Principales course is fireable; the fired Entrantes and the (null, always-fired)
-    // bread course are not.
     expect(el.shadowRoot!.querySelectorAll("[data-fire]")).toHaveLength(1);
     expect(el.shadowRoot!.querySelector('[data-fire="co-start"]')).toBeNull();
     expect(el.shadowRoot!.querySelector('[data-fire="none"]')).toBeNull();
@@ -1009,7 +963,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
       fireControl: "waiter", // the default; the held course is still greyed, just not fireable here
     });
     expect(el.shadowRoot!.querySelector("[data-fire]")).toBeNull();
-    // The held line is still greyed + non-advanceable regardless of who owns the fire.
     expect(el.shadowRoot!.querySelector('[data-item="it-main"]')!.classList.contains("held")).toBe(
       true,
     );
@@ -1035,8 +988,6 @@ describe("till-station-queue — KDS-2 courses & fire", () => {
   });
 
   it("advanceOnly: suppresses the kitchen-fire button on a held course (device mode has no fire route, §3d)", async () => {
-    // Device mode is advance-only: there is no device fire route, so even a held course under
-    // `fire_control = 'kitchen'` shows no Empezar curso button (it would only 401 → no-op).
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [coursedOrder], // Principales (co-main) is held → normally fireable under kitchen
       view: "rail",

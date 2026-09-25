@@ -11,7 +11,7 @@ import { sellingValuesOf, type OfferedModifier, type TillProduct } from "../api/
  * Every fixture below gives a list, a label and a picked product THREE DIFFERENT texts for their
  * three names (staff / customer / kitchen), so a surface reading the wrong one fails rather than
  * passing on a shared string (CLAUDE.md §3). The picker is a staff surface: it reads the plain
- * staff name everywhere (spec §10).
+ * staff name everywhere.
  */
 function offeredItem(
   productId: string,
@@ -72,7 +72,7 @@ const extrasList: OfferedModifier = {
   items: [offeredItem("p-bacon", "Bacon", "1.50"), offeredItem("p-cheese", "Queso", "1.00", 3)],
 };
 
-/** "Pan": exactly one pick required — the "choose your bread" case (spec §3). */
+/** "Pan": exactly one pick required — the "choose your bread" case. */
 const breadList: OfferedModifier = {
   kind: "extras",
   id: "list-bread",
@@ -247,13 +247,10 @@ describe("till-modifier-picker", () => {
   });
 
   it("names each extras checkbox group by KIND and list, as the options radios already were", async () => {
-    // Each group's `name` carries its kind in front of its list id — `extras-${list.id}` and
-    // `options-${list.id}` (modifier-picker.ts) — where the extras checkbox used to carry the bare
-    // list id and its options sibling was already prefixed. That is the whole of what changed here.
-    // It does NOT make these names semantic: a list id is a generated uuid, and a kind in front of
-    // one is still a generated widget id, which is what docs/developers/conventions-ui.md refuses.
-    // Recorded as still open in `docs/backlog.md`, Task 12. Burger draws one extras checkbox (its
-    // second item is a stepper, which has no input) and one radio per options label.
+    // These names are NOT semantic: a list id is a generated uuid, so a kind in front of one is still
+    // a generated widget id, which docs/developers/conventions-ui.md refuses. Open in `docs/backlog.md`.
+    // Burger draws one extras checkbox (its second item is a stepper, which has no input) and one
+    // radio per options label.
     const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
     const names = [...picker.shadowRoot!.querySelectorAll("input")].map((input) => input.name);
     expect(names).toEqual(["extras-list-extras", "options-list-cooked", "options-list-cooked"]);

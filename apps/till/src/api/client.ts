@@ -171,8 +171,7 @@ export interface TillInfo {
    * The CALLING device's CAPABILITY set (device-profile design 2026-09-05 §5.3, Task 9). Relocated OFF
    * the canvas onto the device profile, so it rides the payload as an explicit sibling rather than inside
    * `canvas`. `profile.capabilities` for a device with a profile; `[]` for a no-profile or cookieless
-   * request. The render axis (`card-grid.ts`) hides `tender-pay`/`kds-board` when the required flag is
-   * absent. REQUIRED — the server resolves one for every boot.
+   * request. REQUIRED — the server resolves one for every boot.
    */
   capabilities: CapabilityFlag[];
   /**
@@ -1609,7 +1608,7 @@ export class TillApi {
     });
   }
 
-  /** The cross-till held list for this node → `GET /api/working-orders`. Every OPEN parked order. */
+  /** The cross-till held list → `GET /api/working-orders`: every OPEN working order in the venue. */
   listWorkingOrders(): Promise<HeldOrderSummary[]> {
     return this.#request<HeldOrderSummary[]>("/api/working-orders", "GET");
   }

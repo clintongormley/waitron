@@ -4,19 +4,9 @@ import { baseStyles, dispatchWtChange } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 
 /**
- * The number string produced by pressing `key` on a pad currently showing `value`.
- *
- * `key` is a digit `"0"`–`"9"`, `"."` (the decimal point) or `"backspace"`. The result is a
- * PARTIAL number the parent normalises before it reaches `decimal()`:
- *  - no leading zeros — a lone `"0"` is replaced by the next digit (`"0"` + `"5"` → `"5"`), so the
- *    string never becomes `"05"` (which `decimal()` rejects);
- *  - at most one decimal point — a second `"."` is ignored;
- *  - a decimal point on an empty pad seeds `"0."` rather than a bare `"."`.
- *
- * It may TRANSIENTLY end in `"."` (e.g. `"0."` while the operator is half-way through `"0.3"`),
- * which is the one shape `decimal()` rejects — stripping that trailing dot is the parent's single
- * normalisation step (see `till-tender-pay`'s `#enteredDecimal`). Kept pure and exported so every
- * branch is pinned by a unit test independent of the DOM.
+ * A PARTIAL number the parent normalises before it reaches `decimal()`: never a leading zero
+ * (`"05"`) or a second point, but it may end in `"."` mid-entry (see `till-tender-pay`'s
+ * `#enteredDecimal`).
  */
 export function nextPadValue(value: string, key: string): string {
   if (key === "backspace") {
@@ -34,13 +24,8 @@ export function nextPadValue(value: string, key: string): string {
 }
 
 /**
- * The string produced by pressing `key` on a pad in "pin" mode, where the value is a PIN rather than
- * a number. A PIN is a literal string the server hashes and length-checks — leading zeros are
- * significant and repeats are allowed — so every digit APPENDS verbatim: `"0"` + `"0"` stays `"00"`,
- * and a four-key `0,0,0,0` builds `"0000"` (the decimal-mode {@link nextPadValue} would collapse that
- * to `"0"`). `key` is a digit `"0"`–`"9"` or `"backspace"`; the pad hides the `.` key in pin mode, so
- * a `"."` never reaches here and is ignored defensively rather than inserted into a PIN. Pure and
- * exported for the same reason as `nextPadValue` — every branch is pinned by a DOM-free unit test.
+ * A PIN's leading zeros are significant, so every digit appends verbatim: `0,0,0,0` builds `"0000"`,
+ * which {@link nextPadValue} would collapse to `"0"`.
  */
 export function nextPinValue(value: string, key: string): string {
   if (key === "backspace") return value.slice(0, -1);
@@ -48,8 +33,7 @@ export function nextPinValue(value: string, key: string): string {
   return value + key;
 }
 
-/** The pad's key layout, top-left to bottom-right. `glyph` is what shows; `label` is the a11y name
- * for the two keys whose glyph is not its own accessible name (`.` and `⌫`). */
+/** `label` is the accessible name for a key whose glyph is not its own (`.` and `⌫`). */
 interface PadKey {
   key: string;
   glyph: string;
@@ -57,22 +41,8 @@ interface PadKey {
 }
 
 /**
- * A reusable touch numeric keypad — the shared input surface for the cash-tender amount, the kg
- * weight entry (Task 15) and the login PIN (Task 16). It is deliberately PRESENTATIONAL: it knows
- * nothing of money, weight or PINs. It reads the current string via its `value` property, and on each
- * key press emits a `wt-change` CustomEvent carrying `{ value }` — the string that pressing that key
- * produces. The parent owns the meaning: it holds the value, decides what it means, and passes the
- * updated string back down.
- *
- * Two `mode`s pick which string-builder runs and which keys show:
- *  - `"decimal"` (the DEFAULT — cash and kg entry are unchanged): {@link nextPadValue}, with a `.` key
- *    and leading-zero suppression, so the value stays a valid decimal number.
- *  - `"pin"`: {@link nextPinValue}, digit-append with NO `.` key, so leading zeros survive and a PIN
- *    like `"0000"` round-trips.
- *
- * Every key is a `<wt-button>` (a 44px tap target with a focus ring for free). The `.` and `⌫` keys
- * carry an accessible `aria-label` and hide their decorative glyph, so their name is spoken text and
- * not a bare symbol.
+ * Deliberately PRESENTATIONAL: it knows nothing of money, weight or PINs. Each key press emits
+ * `wt-change` with the string that key produces; the parent holds the value and passes it back down.
  */
 @customElement("till-numeric-pad")
 export class TillNumericPad extends LitElement {
@@ -110,18 +80,12 @@ export class TillNumericPad extends LitElement {
     `,
   ];
 
-  /** The string the pad is editing. Owned by the parent; the pad only reads it to compute the next. */
   @property() value = "";
 
-  /** Which string-builder + key layout to use — see the class doc. `"decimal"` by default so the
-   * cash and kg screens are unaffected; the lock screen sets `"pin"`. */
   @property() mode: "decimal" | "pin" = "decimal";
 
   #keys(): PadKey[] {
     if (this.mode === "pin") {
-      // Phone-dialpad order (1-2-3 on top), the layout muscle memory expects for a PIN. Digits only
-      // — the empty `key: ""` cell holds the decimal point's calculator position so `0` stays centred
-      // in the bottom row, and keeping no `.` key at all is what keeps a "." out of a PIN.
       return [
         { key: "1", glyph: "1" },
         { key: "2", glyph: "2" },
@@ -137,7 +101,6 @@ export class TillNumericPad extends LitElement {
         { key: "backspace", glyph: "⌫", label: t("pad.backspace") },
       ];
     }
-    // Calculator order (7-8-9 on top) for cash and kg entry — unchanged.
     return [
       { key: "7", glyph: "7" },
       { key: "8", glyph: "8" },
@@ -160,15 +123,8 @@ export class TillNumericPad extends LitElement {
     dispatchWtChange(this, event, { value: next });
   }
 
-  /**
-   * One key. A digit's own glyph is its accessible name. The `.` and `⌫` keys hide their glyph and
-   * take their name from a visually-hidden `.sr-only` label — see the styles for why that beats an
-   * aria-label on the host.
-   */
   #renderKey({ key, glyph, label }: PadKey) {
-    // An empty `key` is the pin layout's spacer: an inert grid cell that keeps `0` centred where the
-    // decimal-point key sits on the calculator layout. It carries no `data-key`, so it is not a
-    // tappable dead key and never appears in the pad's key sequence.
+    // The pin layout's spacer: it keeps `0` centred where the calculator layout has `.`.
     if (key === "") return html`<div class="key" aria-hidden="true"></div>`;
     const content = label
       ? html`<span aria-hidden="true">${glyph}</span><span class="sr-only">${label}</span>`

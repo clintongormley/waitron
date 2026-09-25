@@ -10,10 +10,8 @@ const twoLocales = async () => [
 ];
 
 /**
- * Let a trigger activation settle. Opening the first time runs the ASYNC `#toggle` (it awaits
- * `loadLocales()` before flipping `open`), so a single `updateComplete` races the awaited fetch; a
- * macrotask drains that microtask chain, then `updateComplete` awaits the repaint. A close / cached
- * re-open flips state synchronously, for which this is simply a harmless extra wait.
+ * The first open awaits `loadLocales()` before flipping `open`, so a single `updateComplete` races the
+ * fetch; a macrotask drains that microtask chain, then `updateComplete` awaits the repaint.
  */
 async function settle(el: LanguageChooser): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve));
@@ -143,10 +141,8 @@ describe("till-language-chooser", () => {
   });
 
   it("a rejected loadLocales does NOT escape as an unhandled rejection and leaves the menu closed", async () => {
-    // Opening fetches the list; if that fetch rejects (the server is unreachable when the operator taps
-    // the chooser) the widget must degrade gracefully. The click handler fires `void #toggle()`, so an
-    // un-caught rejection would escape as an UNHANDLED promise rejection (this repo requires pristine
-    // test output). Proven by deletion: strip `#toggle`'s try/catch and `rejections` is non-empty here.
+    // The click handler fires `void #toggle()`, so an uncaught fetch rejection would escape as an
+    // UNHANDLED promise rejection.
     const rejections: unknown[] = [];
     const onRejection = (event: PromiseRejectionEvent): void => {
       rejections.push(event.reason);

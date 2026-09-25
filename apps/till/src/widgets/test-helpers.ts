@@ -12,10 +12,8 @@ declare module "vitest/browser" {
 }
 
 /**
- * Test support for the till's Lit widgets. It mirrors `packages/ui/src/test-helpers.ts` and
- * `a11y-helpers.ts`, but mounts by ASSIGNING PROPERTIES rather than parsing an HTML string: every
- * till widget takes its `products`/`store` as `@property({ attribute: false })` objects, which
- * cannot travel through markup. So it creates the element, assigns the props, then connects it.
+ * Mounts by ASSIGNING PROPERTIES, where `packages/ui/src/test-helpers.ts` parses an HTML string: till
+ * widgets take objects as `@property({ attribute: false })`, which cannot travel through markup.
  */
 
 // Standalone widget fixtures use a Spanish venue; app roots replace this with their API configuration.
@@ -43,9 +41,9 @@ export interface Mounted<T extends HTMLElement> {
 
 /**
  * Mounts a custom element `tag` with `props` assigned before connection, inside a fresh themed
- * host, and waits for its first render. Pass `theme` to pin `data-theme` (and paint the host's
- * `--wt-color-bg`, as a real deployment does) so a color-contrast a11y check means what it means in
- * the app; omit it to render in whatever theme the environment resolves to.
+ * host, and waits for its first render. It paints the host's `--wt-color-bg` as a real deployment
+ * does. Pass `theme` to pin `data-theme` so a color-contrast a11y check means what it means in the app;
+ * omit it to render in whatever theme the environment resolves to.
  */
 export async function mountWidget<T extends HTMLElement>(
   tag: string,
@@ -68,16 +66,10 @@ export async function mountWidget<T extends HTMLElement>(
 }
 
 /**
- * Paints the page CANVAS (`<body>` and `<html>`) with `host`'s resolved theme background, mirroring
- * what a real deployment does: `index.html` sets `body { background: var(--wt-color-bg) }` under
- * `applyTokens(document.documentElement)`, so in the app every element ultimately sits on the theme's
- * background. The harness themes only the nested `host` `<div>`, which leaves the page's default WHITE
- * canvas behind it — and axe-core composites the background of any element it cannot trace back to
- * `host` (e.g. one pushed off-viewport by a wide header, where `elementsFromPoint` returns nothing)
- * against that canvas. On white that reads as a false color-contrast failure for the dark theme's
- * light text (`#eceef2` on `#ffffff` → 1.16:1) even though the element renders correctly on the dark
- * canvas in the app. `<body>`/`<html>` are not themselves theme roots, so read the concrete colour off
- * `host` rather than passing the `var()`. Reset in {@link cleanupWidgets}.
+ * Paints the page canvas as `index.html` does in the app. The harness themes only `host`, and axe
+ * composites any element it cannot trace back to `host` (one pushed off-viewport, say) against the page
+ * canvas — white by default, a false contrast failure for the dark theme. `<body>`/`<html>` are not theme
+ * roots, so the concrete colour is read off `host` rather than passing the `var()`.
  */
 function paintCanvas(host: HTMLElement): void {
   const bg = getComputedStyle(host).backgroundColor;
@@ -93,7 +85,6 @@ export function cleanupWidgets(): void {
   document.documentElement.style.background = "";
 }
 
-/** Formats axe violations into a readable message: rule id, impact, help text, and node targets. */
 export function formatViolations(violations: axe.Result[]): string {
   return violations
     .map((violation) => {

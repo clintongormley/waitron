@@ -17,9 +17,6 @@ import {
   type TillProduct,
 } from "../api/client.js";
 
-/** What a confirmed pick carries: the dish as chosen, plus everything `LineSelection` holds — the
- *  answers to its lists and the line note. It IS a `LineSelection`, so a confirm reaches
- *  `addProduct`/`setLineModifiers` as one argument. */
 export interface ModifierConfirmDetail extends LineSelection {
   product: TillProduct;
 }
@@ -41,9 +38,7 @@ function priceDifference(difference: string): string {
 }
 
 /**
- * The dialog a dish with something to ask opens: it walks the dish's offered lists in the order the
- * offer gives them — the product's own attachment order, which nothing here re-sorts (spec §5) —
- * drawing an extras widget or an options radio group per entry (spec §10).
+ * Walks the dish's offered lists in the order the offer gives them, which nothing here re-sorts.
  *
  * It reads the STAFF name of every list, label and offered product. The till is a staff surface; the
  * diner's and the cook's wordings belong to the receipt and the kitchen ticket.
@@ -187,7 +182,6 @@ export class TillModifierPicker extends LitElement {
         this.answers[answer.listId] = answer.labelId;
       return;
     }
-    // The first available variant in the one variant order (spec §15.4).
     this.variantId = this.#variants.find((variant) => variant.available)?.id ?? "";
     for (const entry of this.#offered) {
       if (entry.kind === "options") {
@@ -240,7 +234,6 @@ export class TillModifierPicker extends LitElement {
     return this.picks[pickKey(listId, productId)] ?? 0;
   }
 
-  /** How many picks one list holds in total — what `minPicks`/`maxPicks` bound (spec §3.1). */
   #listTotal(list: OfferedExtrasList): number {
     return list.items.reduce((sum, item) => sum + this.#countOf(list.id, item.productId), 0);
   }
@@ -262,7 +255,6 @@ export class TillModifierPicker extends LitElement {
     );
   }
 
-  /** Every extras list's pick count, keyed by list id, in one pass over the offered lists. */
   #listTotals(): Map<string, number> {
     const totals = new Map<string, number>();
     for (const entry of this.#offered) {
@@ -290,7 +282,6 @@ export class TillModifierPicker extends LitElement {
     });
   }
 
-  /** The picks, in offer order — list by list, and each list's items in the order it offers them. */
   #selectedExtras(): SelectedExtra[] {
     return this.#offered.flatMap((entry) =>
       entry.kind === "extras"
@@ -312,7 +303,6 @@ export class TillModifierPicker extends LitElement {
     );
   }
 
-  /** The answered options lists, in offer order: the ids for the wire. */
   #selectedOptions(): OptionSelection[] {
     return this.#answeredLists().map(({ list, labelId }) => ({ listId: list.id, labelId }));
   }
@@ -422,9 +412,7 @@ export class TillModifierPicker extends LitElement {
     const stale = this.#stalePicks();
     const totals = this.#listTotals();
     // wt-MODAL, not wt-dialog: the body scrolls inside the frame and the footer keeps its own row, so
-    // Add and Cancel stay on screen however many lists a dish offers. The design system draws that
-    // line — wt-modal for an add or edit form, wt-dialog for a compact confirmation
-    // (docs/developers/design-system.md) — and this is the till's add-a-dish form.
+    // Add and Cancel stay on screen however many lists a dish offers.
     return html`<wt-modal
       .open=${true}
       .heading=${productName(this.product)}
@@ -507,8 +495,6 @@ export class TillModifierPicker extends LitElement {
     </wt-modal>`;
   }
 
-  /** One extras list: its items at their resolved prices, bounded by the list's own allowance.
-   *  `total` is this list's pick count, computed once per render by {@link #listTotals}. */
   #renderExtras(list: OfferedExtrasList, total: number) {
     const atListMax = list.maxPicks !== null && total >= list.maxPicks;
     return html`
@@ -587,7 +573,6 @@ export class TillModifierPicker extends LitElement {
     `;
   }
 
-  /** One options list: exactly one label, the offer's default preselected (spec §2.2). */
   #renderOptions(list: OfferedOptionsList) {
     return html`
       <fieldset class="group">

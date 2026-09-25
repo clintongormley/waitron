@@ -4,14 +4,10 @@ import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 
 /**
- * One reader the picker can offer. Deliberately its OWN shape, not imported from `../api/client.js`
- * — this widget stays mountable with no server-shape dependency at all (Task 17's brief: keep it
- * self-contained so slice 2's handheld NFC/QR link can mount the SAME element). `online` is optional
- * because today's `GET /api/till` (Task 12) carries no per-reader liveness signal, only `id`/`name`/
- * `provider` — a reader with `online` omitted renders with no status mark, the same as one explicitly
- * `true`; only `online === false` marks it offline. Either way the reader stays SELECTABLE: an
- * offline mark is informational only, never a lock (CLAUDE.md §5 — nothing may wedge a sale, and a
- * reader that looks offline may simply have a stale liveness read).
+ * Deliberately its OWN shape, not imported from `../api/client.js`, so this widget has no
+ * server-shape dependency. `online` is optional because `GET /api/till` carries no per-reader
+ * liveness signal. An offline reader stays SELECTABLE: a reader that looks offline may simply have
+ * a stale liveness read.
  */
 export interface ReaderOption {
   id: string;
@@ -20,17 +16,6 @@ export interface ReaderOption {
   online?: boolean;
 }
 
-/**
- * The payment-time reader picker (Task 17): a small dialog listing the venue's active card readers,
- * marking any known-offline one, and letting the operator choose which reader the NEXT payment
- * collects on. PURE presentational — props in, one event out, no store, no API call — so
- * `tender-pay.ts`'s "use a different reader" control and slice 2's handheld link mount the exact
- * same element.
- *
- * Emits `reader-chosen` (composed, bubbling) with `{ readerId }` on a pick, and `reader-picker-cancel`
- * (same shape, no detail) on Cancel / Escape / a backdrop click. The host decides what either means —
- * `tender-pay.ts` closes the dialog either way and only remembers the id on a genuine pick.
- */
 @customElement("till-reader-picker")
 export class TillReaderPicker extends LitElement {
   static override styles = [
@@ -80,15 +65,10 @@ export class TillReaderPicker extends LitElement {
     `,
   ];
 
-  /** The readers to offer, in the order supplied. `[]` renders an empty-state message rather than a
-   * dead-looking blank list. */
   @property({ attribute: false }) readers: ReaderOption[] = [];
-  /** The reader to show as the current pick (the pay-time default, or a prior choice this session),
-   * or `undefined` when none is distinguished. */
   @property() selectedReaderId?: string;
 
-  /** Emit the pick. Does not close itself — the host (`tender-pay.ts`) owns whether picking one also
-   * tears the dialog down, matching `modifier-picker.ts`'s confirm/cancel split. */
+  /** Does not close itself: the host owns whether a pick also tears the dialog down. */
   #choose(readerId: string): void {
     this.dispatchEvent(
       new CustomEvent<{ readerId: string }>("reader-chosen", {
@@ -99,8 +79,6 @@ export class TillReaderPicker extends LitElement {
     );
   }
 
-  /** Emit the cancel — Cancel button, Escape, or a backdrop click (`wt-dialog`'s own `wt-close`), all
-   * the same "the operator changed their mind" signal. */
   #cancel(): void {
     this.dispatchEvent(new CustomEvent("reader-picker-cancel", { bubbles: true, composed: true }));
   }
@@ -124,10 +102,8 @@ export class TillReaderPicker extends LitElement {
     </wt-dialog>`;
   }
 
-  /** One reader row: a `role="menuitemradio"` button (the language-chooser's own pattern) so the
-   * role and `aria-checked` land on the real focusable node rather than a `wt-button` host, which
-   * only forwards `disabled`/`aria-label` into its shadow root. Offline is a text mark, never a
-   * `disabled` state — see the class doc on why an offline reader stays selectable. */
+  /** A native button, so the role and `aria-checked` land on the real focusable node rather than a
+   * `wt-button` host. Offline is a text mark, never `disabled` — see `ReaderOption`. */
   #renderOption(reader: ReaderOption) {
     const checked = reader.id === this.selectedReaderId;
     return html`
