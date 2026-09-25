@@ -111,9 +111,10 @@ type RecoveryCode = ErrorCode | typeof BOOT_INCOMPLETE | typeof HOLDER_STALLED;
  * error code, the log tail and `lastFailureAt` — and all three are HTML-escaped; `failures` is
  * interpolated raw because `readRecoveryState` only keeps a number.
  *
- * The tail can carry a caught error's own words. What bounds it is not this page: the file sink
- * masks URL credentials (`log-file.ts` → `redactSecrets`) and nothing else, and an `AppError`'s
- * params never carry a secret (`apps/server/src/errors.ts`), because the error boundary logs them.
+ * The tail can carry a caught error's own words. What bounds it is not this page: the file sink,
+ * which masks passwords in a URL (`log-file.ts` → `redactSecrets`) and nothing else, and the
+ * convention that an `AppError`'s params never carry a secret (`apps/server/src/errors.ts`),
+ * because the error boundary logs them.
  *
  * The wording never suggests wiping or resetting anything: a real venue's database holds fiscal
  * records that cannot be re-created, so the action is always restore or reinstall (owner decision,

@@ -61,8 +61,9 @@ export interface AdoptDeps {
  * Adopts an existing venue into this mirror's own database. It inserts no scaffold rows and registers
  * no SIF, so it forks no fiscal chain; the reserved standby identity stays dormant.
  *
- * Every refusal runs before any mutation, and `stampDeployment` precedes `setDeploymentMode` because
- * a node's role may be written only to a stamped database. The caller restarts the box.
+ * Every refusal runs before any write to this node, and `stampDeployment` precedes
+ * `setDeploymentMode` because a node's role may be written only to a stamped database. The caller
+ * restarts the box.
  */
 export async function adoptFromPrimary(
   deps: AdoptDeps,
@@ -77,7 +78,7 @@ export async function adoptFromPrimary(
   const { designated } = bundle;
 
   // Validated against THIS node's modules, so a skewed or hostile primary is refused before any
-  // mutation.
+  // write to this node.
   const moduleConfig = parseModuleOverrides(bundle.moduleOverrides, ALL_MODULES);
 
   // One database serves one environment (CLAUDE.md §5).

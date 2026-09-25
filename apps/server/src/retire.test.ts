@@ -32,8 +32,8 @@ const noopLog: RetireDeps["log"] = () => {};
 
 const CARRIER_ID = "carrier-1";
 
-// Cases depend on `useVenueDb`'s default per-test reset: `refuses a node absent from any held
-// chart` would otherwise read the chart the case before it wrote.
+// Two cases depend on `useVenueDb`'s default per-test reset: each expects no chart held, and would
+// otherwise read the chart an earlier case wrote.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS],
   timeoutMs: 60_000,

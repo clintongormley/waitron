@@ -41,7 +41,8 @@ describe("recoveryApp", () => {
       onRetry: vi.fn(),
     });
     const res = await app.request("/recovery-api/status");
-    // toEqual, not toMatchObject: an unlisted key is never checked.
+    // toEqual, not toMatchObject: an unlisted key is never checked, and this unauthenticated
+    // route must not leak a log path or a raw error message.
     expect(await res.json()).toEqual({
       failures: 3,
       level: "recovery",
@@ -225,10 +226,9 @@ describe("curated operator text", () => {
     }
   });
 
-  // A hand-kept list, and NOT every code that can reach the page: any `AppError` out of
-  // `startServer` is persisted under its own code, and most of those fall to the generic line.
-  // `deployment.environment_mismatch` is listed because the generic line fails it worst
-  // (CLAUDE.md §5).
+  // A hand-kept list, and NOT every code that can reach the page: a code with no entry falls to the
+  // generic line. `deployment.environment_mismatch` is listed because the generic line fails it
+  // worst (CLAUDE.md §5).
   it("has an entry for every code classifyBootFailure produces and each persisted code listed here", () => {
     const classified = [
       "provisioning.database_unreachable",

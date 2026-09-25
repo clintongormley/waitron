@@ -1,4 +1,3 @@
-// The bundle carries identity and dial details only, none of the venue's rows.
 import "./errors.js";
 import { readFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";

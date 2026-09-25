@@ -59,7 +59,6 @@ function invalid(): AppError {
   return new AppError("mirror.primary_url_invalid", {});
 }
 
-// `node:net` accepts neither the `[...]` of a URL's IPv6 hostname nor a `%zone` suffix.
 function stripLiteral(host: string): string {
   let h = host;
   if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1);

@@ -287,7 +287,7 @@ export async function updateZone(
   }
 }
 
-/** Never a hard delete: a `dining_tables.zone_id` may reference it (see `deactivateTable`). */
+/** Never a hard delete: a `dining_tables.zone_id` may reference it. */
 export async function deactivateZone(tx: Transaction, _cfg: TillConfig, id: string): Promise<void> {
   const updated = await tx
     .update(floorZones)
@@ -429,7 +429,7 @@ export async function updateStatus(
   }
 }
 
-/** Never a hard delete: a table may reference it (see `deactivateTable`). */
+/** Never a hard delete: a table may reference it. */
 export async function deactivateStatus(
   tx: Transaction,
   input: { managementSessionId: string; id: string },

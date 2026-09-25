@@ -126,8 +126,7 @@ export function mountMirrorBundleApi(
   );
 }
 
-// A round is lost only to another adopt that committed a newer term; `MAX_NODES` in
-// `@waitron/membership` caps a chart at 8 nodes.
+// A round is lost only to a writer that committed a newer term.
 const MAX_CHART_WRITE_ROUNDS = 8;
 
 // A refused write means this mint was built on a stale chart: re-read and mint again, never force.

@@ -2,9 +2,9 @@
 // the manifest, module non-DB state and state secrets into one archive, encrypts that ONCE under the
 // recovery key, puts the same ciphertext to every destination, and prunes each destination.
 //
-// This loop is the box's only backup duty, so a failing tick is logged and the loop goes on, and a
-// destination that throws does not cost the others their copy. A destination that HANGS stalls the
-// tick: `backend.put` is handed no signal, and an abort is read only between ticks.
+// A failing tick is logged and the loop goes on, and a destination that throws does not cost the
+// others their copy. A destination that HANGS stalls the tick: `backend.put` is handed no signal,
+// so an abort cannot interrupt it.
 
 import { chmod, mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -168,7 +168,7 @@ export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
   if (deps.signal.aborted) return;
   await tick(deps);
   while (!deps.signal.aborted) {
-    // Inside the try: a `readClock` rejection must not end the box's only backup duty.
+    // Inside the try: a `readClock` rejection must not end the backup loop.
     let fireAt: number;
     try {
       const clock =
@@ -183,6 +183,8 @@ export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
       continue;
     }
     // `fireAt` is fixed for the cycle, so a time zone or cutover change lands at the next fire.
+    // Never recompute it mid-wait: an interval schedule's next fire is `now + ms`, so each wake
+    // would push it out again.
     while (!deps.signal.aborted && now().getTime() < fireAt) {
       const chunk = Math.min(MAX_SLEEP_MS, fireAt - now().getTime());
       await deps.sleep(chunk, deps.signal);

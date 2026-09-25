@@ -7,7 +7,7 @@ import "./errors.js";
 /**
  * Returns the absolute path an archive entry may be written to, or throws
  * `restore.unsafe_entry_path`. An authentic archive proves its bytes, never that its entry names
- * stay inside `destRoot`.
+ * stay inside `destRoot`. It does not refuse two names that alias one path inside `destRoot`.
  *
  * `destRoot` must already exist, for `realpath`. A caller looping over many entries may pass
  * `realDestRoot` computed once.
