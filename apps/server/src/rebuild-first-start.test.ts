@@ -306,7 +306,6 @@ describe("completeRebuild", () => {
           heldDocument: held,
           nodes: held!.body.nodes,
           signerNodeId: NODE,
-          endorsements: [endorsement],
         },
       );
       await writeNodeMembership(suite.db, promoted);

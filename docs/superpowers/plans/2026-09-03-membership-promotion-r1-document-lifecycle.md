@@ -592,4 +592,4 @@ git commit -s -m "feat(server): mint the next membership document on local-secon
 
 **Note for the executor:** R1 signs promotion documents with the promoting node's own directly-trusted key (`endorsements: []`). A receiver that only trusts the promoting node transitively (via the primary's endorsement) is an R2/R3 concern — do not add endorsement plumbing here.
 
-_(2026-09-25: `promoteLocalSecondaryToPrimary` now carries the signing node's stored endorsement, if any, through `readSignerEndorsements` in `apps/server/src/membership-mint.ts`.)_
+_(2026-09-25: `promoteLocalSecondaryToPrimary` now carries the signing node's stored endorsement, if any, because `mintNextMembershipDocument` in `apps/server/src/membership-mint.ts` reads it itself.)_
