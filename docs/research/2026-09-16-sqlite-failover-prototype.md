@@ -504,7 +504,9 @@ Stated together, because each is something a reader would otherwise assume the g
   Linux archives in Docker — [Slice 2 measurements §5](#slice-2-measurements).
 - **The cloud's own generation, and the store pointer.** Nothing streams the cloud's generation and no
   node restores by following `current.json`. S0 handed that case to S3; **S3 did not take it, and neither
-  did S4, so it is unowned.**
+  did S4, so it is unowned.** **2026-09-25 (slice 2):** a rebuilt box's generation, and a restore
+  that follows `current.json`, are exercised by `apps/server/src/stream-loop.e2e.test.ts` against
+  versitygw 1.8.0, not against a production store. A promoted node's generation is still unowned.
 - **Fencing a returning node.** No scenario stops a node selling or filing; the decommission-then-promote
   rule the topology design §5.2 states is unmodelled.
 - **Whether litestream ever writes different bytes under a key it has already used** (S3).
@@ -513,16 +515,16 @@ Stated together, because each is something a reader would otherwise assume the g
   and its refusal to run against a configuration file it did not write — are driven by no scenario. They
   are there because the failure they prevent is silent. A later task should pin them or delete them.
 
-**Pointer, 2026-09-25 (slice 2).** A rebuilt box's generation, and a restore that follows
-`current.json`, are exercised by `apps/server/src/stream-loop.e2e.test.ts` against
-versitygw 1.8.0, not against a production store. A promoted node's generation is still unowned.
-
 ## Standing obligations
 
 - **Re-run S6 against the real store when Waitron Cloud picks one**, and against any self-host target the
   product claims to support. An older S3-compatible target may lack the conditional write, and without it
   the promotion tie-break is unsafe (topology §12.2, risk 11). This is the obligation the prototype spec
   §5 asks this note to record, and it is the one result here that a store choice can invalidate outright.
+  **2026-09-25 (slice 2):** the conditional write is now checked on each owner's own bucket by the
+  Backups screen's Test (`probeBucket`, `packages/stream/src/probe.ts`), and on versitygw 1.8.0 by the
+  stream loop test. Waitron Cloud's store, and any other self-host target the product claims, still
+  need their own run.
 - **Build the restart reset.** A node must, on restart and before it files anything, reset every sale it
   inherited in the "being filed right now" state, with no five-minute wait. That covers the copy a
   promoted node inherited through the stream; a sale arriving later in a hand-over is still the
@@ -532,12 +534,11 @@ versitygw 1.8.0, not against a production store. A promoted node's generation is
   the backoff that returns a sale whose submission threw — read on 2026-09-17, not run.
   **2026-09-23: built** — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it before a boot's first filing pass, and again only if that attempt failed.
 - **Own the cloud-generation/pointer case, or write down that nothing covers it.**
+  **2026-09-25 (slice 2):** a rebuilt box's generation, and a restore that follows `current.json`,
+  are exercised by `apps/server/src/stream-loop.e2e.test.ts` against versitygw 1.8.0. A promoted
+  node's generation is still unowned.
 - **Measure the sales-a-day rate** before quoting S4's days-per-GiB at anyone; 250 is an assumption.
 - **Re-run everything on a litestream or MinIO bump.** The verdicts do not carry across a version.
-
-**Pointer, 2026-09-25 (slice 2).** The conditional write is now checked on each owner's own bucket by the Backups screen's Test
-(`probeBucket`, `packages/stream/src/probe.ts`), and on versitygw 1.8.0 by the stream loop test.
-Waitron Cloud's store, and any other self-host target the product claims, still need their own run.
 
 ## What this gate leaves to be built
 
@@ -550,13 +551,12 @@ Two design decisions this measurement hands to slice 2:
   seconds and it did not shrink; longer was not measured —
   [Slice 2 measurements §2](#slice-2-measurements). Doing that on the sale path is
   the thing risk 9 exists to forbid, so bounding that log is a design question slice 2 inherits open.
+  **2026-09-25 (slice 2):** the offline side file is bounded by stopping Litestream at a 256 MiB limit
+  and then folding the file back with a checkpoint that does not wait on a busy database (slice-2 spec
+  §4.5; `StreamSupervisor`, `packages/stream/src/supervisor.ts`, #590).
 - **The fence-before-ship rule removes S2's failing sequences** — an argument from the design, since
   nothing here fences a sender — so whichever slice turns promotion on owns it, together with the
   restart reset above. **2026-09-23:** the restart reset is built — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`), see `docs/backlog.md`.
-
-**Pointer, 2026-09-25 (slice 2).** The offline side file is bounded by stopping Litestream at a
-256 MiB limit and then folding the file back with a checkpoint that does not wait on a busy database
-(slice-2 spec §4.5; `StreamSupervisor`, `packages/stream/src/supervisor.ts`, #590).
 
 ## Slice 2 measurements
 

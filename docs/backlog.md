@@ -157,7 +157,8 @@ brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at
    fallen behind; see A5.
 
 3. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
-   standalone primary's only off-box copy. Only `LocalFsBackend` exists.
+   standalone primary's only off-box copy. The bucket stream of `venue.db` is built (slice 2); the
+   archive's S3 backend is not — only `LocalFsBackend` exists for archives.
 
 4. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
@@ -2475,7 +2476,8 @@ walked was not recorded here. `deploy/README.md` keeps the advice for whoever in
 
 - **Guided Cloud snapshot recovery for test venues is built.** Cloud approval alone does not
   authorize trading or stop another server.
-- **S3-compatible bucket, then Google Drive.** Only `LocalFsBackend` exists. The abort-aware
+- **S3-compatible bucket, then Google Drive.** The bucket stream of `venue.db` is built (slice 2);
+  the archive's S3 backend is not — only `LocalFsBackend` exists for archives. The abort-aware
   per-destination timeout lands with the first network backend.
 - **Whole-state-volume capture** (its own §5-reviewed slice): capture the whole state directory EXCEPT
   an explicit exclusion set, with a completeness guard that fails when a new top-level entry is
@@ -5619,12 +5621,14 @@ against a pinned SHA-256): box A streams and dies, box B is rebuilt from the rec
 under a fresh installation number, streams into its own generation and moves the pointer, and a
 restore of that generation equals B's database; ten sales timed while the S3 server is frozen must
 keep their normal time. Every `test-server` shard in CI installs both binaries first, and
-`scripts/ci-workflow.test.mjs` checks that. The sweep brought `CLAUDE.md`, the developer guides,
+`scripts/ci-workflow.test.mjs` checks that, reading `ci.yml` as text, so a comment naming
+the commands, or a step an `if:` switches off, also satisfies it. The sweep brought `CLAUDE.md`, the developer guides,
 `deploy/README.md`, `apps/server/README.md`, the topology design and the prototype results note in
 line with what slice 2 built. Left open:
 - Locally the test is skipped without its binaries, and Vitest's default reporter shows that only as
   `1 skipped`; the reason shows under `--reporter=verbose`
-  ([testing-guide.md](developers/testing-guide.md), "The stream loop test").
+  ([testing-guide.md](developers/testing-guide.md), "The stream loop test skips locally without its
+  two binaries, and a skip reads as a pass").
 - A change to `scripts/setup-litestream.mjs` or `scripts/setup-s3-test-server.mjs` alone runs no
   `test-server` shard, on its pull request or on its merge to `main`, because neither is in
   `ROOT_SCOPE_CONSUMERS` ([ci-and-gates.md](developers/ci-and-gates.md)); the next run that tests
@@ -5635,6 +5639,8 @@ line with what slice 2 built. Left open:
   only against a fake Litestream in the test suites (`packages/stream/src/supervisor.test.ts`
   among them); the real binary at that limit was measured by the bench rig (results note, 1b), not
   through the supervisor.
+- The frozen-server stage records its sales with `recordOneSale`, which opens a second store with its
+  own write queue, so none of them waits behind the server's `checkpointTruncate`.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence

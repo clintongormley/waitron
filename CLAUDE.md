@@ -551,8 +551,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   tables, or that empties, copies or restores the venue folder, must expect them; no guard finds a
   new site that does not. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **A `local` row belongs to one node, so no foreign key may join a `local` table to a
-  `ledger`/`state` one, in either direction.** Every table is in `venue.db`, which streams whole to
-  the owner's bucket (slice-2 spec §2); `node.db` is reserved and empty, and a key across the classes would stop
+  `ledger`/`state` one, in either direction.** Every table is in `venue.db`, which a primary streams
+  whole to the owner's bucket once one is set up (slice-2 spec §2); `node.db` is reserved and empty, and a key across the classes would stop
   a later slice moving `local` tables into it. A `local` row that needs a venue row keeps the plain
   id and names, at the column, what establishes the target exists — or that nothing does, and where
   the refusal moved to. Guard: `scripts/two-file-foreign-keys.test.ts`, weaker than its name — it
@@ -567,8 +567,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   holding another node's copy of `venue.db` must read its own rows or none. No guard makes a new
   `local` table say which. Which node filters a deletion pins:
   [conventions-data.md](docs/developers/conventions-data.md).
-- **Anything that works as a live login is stored as a hash, because the whole database streams to
-  the owner's bucket.** The dashboard and till session cookies carry a random token and the row
+- **Anything that works as a live login is stored as a hash, because a primary streams the whole
+  database to the owner's bucket once one is set up.** The dashboard and till session cookies carry a random token and the row
   keeps its SHA-256 (`hashSessionToken`, `@waitron/identity`), as pairing tokens and the Google
   sign-in state already did: reading the bucket must never let anyone into the live box. Guards,
   weaker than the rule: the "what a copy of the database holds" cases in
@@ -678,7 +678,8 @@ browser test** — most of these rules exist because a test passed while proving
   `WAITRON_REQUIRE_STREAM_BINARIES=1` a missing one fails the case. **Vitest's default reporter
   prints a skipped run as `1 skipped` and nothing else** — the reason shows only under
   `--reporter=verbose` — so a local green run of `apps/server` may not have run it. That CI installs
-  them is guarded by `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT. See
+  them is guarded by `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT, so the commands
+  left only in a YAML comment, or in a step an `if:` switches off, pass it. See
   [testing-guide.md](docs/developers/testing-guide.md).
 - **A container port-binding timeout needs Docker state as well as the container's own logs.** Save
   `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the
@@ -871,13 +872,16 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   (`2026-09-05-till-reroute-design.md` §2); only the primary sells. Fiscal submission is an outbox,
   never inline.
 - **The bucket stream is external too: it never blocks a sale and never fails `/health`.** A copy
-  fifteen minutes behind raises `backup.stream_behind`. The side file is bounded by stopping
+  fifteen minutes behind raises `backup.stream_behind`, unless a stopped, refused or
+  unusable-settings alert already explains it (`apps/server/src/alert-sources.ts`). The side file is bounded by stopping
   Litestream at a size limit (`backup.stream_paused`) and then folding the file back; that
   checkpoint takes its turn in the write queue with no busy wait (`checkpointTruncate`,
-  `packages/store/src/index.ts`), so a sale can queue behind it but never waits on Litestream or the
-  bucket. Guards, narrower than the rule: the frozen-server stage of
-  `apps/server/src/stream-loop.e2e.test.ts` times ten sales against a bound, never reaches the size
-  limit, and is skipped locally without its binaries (§4); the bucket-copy cases in
+  `packages/store/src/index.ts`), so a sale can queue behind it but never waits on the bucket. Guards,
+  narrower than the rule: the frozen-server stage of `apps/server/src/stream-loop.e2e.test.ts`
+  times ten sales against a bound, never reaches the size limit, records them with `recordOneSale`
+  — which opens a second store, with its own write queue, rather than going through the server's
+  route and write queue, so no sale there queues behind the server's `checkpointTruncate` — and is
+  skipped locally without its binaries (§4); the bucket-copy cases in
   `apps/server/src/health.test.ts` hold `/health`.
 - **`registros_facturacion` is immutable**: it is the table declared `appendOnly()`
   (`packages/fiscal-verifactu/src/classification.ts`), so `applyMigrations` puts a `RAISE(ABORT)`
@@ -903,10 +907,16 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   `UNIQUE constraint failed: time_entries.node_id, …`, errcode 2067 — it names the COLUMNS, never
   the index) however it reaches the database; nothing
   carries rows between nodes today. Guard:
-  `packages/workforce/src/restore-continuation.test.ts`. On a node that files, every start puts each
-  sale left "being sent" back to waiting before its first filing pass (`resetInFlightClaims`,
-  `apps/server/src/restart-reset.ts`) — safe only
-  because the store refuses a second process on the venue folder (`provisioning.database_in_use`).
+  `packages/workforce/src/restore-continuation.test.ts`.
+- **On a node that files, every start puts each sale left "being sent" back to waiting before its
+  first filing pass** (`resetInFlightClaims`, `packages/fiscal-verifactu/src/drain.ts`, run by
+  `resetBeforeFirstDrain`, `apps/server/src/restart-reset.ts`) — safe only while no second process
+  files from the database: the server opens the folder exclusively (`provisioning.database_in_use`),
+  and the tools that open it with `exclusive: false` file nothing. Guards:
+  `apps/server/src/restart-reset.test.ts`, which holds that the reset runs before the first pass,
+  and the case in `apps/server/src/boot.test.ts` that returns a previous run's in-flight claim to
+  `pendiente` on a start's first pass — weaker than the rule, because nothing checks that a tool
+  opening the folder with `exclusive: false` never files.
 
 ---
 

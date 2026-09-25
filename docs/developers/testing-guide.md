@@ -525,7 +525,7 @@ is no `process.title` anywhere in `vitest@4.1.11`'s `dist/`. Measured 2026-09-19
 `packages/identity`, one version each: 3.2.7 showed `node (vitest)` and `node (vitest 1)`, 4.1.11
 showed no `(vitest` at any sample and a worker running `…/vitest/dist/workers/forks.js`.
 
-## The stream loop test
+## The stream loop test skips locally without its two binaries, and a skip reads as a pass
 
 `apps/server/src/stream-loop.e2e.test.ts` runs slice 2 end to end with the real pinned Litestream
 and a real S3-compatible server started as a plain child process, because no package suite starts a
@@ -555,18 +555,22 @@ before taking the loop as tested.
 **The frozen-server stage.** Ten sales are timed with the S3 server up, then it is frozen with
 `SIGSTOP` (every call hangs rather than being refused) and ten more are timed. The slowest frozen sale
 must stay under the larger of one second and five times the slowest sale before the freeze. It never
-drives the side file to the 256 MiB limit, so it says nothing about the pause.
+drives the side file to the 256 MiB limit, so it says nothing about the pause. Its sales are recorded
+with `recordOneSale` (`apps/server/scripts/record-one-sale.ts`), which opens a second store with
+`exclusive: false` and so its own write queue, not the server's route and write queue; no sale in
+this stage waits behind the server's `checkpointTruncate`.
 
-**Why versitygw 1.8.0.** Five candidates were run on 2026-09-23 with the same probe: a write "only if
-absent" over an existing key, a write "only if unchanged" with a stale ETag, and twenty parallel
-create-only writes (the slice-2 plan, Task 10's drafting notes, "Receipts for the choices in this
-task"). versitygw, SeaweedFS 4.47 and MinIO's last binary release refused both conditional writes with
-412 and let one writer of twenty win. rclone `serve s3` overwrote the object both times. Garage does
-not support the conditional write; its issue #1052 is open, and a maintainer wrote that "adding this
-to Garage is not possible with our weak-consistency replication model". versitygw was preferred
-because it answers `If-Match` on a missing key with 404 as AWS documents (SeaweedFS answers 412), it
-is one process on one port, and its release publishes SHA-256 checksums (SeaweedFS publishes MD5).
-MinIO's repository is archived and its community binaries are no longer published.
+**Why versitygw 1.8.0.** Five candidates were weighed on 2026-09-23. Four were run with the same
+probe: a write "only if absent" over an existing key, a write "only if unchanged" with a stale ETag,
+and twenty parallel create-only writes (the slice-2 plan, Task 10's drafting notes, "Receipts for
+the choices in this task"). versitygw, SeaweedFS 4.47 and MinIO's last binary release refused both
+conditional writes with 412 and let one writer of twenty win. rclone `serve s3` overwrote the object
+both times. The fifth, Garage, was ruled out by reading, not run: it does not support the
+conditional write; its issue #1052 is open, and a maintainer wrote that "adding this to Garage is
+not possible with our weak-consistency replication model". versitygw was preferred because it
+answers `If-Match` on a missing key with 404 as AWS documents (SeaweedFS answers 412), it is one
+process on one port, and its release publishes SHA-256 checksums (SeaweedFS publishes MD5). MinIO's
+repository is archived and its community binaries are no longer published.
 
 **It runs with `--sidecar`** (`apps/server/src/testing/s3-test-server.ts`), which keeps object
 metadata in a plain directory instead of extended attributes, so it does not depend on what the

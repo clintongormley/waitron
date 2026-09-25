@@ -127,9 +127,11 @@ vice versa, or the two files could not be backed up independently.
 > only in hand-written migration SQL is outside it. The six, and the one whose id is configuration
 > rather than a row already read, are in the plan's task P7 step 5.
 
-> **Pointer, 2026-09-25 (slice 2).** Superseded: every table stays in `venue.db` and streams. A row
-> that belongs to one machine is keyed by `node_id` instead of living in `node.db`, which stays empty,
-> reserved for slice 5's mirror box. Anything that works as a live login is stored as a hash, because
+> **Pointer, 2026-09-25 (slice 2).** Superseded: every table stays in `venue.db` and streams, and
+> `node.db` stays empty, reserved for slice 5's mirror box. A row that belongs to one machine is tied
+> to it in one of three ways: a `node_id` column every read and write names, a seal only that node's
+> key opens (`tenant_credentials`), or deletion by the transaction that wrote it (`change_log`) —
+> `docs/developers/conventions-data.md`. Anything that works as a live login is stored as a hash, because
 > the bucket now holds it. [Slice-2 spec §2](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
 
 ### 2.2 Generations
@@ -525,6 +527,10 @@ to every configured `StorageBackend` — is kept with `VACUUM INTO` in place of 
 also carries `node.db`'s sealed secrets, as `stateDir` secrets are carried today. **Waitron Cloud is
 the premier, default backup; the archive is the self-host / extra-copy path.**
 
+> **Pointer, 2026-09-25 (slice 2).** `node.db` is empty: the sealed secrets live in `venue.db`, which
+> is the one database file the archive copies (`archiveTo`, `packages/store/src/archive.ts`).
+> [Slice-2 spec §2](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
+
 **The stream and the archive are two independent recovery ladders, not one that refines the other**
 (owner question, 2026-09-16). What Litestream brings up to date is a *replica* — a store holding one of
 its snapshots plus the change files (LTX) since — which it restores to the latest point and can advance
@@ -599,7 +605,9 @@ is weakened knowingly: the records the stream holds are, once submitted, already
    live ledger**: rolling the ledger back would re-issue invoice numbers. Going back for real is a cold
    restore with a fresh chain, by design.
 
-> **Pointer, 2026-09-25 (slice 2).** Slice 2's rebuild from the bucket claims no seat; seats arrive
+> **Pointer, 2026-09-25 (slice 2).** `node.db` is empty and every table, identity included, is in
+> `venue.db`, so item 1's "`node.db` identity kept" and item 2's split on whether the artifact
+> carries `node.db` no longer describe what was built. Slice 2's rebuild from the bucket claims no seat; seats arrive
 > with promotion in slice 3. It resumes the dead node's own identity from a row locked with the
 > recovery key that streams with the database, and places the copy through the archive restore's own
 > path, so the fiscal restore hook mints a fresh installation number, series and chain as it does for
@@ -683,7 +691,9 @@ no-tenant-column guard.
 > (every 1000 pages, and passive), not `wal_autocheckpoint = 0` (`packages/store/src/index.ts`).
 > Slice 2's measurement 2 found that, with the bucket reachable, the default restored completely and
 > Litestream logged no warning, with a peak side file below the switched-off arm's by about 0.5% and
-> 1.5% in its two runs, a close comparison ([results note](../../research/2026-09-16-sqlite-failover-prototype.md), slice-2 section). The side file
+> 1.5% in its two runs, a close comparison ([results note](../../research/2026-09-16-sqlite-failover-prototype.md), slice-2 section). A
+> one-off upload ran before each restore, so "restored completely" cannot tell the daemon kept up from
+> the upload catching up (the same note). The side file
 > is bounded instead by stopping Litestream at a size limit (slice-2 spec §4.5).
 
 ---
@@ -697,6 +707,14 @@ The replacement for the two-node fixture is a **loop test**: two "nodes" in one 
 directories, the **real pinned Litestream binary** (downloaded in CI), and a local directory as the
 store. It runs the whole arc — stream, follow, promote, return-with-a-tail, ship, rejoin — and every
 slice in §11 adds a step to it.
+
+> **Pointer, 2026-09-25 (slice 2).** As built, the loop test's store is versitygw 1.8.0 over S3, run
+> as a plain child process, not a local directory (`apps/server/src/stream-loop.e2e.test.ts`;
+> `docs/developers/testing-guide.md`, "The stream loop test skips locally without its two binaries,
+> and a skip reads as a pass"). It does not run the whole arc: box A streams, box B is rebuilt from
+> the bucket, sells under a fresh installation number, and streams into a generation of its own.
+> Follow, promote, return-with-a-tail, ship and rejoin are left to the later slices §11 lists,
+> starting with slice 3 (`docs/backlog.md`, "Slice 2, stream and cold restore, is COMPLETE").
 
 Proved by deletion (CLAUDE.md §4):
 

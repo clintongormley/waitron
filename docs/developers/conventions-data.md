@@ -889,7 +889,8 @@ Run both after adding any table anywhere.
 
 ## A `local` row belongs to one node, so no foreign key may join a `local` table to a `ledger`/`state` one
 
-Every table is in `venue.db`, which streams whole to the owner's bucket (slice-2 spec §2, which
+Every table is in `venue.db`, which a primary streams whole to the owner's bucket once one is set up
+(slice-2 spec §2, which
 replaced the topology design's plan to put `local` tables in `node.db`). A `local` row means nothing to another
 node, so no venue row may depend on one, and `node.db` stays reserved for a later slice that may
 move `local` tables into it — which a key in either direction would block. Guard:
