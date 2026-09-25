@@ -147,6 +147,11 @@ choose a verified snapshot, enter the code, and confirm that the old server and 
 peers are stopped. Return to the replacement and choose **Check approval**. Review the snapshot
 capture time before you confirm the local restore; later changes are absent from that snapshot.
 
+If the snapshot's database holds bucket settings, choosing **Restore this snapshot** first checks
+the old server's bucket. If the old server wrote to it in the last ten minutes, or that could not
+be checked, the restore stops and the page asks you to tick **The old server is switched off for
+good.** Tick it only when that is true, then choose **Restore this snapshot** again.
+
 This path supports preparation and demo venues. It restores a retained snapshot through the
 same local cold restore and module hooks as a backup file. It does not recover changes after the
 snapshot, activate a Cloud route, enroll the replacement with Cloud, or fence a running server.

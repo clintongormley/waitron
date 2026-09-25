@@ -10,6 +10,7 @@ import { verifyPassword, verifyPin } from "@waitron/identity";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { ProvisionRequest } from "./provision.js";
+import type { RestoreRequest } from "./restore-request.js";
 import type { AdoptCredential, AdoptRequest } from "./adopt.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
@@ -1579,6 +1580,80 @@ describe("POST /setup-api/configuration", () => {
   });
 });
 
+/** Refusals every restore route can meet from the same validation, with the one status each answers. */
+const SHARED_RESTORE_REFUSALS: [AppError, number][] = [
+  [new AppError("recovery.passphrase_invalid", {}), 422],
+  [new AppError("backup.artifact_invalid", { reason: "tag" }), 422],
+  [new AppError("backup.archive_invalid", { reason: "truncated" }), 422],
+  [
+    new AppError("restore.environment_mismatch", { backup: "preproduction", target: "production" }),
+    409,
+  ],
+  [new AppError("restore.schema_too_new", { module: "core", backup: 9, target: 8 }), 409],
+  [new AppError("provisioning.database_ahead", { set: "core", unknownMigrations: ["0009"] }), 409],
+  [new AppError("restore.stream_source_live", { lastChangeAt: "2026-09-23T11:58:00Z" }), 409],
+  [new AppError("restore.stream_source_unchecked", { reason: "clock" }), 409],
+];
+
+describe("the archive and Cloud restore routes, on the refusals they share with the bucket rebuild", () => {
+  it("answers the refusals an archive restore shares with the rebuild with the same statuses", async () => {
+    const seen: [string, number][] = [];
+    for (const [error] of SHARED_RESTORE_REFUSALS) {
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          stageRestore: vi.fn().mockRejectedValue(error),
+          requestRestart: vi.fn(),
+        },
+        noopLog,
+      );
+      const res = await postRestore(app, Uint8Array.from([1]));
+      expect((await res.json()) as unknown).toMatchObject({ error: { code: error.code } });
+      seen.push([error.code, res.status]);
+    }
+    expect(seen).toEqual(SHARED_RESTORE_REFUSALS.map(([error, status]) => [error.code, status]));
+  });
+
+  it("answers the refusals a Cloud restore shares with the rebuild with the same statuses", async () => {
+    const requestId = "3728e560-fbb2-41aa-8c2b-d21f3ce1ce92";
+    const pointId = "9f41b8b8-b14e-472a-8eb4-f9259b80f0d1";
+    const seen: [string, number][] = [];
+    for (const [error] of SHARED_RESTORE_REFUSALS) {
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          cloudRecovery: {
+            binding: vi.fn(async () => ({ requestId, pointId })),
+            restore: vi.fn(async (stage: (request: RestoreRequest) => Promise<void>) => {
+              await stage({
+                artifact: Uint8Array.from([1]),
+                recoveryKey: "key",
+                environment: "preproduction",
+                managedCloud: { requestId, pointId },
+              });
+            }),
+          } as unknown as SetupDeps["cloudRecovery"],
+          stageRestore: vi.fn().mockRejectedValue(error),
+          requestRestart: vi.fn(),
+        },
+        noopLog,
+      );
+      const res = await app.request("/setup-api/cloud-recovery/restore", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pointId }),
+      });
+      expect((await res.json()) as unknown).toMatchObject({ error: { code: error.code } });
+      seen.push([error.code, res.status]);
+    }
+    expect(seen).toEqual(SHARED_RESTORE_REFUSALS.map(([error, status]) => [error.code, status]));
+  });
+});
+
 describe("POST /setup-api/restore", () => {
   it("stages the encrypted artifact under the persistent operation lease and restarts", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-restore-operation-"));
@@ -1594,11 +1669,14 @@ describe("POST /setup-api/restore", () => {
       );
       const response = await postRestore(app, Uint8Array.from([1, 2, 3]));
       expect(response.status).toBe(202);
-      expect(stageRestore).toHaveBeenCalledWith({
-        artifact: Uint8Array.from([1, 2, 3]),
-        recoveryKey: "recovery-secret",
-        environment: "production",
-      });
+      expect(stageRestore).toHaveBeenCalledWith(
+        {
+          artifact: Uint8Array.from([1, 2, 3]),
+          recoveryKey: "recovery-secret",
+          environment: "production",
+        },
+        { oldBoxGone: false },
+      );
       expect((await operations.read())?.phase).toBe("complete");
       await tick();
       expect(requestRestart).toHaveBeenCalledOnce();
@@ -1618,6 +1696,390 @@ describe("POST /setup-api/restore", () => {
     const response = await postRestore(app, Uint8Array.from([1]), "dev");
     expect(response.status).toBe(400);
     expect(stageRestore).not.toHaveBeenCalled();
+  });
+});
+
+async function postBucketRestore(app: Hono, body: unknown): Promise<Response> {
+  return app.request("/setup-api/restore-bucket", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("POST /setup-api/restore-bucket", () => {
+  it("stages the rebuild under the persistent operation lease and restarts", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-bucket-"));
+    try {
+      const stageBucketRestore = vi.fn(async () => {});
+      const requestRestart = vi.fn();
+      const operations = createSetupOperationStore(dir);
+      const app = new Hono();
+      mountSetup(
+        app,
+        { environment: "preproduction", operations, stageBucketRestore, requestRestart },
+        noopLog,
+      );
+      const response = await postBucketRestore(app, {
+        kit: "WAITRON-RECOVERY-KIT-1:abc",
+        environment: "production",
+      });
+      expect(response.status).toBe(202);
+      expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });
+      expect(stageBucketRestore).toHaveBeenCalledWith({
+        kit: "WAITRON-RECOVERY-KIT-1:abc",
+        environment: "production",
+        oldBoxGone: false,
+        venueConfirmed: null,
+      });
+      expect((await operations.read())?.phase).toBe("complete");
+      await tick();
+      expect(requestRestart).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("answers a live old box with 409 and its last change time, and accepts the confirmed retry", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-bucket-"));
+    try {
+      const stageBucketRestore = vi
+        .fn()
+        .mockRejectedValueOnce(
+          new AppError("restore.stream_source_live", { lastChangeAt: "2026-09-23T11:58:00.000Z" }),
+        )
+        .mockResolvedValueOnce(undefined);
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          operations: createSetupOperationStore(dir),
+          stageBucketRestore,
+          requestRestart: vi.fn(),
+        },
+        noopLog,
+      );
+      const first = await postBucketRestore(app, { kit: "k", environment: "production" });
+      expect(first.status).toBe(409);
+      expect(await first.json()).toEqual({
+        error: {
+          code: "restore.stream_source_live",
+          params: { lastChangeAt: "2026-09-23T11:58:00.000Z" },
+        },
+      });
+      const second = await postBucketRestore(app, {
+        kit: "k",
+        environment: "production",
+        oldBoxGone: true,
+      });
+      expect(second.status).toBe(202);
+      expect(stageBucketRestore).toHaveBeenLastCalledWith({
+        kit: "k",
+        environment: "production",
+        oldBoxGone: true,
+        venueConfirmed: null,
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("releases the latch after a refusal when this box keeps no setup progress", async () => {
+    const stageBucketRestore = vi
+      .fn()
+      .mockRejectedValueOnce(new AppError("restore.stream_source_unchecked", { reason: "clock" }))
+      .mockResolvedValueOnce(undefined);
+    const app = new Hono();
+    mountSetup(
+      app,
+      { environment: "preproduction", stageBucketRestore, requestRestart: vi.fn() },
+      noopLog,
+    );
+    expect((await postBucketRestore(app, { kit: "k", environment: "production" })).status).toBe(
+      409,
+    );
+    const retry = await postBucketRestore(app, {
+      kit: "k",
+      environment: "production",
+      oldBoxGone: true,
+    });
+    expect(retry.status).toBe(202);
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ["kit", { environment: "production" }],
+    ["kit", { kit: "", environment: "production" }],
+    ["kit", { kit: 7, environment: "production" }],
+    ["kit", { kit: "k".repeat(64 * 1024 + 1), environment: "production" }],
+    ["environment", { kit: "k", environment: "dev" }],
+    ["environment", { kit: "k" }],
+    ["oldBoxGone", { kit: "k", environment: "production", oldBoxGone: "yes" }],
+    ["venueConfirmed", { kit: "k", environment: "production", venueConfirmed: 89890001 }],
+  ])("refuses a request with a bad %s without staging (%#)", async (field, body) => {
+    const stageBucketRestore = vi.fn(async () => {});
+    const app = new Hono();
+    mountSetup(
+      app,
+      { environment: "preproduction", stageBucketRestore, requestRestart: vi.fn() },
+      noopLog,
+    );
+    const res = await postBucketRestore(app, body);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field } },
+    });
+    expect(stageBucketRestore).not.toHaveBeenCalled();
+    // A refused request releases the latch, so a corrected one is accepted.
+    expect((await postBucketRestore(app, { kit: "k", environment: "production" })).status).toBe(
+      202,
+    );
+  });
+
+  it.each(["stageBucketRestore", "requestRestart"] as const)(
+    "answers not ready when %s is not wired",
+    async (missing) => {
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          stageBucketRestore: vi.fn(async () => {}),
+          requestRestart: vi.fn(),
+          [missing]: undefined,
+        },
+        noopLog,
+      );
+      const res = await postBucketRestore(app, { kit: "k", environment: "production" });
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+    },
+  );
+
+  it("maps each refusal a rebuild can meet to its status", async () => {
+    const cases: [AppError, number][] = [
+      [new AppError("backup.stream_kit_invalid", { reason: "shape" }), 400],
+      [new AppError("restore.stream_pointer_missing", {}), 422],
+      [new AppError("restore.stream_pointer_unverified", { reason: "signature" }), 422],
+      [new AppError("backup.stream_pointer_invalid", { reason: "not_json" }), 422],
+      [new AppError("restore.stream_integrity_failed", {}), 422],
+      [new AppError("restore.stream_state_missing", { nodeId: "n" }), 422],
+      [new AppError("recovery.passphrase_invalid", {}), 422],
+      [new AppError("backup.artifact_invalid", { reason: "tag" }), 422],
+      [new AppError("backup.archive_invalid", { reason: "truncated" }), 422],
+      [
+        new AppError("backup.stream_request_failed", {
+          operation: "get",
+          key: "current.json",
+          status: null,
+          name: "TimedOut",
+        }),
+        502,
+      ],
+      [new AppError("backup.stream_restore_failed", { exitCode: 1, diskFull: false }), 502],
+      [new AppError("restore.stream_disk_full", {}), 507],
+      [
+        new AppError("restore.environment_mismatch", {
+          backup: "preproduction",
+          target: "production",
+        }),
+        409,
+      ],
+      [new AppError("restore.schema_too_new", { module: "core", backup: 9, target: 8 }), 409],
+      [
+        new AppError("provisioning.database_ahead", { set: "core", unknownMigrations: ["0009"] }),
+        409,
+      ],
+      [new AppError("restore.stream_source_live", { lastChangeAt: "2026-09-23T11:58:00Z" }), 409],
+      [new AppError("restore.stream_source_unchecked", { reason: "clock" }), 409],
+      [
+        new AppError("restore.stream_venue_unconfirmed", {
+          legalName: "L",
+          taxId: "T",
+          locationName: "N",
+        }),
+        409,
+      ],
+    ];
+    const seen: [string, number][] = [];
+    for (const [error] of cases) {
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          stageBucketRestore: vi.fn().mockRejectedValue(error),
+          requestRestart: vi.fn(),
+        },
+        noopLog,
+      );
+      const res = await postBucketRestore(app, { kit: "k", environment: "production" });
+      expect((await res.json()) as unknown).toMatchObject({ error: { code: error.code } });
+      seen.push([error.code, res.status]);
+    }
+    expect(seen).toEqual(cases.map(([error, status]) => [error.code, status]));
+  });
+
+  // Reconciliation N26: the owner sees whose copy it is before anything is staged.
+  it("answers an unconfirmed venue with 409 and its names, and stages the retry that names its tax id", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-bucket-"));
+    try {
+      const venue = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" };
+      const stageBucketRestore = vi
+        .fn()
+        .mockRejectedValueOnce(new AppError("restore.stream_venue_unconfirmed", venue))
+        .mockResolvedValueOnce(undefined);
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          operations: createSetupOperationStore(dir),
+          stageBucketRestore,
+          requestRestart: vi.fn(),
+        },
+        noopLog,
+      );
+      const first = await postBucketRestore(app, { kit: "k", environment: "production" });
+      expect(first.status).toBe(409);
+      expect(await first.json()).toEqual({
+        error: { code: "restore.stream_venue_unconfirmed", params: venue },
+      });
+      const second = await postBucketRestore(app, {
+        kit: "k",
+        environment: "production",
+        venueConfirmed: "89890001K",
+      });
+      expect(second.status).toBe(202);
+      expect(stageBucketRestore).toHaveBeenLastCalledWith({
+        kit: "k",
+        environment: "production",
+        oldBoxGone: false,
+        venueConfirmed: "89890001K",
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Reconciliation N23: the archive restore asks the same old-box question when its database holds
+  // bucket settings; the confirmation travels in a header, beside the recovery key's.
+  it("passes the archive restore's old-box confirmation through, and answers its refusal with 409", async () => {
+    const stageRestore = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new AppError("restore.stream_source_live", { lastChangeAt: "2026-09-23T11:58:00.000Z" }),
+      )
+      .mockRejectedValueOnce(new AppError("restore.stream_source_unchecked", { reason: "bucket" }))
+      .mockResolvedValueOnce(undefined);
+    const app = new Hono();
+    mountSetup(
+      app,
+      { environment: "preproduction", stageRestore, requestRestart: vi.fn() },
+      noopLog,
+    );
+    const send = (headers: Record<string, string>) =>
+      app.request("/setup-api/restore", {
+        method: "POST",
+        headers: {
+          "content-type": "application/octet-stream",
+          "x-waitron-recovery-key": "key",
+          "x-waitron-restore-environment": "production",
+          ...headers,
+        },
+        body: Uint8Array.from([1]),
+      });
+    const first = await send({});
+    expect(first.status).toBe(409);
+    expect(await first.json()).toEqual({
+      error: {
+        code: "restore.stream_source_live",
+        params: { lastChangeAt: "2026-09-23T11:58:00.000Z" },
+      },
+    });
+    expect(stageRestore).toHaveBeenLastCalledWith(expect.anything(), { oldBoxGone: false });
+    // A refused staging releases the latch, so the next attempt is staged. Only "1" confirms.
+    const unchecked = await send({ "x-waitron-old-box-gone": "true" });
+    expect(unchecked.status).toBe(409);
+    expect(await unchecked.json()).toEqual({
+      error: { code: "restore.stream_source_unchecked", params: { reason: "bucket" } },
+    });
+    expect(stageRestore).toHaveBeenCalledTimes(2);
+    expect(stageRestore).toHaveBeenLastCalledWith(expect.anything(), { oldBoxGone: false });
+    const confirmed = await send({ "x-waitron-old-box-gone": "1" });
+    expect(confirmed.status).toBe(202);
+    expect(stageRestore).toHaveBeenLastCalledWith(
+      { artifact: Uint8Array.from([1]), recoveryKey: "key", environment: "production" },
+      { oldBoxGone: true },
+    );
+  });
+
+  it("does not replay an unconfirmed archive restore's completion for the confirmed one", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-bucket-"));
+    try {
+      const operations = createSetupOperationStore(dir);
+      const first = new Hono();
+      mountSetup(
+        first,
+        {
+          environment: "preproduction",
+          operations,
+          stageRestore: vi.fn(async () => {}),
+          requestRestart: vi.fn(),
+        },
+        noopLog,
+      );
+      expect((await postRestore(first, Uint8Array.from([1]))).status).toBe(202);
+      const hash = (await operations.read())?.requestHash;
+
+      const restarted = new Hono();
+      mountSetup(
+        restarted,
+        {
+          environment: "preproduction",
+          operations: createSetupOperationStore(dir),
+          stageRestore: vi.fn(async () => {}),
+          requestRestart: vi.fn(),
+        },
+        noopLog,
+      );
+      const confirmed = await restarted.request("/setup-api/restore", {
+        method: "POST",
+        headers: {
+          "content-type": "application/octet-stream",
+          "x-waitron-recovery-key": "recovery-secret",
+          "x-waitron-restore-environment": "production",
+          "x-waitron-old-box-gone": "1",
+        },
+        body: Uint8Array.from([1]),
+      });
+      expect(confirmed.status).toBe(409);
+      expect(await confirmed.json()).toMatchObject({ error: { code: "setup.operation_conflict" } });
+      expect((await operations.read())?.requestHash).toBe(hash);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("shares the setup latch with the archive restore", async () => {
+    let release: () => void = () => {};
+    const stageRestore = vi.fn(() => new Promise<void>((r) => (release = r)));
+    const stageBucketRestore = vi.fn(async () => {});
+    const app = new Hono();
+    mountSetup(
+      app,
+      { environment: "preproduction", stageRestore, stageBucketRestore, requestRestart: vi.fn() },
+      noopLog,
+    );
+    const archive = postRestore(app, Uint8Array.from([1]));
+    await tick();
+    const bucket = await postBucketRestore(app, { kit: "k", environment: "production" });
+    expect(bucket.status).toBe(409);
+    expect(await bucket.json()).toMatchObject({ error: { code: "setup.already_provisioning" } });
+    expect(stageBucketRestore).not.toHaveBeenCalled();
+    release();
+    expect((await archive).status).toBe(202);
+    await tick();
   });
 });
 
@@ -2338,11 +2800,14 @@ describe("setup routes — remaining refusals and resumption paths", () => {
 
       expect(res.status).toBe(202);
       expect(await res.json()).toEqual({ restoreStaged: true, restarting: true });
-      expect(deps.stageRestore).toHaveBeenCalledWith({
-        artifact: Uint8Array.from([4, 5]),
-        recoveryKey: "recovery-secret",
-        environment: "preproduction",
-      });
+      expect(deps.stageRestore).toHaveBeenCalledWith(
+        {
+          artifact: Uint8Array.from([4, 5]),
+          recoveryKey: "recovery-secret",
+          environment: "preproduction",
+        },
+        { oldBoxGone: false },
+      );
       await tick();
       expect(deps.requestRestart).toHaveBeenCalledOnce();
     });

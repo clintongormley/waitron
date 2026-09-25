@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -6,7 +6,12 @@ import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
-import { dispatchRestoreRequested, dispatchSetupGoto } from "../events.js";
+import {
+  type RestoreRequestDetail,
+  dispatchRestoreRequested,
+  dispatchSetupGoto,
+} from "../events.js";
+import { OLD_BOX_PROBLEM, oldBoxQuestion } from "./old-box-question.js";
 
 /**
  * The warning asks about any server still RUNNING, never "a primary or a mirror": an adopted mirror
@@ -28,14 +33,59 @@ export class SetupRestoreScreen extends LitElement {
   ];
 
   @property() errorMessage?: string;
+  /** Set by the shell from `restore.stream_source_live`: when the old server last wrote to its bucket. */
+  @property() liveSince?: string;
+  /** Set by the shell from `restore.stream_source_unchecked`. */
+  @property({ type: Boolean }) liveUnknown = false;
+  /** The request the shell last sent, returned with a refusal so the owner's entries are kept. */
+  @property({ attribute: false }) request?: RestoreRequestDetail;
   @state() private artifact?: File;
   @state() private recoveryKey = "";
   @state() private environment: "production" | "preproduction" = "production";
   @state() private acknowledged = false;
+  @state() private oldBoxGone = false;
   @state() private showError = false;
 
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("request") && this.request !== undefined) {
+      this.artifact = this.request.artifact;
+      this.recoveryKey = this.request.recoveryKey;
+      this.environment = this.request.environment;
+      // A request is only sent once the owner has ticked this.
+      this.acknowledged = true;
+      this.oldBoxGone = this.request.oldBoxGone;
+    }
+  }
+
+  override updated(changed: PropertyValues<this>): void {
+    // A file input cannot be bound; without this it would read "No file chosen" beside a kept file.
+    if (changed.has("request") && this.request !== undefined) {
+      const files = new DataTransfer();
+      files.items.add(this.request.artifact);
+      this.shadowRoot!.querySelector<HTMLInputElement>("[data-test=artifact]")!.files = files.files;
+    }
+  }
+
+  /** The owner chose another file than the one the shell's old-server refusal was about. */
+  get #artifactReplaced(): boolean {
+    return this.request !== undefined && this.artifact !== this.request.artifact;
+  }
+
+  get #askingOldBox(): boolean {
+    return !this.#artifactReplaced && (this.liveSince !== undefined || this.liveUnknown);
+  }
+
+  get #oldBoxUnanswered(): boolean {
+    return this.#askingOldBox && !this.oldBoxGone;
+  }
+
   #restore(): void {
-    if (this.artifact === undefined || this.recoveryKey === "" || !this.acknowledged) {
+    if (
+      this.artifact === undefined ||
+      this.recoveryKey === "" ||
+      !this.acknowledged ||
+      this.#oldBoxUnanswered
+    ) {
       this.showError = true;
       return;
     }
@@ -44,6 +94,7 @@ export class SetupRestoreScreen extends LitElement {
       artifact: this.artifact,
       recoveryKey: this.recoveryKey,
       environment: this.environment,
+      oldBoxGone: this.#askingOldBox && this.oldBoxGone,
     });
   }
 
@@ -116,8 +167,10 @@ export class SetupRestoreScreen extends LitElement {
               "production" | "preproduction";
           }}
         >
-          <option value="production">Live</option>
-          <option value="preproduction">Preparation or demo</option>
+          <option value="production" .selected=${this.environment === "production"}>Live</option>
+          <option value="preproduction" .selected=${this.environment === "preproduction"}>
+            Preparation or demo
+          </option>
         </select>
       </label>
       <label class="field">
@@ -140,12 +193,21 @@ export class SetupRestoreScreen extends LitElement {
         >
       </label>
       ${this.showError && !this.acknowledged ? html`<p class="error" id="acknowledge-error">Confirm that no other running server has newer data.</p>` : nothing}
+      ${oldBoxQuestion({
+        liveSince: this.#askingOldBox ? this.liveSince : undefined,
+        liveUnknown: this.#askingOldBox && this.liveUnknown,
+        checked: this.oldBoxGone,
+        invalid: this.showError && this.#oldBoxUnanswered,
+        onChange: (checked) => {
+          this.oldBoxGone = checked;
+        },
+      })}
       ${
         this.showError
           ? html`<wt-form-error-summary
               data-test="error"
               heading="There is a problem with this form"
-              .errors=${[this.artifact === undefined ? "Choose a backup file." : "", this.recoveryKey === "" ? "Enter the recovery key." : "", !this.acknowledged ? "Confirm that no other running server has newer data." : ""].filter(Boolean)}
+              .errors=${[this.artifact === undefined ? "Choose a backup file." : "", this.recoveryKey === "" ? "Enter the recovery key." : "", !this.acknowledged ? "Confirm that no other running server has newer data." : "", this.#oldBoxUnanswered ? OLD_BOX_PROBLEM : ""].filter(Boolean)}
             ></wt-form-error-summary>`
           : this.errorMessage === undefined
             ? html``

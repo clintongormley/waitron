@@ -2,10 +2,40 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { SetupCloudRestoreScreen } from "./cloud-restore-screen.js";
 import "./cloud-restore-screen.js";
+import { OLD_BOX_PROBLEM } from "./old-box-question.js";
 
 afterEach(cleanupWidgets);
 const q = (el: SetupCloudRestoreScreen, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector);
+const approvedView = (pointId = "e8722eb0-3f02-4f35-920b-9b5f6bfb05e8") => ({
+  requestId: "be9c200d-d6ae-4dad-8895-e5eb50fa8ea3",
+  code: "12345678",
+  openCloudUrl: "https://cloud.example.test/recover#request=be9c200d-d6ae-4dad-8895-e5eb50fa8ea3",
+  expiresAt: "2026-09-24T12:00:00.000Z",
+  state: "approved" as const,
+  point: {
+    id: pointId,
+    venueId: "fe78bc70-b66f-4b2f-970d-7acbd3739977",
+    capturedAt: "2026-09-24T10:00:00.000Z",
+    modules: { core: 1 },
+  },
+});
+const tick = async (el: SetupCloudRestoreScreen, selector: string, checked = true) => {
+  const box = q(el, selector) as HTMLInputElement;
+  box.checked = checked;
+  box.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+};
+async function summaryItems(el: SetupCloudRestoreScreen): Promise<string[]> {
+  const summary = q(el, "[data-test=error]") as
+    (HTMLElement & { updateComplete: Promise<unknown> }) | null;
+  if (summary === null) return [];
+  await summary.updateComplete;
+  return [...summary.shadowRoot!.querySelectorAll("li")].map((li) => li.textContent!.trim());
+}
+const ACKNOWLEDGE_PROBLEM =
+  "Confirm that the old server and surviving peers are stopped, and that you accept losing changes after this snapshot.";
+
 describe("Cloud restore screen", () => {
   it("starts pairing and shows only the code, link and deadline", async () => {
     const { el, host } = await mountWidget<SetupCloudRestoreScreen>(
@@ -63,7 +93,9 @@ describe("Cloud restore screen", () => {
     expect(listener.mock.calls[0]?.[0].detail).toEqual({
       action: "restore",
       pointId: el.view.point!.id,
+      oldBoxGone: false,
     });
+    expect(q(el, "[data-test=live-warning]")).toBeNull();
     expect(el.shadowRoot!.textContent).toContain("2026-09-24");
   });
   it("offers a new request only when the displayed request has expired", async () => {
@@ -205,7 +237,7 @@ describe("Cloud restore screen", () => {
     await el.updateComplete;
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
-    expect(q(el, "[role=alert]")?.textContent).toContain("Confirm before restoring.");
+    expect(await summaryItems(el)).toEqual([ACKNOWLEDGE_PROBLEM]);
     el.view = { ...el.view, state: "awaiting_owner", point: undefined };
     await el.updateComplete;
     el.view = {
@@ -219,9 +251,122 @@ describe("Cloud restore screen", () => {
       },
     };
     await el.updateComplete;
+    expect(q(el, "[data-test=error]")).toBeNull();
     expect(q(el, "[role=alert]")?.textContent).toContain("Cloud recovery is unavailable");
     el.errorMessage = undefined;
     await el.updateComplete;
     expect(q(el, "[role=alert]")).toBeNull();
+  });
+});
+
+describe("Cloud restore screen asking whether the old server is gone", () => {
+  it("names when the old server last wrote, and restores only once the owner says it is gone", async () => {
+    const { el, host } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      liveSince: "2026-09-23T11:58:00.000Z",
+    });
+    const listener = vi.fn();
+    host.addEventListener("cloud-restore-action", listener);
+    expect(q(el, "[data-test=live-warning]")!.textContent).toContain("2026-09-23T11:58:00.000Z");
+    await tick(el, "[data-test=acknowledge]");
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(listener).not.toHaveBeenCalled();
+    expect(q(el, "#old-box-gone-error")!.textContent).toBe(OLD_BOX_PROBLEM);
+    expect(q(el, "[data-test=old-box-gone]")!.getAttribute("aria-invalid")).toBe("true");
+    await tick(el, "[data-test=old-box-gone]");
+    expect(q(el, "#old-box-gone-error")).toBeNull();
+    q(el, "[data-test=restore]")!.click();
+    expect(listener.mock.calls.map(([event]) => event.detail)).toEqual([
+      { action: "restore", pointId: el.view!.point!.id, oldBoxGone: true },
+    ]);
+  });
+
+  it("says the old server could not be checked, and still needs the acknowledgement", async () => {
+    const { el, host } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      liveUnknown: true,
+    });
+    const listener = vi.fn();
+    host.addEventListener("cloud-restore-action", listener);
+    expect(q(el, "[data-test=live-warning]")!.textContent).toContain("could not be checked");
+    await tick(el, "[data-test=old-box-gone]");
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(listener).not.toHaveBeenCalled();
+    expect(q(el, "#old-box-gone-error")).toBeNull();
+    await tick(el, "[data-test=acknowledge]");
+    q(el, "[data-test=restore]")!.click();
+    expect(listener.mock.calls[0]?.[0].detail.oldBoxGone).toBe(true);
+  });
+
+  it("asks nothing before a snapshot is approved", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: { ...approvedView(), state: "awaiting_owner", point: undefined },
+      liveUnknown: true,
+    });
+    expect(q(el, "[data-test=live-warning]")).toBeNull();
+  });
+
+  it("needs a fresh answer when the approved snapshot changes", async () => {
+    const { el, host } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      liveUnknown: true,
+    });
+    const listener = vi.fn();
+    host.addEventListener("cloud-restore-action", listener);
+    await tick(el, "[data-test=acknowledge]");
+    await tick(el, "[data-test=old-box-gone]");
+    el.view = approvedView("e8722eb0-3f02-4f35-920b-9b5f6bfb05e9");
+    await el.updateComplete;
+    expect((q(el, "[data-test=old-box-gone]") as HTMLInputElement).checked).toBe(false);
+    await tick(el, "[data-test=acknowledge]");
+    q(el, "[data-test=restore]")!.click();
+    expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe("Cloud restore screen listing what is still unanswered", () => {
+  it("marks the acknowledgement beside the field and in one summary", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+    });
+    const acknowledge = q(el, "[data-test=acknowledge]") as HTMLInputElement;
+    expect(acknowledge.required).toBe(true);
+    expect(acknowledge.name).toBe("no-running-server");
+    expect(acknowledge.getAttribute("aria-invalid")).toBe("false");
+    expect(acknowledge.hasAttribute("aria-describedby")).toBe(false);
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(await summaryItems(el)).toEqual([ACKNOWLEDGE_PROBLEM]);
+    expect(q(el, "wt-form-error-summary")!.getAttribute("heading")).toBe(
+      "There is a problem with this form",
+    );
+    expect(acknowledge.getAttribute("aria-invalid")).toBe("true");
+    expect(acknowledge.getAttribute("aria-describedby")).toBe("acknowledge-error");
+    expect(q(el, "#acknowledge-error")!.textContent).toBe(ACKNOWLEDGE_PROBLEM);
+  });
+
+  it("lists both questions when neither is answered, then only the one left, then nothing", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      liveUnknown: true,
+      errorMessage: "Cloud recovery is unavailable. Try again.",
+    });
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(await summaryItems(el)).toEqual([ACKNOWLEDGE_PROBLEM, OLD_BOX_PROBLEM]);
+    expect(q(el, "[data-test=server-error]")).toBeNull();
+    await tick(el, "[data-test=acknowledge]");
+    expect(await summaryItems(el)).toEqual([OLD_BOX_PROBLEM]);
+    expect(q(el, "#acknowledge-error")).toBeNull();
+    const acknowledge = q(el, "[data-test=acknowledge]")!;
+    expect(acknowledge.getAttribute("aria-invalid")).toBe("false");
+    expect(acknowledge.hasAttribute("aria-describedby")).toBe(false);
+    await tick(el, "[data-test=acknowledge]", false);
+    await tick(el, "[data-test=old-box-gone]");
+    expect(await summaryItems(el)).toEqual([ACKNOWLEDGE_PROBLEM]);
+    await tick(el, "[data-test=acknowledge]");
+    expect(await summaryItems(el)).toEqual([]);
   });
 });

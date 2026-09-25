@@ -30,4 +30,21 @@ describe.each(["light", "dark"] as const)("setup-app a11y (%s theme)", (theme) =
     expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
+
+  it("has no violations on the restore-from-bucket screen inside its modal", async () => {
+    const { el, host } = await mountWidget<SetupApp>("setup-app", { api: stubApi() }, theme);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    // The shell listens for `setup-goto` on its <wt-modal> (setup-app.ts, the `@setup-goto` binding).
+    el.shadowRoot!.querySelector("wt-modal")!.dispatchEvent(
+      new CustomEvent("setup-goto", {
+        detail: { screen: "restore-bucket" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=screen-restore-bucket]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });

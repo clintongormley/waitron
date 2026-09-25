@@ -83,6 +83,15 @@ export interface RestoreOutcome {
   restoreStaged: true;
   restarting: true;
 }
+
+export interface BucketRestoreBody {
+  /** The recovery kit as pasted or read from its file; as sensitive as the recovery key. */
+  kit: string;
+  environment: "production" | "preproduction";
+  oldBoxGone: boolean;
+  venueConfirmed: string | null;
+}
+
 export interface CloudRecoveryView {
   requestId: string;
   code: string;
@@ -180,14 +189,21 @@ export class SetupApi {
     return this.#request("/setup-api/cloud-recovery/start-again", "POST", {});
   }
 
-  restoreFromCloud(pointId: string): Promise<RestoreOutcome> {
-    return this.#request("/setup-api/cloud-recovery/restore", "POST", { pointId });
+  /** `oldBoxGone` answers `restore.stream_source_live`/`restore.stream_source_unchecked`. */
+  restoreFromCloud(pointId: string, oldBoxGone = false): Promise<RestoreOutcome> {
+    return this.#request(
+      "/setup-api/cloud-recovery/restore",
+      "POST",
+      oldBoxGone ? { pointId, oldBoxGone } : { pointId },
+    );
   }
 
+  /** `oldBoxGone` answers `restore.stream_source_live`/`restore.stream_source_unchecked`. */
   async restore(
     artifact: Blob,
     recoveryKey: string,
     environment: "production" | "preproduction",
+    oldBoxGone = false,
   ): Promise<RestoreOutcome> {
     const fetchImpl = this.#fetchImpl;
     const res = await fetchImpl(this.#baseUrl + "/setup-api/restore", {
@@ -197,11 +213,25 @@ export class SetupApi {
         "content-type": "application/octet-stream",
         "x-waitron-recovery-key": recoveryKey,
         "x-waitron-restore-environment": environment,
+        ...(oldBoxGone ? { "x-waitron-old-box-gone": "1" } : {}),
       },
       body: artifact,
     });
     if (!res.ok) throw await apiError(res);
     return JSON.parse(await res.text()) as RestoreOutcome;
+  }
+
+  /** `POST /setup-api/restore-bucket` — check the owner's bucket and stage a rebuild from it.
+   * `restore.stream_source_live` carries `params.lastChangeAt`, and
+   * `restore.stream_venue_unconfirmed` the restored copy's names. The route's `venueConfirmed` is
+   * optional, so no confirmation is left out rather than sent as `null`. */
+  restoreFromBucket(body: BucketRestoreBody): Promise<RestoreOutcome> {
+    const { venueConfirmed, ...rest } = body;
+    return this.#request<RestoreOutcome>(
+      "/setup-api/restore-bucket",
+      "POST",
+      venueConfirmed === null ? rest : { ...rest, venueConfirmed },
+    );
   }
 
   async stageConfiguration(artifact: Blob, passphrase: string): Promise<ConfigurationPreview> {

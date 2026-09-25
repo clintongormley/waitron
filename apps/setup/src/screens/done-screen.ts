@@ -95,6 +95,9 @@ export class SetupDoneScreen extends LitElement {
 
   @property() onboardingIntent?: "demo" | "prepare" | "live";
 
+  /** True after a rebuild from the owner's bucket, whose devices may need pointing at this server. */
+  @property({ type: Boolean }) rebuilt = false;
+
   @property({ attribute: false }) reload: () => void = location.reload.bind(location);
 
   @property() hostname: string = location.hostname;
@@ -167,7 +170,7 @@ export class SetupDoneScreen extends LitElement {
 
   #renderTrading(): TemplateResult {
     return html`
-      <h1>Setup complete</h1>
+      <h1>${this.rebuilt ? "Rebuilt from your bucket" : "Setup complete"}</h1>
       ${
         this.onboardingIntent === undefined
           ? nothing
@@ -185,9 +188,9 @@ export class SetupDoneScreen extends LitElement {
           <li><a href=${`http://${this.hostname}:9110`}>Print agent</a></li>
         </ul>
       </div>
-      ${this.#breakGlass()}
+      ${this.rebuilt ? this.#deviceSteps() : nothing} ${this.#breakGlass()}
       ${
-        this.onboardingIntent === "demo"
+        this.onboardingIntent === "demo" || this.rebuilt
           ? nothing
           : html`<div class="backup-nudge" data-test="backup-nudge">
               <p>
@@ -209,6 +212,27 @@ export class SetupDoneScreen extends LitElement {
             </p>`
       }
     `;
+  }
+
+  #deviceSteps(): TemplateResult {
+    return html`<div class="links" data-test="device-steps">
+      <p>Devices depend on how each was set up:</p>
+      <ul>
+        <li>
+          Tills, handhelds and kitchen screens that were opened at https://waitron.local reconnect
+          by themselves.
+        </li>
+        <li>
+          Any that were opened at an IP address (for example by scanning a QR code) must be opened
+          again: go to /setup/trust on this server, scan its QR code, and set the device up again.
+        </li>
+        <li>
+          A print agent on this server reconnects by itself. One on another computer that was given
+          an IP address needs its Server address changed on its own page, at port 9110 on that
+          computer.
+        </li>
+      </ul>
+    </div>`;
   }
 
   #renderJoinStalled(): TemplateResult {

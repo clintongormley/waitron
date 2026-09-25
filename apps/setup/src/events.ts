@@ -40,11 +40,34 @@ export interface RestoreRequestDetail {
   artifact: File;
   recoveryKey: string;
   environment: "production" | "preproduction";
+  /** The owner answered the old-server question (Reconciliation N23). */
+  oldBoxGone: boolean;
 }
 
 export function dispatchRestoreRequested(el: EventTarget, request: RestoreRequestDetail): void {
   el.dispatchEvent(
     new CustomEvent("restore-requested", {
+      detail: { request },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+}
+
+export interface BucketRestoreRequestDetail {
+  kit: string;
+  environment: "production" | "preproduction";
+  oldBoxGone: boolean;
+  /** The tax id of the restored copy the owner confirmed; null until one has been shown. */
+  venueConfirmed: string | null;
+}
+
+export function dispatchBucketRestoreRequested(
+  el: EventTarget,
+  request: BucketRestoreRequestDetail,
+): void {
+  el.dispatchEvent(
+    new CustomEvent("bucket-restore-requested", {
       detail: { request },
       bubbles: true,
       composed: true,

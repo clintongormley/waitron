@@ -15,7 +15,7 @@ import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -76,7 +76,8 @@ import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { unsealNodeState } from "./sealed-state.js";
-import { STREAM_PURPOSE } from "./stream-host.js";
+import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
+import { encodeRecoveryKit } from "@waitron/stream";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
@@ -126,6 +127,21 @@ vi.mock("@waitron/tunnel", async (importOriginal) => {
   return {
     ...actual,
     runTunnelClient: vi.fn(actual.runTunnelClient),
+  };
+});
+
+/**
+ * Every bucket call the setup routes make is wrapped by `boundObjectStore`. This passes through to
+ * the real wrapper, shortening its bound only while a test sets `bucketBound.timeoutMs`, so a test
+ * can point a route at a bucket that never answers and see the route give up.
+ */
+const bucketBound = vi.hoisted(() => ({ timeoutMs: undefined as number | undefined }));
+vi.mock("./bounded-store.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./bounded-store.js")>();
+  return {
+    ...actual,
+    boundObjectStore: (store: Parameters<typeof actual.boundObjectStore>[0], timeoutMs?: number) =>
+      actual.boundObjectStore(store, bucketBound.timeoutMs ?? timeoutMs),
   };
 });
 
@@ -3706,7 +3722,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           ),
         });
         const body = (await response.json()) as { error?: { code: string } };
-        expect(response.status).toBe(400);
+        expect(response.status).toBe(422);
         expect(body.error?.code).toBe("recovery.passphrase_invalid");
         await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
           code: "ENOENT",
@@ -3716,6 +3732,160 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     } finally {
       await venue.store.close();
       await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  /** A bucket address that accepts connections and never answers. */
+  async function withSilentBucket(use: (endpoint: string) => Promise<void>): Promise<void> {
+    const sockets = new Set<import("node:net").Socket>();
+    const silent = createServer((socket) => sockets.add(socket));
+    await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", resolve));
+    bucketBound.timeoutMs = 300;
+    try {
+      await use(`http://127.0.0.1:${(silent.address() as AddressInfo).port}`);
+    } finally {
+      bucketBound.timeoutMs = undefined;
+      for (const socket of sockets) socket.destroy();
+      await new Promise((resolve) => silent.close(resolve));
+    }
+  }
+
+  const SILENT_BUCKET = {
+    region: "eu-west-1",
+    bucket: "venue-copy",
+    prefix: "",
+    accessKeyId: "AKIA",
+    secretAccessKey: "secret-0123456789",
+  };
+
+  it("refuses a pasted kit it cannot read, and gives up on a bucket that never answers, staging nothing", async () => {
+    const venue = await freshVenue();
+    try {
+      await withSilentBucket(async (endpoint) => {
+        await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
+          const unreadable = await post("/setup-api/restore-bucket", {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ kit: "not a recovery kit", environment: "preproduction" }),
+          });
+          expect(unreadable.status).toBe(400);
+          expect(await unreadable.json()).toEqual({
+            error: { code: "backup.stream_kit_invalid", params: { reason: "not_found" } },
+          });
+          const kit = encodeRecoveryKit({
+            version: 1,
+            venueId: "c0000000-0000-4000-8000-000000000002",
+            bucket: { ...SILENT_BUCKET, endpoint },
+            recoveryKey: "recovery-key-one-strong",
+            pointerSignerPublicKey: "unused",
+          });
+          const response = await post("/setup-api/restore-bucket", {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ kit, environment: "preproduction" }),
+            signal: AbortSignal.timeout(20_000),
+          });
+          expect(response.status).toBe(502);
+          expect(await response.json()).toMatchObject({
+            error: { code: "backup.stream_request_failed", params: { name: "TimedOut" } },
+          });
+          await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
+            code: "ENOENT",
+          });
+          expect(kills).toEqual([]);
+        });
+      });
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  // Slice-2 plan N23: an archive whose database holds bucket settings may be a copy of a server
+  // still selling, so staging it checks that server's bucket first.
+  it("asks whether the old server is gone when an archive's bucket never answers, staging nothing", async () => {
+    const venue = await freshVenue();
+    const source = await freshVenue();
+    const vaultKey = Buffer.alloc(32, 5).toString("base64");
+    try {
+      await withSilentBucket(async (endpoint) => {
+        await withTransaction(source.store.venue, (tx) =>
+          putCredential(
+            tx,
+            loadKeyRing({
+              WAITRON_CREDENTIALS_KEY: vaultKey,
+              WAITRON_CREDENTIALS_KEY_VERSION: "1",
+            }),
+            {
+              purpose: STREAM_PURPOSE,
+              value: streamSettingsPayload({
+                venueId: "c0000000-0000-4000-8000-000000000002",
+                bucket: { ...SILENT_BUCKET, endpoint },
+              }),
+            },
+          ),
+        );
+        const dump = join(await mkdtemp(join(tmpdir(), "waitron-boot-archive-")), "venue.db");
+        await source.store.venue.archiveTo(dump);
+        const artifact = encryptArtifact(
+          packArchive([
+            {
+              name: "manifest.json",
+              bytes: Buffer.from(
+                JSON.stringify({
+                  manifestVersion: 1,
+                  createdAt: "2026-09-23T09:00:00.000Z",
+                  environment: "preproduction",
+                  modules: {},
+                }),
+              ),
+            },
+            { name: "db.dump", bytes: await readFile(dump) },
+            {
+              name: "secrets/secrets.env",
+              bytes: Buffer.from(
+                `WAITRON_CREDENTIALS_KEY=${vaultKey}\nWAITRON_CREDENTIALS_KEY_VERSION=1\n`,
+              ),
+            },
+            {
+              name: "secrets/trading.env",
+              bytes: Buffer.from(
+                [
+                  "WAITRON_TILL_TILL_ID=c0000000-0000-4000-8000-000000000003",
+                  "WAITRON_TILL_NODE_ID=c0000000-0000-4000-8000-000000000008",
+                  "WAITRON_TILL_SERIES_ID=c0000000-0000-4000-8000-000000000004",
+                  "WAITRON_TILL_LOCATION_ID=c0000000-0000-4000-8000-000000000002",
+                  "",
+                ].join("\n"),
+              ),
+            },
+          ]),
+          "the archive's recovery key",
+        );
+        await rm(dirname(dump), { recursive: true, force: true });
+        await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
+          const response = await post("/setup-api/restore", {
+            headers: {
+              "content-type": "application/octet-stream",
+              "x-waitron-recovery-key": "the archive's recovery key",
+              "x-waitron-restore-environment": "preproduction",
+            },
+            body: new Uint8Array(artifact),
+            signal: AbortSignal.timeout(20_000),
+          });
+          expect(response.status).toBe(409);
+          expect(await response.json()).toEqual({
+            error: { code: "restore.stream_source_unchecked", params: { reason: "bucket" } },
+          });
+          await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
+            code: "ENOENT",
+          });
+          expect(kills).toEqual([]);
+        });
+      });
+    } finally {
+      await venue.store.close();
+      await source.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+      await rm(source.directory, { recursive: true, force: true });
     }
   }, 60_000);
 

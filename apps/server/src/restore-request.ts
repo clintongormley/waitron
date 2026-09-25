@@ -1,13 +1,26 @@
 import { chmod, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { isAppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { writeFileAtomic } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import { RESTORE_STAGING_DIR, restoreFromArtifact, type RestoreDeps } from "./restore.js";
-import { writeStreamRestore, type WriteStreamArgs } from "./restore-stream.js";
+import {
+  RESTORE_STAGING_DIR,
+  restoreFromArtifact,
+  validateEntries,
+  type EntryValidationDeps,
+  type RestoreDeps,
+} from "./restore.js";
+import {
+  confirmsVenue,
+  prepareStreamRestore,
+  writeStreamRestore,
+  type PrepareStreamDeps,
+  type WriteStreamArgs,
+} from "./restore-stream.js";
+import "./errors.js";
 
 const ARTIFACT = "restore-request.artifact";
 const KEY = "restore-request.key";
@@ -68,6 +81,43 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
     }),
     0o600,
   );
+}
+
+/**
+ * The setup wizard's bucket rebuild: prepare the copy, refuse it unless the owner confirmed its tax
+ * id, run the entrypoint's own validation over it so a wrong environment is refused before the
+ * restart, then stage it. The download's scratch folder is removed however it ends.
+ */
+export async function stageStreamRestore(
+  deps: PrepareStreamDeps &
+    Omit<EntryValidationDeps, "skipSecrets"> & {
+      /** The tax id the owner confirmed; null until they have seen one. */
+      venueConfirmed: string | null;
+    },
+): Promise<void> {
+  const prepared = await prepareStreamRestore(deps);
+  try {
+    if (!confirmsVenue(prepared.venue, deps.venueConfirmed)) {
+      throw new AppError("restore.stream_venue_unconfirmed", { ...prepared.venue });
+    }
+    await stageRestoreRequest(
+      deps.stateDir,
+      {
+        kind: "stream",
+        databasePath: prepared.databasePath,
+        entries: prepared.entries,
+        environment: deps.environment,
+      },
+      async (request) => {
+        await validateEntries(
+          [...request.entries, { name: "db.dump", bytes: await readFile(request.databasePath) }],
+          deps,
+        );
+      },
+    );
+  } finally {
+    await prepared.discard();
+  }
 }
 
 export interface StagedRestoreDeps {

@@ -6,6 +6,7 @@ import "./screens/role-screen.js";
 import "./screens/connection-screen.js";
 import "./screens/connect-screen.js";
 import "./screens/restore-screen.js";
+import "./screens/restore-bucket-screen.js";
 import "./screens/cloud-restore-screen.js";
 import "./screens/live-source-screen.js";
 import "./screens/configuration-preview-screen.js";
@@ -26,7 +27,12 @@ import type {
   CloudRecoveryView,
   VenueDefaults,
 } from "./api/client.js";
-import type { ConfigurationRequestDetail, RestoreRequestDetail } from "./events.js";
+import type {
+  BucketRestoreRequestDetail,
+  ConfigurationRequestDetail,
+  RestoreRequestDetail,
+} from "./events.js";
+import type { RestoredVenue } from "./screens/restore-bucket-screen.js";
 import { SERVER_FIELDS } from "./server-fields.js";
 
 /** The wizard's screens, shown one at a time from in-memory state, never a URL route. */
@@ -35,6 +41,7 @@ export type Screen =
   | "role"
   | "connect"
   | "restore"
+  | "restore-bucket"
   | "cloud-restore"
   | "live-source"
   | "configuration-preview"
@@ -115,6 +122,94 @@ const ADOPT_ERROR_MESSAGES: Record<string, string> = {
   "setup.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
 };
 
+const KIT_DAMAGED =
+  "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Upload the kit file as it was saved, or paste the whole kit.";
+const KEY_DOES_NOT_OPEN =
+  "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest kit.";
+const NEWER_SOFTWARE =
+  "The copy in the bucket was made by newer Waitron software than this server has. Update this server, then try again.";
+
+/** The owner's words for each refusal a rebuild from the bucket can meet whose params add nothing. */
+const BUCKET_ERROR_MESSAGES: Record<string, string> = {
+  "backup.stream_kit_invalid":
+    "This is not a Waitron recovery kit. Upload the kit file, or paste the whole kit.",
+  "restore.stream_pointer_missing": "The bucket in this kit holds no copy of this restaurant.",
+  "restore.stream_pointer_unverified":
+    "The copy in the bucket was not written by the server this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
+  "backup.stream_pointer_invalid":
+    "The bucket's record of its newest copy is damaged, so it cannot be rebuilt from. Nothing was changed.",
+  "restore.stream_integrity_failed":
+    "The copy read from the bucket is damaged. Nothing on this server was changed.",
+  "restore.stream_state_missing":
+    "The copy in the bucket does not hold the old server's locked settings, so it cannot be rebuilt from.",
+  // One sentence for all three, as the command line gives (`DECRYPT_PHASE_CODES`,
+  // apps/server/src/restore-command.ts).
+  "recovery.passphrase_invalid": KEY_DOES_NOT_OPEN,
+  "backup.artifact_invalid": KEY_DOES_NOT_OPEN,
+  "backup.archive_invalid": KEY_DOES_NOT_OPEN,
+  "backup.stream_restore_failed":
+    "The copy could not be downloaded from the bucket. Check this server's internet connection and that the bucket still exists, then try again.",
+  "backup.stream_request_failed":
+    "The bucket did not answer, or refused the key in this kit. Check this server's internet connection and that the bucket and its key still exist, then try again.",
+  "restore.stream_disk_full":
+    "This server's disk filled while the copy was downloading. Nothing on this server was changed. Free some space and try again.",
+  "restore.environment_mismatch":
+    "The copy comes from the other environment. Choose the environment it came from.",
+  "provisioning.database_ahead": NEWER_SOFTWARE,
+  "restore.schema_too_new": NEWER_SOFTWARE,
+  "setup.already_provisioning":
+    "Setup is already in progress on this server. Wait for it to finish, then reload this page.",
+  "setup.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
+  "setup.operation_conflict":
+    "This server has saved setup work for a different request. Resume the original setup or contact support.",
+  "setup.request_invalid":
+    "The server rejected the details. Check the kit and the environment, then try again.",
+};
+
+const CLOUD_NEWER_SOFTWARE =
+  "This snapshot was made by newer Waitron software than this server has. Update this server, then try again.";
+const CLOUD_UNOPENABLE =
+  "This snapshot could not be opened. It is damaged, or the recovery key Waitron Cloud holds for it does not open it.";
+
+/**
+ * Cloud restore refusals that pressing Restore again cannot fix. The recovery key comes from the
+ * Cloud grant, not from the owner, and the environment is always preproduction
+ * (`createCloudRecoveryClient`, apps/server/src/cloud-recovery.ts), so the owner can correct
+ * neither here.
+ */
+const CLOUD_ERROR_MESSAGES: Record<string, string> = {
+  "restore.schema_too_new": CLOUD_NEWER_SOFTWARE,
+  "recovery.passphrase_invalid": CLOUD_UNOPENABLE,
+  "backup.artifact_invalid": CLOUD_UNOPENABLE,
+  "backup.archive_invalid": CLOUD_UNOPENABLE,
+  "restore.environment_mismatch":
+    "This snapshot is not from a preparation or demo venue, and Cloud recovery restores only those.",
+};
+
+/** The sentence for a bucket refusal the screen does not answer with a question of its own. */
+function describeBucketRefusal(code: unknown, params: Record<string, unknown> | undefined): string {
+  if (typeof code !== "string")
+    return "The copy could not be restored. Check the connection and try again.";
+  if (
+    code === "backup.stream_kit_invalid" &&
+    (params?.reason === "encoding" || params?.reason === "shape")
+  )
+    return KIT_DAMAGED;
+  if (code === "restore.stream_pointer_unverified" && params?.reason === "venue_mismatch")
+    return "The bucket's record of its newest copy names a different restaurant from this kit. Nothing was changed.";
+  if (code === "restore.stream_venue_unconfirmed")
+    return "The copy in the bucket names no business tax id, so it cannot be confirmed or restored.";
+  return BUCKET_ERROR_MESSAGES[code] ?? `The copy could not be restored. (${code})`;
+}
+
+/** The restored copy's names, when the refusal carries all three and a tax id to confirm. */
+function venueToConfirm(params: Record<string, unknown> | undefined): RestoredVenue | undefined {
+  const { legalName, taxId, locationName } = params ?? {};
+  if (typeof legalName !== "string" || typeof taxId !== "string") return undefined;
+  if (typeof locationName !== "string" || taxId === "") return undefined;
+  return { legalName, taxId, locationName };
+}
+
 const ADOPT_GENERIC_ERROR =
   "Couldn't connect to the primary. Check the address and login, then try again.";
 
@@ -194,9 +289,25 @@ export class SetupApp extends LitElement {
 
   @state() private connectError?: string;
   @state() private restoreError?: string;
+  /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the archive path. */
+  @state() private restoreLiveSince?: string;
+  @state() private restoreLiveUnknown = false;
+  /** Handed back to the archive screen with a refusal, so the owner's entries are kept. */
+  @state() private restoreRequest?: RestoreRequestDetail;
+  @state() private bucketRestoreError?: string;
+  @state() private bucketLiveSince?: string;
+  @state() private bucketLiveUnknown = false;
+  @state() private bucketVenue?: RestoredVenue;
+  /** Held only in this tab's memory: the kit inside it is as sensitive as the recovery key. */
+  @state() private bucketRequest?: BucketRestoreRequestDetail;
+  /** Kept apart from the other outcomes because the done screen's copy depends on which path ran. */
+  @state() private rebuilt = false;
   @state() private cloudRecoveryView?: CloudRecoveryView;
   @state() private cloudRecoveryError?: string;
   @state() private cloudRecoveryBusy = false;
+  /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the Cloud path. */
+  @state() private cloudLiveSince?: string;
+  @state() private cloudLiveUnknown = false;
   @state() private configurationError?: string;
   @state() private configurationPreview?: ConfigurationPreview;
   @state() private fiscalTestStatus?: "accepted" | "rejected" | "uncertain";
@@ -315,6 +426,17 @@ export class SetupApp extends LitElement {
     this.reviewError = undefined;
     this.connectError = undefined;
     this.restoreError = undefined;
+    // An answer belongs to the copy it was given for; leaving the screen may mean another kit or file.
+    this.restoreLiveSince = undefined;
+    this.restoreLiveUnknown = false;
+    this.restoreRequest = undefined;
+    this.bucketRestoreError = undefined;
+    this.bucketLiveSince = undefined;
+    this.bucketLiveUnknown = false;
+    this.bucketVenue = undefined;
+    this.bucketRequest = undefined;
+    this.cloudLiveSince = undefined;
+    this.cloudLiveUnknown = false;
     this.configurationError = undefined;
     this.screen = event.detail.screen;
   }
@@ -457,19 +579,93 @@ export class SetupApp extends LitElement {
     this.provisionCanRetry = false;
     this.provisionReloadLabel = undefined;
     this.screen = "provisioning";
+    const request = event.detail.request;
+    // The server answered the old-server question for the file it was sent, not for another.
+    if (request.artifact !== this.restoreRequest?.artifact) {
+      this.restoreLiveSince = undefined;
+      this.restoreLiveUnknown = false;
+    }
     try {
-      const request = event.detail.request;
-      await this.api.restore(request.artifact, request.recoveryKey, request.environment);
+      await this.api.restore(
+        request.artifact,
+        request.recoveryKey,
+        request.environment,
+        request.oldBoxGone,
+      );
       if (!this.isConnected) return;
+      this.restoreRequest = undefined;
       this.screen = "done";
     } catch (error) {
       if (!this.isConnected) return;
-      const code = (error as { code?: unknown }).code;
-      this.restoreError =
-        typeof code === "string"
-          ? `The backup could not be staged. Check the file, key and environment. (${code})`
-          : "The backup could not be staged. Check the connection and try again.";
+      const { code, params } = (error ?? {}) as {
+        code?: unknown;
+        params?: { lastChangeAt?: unknown };
+      };
+      this.restoreRequest = request;
+      if (code === "restore.stream_source_live" && typeof params?.lastChangeAt === "string") {
+        this.restoreLiveSince = params.lastChangeAt;
+        this.restoreLiveUnknown = false;
+      } else if (
+        code === "restore.stream_source_live" ||
+        code === "restore.stream_source_unchecked"
+      ) {
+        this.restoreLiveSince = undefined;
+        this.restoreLiveUnknown = true;
+      } else {
+        this.restoreError =
+          typeof code === "string"
+            ? `The backup could not be staged. Check the file, key and environment. (${code})`
+            : "The backup could not be staged. Check the connection and try again.";
+      }
       this.screen = "restore";
+    }
+  }
+
+  async #onBucketRestoreRequested(
+    event: CustomEvent<{ request: BucketRestoreRequestDetail }>,
+  ): Promise<void> {
+    event.stopPropagation();
+    const request = event.detail.request;
+    // The server checked the old server and named the copy for the kit it was sent, not for another.
+    if (request.kit !== this.bucketRequest?.kit) {
+      this.bucketLiveSince = undefined;
+      this.bucketLiveUnknown = false;
+      this.bucketVenue = undefined;
+    }
+    this.bucketRestoreError = undefined;
+    this.provisionMessage = undefined;
+    this.provisionCanRetry = false;
+    this.provisionReloadLabel = undefined;
+    this.screen = "provisioning";
+    try {
+      await this.api.restoreFromBucket(request);
+      if (!this.isConnected) return;
+      this.bucketRequest = undefined;
+      this.rebuilt = true;
+      this.screen = "done";
+    } catch (error) {
+      if (!this.isConnected) return;
+      const { code, params } = (error ?? {}) as {
+        code?: unknown;
+        params?: Record<string, unknown>;
+      };
+      this.bucketRequest = request;
+      const venue = venueToConfirm(params);
+      if (code === "restore.stream_source_live" && typeof params?.lastChangeAt === "string") {
+        this.bucketLiveSince = params.lastChangeAt;
+        this.bucketLiveUnknown = false;
+      } else if (
+        code === "restore.stream_source_live" ||
+        code === "restore.stream_source_unchecked"
+      ) {
+        this.bucketLiveSince = undefined;
+        this.bucketLiveUnknown = true;
+      } else if (code === "restore.stream_venue_unconfirmed" && venue !== undefined) {
+        this.bucketVenue = venue;
+      } else {
+        this.bucketRestoreError = describeBucketRefusal(code, params);
+      }
+      this.screen = "restore-bucket";
     }
   }
 
@@ -477,6 +673,7 @@ export class SetupApp extends LitElement {
     event: CustomEvent<{
       action: "start" | "status" | "start-again" | "restore";
       pointId?: string;
+      oldBoxGone?: boolean;
     }>,
   ): Promise<void> {
     event.stopPropagation();
@@ -484,24 +681,46 @@ export class SetupApp extends LitElement {
     this.cloudRecoveryBusy = true;
     this.cloudRecoveryError = undefined;
     try {
-      const { action, pointId } = event.detail;
+      const { action, pointId, oldBoxGone } = event.detail;
       if (action === "restore") {
         if (!pointId || pointId !== this.cloudRecoveryView?.point?.id) throw new Error();
         this.screen = "provisioning";
-        await this.api.restoreFromCloud(pointId);
+        await this.api.restoreFromCloud(pointId, oldBoxGone === true);
         if (this.isConnected) this.screen = "done";
       } else {
+        const shown = this.cloudRecoveryView?.point?.id;
         this.cloudRecoveryView =
           action === "start"
             ? await this.api.startCloudRecovery()
             : action === "start-again"
               ? await this.api.startCloudRecoveryAgain()
               : await this.api.cloudRecoveryStatus();
+        // The server answered the old-server question for the snapshot it was sent, not for another.
+        if (this.cloudRecoveryView.point?.id !== shown) {
+          this.cloudLiveSince = undefined;
+          this.cloudLiveUnknown = false;
+        }
       }
-    } catch {
+    } catch (error) {
       if (this.isConnected) {
-        this.cloudRecoveryError =
-          "Cloud recovery is unavailable. Check the connection or request expiry, then try again.";
+        const { code, params } = (error ?? {}) as {
+          code?: unknown;
+          params?: { lastChangeAt?: unknown };
+        };
+        if (code === "restore.stream_source_live" && typeof params?.lastChangeAt === "string") {
+          this.cloudLiveSince = params.lastChangeAt;
+          this.cloudLiveUnknown = false;
+        } else if (
+          code === "restore.stream_source_live" ||
+          code === "restore.stream_source_unchecked"
+        ) {
+          this.cloudLiveSince = undefined;
+          this.cloudLiveUnknown = true;
+        } else {
+          this.cloudRecoveryError =
+            (typeof code === "string" ? CLOUD_ERROR_MESSAGES[code] : undefined) ??
+            "Cloud recovery is unavailable. Check the connection or request expiry, then try again.";
+        }
         this.screen = "cloud-restore";
       }
     } finally {
@@ -598,7 +817,9 @@ export class SetupApp extends LitElement {
       @adopt-requested=${(e: CustomEvent<{ body: AdoptBody }>) => void this.#onAdoptRequested(e)}
       @restore-requested=${(e: CustomEvent<{ request: RestoreRequestDetail }>) =>
         void this.#onRestoreRequested(e)}
-      @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string }>) => void this.#onCloudRestoreAction(e)}
+      @bucket-restore-requested=${(e: CustomEvent<{ request: BucketRestoreRequestDetail }>) =>
+        void this.#onBucketRestoreRequested(e)}
+      @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string; oldBoxGone?: boolean }>) => void this.#onCloudRestoreAction(e)}
       @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
         void this.#onConfigurationRequested(e)}
       @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
@@ -623,13 +844,27 @@ export class SetupApp extends LitElement {
         return html`<setup-restore-screen
           data-test="screen-restore"
           .errorMessage=${this.restoreError}
+          .liveSince=${this.restoreLiveSince}
+          .liveUnknown=${this.restoreLiveUnknown}
+          .request=${this.restoreRequest}
         ></setup-restore-screen>`;
+      case "restore-bucket":
+        return html`<setup-restore-bucket-screen
+          data-test="screen-restore-bucket"
+          .errorMessage=${this.bucketRestoreError}
+          .liveSince=${this.bucketLiveSince}
+          .liveUnknown=${this.bucketLiveUnknown}
+          .venue=${this.bucketVenue}
+          .request=${this.bucketRequest}
+        ></setup-restore-bucket-screen>`;
       case "cloud-restore":
         return html`<setup-cloud-restore-screen
           data-test="screen-cloud-restore"
           .view=${this.cloudRecoveryView}
           .errorMessage=${this.cloudRecoveryError}
           .busy=${this.cloudRecoveryBusy}
+          .liveSince=${this.cloudLiveSince}
+          .liveUnknown=${this.cloudLiveUnknown}
         ></setup-cloud-restore-screen>`;
       case "live-source":
         return html`<setup-live-source-screen
@@ -696,6 +931,7 @@ export class SetupApp extends LitElement {
           .breakGlassSecret=${this.breakGlassSecret}
           .mirrorJoin=${this.mirrorJoin}
           .onboardingIntent=${this.draft.mode}
+          .rebuilt=${this.rebuilt}
         ></setup-done-screen>`;
       default:
         return html`<setup-mode-screen

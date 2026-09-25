@@ -126,7 +126,9 @@ import { resolveEmailDelivery } from "./email-delivery.js";
 import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { createMailpitClient } from "./mailpit-client.js";
 import { createSetupOperationStore } from "./setup-operation.js";
-import { stageRestoreRequest } from "./restore-request.js";
+import { stageRestoreRequest, stageStreamRestore } from "./restore-request.js";
+import { refuseIfArchiveSourceLive } from "./restore-stream.js";
+import { boundObjectStore } from "./bounded-store.js";
 import { RESTORE_STAGING_DIR, validateArtifact } from "./restore.js";
 import {
   clearStagedConfigurationImport,
@@ -197,7 +199,12 @@ import { StreamHost } from "./stream-host.js";
 import { mountStreamApi } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
 import { writeRecoveryKey } from "./backup-env-writer.js";
-import { createS3ObjectStore, probeBucket } from "@waitron/stream";
+import {
+  createS3ObjectStore,
+  parseRecoveryKit,
+  probeBucket,
+  type BucketConfig,
+} from "@waitron/stream";
 import { Server as HttpsServer } from "node:https";
 import "./errors.js";
 // `DEFAULTS` is NOT imported: `loadConfig` already applied the scheduler's defaults, so reaching for
@@ -1052,6 +1059,10 @@ export async function startServer(
       // operator-typed configuration rather than a secret, which is why it may be echoed. The name
       // the receiving side gives this — `database` — is unchanged.
       const ownerDatabaseName = config.venueDir;
+      // Bounds each object-store call the setup restores make; the Litestream download that
+      // follows is limited by restoreGeneration's own stall and ceiling times.
+      const openBoundedBucket = (bucket: BucketConfig) =>
+        boundObjectStore(createS3ObjectStore(bucket));
       // The setup surface, now with the slice-2b provisioning deps bound. `db`/`ring` are handed to
       // the fiscal contribution's provisioning-secret seal seat (so boot imports no regime);
       // `persistTrading` writes `<stateDir>/trading.env`; `requestRestart` SIGTERMs this process so the
@@ -1074,9 +1085,9 @@ export async function startServer(
                   environment: config.environment,
                 })
               : undefined,
-          stageRestore: (request) =>
+          stageRestore: (request, { oldBoxGone }) =>
             stageRestoreRequest(config.stateDir, request, async (candidate) => {
-              await validateArtifact({
+              const validated = await validateArtifact({
                 artifact: candidate.artifact,
                 recoveryKey: candidate.recoveryKey,
                 stateDir: config.stateDir,
@@ -1085,6 +1096,28 @@ export async function startServer(
                 modules: ALL_MODULES,
                 environment: candidate.environment,
               });
+              await refuseIfArchiveSourceLive({
+                validated,
+                stateDir: config.stateDir,
+                oldBoxGone,
+                now,
+                openStore: openBoundedBucket,
+              });
+            }),
+          stageBucketRestore: async ({ kit, environment, oldBoxGone, venueConfirmed }) =>
+            stageStreamRestore({
+              kit: parseRecoveryKit(kit),
+              stateDir: config.stateDir,
+              stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
+              migrationsRoot: config.migrationsRoot,
+              modules: ALL_MODULES,
+              environment,
+              litestreamBin: config.litestreamBin,
+              oldBoxGone,
+              venueConfirmed,
+              now,
+              log,
+              openStore: openBoundedBucket,
             }),
           stageConfiguration: (artifact, passphrase) =>
             stageConfigurationImport(

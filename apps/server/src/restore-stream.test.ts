@@ -48,6 +48,7 @@ import {
   restoreFromStream,
   type PrepareStreamDeps,
 } from "./restore-stream.js";
+import { stageStreamRestore } from "./restore-request.js";
 import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 
@@ -953,5 +954,83 @@ describe("restoreFromStream (the command line's whole path)", () => {
     expect(seen).toEqual([VENUE]);
     expect(await readFile(join(venueDir, "venue.db"), "utf8")).toBe("the box's own database");
     await expectStateUntouched(deps.stateDir);
+  });
+});
+
+describe("stageStreamRestore (the setup wizard's path)", () => {
+  const STAGED = ["restore-request.db", "restore-request.entries", "restore-request.json"];
+
+  async function stageDeps(
+    overrides: Partial<PrepareStreamDeps> & { venueConfirmed?: string | null } = {},
+  ) {
+    const deps = await prepareDeps(await bucket(), overrides);
+    return {
+      ...deps,
+      stagingDir: join(deps.stateDir, "restore-staging"),
+      modules: [],
+      environment: "preproduction" as const,
+      venueConfirmed: VENUE.taxId,
+      ...overrides,
+    };
+  }
+
+  const leftovers = async (stateDir: string) =>
+    (await readdir(stateDir)).filter(
+      (name) => name.startsWith("stream-restore") || name.startsWith("restore-request"),
+    );
+
+  it("stages the copy the owner confirmed by its tax id, and removes the download's folder", async () => {
+    const deps = await stageDeps();
+    await stageStreamRestore(deps);
+    expect(JSON.parse(await readFile(join(deps.stateDir, "restore-request.json"), "utf8"))).toEqual(
+      { version: 1, environment: "preproduction", kind: "stream" },
+    );
+    expect((await leftovers(deps.stateDir)).sort()).toEqual(STAGED);
+  });
+
+  it("shows whose copy it is and stages nothing until the owner names its tax id", async () => {
+    const deps = await stageDeps({ venueConfirmed: null });
+    await expect(stageStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.stream_venue_unconfirmed",
+      params: VENUE,
+    });
+    await expectStateUntouched(deps.stateDir);
+  });
+
+  it("refuses a confirmation naming another tax id, staging nothing", async () => {
+    const deps = await stageDeps({ venueConfirmed: "B00000000" });
+    await expect(stageStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.stream_venue_unconfirmed",
+      params: VENUE,
+    });
+    await expectStateUntouched(deps.stateDir);
+  });
+
+  it("never confirms a copy that names no tax id, even against an empty confirmation", async () => {
+    const deps = await stageDeps({
+      venueConfirmed: "",
+      restoreGeneration: async (args) => {
+        await copyFile(fixtureDb, args.outPath);
+        const copy = new DatabaseSync(args.outPath);
+        try {
+          copy.exec("delete from tenants");
+        } finally {
+          copy.close();
+        }
+      },
+    });
+    await expect(stageStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.stream_venue_unconfirmed",
+      params: { legalName: "", taxId: "", locationName: VENUE.locationName },
+    });
+    await expectStateUntouched(deps.stateDir);
+  });
+
+  it("refuses a copy made under another environment before staging anything", async () => {
+    const deps = { ...(await stageDeps()), environment: "production" as const };
+    await expect(stageStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.environment_mismatch",
+    });
+    expect(await leftovers(deps.stateDir)).toEqual([]);
   });
 });

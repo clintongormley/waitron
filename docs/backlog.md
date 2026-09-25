@@ -5484,10 +5484,10 @@ row's unlock, and then asks for the copy's tax id before placing it through the 
 bucket call the command makes through the object store gives up after 60 seconds
 (`apps/server/src/bounded-store.ts`), without cancelling the request. A command-line archive restore
 whose database holds bucket settings runs the same old-box check first, reading those settings from
-a scratch copy in its own `<stateDir>/archive-source-check-XXXXXX/`; the setup wizard's archive
-restore does not run it yet — Task 9c adds it (plan, Reconciliation N23). The staged restore request
+a scratch copy in its own `<stateDir>/archive-source-check-XXXXXX/`; since Task 9c the setup
+wizard's archive restore and the Cloud recovery restore run it too. The staged restore request
 now carries either an archive or a bucket copy (`apps/server/src/restore-request.ts`); the command
-line places the copy itself, and nothing stages a bucket request yet — Task 9c's wizard will. The
+line places the copy itself, and the setup wizard's rebuild stages a bucket request (Task 9c). The
 wipe and the archive placement also remove Litestream's own `.venue.db-litestream/` folder. Left
 open:
 - A copy over 2 GiB cannot be restored: `restoreFromStream` reads the downloaded file whole, and
@@ -5503,9 +5503,9 @@ open:
 - A staged request whose marker is invalid, or whose payload cannot be read, throws before the
   request is cleared, so every start fails the same way. I believe this predates the branch: the
   archive request's reads sat outside the `try` before it (from the diff, not a run).
-- A copy with no `tenants` row reads an empty tax id, which the command line never accepts as
-  confirmed, so it cannot be restored. The command line prints its own message for it, but no
-  dedicated error code names that case.
+- A copy with no `tenants` row reads an empty tax id, which neither the command line nor the setup
+  wizard ever accepts as confirmed, so it cannot be restored. Each prints its own message for it,
+  but no dedicated error code names that case.
 - An interrupted bucket rebuild or archive check leaves its scratch folder, a full copy of the
   venue database, under the state folder; the next run makes a new one and does not remove it.
 - The placement step can lose the old database. `restoreDatabase` (`apps/server/src/restore.ts`)
@@ -5515,16 +5515,56 @@ open:
   the base commit's placement order, so I believe it predates this branch; both restore forms go
   through it.
 - The bucket client sets no time limit of its own: `createS3ObjectStore` (`packages/stream`) has
-  none. The command line wraps it (`boundObjectStore`, which abandons a call but never cancels it),
+  none. The command line and the setup restores wrap it for every object-store call they make
+  (`boundObjectStore`, which abandons a call but never cancels it),
   the first start's pointer read has its own 15-second race (`readBucketPointerTerm`,
   `apps/server/src/rebuild-first-start.ts`, reported as `restore.pointer_unreadable`), and every
   other caller's calls have no bound at all: the replication supervisor's, and the bucket check the
   backup settings screen's Test and Save buttons run (`probeBucket`, opened in
   `apps/server/src/boot.ts`, called from `apps/server/src/stream-api.ts`). A per-call abort signal or request timeout
   inside `createS3ObjectStore` would bound and cancel every caller's calls.
-- Open question: the first start's pointer read and the command line's bucket calls use different
-  limits (15 seconds and 60 seconds) and report different codes (`restore.pointer_unreadable` and
-  `backup.stream_request_failed`). Neither the code nor the plan says why they differ.
+- Open question: the first start's pointer read and the bucket rebuild's calls (the command line's
+  `--from-bucket` and the wizard's `/setup-api/restore-bucket`) use different limits (15 seconds
+  and 60 seconds) and report different codes (`restore.pointer_unreadable` and
+  `backup.stream_request_failed`). Neither the code nor the plan says why they differ. On the
+  bucket rebuild, only a timed-out pointer read or newest-upload listing reaches the caller as
+  `backup.stream_request_failed`. On every restore, a timed-out call in the clock check
+  (`measureBucketSkew`, `apps/server/src/restore-stream.ts`) is reported as
+  `restore.stream_source_unchecked` with reason `clock`. The backup-file restores (command line and
+  wizard) and the Cloud restore make their other calls to the venue's own bucket inside
+  `refuseIfArchiveSourceLive` (same file), which reports a timed-out one with reason `bucket`. The
+  Cloud restore's download of its snapshot from Waitron Cloud's storage is not one of these calls:
+  it has its own limit (`downloadArchive`, `apps/server/src/cloud-recovery.ts`).
+
+Task 9c, "Restore from my bucket" in the setup wizard. A third card on the wizard's "Join or
+recover an existing restaurant" screen takes the recovery kit (pasted or read from a file) and the
+environment, and posts them to `POST /setup-api/restore-bucket`, which checks the bucket and
+stages the rebuild through `stageStreamRestore` (`apps/server/src/restore-request.ts`) for the
+entrypoint to place after the restart. The old-server question ("the old server is switched off for good") and "This is my
+business" (the copy's legal name, tax id and location) are asked on the screen and sent back with
+the same kit; an answer given for one kit, backup file or Cloud snapshot is dropped when the owner changes it. The
+archive restore asks the same old-server question (header `x-waitron-old-box-gone: 1`) when its
+database holds bucket settings, and so does the Cloud recovery restore (`oldBoxGone` in its request
+body). A copy with an empty tax id is never confirmed, on the wizard or the
+command line (`confirmsVenue`, `apps/server/src/restore-stream.ts`). Every object-store call the
+setup restores make gives up after 60 seconds (`boundObjectStore`); the Litestream download has
+its own stall and ceiling limits. The archive and Cloud recovery routes
+now release the setup lock when their staging is refused; before, a refused restore held it until
+the process restarted. Left open:
+- The bucket route answers a wrong key (`recovery.passphrase_invalid`) and a damaged copy
+  (`backup.artifact_invalid`, `backup.archive_invalid`) with different codes; the wizard shows one
+  sentence for all three, as the command line does. Whoever holds the kit already holds the key.
+- The first, unconfirmed attempt downloads the whole copy only to show whose it is, and the
+  confirmed attempt downloads it again; the HTTP request stays open for the whole download.
+- Walked in the browser test harness against a stubbed server (both themes, desktop and phone
+  width), not yet on a running box.
+- After an archive restore or a Cloud restore the final screen does not show the device steps the
+  bucket rebuild's shows (`rebuilt` is set only on the bucket path, `apps/setup/src/setup-app.ts`),
+  although the first start re-issues the certificate for this machine's addresses after an archive
+  restore too (spec §5.1 step 7, plan owner decision O4).
+- After a refused Cloud restore the owner has to tick the Cloud screen's "old server and surviving
+  peers are stopped" confirmation again: the shell shows the progress screen while the request runs
+  and then draws a new Cloud screen, which starts unticked.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence

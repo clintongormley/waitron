@@ -16,7 +16,7 @@ import { isUnset } from "./env-value.js";
 import { createLogger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { RESTORE_STAGING_DIR, restoreFromArtifact, type RestoreDeps } from "./restore.js";
-import { refuseIfArchiveSourceLive, restoreFromStream } from "./restore-stream.js";
+import { confirmsVenue, refuseIfArchiveSourceLive, restoreFromStream } from "./restore-stream.js";
 import "./errors.js";
 
 type Env = NodeJS.ProcessEnv;
@@ -360,7 +360,7 @@ async function runBucketRestore(
         deps.out(
           `the copy in the bucket is: ${venue.legalName}, tax id ${venue.taxId}, location ${venue.locationName}`,
         );
-        return venue.taxId !== "" && confirmedTaxId === venue.taxId;
+        return confirmsVenue(venue, confirmedTaxId);
       },
     });
   } catch (err) {
