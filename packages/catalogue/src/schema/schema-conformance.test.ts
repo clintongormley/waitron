@@ -17,7 +17,8 @@ describeSchemaConformance({
   prerequisites: [CORE_MIGRATIONS],
   subject: CATALOGUE_MIGRATIONS,
   declarations: barrel,
-  // False: no column here declares a closed vocabulary — `units.hardware_unit` is a plain
-  // `label()` beside a hand-written check, and `src/schema/units.ts` says why.
-  declaresClosedVocabularies: false,
+  // True: `sections.role` carries the `enumText`/`enumCheck` pair, through `enumType`.
+  // `units.hardware_unit` is a plain `label()` beside a hand-written check, and
+  // `src/schema/units.ts` says why.
+  declaresClosedVocabularies: true,
 });

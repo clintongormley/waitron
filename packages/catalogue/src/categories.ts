@@ -72,14 +72,18 @@ async function validateParent(tx: Transaction, id: string, parentId: string | nu
     parentId = (await readCategory(tx, parentId)).parentId;
   }
 }
-async function validateImage(tx: Transaction, filename: string | null): Promise<void> {
-  if (filename === null) return;
-  if (!(await tablePresent(tx, "media_images"))) throw new AppError("category.image_not_found", {});
-  // The media module owns the foreign key. The row cannot be deleted between this read and the
+/** Does the media library hold this file? Never, where the media module is not installed. */
+export async function mediaImageExists(tx: Transaction, filename: string): Promise<boolean> {
+  if (!(await tablePresent(tx, "media_images"))) return false;
+  // The media module owns the reference. The row cannot be deleted between this read and the
   // write that depends on it: one write transaction runs on the venue file at a time, so there is
   // no concurrent deleter to hold the reference against.
   const image = await tx.execute(sql`select 1 from media_images where filename = ${filename}`);
-  if (!image.rows.length) throw new AppError("category.image_not_found", {});
+  return image.rows.length > 0;
+}
+async function validateImage(tx: Transaction, filename: string | null): Promise<void> {
+  if (filename !== null && !(await mediaImageExists(tx, filename)))
+    throw new AppError("category.image_not_found", {});
 }
 /**
  * Has an optional module's table been migrated into this database?

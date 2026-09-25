@@ -55,11 +55,12 @@ export async function listContentTranslationGaps(
   language: string,
 ): Promise<{ kind: string; id: string; productId?: string }[]> {
   const code = contentLanguageCode(language);
-  // `product`, `variant`, `option_list`, `option_label` and `extra_list` are the kinds whose
-  // customer-facing name is optional, so the query filters a wholly-absent one (null or {}) out of
+  // `product`, `variant`, `option_list`, `option_label`, `extra_list` and `library_section` are the
+  // kinds whose customer-facing name is optional, so the query filters a wholly-absent one (null or {}) out of
   // them: absent is not a gap, only a partly filled map is. The kinds it emits unfiltered —
-  // `category`, `unit` and `section` — have no optional customer name; their name is the only text
-  // they have and stays required.
+  // `category`, `unit` and `section` (a `menu_sections` heading) — have no optional customer name;
+  // their name is the only text they have and stays required. A menu's own lists in `sections`
+  // are not in the library, so they are not reported.
   // `translations` arrives as the JSON TEXT the column stores: this is a raw statement, so no
   // drizzle column mapping runs over the result.
   // A variant is a `products` row with a `parent_id`, so the product branch keeps to top-level
@@ -86,6 +87,8 @@ export async function listContentTranslationGaps(
       from option_labels where customer_name is not null and customer_name <> '{}'
     union all select 'extra_list' as kind, id, null, customer_name as translations
       from extra_lists where customer_name is not null and customer_name <> '{}'
+    union all select 'library_section' as kind, id, null, names as translations
+      from sections where role = 'library' and names <> '{}'
   `);
   return result.rows
     .filter(

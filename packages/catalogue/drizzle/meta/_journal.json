@@ -50,6 +50,13 @@
       "when": 1790344703003,
       "tag": "0006_drop_product_categories",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1790355483890,
+      "tag": "0007_sections",
+      "breakpoints": true
     }
   ]
 }

@@ -22,10 +22,10 @@ import { packageDirOf } from "../packages/module/src/module.js";
  * under a kept name passes. It reads a check's name out of the built schema's `CREATE TABLE` TEXT.
  * And it says nothing about indexes that are not unique.
  *
- * TWO KEYS ARE DELIBERATELY ABSENT from the foreign-key list: `products(image)` and
- * `category_details(image)`, both referencing `media_images`. `packages/media` depends on
- * `@waitron/catalogue` and `@waitron/db`, so neither owning package may depend on media to name the
- * column: that dependency would close a loop `scripts/workspace-cycles.test.ts` refuses, and that
+ * THREE KEYS ARE DELIBERATELY ABSENT from the foreign-key list: `products(image)`,
+ * `category_details(image)` and `sections(image)`, all referencing `media_images`. `packages/media`
+ * depends on `@waitron/catalogue` and `@waitron/db`, so neither owning package may depend on media
+ * to name the column: that dependency would close a loop `scripts/workspace-cycles.test.ts` refuses, and that
  * guard reads each `package.json`, not source imports.
  */
 
@@ -149,6 +149,10 @@ const EXPECTED_FOREIGN_KEYS = [
   ["sales", ["series_id"], "invoice_series"],
   ["sales", ["till_id"], "tills"],
   ["sales", ["working_order_id"], "working_orders"],
+  ["section_members", ["child_section_id"], "sections"],
+  ["section_members", ["product_id"], "products"],
+  ["section_members", ["section_id"], "sections"],
+  ["sections", ["owner_menu_id"], "catalogues"],
   ["shift_swaps", ["decided_by_person_id"], "persons"],
   ["shift_swaps", ["from_shift_id"], "shifts"],
   ["shift_swaps", ["requested_by_person_id"], "persons"],
@@ -254,6 +258,8 @@ const EXPECTED_UNIQUE_INDEXES = [
   "sales_series_invoice_number_key",
   "sales_working_order_id_key",
   "scheduled_runs_key",
+  "section_members_child_uq",
+  "section_members_product_uq",
   "sessions_token_hash_uq",
   "table_service_statuses_tenant_label_key",
   "tenants_country_tax_id_key",
@@ -382,6 +388,9 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "scheduled_runs_generation_ck",
   "scheduled_runs_period_ck",
   "scheduled_runs_state_ck",
+  "section_members_one_ref_ck",
+  "sections_owner_ck",
+  "sections_role_ck",
   "sessions_token_hash_ck",
   "shift_templates_ends_minute_ck",
   "shift_templates_label_ck",

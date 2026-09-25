@@ -16,6 +16,9 @@ export { CATALOGUE_CHANGE_SOURCES } from "./classification.js";
 export * from "./categories.js";
 export * from "./schema/categories.js";
 export * from "./labels.js";
+export * from "./section-types.js";
+export * from "./section-graph.js";
+export * from "./sections.js";
 export * from "./sale-classification.js";
 
 export * from "./option-contract.js";
