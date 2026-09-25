@@ -311,6 +311,16 @@ export const en = {
   "place.refused":
     "This order cannot be filed with the tax agency. Trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up.",
   "station.advance_error": "Could not update the ticket, try again",
+  // Shown after a write that SUCCEEDED, when only the list refresh behind it failed.
+  "refresh.held_after_park": "The order was held, but the list of held orders could not refresh.",
+  "refresh.held_after_sale":
+    "The sale was recorded, but the list of held orders could not refresh.",
+  "refresh.station_after_place": "The order was placed, but the kitchen queue could not refresh.",
+  // `{n}` is substituted at the call site; `t()` does not interpolate.
+  "refresh.retry_in": "Trying again in {n} seconds.",
+  "refresh.retry_in_one": "Trying again in 1 second.",
+  "refresh.retrying": "Trying again…",
+  "refresh.try_now": "Try now",
   "locale.save_failed": "Could not save your language, try again",
   "station.collect_error": "Could not mark the order collected, try again",
   "table.error": "Could not update the table, try again",
@@ -606,6 +616,16 @@ export const es: Record<StringKey, string> = {
   "place.refused":
     "Este pedido no se puede registrar en Hacienda. Reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja.",
   "station.advance_error": "No se pudo actualizar la comanda, inténtalo de nuevo",
+  "refresh.held_after_park":
+    "El pedido se aparcó, pero la lista de pedidos aparcados no se pudo actualizar.",
+  "refresh.held_after_sale":
+    "La venta se registró, pero la lista de pedidos aparcados no se pudo actualizar.",
+  "refresh.station_after_place":
+    "El pedido se envió, pero la cola de cocina no se pudo actualizar.",
+  "refresh.retry_in": "Se reintentará en {n} segundos.",
+  "refresh.retry_in_one": "Se reintentará en 1 segundo.",
+  "refresh.retrying": "Reintentando…",
+  "refresh.try_now": "Reintentar ahora",
   "locale.save_failed": "No se pudo guardar tu idioma, inténtalo de nuevo",
   "station.collect_error": "No se pudo marcar el pedido como entregado, inténtalo de nuevo",
   "table.error": "No se pudo actualizar la mesa, inténtalo de nuevo",
