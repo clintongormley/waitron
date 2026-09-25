@@ -25,7 +25,8 @@ export class MenuStructureTree extends LitElement {
         list-style: none;
       }
       ul ul {
-        padding-inline-start: var(--wt-space-5);
+        margin-inline-start: calc(var(--wt-tap-min) / 2);
+        padding-inline-start: var(--wt-space-3);
         border-inline-start: 1px solid var(--wt-color-border);
       }
       .row {

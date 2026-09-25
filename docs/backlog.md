@@ -250,7 +250,19 @@ product off but the dashboard no longer calls it, since `PATCH` now carries `act
 `sections_owner_menu_fk` still has no delete rule (Task 1's note stands) — nothing deletes a menu
 today, so it bites only when something does. A product reached through a section offers no extras
 list; that was already so before #659 (checked at `002b79f69`).
-Next in the lane: menus Task 4 (the Menus screen). The owner lifted the wait: the dependency upgrades are
+**Menus Task 4 (the Menus screen), on `feat/menus-menu-editor`:** **Products and recipes → Menus**
+(`/manage/menus`) lists, creates and renames menus, and a menu's Structure tab
+(`/manage/menus/menu/<id>/view/structure`) shows its whole tree, edits any list in it (add, remove,
+reorder by arrow keys, create a section in place, add several products at once) with a breadcrumb
+and where else a section is used, and offers "Duplicate and use the copy here" as one request
+(`replaceIn`). Creating a product on the Products screen now ends with an optional "Add to menus"
+step (`apps/dashboard/src/widgets/add-to-menus.ts`); a failed placement leaves the product saved and
+says which places failed. Left, none blocking: `POST /management-api/catalogues` accepts a blank
+name (read, not run; the rename route refuses one), so the screen's own check is the only guard on
+create; "New section here" asks only for the internal name, so a section's customer names, image
+and colour are still edited on the Sections screen; and which section is being edited is not in the
+address, only the menu and the tab.
+Next in the lane: menus Task 5 (menu prices, and the old Menus tab goes). The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task

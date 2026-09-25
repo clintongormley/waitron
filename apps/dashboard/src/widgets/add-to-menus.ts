@@ -145,6 +145,7 @@ export class AddToMenus extends LitElement {
         color: var(--wt-color-text-muted);
       }
       .error {
+        margin-block-end: var(--wt-space-3);
         color: var(--wt-color-danger);
       }
       .error ul {
