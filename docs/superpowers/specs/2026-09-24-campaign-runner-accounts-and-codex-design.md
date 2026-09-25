@@ -160,6 +160,9 @@ The script refuses a folder that already exists. Logging in and installing plugi
 `CLAUDE_CONFIG_DIR=<folder> claude`, then `/login` and `/plugin install` for each plugin above; or
 `CODEX_HOME=<folder> codex login`, then install the plugins `~/.codex` has.
 
+_2026-09-25: a Claude runner folder installs `superpowers` alone. `security-guidance` is for interactive
+sessions, not an unattended firing (owner decision), and the script's closing hint now says so._
+
 ## Testing
 
 New cases in `runner.test.sh`, each run against the real `run.sh` and `runner-lib.sh` in a sandbox,
