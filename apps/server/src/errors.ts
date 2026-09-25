@@ -1,6 +1,7 @@
 // A bare side-effect import: it makes TypeScript augment "@waitron/shared" rather than declare a
 // fresh ambient module.
 import "@waitron/shared";
+import type { ProbeFailure } from "@waitron/stream";
 
 /**
  * This host's contribution to the shared error registry, by declaration merging. A code names the
@@ -628,8 +629,9 @@ declare module "@waitron/shared" {
      * to — is malformed: bad magic, unsupported version, or a declared length that would read past
      * the buffer. `reason` is a short machine tag, never the offending bytes. */
     "backup.archive_invalid": { reason: string };
-    /** A backup destination is configured but WAITRON_BACKUP_RECOVERY_KEY is unset — refused at load
-     * so an unattended backup can never write an unencrypted or box-key-encrypted artifact. */
+    /** WAITRON_BACKUP_RECOVERY_KEY is unset where one is needed: a backup destination is configured
+     * (refused at load so an unattended backup can never write an unencrypted or box-key-encrypted
+     * artifact), or a recovery kit is asked for (`GET /api/backup/stream/kit`). */
     "backup.recovery_key_missing": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is shorter than `min` characters. */
     "backup.recovery_key_too_short": { min: number };
@@ -650,13 +652,14 @@ declare module "@waitron/shared" {
      */
     "backup.source_kind_unsupported": { kind: string };
     /**
-     * A backup admin route (`apply`/`rotate`) was refused because a `WAITRON_BACKUP_*` variable is
-     * set in the environment, which would override a written `backup.env` on the next reload. No
-     * params: an env var could hold the recovery key. */
+     * A backup admin route (`apply`/`rotate`), or the bucket copy's Save on a box holding no
+     * recovery key, was refused because a variable `BACKUP_ENV_KEYS` (`boot.ts`) lists is set in the
+     * environment. The environment then owns this box's backup settings, and the server
+     * does not write `backup.env` beside it. No params: an env var could hold the recovery key. */
     "backup.managed_by_environment": Record<string, never>;
     /**
-     * A backup admin route (`apply`/`rotate`) was refused because this node is not the primary; only
-     * the primary runs the backup duty. */
+     * A backup admin route (`apply`/`rotate`) or the bucket copy's Save or switch-off was refused
+     * because this node is not the primary; only the primary runs the backup duty. */
     "backup.not_primary": Record<string, never>;
     /**
      * A supplied recovery key cannot be stored verbatim in `backup.env`: it carries a control
@@ -675,6 +678,14 @@ declare module "@waitron/shared" {
      * `rotate` finds no destination loaded and no key held. `field` names the offending field, never
      * the value, which could be the recovery key. */
     "backup.request_invalid": { field: string };
+    /** The stream settings' Test, or the same check Save runs first, refused the owner's bucket.
+     * `reason` is `probeBucket`'s short reason (`@waitron/stream`), naming which check failed. */
+    "backup.stream_test_failed": { reason: ProbeFailure };
+    /** A recovery kit was asked for while no bucket is configured. */
+    "backup.stream_not_configured": Record<string, never>;
+    /** A recovery kit was asked for on a node with no membership public key (`nodes.public_key`),
+     * so a rebuild could not verify the pointer this node signs. */
+    "backup.stream_signer_missing": Record<string, never>;
     /**
      * `apply` was given a recovery key different from the one this box already holds. One recovery
      * key per venue; `rotate` is the way to change it. No params — the keys are secrets. */
@@ -715,8 +726,11 @@ declare module "@waitron/shared" {
     /** The bucket copy stopped Litestream at the side-file limit. Built as data by the backups alert
      * source, never thrown. */
     "backup.stream_paused": Record<string, never>;
-    /** The bucket copy stopped because the pointer changed under it, or names a newer term: another
-     * box is writing this venue. Built as data by the backups alert source, never thrown. */
+    /** The bucket copy stopped because the pointer changed under it, or names a newer term: usually
+     * another box writing this venue; it can also be a late pointer write by this box from before a
+     * restart, or, on a bucket that refuses a conditional write to a missing object with 412, a
+     * pointer that was deleted. Built as data by the backups alert source, never
+     * thrown. */
     "backup.stream_refused": Record<string, never>;
     /** The bucket copy refused to start because a value bound for Litestream could not be written
      * into its configuration safely. Built as data by the backups alert source, never thrown. */

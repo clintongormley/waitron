@@ -4,6 +4,7 @@ import type { BucketConfig } from "./index.js";
 import {
   DEFAULT_LITESTREAM_BIN,
   LITESTREAM_VERSION,
+  checkLitestreamSettings,
   litestreamConfig,
   litestreamEnv,
   litestreamMetaDir,
@@ -183,6 +184,29 @@ describe("the Litestream configuration", () => {
     expect(
       replicaUrl({ ...BUCKET, bucket: "venue.copies-2" }, "v1", "gen-0-a-20260923T120000Z"),
     ).toBe("s3://venue.copies-2/venues/v1/gen-0-a-20260923T120000Z?region=eu-south-2");
+  });
+
+  // The settings routes run this before probing, so a bucket Litestream would refuse is refused at
+  // Save rather than when the copy starts.
+  it.each([
+    ["bucket", { bucket: "Venue_Copy" }],
+    ["prefix", { prefix: "a/../b" }],
+    ["secretAccessKey", { secretAccessKey: "s'" }],
+  ] as const)("checks the settings as a whole, naming the %s", (field, change) => {
+    expect(refusalOf(() => checkLitestreamSettings({ ...BUCKET, ...change }))).toEqual({
+      code: "backup.stream_config_unsafe",
+      params: { field },
+    });
+  });
+
+  it("passes settings Litestream can use", () => {
+    expect(() =>
+      checkLitestreamSettings({
+        ...BUCKET,
+        prefix: "waitron/",
+        endpoint: "https://s3.example.net",
+      }),
+    ).not.toThrow();
   });
 
   it("finds the binary from WAITRON_LITESTREAM_BIN, and on PATH when that is unset or empty", () => {

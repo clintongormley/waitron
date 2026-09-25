@@ -1,12 +1,17 @@
-import { randomBytes } from "node:crypto";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { StreamView } from "@waitron/stream";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
-import { loadBackupConfig, loadRecoveryKey, type BackupSchedule } from "./backup-config.js";
+import {
+  loadBackupConfig,
+  loadRecoveryKey,
+  mintRecoveryKey,
+  readHeldKey,
+  type BackupSchedule,
+} from "./backup-config.js";
 import {
   backupEnvRecord,
   writeBackupEnv,
@@ -17,6 +22,7 @@ import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import type { BackupRuntimeStatus, BackupSupervisor } from "./backup-supervisor.js";
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
+import type { Turns } from "./backup-turns.js";
 // This file THROWS the `backup.*` admin codes, so it imports the host error registry directly, the
 // "every file that throws one of these imports ./errors.js" convention errors.ts states.
 import "./errors.js";
@@ -35,6 +41,9 @@ export interface BackupApiDeps {
    * key. */
   sealedState: SealedStateRefresher;
   readStream: () => StreamView;
+  /** Shared with the stream settings routes, which also read and then write the key in
+   * `backup.env`. */
+  turns: Turns;
 }
 
 /**
@@ -247,29 +256,13 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
 
   // Presence, not validity: a key under the length floor still counts as held, so the status answers
   // and `rotate` can replace it. `apply` and `GET recovery-key` keep refusing such a key.
-  const keyPresent = async (): Promise<boolean> => {
-    try {
-      return (await heldKey()) !== undefined;
-    } catch (err) {
-      if (isAppError(err) && err.code === "backup.recovery_key_too_short") return true;
-      throw err;
-    }
-  };
+  const keyPresent = async (): Promise<boolean> => (await readHeldKey(heldKey)).held;
 
   const statusBody = async (keySet?: boolean) => ({
     ...projectStatus(await deps.supervisor.status()),
     recoveryKeySet: keySet ?? (await keyPresent()),
     stream: deps.readStream(),
   });
-
-  // `apply` and `rotate` each read the held key and then write one. Run concurrently, one could write
-  // back the key the other just replaced, so each runs from that read to its response alone.
-  let tail: Promise<unknown> = Promise.resolve();
-  const oneWriteAtATime = <T>(body: () => Promise<T>): Promise<T> => {
-    const mine = tail.then(body);
-    tail = mine.catch(() => undefined);
-    return mine;
-  };
 
   // Read the live backup status (async freshness read folded in). Never carries the recovery key.
   app.get("/api/backup/status", (c) =>
@@ -284,7 +277,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   app.post("/api/backup/mint-key", (c) =>
     run(c, log, async () => {
       await authorize(c);
-      return c.json({ key: randomBytes(32).toString("base64url") });
+      return c.json({ key: mintRecoveryKey() });
     }),
   );
 
@@ -295,7 +288,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       await authorize(c);
       guardWritable();
       const body = await readApplyBody(c);
-      return oneWriteAtATime(async () => {
+      return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
         const held = await heldKey();
         // One recovery key per venue: a box that already holds one keeps it; only `rotate` changes it.
@@ -349,7 +342,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       guardWritable();
       const { recoveryKey } = await readRotateBody(c);
       assertStorableKey(recoveryKey);
-      return oneWriteAtATime(async () => {
+      return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
         const keyRotatedAt = new Date().toISOString();
         const cur = deps.supervisor.current();

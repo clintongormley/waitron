@@ -2126,6 +2126,13 @@ describe("startServer, against a migrated venue directory", () => {
         acceptingSales: true,
         environment: "production",
       });
+
+      // The bucket-copy settings are mounted, behind the manager gate.
+      const streamSettings = await fetch(`http://127.0.0.1:${port}/api/backup/stream`);
+      expect(streamSettings.status).toBe(401);
+      expect(await streamSettings.json()).toMatchObject({
+        error: { code: "management_session.required" },
+      });
     } finally {
       await server.close();
     }

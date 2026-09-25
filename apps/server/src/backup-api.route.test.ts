@@ -18,6 +18,9 @@ import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { StreamView } from "@waitron/stream";
 import { mountBackupApi } from "./backup-api.js";
+import { createTurns, type Turns } from "./backup-turns.js";
+import { deleteCredential, loadKeyRing } from "@waitron/credentials";
+import { mountStreamApi } from "./stream-api.js";
 import { loadBackupConfig, loadRecoveryKey, type BackupConfig } from "./backup-config.js";
 import { writeBackupEnv, writeRecoveryKey } from "./backup-env-writer.js";
 import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
@@ -123,6 +126,7 @@ function buildApp(
     loadRecoveryKey(await loadBoxEnv(base, stateDir)),
   sealedState: SealedStateRefresher = { refresh: async () => "sealed" },
   readStream: () => StreamView = () => ({ state: "off" }),
+  turns: Turns = createTurns(),
 ): Hono {
   const app = new Hono();
   mountManagementApi(
@@ -145,6 +149,7 @@ function buildApp(
       readRecoveryKey,
       sealedState,
       readStream,
+      turns,
     },
     () => {},
   );
@@ -1161,5 +1166,94 @@ describe("backup admin routes", () => {
     });
     expect(rotated.status).toBe(200);
     expect(loadRecoveryKey(await loadBoxEnv({}, stateDir))).toBe(KEY_2);
+  }, 60_000);
+  // Both write backup.env after reading the key it holds, so they take turns with each other.
+  it("a stream Save sent while apply holds its turn keeps apply's key and settings", async () => {
+    const dest = makeDestDir();
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const readKey = async (): Promise<string | undefined> =>
+      loadRecoveryKey(await loadBoxEnv({}, sc.stateDir));
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let applyReached!: () => void;
+    const applyReading = new Promise<void>((resolve) => (applyReached = resolve));
+    let firstRead = true;
+    const turns = createTurns();
+    const app = buildApp(
+      makeSupervisor(sc),
+      sc.stateDir,
+      {},
+      async () => {
+        if (firstRead) {
+          firstRead = false;
+          applyReached();
+          await held;
+        }
+        return readKey();
+      },
+      undefined,
+      undefined,
+      turns,
+    );
+    mountStreamApi(
+      app,
+      {
+        db: suite.db,
+        ring: loadKeyRing({
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "1",
+        }),
+        stream: { reload: async () => {}, status: () => ({ state: "off" }) },
+        nodeId: "00000000-0000-0000-0000-000000000000",
+        venueId: "c0000000-0000-4000-8000-000000000002",
+        isPrimary: () => true,
+        isManagedByEnvironment: () => false,
+        readRecoveryKey: readKey,
+        writeRecoveryKey: (recoveryKey) =>
+          writeRecoveryKey(sc.stateDir, { recoveryKey, keyRotatedAt: undefined }),
+        sealedState: { refresh: async () => "sealed" },
+        probe: async () => ({ ok: true }),
+        turns,
+      },
+      () => {},
+    );
+    const cookie = await login(app);
+    const apply = app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinationDir: dest,
+        recoveryKey: KEY_1,
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    await applyReading;
+    const save = app.request("/api/backup/stream", {
+      method: "PUT",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        region: "eu-west-1",
+        bucket: "venue-copy",
+        accessKeyId: "AKIAEXAMPLE",
+        secretAccessKey: "not-a-real-secret-0123456789",
+      }),
+    });
+    // Long enough for a Save that does not wait its turn to finish.
+    try {
+      await Promise.race([save, new Promise((resolve) => setTimeout(resolve, 500))]);
+      release();
+      const [applied, saved] = await Promise.all([apply, save]);
+      expect(await applied.json()).toMatchObject({ enabled: true });
+      expect(saved.status).toBe(200);
+      expect((await saved.json()).keyFingerprint).toBe(keyFingerprint(KEY_1));
+      const env = parseEnvFile(await readFile(join(sc.stateDir, "backup.env"), "utf8"));
+      expect(env.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_1);
+      expect(env.WAITRON_BACKUP_DIR).toBe(dest);
+    } finally {
+      release();
+      await Promise.allSettled([apply, save]);
+      await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: "backup.stream" }));
+    }
   }, 60_000);
 });

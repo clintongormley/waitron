@@ -25,6 +25,7 @@ import {
   pointerMessage,
   readPointer,
   writePointer,
+  type SentPointers,
   type SignedPointer,
   type StreamPointer,
 } from "./pointer.js";
@@ -112,6 +113,8 @@ export interface SupervisorDeps {
   readCommandLine?: (pid: number) => Promise<string | null>;
   /** Subscribes to the venue database's commits; returns the unsubscribe. */
   onCommit(listener: () => void): () => void;
+  /** Shared by every supervisor one process starts for this venue; see `SentPointers`. */
+  sentPointers: SentPointers;
 }
 
 /** How often, while streaming, the side file is measured. */
@@ -230,8 +233,8 @@ interface Keeper {
  *
  * Opening (spec §4.4): claim the generation with a create-only marker, start Litestream into it,
  * wait until a full copy is visible in the bucket, then move `current.json` only if it is unchanged
- * since it was read at the start. A pointer that changed is another box writing this venue: the
- * supervisor stops and reads `refused`. Nothing on the sale path waits for any of it: `start()`
+ * since it was read at the start. A pointer that changed to anything but a pointer this process sent
+ * (see `#movePointer`) stops the supervisor, which reads `refused`. Nothing on the sale path waits for any of it: `start()`
  * returns once the work is scheduled.
  *
  * It restarts an exited Litestream with a backoff. From the moment Litestream starts, the side file
@@ -250,6 +253,7 @@ export class StreamSupervisor {
   readonly #sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   readonly #stopWaitMs: number;
   readonly #monotonic: () => number;
+  readonly #sentPointers: SentPointers;
   #status: StreamCore;
   #controller: AbortController | undefined;
   #run: Promise<void> = Promise.resolve();
@@ -281,6 +285,7 @@ export class StreamSupervisor {
     this.#sleep = deps.sleep ?? abortableSleep;
     this.#stopWaitMs = deps.stopWaitMs ?? STOP_WAIT_MS;
     this.#monotonic = deps.monotonic ?? steadyMs;
+    this.#sentPointers = deps.sentPointers;
     this.#status = {
       state: "off",
       generation: null,
@@ -466,8 +471,6 @@ export class StreamSupervisor {
         if (signal.aborted) throw error;
         this.#deps.log("warn", "stream.open_failed", { errorCode: codeOf(error) });
         await this.#stopChild();
-        // A pointer write already sent cannot be called back. Landing after the next attempt reads
-        // the pointer, it would make that attempt's own write be refused as another box's.
         await moving.catch(() => undefined);
         await this.#sleep(OPEN_RETRY_MS, signal);
       }
@@ -511,19 +514,35 @@ export class StreamSupervisor {
 
   /**
    * Replaces `current.json` only if it is unchanged since `previousEtag` was read; false when
-   * refused. `writePointer` already counts a refusal of this box's own landed write as success, so a
-   * refusal here is another box.
+   * refused. `writePointer` already counts a refusal of this box's own landed write as success. A
+   * refusal because the pointer now holds one this process sent earlier (a stopped supervisor's
+   * write landing late) is retried against that version, with a pause after the first retry, since
+   * a bucket whose reads lag its conditional check would otherwise be asked again without pause.
    */
   async #movePointer(
     pointer: SignedPointer,
     previousEtag: string | null,
     signal: AbortSignal,
   ): Promise<boolean> {
+    let expected = previousEtag;
+    let retriedAtOnce = false;
+    this.#sentPointers.add(pointer);
     for (;;) {
       signal.throwIfAborted();
       try {
-        await writePointer(this.#store, this.#deps.venueId, pointer, previousEtag);
-        return true;
+        const retryAgainst = await writePointer(
+          this.#store,
+          this.#deps.venueId,
+          pointer,
+          expected,
+          this.#sentPointers,
+        );
+        if (retryAgainst === undefined) return true;
+        expected = retryAgainst;
+        if (!retriedAtOnce) {
+          retriedAtOnce = true;
+          continue;
+        }
       } catch (error) {
         signal.throwIfAborted();
         if (isPreconditionFailure(error)) return false;

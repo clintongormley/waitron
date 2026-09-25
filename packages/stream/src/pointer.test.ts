@@ -7,6 +7,8 @@ import {
   pointerKey,
   pointerMessage,
   readPointer,
+  SENT_POINTERS_KEPT,
+  SentPointers,
   signPointer,
   verifyPointer,
   writePointer,
@@ -187,6 +189,39 @@ describe("writePointer", () => {
     expect((await readPointer(store, VENUE))?.pointer).toEqual(pointer);
   });
 
+  // A pointer this process sent earlier, landing after the read the write was conditioned on.
+  it("answers the stored version to retry against when refused by a pointer it sent, from one read", async () => {
+    const store = createMemoryObjectStore();
+    const earlier = signPointer(body(), KEYS.privateKey);
+    const sent = new SentPointers();
+    sent.add(earlier);
+    await writePointer(store, VENUE, earlier, null);
+    const next = signPointer(body({ term: 3 }), KEYS.privateKey);
+    sent.add(next);
+    const calls = store.calls.length;
+    const version = await writePointer(store, VENUE, next, null, sent);
+    expect(version).toBe(store.snapshot().get(pointerKey(VENUE))?.etag);
+    expect(store.calls.slice(calls).map((call) => call.operation)).toEqual(["put", "get"]);
+    expect((await readPointer(store, VENUE))?.pointer).toEqual(earlier);
+  });
+
+  it("still refuses, with a record of what it sent, a pointer it never sent", async () => {
+    const store = createMemoryObjectStore();
+    const sent = new SentPointers();
+    await writePointer(
+      store,
+      VENUE,
+      signPointer(body({ nodeId: OTHER_NODE }), OTHER_KEYS.privateKey),
+      null,
+    );
+    const ours = signPointer(body(), KEYS.privateKey);
+    sent.add(ours);
+    expect(await rejection(writePointer(store, VENUE, ours, null, sent))).toEqual({
+      code: "backup.stream_precondition_failed",
+      params: { key: pointerKey(VENUE) },
+    });
+  });
+
   it("passes every other failure through unchanged", async () => {
     const store = createMemoryObjectStore();
     store.failNext({
@@ -225,5 +260,34 @@ describe("writePointer", () => {
       reason: "shape",
     });
     expect(store.calls).toEqual([]);
+  });
+});
+
+describe("SentPointers", () => {
+  it("holds the exact bytes writePointer stored, and not a pointer that differs only in its signature", async () => {
+    const store = createMemoryObjectStore();
+    const mine = signPointer(body(), KEYS.privateKey);
+    const sent = new SentPointers();
+    sent.add(mine);
+    await writePointer(store, VENUE, mine, null);
+    expect(sent.includes((await store.get(pointerKey(VENUE)))!.body)).toBe(true);
+    const twin = signPointer(body(), OTHER_KEYS.privateKey);
+    await writePointer(store, VENUE, twin, (await readPointer(store, VENUE))!.etag);
+    expect(sent.includes((await store.get(pointerKey(VENUE)))!.body)).toBe(false);
+  });
+
+  it("forgets the oldest pointer once it holds more than it keeps", () => {
+    const sent = new SentPointers();
+    const pointers = Array.from({ length: SENT_POINTERS_KEPT + 1 }, (_, i) =>
+      signPointer(
+        body({ writtenAt: new Date(Date.UTC(2026, 8, 23, 10, 5, i)).toISOString() }),
+        KEYS.privateKey,
+      ),
+    );
+    const bytes = (pointer: SignedPointer) =>
+      new TextEncoder().encode(canonicalize(pointer as unknown as CanonicalValue));
+    for (const pointer of pointers) sent.add(pointer);
+    expect(sent.includes(bytes(pointers[0]!))).toBe(false);
+    expect(pointers.slice(1).every((pointer) => sent.includes(bytes(pointer)))).toBe(true);
   });
 });

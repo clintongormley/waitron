@@ -191,6 +191,10 @@ import { readVenueTimeZone } from "./venue-time-zone.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
 import { buildServeOptions, watchTlsFiles } from "./tls.js";
 import { StreamHost } from "./stream-host.js";
+import { mountStreamApi } from "./stream-api.js";
+import { createTurns } from "./backup-turns.js";
+import { writeRecoveryKey } from "./backup-env-writer.js";
+import { createS3ObjectStore, probeBucket } from "@waitron/stream";
 import { Server as HttpsServer } from "node:https";
 import "./errors.js";
 // `DEFAULTS` is NOT imported: `loadConfig` already applied the scheduler's defaults, so reaching for
@@ -273,7 +277,8 @@ export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.m
  */
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
 
-/** Every `WAITRON_BACKUP_*` env var `loadBackupConfig` reads. The supervisor's `isManagedByEnvironment`
+/** The `WAITRON_BACKUP_*` env vars `loadBackupConfig` reads, except `WAITRON_BACKUP_STALE_AFTER_MS`
+ * and `WAITRON_BACKUP_KEY_ROTATED_AT`. The supervisor's `isManagedByEnvironment`
  * reports true iff any is non-empty in the RAW base env — the provenance signal that distinguishes an
  * env-injected backup config (a cloud profile) from a file-sourced one written by the wizard (spec
  * §3.2). Only presence matters here; the parse/validation of the values lives in `loadBackupConfig`. */
@@ -2066,9 +2071,11 @@ export async function startServer(
   const backupOutcomes: BackupOutcomeHolder = { failed: new Map() };
   const readRecoveryKey = async (): Promise<string | undefined> =>
     loadRecoveryKey(await loadBoxEnv(base, config.stateDir));
+  const isBackupManagedByEnvironment = (): boolean =>
+    BACKUP_ENV_KEYS.some((k) => !isUnset(base[k]));
   const backupSupervisor = new BackupSupervisor({
     buildConfig: async () => loadBackupConfig(await loadBoxEnv(base, config.stateDir)),
-    isManagedByEnvironment: () => BACKUP_ENV_KEYS.some((k) => !isUnset(base[k])),
+    isManagedByEnvironment: isBackupManagedByEnvironment,
     readSingletonRole: () => holders.singletonRole.current,
     venueDir: config.venueDir,
     modules: ALL_MODULES,
@@ -2233,6 +2240,7 @@ export async function startServer(
   // reading and hot-reloading the SAME `backupSupervisor` above so the wizard can enable/rotate
   // backups without a restart. Writes `backup.env` to `config.stateDir`; refuses a write the env owns
   // or that a non-primary would make.
+  const backupTurns = createTurns();
   mountBackupApi(
     app,
     {
@@ -2242,6 +2250,26 @@ export async function startServer(
       readRecoveryKey,
       sealedState,
       readStream: () => streamHost.status(),
+      turns: backupTurns,
+    },
+    log,
+  );
+  mountStreamApi(
+    app,
+    {
+      db,
+      ring,
+      stream: streamHost,
+      nodeId: till.nodeId,
+      venueId: till.locationId,
+      isPrimary: () => holders.singletonRole.current === "primary",
+      isManagedByEnvironment: isBackupManagedByEnvironment,
+      readRecoveryKey,
+      writeRecoveryKey: (recoveryKey) =>
+        writeRecoveryKey(config.stateDir, { recoveryKey, keyRotatedAt: undefined }),
+      sealedState,
+      probe: (bucket) => probeBucket(createS3ObjectStore(bucket)),
+      turns: backupTurns,
     },
     log,
   );

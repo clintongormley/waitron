@@ -7,6 +7,7 @@ import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import {
   DEFAULT_WAL_LIMIT_BYTES,
+  SentPointers,
   StreamSupervisor,
   type BucketConfig,
   type ObjectStore,
@@ -32,6 +33,7 @@ export interface StreamSettings {
 /** What `putCredential` stores for `settings`: the inverse of {@link readStreamSettings}. */
 export function streamSettingsPayload(settings: StreamSettings): Record<string, string> {
   const { bucket } = settings;
+  if (bucket.prefix === ABSENT) throw new AppError("backup.request_invalid", { field: "prefix" });
   return {
     venueId: settings.venueId,
     endpoint: bucket.endpoint ?? ABSENT,
@@ -87,7 +89,7 @@ export interface StreamHostDeps {
  * `reload()` never throw for a bucket or vault problem: a copy that cannot start is logged and reads
  * off, and the till is untouched. The only bucket wait on their path is a stopping supervisor's
  * (`StreamSupervisor.stop()`), which both wait for before starting the next. At most one supervisor
- * runs, and the old one has stopped before the next starts.
+ * runs, and the old one's `stop()` has resolved before the next starts.
  */
 export class StreamHost {
   readonly #deps: StreamHostDeps;
@@ -97,6 +99,8 @@ export class StreamHost {
   #reloading = false;
   #stopped = false;
   #retiring: Promise<void> = Promise.resolve();
+  /** A stopped supervisor's pointer write can still land after the next one reads the pointer. */
+  readonly #sentPointers = new SentPointers();
 
   constructor(deps: StreamHostDeps) {
     this.#deps = deps;
@@ -144,6 +148,7 @@ export class StreamHost {
         spawn: this.#deps.spawn,
         store: this.#deps.store,
         onCommit: (listener) => db.onCommit(listener),
+        sentPointers: this.#sentPointers,
       });
       this.#supervisor = supervisor;
       await supervisor.start();

@@ -13,6 +13,7 @@ import { CORE_MIGRATIONS, withTransaction, writeNodeMembership, type Database } 
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { buildNextMembershipDocument, generateNodeKeyPair } from "@waitron/membership";
 import {
+  pointerKey,
   readPointer,
   venuePrefix,
   verifyPointer,
@@ -125,6 +126,24 @@ describe("the live copy's wiring", () => {
         bucket: { ...settings.bucket, endpoint: "https://e", prefix: "p/" },
       }),
     ).toMatchObject({ endpoint: "https://e", prefix: "p/" });
+  });
+
+  // "-" is how an empty prefix is stored, so a prefix of "-" would read back as none at all.
+  it("refuses a prefix of a single hyphen, naming the field", () => {
+    expect(() =>
+      streamSettingsPayload({
+        venueId: "venue-1",
+        bucket: {
+          region: "eu-south-2",
+          bucket: "b",
+          prefix: "-",
+          accessKeyId: "A",
+          secretAccessKey: "S",
+        },
+      }),
+    ).toThrow(
+      expect.objectContaining({ code: "backup.request_invalid", params: { field: "prefix" } }),
+    );
   });
 
   describe("with a bucket stored", () => {
@@ -407,6 +426,55 @@ describe("the live copy's wiring", () => {
           const pointer = await readPointer(store, "venue-1");
           expect(verifyPointer(pointer!.pointer, keys.publicKey)).toBe(true);
           expect(pointer!.pointer.body).toMatchObject({ venueId: "venue-1", nodeId: NODE_ID });
+        } finally {
+          await rt.stop();
+        }
+      });
+
+      // The old supervisor's pointer write is held in flight through the reload and lands just after
+      // the next supervisor has read the pointer, so the next one's conditional write is refused.
+      it("keeps streaming after a reload when the old supervisor's pointer write lands late", async () => {
+        const store = new SwitchableStore(() => new Date());
+        const put = store.put.bind(store);
+        const get = store.get.bind(store);
+        const key = pointerKey("venue-1");
+        let release: (() => void) | undefined;
+        let reloaded = false;
+        store.put = async (k, body, cond) => {
+          if (k === key && release === undefined) {
+            await new Promise<void>((resolve) => (release = resolve));
+          }
+          return put(k, body, cond);
+        };
+        store.get = async (k) => {
+          const answer = await get(k);
+          if (k === key && reloaded) release?.();
+          return answer;
+        };
+        const litestream = new FakeLitestream();
+        const rt = runtime({ spawn: litestream.spawn, store });
+        try {
+          await rt.start();
+          await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
+          const first = generationOf(rt.status());
+          store.upload(
+            `${venuePrefix("venue-1")}${first}/0000/0000000000000001-0000000000000001.ltx`,
+          );
+          await vi.waitFor(() => expect(release).toBeDefined(), { timeout: 10_000 });
+          reloaded = true;
+          await rt.reload();
+          await vi.waitFor(() => expect(store.has(key)).toBe(true), { timeout: 10_000 });
+          const second = generationOf(rt.status());
+          expect(second).not.toBe(first);
+          expect((await readPointer(store, "venue-1"))!.pointer.body.generation).toBe(first);
+          store.upload(
+            `${venuePrefix("venue-1")}${second}/0000/0000000000000001-0000000000000001.ltx`,
+          );
+          await vi.waitFor(() => expect(["streaming", "refused"]).toContain(rt.status().state), {
+            timeout: 10_000,
+          });
+          expect(rt.status()).toMatchObject({ state: "streaming", generation: second });
+          expect((await readPointer(store, "venue-1"))!.pointer.body.generation).toBe(second);
         } finally {
           await rt.stop();
         }

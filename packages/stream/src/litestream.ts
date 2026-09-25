@@ -123,6 +123,15 @@ export function replicaUrl(bucket: BucketConfig, venueId: string, generation: st
   return `s3://${bucket.bucket}/${path}?${query.toString()}`;
 }
 
+/** Builds, and discards, the Litestream configuration and environment these settings would get. */
+export function checkLitestreamSettings(bucket: BucketConfig): void {
+  litestreamConfig({
+    dbPath: "venue.db",
+    replicaUrl: replicaUrl(bucket, "venue", "gen-0-node-20260101T000000Z"),
+  });
+  litestreamEnv(bucket);
+}
+
 /** Litestream's own state for `dbPath`: `.<file>-litestream` beside it (`db.go:312` at the pinned tag). */
 export function litestreamMetaDir(dbPath: string): string {
   return join(dirname(dbPath), `.${basename(dbPath)}-litestream`);
