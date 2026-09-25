@@ -159,6 +159,13 @@ declare module "@waitron/shared" {
      */
     "deployment.environment_mismatch": { databaseEnvironment: string; hostEnvironment: string };
     /**
+     * The demo seed was asked to write sample data — catalogue, staff and back-dated fiscal
+     * records — under a production stamp. Refused before anything is written: a production chain
+     * can never be corrected (CLAUDE.md §5). `environment` is the resolved host value — always
+     * `production`, the only value refused — and not a secret.
+     */
+    "deployment.demo_data_refused": { environment: string };
+    /**
      * An inbound hosted-payment webhook failed signature verification; nothing acts on the event
      * until the `payments.stripe` `webhookSecret` verifies the raw bytes. Carries NOTHING — never the
      * signature, the raw body or the secret.

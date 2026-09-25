@@ -1,9 +1,10 @@
 /**
  * `seedDemoRestaurant` runs every sub-seed. `WAITRON_ENV` is left unset, so `deploymentEnvironment`
- * resolves to `preproduction` for the seeded sales.
+ * resolves to `preproduction` for the seeded sales; one case stubs it to `production` and proves the
+ * seed refuses before its first write.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -80,6 +81,32 @@ async function provisionVenue(): Promise<Venue> {
 }
 
 describe("seedDemoRestaurant", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("refuses a production environment before writing anything", async () => {
+    const venue = await provisionVenue();
+    const before = await withTransaction(suite.db, async (tx) => ({
+      menus: (await listAccessibleCatalogues(tx, venue.locationId)).length,
+      products: (await listAvailableProducts(tx, venue.locationId)).products.length,
+    }));
+    vi.stubEnv("WAITRON_ENV", "production");
+
+    await expect(
+      seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 7 }),
+    ).rejects.toMatchObject({ code: "deployment.demo_data_refused" });
+
+    const after = await withTransaction(suite.db, async (tx) => ({
+      menus: (await listAccessibleCatalogues(tx, venue.locationId)).length,
+      products: (await listAvailableProducts(tx, venue.locationId)).products.length,
+      sales: (
+        await tx.execute<{ n: number }>(sql`select cast(count(*) as integer) as n from sales`)
+      ).rows[0]!.n,
+    }));
+    expect(after).toEqual({ ...before, sales: 0 });
+  });
+
   it("runs every sub-seed: both menus, the floor, the staff, a sale, and content-addressed media", async () => {
     const venue = await provisionVenue();
 

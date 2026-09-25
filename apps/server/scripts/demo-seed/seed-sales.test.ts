@@ -1,9 +1,9 @@
 /**
  * Back-dated preproduction sales through `recordSale`: the stored environment, the chain, and the
- * reports they light up.
+ * reports they light up — and the refusal of a production stamp.
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { sales, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -120,6 +120,10 @@ function venueFor(v: VenueResult): SeedSalesVenue {
 }
 
 describe("seedSales", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("fills the last 3 days with back-dated preproduction sales that light up the reports", async () => {
     const venue = await provisionVenue();
     const start = Date.now();
@@ -192,6 +196,24 @@ describe("seedSales", () => {
     expect(compareDecimal(read.close.vat.taxTotal, decimal("0.00"))).toBeGreaterThan(0);
     expect(read.close.cash.byTill.length).toBeGreaterThan(0);
     expect(compareDecimal(read.close.cash.tenderTotal, decimal("0.00"))).toBeGreaterThan(0);
+  });
+
+  it("refuses to file demo sales into a production environment, and writes nothing", async () => {
+    const venue = await provisionVenue();
+    vi.stubEnv("WAITRON_ENV", "production");
+
+    await expect(
+      seedSales(suite.db, { venue: venueFor(venue), locale: LOCALE, days: 3, products: PRODUCTS }),
+    ).rejects.toMatchObject({ code: "deployment.demo_data_refused" });
+
+    const read = await withTransaction(suite.db, async (tx) => ({
+      sales: await tx.select({ id: sales.id }).from(sales),
+      registros: await tx
+        .select({ entorno: registrosFacturacion.entorno })
+        .from(registrosFacturacion),
+    }));
+    expect(read.sales.length).toBe(0);
+    expect(read.registros.length).toBe(0);
   });
 
   it("writes nothing when days is 0 (guard by deletion)", async () => {

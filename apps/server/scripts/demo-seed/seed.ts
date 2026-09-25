@@ -9,7 +9,7 @@ import { seedFloor } from "./seed-floor.js";
 import { seedStaff } from "./seed-staff.js";
 import { seedMedia } from "./seed-media.js";
 import { seedOptionLists } from "./seed-option-lists.js";
-import { seedSales } from "./seed-sales.js";
+import { demoSeedEnvironment, seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct } from "./seed-sales.js";
 import type { SeedLocale } from "./menu.js";
 
@@ -33,6 +33,7 @@ export async function seedDemoRestaurant(
   { venue, locale, salesDays }: SeedDemoInput,
 ): Promise<void> {
   const { locationId } = venue;
+  demoSeedEnvironment(process.env);
 
   const products = await withTransaction(db, async (tx) => {
     const { productsByImage, menuIds } = await seedCatalogues(tx, {
