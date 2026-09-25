@@ -45,6 +45,8 @@ type Editor =
   | { kind: "delete"; name: string; detail?: string; action: () => Promise<unknown> };
 type Action = { key: string; label: string; run: () => void; disabled?: boolean };
 
+const inSomeSection = (row: MenuOffer): boolean => row.placements.some((path) => path.length > 0);
+
 @customElement("dashboard-venue-operations-screen")
 export class VenueOperationsScreen extends LitElement {
   static override styles = [
@@ -645,9 +647,8 @@ export class VenueOperationsScreen extends LitElement {
     </section>`;
   }
   #placement(row: MenuOffer): string {
-    const inSection = row.placements.some((path) => path.length > 0);
     if (row.topLevelMember === null) return t("venue.placement_section");
-    return t(inSection ? "venue.placement_both" : "venue.placement_top");
+    return t(inSomeSection(row) ? "venue.placement_both" : "venue.placement_top");
   }
   /** A product the menu's top level holds is taken off it; one the menu reaches only through a
    * section cannot be, so it keeps the menu's own switch instead. */
@@ -668,11 +669,7 @@ export class VenueOperationsScreen extends LitElement {
           this.#confirm(
             row.name,
             () => this.api.removeMenuMember(member.sectionId, member.memberId),
-            t(
-              row.placements.some((path) => path.length > 0)
-                ? "venue.remove_offer_stays"
-                : "venue.remove_offer_resets",
-            ),
+            t(inSomeSection(row) ? "venue.remove_offer_stays" : "venue.remove_offer_resets"),
           ),
       });
     if (member === null || !row.active)

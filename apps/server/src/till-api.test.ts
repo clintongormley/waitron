@@ -40,6 +40,7 @@ import {
   readContentLanguages,
   updateOptionList,
   setMenuItemExtraLists,
+  updateMenuItem,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import {
@@ -1469,6 +1470,32 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       menus: [{ id: aguaProduct.catalogueId, name: "Carta", isDefault: true }],
       offers: [{ id: aguaOfferId, productId: aguaProduct.id, grossPrice: "1.75" }],
     });
+  });
+
+  it("leaves out a product switched off on its menu, and lists it again once switched back on", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const token = await openSession(suite.db);
+    const offerIds = async (): Promise<string[]> => {
+      const res = await app.request(`/api/service-zones/${counterZoneId}/offers`, {
+        headers: { cookie: `${SESSION_COOKIE}=${token}` },
+      });
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { offers: { id: string }[] }).offers.map((offer) => offer.id);
+    };
+    // The same write `PATCH /management-api/catalogues/:id/items/:itemId` makes.
+    const switchTo = (active: boolean) =>
+      withTransaction(suite.db, (tx) =>
+        updateMenuItem(tx, aguaProduct.catalogueId, aguaOfferId, { active }),
+      );
+
+    try {
+      await switchTo(false);
+      expect(await offerIds()).not.toContain(aguaOfferId);
+    } finally {
+      await switchTo(true);
+    }
+    expect(await offerIds()).toContain(aguaOfferId);
   });
 
   it("REJECTS (401 session.required) when no cookie is present — proves the requireSession guard", async () => {

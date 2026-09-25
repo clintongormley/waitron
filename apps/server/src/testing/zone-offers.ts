@@ -4,8 +4,8 @@ import type { Transaction } from "@waitron/db";
 import {
   addProducts,
   createCatalogue,
+  menuDetails,
   menuItems,
-  readMenuStructure,
   readProductModifiers,
   resolveAccessibleCatalogueIds,
   setMenuItemExtraLists,
@@ -175,16 +175,15 @@ async function department(tx: Transaction, cfg: Cfg, serviceMode: ServiceMode): 
 async function placeOnTopLevel(
   tx: Transaction,
   menuId: string,
-  productIds: readonly string[],
+  productIds: string[],
 ): Promise<Map<string, string>> {
   if (productIds.length === 0) return new Map();
-  const { rootSectionId, nodes } = await readMenuStructure(tx, menuId);
-  const onTopLevel = new Set(
-    nodes.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : [])),
-  );
-  const missing = productIds.filter((productId) => !onTopLevel.has(productId));
-  if (missing.length > 0) await addProducts(tx, rootSectionId, missing);
-  const ofMenu = and(eq(menuItems.menuId, menuId), inArray(menuItems.productId, [...productIds]));
+  const [details] = await tx
+    .select({ rootSectionId: menuDetails.rootSectionId })
+    .from(menuDetails)
+    .where(eq(menuDetails.menuId, menuId));
+  await addProducts(tx, details!.rootSectionId, productIds);
+  const ofMenu = and(eq(menuItems.menuId, menuId), inArray(menuItems.productId, productIds));
   await tx.update(menuItems).set({ grossPrice: null, active: true }).where(ofMenu);
   const rows = await tx
     .select({ id: menuItems.id, productId: menuItems.productId })

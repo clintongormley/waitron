@@ -833,7 +833,7 @@ describe("venue operations screen", () => {
     expect(api.updateMenuItem).toHaveBeenCalledWith("m1", "i2", { active: false });
     await settle(el);
     expect(find(el, '[data-test="switch-offer-i2"]')!.textContent).toContain(
-      "Switch on on this menu",
+      "Switch back on for this menu",
     );
     await action(el, "switch-offer-i2");
     expect(api.updateMenuItem).toHaveBeenLastCalledWith("m1", "i2", { active: true });

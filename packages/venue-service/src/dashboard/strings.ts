@@ -67,7 +67,7 @@ const en = {
   "venue.remove_offer_resets": "Its menu price and variant settings are cleared.",
   "venue.remove_offer_stays": "It stays on this menu through its section.",
   "venue.switch_offer_off": "Switch off on this menu",
-  "venue.switch_offer_on": "Switch on on this menu",
+  "venue.switch_offer_on": "Switch back on for this menu",
   "venue.offer_on": "On",
   "venue.offer_off": "Switched off",
   "venue.placement": "Where it sits",

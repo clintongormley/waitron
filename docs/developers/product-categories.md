@@ -106,9 +106,9 @@ product its structure reaches: `grossPrice` (a price, or null for the product's 
 the menu's own switch for the product (a boolean, else `management.request_invalid` naming
 `active`). Either may be left out. `DELETE` on the same path switches the product off, and leaves
 it where the structure put it. An item whose product the structure no longer reaches is
-`menu_item.not_found` (404). `GET /management-api/catalogues/:id/offers` lists every product the
-structure reaches, switched-off ones included with `active: false`; the till's offers leave them
-out.
+`menu_item.not_found` (404). `GET /management-api/catalogues/:id/offers` lists the active
+top-level products the structure reaches, or nothing while the menu is inactive; switched-off ones
+are included with `active: false`, and the till's offers leave them out.
 
 ## Moving and deleting
 
