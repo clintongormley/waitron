@@ -5430,7 +5430,7 @@ listener reads it, because the marker is still there — unless that start defer
 (fenced, mirror or adoption-pending), when the listener refuses the pair. The next membership
 document carries this node's stored endorsement, so a peer that trusts only the endorser (the
 primary that adopted this node) accepts it when the stored endorsement is valid for this node's
-key. Every signer except the term-0 seed
+key. Every signer except the term-0 seed (#643)
 (`apps/server/src/membership-seed.ts`) reads the signing node's stored endorsement through
 `readSignerEndorsements` (`apps/server/src/membership-mint.ts`): this first start, both promotions
 (`apps/server/src/promote.ts`), `retireSelf` (`apps/server/src/retire.ts`) and the chart append in
