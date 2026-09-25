@@ -135,7 +135,6 @@ async function appendStandbyToChart(
   standbyNodeId: string,
   standbyContactUrl: string,
 ): Promise<void> {
-  const endorsements = await readSignerEndorsements(deps.appDb, deps.designated.nodeId);
   for (let round = 1; round <= MAX_CHART_WRITE_ROUNDS; round += 1) {
     const held = await readNodeMembership(deps.appDb);
     const document = await mintNextMembershipDocument(
@@ -144,7 +143,7 @@ async function appendStandbyToChart(
         heldDocument: held,
         nodes: withMember(held?.body.nodes ?? [], standbyNodeId, standbyContactUrl),
         signerNodeId: deps.designated.nodeId,
-        endorsements,
+        endorsements: await readSignerEndorsements(deps.appDb, deps.designated.nodeId),
       },
     );
     if (await persistNodeMembershipIfNewer(deps.appDb, document)) return;
