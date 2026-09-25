@@ -86,6 +86,7 @@ describe("SetupRestoreScreen", () => {
       artifact,
       recoveryKey: "recovery-key",
       environment: "production",
+      oldBoxGone: false,
     });
   });
 
@@ -100,7 +101,12 @@ describe("SetupRestoreScreen", () => {
     host.addEventListener("restore-requested", listener);
     q(el, "[data-test=restore]")!.click();
     expect(listener.mock.calls.map(([event]) => (event as CustomEvent).detail.request)).toEqual([
-      { artifact: BACKUP, recoveryKey: "recovery-key", environment: "preproduction" },
+      {
+        artifact: BACKUP,
+        recoveryKey: "recovery-key",
+        environment: "preproduction",
+        oldBoxGone: false,
+      },
     ]);
   });
 
@@ -121,6 +127,85 @@ describe("SetupRestoreScreen", () => {
     await el.updateComplete;
     expect(listener).not.toHaveBeenCalled();
     expect(await summaryItems(el)).toEqual([message]);
+  });
+
+  it("asks the old-server question when the old server wrote recently, and sends the answer", async () => {
+    const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
+      liveSince: "2026-09-23T11:58:00.000Z",
+    });
+    expect(q(el, "[data-test=live-warning]")!.textContent).toContain("2026-09-23T11:58:00.000Z");
+    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    const listener = vi.fn();
+    host.addEventListener("restore-requested", listener);
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(listener).not.toHaveBeenCalled();
+    expect(await summaryItems(el)).toEqual([
+      "Confirm that the old server is switched off for good.",
+    ]);
+    expect(q(el, "#old-box-gone-error")!.textContent).toBe(
+      "Confirm that the old server is switched off for good.",
+    );
+    const box = q<HTMLInputElement>(el, "[data-test=old-box-gone]")!;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    q(el, "[data-test=restore]")!.click();
+    expect(listener).toHaveBeenCalledOnce();
+    expect(
+      (listener.mock.calls[0]![0] as CustomEvent<{ request: RestoreRequestDetail }>).detail.request
+        .oldBoxGone,
+    ).toBe(true);
+  });
+
+  it("asks the same question when whether the old server is writing could not be checked", async () => {
+    const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
+      liveUnknown: true,
+    });
+    expect(q(el, "[data-test=live-warning]")!.textContent).toContain("could not be checked");
+    expect(q(el, "[data-test=old-box-gone]")).not.toBeNull();
+  });
+
+  it("sends no old-server answer when it was not asked", async () => {
+    const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+    expect(q(el, "[data-test=live-warning]")).toBeNull();
+    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    const listener = vi.fn();
+    host.addEventListener("restore-requested", listener);
+    q(el, "[data-test=restore]")!.click();
+    expect(
+      (listener.mock.calls[0]![0] as CustomEvent<{ request: RestoreRequestDetail }>).detail.request
+        .oldBoxGone,
+    ).toBe(false);
+  });
+
+  // The old-server question is answered by sending the same backup again; the shell hands the last
+  // request back so the file does not have to be chosen and the key typed a second time.
+  it("comes back from a refusal with the backup, the key and the answers kept", async () => {
+    const request: RestoreRequestDetail = {
+      artifact: BACKUP,
+      recoveryKey: "recovery-key",
+      environment: "preproduction",
+      oldBoxGone: false,
+    };
+    const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
+      request,
+      liveUnknown: true,
+    });
+    expect(q<HTMLInputElement>(el, "[data-test=artifact]")!.files?.[0]).toBe(BACKUP);
+    expect(q<HTMLInputElement>(el, "[data-test=recovery-key]")!.value).toBe("recovery-key");
+    expect(q<HTMLSelectElement>(el, "[data-test=environment]")!.value).toBe("preproduction");
+    expect(q<HTMLInputElement>(el, "[data-test=acknowledge]")!.checked).toBe(true);
+    const box = q<HTMLInputElement>(el, "[data-test=old-box-gone]")!;
+    box.checked = true;
+    box.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+    const listener = vi.fn();
+    host.addEventListener("restore-requested", listener);
+    q(el, "[data-test=restore]")!.click();
+    expect(listener.mock.calls.map(([event]) => (event as CustomEvent).detail.request)).toEqual([
+      { ...request, oldBoxGone: true },
+    ]);
   });
 
   it("steps back to the role screen", async () => {

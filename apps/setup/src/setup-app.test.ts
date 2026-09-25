@@ -4,6 +4,10 @@ import { SetupApp, assembleBody } from "./setup-app.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
 import type { ProvisionBody, SetupApi, SetupStatus } from "./api/client.js";
 import type { SetupCloudRestoreScreen } from "./screens/cloud-restore-screen.js";
+import type { SetupRestoreBucketScreen } from "./screens/restore-bucket-screen.js";
+import type { SetupRestoreScreen } from "./screens/restore-screen.js";
+import type { SetupDoneScreen } from "./screens/done-screen.js";
+import type { BucketRestoreRequestDetail } from "./events.js";
 
 const mounted: HTMLElement[] = [];
 
@@ -29,6 +33,7 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
       restarting: true,
     }),
     restore: vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true }),
+    restoreFromBucket: vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true }),
     startCloudRecovery: vi.fn(),
     cloudRecoveryStatus: vi.fn(),
     startCloudRecoveryAgain: vi.fn(),
@@ -107,10 +112,37 @@ function adoptRequest(el: SetupApp, body: unknown = adoptBody): void {
 
 function restoreRequest(
   el: SetupApp,
-  request: { artifact: File; recoveryKey: string; environment: "production" | "preproduction" },
+  request: {
+    artifact: File;
+    recoveryKey: string;
+    environment: "production" | "preproduction";
+    oldBoxGone?: boolean;
+  },
 ): void {
   wizard(el).dispatchEvent(
-    new CustomEvent("restore-requested", { detail: { request }, bubbles: true, composed: true }),
+    new CustomEvent("restore-requested", {
+      detail: { request: { oldBoxGone: false, ...request } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+}
+
+function bucketRequest(el: SetupApp, request: Partial<BucketRestoreRequestDetail> = {}): void {
+  wizard(el).dispatchEvent(
+    new CustomEvent("bucket-restore-requested", {
+      detail: {
+        request: {
+          kit: "k",
+          environment: "production",
+          oldBoxGone: false,
+          venueConfirmed: null,
+          ...request,
+        },
+      },
+      bubbles: true,
+      composed: true,
+    }),
   );
 }
 
@@ -505,6 +537,7 @@ describe("setup-app", () => {
       request.artifact,
       request.recoveryKey,
       request.environment,
+      false,
     );
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
@@ -1545,6 +1578,370 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   });
 });
 
+describe("restore from my bucket", () => {
+  const VENUE = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" };
+
+  async function refusedWith(error: unknown): Promise<SetupRestoreBucketScreen> {
+    const el = await mountSetupApp(
+      stubApi({ restoreFromBucket: vi.fn().mockRejectedValue(error) }),
+    );
+    bucketRequest(el);
+    await flush(el);
+    await flush(el);
+    return (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
+  }
+
+  it("stages a bucket rebuild and shows the rebuild outcome", async () => {
+    const restoreFromBucket = vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true });
+    const el = await mountSetupApp(stubApi({ restoreFromBucket }));
+    bucketRequest(el);
+    await flush(el);
+    await flush(el);
+    expect(restoreFromBucket).toHaveBeenCalledWith({
+      kit: "k",
+      environment: "production",
+      oldBoxGone: false,
+      venueConfirmed: null,
+    });
+    const done = (await screenHost(el, "done")) as SetupDoneScreen;
+    expect(done.rebuilt).toBe(true);
+  });
+
+  it("shows the provisioning screen while the rebuild is staged, with no earlier failure on it", async () => {
+    const pending = deferred();
+    const el = await mountSetupApp(
+      stubApi({
+        provision: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+        restoreFromBucket: vi.fn().mockReturnValue(pending.promise),
+      }),
+    );
+    provisionRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).not.toBeNull();
+    bucketRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toBeNull();
+    pending.resolve({ restoreStaged: true, restarting: true });
+  });
+
+  it("returns to the bucket screen asking about the old server when it looks alive", async () => {
+    const screen = await refusedWith({
+      code: "restore.stream_source_live",
+      params: { lastChangeAt: "2026-09-23T11:58:00.000Z" },
+      status: 409,
+    });
+    expect(screen.liveSince).toBe("2026-09-23T11:58:00.000Z");
+    expect(screen.liveUnknown).toBe(false);
+    expect(screen.errorMessage).toBeUndefined();
+  });
+
+  it("returns the request it sent, so the owner's entries are kept", async () => {
+    const restoreFromBucket = vi.fn().mockRejectedValue({
+      code: "restore.stream_source_live",
+      params: { lastChangeAt: "2026-09-23T11:58:00.000Z" },
+      status: 409,
+    });
+    const el = await mountSetupApp(stubApi({ restoreFromBucket }));
+    bucketRequest(el, { kit: "WAITRON-RECOVERY-KIT-1:abc", environment: "preproduction" });
+    await flush(el);
+    await flush(el);
+    const screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
+    expect(screen.request).toEqual({
+      kit: "WAITRON-RECOVERY-KIT-1:abc",
+      environment: "preproduction",
+      oldBoxGone: false,
+      venueConfirmed: null,
+    });
+    expect(screen.shadowRoot!.querySelector<HTMLTextAreaElement>("[data-test=kit]")!.value).toBe(
+      "WAITRON-RECOVERY-KIT-1:abc",
+    );
+  });
+
+  // Reconciliation N26: the shell hands the restored copy's names to the screen for confirmation.
+  it("returns to the bucket screen showing whose copy it is when the venue is unconfirmed", async () => {
+    const screen = await refusedWith({
+      code: "restore.stream_venue_unconfirmed",
+      params: VENUE,
+      status: 409,
+    });
+    expect(screen.venue).toEqual(VENUE);
+    expect(screen.errorMessage).toBeUndefined();
+  });
+
+  // An empty tax id never counts as confirmed, so offering to confirm it would loop for ever.
+  it("says a copy that names no tax id cannot be restored, and offers no confirmation", async () => {
+    const screen = await refusedWith({
+      code: "restore.stream_venue_unconfirmed",
+      params: { ...VENUE, taxId: "" },
+      status: 409,
+    });
+    expect(screen.venue).toBeUndefined();
+    expect(screen.errorMessage).toBe(
+      "The copy in the bucket names no business tax id, so it cannot be confirmed or restored.",
+    );
+  });
+
+  it.each([[{ reason: "clock" }], [{ reason: "bucket" }]])(
+    "asks the old-box question when whether the old server is writing could not be checked (%o)",
+    async (params) => {
+      const screen = await refusedWith({
+        code: "restore.stream_source_unchecked",
+        params,
+        status: 409,
+      });
+      expect(screen.liveUnknown).toBe(true);
+      expect(screen.liveSince).toBeUndefined();
+    },
+  );
+
+  it("still asks the old-box question when the server gave no time the old server last wrote", async () => {
+    const screen = await refusedWith({
+      code: "restore.stream_source_live",
+      params: {},
+      status: 409,
+    });
+    expect(screen.liveUnknown).toBe(true);
+  });
+
+  // Review Focus 2: the wrong kit is refused before anything changes, and the owner is told which
+  // way it is wrong. (The server refuses; these pin the words the wizard puts on each refusal.)
+  it.each([
+    [
+      "backup.stream_kit_invalid",
+      undefined,
+      "This is not a Waitron recovery kit. Upload the kit file, or paste the whole kit.",
+    ],
+    [
+      "backup.stream_kit_invalid",
+      { reason: "not_found" },
+      "This is not a Waitron recovery kit. Upload the kit file, or paste the whole kit.",
+    ],
+    [
+      "backup.stream_kit_invalid",
+      { reason: "encoding" },
+      "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Upload the kit file as it was saved, or paste the whole kit.",
+    ],
+    [
+      "backup.stream_kit_invalid",
+      { reason: "shape" },
+      "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Upload the kit file as it was saved, or paste the whole kit.",
+    ],
+    [
+      "restore.stream_pointer_missing",
+      undefined,
+      "The bucket in this kit holds no copy of this restaurant.",
+    ],
+    [
+      "restore.stream_pointer_unverified",
+      undefined,
+      "The copy in the bucket was not written by the server this kit belongs to. Nothing was changed.",
+    ],
+    [
+      "restore.stream_pointer_unverified",
+      { reason: "signature" },
+      "The copy in the bucket was not written by the server this kit belongs to. Nothing was changed.",
+    ],
+    [
+      "restore.stream_pointer_unverified",
+      { reason: "venue_mismatch" },
+      "The bucket's record of its newest copy names a different restaurant from this kit. Nothing was changed.",
+    ],
+    [
+      "backup.stream_pointer_invalid",
+      { reason: "shape" },
+      "The bucket's record of its newest copy is damaged, so it cannot be rebuilt from. Nothing was changed.",
+    ],
+    [
+      "restore.stream_integrity_failed",
+      undefined,
+      "The copy read from the bucket is damaged. Nothing on this server was changed.",
+    ],
+    [
+      "restore.stream_state_missing",
+      { nodeId: "n1" },
+      "The copy in the bucket does not hold the old server's locked settings, so it cannot be rebuilt from.",
+    ],
+    [
+      "recovery.passphrase_invalid",
+      undefined,
+      "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest kit.",
+    ],
+    [
+      "backup.artifact_invalid",
+      { reason: "magic" },
+      "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest kit.",
+    ],
+    [
+      "backup.archive_invalid",
+      { reason: "magic" },
+      "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest kit.",
+    ],
+    [
+      "backup.stream_restore_failed",
+      { exitCode: 1, diskFull: false },
+      "The copy could not be downloaded from the bucket. Check this server's internet connection and that the bucket still exists, then try again.",
+    ],
+    [
+      "backup.stream_request_failed",
+      { operation: "get", key: "k", status: 403, name: "AccessDenied" },
+      "The bucket did not answer, or refused the key in this kit. Check this server's internet connection and that the bucket and its key still exist, then try again.",
+    ],
+    [
+      "restore.environment_mismatch",
+      { backup: "preproduction", target: "production" },
+      "The copy comes from the other environment. Choose the environment it came from.",
+    ],
+    [
+      "provisioning.database_ahead",
+      undefined,
+      "The copy in the bucket was made by newer Waitron software than this server has. Update this server, then try again.",
+    ],
+    [
+      "restore.schema_too_new",
+      { module: "core", backup: 9, target: 8 },
+      "The copy in the bucket was made by newer Waitron software than this server has. Update this server, then try again.",
+    ],
+    [
+      "setup.already_provisioning",
+      undefined,
+      "Setup is already in progress on this server. Wait for it to finish, then reload this page.",
+    ],
+    ["setup.not_ready", undefined, "The server isn't ready yet. Wait a moment, then try again."],
+    [
+      "setup.request_invalid",
+      { field: "kit" },
+      "The server rejected the details. Check the kit and the environment, then try again.",
+    ],
+    [
+      "restore.hook_failed",
+      { module: "fiscal", code: "x.y" },
+      "The copy could not be restored. (restore.hook_failed)",
+    ],
+  ])("explains %s (%o) and stays on the bucket screen", async (code, params, message) => {
+    const screen = await refusedWith({ code, params, status: 400 });
+    expect(screen.errorMessage).toBe(message);
+    expect(screen.shadowRoot!.querySelector("[data-test=server-error]")!.textContent).toBe(message);
+  });
+
+  // Review Focus 5, the wizard's half.
+  it("says the disk filled during the download", async () => {
+    const screen = await refusedWith({ code: "restore.stream_disk_full", status: 507 });
+    expect(screen.errorMessage).toBe(
+      "This server's disk filled while the copy was downloading. Nothing on this server was changed. Free some space and try again.",
+    );
+  });
+
+  it("tells the owner to check the connection when nothing answered", async () => {
+    const screen = await refusedWith(new TypeError("Failed to fetch"));
+    expect(screen.errorMessage).toBe(
+      "The copy could not be restored. Check the connection and try again.",
+    );
+  });
+
+  it("does not stay on the provisioning screen when the rejection carries nothing", async () => {
+    const screen = await refusedWith(undefined);
+    expect(screen.errorMessage).toBe(
+      "The copy could not be restored. Check the connection and try again.",
+    );
+  });
+
+  it("forgets the refusal and the request once the owner leaves the screen", async () => {
+    const restoreFromBucket = vi.fn().mockRejectedValue({
+      code: "restore.stream_venue_unconfirmed",
+      params: VENUE,
+      status: 409,
+    });
+    const el = await mountSetupApp(stubApi({ restoreFromBucket }));
+    bucketRequest(el);
+    await flush(el);
+    await flush(el);
+    goto(el, "role");
+    await flush(el);
+    goto(el, "restore-bucket");
+    await flush(el);
+    const screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
+    expect({ venue: screen.venue, request: screen.request }).toEqual({
+      venue: undefined,
+      request: undefined,
+    });
+  });
+});
+
+describe("restoring a backup file whose old server may still be running", () => {
+  const backup = {
+    artifact: new File([Uint8Array.from([1])], "b.wbk"),
+    recoveryKey: "k",
+    environment: "production" as const,
+  };
+
+  it.each([
+    [
+      {
+        code: "restore.stream_source_live",
+        params: { lastChangeAt: "2026-09-23T11:58:00.000Z" },
+        status: 409,
+      },
+      { liveSince: "2026-09-23T11:58:00.000Z", liveUnknown: false },
+    ],
+    [
+      { code: "restore.stream_source_unchecked", params: { reason: "bucket" }, status: 409 },
+      { liveSince: undefined, liveUnknown: true },
+    ],
+  ])(
+    "returns to the archive screen asking about the old server (%o)",
+    async (refusal, expected) => {
+      const restore = vi
+        .fn()
+        .mockRejectedValueOnce(refusal)
+        .mockResolvedValueOnce({ restoreStaged: true, restarting: true });
+      const el = await mountSetupApp(stubApi({ restore }));
+      restoreRequest(el, backup);
+      await flush(el);
+      await flush(el);
+      const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
+      expect({ liveSince: screen.liveSince, liveUnknown: screen.liveUnknown }).toEqual(expected);
+      expect(screen.errorMessage).toBeUndefined();
+      expect(screen.request).toEqual({ ...backup, oldBoxGone: false });
+      // The owner confirms: the resend carries the answer, which the client turns into the header.
+      restoreRequest(el, { ...backup, oldBoxGone: true });
+      await flush(el);
+      await flush(el);
+      expect(restore).toHaveBeenLastCalledWith(backup.artifact, "k", "production", true);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+    },
+  );
+
+  it("does not stay on the provisioning screen when the rejection carries nothing", async () => {
+    const el = await mountSetupApp(stubApi({ restore: vi.fn().mockRejectedValue(undefined) }));
+    restoreRequest(el, backup);
+    await flush(el);
+    expect(await screenText(el, "restore", "[data-test=server-error]")).toBe(
+      "The backup could not be staged. Check the connection and try again.",
+    );
+  });
+
+  it("forgets the old-server question once the owner leaves the screen", async () => {
+    const restore = vi.fn().mockRejectedValue({
+      code: "restore.stream_source_unchecked",
+      params: { reason: "clock" },
+      status: 409,
+    });
+    const el = await mountSetupApp(stubApi({ restore }));
+    restoreRequest(el, backup);
+    await flush(el);
+    await flush(el);
+    goto(el, "role");
+    await flush(el);
+    goto(el, "restore");
+    await flush(el);
+    const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
+    expect({ liveUnknown: screen.liveUnknown, request: screen.request }).toEqual({
+      liveUnknown: false,
+      request: undefined,
+    });
+  });
+});
+
 describe("an answer that arrives after the element is detached", () => {
   const backup = {
     artifact: new File(["encrypted"], "waitron.backup"),
@@ -1605,6 +2002,26 @@ describe("an answer that arrives after the element is detached", () => {
       fire: (el: SetupApp) => restoreRequest(el, backup),
       settle: (d: ReturnType<typeof deferred>) => d.reject({ code: "server.internal", params: {} }),
       unchanged: { screen: "provisioning", restoreError: undefined },
+    },
+    {
+      name: "a bucket restore success",
+      method: "restoreFromBucket",
+      fire: (el: SetupApp) => bucketRequest(el),
+      settle: (d: ReturnType<typeof deferred>) =>
+        d.resolve({ restoreStaged: true, restarting: true }),
+      unchanged: { screen: "provisioning", rebuilt: false },
+    },
+    {
+      name: "a bucket restore refusal",
+      method: "restoreFromBucket",
+      fire: (el: SetupApp) => bucketRequest(el),
+      settle: (d: ReturnType<typeof deferred>) =>
+        d.reject({ code: "restore.stream_source_live", params: { lastChangeAt: "x" } }),
+      unchanged: {
+        screen: "provisioning",
+        bucketLiveSince: undefined,
+        bucketRestoreError: undefined,
+      },
     },
     {
       name: "a staged configuration",

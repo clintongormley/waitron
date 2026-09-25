@@ -18,10 +18,18 @@ const q = (el: SetupRoleScreen, sel: string) => el.shadowRoot!.querySelector<HTM
 afterEach(cleanupWidgets);
 
 describe("setup-role-screen", () => {
-  it("renders both ways to join or recover an existing restaurant", async () => {
+  it("renders every way to join or recover an existing restaurant", async () => {
     const { el } = await mountWidget<SetupRoleScreen>("setup-role-screen", {});
     expect(q(el, "[data-test=choose-mirror]")).not.toBeNull();
     expect(q(el, "[data-test=choose-restore]")).not.toBeNull();
+    expect(q(el, "[data-test=choose-restore-bucket]")).not.toBeNull();
+  });
+
+  it("navigates to restore-bucket on the bucket choice", async () => {
+    const { el, host } = await mountWidget<SetupRoleScreen>("setup-role-screen", {});
+    const events = collect(host);
+    q(el, "[data-test=choose-restore-bucket]")!.click();
+    expect(events).toEqual([{ kind: "goto", detail: { screen: "restore-bucket" } }]);
   });
 
   it("navigates to connect on the mirror choice", async () => {

@@ -40,6 +40,22 @@ describe("setup-done-screen", () => {
     expect(q(el, "[data-test=mode-indicator]")?.textContent?.trim()).toBe(label);
   });
 
+  it("after a rebuild, names which devices need a person and hides the no-backups nudge", async () => {
+    const el = await mountDone(() => new Promise(() => {}), { rebuilt: true });
+    expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Rebuilt from your bucket");
+    const steps = q(el, "[data-test=device-steps]")!.textContent!.replace(/\s+/g, " ");
+    expect(steps).toContain("opened at https://waitron.local reconnect by themselves");
+    expect(steps).toContain("opened at an IP address");
+    expect(steps).toContain("port 9110");
+    expect(q(el, "[data-test=backup-nudge]")).toBeNull();
+  });
+
+  it("says nothing about devices reconnecting after an ordinary setup", async () => {
+    const el = await mountDone(() => new Promise(() => {}));
+    expect(el.shadowRoot!.querySelector("h1")!.textContent).toBe("Setup complete");
+    expect(q(el, "[data-test=device-steps]")).toBeNull();
+  });
+
   it("keeps waiting (no reload) while getStatus fails with a network TypeError", async () => {
     const getStatus = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await mountDone(getStatus);

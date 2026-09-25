@@ -79,6 +79,19 @@ export class SetupRoleScreen extends LitElement {
             >Restore a backup</wt-button
           >
         </wt-card>
+        <wt-card raised>
+          <h2>Restore from my bucket</h2>
+          <p class="choice-copy">
+            Rebuild onto this fresh server from the continuous copy in your own storage bucket, when
+            the old server is gone. You need the recovery kit.
+          </p>
+          <wt-button
+            variant="secondary"
+            data-test="choose-restore-bucket"
+            @click=${() => dispatchSetupGoto(this, "restore-bucket")}
+            >Restore from my bucket</wt-button
+          >
+        </wt-card>
       </div>
       <div class="actions">
         <wt-button variant="ghost" data-test="back" @click=${() => dispatchSetupGoto(this, "mode")}
