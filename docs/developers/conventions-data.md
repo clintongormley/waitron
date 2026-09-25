@@ -525,7 +525,7 @@ whenever a money column is added:
   the old rule is gone, and a bare whole number still succeeds and still means cents. One instance was
   found and corrected while money was moving to cents: a fixture inserting `('cash_only', 50)` into
   `payment_policy` had meant an offline cap of fifty euros and silently became fifty cents. It reads
-  `('cash_only', 5000)` today — `apps/server/src/configuration-transfer.test.ts:320`. Whether that was
+  `('cash_only', 5000)` today — `apps/server/src/configuration-transfer.test.ts` (its `payment_policy` insert). Whether that was
   the only one in the tree is not established; what was run was a hand sweep, not a check anything
   re-runs.
 - Money held as strings inside a JSON document — `sales.vat_breakdown` and the hashed

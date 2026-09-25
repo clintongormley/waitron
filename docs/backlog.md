@@ -2814,12 +2814,40 @@ image constraints under *Detail → Box image*.
   walk, tests included) and `apps/server`'s `till-*` files, part a of eight (#613, about 4,330 to
   about 1,915, parse-tree walk, tests included) and `apps/till/src/screens`, part a of four (#614,
   about 2,233 to about 800, parse-tree walk, tests included, plus stale twins of its corrected claims
-  in `till-app.ts`, `api/client.ts` and `widgets/card-grid.ts`; text inside `css` templates left).
+  in `till-app.ts`, `api/client.ts` and `widgets/card-grid.ts`; text inside `css` templates left)
+  and `apps/server`'s errors, management, catalogue, configuration, purchasing and recipe files,
+  part d of eight (#615, about 4,110 to about 1,340, parse-tree walk, tests included; five other
+  server files' pointers into the pruned text repointed).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613 and #614 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614 and #615 and left for the package that owns each, all
   still OPEN:
+  - Found by #615 (`apps/server` part d), outside its files or not fixable in a comments-only
+    change. **The recipe routes and the recipe screen are unreached**: #345 (`f5c8e7b5f`) removed
+    `mountRecipeApi` from `apps/server/src/boot.ts`, nothing outside tests mounts
+    `/management-api/ingredients` or `/management-api/products/:id/recipe`, and
+    `apps/dashboard/src/screens/recipe-screen.ts` is imported by nothing (`git grep`), while its
+    client methods in `apps/dashboard/src/api/client.ts` still call those routes (read, not run).
+    Next action: the owner decides whether to delete `recipe-api.ts`, the screen and the client
+    methods, or to remount the routes and route the screen. Read, not run: `alert.not_found` was
+    documented as never revealing which case applied, but `apps/server/src/alerts-api.ts` answers
+    `authorization.not_permitted` for an incident the session cannot see and `alert.not_found` for
+    a missing id, so a caller can tell a real incident exists (#615 narrowed the comment; the route
+    is unchanged). `mirror.bundle_fetch_failed` was documented as logging its cause; nothing logs
+    it (`mirror-bundle-fetch.ts` discards the caught error) — whether it should is open.
+    `packages/server-kit/src/request-screens.ts` says its screens are the only refusal and an
+    unparseable value is stored; a foreign-key column refuses it (read, not run; #615 narrowed the
+    `till-api.ts` twin). `docs/developers/conventions-ui.md` says the no-secret-in-params rule is
+    stated per code in `apps/server/src/errors.ts`; it is now stated once, in that file's header.
+    Test titles #615 could not touch: "before it reaches Postgres" (two, in
+    `management-api-passkey.test.ts`), "not an opaque 500" and "non-uuid" titles in
+    `management-api-passkey.test.ts`, `catalogue-api.test.ts` and `recipe-api.test.ts`,
+    "option groups, gates, by-id FKs" in `catalogue-api.full-manifest.test.ts` (option groups no
+    longer exist), "(Task 11)" twice in `management-api.canvases.test.ts`, "(Task 7)" in
+    `management-api.accounts-and-receipt-config.test.ts`, "(Task 4)" in
+    `management-api.device-profiles.test.ts`, and "KDS-1", "KDS-2", "FP-2" and "KDS-3" in
+    `management-api.test.ts`.
   - Found by #614 (`apps/till/src/screens`), not fixable in a comments-only change. Read, not run:
     the till always mounts the counter screen `embedded` (`apps/till/src/till-app.ts`, the
     `<till-counter-screen>` in its render), so the screen's own header — its Allergens, Floor,
@@ -2836,11 +2864,10 @@ image constraints under *Detail → Box image*.
     screen's `#lineGross` "same arithmetic the server files with" (the server does not call
     `grossOf`).
   - Found by #613 (`apps/server` `till-*`), outside its files or not fixable in a comments-only
-    change. `apps/server/src/errors.ts` (around lines 743 and 755) and `errors.test.ts` (around
-    line 14) say the zone verbs have no HTTP route; `management-api.ts` has zone routes. Present-tense
-    "a malformed id becomes a 500" survives in `catalogue-api.test.ts`, `print-api.printer-wiring.test.ts`,
-    `print-api.test.ts`, `recipe-api.test.ts` and `working-order.test.ts` (ids are text columns, so
-    no `22P02`). Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`,
+    change. Present-tense "a malformed id becomes a 500" survives in `print-api.printer-wiring.test.ts`,
+    `print-api.test.ts` and `working-order.test.ts` (ids are text columns, so no `22P02`; #615
+    removed the `errors.ts` zone-route claim and the `catalogue-api.test.ts` and `recipe-api.test.ts`
+    copies). Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`,
     `finalizeSettle`) cite `provider.ts:66-83`; the checker compares tool comments character for
     character, so repointing them to `PaymentResult` in `packages/payments/src/provider.ts` is not
     a comments-only change. `apps/server/src/receipt-lines.ts` still carries "(Finding 2)" and
@@ -2882,8 +2909,7 @@ image constraints under *Detail → Box image*.
     the NUL; closing it needs a migration. Read only, not run: configuration import refuses an
     image whose default-language alt text is blank (`src/configuration-transfer.ts`, pinned by the
     `"alt"` case in its test), while an upload leaves alt text optional, so a venue holding such a
-    photo may export a bundle it cannot import. Outside the package:
-    `apps/server/src/configuration-transfer.ts` carries an "on this branch" history line.
+    photo may export a bundle it cannot import.
   - Found by #610 (`apps/dashboard/src/api` + `src/widgets`), not fixable in a comments-only
     change. `apps/dashboard/src/widgets/language-chooser.ts` puts `aria-haspopup` and
     `aria-expanded` on the `wt-button` host, and `wt-button` does not pass them to its inner
@@ -2939,8 +2965,6 @@ image constraints under *Detail → Box image*.
     (Task 4)")` and `describe("validateDietOverride (Task 4)")` (`src/dietary.test.ts`), "settles
     a product id sent in upper case in the database" (`src/product-modifiers.test.ts`, the code
     settles it now), "rebuilds every lookup index without the tenant" (`src/migrations.test.ts`).
-    Outside the package: `apps/server/src/catalogue-api.ts` (about line 263) still names only two
-    foreign keys as what blocks deleting a product, for the `apps/server` pruning.
   - Found by #602 (`scripts/`), each in a file a comments-only change cannot carry.
     `.github/workflows/ci.yml` (about line 283) says the three-shell receipt sits in
     `.husky/pre-push` beside the same loop; it is not there. `CLAUDE.md` §2 and the entry "The
@@ -2998,9 +3022,8 @@ image constraints under *Detail → Box image*.
   - Found by #600 (the small packages), not fixable in a comments-only change. `apps/server` test
     titles still say an unscreened malformed id raises PostgreSQL's 22P02 or becomes an opaque 500,
     although ids are text columns now (#613 removed the comments in the `till-*` suites; the titles
-    stay, e.g. `till-api.test.ts`'s two "never an opaque 22P02 500" cases), and a comment says it at
-    `catalogue-api.test.ts` 2592 (line number on `9a9adb80`). The wording to copy is at
-    `management-api.device-profiles.test.ts:31`. Also found by reading only, not run: nothing the
+    stay, e.g. `till-api.test.ts`'s two "never an opaque 22P02 500" cases; #615 removed
+    `catalogue-api.test.ts`'s comment). Also found by reading only, not run: nothing the
     review could find copies `node_membership` from the primary to a standby, so a promoting
     standby may take `nextStandings`' fallback that appends it with an empty `contactUrl`
     (`packages/membership`), which `routableServers` then drops. The slice-2 plan
@@ -3069,12 +3092,6 @@ image constraints under *Detail → Box image*.
   - Comments in `apps/server` tests cite
     `packages/identity/src/schema/persons.ts:26` and `:67`, already wrong before #559; name the
     column instead of the line when those packages are pruned.
-  - `apps/server/src/management-api.ts` still says an unregistered credential gets
-    `passkey.not_registered` (an unknown credential id throws `passkey.verification_failed`), and
-    it and two server tests say a response "never reveals" which addresses have accounts, which
-    nobody has measured; #559 narrowed identity's own timing comments to "the same error after the
-    same password-hashing work". `management-api.accounts-and-receipt-config.test.ts` describes the
-    display-name index as `lower(trim(display_name))`, which is no longer how it is built.
   - The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was
     measured false in identity (2026-09-24: `sessions.ts`'s function of the same kind, with no
     ignore, read 1 of 1 covered) and again by #562's review (making the foreign-key callback in
@@ -3256,8 +3273,8 @@ image constraints under *Detail → Box image*.
     client's "runtime shape error a view test catches" and `purchase-form.ts`'s "client validation
     mirrors the op's checks"; #612 removed `date-utils.ts`'s "per-venue timezone is a later
     slice"): PostgreSQL's `22P02`
-    described as current in `apps/server`'s `print-api.printer-wiring.test.ts`, `print-api.test.ts`
-    and `recipe-api.test.ts`; and `apps/server/src/print-api.test.ts` says `bookings-cas.test.ts`
+    described as current in `apps/server`'s `print-api.printer-wiring.test.ts` and
+    `print-api.test.ts` (#615 removed `recipe-api.test.ts`'s); and `apps/server/src/print-api.test.ts` says `bookings-cas.test.ts`
     records a deleted setup, which it no longer does. (#600 removed the same claim from
     `fiscal-none` and `workforce-es`, and `composition/src/modules.ts`'s "the only place bookings is
     named".)
@@ -3266,13 +3283,10 @@ image constraints under *Detail → Box image*.
     error numbers 23001 and 23505; the stores match SQLite's. The false "Inert: nothing here reads
     it" comment #588 removed from layouts (it was written about the deleted `tenantId` field and
     left on the next field down) went from `packages/db` with #589 and from `packages/core` with
-    #598, both fields being read. Comments quoting the PostgreSQL numbers for these two stores remain at
-    `apps/server/src/management-api.ts:299` and `:358`,
-    `apps/server/src/management-api.canvases.test.ts:277` (#612 removed the dashboard's copy in
-    `i18n/codes.test.ts`). `packages/printing/src/errors.test.ts:5` says the
+    #598, both fields being read. (#612 removed the dashboard's comments quoting the PostgreSQL
+    numbers for these two stores, #615 `apps/server`'s.) `packages/printing/src/errors.test.ts:5` says the
     error construction typechecks "ONLY because" of one import — #588's review measured the same
-    claim false for printing and layouts; `apps/server/src/errors.test.ts:8` makes it too, not
-    measured. The shipped `packages/media/drizzle/0001_image_references.sql` says `canvas-store.ts`
+    claim false for printing and layouts (#615 removed `apps/server/src/errors.test.ts`'s copy). The shipped `packages/media/drizzle/0001_image_references.sql` says `canvas-store.ts`
     tells 787 from 1811; it reads only 1811 (`device-profile-store.ts` reads both). #609 removed
     the same claim from `packages/media/src/image-references.test.ts`. Both layouts database
     suites create a manager session in `beforeAll`, while `useVenueDb` empties every table after
@@ -3863,7 +3877,7 @@ than the file, so nothing refuses them and nothing routes them back. A temporary
 table` grep over `packages`, `apps` and `scripts` matched nothing, and the same search for `ATTACH`
 was recorded in `packages/store/src/index.ts` until #568 pruned it. A connection-scoped pragma is a different matter — those are
 issued through routed handles already. The one that runs on a request path,
-`pragma defer_foreign_keys = on` at `apps/server/src/configuration-transfer.ts:487`, is issued
+`pragma defer_foreign_keys = on` in `apps/server/src/configuration-transfer.ts`'s import, is issued
 INSIDE the provisioning transaction's body, which is exactly where the routing sends a statement to
 the writer; the others are test setup issued outside any body, where the reader would serve them if
 a body happened to be running, and none of those suites runs one. **Next action:** none needed while
@@ -5027,9 +5041,9 @@ closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SI
 sidecar removal is pinned by `apps/server/src/db-wipe.test.ts`; what is missing is only a
 rejoin-level case with sidecars on disk.
 Every synchronous `deriveKey` caller still blocks the event loop while it derives, among them:
-`encodeConfigurationBundle` (`apps/server/src/configuration-transfer.ts:286`, through
+`encodeConfigurationBundle` (`apps/server/src/configuration-transfer.ts`, through
 `encryptArtifact`); everything reaching `decryptArtifact` (`apps/server/src/artifact-cipher.ts:83`) —
-`decodeConfigurationBundle` (`apps/server/src/configuration-transfer.ts:358`, on the request path,
+`decodeConfigurationBundle` (`apps/server/src/configuration-transfer.ts`, on the request path,
 decoding an uploaded bundle), `apps/server/src/restore.ts:153` and `unsealNodeState`
 (`apps/server/src/sealed-state.ts:33`); and the recovery bundle's `encryptBundle` and
 `decryptBundle` (`apps/server/src/recovery-bundle.ts:44` and `:140`). Task 2b moved the backup
