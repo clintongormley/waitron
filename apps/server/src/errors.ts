@@ -1,6 +1,7 @@
 // A bare side-effect import: it makes TypeScript augment "@waitron/shared" rather than declare a
 // fresh ambient module.
 import "@waitron/shared";
+import type { ProbeFailure } from "@waitron/stream";
 
 /**
  * This host's contribution to the shared error registry, by declaration merging. A code names the
@@ -677,7 +678,7 @@ declare module "@waitron/shared" {
     "backup.request_invalid": { field: string };
     /** The stream settings' Test, or the same check Save runs first, refused the owner's bucket.
      * `reason` is `probeBucket`'s short reason (`@waitron/stream`), naming which check failed. */
-    "backup.stream_test_failed": { reason: string };
+    "backup.stream_test_failed": { reason: ProbeFailure };
     /** A recovery kit was asked for while no bucket is configured. */
     "backup.stream_not_configured": Record<string, never>;
     /** A recovery kit was asked for on a node with no membership public key (`nodes.public_key`),

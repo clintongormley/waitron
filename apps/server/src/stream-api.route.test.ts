@@ -21,6 +21,7 @@ import {
   type StreamStatus,
 } from "@waitron/stream";
 import { keyFingerprint } from "./backup-supervisor.js";
+import { createTurns } from "./backup-turns.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountStreamApi, type StreamApiDeps } from "./stream-api.js";
@@ -199,6 +200,7 @@ function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Har
       }),
     },
     probe: vi.fn(async () => ({ ok: true as const })),
+    turns: createTurns(),
     ...overrides,
   };
   const app = new Hono();
@@ -336,16 +338,18 @@ describe("stream settings routes", () => {
     expect(deps.probe).not.toHaveBeenCalled();
   });
 
-  it("refuses an endpoint that is not an http(s) address", async () => {
-    const { app } = harness();
+  it("refuses an endpoint that is not an http(s) address, before any probe", async () => {
+    const { app, deps } = harness();
     const cookie = await login(app);
     const res = await app.request("/api/backup/stream/test", {
       method: "POST",
       ...json(cookie, { ...BODY, endpoint: "s3.example.net" }),
     });
+    expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
       error: { code: "backup.request_invalid", params: { field: "endpoint" } },
     });
+    expect(deps.probe).not.toHaveBeenCalled();
   });
 
   // The vault stores an absent prefix as "-", so a prefix of "-" would read back as none at all.
@@ -431,6 +435,7 @@ describe("stream settings routes", () => {
         accessKeyId: "AKIAEXAMPLE",
       },
       status: STREAMING,
+      recoveryKeySet: true,
       keyFingerprint: keyFingerprint(key.value!),
     });
     expect(JSON.stringify(view)).not.toContain(BODY.secretAccessKey);
@@ -554,6 +559,22 @@ describe("stream settings routes", () => {
     // The second reload found the settings already gone.
     expect(seenByReload.at(-1)).toBeNull();
     expect(await storedBucket()).toBeNull();
+  });
+
+  // A key under the archive's length floor still counts as held, as the backup routes count it.
+  it("reads and switches off on a box whose recovery key is too short", async () => {
+    const { app } = harness({
+      readRecoveryKey: async () => {
+        throw new AppError("backup.recovery_key_too_short", { min: 12 });
+      },
+    });
+    const cookie = await login(app);
+    const read = await app.request("/api/backup/stream", { headers: { cookie } });
+    expect(read.status).toBe(200);
+    expect(await read.json()).toMatchObject({ recoveryKeySet: true, keyFingerprint: null });
+    const off = await app.request("/api/backup/stream", { method: "DELETE", headers: { cookie } });
+    expect(off.status).toBe(200);
+    expect(await off.json()).toMatchObject({ configured: false, recoveryKeySet: true });
   });
 
   it("switching off is refused on a node that is not the primary", async () => {

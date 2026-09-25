@@ -113,7 +113,6 @@ export async function readPointer(
   return { pointer, etag: stored.etag };
 }
 
-/** A pointer is needed only while a write of it can still land. */
 export const SENT_POINTERS_KEPT = 16;
 
 /**

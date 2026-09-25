@@ -35,9 +35,8 @@ declare module "@waitron/shared" {
     "backup.stream_name_invalid": { field: string; value: string };
     /** A value bound for Litestream could not be written into its configuration safely
      * (`litestream.ts`). `field` names the value, never its content. For `bucket` the fix is a name
-     * of lowercase letters, digits, dots and hyphens only; for `prefix`, a folder path with no
-     * empty, `.` or `..` part; for `accessKeyId` or `secretAccessKey`, printable ASCII with no `'`.
-     * The settings routes refuse with it before any bucket is contacted. */
+     * of lowercase letters, digits, dots and hyphens only. The settings routes refuse with it
+     * before any bucket is contacted. */
     "backup.stream_config_unsafe": { field: string };
     /** Text offered as a recovery kit is not one: `not_found` (no kit token in it), `encoding` (the
      * token does not decode to JSON) or `shape` (a field is missing, mistyped or carries a control

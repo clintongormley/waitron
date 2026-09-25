@@ -192,6 +192,7 @@ import { makeFiscalBackend, systemClock } from "./till-backend.js";
 import { buildServeOptions, watchTlsFiles } from "./tls.js";
 import { StreamHost } from "./stream-host.js";
 import { mountStreamApi } from "./stream-api.js";
+import { createTurns } from "./backup-turns.js";
 import { writeRecoveryKey } from "./backup-env-writer.js";
 import { createS3ObjectStore, probeBucket } from "@waitron/stream";
 import { Server as HttpsServer } from "node:https";
@@ -2236,6 +2237,7 @@ export async function startServer(
   // reading and hot-reloading the SAME `backupSupervisor` above so the wizard can enable/rotate
   // backups without a restart. Writes `backup.env` to `config.stateDir`; refuses a write the env owns
   // or that a non-primary would make.
+  const backupTurns = createTurns();
   mountBackupApi(
     app,
     {
@@ -2245,6 +2247,7 @@ export async function startServer(
       readRecoveryKey,
       sealedState,
       readStream: () => streamHost.status(),
+      turns: backupTurns,
     },
     log,
   );
@@ -2262,6 +2265,7 @@ export async function startServer(
         writeRecoveryKey(config.stateDir, { recoveryKey, keyRotatedAt: undefined }),
       sealedState,
       probe: (bucket) => probeBucket(createS3ObjectStore(bucket)),
+      turns: backupTurns,
     },
     log,
   );

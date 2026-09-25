@@ -5270,15 +5270,12 @@ the copy on, switch it off, and hand out the recovery kit: one string holding th
 the venue id, the recovery key and the public key that signs the pointer
 (`packages/stream/src/kit.ts`). Save sets a recovery key when the box holds none, refreshes the
 sealed-state row, stores the settings, and reloads the copy only after that commits; Saves and
-switch-offs take turns. Test and Save refuse, before contacting the bucket, a bucket name with
+switch-offs take turns with each other and with the backup routes' `apply` and `rotate`, which also
+set the recovery key. Test and Save refuse, before contacting the bucket, a bucket name with
 capitals or `_`, a prefix Litestream would read as another folder, or a key holding a quote or a
 character outside printable ASCII (`backup.stream_config_unsafe`, naming the field), and a prefix of a single `-`, which the vault
-would store as no prefix. The screen is Task 8b's. Left open:
-- The stream routes' Save and the backup routes' `apply` and `rotate` take turns only among
-  themselves, not with each other, so on a box holding no key a Save and an `apply` sent at the same
-  moment could each set a different recovery key (read from the code, not tested).
-- The same pointer write left open under Task 6, item (2): one from a process that has since died,
-  landing after the restart.
+would store as no prefix. The screen is Task 8b's. Left open: the pointer write left open under
+Task 6, item (2), one from a process that has since died, landing after the restart.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence

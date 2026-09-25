@@ -17,6 +17,7 @@ import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import type { BackupRuntimeStatus, BackupSupervisor } from "./backup-supervisor.js";
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
+import type { Turns } from "./backup-turns.js";
 // This file THROWS the `backup.*` admin codes, so it imports the host error registry directly, the
 // "every file that throws one of these imports ./errors.js" convention errors.ts states.
 import "./errors.js";
@@ -35,6 +36,9 @@ export interface BackupApiDeps {
    * key. */
   sealedState: SealedStateRefresher;
   readStream: () => StreamView;
+  /** Shared with the stream settings routes, which also read and then write the key in
+   * `backup.env`. */
+  turns: Turns;
 }
 
 /**
@@ -264,12 +268,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
 
   // `apply` and `rotate` each read the held key and then write one. Run concurrently, one could write
   // back the key the other just replaced, so each runs from that read to its response alone.
-  let tail: Promise<unknown> = Promise.resolve();
-  const oneWriteAtATime = <T>(body: () => Promise<T>): Promise<T> => {
-    const mine = tail.then(body);
-    tail = mine.catch(() => undefined);
-    return mine;
-  };
+  const oneWriteAtATime = deps.turns;
 
   // Read the live backup status (async freshness read folded in). Never carries the recovery key.
   app.get("/api/backup/status", (c) =>

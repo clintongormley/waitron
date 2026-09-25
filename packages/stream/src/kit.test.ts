@@ -92,6 +92,18 @@ describe("the recovery kit", () => {
     });
   });
 
+  it.each([
+    ["a bucket name with capitals and an underscore", { bucket: "Venue_Copy" }],
+    ["a prefix path cleaning would change", { prefix: "a/../b" }],
+  ])("refuses %s, which Litestream's configuration would refuse", (_what, change) => {
+    const kit = { ...KIT, bucket: { ...KIT.bucket, ...change } };
+    const text = `${KIT_PREFIX}${Buffer.from(JSON.stringify(kit)).toString("base64url")}`;
+    expect(refusal(text)).toEqual({
+      code: "backup.stream_kit_invalid",
+      params: { reason: "shape" },
+    });
+  });
+
   it("refuses an unknown version", () => {
     const text = `${KIT_PREFIX}${Buffer.from(JSON.stringify({ ...KIT, version: 2 })).toString("base64url")}`;
     expect(refusal(text)).toEqual({

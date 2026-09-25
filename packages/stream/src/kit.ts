@@ -1,4 +1,5 @@
 import { AppError } from "@waitron/shared";
+import { checkLitestreamSettings } from "./litestream.js";
 import type { BucketConfig } from "./s3-store.js";
 import "./errors.js";
 
@@ -22,11 +23,14 @@ export function encodeRecoveryKit(kit: RecoveryKit): string {
   return KIT_PREFIX + Buffer.from(JSON.stringify(kit), "utf8").toString("base64url");
 }
 
+/** A C0 control character or DEL. */
 // eslint-disable-next-line no-control-regex
-const CONTROL = /[\x00-\x1f\x7f]/;
+export const CONTROL_CHARACTER = /[\x00-\x1f\x7f]/;
 
 function text(value: unknown, allowEmpty = false): value is string {
-  return typeof value === "string" && (allowEmpty || value !== "") && !CONTROL.test(value);
+  return (
+    typeof value === "string" && (allowEmpty || value !== "") && !CONTROL_CHARACTER.test(value)
+  );
 }
 
 function refuse(reason: "not_found" | "encoding" | "shape"): never {
@@ -63,17 +67,23 @@ export function parseRecoveryKit(input: string): RecoveryKit {
   ) {
     refuse("shape");
   }
+  const bucket: BucketConfig = {
+    ...(b.endpoint === undefined ? {} : { endpoint: b.endpoint as string }),
+    region: b.region as string,
+    bucket: b.bucket as string,
+    prefix: b.prefix as string,
+    accessKeyId: b.accessKeyId as string,
+    secretAccessKey: b.secretAccessKey as string,
+  };
+  try {
+    checkLitestreamSettings(bucket);
+  } catch {
+    refuse("shape");
+  }
   return {
     version: 1,
     venueId: k.venueId,
-    bucket: {
-      ...(b.endpoint === undefined ? {} : { endpoint: b.endpoint as string }),
-      region: b.region as string,
-      bucket: b.bucket as string,
-      prefix: b.prefix as string,
-      accessKeyId: b.accessKeyId as string,
-      secretAccessKey: b.secretAccessKey as string,
-    },
+    bucket,
     recoveryKey: k.recoveryKey,
     pointerSignerPublicKey: k.pointerSignerPublicKey,
   };
