@@ -1,15 +1,8 @@
 import { css } from "lit";
 
 /**
- * Shared token styling for the till's token-styled native `<select>`s (the tab-order screen's per-line
- * course picker and the schedule screen's colleague/swap pickers) — there is no `wt-select` primitive,
- * so both fall back to a plain `<select>` styled with the same tokens. A consumer that needs more (the
- * schedule screen adds `min-width`) layers its own `select { … }` rule after this in its `styles` array.
- *
- * This DELIBERATELY differs from `@waitron/ui`'s shared `selectStyles` and keeps its own local copy: the
- * till is a touch surface, so its select is a tap-target (`min-height: var(--wt-tap-min)` + roomier
- * padding, no `width: 100%`), whereas the shared form select fills its container. Do not "dedupe" this
- * into the `@waitron/ui` export — the two are different by design.
+ * Deliberately not `@waitron/ui`'s `selectStyles`: the till's select is a touch target and does not
+ * fill its container. Do not merge the two.
  */
 export const selectStyles = css`
   select {

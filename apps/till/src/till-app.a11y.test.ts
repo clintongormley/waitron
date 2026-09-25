@@ -68,7 +68,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setServiceZone: vi.fn(),
     recordSale: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
-    // KDS-1 kitchen surface: the counter's default-station queue (Modes I/T).
     listStations: vi
       .fn()
       .mockResolvedValue([
@@ -77,8 +76,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getStationQueue: vi.fn().mockResolvedValue([]),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
-    // Device front door (device-enrolment §3.1): boot as an enrolled `till` (→ the login screen) and not
-    // in dev mode (getDevDevices 404s), so these sweeps reach the login → counter surface as before.
     getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
       deviceId: "till-dev",
@@ -127,8 +124,6 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
           orderNumber: 5,
           label: "Mesa 4",
           queuedAt: "2026-08-17T10:00:00.000Z",
-          // KDS order-timing alerts (design §4/§6) — the station-queue group's own thresholds, so the
-          // widget's classifyBand call doesn't throw on the missing field.
           thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
           items: [
             {

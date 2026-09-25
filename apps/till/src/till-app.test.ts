@@ -92,7 +92,6 @@ const freeTable: TableState = {
   timingBand: "fresh",
   status: null,
   nextReservation: null,
-  // FP-2: unplaced (the app tests exercise the FP-1 flows, which default to the list view).
   posX: null,
   posY: null,
   shape: null,
@@ -129,7 +128,6 @@ const saleResult: TillSaleResult = {
   issuedAt: "2026-08-05T10:00:00.000Z",
   total: "3.00",
   vatBreakdown: [{ rate: "21", base: "2.48", tax: "0.52" }],
-  // The FILED line list the ticket renders (server's composition), never the client basket.
   lines: [{ descriptions: { "es-ES": "Café" }, quantity: "2", gross: "3.00" }],
   tender: { method: "cash", change: "2.00" },
   qr: "https://example.test/vf?nif=B1&num=F-0001&fecha=05-08-2026&total=3.00",
@@ -137,36 +135,21 @@ const saleResult: TillSaleResult = {
 
 const till = {
   locale: "es-ES",
-  // The RECEIPT (fiscal) locale — a SEPARATE server field from the UI `locale` above (sourced from
-  // `cfg.locale` server-side). Same value here for the ES-venue default, but distinct so a test can
-  // drive them apart to prove the receipt does not follow the operator UI (decision 2).
   invoiceLocale: "es-ES",
   venueName: "Bar Pepe",
   nif: "B12345678",
   orderFlow: "prepay" as const,
   receiptPrintMode: "auto" as const,
-  // The venue's KDS whole-ticket bump mode (KDS-1 §2e); `line` is the default (per-line bump only), so
-  // the station-screen tests that don't drive it exercise the per-line path. A test overrides it.
   bumpMode: "line" as const,
-  // The venue's KDS fire-control mode (KDS-2 §2c); `waiter` is the default (the tab screen fires), so the
-  // station display shows no fire action unless a test drives this to `kitchen`.
   fireControl: "waiter" as const,
-  // The venue's ACTIVE kitchen courses (KDS-2 §5b) — threaded to the table-order screen's picker + fire
-  // actions. Empty by default; a test drives it to exercise the course surfaces.
   courses: [] as { id: string; name: string; displayOrder: number }[],
-  // Both always present on the real `GET /api/till` (`TillInfo`'s own doc) — defaulted here to the
-  // manual (datáfono) Card path, `"none"`, so every pre-Task-9 test below (which never touches these
-  // two fields) keeps exercising #62's unchanged behaviour rather than the integrated one.
   cardProvider: "none" as const,
   tipsEnabled: false,
-  // The device's layout CANVAS (SP-B4) — always present on a successful boot, so every test that logs in
-  // boots into the tab shell with the embedded counter screen. Mirrors the server's default `till` canvas
-  // (`packages/layouts/src/default-canvases.ts`): a `counter` tab carrying the sale-critical cards + a
-  // `floor` tab. It adds a `prep-queue` card gated `visibleWhen: ["has-items"]` (the default canvas omits
-  // it) so the mode-dependent station-queue assertions below still hold: Mode P never refreshes the queue
-  // (empty ⇒ the has-items gate hides the card), Modes I/T populate it (⇒ shown). `receipt` is
-  // DELIBERATELY omitted (an older server that predates the editor) so the ticket receipt defaults to {} —
-  // the `receipt` suite supplies it explicitly.
+  // Mirrors the server's default `till` canvas (`packages/layouts/src/default-canvases.ts`), plus a
+  // `prep-queue` card gated `visibleWhen: ["has-items"]` so the mode-dependent station-queue assertions
+  // below hold: Mode P never refreshes the queue (empty ⇒ the gate hides the card), Modes I/T populate
+  // it. `receipt` is deliberately omitted so the ticket receipt defaults to {}; the `receipt` suite
+  // supplies it.
   canvas: {
     formFactor: "till",
     tabs: [
@@ -191,15 +174,8 @@ const till = {
       },
     ],
   } satisfies CanvasDef,
-  // The device's CAPABILITY set (device-profile §5.3, Task 9) — relocated OFF the canvas onto the device
-  // profile, now an explicit `/api/till` payload sibling. The default till profile can print receipts;
-  // a KDS boot below supplies `["act-as-kds"]` so its kds-board card renders.
   capabilities: ["print-receipt"] as CapabilityFlag[],
-  // The device profile's inactivity auto-logout in seconds (installable-till Task 9), or null for the
-  // app default (no idle logout). `null` by default; the session-activity suite drives it to a number.
   inactivityTimeoutSeconds: null as number | null,
-  // This node's id + the venue's routable servers (till-reroute §3.2). `[]` by default (the server sends
-  // an empty list while no membership document is held).
   nodeId: "n1",
   servers: [] as {
     nodeId: string;
@@ -208,8 +184,6 @@ const till = {
   }[],
 };
 
-/** The form-factor canvas a `handheld` device boots (SP-B): a `floor` tab + an `order` tab (a
- * `table-order` card). The server resolves this for a phone-portrait device. */
 const phoneCanvasDef: CanvasDef = {
   formFactor: "phone-portrait",
   tabs: [
@@ -228,8 +202,6 @@ const phoneCanvasDef: CanvasDef = {
   ],
 };
 
-/** The form-factor canvas a `kds_station` device boots (SP-B): one `kitchen` tab carrying the
- * `kds-board` card (its embedded station screen renders through the grid, gated on `act-as-kds`). */
 const kdsCanvasDef: CanvasDef = {
   formFactor: "kds",
   tabs: [
@@ -258,8 +230,6 @@ const stationGroup = {
   label: "Mesa 4",
   queuedAt: "2026-08-17T10:00:00.000Z",
   status: "settled" as const,
-  // KDS order-timing alerts (design §4/§6) — the station-queue group's own thresholds, so the widget's
-  // classifyBand call doesn't throw on the missing field.
   thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
   items: [
     {
@@ -272,8 +242,6 @@ const stationGroup = {
   ],
 };
 
-/** The venue's single default station — what `#refreshStationQueue` resolves to fetch the counter's
- * default-station queue (Modes I/T). */
 const defaultStation = {
   id: "st-default",
   name: "Cocina",
@@ -302,11 +270,7 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
       name: product.name,
       customerName: product.customerName ?? null,
       kitchenName: product.kitchenName ?? null,
-      // A `MenuOffer` always carries its full sell-side `unit`, `dietaryDeclarations`, `modifiers`
-      // and `variants`; the fixture fills them from the looser source product (or an empty default),
-      // which is the drift the shared shape now forbids leaving out. `productUnit` is the till's own
-      // fallback (the source product's `unit`, else the each/kg synthetic by `pricingUnit`), reused so
-      // the fixture cannot drift from it.
+      // `productUnit` is the till's own fallback, reused so the fixture cannot drift from it.
       unit: productUnit(product),
       vatClass: product.vatClass,
       category: product.category ?? "Other",
@@ -318,11 +282,7 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
       // `string[]`), so the fixture narrows them — the fixtures only ever supply real labels.
       dietaryDeclarations: (product.dietaryDeclarations ??
         []) as ZoneOfferCatalogue["offers"][number]["dietaryDeclarations"],
-      // The ordered attachment list a dish exposes, carried straight through from the source
-      // `TillProduct` so a fixture that offers a list reaches the grid and the picker.
       offeredModifiers: product.offeredModifiers ?? [],
-      // Each variant as an offer lists it: its own names, price and availability, and the source
-      // product's values for every field a variant inherits.
       variants: (product.variants ?? []).map(
         (variant): ZoneOfferCatalogue["offers"][number]["variants"][number] => ({
           id: variant.id,
@@ -365,8 +325,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getTill: vi.fn().mockResolvedValue(till),
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1", canConfigureTill: false, locale: "en-GB" }),
-    // Per-user-language-preference (Task 9): the pre-login chooser reads `getLocales` (only when
-    // opened) and the logged-in persist path writes `putLocale` (a spy a test asserts on).
     getLocales: vi.fn().mockResolvedValue({
       locales: [
         { code: "es-ES", label: "Español" },
@@ -390,46 +348,33 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     updateWorkingOrder: vi.fn().mockResolvedValue(undefined),
     placeOrder: vi.fn().mockResolvedValue(placedResult),
     collectOrder: vi.fn().mockResolvedValue(saleResult),
-    // Counter receipt/drawer (§5): the ticket screen's reprint + manual drawer-open levers. Default
-    // resolved; the failure tests override them to reject.
     reprint: vi.fn().mockResolvedValue(undefined),
     printReceipt: vi.fn().mockResolvedValue(undefined),
     printPaymentSlip: vi.fn().mockResolvedValue(undefined),
     openDrawer: vi.fn().mockResolvedValue(undefined),
-    // Cash-drawer-authorization (§5): the eligible supervisors the override dialog picks from, fetched
-    // only when a gated 403 sends the operator into the override flow. Default roster of one.
     listDrawerAuthorizers: vi
       .fn()
       .mockResolvedValue([{ personId: "sup-1", displayName: "Responsable" }]),
-    // KDS-1 kitchen surface: the counter's default-station queue (Modes I/T) + the per-line advance.
     listStations: vi.fn().mockResolvedValue([defaultStation]),
     getStationQueue: vi.fn().mockResolvedValue([]),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     markCollected: vi.fn().mockResolvedValue(undefined),
     advanceTicket: vi.fn().mockResolvedValue(undefined),
-    // KDS-3 expo/pass surface: the cross-station board the expo screen fetches + its per-course levers.
     getExpoQueue: vi.fn().mockResolvedValue([]),
     bumpCourseReady: vi.fn().mockResolvedValue(undefined),
     markCourseAway: vi.fn().mockResolvedValue(undefined),
-    // Live floor (FP-1): the app loads these on entering the floor and opens a tab on a table tap.
     getTablesState: vi.fn().mockResolvedValue([]),
     listZones: vi.fn().mockResolvedValue([]),
     openTab: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
-    // FP-1 table-order screen: the app loads the tab's lines on entering it and writes rounds/serve/
-    // status from its events. Each defaults to a resolved value; a test overrides any with its own fn.
     getTabLines: vi.fn().mockResolvedValue([]),
     addTabRound: vi.fn().mockResolvedValue(undefined),
     fireCourse: vi.fn().mockResolvedValue(undefined),
     markLineServed: vi.fn().mockResolvedValue(undefined),
     setLineCourse: vi.fn().mockResolvedValue(undefined),
-    // Coursing corrections (C5): the per-line send/recall/cancel verbs. Each defaults to a resolved void;
-    // a test overrides any with its own spy. The tab's lines are re-read after each (success OR reject).
     sendLines: vi.fn().mockResolvedValue(undefined),
     recallLines: vi.fn().mockResolvedValue(undefined),
     voidLine: vi.fn().mockResolvedValue(undefined),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
-    // TS-3/TS-4 table actions: move/join/merge/transfer. Each defaults to a resolved void; a test
-    // overrides any with its own spy. `getTablesState` above is re-read after each on the success path.
     moveTab: vi.fn().mockResolvedValue(undefined),
     joinTable: vi.fn().mockResolvedValue(undefined),
     mergeTabs: vi.fn().mockResolvedValue(undefined),
@@ -438,14 +383,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listStatuses: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
     setServiceZone: vi.fn(),
-    // Device front door (device-enrolment §3.1): the boot decision. `getDevDevices` is the dev-mode
-    // signal — it DEFAULTS to a rejection (a 404 outside dev mode), so the default boot is NOT the dev
-    // chooser; the chooser tests override it to resolve a list. `getDeviceIdentity` DEFAULTS to an
-    // enrolled `till`, so the default boot lands on the login (lock) screen — the surface almost every
-    // downstream test logs in through (`toCounter`). The not-enrolled/kds/handheld boot tests override it
-    // (a 401 → the enrol screen; `kds`/`phone-portrait` → their shells). `getDeviceStation` keeps its own
-    // 401 default so a non-KDS boot never prefetches. `join`/`joinStatus`/`deviceAdvance` are present so
-    // the front-door/device screens never hit an undefined method.
+    // `getDevDevices` rejects by default, so the default boot is not the dev chooser; `getDeviceIdentity`
+    // resolves an enrolled `till`, so the default boot lands on the login (lock) screen.
     getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
     getDeviceIdentity: vi.fn().mockResolvedValue({
       deviceId: "till-dev",
@@ -481,23 +420,18 @@ const modeIndicator = (el: TillApp) =>
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
 const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view");
-/** The supervisor-override dialog (cash-drawer-authorization §5), present only while an override is
- * in flight; typed loosely enough to read its `authorizers`/`error` props without importing the class. */
 const overrideDialog = (el: TillApp) =>
   el.shadowRoot!.querySelector<HTMLElement & { authorizers: unknown; error: string | null }>(
     "till-supervisor-override-dialog",
   );
 const schedule = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillScheduleScreen>("till-schedule-screen");
-/** The canvas tab shell (SP-B) — present whenever the app is off-lock (a canvas always resolves on a
- * successful boot). Navigation between tabs is driven by its `tab-select` event. */
 const shell = (el: TillApp) =>
   el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell");
-/** The card grid mounted directly as a non-counter TAB's body (SP-B4) — the floor/order/kitchen tabs
+/** The card grid mounted directly as a non-counter TAB's body — the floor/order/kitchen tabs
  * render through it. (The counter tab's body is the counter screen, whose OWN grid `counterGrid` reaches;
  * this one is only present when a non-counter tab is active, so it is unambiguous.) */
 const activeTabGrid = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-card-grid");
-/** Navigate the shell to `key` (the tab-strip tap the embedded screens no longer surface as buttons). */
 const selectTab = (el: TillApp, key: string): void => emit(shell(el)!, "tab-select", { key });
 /** The floor screen — on the shell it renders inside the active `floor` tab's card grid (a `floor-plan`
  * card), so pierce that grid's shadow root. `null` off the floor tab. */
@@ -512,11 +446,7 @@ const station = (el: TillApp) =>
       "till-station-screen",
     ) as TillStationScreen | null) ??
     null) as TillStationScreen | null;
-/** The join screen the boot front door renders for a fresh (unenrolled) browser (device-join-and-accept
- * §2), present only while `frontDoor === "enrol"`; queried by tag. */
 const enrolScreen = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-enrol-screen");
-/** The dev-only device chooser the boot front door renders in dev mode with no adopted tab device
- * (device-enrolment §3.2), present only while `frontDoor === "chooser"`; queried by tag. */
 const chooser = (el: TillApp) =>
   el.shadowRoot!.querySelector<HTMLElement & { list?: unknown }>("till-device-chooser");
 /** The table-order screen — a TILL opens it as a `drill` (app shadow); a handheld/tablet whose canvas
@@ -527,11 +457,10 @@ const tableOrder = (el: TillApp) =>
       "till-table-order-screen",
     ) as TillTableOrderScreen | null) ??
     null) as TillTableOrderScreen | null;
-/** The card grid the embedded counter screen delegates its sale body to (SP-B4) — the sale cards render
+/** The card grid the embedded counter screen delegates its sale body to — the sale cards render
  * inside ITS shadow root, so the pay/queue helpers pierce through it. */
 const counterGrid = (el: TillApp) =>
   counter(el)!.shadowRoot!.querySelector<HTMLElement>("till-card-grid");
-/** The pay card, now inside the card grid's shadow root (SP-B4 — the counter renders from the canvas). */
 const tenderPay = (el: TillApp) =>
   counterGrid(el)!.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
 /** The station-queue card inside the card grid, or `null` when the `prep-queue` card is hidden (its
@@ -539,13 +468,12 @@ const tenderPay = (el: TillApp) =>
 const stationQueueWidget = (el: TillApp) =>
   counterGrid(el)?.shadowRoot?.querySelector<TillStationQueue>("till-station-queue") ?? null;
 
-/** Fires a composed, bubbling CustomEvent from `source` — the shape every till screen emits. */
 function emit(source: Element, type: string, detail?: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
 /** A fake {@link SessionActivity} the app can be mounted with, so a till-app test asserts how the app
- * CONFIGURES the controller without depending on the real Wake Lock API (installable-till Task 9). */
+ * CONFIGURES the controller without depending on the real Wake Lock API. */
 function fakeSessionActivity() {
   return {
     configure: vi.fn(),
@@ -559,16 +487,15 @@ function fakeSessionActivity() {
 /** Boots the app, settles boot, and logs a person in — leaving the app on the counter. */
 async function toCounter(el: TillApp): Promise<TillCounterScreen> {
   await flush(el);
-  // Log in as a NON-configuring operator by default (the common case) — the FP-2 capability tests below
-  // drive a configuring one explicitly. `canConfigureTill` rides the `logged-in` event exactly as the
-  // lock screen sends it (the server computes it from the operator's role).
+  // Log in as a NON-configuring operator by default (the common case) — the capability tests below
+  // drive a configuring one explicitly.
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
   await flush(el);
   return counter(el)!;
 }
 
 /** Boots, logs in, rings a cash sale — leaving the app on the ticket screen where the Reprint / Abrir
- * cajón levers live (counter receipt/drawer §5). */
+ * cajón levers live. */
 async function toTicket(el: TillApp): Promise<void> {
   const c = await toCounter(el);
   c.store.addProduct(cafe, "2");
@@ -578,7 +505,7 @@ async function toTicket(el: TillApp): Promise<void> {
 }
 
 /** Boots, logs in, opens the floor, then opens `table`'s tab — leaving the app on the table-order
- * screen (FP-1). The app must be mounted with `getTablesState` returning `table` so the floor has it. */
+ * screen. The app must be mounted with `getTablesState` returning `table` so the floor has it. */
 async function toTableOrder(el: TillApp, table: TableState): Promise<TillTableOrderScreen> {
   await toCounter(el);
   selectTab(el, "floor");
@@ -596,7 +523,7 @@ async function mountApp(overrides: Record<string, unknown> = {}) {
 
 // Force a deterministic es-ES baseline before each test — DELIBERATELY not the module default (en-GB),
 // so the boot/login switches to en-GB below are observable against a Spanish starting point rather than
-// a no-op against an already-English default (§1: a switch you cannot observe proves nothing).
+// a no-op against an already-English default (a switch you cannot observe proves nothing).
 beforeEach(() => setLocale("es-ES"));
 const initialUrl = location.href;
 afterEach(() => {
@@ -918,11 +845,8 @@ describe("till-app", () => {
 
   it("a failing listStaff leaves the roster empty and never blocks the counter (no unhandled rejection)", async () => {
     // `#onLoggedIn` loads the colleague roster AFTER the counter is shown, so a roster failure must
-    // degrade gracefully: leave `staff` at its default `[]` and surface no error. Under
-    // `void this.#onLoggedIn(...)` an uncaught rejection escapes as an UNHANDLED promise rejection —
-    // the load-bearing assertion below is `rejections === []`, since `staff` is `[]` either way (the
-    // unguarded assignment simply never completes). Removing the try/catch makes `rejections` hold the
-    // roster error and this test go red — the deletion proof.
+    // degrade gracefully. The assertion that tells the two apart is `rejections === []`: `staff` is
+    // `[]` either way.
     const rejections: unknown[] = [];
     const onRejection = (event: PromiseRejectionEvent): void => {
       rejections.push(event.reason);
@@ -938,14 +862,10 @@ describe("till-app", () => {
       await flush(el);
       await flush(el);
 
-      // The counter still shows — the sale flow is never blocked by the roster fetch.
       expect(c).not.toBeNull();
       expect(counter(el)).not.toBeNull();
-      // The roster degraded to empty rather than throwing.
       expect((el as unknown as { staff: unknown[] }).staff).toEqual([]);
-      // No error banner: a roster failure is non-fatal, not a surfaced error.
       expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
-      // The rejection was caught, not left unhandled.
       expect(rejections).toEqual([]);
     } finally {
       window.removeEventListener("unhandledrejection", onRejection);
@@ -953,20 +873,15 @@ describe("till-app", () => {
   });
 
   // Both boot-failure shapes reach the same bare `catch`: a network rejection (server unreachable) and a
-  // non-2xx `{ code }` the client throws (e.g. `server.internal`). Parametrised so the comment's "either
-  // way boot cannot complete" claim is a tested receipt, not just prose.
+  // non-2xx `{ code }` the client throws (e.g. `server.internal`).
   it.each([
     { label: "server unreachable", reason: new Error("server down") },
     { label: "non-2xx { code }", reason: { code: "server.internal" } },
   ])(
     "a failing getTill ($label) surfaces the boot error, never an unhandled rejection",
     async ({ reason }) => {
-      // `firstUpdated` fires `void this.#boot()`, and `#boot` awaits `getTill()` to load the till's setup
-      // (locale, issuer, order flow, card wiring). A failing boot must be a HANDLED state, not an UNHANDLED
-      // promise rejection: it surfaces the `boot.error` banner and stays on the lock screen. The two
-      // load-bearing assertions are the visible banner (removing `#boot`'s try/catch drops the errorKey) AND
-      // `rejections === []` (removing it lets getTill's rejection escape as an unhandled rejection) —
-      // together the deletion proof.
+      // `#boot` awaits `getTill()`. A failing boot must be a HANDLED state, not an UNHANDLED promise
+      // rejection: it surfaces the `boot.error` banner and stays on the lock screen.
       const rejections: unknown[] = [];
       const onRejection = (event: PromiseRejectionEvent): void => {
         rejections.push(event.reason);
@@ -981,13 +896,10 @@ describe("till-app", () => {
         await flush(el);
         await flush(el);
 
-        // A boot failure never crashes the app into a blank screen — the lock screen still renders.
         expect(lock(el)).not.toBeNull();
-        // The failure is surfaced, not swallowed: the operator sees why the till is unusable.
         const banner = el.shadowRoot!.querySelector('[role="alert"]');
         expect(banner).not.toBeNull();
         expect(banner!.textContent).toContain(t("boot.error"));
-        // The rejection was caught, not left unhandled.
         expect(rejections).toEqual([]);
       } finally {
         window.removeEventListener("unhandledrejection", onRejection);
@@ -995,7 +907,7 @@ describe("till-app", () => {
     },
   );
 
-  // Device mode (device-identity-1 §5a): an enrolled kds display boots straight into its bound station in
+  // Device mode: an enrolled kds display boots straight into its bound station in
   // the kiosk shell (past the login screen); the fuller boot decision (chooser/enrol/login) is exercised
   // by the "Device front door" suite below.
   it("boots an ENROLLED kds_station device straight into the station screen in device mode", async () => {
@@ -1004,19 +916,12 @@ describe("till-app", () => {
       // `setLocale` is observable: an enrolled display has NO operator, so `#boot`'s
       // `if (this.operatorPersonId === "")` guard passes and the venue default is applied — the login-race
       // guard must never withhold the venue default from the operator-less device path.
-      // A kds_station device boots the KDS canvas (its `kitchen` tab's `kds-board` card mounts the
-      // station screen through the grid). Venue default en-GB (≠ es-ES) makes the device-path
-      // venue-default `setLocale` observable.
       getTill: vi.fn().mockResolvedValue({
         ...till,
         locale: "en-GB",
         canvas: kdsCanvasDef,
         capabilities: ["act-as-kds"],
       }),
-      // The kind-aware probe (Task 7): a `kds_station` identity keeps the existing behaviour — the boot
-      // then PREFETCHES the bound station's queue (`getDeviceStation`), a DELIBERATE second authenticated
-      // read that preserves the `initialDeviceStation` optimisation. Only the mock plumbing changes here;
-      // the end-state assertions (lands on `station`, `deviceMode` true) are exactly as before.
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "dev-1", formFactor: "kds", stationId: "st-dev" }),
@@ -1025,18 +930,15 @@ describe("till-app", () => {
     await flush(el);
     expect(currentApi.getDeviceStation).toHaveBeenCalled();
     // Straight past the lock screen — a device never logs in; it boots the shell in kiosk mode straight
-    // onto the kitchen tab, whose kds-board card mounts the station screen (SP-B2.2).
+    // onto the kitchen tab, whose kds-board card mounts the station screen.
     expect(lock(el)).toBeNull();
     const s = station(el);
     expect(s).not.toBeNull();
     expect(s!.deviceMode).toBe(true);
-    // The venue default was applied on the operator-less device path (guard passes on `operatorPersonId === ""`).
     expect(currentLocale()).toBe("en-GB");
   });
 
   it("boots a HANDHELD device into the phone shell (stays on lock) and lands on the floor after login", async () => {
-    // The kind-aware probe (Task 7): a `handheld` identity puts the till into handheld mode but STAYS on
-    // the lock screen — the waiter PIN-logs-in, then lands on the floor rather than the counter POS.
     const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
     const { el } = await mountApp({
       // A handheld boots the phone canvas (floor + order tabs); its first tab is `floor`, so login lands
@@ -1045,9 +947,8 @@ describe("till-app", () => {
       getDeviceIdentity: vi
         .fn()
         .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
-      // The floor's data source (FP-1) — proving the handheld login LOADS the floor via `#loadFloorData`,
-      // not that it merely switches `screen` to an empty one (`<till-floor-screen>` renders purely from
-      // these props, which only `#onShowFloor` fetches).
+      // Proves the handheld login LOADS the floor via `#loadFloorData`, not that it merely switches
+      // `screen` to an empty one.
       getTablesState: vi.fn().mockResolvedValue([freeTable]),
       listZones: vi.fn().mockResolvedValue([floorZone]),
       listStatuses: vi.fn().mockResolvedValue([status]),
@@ -1064,8 +965,7 @@ describe("till-app", () => {
     emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
     await flush(el);
     expect(counter(el)).toBeNull();
-    // The floor was LOADED, not just shown: `#onShowFloor`'s three fetches ran and the screen renders
-    // POPULATED from them — the fix for the empty-floor dead end.
+    // The floor was LOADED, not just shown.
     expect(currentApi.getTablesState).toHaveBeenCalled();
     expect(currentApi.listZones).toHaveBeenCalled();
     expect(currentApi.listStatuses).toHaveBeenCalled();
@@ -1080,8 +980,8 @@ describe("till-app", () => {
   // Handheld face-set containment (§6a): the phone shell may reach ONLY `HANDHELD_FACES`
   // (`lock`/`floor`/`table-order`). A `back-to-counter` — whether from the floor's Back affordance or
   // bubbled from any child — must NOT land the handheld on the counter POS (from which `station`/`expo`/
-  // `schedule` are reachable). The screen state machine consults the face-set instead of navigating
-  // blindly; the floor's Back affordance is suppressed in handheld mode (`canExitToCounter`).
+  // `schedule` are reachable). The floor's Back affordance is suppressed in handheld mode
+  // (`canExitToCounter`).
   describe("handheld face-set containment (§6a)", () => {
     /** Boots a HANDHELD, logs the waiter in, and returns the app on the floor (the post-login face). */
     async function toHandheldFloor(): Promise<TillApp> {
@@ -1111,10 +1011,8 @@ describe("till-app", () => {
 
     it("does NOT leave the face-set when back-to-counter fires from the floor (stays on floor)", async () => {
       const el = await toHandheldFloor();
-      // Fire the escape event the floor's Back used to emit — the app's face-set gate must swallow it.
       emit(floor(el)!, "back-to-counter");
       await flush(el);
-      // Still on the floor; the counter POS (and the station/expo/schedule it leads to) is unreachable.
       expect(floor(el)).not.toBeNull();
       expect(counter(el)).toBeNull();
     });
@@ -1129,12 +1027,12 @@ describe("till-app", () => {
       // the shell falls back to its first tab (`floor`, a face-set member) — never the counter.
       emit(tableOrder(el)!, "back-to-counter");
       await flush(el);
-      expect(counter(el)).toBeNull(); // containment: the counter POS is unreachable on a handheld
-      expect(floor(el)).not.toBeNull(); // fell back to the floor tab
+      expect(counter(el)).toBeNull();
+      expect(floor(el)).not.toBeNull();
     });
   });
 
-  // ── Device front door (device-enrolment §3.1) ───────────────────────────────────────────────────────
+  // ── Device front door ───────────────────────────────────────────────────────
   // One boot decision: dev + no adopted tab device → the chooser; not enrolled (401, not dev) → the join
   // screen; enrolled `kds` → the kiosk shell (the kds-boot test above); enrolled other → the login (lock)
   // screen. The default stub is an enrolled `till` (→ login); these tests override it.
@@ -1145,7 +1043,6 @@ describe("till-app", () => {
       getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     });
     await flush(el);
-    // The front door renders the join screen, NOT the login screen, and NOT a boot error.
     expect(enrolScreen(el)).not.toBeNull();
     expect(lock(el)).toBeNull();
     expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("enrol");
@@ -1153,17 +1050,13 @@ describe("till-app", () => {
   });
 
   it("a NON-401 identity-probe failure (transient) stays on the LOGIN screen, never the enrol front door", async () => {
-    // Finding 1 (CLAUDE.md §5): `getTill` succeeds but `getDeviceIdentity` fails transiently — a 5xx or a
-    // network blip carrying NO `device.unauthorized` code (a mid-boot ServerRouter failover to an origin
-    // without the device cookie has this shape). An enrolled, SELLABLE till must NOT be stranded behind an
-    // approval it cannot get: `#boot` only routes to the join screen on a genuine 401, so this falls
-    // through to the login screen. Prove-by-inversion: drop the `code === "device.unauthorized"` guard and
-    // this goes red (the enrol front door renders instead).
+    // `getTill` succeeds but `getDeviceIdentity` fails transiently — a 5xx or a network blip carrying NO
+    // `device.unauthorized` code. An enrolled, SELLABLE till must NOT be stranded behind an approval it
+    // cannot get: `#boot` only routes to the join screen on a genuine 401.
     const { el } = await mountApp({
       getDeviceIdentity: vi.fn().mockRejectedValue(new Error("network")), // no `code` → not a 401
     });
     await flush(el);
-    // Sellable: the login screen renders, the enrol front door does not, and there is no boot-error banner.
     expect(lock(el)).not.toBeNull();
     expect(enrolScreen(el)).toBeNull();
     expect((el as unknown as { frontDoor?: string }).frontDoor).toBeUndefined();
@@ -1171,8 +1064,6 @@ describe("till-app", () => {
   });
 
   it("boots an ENROLLED till device onto the login screen and lands on the counter after login", async () => {
-    // The default stub is an enrolled `till`: it boots straight to the login (lock) screen, threading the
-    // device's own name + id, and the operator PIN-logs-in onto the counter (a sale-capable POS).
     const { el } = await mountApp();
     await flush(el);
     expect(enrolScreen(el)).toBeNull();
@@ -1181,7 +1072,6 @@ describe("till-app", () => {
     expect(station(el)).toBeNull();
     expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(false);
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(false);
-    // Not a KDS — never prefetches the station queue.
     expect(currentApi.getDeviceStation).not.toHaveBeenCalled();
     expect(lock(el)!.deviceName).toBe("Till 1");
     expect(lock(el)!.deviceId).toBe("till-dev");
@@ -1203,9 +1093,7 @@ describe("till-app", () => {
     expect(chooser(el)).not.toBeNull();
     expect(lock(el)).toBeNull();
     expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("chooser");
-    // The chooser path short-circuits BEFORE the identity probe.
     expect(getDeviceIdentity).not.toHaveBeenCalled();
-    // The list boot fetched is threaded to the chooser (no re-fetch).
     expect(chooser(el)!.list).toEqual(list);
   });
 
@@ -1246,7 +1134,7 @@ describe("till-app", () => {
   it("the login screen offers a dev-only Switch device link that clears the tab device and returns to the chooser", async () => {
     // This tab adopted a device (dev), so boot lands on the login screen WITH the switch affordance.
     // Switching clears the tab device and re-boots; with no tab device the re-boot re-detects dev mode
-    // (getDevDevices resolves) and shows the chooser — the per-tab replacement for the old reset button.
+    // (getDevDevices resolves) and shows the chooser.
     sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "adopted-1");
     try {
       const { el } = await mountApp({
@@ -1260,11 +1148,9 @@ describe("till-app", () => {
       });
       await flush(el);
       expect(lock(el)).not.toBeNull();
-      // The login screen learns it is a dev tab (an adopted device to switch away from).
       expect(lock(el)!.devMode).toBe(true);
       emit(lock(el)!, "switch-device");
       await flush(el);
-      // The tab device is cleared and the chooser is back.
       expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBeNull();
       expect(chooser(el)).not.toBeNull();
     } finally {
@@ -1290,7 +1176,6 @@ describe("till-app", () => {
     });
     await flush(el);
     expect(enrolScreen(el)).not.toBeNull();
-    // The enrol screen redeemed a key and announced success (carrying the new device id).
     emit(enrolScreen(el)!, "enrolled", { deviceId: "d1" });
     await flush(el);
     expect(enrolScreen(el)).toBeNull();
@@ -1331,8 +1216,7 @@ describe("till-app", () => {
   it("a revoked KDS (device-unauthorized mid-session) re-boots into the two-step enrol front door", async () => {
     // Cold boot resolves an enrolled kds → kiosk shell. Then its device-station probe 401s (cookie
     // revoked/expired) and the station screen emits `device-unauthorized`; the app re-boots and the
-    // identity probe now 401s too, so the unified front door routes it to the NEW two-step enrol screen —
-    // never the station screen's old bare-code enrol sub-view (which is gone).
+    // identity probe now 401s too, so the unified front door routes it to the two-step enrol screen.
     const { el } = await mountApp({
       getTill: vi
         .fn()
@@ -1349,7 +1233,6 @@ describe("till-app", () => {
     // The station screen's probe 401s mid-session → it emits device-unauthorized (bubbles to the app).
     emit(station(el)!, "device-unauthorized");
     await flush(el);
-    // Re-booted to the new enrol front door, device mode cleared.
     expect(enrolScreen(el)).not.toBeNull();
     expect(station(el)).toBeNull();
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(false);
@@ -1371,13 +1254,11 @@ describe("till-app", () => {
       getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
     });
     await flush(el);
-    // The prior boot left deviceMode on (a kds display in the kiosk shell — not on the login screen).
     expect((el as unknown as { deviceMode: boolean }).deviceMode).toBe(true);
     expect(lock(el)).toBeNull();
     // Re-boot via the enrolled event (it bubbles to the app's handler); identity now resolves handheld.
     emit(shell(el)!, "enrolled");
     await flush(el);
-    // The re-boot reset the stale device state: a handheld waits on the login screen, deviceMode cleared.
     expect(lock(el)).not.toBeNull();
     expect(station(el)).toBeNull();
     expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
@@ -1393,7 +1274,6 @@ describe("till-app", () => {
     });
     await flush(el);
     expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
-    // Re-boot; the device is now gone (401) → the enrol screen, both device modes cleared.
     emit(lock(el)!, "enrolled");
     await flush(el);
     expect(enrolScreen(el)).not.toBeNull();
@@ -1417,7 +1297,7 @@ describe("till-app", () => {
       { method: "cash", amount: "5" },
       // The workingOrderId sent is the store's stable id, NOT a fresh uuid, so a lost-response re-tap
       // replays and a retrieved order settles under its own id (see the retrieve→pay and retry tests
-      // below). A `expect.any(String)` here was satisfied by the old `crypto.randomUUID()` bug.
+      // below).
       workingOrderId,
     );
     // A FRESH walk-up (never persisted) is filed straight from its lines — no pre-pay re-lock. Only a
@@ -1426,15 +1306,13 @@ describe("till-app", () => {
     expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
     const view = ticket(el)!;
     expect(view).not.toBeNull();
-    // The ticket renders the SERVER result (its `lines` are the filed composition), not a client basket.
     expect(view.result).toBe(saleResult);
     expect(view.issuer).toEqual({ venueName: "Bar Pepe", nif: "B12345678" });
   });
 
   it("confirm-payment: sends a line's picks as one entry per list, and omits the key on a plain line", async () => {
     // A line carrying picks sends `extras: [{ listId, picks }]` — never the display name or price
-    // (the server re-resolves both). A plain line still omits the key, so the mixed basket proves a
-    // no-answer line reaches the wire exactly as it did before.
+    // (the server re-resolves both). A plain line still omits the key.
     const { el } = await mountApp();
     const c = await toCounter(el);
     c.store.addProduct(cafe, "1", {
@@ -1538,11 +1416,10 @@ describe("till-app", () => {
     expect(rows[0]!.textContent).toContain("Agua");
     expect(rows[0]!.textContent).toContain("3");
     expect(norm(rows[0]!.textContent!)).toContain("6,00 €");
-    // The client basket's "Café" never reaches the receipt.
     expect(ticket(el)!.shadowRoot!.textContent).not.toContain("Café");
   });
 
-  // ── Counter receipt/drawer (§5): the ticket screen's Reprint + Abrir cajón buttons ────────────────
+  // ── Counter receipt/drawer: the ticket screen's Reprint + Abrir cajón buttons ────────────────
   // The view dispatches `reprint`/`open-drawer`; the app owns the API call and (for reprint) the
   // working-order id. `#store.id` is STILL the just-filed sale's id at the ticket stage — nothing clears
   // the store between recordSale and New sale — so reprint replays against the sale the ticket shows.
@@ -1556,7 +1433,6 @@ describe("till-app", () => {
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
-    // Sanity: the sale filed against this id, and the ticket is showing.
     expect(currentApi.recordSale).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
@@ -1734,11 +1610,10 @@ describe("till-app", () => {
     const banner = el.shadowRoot!.querySelector('[role="alert"]');
     expect(banner).not.toBeNull();
     expect(banner!.textContent).toContain(t("drawer.error"));
-    // Non-fatal: the ticket is still on screen.
     expect(ticket(el)).not.toBeNull();
   });
 
-  // ── Cash-drawer-authorization (§5): the OPTIMISTIC 403 → supervisor-override dialog → retry flow ──
+  // ── Cash-drawer-authorization: the OPTIMISTIC 403 → supervisor-override dialog → retry flow ──
   // The till carries NO policy or role knowledge: it always TRIES the direct open, and only on the
   // server's `authorization.not_permitted` (a gated policy + an operator who lacks cash.drawer) does it
   // fetch the eligible supervisors and open the override dialog. This stays correct if the location's
@@ -1749,9 +1624,9 @@ describe("till-app", () => {
     await toTicket(el);
     emit(ticket(el)!, "open-drawer");
     await flush(el);
-    expect(currentApi.openDrawer).toHaveBeenCalledWith(); // tried directly, no override
-    expect(overrideDialog(el)).toBeNull(); // no dialog
-    expect(currentApi.listDrawerAuthorizers).not.toHaveBeenCalled(); // no fetch
+    expect(currentApi.openDrawer).toHaveBeenCalledWith();
+    expect(overrideDialog(el)).toBeNull();
+    expect(currentApi.listDrawerAuthorizers).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
@@ -1789,7 +1664,7 @@ describe("till-app", () => {
     await flush(el);
 
     expect(openDrawer).toHaveBeenNthCalledWith(2, { personId: "sup-1", pin: "4321" });
-    expect(overrideDialog(el)).toBeNull(); // closed on success
+    expect(overrideDialog(el)).toBeNull();
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
@@ -1826,7 +1701,7 @@ describe("till-app", () => {
     emit(overrideDialog(el)!, "override-confirm", { personId: "sup-1", pin: "4321" });
     await flush(el);
 
-    expect(overrideDialog(el)).toBeNull(); // closed
+    expect(overrideDialog(el)).toBeNull();
     const banner = el.shadowRoot!.querySelector('[role="alert"]');
     expect(banner).not.toBeNull();
     expect(banner!.textContent).toContain(t("drawer.error"));
@@ -1881,14 +1756,9 @@ describe("till-app", () => {
   });
 
   it("confirm-payment: a CARD tender forwards intact (method, amount, externalRef) with the store's stable id", async () => {
-    // Task 2 widened ConfirmPaymentDetail/Tender to the cash|card union and Task 3's #onConfirmPayment
-    // forwards whichever tender the widget emits without branching — this pins that a CARD tender
-    // reaches recordSale UNCHANGED (method still "card", externalRef still present, never dropped) and
-    // keyed under the store's own stable working-order id, exactly like the cash test above. Mutating
-    // #onConfirmPayment to send only `{ method: tender.method, amount: tender.amount }` (dropping
-    // externalRef) or to send `crypto.randomUUID()` instead of `this.#store.id` both fail this test —
-    // the exact-object + exact-id assertions below are what make it load-bearing rather than a type-only
-    // check.
+    // `#onConfirmPayment` forwards whichever tender the widget emits without branching — this pins that
+    // a CARD tender reaches recordSale UNCHANGED (method still "card", externalRef still present, never
+    // dropped) and keyed under the store's own stable working-order id, exactly like the cash test above.
     const { el } = await mountApp();
     const c = await toCounter(el);
     const store = c.store;
@@ -1910,11 +1780,9 @@ describe("till-app", () => {
   });
 
   it("confirm-payment success: refreshes the held-orders list so a just-paid parked order drops off", async () => {
-    // The Minor review finding: paying a RETRIEVED parked order must drop it off the cross-till held
-    // list immediately, like park/retrieve/discard already do. `listWorkingOrders` returns the order
-    // first, then an empty list after it is settled — so a successful pay re-reads and the settled
-    // order is gone. Removing the new `#refreshHeldOrders()` on the success path fails this (one call,
-    // not two — the order lingers in the in-memory list until the next park/retrieve/discard).
+    // Paying a RETRIEVED parked order must drop it off the cross-till held list immediately, like
+    // park/retrieve/discard already do. `listWorkingOrders` returns the order first, then an empty list
+    // after it is settled — so a successful pay re-reads and the settled order is gone.
     const { el } = await mountApp({
       listWorkingOrders: vi.fn().mockResolvedValueOnce([heldSummary]).mockResolvedValue([]),
     });
@@ -1928,7 +1796,7 @@ describe("till-app", () => {
 
     // once on entering the counter, once after the successful pay — the settled order drops off.
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
-    expect(ticket(el)).not.toBeNull(); // the sale still filed and the ticket still shows
+    expect(ticket(el)).not.toBeNull();
 
     // Returning to the counter ("New sale") shows the refreshed (now empty) list, not the stale one —
     // the app's held state was updated to [] by the pay refresh, so the re-rendered counter reads it.
@@ -1939,9 +1807,8 @@ describe("till-app", () => {
 
   it("threads the RECEIPT invoiceLocale from getTill to the ticket, DECOUPLED from the UI locale", async () => {
     // The ticket's receipt locale (till-ticket-view.invoiceLocale) is threaded from getTill's OWN
-    // `invoiceLocale` field (the fiscal cfg.locale) — NOT the UI-driving `locale`. Drive the two APART
-    // (UI en-GB, receipt ca-ES) to prove the receipt follows `invoiceLocale`, never the operator UI
-    // (per-user-language spec, decision 2 — a Catalan receipt must not be flipped to the venue default).
+    // `invoiceLocale` field — NOT the UI-driving `locale`. Drive the two APART (UI en-GB, receipt ca-ES)
+    // to prove the receipt follows `invoiceLocale`, never the operator UI.
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, locale: "en-GB", invoiceLocale: "ca-ES" }),
     });
@@ -1951,8 +1818,6 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
 
-    // The receipt takes the fiscal `invoiceLocale`, distinct from the operator UI (en-GB) — proving
-    // the two are read from separate fields, not aliased.
     expect(ticket(el)!.invoiceLocale).toBe("ca-ES");
   });
 
@@ -1970,10 +1835,10 @@ describe("till-app", () => {
   });
 
   it("retrieve then pay: recordSale settles under the RETRIEVED order's own id, not a fresh one", async () => {
-    // The Critical fix: paying a retrieved order must send that order's adopted id (wo-1), so the
-    // server takes the pay-the-parked-order branch and settles it. The pre-fix `crypto.randomUUID()`
-    // sent a random id → the walk-up branch → wo-1 left `open` and re-payable → double-charge + a
-    // second unrepairable chained record. `retrieveWorkingOrder` defaults to id "wo-1" + a cafe line.
+    // Paying a retrieved order must send that order's adopted id (wo-1), so the server takes the
+    // pay-the-parked-order branch and settles it. A random id would take the walk-up branch → wo-1 left
+    // `open` and re-payable → double-charge + a second unrepairable chained record.
+    // `retrieveWorkingOrder` defaults to id "wo-1" + a cafe line.
     const { el } = await mountApp();
     const c = await toCounter(el);
     const store = c.store;
@@ -1985,24 +1850,23 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
 
-    // the adopted id is the pay-idempotency key — this FAILS against the pre-fix random-uuid line.
+    // the adopted id is the pay-idempotency key.
     expect(currentApi.recordSale).toHaveBeenCalledWith(
       [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
       { method: "cash", amount: "5" },
       "wo-1",
     );
-    // Behaviour 1 (re-review): the order was retrieved but NOT edited, so it must NOT be re-synced —
+    // The order was retrieved but NOT edited, so it must NOT be re-synced —
     // re-syncing re-prices with the live catalogue and would file at the pay-time price, defeating the
     // add-time lock. An unedited retrieve→pay files from the stored lock (recordSale straight through).
     expect(currentApi.updateWorkingOrder).not.toHaveBeenCalled();
   });
 
   it("retrieve → edit → pay re-syncs the edited basket BEFORE paying, so the edit is not dropped (Finding 2)", async () => {
-    // 7c regression: the server's retrieved-order pay files from the STORED lock and IGNORES the sent
-    // basket, so an edit made after retrieve must be re-locked (`updateWorkingOrder`) BEFORE the pay or
-    // it is SILENTLY DROPPED from both the charge and the filed record. Retrieve wo-1 (café×2), add a
-    // second café, then pay: `updateWorkingOrder` must carry the EDITED composition and run BEFORE
-    // `recordSale`. Deleting the persisted-sync in `#onConfirmPayment` makes this fail (the edit is lost).
+    // The server's retrieved-order pay files from the STORED lock and IGNORES the sent basket, so an
+    // edit made after retrieve must be re-locked (`updateWorkingOrder`) BEFORE the pay or it is SILENTLY
+    // DROPPED from both the charge and the filed record. Retrieve wo-1 (café×2), add a second café, then
+    // pay: `updateWorkingOrder` must carry the EDITED composition and run BEFORE `recordSale`.
     const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
     const recordSale = vi.fn().mockResolvedValue(saleResult);
     const { el } = await mountApp({ updateWorkingOrder, recordSale });
@@ -2482,12 +2346,10 @@ describe("till-app", () => {
   });
 
   it("retrieve → edit → pay: a not_open re-sync FALLS THROUGH to the settled replay, not sale.error (Findings 3 & 4)", async () => {
-    // Behaviours 3 & 4 of the re-review: a lost-response retry, or the LOSER of a two-till concurrent
-    // pay on the same parked order (a normal 7b flow), finds the order ALREADY settled. The edit-gated
-    // re-sync then throws `working_order.not_open` — which must NOT surface. It means "already settled →
-    // let the pay path replay": `recordSale`'s settled branch returns the FILED ticket (no double-file,
-    // no error banner). Deleting the not_open swallow in `#onConfirmPayment` makes this fail (the throw
-    // reaches the sale.error handler and no ticket shows) — the replay-safety deletion proof.
+    // A lost-response retry, or the LOSER of a two-till concurrent pay on the same parked order, finds
+    // the order ALREADY settled. The edit-gated re-sync then throws `working_order.not_open` — which must
+    // NOT surface. It means "already settled → let the pay path replay": `recordSale`'s settled branch
+    // returns the FILED ticket (no double-file, no error banner).
     const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
     const recordSale = vi.fn().mockResolvedValue(saleResult); // the server's settled-replay ticket
     const { el } = await mountApp({ updateWorkingOrder, recordSale });
@@ -2513,7 +2375,7 @@ describe("till-app", () => {
       "wo-1",
     );
     expect(ticket(el)).not.toBeNull();
-    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull(); // no sale.error banner
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
   it("retrieve → edit → pay: a NON-not_open re-sync failure surfaces as a non-fatal error (basket intact)", async () => {
@@ -2560,18 +2422,17 @@ describe("till-app", () => {
     await flush(el);
 
     expect(ticket(el)).toBeNull();
-    expect(counter(el)).not.toBeNull(); // still on the counter
-    expect(store.lines).toHaveLength(1); // basket kept
+    expect(counter(el)).not.toBeNull();
+    expect(store.lines).toHaveLength(1);
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
     expect(banner.textContent).toContain(t("sale.unconfirmed"));
   });
 
   it("confirm-payment: a PRELIMINARY-save network failure shows sale.error, not sale.unconfirmed", async () => {
-    // F2 (run-it reviewer, §4.3): `sale.unconfirmed` means "the sale may have filed — check before
-    // retrying". A network failure of the PRE-PAY `#syncIfDirty` save is not that: no fiscal request was
-    // ever made, nothing filed, safe to retry — so it must be the plain `sale.error`. Retrieve + edit so
-    // `#syncIfDirty` actually calls the API, then reject that call at the network level; `recordSale` is
-    // never reached. BEFORE the fix this mislabels as `sale.unconfirmed`.
+    // `sale.unconfirmed` means "the sale may have filed — check before retrying". A network failure of
+    // the PRE-PAY `#syncIfDirty` save is not that: no fiscal request was ever made, nothing filed, safe to
+    // retry — so it must be the plain `sale.error`. Retrieve + edit so `#syncIfDirty` actually calls the
+    // API, then reject that call at the network level; `recordSale` is never reached.
     const updateWorkingOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const recordSale = vi.fn().mockResolvedValue(saleResult);
     const { el } = await mountApp({ updateWorkingOrder, recordSale });
@@ -2589,7 +2450,7 @@ describe("till-app", () => {
     expect(recordSale).not.toHaveBeenCalled(); // the failed save short-circuits before any fiscal call
     expect(ticket(el)).toBeNull();
     expect(counter(el)).not.toBeNull();
-    expect(store.lines).toHaveLength(2); // basket kept
+    expect(store.lines).toHaveLength(2);
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
     expect(banner.textContent).toContain(t("sale.error"));
     expect(banner.textContent).not.toContain(t("sale.unconfirmed"));
@@ -2700,9 +2561,8 @@ describe("till-app", () => {
   });
 
   it("park single-flight: a second park-order while the first is pending parks EXACTLY ONCE", async () => {
-    // A re-entrant park (double-tap / laggy link) must not fire a second POST. Deleting the
-    // `if (this.parking) return` guard makes parkOrder fire twice — the deletion proof.
-    const parkOrder = vi.fn(() => new Promise(() => {})); // never resolves
+    // A re-entrant park (double-tap / laggy link) must not fire a second POST.
+    const parkOrder = vi.fn(() => new Promise(() => {}));
     const { el } = await mountApp({ parkOrder });
     const c = await toCounter(el);
     c.store.addProduct(cafe, "2");
@@ -2739,15 +2599,10 @@ describe("till-app", () => {
   });
 
   it("retrieve → edit → Hold re-syncs the edit via updateWorkingOrder instead of re-parking (P6)", async () => {
-    // P6 "Re-hold of a retrieved-and-edited order is not wired": now that the server made park
-    // IDEMPOTENT (a re-sent park with the same id REPLAYS the existing OPEN order and inserts nothing —
-    // the re-sent basket is DISCARDED), re-parking a RETRIEVED, EDITED order would SILENTLY DISCARD the
-    // edit yet show success. So Hold must mirror the pay/place paths: route a PERSISTED order through
-    // `#syncIfDirty` (`updateWorkingOrder`), never `parkOrder`. Retrieve wo-1 (café×2), add a second
-    // café, tap Hold: `updateWorkingOrder` must carry the EDITED composition + label and `parkOrder`
-    // must NOT be called; the basket clears (success). Before the fix `#onParkOrder` calls `parkOrder`
-    // unconditionally — the edit is replayed away — so this fails (parkOrder called, updateWorkingOrder
-    // not).
+    // The server's park is IDEMPOTENT (a re-sent park with the same id REPLAYS the existing OPEN order
+    // and inserts nothing — the re-sent basket is DISCARDED), so re-parking a RETRIEVED, EDITED order
+    // would SILENTLY DISCARD the edit yet show success. So Hold must mirror the pay/place paths: route a
+    // PERSISTED order through `#syncIfDirty` (`updateWorkingOrder`), never `parkOrder`.
     const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
     const parkOrder = vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 });
     const { el } = await mountApp({ updateWorkingOrder, parkOrder });
@@ -2781,11 +2636,10 @@ describe("till-app", () => {
   });
 
   it("retrieve → (no edit) → Hold does not re-park an unedited retrieved order (P6)", async () => {
-    // The unedited half of P6: a retrieved order tapped straight to Hold has nothing to save — and must
-    // STILL not re-park, because an idempotent re-park is a needless round trip that only replays the
-    // already-stored order. `#syncIfDirty` no-ops on a clean basket (`persisted && !dirty`), so neither
-    // `updateWorkingOrder` nor `parkOrder` fires; the basket clears so the operator can move on. Before
-    // the fix `parkOrder` IS called, so this fails.
+    // A retrieved order tapped straight to Hold has nothing to save — and must STILL not re-park,
+    // because an idempotent re-park is a needless round trip that only replays the already-stored order.
+    // `#syncIfDirty` no-ops on a clean basket (`persisted && !dirty`), so neither `updateWorkingOrder`
+    // nor `parkOrder` fires; the basket clears so the operator can move on.
     const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
     const parkOrder = vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 });
     const { el } = await mountApp({ updateWorkingOrder, parkOrder });
@@ -2800,9 +2654,8 @@ describe("till-app", () => {
     emit(c, "park-order", { label: "Mesa 4" });
     await flush(el);
 
-    expect(parkOrder).not.toHaveBeenCalled(); // an idempotent re-park is not a save — skip it
-    expect(updateWorkingOrder).not.toHaveBeenCalled(); // #syncIfDirty no-ops on a clean basket
-    // Success path: the basket empties and stays on the counter.
+    expect(parkOrder).not.toHaveBeenCalled();
+    expect(updateWorkingOrder).not.toHaveBeenCalled();
     expect(store.lines).toHaveLength(0);
     expect(counter(el)).not.toBeNull();
   });
@@ -2811,8 +2664,7 @@ describe("till-app", () => {
     // The Hold field opens BLANK, so `park-order` carries `label: undefined`. `updateWorkingOrder` writes
     // `label ?? null`, so forwarding that undefined would WIPE the retrieved order's name ("Mesa 4" → NULL)
     // — anonymising it in the cross-till held list. The persisted branch falls back to the STORED label,
-    // so a blank re-hold preserves the name. Proven by deletion: dropping `?? this.#store.label` sends
-    // label undefined here and fails this assertion. (A typed label still renames — the case above.)
+    // so a blank re-hold preserves the name. (A typed label still renames — the case above.)
     const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
     const parkOrder = vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 });
     const { el } = await mountApp({ updateWorkingOrder, parkOrder });
@@ -2841,10 +2693,9 @@ describe("till-app", () => {
   });
 
   it("retrieve → edit → Hold surfaces held.park_error and keeps the basket when the update fails (P6)", async () => {
-    // The persisted Hold path's error handling: a REAL `updateWorkingOrder` failure (not the
-    // `working_order.not_open` that `#syncIfDirty` swallows) must surface the same non-fatal
-    // `held.park_error` banner and leave the basket intact — the exact guarantee the fresh-walk-up park
-    // has (see "a failed parkOrder keeps the counter and the basket"), now proven for the persisted path.
+    // A REAL `updateWorkingOrder` failure (not the `working_order.not_open` that `#syncIfDirty`
+    // swallows) must surface the same non-fatal `held.park_error` banner and leave the basket intact, as
+    // the fresh-walk-up park does (see "a failed parkOrder keeps the counter and the basket").
     const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.rejected" });
     const parkOrder = vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 });
     const { el } = await mountApp({ updateWorkingOrder, parkOrder });
@@ -2886,7 +2737,6 @@ describe("till-app", () => {
       menuItemId: "menu-item-cafe-0",
       unitPrice: "1.50",
     });
-    // still on the counter with the retrieved basket
     expect(counter(el)).not.toBeNull();
     expect(ticket(el)).toBeNull();
   });
@@ -3054,7 +2904,6 @@ describe("till-app", () => {
     });
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
     expect(banner.textContent).toContain(t("held.product_gone"));
-    // still on the counter with the partial basket
     expect(counter(el)).not.toBeNull();
   });
 
@@ -3114,7 +2963,6 @@ describe("till-app", () => {
     // the in-progress basket is UNTOUCHED — loadFrom never ran on the rejected retrieve
     expect(store.lines).toHaveLength(1);
     expect(store.lines[0]!.product).toBe(cafe);
-    // still on the counter
     expect(counter(el)).not.toBeNull();
     expect(ticket(el)).toBeNull();
   });
@@ -3144,8 +2992,7 @@ describe("till-app", () => {
 
   it("discard success clears a stale banner left by a prior failed action", async () => {
     // A failed retrieve sets a `held.stale` banner; a SUCCESSFUL discard must clear it, like every
-    // sibling handler. Without the `errorKey = undefined` at the top of `#onDiscardOrder`, the banner
-    // would persist — this fails against the pre-fix handler.
+    // sibling handler.
     const { el } = await mountApp({
       retrieveWorkingOrder: vi.fn().mockRejectedValue({ code: "working_order.not_found" }),
     });
@@ -3174,7 +3021,7 @@ describe("till-app", () => {
     expect(currentApi.logout).toHaveBeenCalledOnce();
     expect(lock(el)).not.toBeNull();
     expect(counter(el)).toBeNull();
-    // THE load-bearing assertion: a shift change never loses the half-built order.
+    // A shift change never loses the half-built order.
     expect(store.lines).toHaveLength(2);
     expect(store.lines[0]!.product).toBe(cafe);
   });
@@ -3255,8 +3102,7 @@ describe("till-app", () => {
   });
 
   it("session activity: uses the real controller as a clean no-op when wake lock is unavailable", async () => {
-    // No injected sessionActivity → the app builds a real SessionActivity. Its default feature-detect
-    // guards a missing navigator.wakeLock, so boot + login + logout must not throw here.
+    // No injected sessionActivity → the app builds a real SessionActivity.
     const { el } = await mountApp();
     const c = await toCounter(el);
     emit(c, "logout");
@@ -3330,7 +3176,6 @@ describe("till-app", () => {
     expect(counter(el)).not.toBeNull();
     // Basket-preserving, like logout: navigating to the schedule never loses the half-built order.
     expect(store.lines).toHaveLength(1);
-    // The roster (from listStaff) and the logged-in operator id reach the schedule screen.
     expect(schedule(el)!.operatorPersonId).toBe("p1");
     expect(schedule(el)!.staff).toEqual([{ personId: "p1", displayName: "Ana" }]);
   });
@@ -3356,7 +3201,7 @@ describe("till-app", () => {
 
     expect(counter(el)).not.toBeNull();
     expect(schedule(el)).toBeNull();
-    // The load-bearing assertion: the basket survives the whole counter → schedule → counter round trip.
+    // The basket survives the whole counter → schedule → counter round trip.
     expect(store.lines).toHaveLength(2);
     expect(store.lines[0]!.product).toBe(cafe);
   });
@@ -3379,7 +3224,6 @@ describe("till-app", () => {
       expect(counter(el)).toBeNull();
       expect(currentApi.getTablesState).toHaveBeenCalledOnce();
       expect(currentApi.listZones).toHaveBeenCalledOnce();
-      // The loaded zones + tables reach the floor screen.
       expect(floor(el)!.zones).toEqual([floorZone]);
       expect(floor(el)!.tables).toEqual([freeTable]);
       // Basket-preserving like the schedule nav: the half-built order survives the round trip.
@@ -3416,11 +3260,9 @@ describe("till-app", () => {
       expect(floor(el)!.canEdit).toBe(false);
     });
 
-    // FP-2 privilege propagation, canvas model (SP-B): the on-till floor editor is now a permission-locked
-    // `table-layout-editor` card, gated at the CELL by the grid's `canConfigureTill` (permission→locked,
-    // SP-B2.1). So the end-to-end assertion is that the operator's server-computed `canConfigureTill`
-    // (the `venue.configure` check) reaches the floor tab's card grid — the input that unlocks/locks that
-    // card. (The card's own lock rendering is covered by card-grid's suite.)
+    // The on-till floor editor is a permission-locked `table-layout-editor` card, gated at the CELL by
+    // the grid's `canConfigureTill`. So the end-to-end assertion is that the operator's `canConfigureTill`
+    // reaches the floor tab's card grid. (The card's own lock rendering is covered by card-grid's suite.)
     const gridConfigurable = (el: TillApp) =>
       (activeTabGrid(el) as unknown as { canConfigureTill: boolean }).canConfigureTill;
 
@@ -3507,7 +3349,6 @@ describe("till-app", () => {
       emit(floor(el)!, "floor-refresh");
       await flush(el);
 
-      // Still on the floor, tables unchanged from the last good load.
       expect(floor(el)).not.toBeNull();
       expect(floor(el)!.tables).toEqual([freeTable]);
     });
@@ -3528,11 +3369,9 @@ describe("till-app", () => {
 
       // A free table opens a NEW tab (a pre-fiscal working order) before transitioning.
       expect(openTab).toHaveBeenCalledWith("t1");
-      // On a TILL the table-order screen opens as a DRILL over the floor tab (SP-B §5), which stays
+      // On a TILL the table-order screen opens as a DRILL over the floor tab, which stays
       // mounted (inert) underneath — the drill is what the operator sees.
       expect(floor(el)).not.toBeNull();
-      // The real table-order screen (Ruling FP-D) now holds the slot, pointed at the freshly-opened tab
-      // id (the app stored `openTab`'s new id in activeTabId and threads it through as `.orderId`).
       const screen = tableOrder(el);
       expect(screen).not.toBeNull();
       expect(screen!.orderId).toBe("wo-new");
@@ -3555,7 +3394,7 @@ describe("till-app", () => {
       // An occupied table already has a tab — no fresh openTab, just the transition. The screen points
       // at the RESUMED tab id (resolved from the read-model's tabId), not a new one.
       expect(openTab).not.toHaveBeenCalled();
-      // The table-order drill overlays the still-mounted floor tab (SP-B §5, till path).
+      // The table-order drill overlays the still-mounted floor tab.
       expect(floor(el)).not.toBeNull();
       expect(tableOrder(el)!.orderId).toBe("wo-7");
     });
@@ -3726,12 +3565,10 @@ describe("till-app", () => {
       });
 
       it("a handheld reaches the table-order screen and can settle — canSettle true", async () => {
-        // A handheld boots into handheld mode (Task 7) and lands on the floor after login; opening a
-        // table reaches the table-order screen. It may settle at `POST /api/sales` for cash OR a manual
-        // card tender (the server firewall permits both, fencing only the INTEGRATED reader, `/api/pay`),
-        // so the pay section SHOWS with both tenders.
-        // A handheld boots a PHONE canvas (SP-B): a `floor` tab + an `order` tab (a `table-order` card).
-        // Opening a table SWITCHES to the order tab, mounting the table-order screen as that tab's card.
+        // A handheld may settle at `POST /api/sales` for cash OR a manual card tender (the server
+        // firewall permits both, fencing only the INTEGRATED reader, `/api/pay`), so the pay section
+        // SHOWS with both tenders. Opening a table SWITCHES to the phone canvas's order tab, mounting the
+        // table-order screen as that tab's card.
         const phoneCanvas: CanvasDef = {
           formFactor: "phone-portrait",
           tabs: [
@@ -3965,7 +3802,6 @@ describe("till-app", () => {
         emit(screen, "set-line-course", { lineNo: 1, courseId: "c2" });
         await flush(el);
 
-        // Non-fatal: the operator stays on the screen and sees the generic banner…
         expect(tableOrder(el)).not.toBeNull();
         expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
         // …and the tab is re-read even on the reject, so the picker reconciles to server truth.
@@ -3992,7 +3828,6 @@ describe("till-app", () => {
         ] as const) {
           emit(screen, type, detail);
           await flush(el);
-          // Non-fatal: the operator stays on the table-order screen and sees the generic banner.
           expect(tableOrder(el)).not.toBeNull();
           expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
         }
@@ -4010,11 +3845,11 @@ describe("till-app", () => {
         emit(screen, "set-status", { statusId: "s1" });
         await flush(el);
 
-        // Keyed by the TABLE id "t2" (Ruling FP-F), never the tab's order id "wo-7".
+        // Keyed by the TABLE id "t2", never the tab's order id "wo-7".
         expect(setTableStatus).toHaveBeenCalledWith("t2", "s1");
       });
 
-      // ── Coursing corrections (C5): send / recall / cancel line actions ─────────────────────────────
+      // ── Coursing corrections: send / recall / cancel line actions ─────────────────────────────
       it("send-lines fires the held lines on the tab then reloads its lines", async () => {
         const sendLines = vi.fn().mockResolvedValue(undefined);
         const getTabLines = vi.fn().mockResolvedValue([tabLine]);
@@ -4133,7 +3968,7 @@ describe("till-app", () => {
         }
       });
 
-      // ── TS-3/TS-4: move / join / merge / transfer table actions ──────────────────────────────────
+      // ── Move / join / merge / transfer table actions ──────────────────────────────────
       it("move-tab relocates the tab then reloads the floor (staying on the screen)", async () => {
         const moveTab = vi.fn().mockResolvedValue(undefined);
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
@@ -4316,7 +4151,7 @@ describe("till-app", () => {
 
         // The server files the tab's STORED locked lines and ignores the sent basket, so we send `[]`
         // (the documented shape) tagged with the tab's order id — and crucially NEVER #syncIfDirty →
-        // updateWorkingOrder, which would re-price and destroy the tab's locks (H2).
+        // updateWorkingOrder, which would re-price and destroy the tab's locks.
         expect(recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "10.00" }, "wo-7");
         expect(updateWorkingOrder).not.toHaveBeenCalled();
         expect(ticket(el)).not.toBeNull();
@@ -4372,7 +4207,7 @@ describe("till-app", () => {
 
         // On the shell, back-to-floor pops the table-order drill and REFRESHES the floor tables-only
         // (`#refreshFloor`) — a just-paid table shows free — but NOT the zones, which are static within a
-        // session (SP-B2.1). So tables re-read (twice total), zones untouched (once).
+        // session. So tables re-read (twice total), zones untouched (once).
         expect(getTablesState).toHaveBeenCalledTimes(2);
         expect(listZones).toHaveBeenCalledTimes(1);
         expect(floor(el)).not.toBeNull();
@@ -4395,7 +4230,7 @@ describe("till-app", () => {
 
     expect(currentApi.recordSale).toHaveBeenCalledOnce();
     // The held-list refresh is gated to the SUCCESS path: a rejected pay must not re-read the list
-    // (only the one call on entering the counter). Proves the new refresh is on success, not always.
+    // (only the one call on entering the counter).
     expect(currentApi.listWorkingOrders).toHaveBeenCalledOnce();
     expect(ticket(el)).toBeNull();
     expect(counter(el)).not.toBeNull();
@@ -4407,9 +4242,7 @@ describe("till-app", () => {
 
   /* A sale the FISCAL FILING refuses is permanent: the same basket rung up again builds the same
    * record and is refused again. The operator has no terminal — the till screen is their only
-   * window — so telling them to try again is the one piece of advice that cannot work. Deletion
-   * proof: drop the `isPermanentSaleRefusal(error)` arm from `#onConfirmPayment` and both cases
-   * below go red, showing the retry message instead. */
+   * window — so telling them to try again is the one piece of advice that cannot work. */
   it.each([["fiscal.record_invalid"], ["fiscal.foreign_recipient_unsupported"]])(
     "a permanent fiscal refusal (%s) says to stop, not to retry",
     async (code) => {
@@ -4436,12 +4269,10 @@ describe("till-app", () => {
     /* `method: "card"` on this event is a MANUAL bank-terminal charge: the operator put the card
      * through the terminal and then keyed its operation number into the till
      * (`ConfirmPaymentDetail`, widgets/tender-pay.ts). So by the time a permanent fiscal refusal
-     * arrives, the customer HAS been charged and the till has no record of the sale. The first
-     * version of this message ended "Nothing was charged", which is false in exactly that state and
-     * would leave the customer out of pocket. This pins that the card tender reaches the same
-     * permanent-refusal message at all; what that message must and must not SAY is pinned on the
-     * catalogues themselves, in `i18n/strings.test.ts`, where both languages can be checked without
-     * depending on which locale a rendered banner happens to be in. */
+     * arrives, the customer HAS been charged and the till has no record of the sale. This pins that
+     * the card tender reaches the same permanent-refusal message at all; what that message must and
+     * must not SAY is pinned on the catalogues themselves, in `i18n/strings.test.ts`, where both
+     * languages can be checked without depending on which locale a rendered banner happens to be in. */
     const { el } = await mountApp({
       recordSale: vi.fn().mockRejectedValue({ code: "fiscal.record_invalid" }),
     });
@@ -4497,9 +4328,8 @@ describe("till-app", () => {
   it("single-flight: a second confirm-payment while recordSale is pending files the sale EXACTLY ONCE", async () => {
     // The double-file safety (CLAUDE.md §5): two chained registros_facturacion for one basket are
     // unrepairable. First recordSale never settles, so the sale stays in flight; a second
-    // confirm-payment dispatched in that window (double-tap / laggy link) must be a no-op. Deleting
-    // the `if (this.submitting) return` guard makes recordSale fire twice — the deletion proof.
-    const recordSale = vi.fn(() => new Promise<TillSaleResult>(() => {})); // never resolves
+    // confirm-payment dispatched in that window (double-tap / laggy link) must be a no-op.
+    const recordSale = vi.fn(() => new Promise<TillSaleResult>(() => {}));
     const { el } = await mountApp({ recordSale });
     const c = await toCounter(el);
     c.store.addProduct(cafe, "2");
@@ -4553,11 +4383,10 @@ describe("till-app", () => {
   });
 
   // ---------------------------------------------------------------------------------------------
-  // collect-card (integrated card terminal, sub-project 7 Task 8): same shape as confirm-payment
-  // (single-flight, dirty-retrieved-order re-sync, held-list refresh on success) but branching on the
-  // server's DATA outcome instead of assuming a ticket — a decline/timeout/network_unavailable must
-  // never wedge the till (CLAUDE.md §5: nothing may block a sale but the sale itself). The widget that
-  // EMITS `collect-card` is Task 9; these tests dispatch the synthetic event directly.
+  // collect-card (integrated card terminal): same shape as confirm-payment (single-flight,
+  // dirty-retrieved-order re-sync, held-list refresh on success) but branching on the server's DATA
+  // outcome instead of assuming a ticket — a decline/timeout/network_unavailable must never wedge the
+  // till (CLAUDE.md §5). These tests dispatch the event directly.
   // ---------------------------------------------------------------------------------------------
 
   describe("collect-card (integrated card terminal, Task 8)", () => {
@@ -4651,9 +4480,8 @@ describe("till-app", () => {
       expect(c.store.lines).toHaveLength(1);
       expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
       // `cardOutcome` is `private` (TS's `private` is compile-time only, so the cast through
-      // `unknown` still reads its real runtime value). `till-tender-pay` (Task 9) is the real reader
-      // now — its own tests cover the rendered retry/switch-tender/wait output — so this layer stays
-      // scoped to till-app's own state, the same way every other assertion in this file does.
+      // `unknown` still reads its real runtime value). `till-tender-pay`'s own tests cover the rendered
+      // retry/switch-tender/wait output, so this layer stays scoped to till-app's own state.
       expect((el as unknown as { cardOutcome?: string }).cardOutcome).toBe("declined");
       // The held list is re-read only on a captured outcome — nothing settled here, so no re-read.
       expect(currentApi.listWorkingOrders).toHaveBeenCalledOnce();
@@ -4698,11 +4526,10 @@ describe("till-app", () => {
       expect(ticket(el)).not.toBeNull();
     });
 
-    // Fix round 1 (Important): cardOutcome must not survive the basket it describes being replaced.
-    // errorKey is reset at every user action; cardOutcome was only reset in #onCollectCard itself and
-    // #onNewSale, so a decline on basket A leaked into whatever basket the operator moved to next via
-    // Park or Retrieve. Task 9 now threads `.cardOutcome` through `till-counter-screen`/`till-tender-pay`,
-    // so a stale value here would reach the rendered card_outcome screen without this reset.
+    // cardOutcome must not survive the basket it describes being replaced: a decline on basket A must
+    // not leak into whatever basket the operator moves to next via Park or Retrieve. `.cardOutcome` is
+    // threaded through `till-counter-screen`/`till-tender-pay`, so a stale value would reach the
+    // rendered card_outcome screen.
     it("park: a declined cardOutcome does not survive into the NEXT (empty) basket", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
       const { el } = await mountApp({ pay });
@@ -4808,7 +4635,7 @@ describe("till-app", () => {
     });
 
     it("a PRELIMINARY-save network failure shows sale.error, not sale.unconfirmed (pay never reached)", async () => {
-      // F2 (§4.3): the pre-pay `#syncIfDirty` save network-fails, so the integrated `pay` is never
+      // The pre-pay `#syncIfDirty` save network-fails, so the integrated `pay` is never
       // called — nothing filed, safe to retry — so this is `sale.error`, not `sale.unconfirmed`.
       const updateWorkingOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
@@ -4831,7 +4658,7 @@ describe("till-app", () => {
     });
 
     it("the integrated pay itself network-failing shows sale.unconfirmed (the fiscal request was reached)", async () => {
-      // The other side of F2: once `pay` IS called, a network failure of THAT request is
+      // The other side: once `pay` IS called, a network failure of THAT request is
       // `sale.unconfirmed` — the charge may have captured and filed, so a human checks before retrying.
       const pay = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
       const { el } = await mountApp({ pay });
@@ -4851,7 +4678,7 @@ describe("till-app", () => {
       // Same double-file safety as confirm-payment's single-flight test (CLAUDE.md §5): the first pay
       // never resolves, so a second collect-card dispatched in that window (double-tap / laggy link)
       // must be a no-op.
-      const pay = vi.fn(() => new Promise<PayOutcome>(() => {})); // never resolves
+      const pay = vi.fn(() => new Promise<PayOutcome>(() => {}));
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
       c.store.addProduct(cafe, "2");
@@ -4881,12 +4708,10 @@ describe("till-app", () => {
     });
 
     it("retrieve → edit → collect-card re-syncs the edited basket BEFORE paying, so the edit is not dropped", async () => {
-      // The same 7c regression #onConfirmPayment guards against (its own "Finding 2" test above): the
-      // server's retrieved-order pay path files from the STORED lock and IGNORES req.lines for the
-      // integrated route too (IntegratedPayRequest's own doc), so an edit made after retrieve must be
-      // re-locked (updateWorkingOrder) BEFORE the pay or it is silently dropped from both the charge and
-      // the filed record. Deleting the #syncIfDirty call in #onCollectCard makes this fail (the edit is
-      // lost from both assertions below).
+      // As in #onConfirmPayment (its retrieve → edit → pay test above): the server's retrieved-order pay
+      // path files from the STORED lock and IGNORES req.lines for the integrated route too, so an edit
+      // made after retrieve must be re-locked (updateWorkingOrder) BEFORE the pay or it is silently
+      // dropped from both the charge and the filed record.
       const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
       const { el } = await mountApp({ updateWorkingOrder, pay });
@@ -4921,8 +4746,8 @@ describe("till-app", () => {
     });
 
     it("retrieve → collect-card (unedited): no re-sync, files the stored lock straight through", async () => {
-      // Behaviour 1's mirror for the integrated route: an UNEDITED retrieve must NOT re-sync — that
-      // would re-price against the live catalogue and defeat the add-time lock (design §3).
+      // The integrated route's mirror of the unedited retrieve→pay test: an UNEDITED retrieve must NOT
+      // re-sync — that would re-price against the live catalogue and defeat the add-time lock (design §3).
       const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
       const { el } = await mountApp({ updateWorkingOrder, pay });
@@ -4943,9 +4768,9 @@ describe("till-app", () => {
   });
 
   // ---------------------------------------------------------------------------------------------
-  // Integrated card wiring (Task 9): `cardProvider`/`tipsEnabled`, read once from `GET /api/till`
-  // (#boot), and `cardOutcome` (Task 8's state) all reach the REAL nested `till-tender-pay` — through
-  // `till-counter-screen`, exactly like `orderFlow`/`stage` above (per-mode pay control).
+  // Integrated card wiring: `cardProvider`/`tipsEnabled`, read once from `GET /api/till` (#boot), and
+  // `cardOutcome` all reach the REAL nested `till-tender-pay` — through `till-counter-screen`, exactly
+  // like `orderFlow`/`stage` above (per-mode pay control).
   // ---------------------------------------------------------------------------------------------
 
   describe("integrated card wiring (Task 9): threaded from GET /api/till to the widget", () => {
@@ -4986,7 +4811,7 @@ describe("till-app", () => {
   });
 
   // ---------------------------------------------------------------------------------------------
-  // 7c prepare & collect: per-mode control selection (end-to-end, not just the widget in isolation)
+  // Prepare & collect: per-mode control selection (end-to-end, not just the widget in isolation)
   // and the prep queue rendered from fetched data.
   // ---------------------------------------------------------------------------------------------
 
@@ -5006,7 +4831,7 @@ describe("till-app", () => {
           menuItemId: "menu-item-cafe-0",
           unitPrice: "1.50",
         }),
-      ]); // sanity: still a normal counter otherwise
+      ]);
     });
 
     it("boots into Mode I (invoice_first): tender-pay starts on the order stage; the default station's queue is fetched and rendered", async () => {
@@ -5084,14 +4909,12 @@ describe("till-app", () => {
     });
 
     it("place-order on an UNEDITED retrieved order does NOT re-sync — placeOrder files the stored composition", async () => {
-      // Symmetric with the unedited retrieve→pay path (Behaviour 1 above): retrieving adopts the order's
-      // id and marks it persisted+clean (loadFrom). An UNEDITED retrieved order must NOT re-sync before
-      // placing — `updateWorkingOrder` re-prices with the LIVE catalogue and would replace the add-time
-      // lock, filing at the place-time price and defeating the line-add snapshot (design §3: placing does
-      // not re-lock price). It must never re-park either (a re-park of the same id would idempotently
-      // REPLAY the existing open order server-side and discard the edit). `placeOrder` files the STORED
-      // composition straight. Removing the `dirty` gate in `#syncIfDirty` makes this fail (the unedited
-      // order re-syncs).
+      // Symmetric with the unedited retrieve→pay path: retrieving adopts the order's id and marks it
+      // persisted+clean (loadFrom). An UNEDITED retrieved order must NOT re-sync before placing —
+      // `updateWorkingOrder` re-prices with the LIVE catalogue and would replace the add-time lock,
+      // filing at the place-time price (design §3: placing does not re-lock price). It must never re-park
+      // either (a re-park of the same id would idempotently REPLAY the existing open order server-side).
+      // `placeOrder` files the STORED composition straight.
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
       });
@@ -5115,8 +4938,7 @@ describe("till-app", () => {
       // The mirror of the pay path's retrieve→edit→pay: an edit made after retrieve must be re-locked
       // (`updateWorkingOrder`) BEFORE placing, or the server places the STORED lock and silently drops
       // the edit. Retrieve wo-1 (café×2), add a second café, then place: `updateWorkingOrder` carries the
-      // EDITED composition and runs BEFORE `placeOrder`. Deleting the `#syncIfDirty` call in the
-      // persisted branch of `#onPlaceOrder` makes this fail (the edit is lost).
+      // EDITED composition and runs BEFORE `placeOrder`.
       const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
       const placeOrder = vi.fn().mockResolvedValue(placedResult);
       const { el } = await mountApp({
@@ -5157,10 +4979,8 @@ describe("till-app", () => {
       // the same `working_order.not_open`; till-api.test.ts pins that 409), returns `not_open` too. So
       // `#onPlaceOrder` surfaces `place.error` and stays on the ORDER stage — it does NOT fall through to
       // collect: placing has no `sales_working_order_id_key` replay the way pay does. Both server calls are
-      // mocked to reject `not_open`, matching the real server (the earlier revision mocked `placeOrder` to
-      // SUCCESS, an impossible pairing — `placeOrder` succeeds only when the order is open, which is exactly
-      // when `updateWorkingOrder` would not have thrown). Removing `#onPlaceOrder`'s place.error handler,
-      // or advancing the stage on a failed place, makes this fail.
+      // mocked to reject `not_open`, matching the real server: `placeOrder` succeeds only when the order
+      // is open, which is exactly when `updateWorkingOrder` would not have thrown.
       const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
       const placeOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
       const { el } = await mountApp({
@@ -5179,7 +4999,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(tenderPay(el).stage).toBe("order"); // NOT advanced to collect — the place failed
-      expect(ticket(el)).toBeNull(); // stays on the counter, no ticket
+      expect(ticket(el)).toBeNull();
       const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
       expect(banner.textContent).toContain(t("place.error"));
       expect(el.shadowRoot!.textContent).not.toContain("working_order.not_open"); // raw code never leaks
@@ -5230,10 +5050,9 @@ describe("till-app", () => {
     });
 
     it("place: a fresh-basket park network failure shows place.error, not sale.unconfirmed", async () => {
-      // F2 (§4.3): `parkOrder` is the preliminary save on a fresh basket; a network failure of it means
-      // the `placeOrder` fiscal request was never made, so this is the free-to-retry `place.error`, not
-      // the "did it file?" `sale.unconfirmed`. `placeOrder` is never reached. BEFORE the fix this
-      // mislabels as `sale.unconfirmed`.
+      // `parkOrder` is the preliminary save on a fresh basket; a network failure of it means the
+      // `placeOrder` fiscal request was never made, so this is the free-to-retry `place.error`, not the
+      // "did it file?" `sale.unconfirmed`. `placeOrder` is never reached.
       const parkOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
@@ -5255,7 +5074,7 @@ describe("till-app", () => {
     });
 
     it("place: the placeOrder fiscal request network-failing shows sale.unconfirmed (the request was reached)", async () => {
-      // The other side of F2: park succeeded and `placeOrder` IS called, so a network failure of THAT
+      // The other side: park succeeded and `placeOrder` IS called, so a network failure of THAT
       // request is `sale.unconfirmed` — the placement / deferred invoice may have filed (§4.3).
       const placeOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
       const { el } = await mountApp({
@@ -5277,7 +5096,7 @@ describe("till-app", () => {
     });
 
     it("place single-flight: a second place-order while the first is pending places EXACTLY ONCE", async () => {
-      const parkOrder = vi.fn(() => new Promise(() => {})); // never resolves
+      const parkOrder = vi.fn(() => new Promise(() => {}));
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         parkOrder,
@@ -5389,7 +5208,7 @@ describe("till-app", () => {
     });
 
     it("collect single-flight: a second collect-order while the first is pending collects EXACTLY ONCE", async () => {
-      const collectOrder = vi.fn(() => new Promise<TillSaleResult>(() => {})); // never resolves
+      const collectOrder = vi.fn(() => new Promise<TillSaleResult>(() => {}));
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         collectOrder,
@@ -5465,8 +5284,8 @@ describe("till-app", () => {
 
     // The app's `#onMarkCollected` is mode-independent (it stamps a settled order's handover and reloads);
     // the reload is only OBSERVABLE where the counter's queue is live — Modes I/T — since `#refreshStationQueue`
-    // skips Mode P by a pre-existing decision (`sendToPrep` has no counter UI yet). So these exercise the
-    // handler wiring under `invoice_first`, exactly as the advance-ticket-item tests above do.
+    // skips Mode P. So these exercise the handler wiring under `invoice_first`, exactly as the
+    // advance-ticket-item tests above do.
     it("mark-collected: hands over the order via markCollected, then refreshes the default station's queue", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
@@ -5596,9 +5415,7 @@ describe("till-app", () => {
 
   // ---------------------------------------------------------------------------------------------
   // Receipt editor: #boot reads `receipt` from GET /api/till and threads it to the ticket view. The
-  // `till` fixture above OMITS it (an older server predating the editor), so it defaults to {}. (The old
-  // region-model `layout` and its Mode-P prep-queue-drop fallback were removed in SP-B4 — the counter
-  // renders solely from the canvas's `counter` tab; its cards' visibility is the canvas's concern now.)
+  // `till` fixture above OMITS it, so it defaults to {}.
   // ---------------------------------------------------------------------------------------------
 
   describe("receipt trim (design §8)", () => {
@@ -5646,8 +5463,7 @@ describe("till-app", () => {
 
   describe("canvas tab shell (SP-B2.1)", () => {
     // A `till` canvas with a `counter` tab and a `floor` tab (a `floor-plan` card, which needs no
-    // capability, so it renders the card grid under the empty `capabilities` list). The shell renders
-    // in place of the legacy `screen`-enum switch once this canvas is present.
+    // capability, so it renders the card grid under the empty `capabilities` list).
     const shellCanvas: CanvasDef = {
       formFactor: "till",
       tabs: [
@@ -5806,11 +5622,8 @@ describe("till-app", () => {
     });
 
     it("a HANDHELD with a canvas renders the shell landing on the floor tab (SP-B2.2 wraps table-order)", async () => {
-      // A `handheld` phone with a canvas is a SHELL device since SP-B2.2 (its `order` tab's `table-order`
-      // card renders through the grid now, so no dead Order tab): the shell renders in place of the legacy
-      // screen-enum, and the waiter lands on the FLOOR tab (the phone canvas's first tab, mirroring the
-      // legacy face-set's post-login floor landing). Was the B2.1 fence test asserting the legacy floor
-      // screen; re-pointed to the shell + floor-tab intent when the fence was removed (Task 6).
+      // A `handheld` phone with a canvas is a SHELL device, and the waiter lands on the FLOOR tab (the
+      // phone canvas's first tab).
       const phoneCanvas: CanvasDef = {
         formFactor: "phone-portrait",
         tabs: [
@@ -5842,7 +5655,7 @@ describe("till-app", () => {
       expect((el as unknown as { handheldMode: boolean }).handheldMode).toBe(true);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
       await flush(el);
-      // SP-B2.2 handheld landing: the shell renders with the FLOOR tab active (the floor surface the
+      // The shell renders with the FLOOR tab active (the floor surface the
       // waiter lands on), never the counter. The floor screen mounts as that tab's body through the grid
       // (nested in the grid's OWN shadow root, so pierce it — `floor(el)` only reaches the app's root).
       const s = shell(el)!;
@@ -5862,8 +5675,8 @@ describe("till-app", () => {
       );
 
     // A phone-portrait canvas: a `floor` tab (a `floor-plan` card) + an `order` tab (a `table-order`
-    // card, now WRAPPED by B2.2 so it renders through the grid). A handheld renders the FULL shell (its
-    // operator header) but NO Station/Expo/Schedule affordances — a phone reaches none of those.
+    // card). A handheld renders the FULL shell (its operator header) but NO Station/Expo/Schedule
+    // affordances — a phone reaches none of those.
     const phoneCanvas: CanvasDef = {
       formFactor: "phone-portrait",
       tabs: [
@@ -5925,8 +5738,7 @@ describe("till-app", () => {
     });
 
     it("renders the tab shell in kiosk mode for a kds display, mounting the kds-board card", async () => {
-      // A kds_station boots STRAIGHT into device mode past the lock screen (no login); its `getTill`
-      // canvas is the KDS canvas the server resolves for the display, so `#shellActive()` sees it.
+      // A kds_station boots STRAIGHT into device mode past the lock screen (no login).
       const { el } = await mountApp({
         getTill: vi
           .fn()
@@ -5948,15 +5760,12 @@ describe("till-app", () => {
       expect(grid.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
     });
 
-    // The ONE behaviour change of the capability relocation (device-profile design 2026-09-05 §5.3,
-    // Task 9): capabilities at the RENDER axis now come from the device PROFILE (the `/api/till`
-    // `capabilities` sibling, threaded through `this.capabilities`), NOT from the canvas. Same KDS canvas
-    // both times — only the profile's capability set differs:
+    // Capabilities at the RENDER axis come from the device PROFILE (the `/api/till` `capabilities`
+    // sibling, threaded through `this.capabilities`), NOT from the canvas. Same KDS canvas both times —
+    // only the profile's capability set differs:
     //  - a device with NO profile boots the form-factor default canvas with `capabilities: []`, so the
     //    `kds-board` card (which needs `act-as-kds`) is HIDDEN — its embedded station screen never mounts;
     //  - a device whose profile grants `act-as-kds` renders it.
-    // Prove-by-deletion of the profile-read: revert `this.capabilities = till.capabilities` in `#boot`
-    // (leaving the `[]` default) and the "shows" case below fails — the station screen no longer mounts.
     it("HIDES the kds-board card for a no-profile device (capabilities []) and SHOWS it when the profile grants act-as-kds (§5.3)", async () => {
       // No-profile device: same KDS canvas, but `capabilities: []` (a device with no device profile).
       const hidden = await mountApp({
@@ -5991,9 +5800,9 @@ describe("till-app", () => {
   describe("handheld table-order mount duality (SP-B2.2 Task 7)", () => {
     // A phone-portrait canvas: a `floor` tab (a `floor-plan` card) + an `order` tab (a `table-order`
     // card). Because the canvas AUTHORS a tab whose cards mount a `table-order` card, opening a table on
-    // a handheld SWITCHES to that Order tab (the card mount, SP-B §5) rather than pushing a drill-in — the
-    // tab bar owns the navigation, so there is no drill and no second Back. A till (no `order` tab) keeps
-    // the B2.1 drill push/pop, asserted by the sibling "drill-in stack" describe.
+    // a handheld SWITCHES to that Order tab rather than pushing a drill-in — the tab bar owns the
+    // navigation, so there is no drill and no second Back. A till (no `order` tab) keeps the drill
+    // push/pop, asserted by the sibling "drill-in stack" describe.
     const phoneCanvas: CanvasDef = {
       formFactor: "phone-portrait",
       tabs: [
@@ -6016,7 +5825,7 @@ describe("till-app", () => {
       el.shadowRoot!.querySelector<HTMLElement & { activeTabKey?: string }>("till-tab-shell");
 
     /** Boots a handheld with the phone canvas and logs the waiter in — landing on the FLOOR tab (the
-     * phone canvas's first tab, mirroring the legacy face-set's post-login floor landing). */
+     * phone canvas's first tab). */
     async function toHandheldFloor(): Promise<TillApp> {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
@@ -6054,7 +5863,7 @@ describe("till-app", () => {
       // What actually happens in the app: the waiter on the Order tab taps the Floor TAB, firing the
       // shell's `tab-select` → `#onTabSelect("floor")`, which switches the active tab AND (the floor tab
       // needs the floor read-model, already loaded once) re-reads live occupancy via `#refreshFloor`. This
-      // guards the SP-B2.1 "no stale floor" invariant for the handheld tab-switch return, proven here by a
+      // guards the "no stale floor" invariant for the handheld tab-switch return, proven here by a
       // SECOND `getTablesState` fetch that flips t1 from free → occupied.
       const occupiedT1: TableState = {
         ...freeTable,
@@ -6105,9 +5914,7 @@ describe("till-app", () => {
       // A handheld authors NO `counter` tab, so #onNewSale must land it on its HOME tab (the canvas's
       // first tab, `floor`), never a phantom `"counter"`. It reaches #onNewSale after settling a TAB
       // (pay-tab → ticket → New sale); the just-closed table is then stale in the floor read-model, so the
-      // return must re-read occupancy — a re-tap must resume nothing. (A hardcoded activeTabKey="counter"
-      // fell back to the floor tab via #activeTab but SKIPPED the refresh, leaving the closed table
-      // showing occupied — SP-B2.2 review finding.)
+      // return must re-read occupancy — a re-tap must resume nothing.
       const occupiedT1: TableState = {
         ...freeTable,
         state: "open-tab",
@@ -6224,13 +6031,11 @@ describe("till-app", () => {
     });
 
     it("refreshes floor occupancy when the drill pops back to the floor tab (SP-B2.1 review — no stale floor)", async () => {
-      // REVIEW FIX 1: opening a table (`openTab`) and table-service actions do NOT update `this.tables`,
-      // so after a waiter opens table N from the floor tab, adds a round, and taps Back, the floor tab
-      // must RE-READ occupancy or it re-renders from the STALE read-model — table N still shows FREE.
-      // Tapping it again calls `openTab(N)` → server throws `tab.already_open` → the waiter cannot resume
-      // the tab they just opened. Asserting the floor screen merely EXISTS (as the pop test above does)
-      // is what masked this; here we assert FRESHNESS — the floor reflects a SECOND fetch. Proven by
-      // deletion: drop the `#refreshFloor()` from `#onBackToFloor`'s shell branch and this goes red.
+      // Opening a table (`openTab`) and table-service actions do NOT update `this.tables`, so after a
+      // waiter opens table N from the floor tab, adds a round, and taps Back, the floor tab must RE-READ
+      // occupancy or it re-renders from the STALE read-model — table N still shows FREE. Tapping it again
+      // calls `openTab(N)` → server throws `tab.already_open` → the waiter cannot resume the tab they just
+      // opened. So this asserts FRESHNESS — the floor reflects a SECOND fetch.
       const occupiedT1: TableState = {
         ...freeTable,
         state: "open-tab",
@@ -6301,8 +6106,7 @@ describe("till-app", () => {
       expect(drill(el)).not.toBeNull();
       expect(allergen).not.toBeNull();
       expect(allergen!.getAttribute("slot")).toBe("drill");
-      // The drill gets the FULL product set (allergen lookup spans every menu), exactly as the counter's
-      // own local overlay feeds it — the shell just owns the button now.
+      // The drill gets the FULL product set (allergen lookup spans every menu).
       expect(allergen!.products).toEqual([
         expect.objectContaining({
           id: "cafe",
@@ -6338,12 +6142,9 @@ describe("till-app", () => {
     });
 
     it("completes a sale through the shell + grid counter and lands on the ticket drill-in (sale-path guard)", async () => {
-      // Follows the legacy counter-sale test body — the ONLY change is the counter now lives in the shell
-      // and the ticket appears as a drill-in rather than the `ticket` screen. Proves the nav rewrite did
-      // not break the sale path: the sale must complete through the shell and reach the ticket.
       const el = await toShellCounter();
       const c = counter(el)!;
-      // The counter tab renders through the SP-B1 card grid (its cards include tender-pay); the store is
+      // The counter tab renders through the card grid (its cards include tender-pay); the store is
       // the app's own working order. The card grid lives in the counter screen's shadow root.
       const cardGrid = c.shadowRoot!.querySelector<HTMLElement>("till-card-grid");
       expect(cardGrid).not.toBeNull();
@@ -6352,7 +6153,7 @@ describe("till-app", () => {
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
-      // The ticket is a drill-in over the (inert) counter tab — not a legacy screen swap.
+      // The ticket is a drill-in over the (inert) counter tab.
       expect(ticket(el)).not.toBeNull();
       expect(ticket(el)!.getAttribute("slot")).toBe("drill");
       expect(drill(el)).not.toBeNull();
@@ -6378,12 +6179,10 @@ describe("till-app", () => {
     });
 
     it("loads the floor read-model when the floor tab is selected in the shell (data reaches the card)", async () => {
-      // FINDING 1: the Floor tab is reached via `tab-select` on the shell, NOT the legacy `show-floor`
-      // event — so the tab-select handler must load `.tables`/`.zones` (as `#onShowFloor` does) or the
-      // floor-plan card renders a BLANK floor with no table to tap, and table-service ordering is
-      // unreachable from the shell. Asserting the floor screen EXISTS is what masked this before; here we
-      // assert the data actually loaded and reached the card. Proven by deletion: drop the
-      // `#loadFloorData()` call from `#onTabSelect` and the tables/zones assertions go red.
+      // The Floor tab is reached via `tab-select` on the shell, so the tab-select handler must load
+      // `.tables`/`.zones` or the floor-plan card renders a BLANK floor with no table to tap, and
+      // table-service ordering is unreachable from the shell. So this asserts the data actually loaded
+      // and reached the card.
       const status: TableServiceStatus = { id: "s1", label: "Reservada", color: "#f00" };
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, canvas: shellCanvas }),
@@ -6404,10 +6203,10 @@ describe("till-app", () => {
     });
 
     it("clears the open drill and resets the active tab on logout (Finding 2 — no stale receipt into the next shift)", async () => {
-      // FINDING 2: operator A finishes a sale (a `ticket` drill holds A's receipt), then taps Logout
-      // (NOT New sale) from the non-inert shell header. The screen reset does NOT clear `drill`/
-      // `activeTabKey`, so operator B's fresh login would re-mount A's ticket over B's counter. Assert the
-      // STATE is cleared (not merely that the shell unmounted at `lock`, which would mask it).
+      // Operator A finishes a sale (a `ticket` drill holds A's receipt), then taps Logout (NOT New sale)
+      // from the non-inert shell header. Unless logout clears `drill`/`activeTabKey`, operator B's fresh
+      // login would re-mount A's ticket over B's counter. Assert the STATE is cleared (not merely that
+      // the shell unmounted at `lock`, which would mask it).
       const el = await toShellCounter();
       const c = counter(el)!;
       c.store.addProduct(cafe, "2");
@@ -6441,9 +6240,8 @@ describe("till-app", () => {
     });
 
     it("dismisses an open drill when a tab is selected (Finding 3)", async () => {
-      // FINDING 3: the tab bar is in the non-inert header, so a tab tap while a drill is open must
-      // DISMISS the drill, not switch the surface underneath it. Proven by deletion: drop the
-      // `#popDrill()` from `#onTabSelect` and the schedule drill survives the switch.
+      // The tab bar is in the non-inert header, so a tab tap while a drill is open must DISMISS the
+      // drill, not switch the surface underneath it.
       const el = await toShellCounter();
       emit(shell(el)!, "show-schedule"); // open a drill
       await el.updateComplete;
@@ -6487,8 +6285,7 @@ describe("till-app", () => {
     it("login switches the UI to the operator's stored locale — a DEEP shell child renders English", async () => {
       // Venue default es-ES; the operator's stored locale is en-GB. On login the app resolves en-GB and
       // `setLocale`s it; the `keyed(currentLocale(), …)` wrapper recreates the shell subtree, so a deep child
-      // (the logout button — SP-B4 relocated it from the counter's own header into the shell header) renders
-      // in English, not Spanish.
+      // (the logout button in the shell header) renders in English, not Spanish.
       const { el } = await mountApp();
       await toCounterAs(el, "en-GB");
       expect(currentLocale()).toBe("en-GB");
@@ -6502,8 +6299,7 @@ describe("till-app", () => {
       // while boot's `getTill` is STILL in flight. `#onLoggedIn` applies the operator's stored en-GB
       // synchronously (before its first await) and sets `operatorPersonId`; when `getTill` finally
       // resolves, the boot continuation must NOT re-apply the venue default (es-ES) over it. The guard is
-      // `#boot`'s `if (this.operatorPersonId === "")` — deletion proof: drop it (making the venue-default
-      // `setLocale` unconditional) and this fails, the language clobbered back es-ES for the whole session.
+      // `#boot`'s `if (this.operatorPersonId === "")`.
       let resolveTill!: (v: typeof till) => void;
       const getTill = vi.fn(() => new Promise<typeof till>((r) => (resolveTill = r)));
       const { el } = await mountApp({ getTill }); // fixture venue default es-ES, DIFFERENT from en-GB
@@ -6546,8 +6342,7 @@ describe("till-app", () => {
 
     it("locale-selected while on the LOCK screen switches transiently — setLocale, NOT putLocale", async () => {
       // A pre-login pick is transient: the app switches the UI but writes NOTHING (there is no session to
-      // write to). Proven-by-deletion target: dropping the `screen === "lock"` guard makes this fail
-      // (putLocale would fire). Emitted from the lock screen exactly as the chooser's composed event does.
+      // write to). Emitted from the lock screen exactly as the chooser's composed event does.
       const { el } = await mountApp();
       await flush(el);
       expect(lock(el)).not.toBeNull();
@@ -6572,8 +6367,7 @@ describe("till-app", () => {
 
     it("a rejected putLocale leaves the language unchanged and surfaces the save-failed error", async () => {
       // The persist failed, so the UI must NOT switch (setLocale is gated behind the successful write) and
-      // a non-fatal banner appears — never the raw code. Deleting the try/catch's `errorKey` set drops the
-      // banner; moving `setLocale` before/outside the try would wrongly switch on a failed save.
+      // a non-fatal banner appears — never the raw code.
       const putLocale = vi.fn().mockRejectedValue({ code: "locale.unsupported" });
       const { el } = await mountApp({ putLocale });
       const c = await toCounterAs(el, null); // venue default es-ES
@@ -6602,8 +6396,7 @@ describe("till-app", () => {
       // #onLogout's `setLocale(this.#venueLocale)` runs AFTER `await api.logout()`, so a teardown during
       // that round trip must not repaint a live sibling's module-global locale — the same guard #boot
       // carries. Log in as an en-GB operator (UI → English), start logout with `logout()` in flight,
-      // detach, then resolve: the venue-default revert (es-ES) must be SKIPPED. Deleting the new
-      // `if (!this.isConnected) return` makes the revert fire and this fail — the deletion proof.
+      // detach, then resolve: the venue-default revert (es-ES) must be SKIPPED.
       let resolveLogout!: () => void;
       const logout = vi.fn(() => new Promise<void>((r) => (resolveLogout = r)));
       const { el, host } = await mountApp({ logout });
@@ -6622,8 +6415,7 @@ describe("till-app", () => {
     it("does not switch the locale if the app disconnects mid-putLocale (persist path)", async () => {
       // #onLocaleSelected's `setLocale(code)` runs AFTER `await api.putLocale(code)`. The durable server
       // write has already landed (and the next login re-applies it), so a teardown during the write must
-      // SKIP only the now-pointless local repaint — never mutate a live sibling's locale. Deleting the
-      // new `if (!this.isConnected) return` after putLocale makes the switch fire and this fail.
+      // SKIP only the now-pointless local repaint — never mutate a live sibling's locale.
       let resolvePut!: () => void;
       const putLocale = vi.fn(() => new Promise<void>((r) => (resolvePut = r)));
       const { el, host } = await mountApp({ putLocale });
@@ -6651,10 +6443,6 @@ describe("till-app", () => {
     expect(currentLocale()).toBe("es-ES"); // guard skipped setLocale on the detached app
   });
 
-  // Multi-menu till: the switcher over the counter grid. A zone may offer several menus; the grid
-  // shows ONE at a time and the switcher picks it. The app owns `selectedCatalogueId`
-  // (resetting to the default menu at login), so a switcher pick re-filters the grid without touching
-  // the working order — an in-flight cart line survives.
   it("switches a kitchen display's language without writing an operator preference", async () => {
     const putLocale = vi.fn().mockResolvedValue(undefined);
     const { el } = await mountApp({
@@ -6707,7 +6495,7 @@ describe("till-app", () => {
       .fn()
       .mockResolvedValue({ menus: [foodMenu, drinksMenu], products: [bocadillo, cerveza] });
 
-    /** The menu switcher the counter screen renders above the card grid (SP-B4 — the region model is gone). */
+    /** The menu switcher the counter screen renders above the card grid. */
     const switcher = (el: TillApp) =>
       counter(el)!.shadowRoot!.querySelector<HTMLElement>("till-menu-switcher")!;
     /** The switcher's option buttons (empty when it renders nothing — one menu or none). */
@@ -6715,7 +6503,7 @@ describe("till-app", () => {
       ...switcher(el).shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="menu-"]'),
     ];
     /** The product names the counter GRID is currently showing (its `wt-button.tile` labels) — the
-     * product-grid card lives inside the counter's card grid shadow root (SP-B4). */
+     * product-grid card lives inside the counter's card grid shadow root. */
     const gridNames = (el: TillApp) =>
       [
         ...counterGrid(el)!
@@ -6824,8 +6612,7 @@ describe("till-app", () => {
       // Both menus offered, default (Comida) first and marked pressed.
       expect(switcherButtons(el).map((b) => b.textContent?.trim())).toEqual(["Comida", "Bebidas"]);
       expect(switcherButtons(el)[0]!.getAttribute("aria-pressed")).toBe("true");
-      // The grid shows ONLY the default menu's product — the guard-by-deletion assertion: drop the
-      // screen's `filterProductsByMenu` `.filter` (grid shows all products) and this fails on "Cerveza".
+      // The grid shows ONLY the default menu's product.
       expect(gridNames(el)).toEqual(["Bocadillo"]);
     });
 
@@ -6906,11 +6693,11 @@ describe("till-app", () => {
     });
 
     it("with a SINGLE menu the switcher renders nothing and the grid shows every product (unchanged)", async () => {
-      // The default stubApi ships one menu (`defaultMenu`) with `cafe` on it — the pre-multi-menu shape.
+      // The default stubApi ships one menu (`defaultMenu`) with `cafe` on it.
       const { el } = await mountApp();
       await toCounter(el);
 
-      // The switcher element is present but renders no options — a single-menu venue looks as before.
+      // The switcher element is present but renders no options.
       expect(switcherButtons(el)).toHaveLength(0);
       expect(gridNames(el)).toEqual(["Café"]);
     });
@@ -6939,7 +6726,7 @@ it("leaves login and pairing actions clear of the language chooser on a narrow s
       .shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!
       .getBoundingClientRect();
     expect(trigger.right).toBeLessThanOrEqual(window.innerWidth);
-    // The device front door (device-enrolment §3.1): a FRESH browser (401 identity probe) renders the
+    // The device front door: a FRESH browser (401 identity probe) renders the
     // join screen — its own language chooser must sit clear of the Ask to join action.
     const fresh = await mountApp({
       getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),

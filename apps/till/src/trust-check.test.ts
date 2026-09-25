@@ -14,8 +14,6 @@ describe("isTrustBroken", () => {
   });
 
   it("is false over plain HTTP even when the probe rejects with a SecurityError", async () => {
-    // No certificate exists to distrust on http:. The Vite dev server answers the missing probe with
-    // its HTML page, and Chromium refuses an HTML service worker with a SecurityError too.
     const nav = navWith(async () => {
       throw new DOMException(
         "The script has an unsupported MIME type ('text/html').",
@@ -72,9 +70,7 @@ describe("isTrustBroken", () => {
   });
 
   it("resolves false within the timeout when register never settles (the till must always boot — C4)", async () => {
-    // A registration that hangs forever must not hang boot: the bounded probe resolves "not broken"
-    // when the timeout wins, so main.ts mounts the till. Uses a short real timeout.
-    const nav = navWith(() => new Promise<unknown>(() => {})); // never resolves
+    const nav = navWith(() => new Promise<unknown>(() => {}));
     const started = performance.now();
     await expect(isTrustBroken({ nav, timeoutMs: 10, protocol: "https:" })).resolves.toBe(false);
     // Settling well before the 1500 ms default shows the given deadline was used.

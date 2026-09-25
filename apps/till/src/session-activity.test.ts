@@ -56,7 +56,7 @@ describe("SessionActivity", () => {
     onIdle.mockClear();
     sa.configure({ loggedIn: true, kind: "kds_station", timeoutSeconds: 300, onIdle });
     fn?.();
-    expect(onIdle).not.toHaveBeenCalled(); // KDS is exempt
+    expect(onIdle).not.toHaveBeenCalled();
   });
 
   it("noteInteraction() resets the idle countdown", () => {
@@ -84,7 +84,6 @@ describe("SessionActivity", () => {
     now = 300_000;
     fn?.();
     expect(onIdle).not.toHaveBeenCalled();
-    // The reset deadline arrives.
     now = 500_000;
     fn?.();
     expect(onIdle).toHaveBeenCalledTimes(1);
@@ -145,7 +144,6 @@ describe("SessionActivity", () => {
     sa.configure({ loggedIn: true, kind: "handheld", timeoutSeconds: null, onIdle });
     await expect(sa.start()).resolves.toBeUndefined();
     expect(request).toHaveBeenCalledTimes(1);
-    // A later release with no sentinel held is a clean no-op.
     await expect(sa.stop()).resolves.toBeUndefined();
   });
 
@@ -189,7 +187,7 @@ describe("SessionActivity", () => {
   it("releases a wake lock whose request resolves AFTER stop() — no strand (C3)", async () => {
     // The request is in flight when stop()/logout happens; it resolves afterwards. The late sentinel
     // must be released, not stored — a stored one would keep the screen awake with no way to give it
-    // back. Before the fix release was called 0 times (the sentinel was stranded).
+    // back.
     let resolveRequest!: (s: unknown) => void;
     const sentinel = { released: false, release: vi.fn(async () => {}) };
     const request = vi.fn(() => new Promise((r) => (resolveRequest = r as (s: unknown) => void)));
@@ -200,9 +198,9 @@ describe("SessionActivity", () => {
       clearTimer: () => {},
     });
     sa.configure({ loggedIn: true, kind: "handheld", timeoutSeconds: null, onIdle: () => {} });
-    const started = sa.start(); // request now pending
-    await sa.stop(); // stop BEFORE the request resolves
-    resolveRequest(sentinel); // the in-flight request resolves late
+    const started = sa.start();
+    await sa.stop();
+    resolveRequest(sentinel);
     await started;
     await Promise.resolve();
     expect(sentinel.release).toHaveBeenCalledTimes(1);
@@ -211,7 +209,7 @@ describe("SessionActivity", () => {
   it("serializes overlapping acquisitions to a single retained sentinel (C3)", async () => {
     // Two requests in flight at once (e.g. reacquire racing an earlier acquire): the superseded one is
     // released, the current one retained, so stop() later has exactly one live sentinel to give back —
-    // never a stranded one. Before the fix the second overwrote the first's reference (1 unreleased).
+    // never a stranded one.
     const resolvers: Array<(s: unknown) => void> = [];
     const sentinels = [
       { released: false, release: vi.fn(async () => {}) },
@@ -226,20 +224,18 @@ describe("SessionActivity", () => {
     });
     sa.configure({ loggedIn: true, kind: "handheld", timeoutSeconds: null, onIdle: () => {} });
     const started = sa.start(); // request #1 in flight
-    sa.reacquire(); // request #2 in flight (#sentinel still undefined, so it proceeds)
+    sa.reacquire(); // request #2 in flight
     await Promise.resolve();
     expect(request).toHaveBeenCalledTimes(2);
-    // Resolve the SUPERSEDED request #1 first — it must release its sentinel, not store it.
+    // Resolve the SUPERSEDED request #1 first.
     resolvers[0]!(sentinels[0]);
     await started;
     await Promise.resolve();
-    // Resolve the CURRENT request #2 — it is retained.
     resolvers[1]!(sentinels[1]);
     await Promise.resolve();
     await Promise.resolve();
-    expect(sentinels[0].release).toHaveBeenCalledTimes(1); // superseded → released
-    expect(sentinels[1].release).not.toHaveBeenCalled(); // current → held
-    // The single retained sentinel is the one stop() gives back — no strand.
+    expect(sentinels[0].release).toHaveBeenCalledTimes(1);
+    expect(sentinels[1].release).not.toHaveBeenCalled();
     await sa.stop();
     expect(sentinels[1].release).toHaveBeenCalledTimes(1);
   });
