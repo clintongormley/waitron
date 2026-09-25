@@ -2835,12 +2835,46 @@ image constraints under *Detail → Box image*.
   `working-order.ts` alone 1,854 to 471) and `apps/server`'s boot, health, SPA and dev-hint
   files, part c1 (#624, about 1,455 to about 400, parse-tree walk, tests included; `boot.ts`,
   `boot.test.ts` and `config.ts` are held back as c2 because the SQLite slice-2 plan's Tasks 8–10
-  change them).
+  change them) and `apps/server`'s adopt, backup, break-glass, mirror, primary-url, promote,
+  recovery, rejoin, restore-entry-guard, restore-gate and retire files, part e1 (#625, about 3,090 to
+  about 760 over the 64 files, parse-tree walk, tests included; the 14 part-e files the SQLite
+  slice-2 plan's Tasks 8a–10 name are held back as e2). #625 also deleted the false "the verb is the
+  whole guard" note from `tables.ts`, `management-api.ts` (five copies) and `till-api.ts`.
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621, #622, #623 and #624 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621, #622, #623, #624 and #625 and left for the package that owns each, all
   still OPEN:
+  - Found by #625 (`apps/server` part e1), outside its files or not fixable in a comments-only
+    change. Comments in files the SQLite slice-2 plan still changes (fix them in e2, c2 or h2):
+    `db-wipe.ts` (near its top) says the empty node-file fact is recorded where
+    `rejoin-command.ts` and `break-glass-command.ts` open their handles, and #625 deleted it from
+    both; `boot.test.ts` (held back as c2) lists `promote-endpoint-e2e.test.ts` among suites whose
+    header records the drain half, and that header is gone; `restore.ts` and `errors.ts` call
+    backup "the cold-recovery path CLAUDE.md §5 says has to work", which §5 does not say, and
+    `backup-supervisor.ts`'s "must never brick the till (§5)" stretches §5's "nothing EXTERNAL may
+    block a sale". Docs: `docs/developers/conventions-ui.md` (the recovery page section) says a
+    caught error's own text goes to the container's stdout only, but the page's log tail can carry
+    it (the file sink masks only credentials in a URL); `docs/developers/conventions-data.md`'s
+    `busy_timeout` receipt, which `recovery-lock.ts` now points at, should carry the date and Node
+    version the deleted comment had (2026-09-24, Node v26.7.0). Tests and code, read not run unless
+    stated: three `adopt.test.ts` titles say "before any mutation", but by then the primary has
+    reserved an identity for the standby and added it to its membership list (the tests assert only
+    on the mirror's own database); `adoptFromPrimary` (`adopt.ts`) spreads one adoption across
+    several transactions with file writes between and no commented decision (CLAUDE.md §3), so a
+    failure partway could leave a stamped mirror with no break-glass verifier; the membership list's
+    eight-node cap (`MAX_NODES`, `packages/membership/src/verify.ts`) is enforced only by the
+    verifier — #625's review measured a nine-node list minted without complaint — so whether the
+    mint should refuse is an open question; the restore guard's repeated-destination check compares
+    resolved path text, so two names reaching one file through a symlink may pass;
+    `mirror-session.ts`'s keepalive keeps an `isNull(lastSeenAt)` arm on a `not null` column (dead,
+    kept on purpose); `MirrorBundle.wireguardPublicKey` is set by no production caller and read by
+    nothing outside tests; `recovery-race.test.ts`'s header has no "weaker than its name" hedge
+    though CLAUDE.md describes the guard that way. Test titles #625 could not touch:
+    "…even when the retired variable is set" (`backup-config.test.ts`, still sets a `postgres://`
+    URL), "…without copying the obsolete media directory" (`backup-sweep.test.ts`), "(C2b Task 9)"
+    (`mirror-bundle-fetch.test.ts`), "(swap S2)" (`mirror-bundle.test.ts`) and "as a file from before
+    the field existed" (`recovery-state.test.ts`).
   - Found by #624 (`apps/server` part c1), outside its files or not fixable in a comments-only
     change. `apps/server/src/node-entry.ts` (the comment after the boot-failure report is written)
     says the scrubbed text "has already gone to stdout from runEntry's catch"; that is false for a
@@ -2889,14 +2923,7 @@ image constraints under *Detail → Box image*.
     UNCHANGED" in `tabs.filing.test.ts`; many "(till-reroute §3.6)", "(KDS-…)" and "(A1)"-style
     plan tags.
   - Found by #622 (`apps/server` part g), outside its files or not fixable in a comments-only
-    change. **A hard delete of a referenced row IS refused**: `tables.ts`'s `deactivateTable` note
-    says "nothing below the verb objects" and that the verb is the whole guard, and
-    `management-api.ts` repeats "the verb is the whole guard" for stations, courses and tables; the
-    review measured (Node v26.7.0, every `packages/db` migration, foreign keys on) that a `DELETE` of
-    a dining table, station, course or print agent that other rows reference fails with `FOREIGN KEY
-    constraint failed` (errcode 787), while an unreferenced one is deleted. The same note lists
-    `till-api.ts`, `device-api.ts`, `kitchen.ts` and `print-api.ts` as pointing back to it, and none
-    does now. `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same
+    change. `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same
     live-course definition; `fireCourse` calls `requireCourse`. `packages/provisioning/src/venue-apply.ts`
     names a `till.configure` gate for `createDeviceProfile`; the gate is `layout.configure`
     (`packages/layouts/src/device-profile-store.ts`). `docs/developers/conventions-data.md` names a
@@ -2905,8 +2932,7 @@ image constraints under *Detail → Box image*.
     reader before deciding"; there are no row locks, the enable waits behind the unpair's write
     transaction. `apps/server/README.md` sends readers to "the `drain.complete` log line, the
     `incidents` table" for rejected fiscal records, a path only someone with a terminal can take.
-    Stale line pointers into moved schema files remain in `recovery-bundle-api.test.ts`
-    (`persons.ts:26`) and `backup-api.route.test.ts`, and `working-order.ts`'s `splitOffCheck`
+    Stale line pointers into moved schema files remain in `backup-api.route.test.ts`, and `working-order.ts`'s `splitOffCheck`
     points at "line ~221". Read only, not run: `WebhookDeps.nodeId` looks unread by `settleWebhook`;
     `receipt-order.ts` takes a `cfg` it never uses; `me-api.ts`'s profile save logs
     `account_email.send_failed` with the caught error's message. The lock-ordering and deadlock
@@ -3031,8 +3057,8 @@ image constraints under *Detail → Box image*.
     test-only; and in device mode the station screen's `#reload` swallows a `device.unauthorized`,
     so a device cookie revoked mid-session raises nothing until the next connect. Test NAMES still
     say `till.configure` where the permission is `venue.configure`, in `apps/till/src/api/client.test.ts`
-    and `till-app.test.ts`, and so does a comment in `apps/server/src/promote-endpoint-e2e.test.ts`
-    (#622 fixed `kitchen.ts` and `kitchen.test.ts`). The screens' `css` templates still carry
+    and `till-app.test.ts` (#625 deleted the matching comment in `promote-endpoint-e2e.test.ts`;
+    #622 fixed `kitchen.ts` and `kitchen.test.ts`). The screens' `css` templates still carry
     task and spec numbers ("Task 7", "KDS-4 §3d"). Unchecked and kept: the allergen screen's legal
     citation (RD 126/2015 Art. 6.5.a.2°). Not restored because nothing confirms it: the table-order
     screen's `#lineGross` "same arithmetic the server files with" (the server does not call
@@ -3243,9 +3269,6 @@ image constraints under *Detail → Box image*.
     the SumUp provider's `resolvePending`) do not both succeed: #558's review measured
     `["fulfilled","payment.not_found"]`, so the second pass throws partway instead of skipping the
     rows the first resolved. The comment at `listAttempting` now says so.
-  - Comments in `apps/server` tests cite
-    `packages/identity/src/schema/persons.ts:26` and `:67`, already wrong before #559; name the
-    column instead of the line when those packages are pruned.
   - The v8-ignore reason "never run by `vitest run`" on schema files' extra-config functions was
     measured false in identity (2026-09-24: `sessions.ts`'s function of the same kind, with no
     ignore, read 1 of 1 covered) and again by #562's review (making the foreign-key callback in
@@ -3377,7 +3400,7 @@ image constraints under *Detail → Box image*.
     making them static imports is a small code follow-up.
   - Found by #589 (`packages/db` outside `src/schema`), not changed. Line pointers from other
     packages into `packages/db/src/schema`, most of them made wrong by #585 and some pointing past
-    the end of their file: `apps/server/src/boot.test.ts:2761`, `retire.test.ts:76` (both under `apps/server/src`)
+    the end of their file: `apps/server/src/boot.test.ts:2761` (#625 removed `retire.test.ts`'s)
     (the `scripts/catalogue-engine-neutral.test.ts` pointers were removed by #602,
     `packages/venue-service/src/operations.ts`'s by #611, the `till-*` ones by #613, `join-requests.test.ts`'s by #617, and `kitchen-print.test.ts`'s and
     `sale-till-source.receipt.test.ts`'s by #622)
@@ -5182,7 +5205,7 @@ Every synchronous `deriveKey` caller still blocks the event loop while it derive
 `decodeConfigurationBundle` (`apps/server/src/configuration-transfer.ts`, on the request path,
 decoding an uploaded bundle), `apps/server/src/restore.ts:153` and `unsealNodeState`
 (`apps/server/src/sealed-state.ts:33`); and the recovery bundle's `encryptBundle` and
-`decryptBundle` (`apps/server/src/recovery-bundle.ts:44` and `:140`). Task 2b moved the backup
+`decryptBundle` (`apps/server/src/recovery-bundle.ts`). Task 2b moved the backup
 sweep's encryption and `sealNodeState` to `encryptArtifactAsync`.
 Task 6, the Litestream supervisor (`@waitron/stream`'s `StreamSupervisor`, the server's
 `StreamHost` started at boot on the primary, the store's `checkpointTruncate`, Litestream 0.5.17
