@@ -50,9 +50,7 @@ import { DRAWER_KICK } from "./receipt-print.js";
 import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
 
 // The manual reprint and drawer-open routes over HTTP, against a GENUINE chained fiscal sale read
-// back and paper enqueued for it. Setup mirrors `till-api.fiscal-sale-paths.test.ts` (a provisioned venue + a
-// seeded catalogue + a login person, a real `VerifactuBackend` + system clock) plus the
-// receipt-printer config helpers from `receipt-print.test.ts`.
+// back and paper enqueued for it.
 const LOCALE = "es-ES";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -64,8 +62,7 @@ let clock: TrustedClock;
 
 const noopLog: Logger = () => {};
 
-/** The wall clock, already anchored — the stub `till-api.fiscal-sale-paths.test.ts` documents; `recordSale` reads
- *  `now()` once and touches neither `anchor` nor `currentAnchor`. */
+/** `recordSale` reads `now()` once and touches neither `anchor` nor `currentAnchor`. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -85,10 +82,6 @@ function systemClock(): TrustedClock {
   };
 }
 
-// A fresh NIF per venue that nothing in this file now depends on: each test provisions its own, and
-// `useVenueDb`'s per-test reset empties `tenants` first, so the unique index this dodges
-// (`tenants_country_tax_id_key`, `packages/db/drizzle/0000_baseline.sql:38`) is never met twice.
-// Pinning it to one constant left all 29 cases passing (measured 2026-09-22).
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -113,11 +106,9 @@ function printCfg(cfg: TillConfig): PrintConfig {
 }
 
 /** Stand up a fresh chained venue + a one-`each`-product catalogue (1.50 gross, general/21 %), a
- *  staff person ("Cajera") and a supervisor ("Responsable"), both with a known PIN ("5555"). The
- *  supervisor holds `cash.drawer` (the SUPERVISOR permission set); the staff person does not — this
- *  is the pair the gated drawer route + supervisor-override matrix is written against. Each test gets
- *  its OWN tenant, so its `print_jobs` / `drawer_opens` / `registros_facturacion` counts are its own,
- *  order-independent (CLAUDE.md §4). */
+ *  staff person ("Cajera") and a supervisor ("Responsable"), both with PIN "5555". The supervisor
+ *  holds `cash.drawer`; the staff person does not — the pair the gated drawer matrix is written
+ *  against. */
 async function setupVenue(): Promise<{
   cfg: TillConfig;
   each: AvailableProduct & { menuItemId: string };
@@ -191,10 +182,6 @@ async function setupVenue(): Promise<{
         update zone_service_policies set default_menu_id = ${cat.id}
         where location_id = ${cfg.locationId}
           and is_counter_default`);
-    // Through the table definitions rather than raw SQL: `preparation_routes.id`, `persons.id` and
-    // `persons.created_at` are `$defaultFn` generators on NOT NULL columns that a raw insert never
-    // reaches on this engine (`packages/venue-service/drizzle/0000_baseline.sql:47`,
-    // `packages/identity/drizzle/0000_baseline.sql:46` and `:62`).
     await tx.insert(preparationRoutes).values({
       locationId: cfg.locationId,
       categoryId: bebidas.id,
@@ -230,8 +217,7 @@ function apiDeps(cfg: TillConfig): TillApiDeps {
   };
 }
 
-/** Create a `cloud_poll` receipt printer (no agent needed — the enqueue is a pure INSERT, so no
- *  transport is ever touched on these routes) and return its id. */
+/** Create a `cloud_poll` receipt printer (the enqueue is a pure INSERT, so no transport is touched). */
 async function makePrinter(cfg: TillConfig): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const { id } = await createPrinter(tx, printCfg(cfg), {
@@ -243,8 +229,7 @@ async function makePrinter(cfg: TillConfig): Promise<string> {
   });
 }
 
-/** Set the location's `receipt_print_mode` and/or the till's `receipt_printer_id` directly (the app
- *  role holds UPDATE on both). Pass `printerId: null` to leave the till with no printer. */
+/** Pass `printerId: null` to leave the till with no printer. */
 async function configureReceipt(
   cfg: TillConfig,
   opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },
@@ -305,8 +290,7 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
   });
 }
 
-/** Set the location's `drawer_open_policy` ('gated' | 'open') directly. The column defaults to
- *  'gated', so a test wanting the gate need not call this. */
+/** The column defaults to 'gated', so a test wanting the gate need not call this. */
 async function setDrawerPolicy(cfg: TillConfig, policy: "gated" | "open"): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
     await tx
@@ -330,9 +314,8 @@ async function saleCount(cfg: TillConfig): Promise<number> {
   });
 }
 
-/** Log in as `operatorId` (PIN "5555") through the HTTP surface and return the session cookie. The
- *  login is DEVICE-GATED (§5/§6) — the throttle keys off the device and the shift records its register
- *  — so it carries an enrolled `till` device cookie exactly as a sale does. */
+/** Log in as `operatorId` (PIN "5555") over HTTP. The login is device-gated, so it carries an
+ *  enrolled `till` device cookie exactly as a sale does. */
 async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
   const deviceCookie = await enrolTillCookie(cfg);
   const res = await app.request("/api/session", {
@@ -344,20 +327,13 @@ async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<st
   return res.headers.get("set-cookie")!;
 }
 
-/** Enrol a REAL `till`-kind device bound to the venue's own till (`cfg.tillId`) and return the
- *  `waitron_device=<id>.<token>` cookie. SP-A.2 cutover: `POST /api/sales` resolves its till from the
- *  enrolled device, and the device's till IS the venue till, so the filed record is unchanged. */
+/** `POST /api/sales` resolves its till from the enrolled device. */
 let tillDeviceCounter = 0;
 async function enrolTillCookie(cfg: TillConfig): Promise<string> {
-  // A device-gated login (§5/§6) plus a sale both enrol a till device in the SAME database, so the
-  // profile name AND the device name (which the auto-created register is named after) must be unique
-  // per call — both carry a unique index.
+  // A login plus a sale both enrol a till device in the SAME database, so the profile name AND the
+  // device name must be unique per call — both carry a unique index.
   tillDeviceCounter += 1;
   const n = tillDeviceCounter;
-  // A `till` device is defined by a `till`-form-factor profile (Task 7); `resolveDeviceBinding`
-  // auto-creates the register it rings against, so the resolved sale till is this device's own.
-  // `device_profiles.id`, `.created_at` and `.updated_at` are `$defaultFn` generators on NOT NULL
-  // columns (`packages/db/drizzle/0000_baseline.sql:489`, `:495`, `:496`).
   const [profile] = await suite.db
     .insert(deviceProfiles)
     .values({ name: `Counter till profile ${n}`, formFactor: "till" })
@@ -369,9 +345,7 @@ async function enrolTillCookie(cfg: TillConfig): Promise<string> {
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
-/** Ring a cash sale under a KNOWN client-minted `workingOrderId` (the id the till holds after a sale —
- *  `#store.id`; the reprint route keys on it), and return that id. Carries a till-device cookie so the
- *  post-cutover sale route resolves its till (SP-A.2 §16.4). */
+/** Ring a cash sale under a KNOWN client-minted `workingOrderId` (the reprint route keys on it). */
 async function ringSale(
   app: Hono,
   cfg: TillConfig,
@@ -413,7 +387,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     // mode 'never' so the SALE itself auto-enqueues nothing — the reprint's job is the only one, and a
-    // reprint working under 'never' proves it bypasses the print-mode gate (§0: reprint is always available).
+    // reprint working under 'never' shows it bypasses the print-mode gate.
     await configureReceipt(cfg, { mode: "never", printerId });
 
     const app = new Hono();
@@ -686,8 +660,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
 
   it("gated: the gate runs BEFORE the printer check — a staff operator with no override is 403 even with NO printer", async () => {
     const { cfg, operatorId } = await setupVenue();
-    // No printer configured. If the printer resolution ran first this would be 400 drawer.no_printer;
-    // the gate runs first (spec §3 order), so an unpermitted operator is refused regardless.
+    // No printer configured. If the printer resolution ran first this would be 400 drawer.no_printer.
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -756,13 +729,8 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
       "/api/drawer/open",
       withOverride(cookie, { personId: "not-a-uuid", pin: "5555" }),
     );
-    // Screened as a UUID (`apps/server/src/till-api.ts`, `parseDrawerOverride`) and mapped to the SAME
-    // person.not_found (401) a well-formed-but-absent id already gets. The `22P02` this case is named
-    // for was the PostgreSQL consequence the screen was written against: `persons.id` is a text column
-    // here (`packages/identity/drizzle/0000_baseline.sql:46`), so a malformed id reaching the query
-    // would simply match no row. Deleting `!isUuid(raw.personId)` from that function leaves all 29
-    // cases in this file passing (measured 2026-09-22) — so this case now pins the CODE the route
-    // answers with, and nothing here still holds the screen itself up.
+    // `parseDrawerOverride` maps a non-UUID id to the SAME person.not_found (401) a well-formed but
+    // absent id gets.
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "person.not_found" },
@@ -1091,11 +1059,8 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
   await suite.db.execute(
     sql`update tenants set legal_name = 'Changed venue identity' where id = 1`,
   );
-  // Through the table definition: `tenant_receipts.updated_at` is a `$defaultFn` generator on a NOT
-  // NULL column (`packages/db/drizzle/0000_baseline.sql:512`) that a raw insert never reaches, and
-  // `receipt` is JSON in a text column, so the `::jsonb` cast the statement carried is both
-  // unnecessary and a syntax error here. The row it writes is unchanged: the CURRENT receipt text,
-  // which the reprint below must NOT read — it reprints the sale's own snapshot.
+  // The CURRENT receipt text, which the reprint below must NOT read — it reprints the sale's own
+  // snapshot.
   await suite.db
     .insert(tenantReceipts)
     .values({

@@ -45,10 +45,8 @@ function captureThrow(fn: () => unknown): unknown {
 describe("loadTillConfig", () => {
   it("brands the four ids from their env vars and defaults locale to es-ES", () => {
     const config = loadTillConfig(base);
-    // toEqual, not toMatchObject: it also asserts there is no SIXTH id field and nothing extra. The
-    // env card selection is gone (Task 12 — a card sale now routes to its reader through the pool), so
-    // the config carries NO `cardProvider`/`stripeReaderId`/`sumupReaderId` key at all; `tipsEnabled`
-    // defaults to false.
+    // toEqual, not toMatchObject: it also asserts nothing extra — no `cardProvider`/`stripeReaderId`/
+    // `sumupReaderId` key at all.
     expect(config).toEqual({
       tillId: TILL,
       nodeId: NODE,
@@ -61,10 +59,8 @@ describe("loadTillConfig", () => {
   });
 
   it("leaves localeOverride undefined when WAITRON_TILL_LOCALE is unset (while locale defaults to es-ES)", () => {
-    // The venue-default UI locale (`readVenueLocale`, boot.ts) reads the RAW env as its override, NOT
-    // the defaulted `locale` — so an unset `WAITRON_TILL_LOCALE` must leave `localeOverride` undefined,
-    // letting the country-pack resolver fall through to geography, even as the FISCAL `locale` still
-    // defaults to `es-ES` beside it.
+    // An unset `WAITRON_TILL_LOCALE` leaves `localeOverride` undefined, so the country-pack resolver
+    // falls through to geography, even as the fiscal `locale` defaults to `es-ES` beside it.
     const config = loadTillConfig(base);
     expect(config.localeOverride).toBeUndefined();
     expect(config.locale).toBe("es-ES");
@@ -79,9 +75,8 @@ describe("loadTillConfig", () => {
   });
 
   it("treats an empty WAITRON_TILL_LOCALE as unset, defaulting to es-ES (and localeOverride undefined)", () => {
-    // Same "absent OR empty string is unset" rule the four ids' `required` uses — an operator's
-    // `WAITRON_TILL_LOCALE=` line must not push an empty locale into `invoiceLocales`, which
-    // downstream invoice rendering consumes, NOR an empty override into the venue-default derivation.
+    // An operator's `WAITRON_TILL_LOCALE=` line must not push an empty locale into `invoiceLocales`,
+    // nor an empty override into the venue-default derivation.
     const config = loadTillConfig({ ...base, WAITRON_TILL_LOCALE: "" });
     expect(config.locale).toBe("es-ES");
     expect(config.invoiceLocales).toEqual(["es-ES"]);
@@ -100,7 +95,7 @@ describe("loadTillConfig", () => {
     });
 
     it("leaves tips disabled on any other WAITRON_TILL_TIPS value", () => {
-      // Only "true"/"1" enable — a stray "yes" is NOT tips-on, so a typo fails safe (off).
+      // A stray "yes" is NOT tips-on, so a typo fails safe (off).
       const config = loadTillConfig({ ...base, WAITRON_TILL_TIPS: "yes" });
       expect(config.tipsEnabled).toBe(false);
     });
@@ -108,10 +103,7 @@ describe("loadTillConfig", () => {
 
   describe("the env card selection is gone (Task 12 cutover)", () => {
     it("ignores WAITRON_TILL_CARD_PROVIDER / *_READER_ID entirely (no card field, no throw)", () => {
-      // The card provider is no longer an env selection — a card sale routes to its reader's provider
-      // through the pool. So even a formerly-valid (or formerly-rejected) value is simply IGNORED: the
-      // config carries no `cardProvider`/`stripeReaderId`/`sumupReaderId`, and an unknown value that
-      // once threw `server.till_config_invalid` no longer does.
+      // A card sale routes to its reader's provider through the pool, so these variables are ignored.
       const config = loadTillConfig({
         ...base,
         WAITRON_TILL_CARD_PROVIDER: "stripe_terminal",
@@ -124,7 +116,6 @@ describe("loadTillConfig", () => {
     });
 
     it("does not throw on a value that once was rejected", () => {
-      // `square` was `server.till_config_invalid` under the old env selection; now it is inert.
       expect(() => loadTillConfig({ ...base, WAITRON_TILL_CARD_PROVIDER: "square" })).not.toThrow();
     });
   });
@@ -154,15 +145,11 @@ describe("loadTillConfig", () => {
 
 describe("tryLoadTillConfig", () => {
   it("returns undefined when NONE of the four till ids are set (setup mode)", () => {
-    // An unprovisioned box has no venue, so the four WAITRON_TILL_*_ID are absent — that is SETUP
-    // MODE, not a misconfiguration, so the load returns undefined rather than throwing. (Boot branches
-    // on `config.till === undefined` in a later slice-1b task.)
+    // An unprovisioned box has no venue: that is SETUP MODE, not a misconfiguration.
     expect(tryLoadTillConfig({})).toBeUndefined();
   });
 
   it("treats all four present-but-empty (VAR=) as none set → undefined", () => {
-    // `isUnset` is absent-OR-empty, so an env file writing every WAITRON_TILL_*_ID= blank is still
-    // "none set" (setup mode) — the same VAR=-means-unset rule the ids' own `required` applies.
     const allEmpty = Object.fromEntries(ID_VARS.map((v) => [v, ""]));
     expect(tryLoadTillConfig(allEmpty)).toBeUndefined();
   });
@@ -183,9 +170,8 @@ describe("tryLoadTillConfig", () => {
 
   describe.each(ID_VARS)("with only %s missing (a partial set)", (missing) => {
     it("throws server.config_invalid { variable, reason: 'till_config_partial' }", () => {
-      // Some-but-not-all set is a HALF-CONFIGURED server — a bug, never a setup box — so it throws,
-      // naming the (first) missing variable. Only the NAME travels, never a value: the same no-leak
-      // discipline the ids' `required`/`brand` paths keep.
+      // Some-but-not-all set is a HALF-CONFIGURED server, never a setup box. Only the variable NAME
+      // travels, never a value.
       const error = captureThrow(() => tryLoadTillConfig({ ...base, [missing]: undefined }));
       expect(codeOf(error)).toBe("server.config_invalid");
       expect(isAppError(error) && error.params).toEqual({
@@ -196,8 +182,7 @@ describe("tryLoadTillConfig", () => {
   });
 
   it("names the FIRST missing variable (in WAITRON_TILL_{TILL,NODE,SERIES,LOCATION}_ID order) when several are absent", () => {
-    // NODE and SERIES both absent → NODE is named (it comes first in the list), so an operator fixes
-    // them top-down rather than one error at a time from an arbitrary one.
+    // NODE and SERIES both absent → NODE is named (it comes first in the list).
     const error = captureThrow(() =>
       tryLoadTillConfig({
         ...base,

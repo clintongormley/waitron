@@ -35,14 +35,9 @@ import { createOpenOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// `readTenderBlock` reads back the committed tender (+ payment) rows through the same handle that
-// wrote them. The whole manifest is migrated because the seed runs the real provisioning plan and
-// `recordSale`, which reach the catalogue, identity, payments and fiscal sets; each case seeds its
-// own sale under its own working-order id (unique, so the `sales.working_order_id` unique index
-// never collides across cases).
-//
-// Nothing here establishes that the deployment role — which no longer exists — may read `tenders`
-// or `payments`.
+// The whole manifest is migrated because the seed runs the real provisioning plan and `recordSale`.
+// Each case seeds its own sale under its own working-order id, which `sales_working_order_id_key`
+// requires.
 const LOCALE = "es-ES";
 
 const suite = useVenueDb({
@@ -54,7 +49,7 @@ const suite = useVenueDb({
 let backend: FiscalBackend;
 let clock: TrustedClock;
 
-/** The system wall clock, reported confident/anchored — the stub the sibling suites use. */
+/** The system wall clock, reported confident/anchored. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -74,9 +69,7 @@ function systemClock(): TrustedClock {
   };
 }
 
-// The taxpayer id is unique, so each provisioned venue needs its own NIF — the shape the sibling
-// suites use. One venue is provisioned here, in `beforeAll`; the counter is what keeps that true if
-// a second one is ever added.
+// The taxpayer id is unique, so each provisioned venue needs its own NIF.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -151,8 +144,7 @@ beforeAll(async () => {
   ({ menuItemId, zoneId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
-    // A product priced at exactly 1.00 gross so the filed total is "1.00" — the figure every case
-    // below asserts against.
+    // Every case asserts against this 1.00 gross.
     const product = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,
@@ -168,9 +160,8 @@ beforeAll(async () => {
 });
 
 /**
- * File a settled sale for a fresh working order with a single 1.00 line, using the supplied tender
- * settlement, and return the sale + working-order ids. A card case may seed the captured `payments`
- * row (with or without card facts / a manual reference) so `readTenderBlock` can read it back.
+ * File a settled sale for a fresh working order with a single 1.00 line and the supplied tender. A
+ * card case may also seed its captured `payments` row.
  */
 async function seedSale(
   tx: Transaction,
@@ -311,10 +302,7 @@ describe("readTenderBlock", () => {
   });
 
   it("keeps card amounts when the card tender's payment row is absent entirely", async () => {
-    // A settled CARD sale with its `tenders` row but NO `payments` row at all (seedSale omits the
-    // payment insert when no payment arg is passed) — the `payment === null` branch of readTenderBlock,
-    // which every other case misses. A filed, immutable sale must PRESENT, never throw (CLAUDE.md §5),
-    // so this degrades to a bare card block rather than failing.
+    // A filed sale must still present, never throw, so this degrades to a bare card block.
     const block = await withTransaction(suite.db, async (tx) => {
       const { saleId, workingOrderId } = await seedSale(tx, {
         method: "card",

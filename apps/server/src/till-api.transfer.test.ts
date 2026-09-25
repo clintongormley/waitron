@@ -32,13 +32,9 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { openTab } from "./working-order.js";
 import "./errors.js";
 
-// `transferLines`' own WRITE behaviour (split arithmetic, guards,
-// price-lock, and the concurrency properties the venue file's write queue now carries) is proven in
-// `transfer-lines.test.ts`/`transfer-lines.filing.test.ts`; this
-// suite proves only the HTTP surface — the session guard, the malformed-`:id`/`toTabId` screens, and the
-// STATUS mapping for the two new transfer codes — the same shape `till-api.move-merge.test.ts` proves for
-// move/join/merge. Harness ported from
-// `till-api.move-merge.test.ts`, itself ported from `till-api.test.ts`.
+// The HTTP surface of the transfer route: the session guard, the malformed-`:id`/`toTabId` screens and
+// the STATUS mapping for the transfer codes. `transferLines`' write behaviour is pinned in
+// `transfer-lines.test.ts` and `transfer-lines.filing.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
 // One product, offered in a table zone, so a tab can open with a real line to transfer — `openTab`
@@ -55,12 +51,6 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     await seedLegacySellingUnits(db);
-    // Through the table definitions rather than raw SQL, the change
-    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
-    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
-    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
-    // is what refused the `array[...]` constructor that used to fill it
-    // (`near "['es-ES']": syntax error`).
     const [loc] = await db
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
@@ -69,18 +59,14 @@ const suite = useVenueDb({
       .insert(tills)
       .values({ locationId: loc!.id, name: "Till 1" })
       .returning({ id: tills.id });
-    // A node the tab lives on: `openTab` writes `working_orders.node_id` (its FK
-    // `(node_id) → nodes(id)` requires a real row). `cfg.nodeId` names THIS row.
+    // `openTab` writes `working_orders.node_id`, whose FK requires a real row.
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
-    // Ana's PIN is "5555"; `openSession` logs her in exactly as the login route does.
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
     cfg = makeCfg(till!.id, loc!.id, nodeId);
-    // One product in a catalogue assigned to the counter location, seeded via the catalogue
-    // helpers — the same `withTransaction` path `openTab` prices it through.
     const offers = await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
       const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
@@ -102,16 +88,13 @@ const suite = useVenueDb({
   },
 });
 
-/** A collecting logger for asserting the structured lines the routes emit. */
 function collect(
   lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[],
 ): Logger {
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-/** The till's config for the seeded tenant. `nodeId` is the seeded node the tab is written on;
- * `seriesId` is unused by the transfer route (no fiscal write on the tab path); `locationId` is the
- * seeded one `createTable` writes into. */
+/** `seriesId` is unused by the transfer route (no fiscal write on the tab path). */
 function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
     tillId: brandTillId(tillId),
@@ -125,8 +108,6 @@ function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig
   };
 }
 
-/** The system wall clock, reported confident/anchored — the identical stub shape the sibling suites
- *  use. The transfer route never calls `clock`, but `TillApiDeps` requires it. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -149,8 +130,7 @@ function systemClock(): TrustedClock {
 function deps(db: Database): TillApiDeps {
   return {
     db,
-    // `backend` is unused by the transfer route (it touches no fiscal path); `clock` IS wired real for
-    // shape completeness though the route never reads it.
+    // Unused: the transfer route touches no fiscal path.
     backend: {} as FiscalBackend,
     clock: systemClock(),
     cfg,
@@ -159,8 +139,6 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
- * route runs — and returns its cookie token. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
@@ -254,11 +232,8 @@ describe("POST /api/tabs/:id/transfer", () => {
       quantity: string;
       unit_price_gross: number;
     }>(
-      // Both columns are whole numbers at their own scales: `unit_price_gross` counts cents, so 150
-      // is the locked 1.50, and `quantity` counts thousandths, so "2000" is two units. The
-      // assertion is on those COUNTS, not on an amount or a quantity; the two casts only normalise
-      // each for the assertion. `cast(x as …)` is the spelling because this engine has no cast
-      // operator — `::` starts a bind parameter to its parser.
+      // `unit_price_gross` counts cents, so 150 is the locked 1.50, and `quantity` counts
+      // thousandths, so "2000" is two units.
       sql`select line_no, product_id, cast(quantity as text) as quantity, cast(unit_price_gross as int) as unit_price_gross from working_order_lines where working_order_id = ${tabB}`,
     );
     expect(b.rows).toEqual([

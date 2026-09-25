@@ -4,11 +4,8 @@ import type { PaymentResult } from "@waitron/payments";
 import { toPayOutcome } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 
-// `toPayOutcome` is a PURE mapper over a provider result — no database at all. It is unit-tested
-// here rather than in `till-sale-integrated.db.test.ts` because none of its behaviour touches the
-// split transactions or the FK-before-attempting ordering that suite exists to prove. The
-// orchestrator only ever calls it for the NON-captured states, so its `captured`/`accepted_offline`
-// arms are exercised here — the one place every arm is covered.
+// The orchestrator calls `toPayOutcome` only for non-captured states, so this is the one place its
+// `captured`/`accepted_offline` arms run.
 
 const TICKET: TillSaleResult = {
   orderLabel: null,
@@ -58,9 +55,6 @@ describe("toPayOutcome", () => {
   });
 
   it("maps an attempting result (SumUp poll timeout) to the timeout arm", () => {
-    // SumUp reports a poll-window stall as `attempting` — the row stays open for `resolvePending`,
-    // nothing filed, order stays `open`. The till renders `timeout` and `declined` the same (retry
-    // or take cash), but the arm is distinct so a stall is not mislabelled a decline.
     expect(toPayOutcome(result("attempting"), null)).toEqual({ outcome: "timeout" });
   });
 });

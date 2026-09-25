@@ -31,12 +31,9 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// This file proves the HTTP SHAPE of the reprint route — the
-// `requireSession` guard, the `requireUuidId` screen, and that `reprintOrderTickets` re-enqueues
-// through the SAME outbox path the fire uses. The reprint VERB's logic (re-query all fired items,
-// R-D whole-ticket, never-block) is proven at the verb level in `kitchen-print.test.ts`. Schema is
-// CORE (kitchen_stations / ticket_items / printers / station_printers / print_jobs all land in
-// CORE) + IDENTITY (the sessions/persons the login path needs).
+// The HTTP shape of the reprint route: the `requireSession` guard, the `requireUuidId` screen, and
+// that `reprintOrderTickets` re-enqueues through the SAME outbox path the fire uses. The verb's logic
+// is pinned in `kitchen-print.test.ts`.
 const CAFE = "Cafe con leche";
 let cfg: TillConfig;
 let ana: { id: string };
@@ -50,12 +47,6 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     await seedLegacySellingUnits(db);
-    // Through the table definitions rather than raw SQL, the change
-    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
-    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
-    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
-    // is what refused the `array[...]` constructor that used to fill it
-    // (`near "['es-ES']": syntax error`).
     const [loc] = await db
       .insert(locations)
       .values({
@@ -109,8 +100,7 @@ function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig
   };
 }
 
-/** The system wall clock — the reprint route files no fiscal doc, but `placeOrder` calls `clock.now()`
- *  regardless of mode, so the same stub shape the sibling suites use is supplied. */
+/** The reprint route files no fiscal doc, but `placeOrder` calls `clock.now()` regardless of mode. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -143,7 +133,6 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** The tenant + location scope the printing verbs run under. */
 function printCfg(): PrintConfig {
   return { locationId: cfg.locationId };
 }
@@ -161,14 +150,11 @@ async function openSession(db: Database): Promise<string> {
 
 let app: Hono;
 let cookie: string;
-// SP-A.2 cutover: `POST /:id/place` resolves its `till_id` from the authenticated enrolled device, so
-// `placeAndFire` carries a `till`-device cookie (bound to `cfg.tillId`, the venue's own till, so the
-// order behaves exactly as pre-cutover). One enrolment for the file — this suite never deletes devices.
+// `POST /:id/place` resolves its `till_id` from the authenticated enrolled device, so `placeAndFire`
+// carries a `till`-device cookie.
 let tillDeviceCookie: string;
 
-/** Enrol a REAL `till` device (Task 7: defined by a `till`-form-factor profile, and
- *  `resolveDeviceBinding` auto-creates the register it rings against) and return its
- *  `waitron_device=…` cookie. */
+/** Enrol a REAL `till` device and return its `waitron_device=…` cookie. */
 async function enrolTillDeviceCookie(db: Database): Promise<string> {
   const rows = await db
     .insert(deviceProfiles)
@@ -228,8 +214,6 @@ async function printJobsFor(printerId: string): Promise<{ id: string; ticket: st
 
 describe("POST /api/orders/:id/reprint", () => {
   it("REJECTS with 401 session.required when no cookie is present (the guard runs first)", async () => {
-    // The `requireSession` guard runs FIRST, before the id screen or any DB touch; deleting it flips this
-    // to a 2xx/4xx — the deletion proof (run manually, CLAUDE.md §4).
     const res = await app.request(`/api/orders/${randomUUID()}/reprint`, { method: "POST" });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
@@ -256,8 +240,8 @@ describe("POST /api/orders/:id/reprint", () => {
   });
 
   it("404s working_order.not_found on a malformed id, and no-ops (200) an unknown well-formed order", async () => {
-    // A malformed id is `requireUuidId`-screened to `working_order.not_found` (404) before any query —
-    // never a 22P02 → 500 — carrying the id it rejected.
+    // A malformed id is `requireUuidId`-screened to `working_order.not_found` (404) before any query,
+    // carrying the id it rejected.
     const malformed = await app.request("/api/orders/not-a-uuid/reprint", {
       method: "POST",
       headers: { cookie },

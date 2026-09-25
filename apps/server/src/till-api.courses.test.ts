@@ -32,24 +32,11 @@ import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
-// These routes are wiring — the session guard + isUuid screens +
-// STATUS mapping over `fireCourse` / `listStationQueue`, which are LOGIC. The auto-fire
-// arithmetic, the held-advance refusal and `fireCourse`'s idempotency are proven at the verb
-// level in `working-order.test.ts`; `working-order.pay-and-dispatch.test.ts` also covers
-// node filtering of `ticket_items` (`working-order.pay-and-dispatch.test.ts`). This file proves the HTTP SHAPE:
-// the fire route fires a held course, the queue read carries each item's `course` + `firedAt`,
-// and the advance route refuses a held item. The KDS-3 block at the foot proves the expo (pass)
-// HTTP shape on the SAME seed — the cross-station `GET /api/expo/queue` aggregates the node's
-// live orders into courses, and the `ready`/`away` routes bump/dispatch a whole course; the
-// aggregation, roll-ups, no-throw-on-empty and `requireCourse` semantics are the verbs'
-// (`working-order.test.ts`), the routes only the session guard + id screens. The schema is
-// CORE_MIGRATIONS (kitchen_courses / course_id / fired_at / away_at land in the KDS-2/3
-// migrations, part of CORE) + IDENTITY_MIGRATIONS (the sessions/persons the login path needs).
+// The HTTP shape of the coursing, fire, station-queue and expo routes: the session guard, the id
+// screens and the STATUS mapping. The verbs' logic is pinned in `working-order.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
-// The two courses seeded on the counter location: Entrantes (earliest, display_order 0) auto-fires;
-// Principales (display_order 1) is held until `fireCourse`. Captured at module scope so the fire route
-// can name the held course's id and the queue assertions can pin the serialised `course` object.
+// Entrantes (earliest) auto-fires; Principales is held until `fireCourse`.
 let entCourseId: string;
 let priCourseId: string;
 // The products offered in the counter zone (a parked order's) and in a tables zone (a tab's). One
@@ -57,10 +44,8 @@ let priCourseId: string;
 let counterOffers: ZoneOffers;
 let tablesZoneId: string;
 
-// Distinct staff names, so a queue item can be matched back to the product it was fired from (the
-// queue serialises the resolved kitchen name, not `productId`, and none of these three carries a
-// kitchen name of its own so each falls back to its staff name). `PAN` carries NO course (course: null) — it
-// fires immediately like the earliest course (§2b) — proving the null-course serialisation too.
+// Distinct staff names: the queue serialises the resolved kitchen name, not `productId`, and none of
+// these carries a kitchen name of its own, so each falls back to its staff name.
 const SOPA = "Sopa"; // Entrantes (earliest) → auto-fires
 const FILETE = "Filete"; // Principales (later) → held
 const PAN = "Pan"; // no course → fires immediately
@@ -76,18 +61,11 @@ const suite = useVenueDb({
     // key; `priceOrderLines` re-keys their descriptions to the location's `es-ES` before the park/place
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the
     // location's locales exactly.
-    // Through the table definitions rather than raw SQL, the change
-    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
-    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
-    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
-    // is what refused the `array[...]` constructor that used to fill it
-    // (`near "['es-ES']": syntax error`).
     const [loc] = await db
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
     const locationId = brandLocationId(loc!.id);
-    // A default kitchen station, the one each product's route sends a fire (placeOrder → fireLines) to.
     await seedKitchenStation(db, { locationId });
     const [till] = await db
       .insert(tills)
@@ -101,9 +79,8 @@ const suite = useVenueDb({
     ana = { id: person!.id };
     cfg = makeCfg(till!.id, loc!.id, nodeId);
 
-    // Seed the courses + three products (two coursed, one loose) under the tenant, the same
-    // `withTransaction` path the routes read/write through — so the course FK + the
-    // active/assignment filters are real, not bypassed by a direct insert.
+    // Through the verbs rather than direct inserts, so the course FK and the active/assignment
+    // filters are real.
     await withTransaction(db, async (tx) => {
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
@@ -134,16 +111,13 @@ const suite = useVenueDb({
   },
 });
 
-/** A collecting logger for asserting the structured lines the routes emit. */
 function collect(
   lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[],
 ): Logger {
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-/** The till's config for the seeded tenant. `seriesId` is unused (no fiscal write on the coursing/fire
- *  path) so it carries a fresh uuid; `nodeId`/`locationId` are the seeded rows the park/place/queue
- *  routes write and scope by. */
+/** `seriesId` is unused (no fiscal write on the coursing/fire path), so it carries a fresh uuid. */
 function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
     tillId: brandTillId(tillId),
@@ -157,9 +131,7 @@ function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig
   };
 }
 
-/** The system wall clock — the coursing/fire routes never file a fiscal doc under this `prepay` cfg,
- *  but `placeOrder` calls `clock.now()` regardless of mode, so the same stub shape the sibling suites
- *  use is supplied. */
+/** No fiscal doc is filed under this `prepay` cfg, but `placeOrder` calls `clock.now()` regardless. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -191,8 +163,6 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
- *  route runs — and returns its cookie token. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
@@ -216,15 +186,11 @@ type QueueGroup = { orderId: string; items: QueueItem[] };
 
 let app: Hono;
 let cookie: string;
-// SP-A.2 cutover: `POST /:id/place` resolves its `till_id` from the authenticated enrolled device, so
-// `placeOrder` below carries a `till`-device cookie (bound to `cfg.tillId`). One enrolment for the file
-// — this suite never deletes devices, so it persists. (The device gate itself is proven in
-// `till-api.fiscal-sale-paths.test.ts`; here it is just the setup a place needs.)
+// `POST /:id/place` resolves its `till_id` from the authenticated enrolled device, so `placeOrder`
+// carries a `till`-device cookie.
 let tillDeviceCookie: string;
 
-/** Enrol a REAL `till` device (Task 7: defined by a `till`-form-factor profile, and
- *  `resolveDeviceBinding` auto-creates the register it rings against) and return its
- *  `waitron_device=…` cookie. */
+/** Enrol a REAL `till` device and return its `waitron_device=…` cookie. */
 async function enrolTillDeviceCookie(db: Database): Promise<string> {
   const rows = await db
     .insert(deviceProfiles)
@@ -258,9 +224,8 @@ async function queueItemsByName(orderId: string, station: string): Promise<Map<s
   return new Map(group.items.map((i) => [i.name, i]));
 }
 
-// The product ids are resolved once (by staff name) from GET /api/products, and each is mapped to its
-// offer so park and round bodies can name it — the queue serialises names, not ids, so this is the
-// only place ids are needed. The route now returns `{ menus, products }`; only `products` is needed.
+// The queue serialises names, not ids, so the product ids are resolved once, by staff name, and each
+// is mapped to its offer so park and round bodies can name it.
 async function offerIdsByName(): Promise<Map<string, string>> {
   const res = await app.request("/api/products", { headers: { cookie } });
   expect(res.status).toBe(200);
@@ -290,8 +255,7 @@ async function placeOrder(names: string[]): Promise<string> {
 }
 
 /** Open a fresh-table tab and ring SOPA (Entrantes, auto-fires as line 1) + FILETE (Principales, HELD line
- *  2) as one round; returns the tab id. SOPA is fired-not-started (recallable); FILETE holds a Principales
- *  ticket-item snapshot until it is sent. Shared by the A1 re-course, A2 send and A4 recall blocks. */
+ *  2) as one round; returns the tab id. SOPA is fired-not-started (recallable). */
 async function tabWithSopaAndFilete(): Promise<string> {
   const ids = await offerIdsByName();
   const table = await app.request("/api/tables", {
@@ -415,8 +379,6 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
   });
 
   it("REJECTS the fire route with 401 session.required when no cookie is present", async () => {
-    // The guard runs FIRST, before any id screen or DB touch; deleting `requireSession` flips this to a
-    // 2xx/4xx (the deletion proof).
     const res = await app.request(`/api/orders/${randomUUID()}/courses/${randomUUID()}/fire`, {
       method: "POST",
     });
@@ -452,11 +414,8 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
   });
 
   it("an empty {} body (courseId key absent) clears the course cleanly (200), never a 500", async () => {
-    // A structurally-valid body that omits `courseId` means "clear the course": the route coerces the
-    // absent key to null (`body.courseId ?? null`) so `undefined` never reaches setLineCourse. Without the
-    // coercion the omitted value surfaces as an opaque server.internal 500 — this test is the receipt: it
-    // fails at the 200 assertion below if the coercion is reverted. The held Principales line starts on
-    // priCourseId; an empty-body PATCH must land it on null, not error.
+    // An omitted `courseId` means "clear the course": the route coerces it to null
+    // (`body.courseId ?? null`) so `undefined` never reaches setLineCourse.
     const tabId = await tabWithSopaAndFilete();
     const station = await cocinaId();
     expect((await queueItemsByName(tabId, station)).get(FILETE)!.course!.id).toBe(priCourseId);
@@ -471,8 +430,8 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
   });
 
   it("a malformed courseId is 404 course.not_found, screened before any DB touch", async () => {
-    // A well-formed tab id + line no, but a non-uuid courseId — the isUuid screen fires it as a clean 404,
-    // never a 22P02 → 500. (No tab is even opened: the screen runs before assertAnchoredTabOpen.)
+    // A well-formed tab id + line no, but a non-uuid courseId. No tab is even opened: the screen runs
+    // before assertAnchoredTabOpen.
     const res = await app.request(`/api/working-orders/${randomUUID()}/lines/1/course`, {
       method: "PATCH",
       headers: { "content-type": "application/json", cookie },
@@ -485,8 +444,6 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
   });
 
   it("REJECTS with 401 session.required when no cookie is present", async () => {
-    // The guard runs FIRST, before any id screen or DB touch; deleting `requireSession` flips this to a
-    // 2xx/4xx (the deletion proof).
     const res = await app.request(`/api/working-orders/${randomUUID()}/lines/1/course`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -542,8 +499,6 @@ describe("POST /api/working-orders/:id/lines/send (A2 fire specific held lines /
   });
 
   it("REJECTS with 401 session.required when no cookie is present", async () => {
-    // The guard runs FIRST, before the id screen or any DB touch (the deletion proof: without
-    // `requireSession` this flips to a 2xx/4xx).
     const res = await app.request(`/api/working-orders/${randomUUID()}/lines/send`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -622,8 +577,6 @@ describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started li
   });
 
   it("REJECTS with 401 session.required when no cookie is present", async () => {
-    // The guard runs FIRST, before the id screen or any DB touch (the deletion proof: without
-    // `requireSession` this flips to a 2xx/4xx).
     const res = await app.request(`/api/working-orders/${randomUUID()}/lines/recall`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -727,7 +680,7 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away"
     expect(unknownAway.status).toBe(404);
     expect(await unknownAway.json()).toMatchObject({ error: { code: "course.not_found" } });
 
-    // A malformed course id is isUuid-screened to the SAME code on BOTH routes (never a 22P02 → 500).
+    // A malformed course id is isUuid-screened to the SAME code on BOTH routes.
     const malformedAway = await app.request(`/api/orders/${orderId}/courses/not-a-uuid/away`, {
       method: "POST",
       headers: { cookie },
@@ -753,7 +706,7 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away"
     });
     expect(unknownReady.status).toBe(200);
 
-    // A malformed ORDER id on either route → 404 working_order.not_found (never a 22P02 → 500).
+    // A malformed ORDER id on either route → 404 working_order.not_found.
     const malformedOrder = await app.request(`/api/orders/not-a-uuid/courses/${entCourseId}/away`, {
       method: "POST",
       headers: { cookie },
@@ -765,8 +718,6 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready/away"
   });
 
   it("REJECTS the queue read + ready + away with 401 session.required when no cookie is present", async () => {
-    // The `requireSession` guard runs FIRST on each route, before any id screen or DB touch; deleting it
-    // flips these to a 2xx/4xx — the deletion proof (run manually, CLAUDE.md §4).
     const queue = await app.request("/api/expo/queue");
     expect(queue.status).toBe(401);
     expect(await queue.json()).toMatchObject({ error: { code: "session.required" } });

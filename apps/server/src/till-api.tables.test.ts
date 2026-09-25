@@ -29,12 +29,9 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// These routes are wiring — session guard + isUuid screen + STATUS mapping
-// over the commercial table/tab verbs, which are LOGIC. The table/tab verbs' own proofs (the FKs,
-// and the concurrency properties that predate the venue file's write queue)
-// live in `tabs.filing.test.ts`, `move-merge.filing.test.ts` and packages/db's schema suites; they are not
-// re-proven at the HTTP layer. The schema is the whole manifest: the tables here span modules that FK
-// into core, so the shared ordered set is the fixture.
+// The HTTP wiring of the table/tab routes: session guard, isUuid screens and STATUS mapping. The verbs
+// are pinned in `tabs.filing.test.ts`, `move-merge.filing.test.ts` and packages/db's schema suites.
+// The schema is the whole manifest: the tables here span modules that FK into core.
 let cfg: TillConfig;
 let ana: { id: string };
 // The one product seeded into the counter location's catalogue, so a tab can open with a real line
@@ -45,9 +42,7 @@ let productId: string;
 // lines name the offer.
 let menuItemId: string;
 let tablesZoneId: string;
-// A real `floor_zones` row in the counter location — a table's `zoneId` is now a FK to
-// `floor_zones`, not a free-text string, so the create/patch table tests point at THIS id. (The zone
-// CRUD verbs have no HTTP route yet — that is a later FP-1 task — so it is seeded directly here.)
+// A real `floor_zones` row in the counter location: a table's `zoneId` is a FK to `floor_zones`.
 let seededZoneId: string;
 
 const suite = useVenueDb({
@@ -60,36 +55,24 @@ const suite = useVenueDb({
     // invoice_locales is `es-ES` (full-tag, fiscal). The product is authored under the BARE `es` key;
     // `priceOrderLines` re-keys its descriptions to the location's `es-ES` before the tab
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the
-    // location's locales exactly — the same constraint the park route's harness documents.
-    // Through the table definitions rather than raw SQL, the change
-    // `apps/server/src/testing/fiscal-fixtures.ts` took: every `id` seeded below, and the
-    // `created_at` beside it, is a `$defaultFn` generator on a NOT NULL column that a raw insert
-    // never reaches on this engine; and `invoice_locales` is a JSON array in a text column, which
-    // is what refused the `array[...]` constructor that used to fill it
-    // (`near "['es-ES']": syntax error`).
+    // location's locales exactly.
     const [loc] = await db
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
-    // KDS-1: a default kitchen station, the one the product's route sends addTabRound's fire to.
     await seedKitchenStation(db, { locationId: brandLocationId(loc!.id) });
     const [till] = await db
       .insert(tills)
       .values({ locationId: loc!.id, name: "Till 1" })
       .returning({ id: tills.id });
-    // A node the tab's working-order write needs: `openTab`/`addTabRound` create an `open`
-    // working_orders row whose FK `(node_id) → nodes(id)` requires a
-    // real row; `cfg.nodeId` names THIS one.
+    // `openTab`/`addTabRound` create a working_orders row whose `node_id` FK requires a real row.
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
-    // Ana logs in with PIN "5555"; the session cookie the routes require names her shift.
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    // One product in a catalogue assigned to the counter location, seeded via the catalogue
-    // helpers — the same `withTransaction` path the tab verbs price it through, so the
-    // active/assignment filters are real.
+    // Through the catalogue verbs, so the active/assignment filters are real.
     const product = await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
       const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
@@ -117,16 +100,13 @@ const suite = useVenueDb({
   },
 });
 
-/** A collecting logger — the routes' structured lines are not asserted here, only that a code maps. */
 function collect(
   lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[],
 ): Logger {
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-/** The till's config for the seeded tenant. `seriesId` is unused by these routes (no fiscal write on
- *  the tab/table path) so it carries a fresh uuid; `nodeId`/`locationId` are the seeded rows the tab
- *  and table reads write/scope by. */
+/** `seriesId` is unused by these routes (no fiscal write on the tab/table path), so it carries a fresh uuid. */
 function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
     tillId: brandTillId(tillId),
@@ -140,8 +120,6 @@ function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig
   };
 }
 
-/** The system wall clock — the table/tab routes never file a fiscal doc under this `prepay` cfg, but
- *  `TillApiDeps` demands a clock, so the same stub shape the sibling suites use is supplied. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -173,8 +151,6 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-/** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
- *  route runs — and returns its cookie token. */
 async function openSession(db: Database): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
@@ -188,9 +164,7 @@ async function openSession(db: Database): Promise<string> {
 
 // One app + one logged-in session shared across the table/tab tests. The suite's venue file persists,
 // so tables accumulate across tests — which is why every list assertion below is a membership check
-// (`.toContainEqual` / `.find`), never an exact-list assertion that would depend on execution order (§4).
-// `request` attaches the JSON content-type and the session cookie, so each test drives the real
-// session-guarded surface.
+// (`.toContainEqual` / `.find`), never an exact-list assertion that would depend on execution order.
 let app: Hono;
 let cookie: string;
 
@@ -216,19 +190,12 @@ describe("table + tab routes", () => {
     expect(create.status).toBe(200);
     const { id } = (await create.json()) as { id: string };
     const list = (await (await request("/api/tables")).json()) as unknown[];
-    // Membership, not an exact one-element array: the suite's venue file persists across tests, so an
-    // exact-list assertion would be order-reliant (§4). `.toContainEqual` holds no matter what other
-    // table-creating tests have run.
     expect(list).toContainEqual(
       expect.objectContaining({ id, label: "12", zoneId: seededZoneId, active: true }),
     );
   });
 
   it("POST /api/tables with an unknown zoneId → 404 zone.not_found", async () => {
-    // The table create route now forwards `zoneId` to `createTable`; one naming no `floor_zones` row
-    // trips `dining_tables_zone_fk` (23503), surfaced as the domain `zone.not_found`
-    // (404 via the STATUS map) rather than an opaque 500. A real zoneId is proven by the create test
-    // above; this is its negative counterpart.
     const res = await request("/api/tables", {
       method: "POST",
       body: JSON.stringify({ label: "orphan-zone", zoneId: randomUUID() }),
@@ -238,11 +205,8 @@ describe("table + tab routes", () => {
   });
 
   it("POST /api/tables with a MALFORMED zoneId → 404 zone.not_found (isUuid guard, not an opaque 22P02 500)", async () => {
-    // A non-UUID `zoneId` string is screened to the domain `zone.not_found` (→ 404) BEFORE any DB work —
-    // the SAME code a well-formed-but-missing zoneId gets (the test above), so a bad zone reads the same
-    // whether it is malformed or merely absent. Without the `isUuid` screen the string reaches the
-    // `zone_id` uuid column and PostgreSQL raises `22P02 (invalid_text_representation)`, a non-AppError the
-    // boundary turns into an opaque `server.internal` 500 — the prove-by-deletion (drop the screen → 500).
+    // A non-UUID `zoneId` is screened to the SAME `zone.not_found` a well-formed-but-missing zoneId
+    // gets, so a bad zone reads the same whether it is malformed or merely absent.
     const res = await request("/api/tables", {
       method: "POST",
       body: JSON.stringify({ label: "bad-zone", zoneId: "not-a-uuid" }),
@@ -262,12 +226,8 @@ describe("table + tab routes", () => {
   });
 
   it("POST /api/tables with an OUT-OF-int4-RANGE capacity → 400 management.request_invalid (not an opaque 22003 500)", async () => {
-    // `dining_tables.capacity` is int4. `9999999999` is a valid JS number, so a bare type check would
-    // let it through; it would then bind into the insert on the int4 column and PostgreSQL would raise
-    // `22003 (numeric_value_out_of_range)` — a non-AppError the boundary turns into an opaque
-    // `server.internal` 500 (the same class the table verb's own `tables.test.ts` "rethrows raw"
-    // asserts below the route). The route's `requireCapacity` range guard refuses it as a domain 400
-    // BEFORE any DB work. Dropping the `> 2_147_483_647` bound makes this a 500 — the prove-by-deletion.
+    // `9999999999` is a valid JS number, so a bare type check would let it through; the route's
+    // `requireCapacity` range guard refuses it as a domain 400.
     const res = await request("/api/tables", {
       method: "POST",
       body: JSON.stringify({ label: "over-cap", capacity: 9_999_999_999 }),
@@ -302,11 +262,8 @@ describe("table + tab routes", () => {
   });
 
   it("PATCH /api/tables/:id with a MALFORMED zoneId → 404 zone.not_found (isUuid guard, not an opaque 22P02 500)", async () => {
-    // The twin of the malformed-:id screen above, one field over: a present-but-non-UUID `zoneId` in the
-    // body is screened to `zone.not_found` (→ 404) BEFORE `updateTable`, the SAME code a well-formed-but-
-    // missing zoneId gets. Without the screen the string reaches the `zone_id` uuid column → `22P02` →
-    // opaque `server.internal` 500 (the prove-by-deletion). A real table id is used so the id screen passes
-    // and the zoneId screen is what fires.
+    // The twin of the malformed-zoneId screen above, one field over. A real table id is used so the
+    // id screen passes and the zoneId screen is what fires.
     const { id } = (await (
       await request("/api/tables", {
         method: "POST",
@@ -498,8 +455,7 @@ describe("table + tab routes", () => {
 
   it("a non-integer :lineNo on the void route → 404 tab.line_not_found (it names no line, not a 500)", async () => {
     // A valid-uuid `:id` passes the `isUuid` screen so the `Number.isInteger` guard is what fires:
-    // `Number("abc")` is `NaN`, refused as `tab.line_not_found` BEFORE any DB read (a raw `abc` would
-    // never reach the integer `line_no` column anyway).
+    // `Number("abc")` is `NaN`, refused as `tab.line_not_found`.
     const res = await request(`/api/working-orders/${randomUUID()}/lines/abc`, {
       method: "DELETE",
     });
@@ -508,15 +464,9 @@ describe("table + tab routes", () => {
   });
 
   it("an OUT-OF-int4-RANGE :lineNo on the void route → 404 tab.line_not_found (not an opaque 22003 500)", async () => {
-    // Open a REAL tab so `voidTabLine`'s `assertAnchoredTabOpen` passes and the delete query is
-    // actually reached — a random uuid would be shielded by `assertAnchoredTabOpen` (tab.not_open,
-    // 409) before the query. With a
-    // real open tab: `9999999999` IS a `Number.isInteger`, so the bare integer check let it through; it
-    // would then bind as `$n` into `where line_no = $n` on the int4 `line_no` column and PostgreSQL
-    // would raise `22003 (out of range for integer)`, a non-AppError the boundary turns into an opaque
-    // 500. The route's range bound refuses it as `tab.line_not_found` (a line number that cannot exist
-    // names no line) BEFORE any query. Dropping the `> 2_147_483_647` bound makes this a 500 — the
-    // prove-by-deletion this fix is for.
+    // Open a REAL tab so `voidTabLine`'s `assertAnchoredTabOpen` passes — a random uuid would be
+    // refused as tab.not_open first. `9999999999` IS a `Number.isInteger`; the route's range bound
+    // refuses it as `tab.line_not_found` (a line number that cannot exist names no line).
     const { id } = (await (
       await request("/api/tables", {
         method: "POST",
@@ -538,10 +488,7 @@ describe("table + tab routes", () => {
   });
 
   it("REJECTS every new table/tab route with 401 session.required when no cookie is present", async () => {
-    // A fresh app driven WITHOUT the session cookie: `requireSession` runs first on each route (before
-    // any isUuid screen, body read or DB touch), so an unauthenticated create/list/state/edit/
-    // deactivate/open-tab/round/void all 401 with the one code. Deleting the `requireSession` call
-    // from any route flips that route's case to a 200/404/409 — the deletion proof of the guard.
+    // A fresh app driven WITHOUT the session cookie: every route below answers 401 with the one code.
     const noAuth = new Hono();
     mountTillApi(noAuth, deps(suite.db), collect([]));
     const id = randomUUID();

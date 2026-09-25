@@ -113,86 +113,36 @@ import {
   tryReadDevice,
 } from "./device-session.js";
 import { requireUuidParam } from "@waitron/server-kit";
-// Side-effect only: loads errors.ts's augmentation for the host codes this file THROWS — the
-// `working_order.*` / `order_prep.*` it constructs via `requireUuidId` — under the "every file that
-// throws one of these imports ./errors.js" convention errors.ts states. (The sale/pay body id screens
-// throw `shared.invalid_id` via `requireUuidParam`, whose own file loads that shared code.) The shared
-// `error-boundary.ts` these routes wrap through is what answers with `server.internal` now, and it
-// emits that as a bare literal, so it needs no such import of its own. See errors.ts.
+// Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
 
-/**
- * Everything the till's HTTP routes need, defined COMPLETE now even though the session routes below
- * touch only some of it. `backend`/`clock` are unused here but Tasks 5/6's `POST /api/sales` calls
- * `recordTillSale` with them, so wiring them into this one interface now keeps it — and every caller
- * that builds it — stable across the whole slice. `secureCookies` decides the session cookie's
- * `Secure` attribute (true for operator TLS or a persisted box leaf, false for leaf-less HTTP dev).
- */
 export interface TillApiDeps {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
   cfg: TillConfig;
-  /**
-   * The ENABLED modules' floor annotators (SP1 bookings), folded onto `GET /api/tables/state`'s rows by
-   * `listTablesWithState` — bookings supplies the reserved-on-floor badge. Boot passes
-   * `enabledFloorAnnotators(setsToMigrate)`. OPTIONAL and defaulting to none, so every existing
-   * `TillApiDeps` construction (tests included) compiles unchanged and a till with no annotating module
-   * simply carries no `nextReservation`, exactly as `devMode` defaults fail-closed.
-   */
   floorAnnotators?: readonly FloorAnnotator[];
   secureCookies: boolean;
   /**
-   * The DEMO/PREPARE local simulator `boot.ts` built for this till's tenant, or `undefined` on a
-   * live/integration till. Since the Task 12 cutover this is ONLY ever the simulator: a real card sale
-   * routes to its reader's own provider through {@link pool} at collect time, keyed by the reader row's
-   * `provider`. `GET /api/till` echoes `"simulator"` when this is present, so a practice till renders
-   * the practice pay control.
+   * Only ever the practice-mode local simulator; a real card sale routes through {@link pool} by
+   * its reader's `provider`.
    */
   cardProvider?: PaymentProvider;
   /**
-   * The card-provider pool (`boot.ts`, one live provider per id, DB-free at construction). `/api/pay`
-   * resolves the sale's reader, then `pool.get(row.provider)` for the provider that drives it — the
-   * reader's own ref rides into `collect` per sale, so the pooled provider carries no reader.
-   * OPTIONAL only so the hermetic session/park suites that never reach the reader-pay path need not
-   * build one; a live boot always supplies it, and the pay route only dereferences it after a reader
-   * row resolves (which those suites never seed).
+   * Optional only for suites that never reach the reader-pay path; a live boot always supplies it.
    */
   pool?: CardProviderPool;
   /**
-   * The card-provider composition list (`CARD_PROVIDERS`), threaded from `boot.ts`. The pay path reads
-   * a reader's provider `credentialPurpose` from its seat here rather than duplicating a provider →
-   * purpose map. OPTIONAL only so the hermetic session/park suites that never reach the reader-pay
-   * path need not build one; a live boot always supplies it, and the pre-check that uses it only runs
-   * once a reader row has resolved (which those suites never seed).
+   * Optional only for suites that never reach the reader-pay path; a live boot always supplies it.
    */
   providers?: readonly CardProviderContribution[];
-  /**
-   * Whether this host runs in DEV mode (SP-C, `config.devMode`) — the switch the per-tab device
-   * override header (`x-waitron-dev-device`) gates on. Boot wires `config.devMode`; forwarded to the
-   * device guards (`tryReadDevice`/`requireSaleTillId`/`assertNotHandheld`/`assertDeviceCapability`)
-   * so the override reaches the sale/pay routes. OPTIONAL and defaulting to fail-closed (unset ⇒ the
-   * header is inert), so every existing `TillApiDeps` construction — tests included — compiles
-   * unchanged, exactly as `DeviceApiDeps.devMode` does (Controller Ruling 1). The routes that pass
-   * `deps` wholesale inherit it; the ONE that reconstructs a narrow `{ db, cfg }` (`GET /api/till`'s
-   * `tryReadDevice`) forwards `deps.devMode` explicitly.
-   */
+  /** Gates the per-tab device override header (`x-waitron-dev-device`); unset leaves it inert. */
   devMode?: boolean;
-  /**
-   * The venue's DEFAULT UI locale, derived ONCE at boot (`readVenueLocale`, boot.ts) from geography +
-   * the optional `WAITRON_TILL_LOCALE` override. `GET /api/till` echoes it as `locale` (the language
-   * the till app defaults to before a per-user preference is known), and `GET /api/locales` returns it
-   * as `venueDefault`. DISTINCT from the fiscal `cfg.locale`/`cfg.invoiceLocales`, which are unchanged.
-   */
+  /** The venue's default UI locale, distinct from the fiscal `cfg.locale` the receipt uses. */
   venueLocale: string;
   /** The setup journey that created this installation, shown persistently by the till. */
   onboardingIntent?: OnboardingIntent;
-  /**
-   * The per-(device, person) wrong-PIN back-off the login route consults (§5). OPTIONAL and injected
-   * only by tests (over a controllable clock, CLAUDE.md §4); production omits it and `mountTillApi`
-   * builds the default `createPinThrottle()` ONCE per mount so its in-memory state persists across
-   * requests — the same singleton idiom as `device-api.ts`'s `enrolRateLimiter`.
-   */
+  /** Injected by tests; production gets one `createPinThrottle()` per mount. */
   pinThrottle?: PinThrottle;
 }
 
@@ -208,16 +158,12 @@ async function resolveHttpOrderZone(
   );
 }
 
-/** The till app's closed card-provider union, as far as this surface hands it out (`apps/till`'s own
- * `CardProvider` also carries `stripe_on_device`, deferred here — Task 12 §I2 — and `none`). */
+/** The subset of `apps/till`'s `CardProvider` union this surface hands out. */
 type TillCardProvider = "sumup_cloud" | "stripe_terminal" | "simulator" | "none";
 
 /**
- * Map a `card_readers.provider` / seat provider id (`"sumup"` / `"stripe"`) onto the till app's
- * closed `CardProvider` union (`"sumup_cloud"` / `"stripe_terminal"`), the ONE place the mapping
- * lives so `GET /api/till` never hands the till's union a value it does not know (Task 12 §I1). An
- * unrecognised provider maps to `undefined`, which every caller resolves to `"none"` rather than
- * leaking a raw seat id onto the wire.
+ * An unrecognised provider maps to `undefined`, which callers answer as `"none"` rather than leak a
+ * raw seat id.
  */
 function tillProviderForReader(provider: string): "sumup_cloud" | "stripe_terminal" | undefined {
   if (provider === "sumup") return "sumup_cloud";
@@ -225,14 +171,6 @@ function tillProviderForReader(provider: string): "sumup_cloud" | "stripe_termin
   return undefined;
 }
 
-/**
- * The `card_readers` row a `/api/pay` charge routes to (Task 12). The reader is `body.readerId`
- * when the caller named one (Task 17's picker), else the paying DEVICE's default
- * (`device_card_readers`). A device with neither → `reader.not_found`. The chosen reader is loaded
- * BY ID — one tenant per database, so the id alone identifies it; an unknown reader id is
- * `reader.not_found`, never chargeable — and must still be `active` (a disabled reader cannot take
- * a payment).
- */
 async function resolvePayReader(
   deps: TillApiDeps,
   deviceId: string | undefined,
@@ -257,13 +195,8 @@ async function resolvePayReader(
       .from(cardReaders)
       .where(and(eq(cardReaders.id, readerId), eq(cardReaders.active, true)));
     if (reader === undefined) throw new AppError("reader.not_found", { id: readerId });
-    // The provider must be CONNECTED (a sealed credential exists) before we drive the reader. Both
-    // adapters turn a deferred credential-read failure into a payment DECLINE, so without this
-    // pre-check a disconnected provider would answer a misleading "declined" (200) instead of the
-    // actionable `reader.provider_disconnected` (409). Metadata read only — the purpose, never the
-    // ciphertext — the same pre-check the payments-management surface makes before add-reader. The seat declares its own credential
-    // purpose (`CardProviderContribution.credentialPurpose`), read from the composition list boot
-    // threads in, so there is no provider → purpose map to keep in step with the seats.
+    // Refuse a disconnected provider here with the actionable `reader.provider_disconnected`,
+    // before an adapter meets the missing credential mid-charge.
     if (deps.providers !== undefined) {
       const purpose = cardProviderById(deps.providers, reader.provider).credentialPurpose;
       const [cred] = await tx
@@ -278,133 +211,47 @@ async function resolvePayReader(
   });
 }
 
-/**
- * Every AppError CODE the till API answers, and the HTTP status it maps to. CLIENT faults only: the
- * identity credential codes (`pin.invalid`/`person.*`/`session.*`), the `sale.*` request codes, the
- * shared `shared.invalid_id` branded-id code (a malformed working-order id in a sale/pay/park body,
- * 400) and the `working_order.*` park-and-retrieve codes are all 4xx. A genuine SERVER fault never appears
- * here — it reaches `run` as a NON-AppError and becomes an opaque 500. A registered code absent from
- * this table defaults to 400 (a client fault not yet given a more specific status), which is why
- * `run` needs the `?? 400`.
- *
- * The working-order and kitchen codes are given SPECIFIC statuses rather than the 400 default: a
- * retrieve of an id that names no open order is a 404 (`working_order.not_found`); a MODIFY of an
- * order that is not open (`working_order.not_open`), not placed (`working_order.not_placed`), not
- * settled (`working_order.not_settled`, `sendToPrep`'s own guard), a re-fire of an order already sent
- * to the kitchen (`ticket.already_fired`), or a per-line bump the item's current kitchen state forbids
- * (`ticket.invalid_transition`) are all 409 — the id may be valid, but the order's (or its ticket
- * item's) STATE forbids the operation (see each code's own note in `errors.ts`). A fire to a venue with
- * no default station is `station.no_default` (409, a misconfiguration blocking the fire); a station id
- * naming no live station is `station.not_found` (404). `working_order.reason_required` is listed
- * explicitly at 400 despite being the table's own default, matching every other
- * `working_order.*`/`sale.*` entry here. (`order_prep.invalid_transition` is retired from this surface
- * with the KDS-1 rework — its throw sites are gone, so it is no longer mapped here; it stays REGISTERED
- * in `errors.ts`, never renamed, spec §6.)
- *
- * The two `fiscal.*` entries are the exception to "client faults only", and they are listed rather
- * than left to the 400 default for that reason: neither is something the till sent wrong. They are
- * the venue's own filing configuration (or an unsupported foreign customer) making this record
- * one the tax agency could not accept, so they take the 409 "the state forbids it" family and the
- * till renders them as a PERMANENT refusal — see each entry's own note below.
- */
+/** Every AppError code the till API answers, and its HTTP status; an unlisted code answers 400. */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.invalid": 401,
-  // The wrong-PIN back-off (§5, `pin-throttle.ts`): inside the escalating wait window the login route
-  // refuses BEFORE the credential check, carrying `retryAfterSeconds` in the payload. 429 (too many
-  // requests) — the same status `device.join_rate_limited` takes on the device surface — not 401,
-  // so the till can tell "wait N seconds" apart from "wrong PIN" and render the countdown (§3.4).
+  // 429, not 401, so the till can tell "wait N seconds" apart from "wrong PIN".
   "pin.throttled": 429,
   "person.not_found": 401,
   "person.suspended": 403,
   // Authenticated device lacks the action capability or is excluded from the workflow.
   "device.forbidden_action": 403,
-  // The SP-A.2 sale-time device gate (§16.4/§16.5): a sale route resolves its `till_id` from the
-  // authenticated enrolled device (`requireSaleTillId`) — a SETUP precondition, not a per-sale block. A
-  // request carrying no `waitron_device` cookie is refused `device.unauthorized` (401, the device-auth
-  // status), and an authenticated device with no till (a `kds_station`, which rings no sale)
-  // `device.till_required` (400, the validation status). Same codes AND same statuses `device-api.ts`'s
-  // own map assigns them — this fiscal surface does not diverge from that sibling.
+  // The same codes and statuses `device-api.ts`'s map assigns.
   "device.unauthorized": 401,
   "device.till_required": 400,
   "session.not_open": 401,
   "session.required": 401,
-  // The operator picked an unsupported UI language on `PUT /api/session/locale` — a request-shape
-  // fault, so 400. Thrown by `setPersonLocale`'s `assertSupportedLocale` (identity), BEFORE any write.
   "locale.unsupported": 400,
   "sale.empty_basket": 400,
   "sale.unknown_product": 400,
-  // A dish line or an extras pick sold a product with an Active variant as itself
-  // (`selectMenuVariant`, `priceOrderLines`): a CLIENT request fault.
   "product.variant_required": 400,
   "modifier.invalid": 400,
   "sale.unsupported_tender": 400,
   "sale.tender_shortfall": 400,
   "quantity.invalid": 400,
-  // A malformed working-order id in a `POST /api/sales` / `POST /api/pay` / `POST /api/working-orders`
-  // body — the shared branded-id code (`@waitron/shared`), screened by `requireUuidParam`.
-  //
-  // WHY AN ID SCREEN IS NOW THE ONLY REFUSAL. Stated once, here; the other `isUuid` screens in this
-  // app's route files point back at this note rather than repeating it. Every id column is plain
-  // `text` — `packages/db/src/schema/columns.ts` is where the engine's helpers are declared and its
-  // header carries the measurement, seven values the PostgreSQL types refused, every one of them now
-  // accepted and stored. Confirmed again for an id: `insert into … values ('not-a-uuid')` into a
-  // `text primary key` succeeds and reads the value back (Node v26.7.0, `node:sqlite`). So a
-  // malformed id no longer meets anything that objects to it — a by-id read simply matches no row,
-  // and a write stores it.
-  //
-  // The practical point for a reader: deleting one of these screens does not fall back to a database
-  // refusal, it removes the last one. Each screen is what turns a malformed id into this clean 400,
-  // or into whatever 404/401 its own surface gives an id that names nothing — never a silent miss or
-  // a stored malformed id.
+  // Every id column is plain `text` (`packages/db/src/schema/columns.ts`), so a malformed id meets
+  // no database refusal: a by-id read matches no row and a write stores it. The `isUuid` screens in
+  // this app's routes are the only refusal.
   "shared.invalid_id": 400,
   "authorization.not_permitted": 403,
-  // A sale the FISCAL FILING itself refuses — the record would break a rule AEAT applies
-  // (`fiscal.record_invalid`, raised at the chain-append seam before anything is written), or it
-  // names a customer outside Spain, whose AEAT identifier type this version does not build
-  // (`fiscal.foreign_recipient_unsupported`). 409, the "the state forbids it" family this table
-  // already uses for the working-order codes: it is not a malformed request (400 would say the till
-  // sent something wrong) and not a server fault (500 would drop the structured code the till needs
-  // to tell the operator this is permanent). Both are PERMANENT for the same basket — retrying
-  // files nothing new — which is why the till renders them as `sale.refused`, not `sale.error`.
+  // The fiscal filing refuses the record: not a malformed request, and permanent for the same
+  // basket, so 409 rather than 400 or 500.
   "fiscal.record_invalid": 409,
   "fiscal.foreign_recipient_unsupported": 409,
   "working_order.not_found": 404,
   "working_order.not_open": 409,
   "working_order.not_placed": 409,
   "working_order.not_settled": 409,
-  // The Mode-P counter handover (`markCollected`, `POST /api/orders/:id/collect`). Re-collecting an
-  // already-handed-over order is `working_order.already_collected`, and collecting an order that was
-  // never fired is `ticket.not_fired` — both 409, the same family as `not_settled`/`ticket.already_fired`
-  // (the id is valid, but the order's handover/kitchen state forbids the operation).
   "working_order.already_collected": 409,
   "ticket.not_fired": 409,
   "working_order.reason_required": 400,
-  // Kitchen tickets (KDS-1). A re-fire of an order already sent to the kitchen is `ticket.already_fired`
-  // (409 — the order's lines are already in the kitchen; `sendToPrep`'s double-send, mapped from the
-  // per-line unique in `fireLines`); a per-line bump the item's state forbids (skip/repeat/backwards, or
-  // an absent/foreign/malformed item id) is `ticket.invalid_transition` (409). A fire to a venue with no
-  // default station is `station.no_default` (409, a misconfiguration blocking the fire); a station id
-  // naming no live station (or a malformed one, screened) is `station.not_found` (404).
   "ticket.already_fired": 409,
   "ticket.invalid_transition": 409,
-  // Coursing (KDS-2). A per-line bump the item's HELD state forbids — its course has not been fired, so
-  // the kitchen must not start it — is `ticket.item_held` (409, thrown by `advanceTicketItem`'s held
-  // guard), the same STATE-forbids-it family as `ticket.invalid_transition` beside it. The course-fire
-  // route (`POST /api/orders/:id/courses/:courseId/fire`) and the KDS-3 expo dispatch route
-  // (`POST /api/orders/:id/courses/:courseId/away`) surface `course.not_found` (404) for an
-  // absent/foreign/malformed course id — thrown by `fireCourse`'s / `markCourseAway`'s `requireCourse`
-  // (EXISTENCE-not-liveness: a course DEACTIVATED while it holds plated items still passes, so `retired`
-  // is NOT a 404 here), the SAME code and 404 the management config surface maps it to (courses are a
-  // management concept, but the fire/dispatch verbs are operational and run here). The expo `ready` route
-  // (`bumpCourseReady`) does NOT existence-check, so it never surfaces this. A malformed ORDER id on any
-  // of those routes is `working_order.not_found` (404, already mapped above), the honest "no such order".
   "ticket.item_held": 409,
-  // Coursing editing (A4). A recall of a line the kitchen has already STARTED (`state` preparing/ready, not
-  // queued) is `ticket.already_started` (409, thrown by `recallLines` after reading the offending item) —
-  // the inverse-direction sibling of `ticket.already_fired`/`ticket.not_fired` beside it, the same
-  // STATE-forbids-it family: the id is valid, but un-firing a line that is cooking is refused (it is cancelled,
-  // not recalled). An already-held or unknown line is not this — a held line is a no-op and an absent `line_no`
-  // is `tab.line_not_found` (404, already mapped above via the sibling tab verbs).
   "ticket.already_started": 409,
   "course.not_found": 404,
   "station.no_default": 409,
@@ -418,107 +265,33 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "route.subject_not_found": 404,
   "route.missing": 409,
   "route.station_inactive": 409,
-  // The generic request-shape 400 the sibling gated surfaces (`workforce-api.ts`,
-  // `catalogue-api.ts`) use for a malformed body field — here, an out-of-range `capacity` on the
-  // table create/patch routes (see `requireCapacity`). Listed explicitly though 400 is the table's
-  // default, matching those siblings.
   "management.request_invalid": 400,
-  // Integrated card pay (Task 12). No reader resolves for the paying device (no default and no
-  // request `readerId`), or a `readerId` that is not this tenant's active reader, is `reader.not_found`
-  // (404) — the same code and status the payments-management surface (`payments-api.ts`) maps it to. A
-  // reader whose provider has no sealed credential (the pool's deferred read fails at first use) is
-  // `reader.provider_disconnected` (409), likewise matching the management surface.
   "reader.not_found": 404,
   "reader.provider_disconnected": 409,
-  // Table + tab (TS-1). A bad/absent/foreign table id is a 404 (`table.not_found`); a label
-  // collision or an already-open tab / non-open tab / deactivated table is a 409 (the id may be
-  // valid but the table's or tab's STATE forbids the operation); a `line_no` naming no line is a 404
-  // (`tab.line_not_found`) — the same shape `working_order.not_found` uses for the retrieve side.
   "table.not_found": 404,
   "table.label_taken": 409,
   "table.inactive": 409,
-  // Floor-plan zone (FP-1). The table create/patch routes now accept a `zoneId`; one naming no
-  // `floor_zones` row surfaces `zone.not_found` — a 404, the same shape
-  // `table.not_found`/`status.not_found` use for an absent referenced row. (`zone.name_taken` is
-  // thrown only by the zone CRUD verbs, which the MANAGEMENT API exposes and maps there; the till
-  // surface only LISTS zones (`GET /api/zones`) and never creates/renames one, so it never throws
-  // it.)
   "zone.not_found": 404,
-  // Floor-plan spatial placement (FP-2, Task 4). A `posX`/`posY`/`rotation` out of range or a `shape`
-  // naming no `floor_table_shape` enum member is `setTablePlacement`'s per-field `placement.invalid` — a
-  // request-shape fault, 400. Listed explicitly (house style) though 400 is the map's default; the
-  // on-till placement routes (`PUT`/`DELETE /api/tables/:id/placement`) surface it. (`table.not_found`/
-  // `zone.not_found`, already mapped above, cover the missing/inactive table or zone the verb also throws.)
   "placement.invalid": 400,
   "tab.already_open": 409,
   "tab.not_open": 409,
   "tab.line_not_found": 404,
-  // Table service move/join/merge (TS-3). A move/join onto a table already covered by a STILL-OPEN tab
-  // is a 409 (`table.occupied`) — the id is valid but the target's STATE (occupied) forbids it, the
-  // same 409 shape `tab.already_open` uses; a merge of a tab into ITSELF is a request-shape fault, a
-  // 400 (`tab.merge_self`). `tab.not_open`/`table.not_found`/`table.inactive` (already mapped above) are
-  // reused for the non-open tab, absent/malformed target, and deactivated target the verbs also throw.
   "table.occupied": 409,
   "tab.merge_self": 400,
-  // Table service transfer (TS-4). A transfer named the SAME tab as source and destination is a
-  // request-shape fault, a 400 (`tab.transfer_self`), the same shape `tab.merge_self` uses; a `quantity`
-  // outside `0 < quantity ≤ line.quantity` (zero, negative, over-quantity, malformed) is also a 400
-  // (`tab.transfer_quantity_invalid`); a batch naming the same source `line_no` more than once is a 400
-  // too (`tab.transfer_duplicate_line`) — the ids may be valid, the request itself is malformed.
-  // `tab.not_open`/`tab.line_not_found` (already mapped above) are reused for a non-open tab and an
-  // unknown source `line_no`.
   "tab.transfer_self": 400,
   "tab.transfer_quantity_invalid": 400,
   "tab.transfer_duplicate_line": 400,
-  // Split-bill un-join (TS-5). Un-joining a table that is not currently joined to the named tab — an
-  // absent/foreign table, a free table, or one joined to a DIFFERENT tab (all read as tab_id ≠ tabId) —
-  // is `table.not_joined` (409): the ids may be valid, but the table's STATE (not joined here) forbids
-  // the detach, the same 409 shape `table.occupied`/`tab.not_open` use. Thrown by `unjoinTable`. (Split's
-  // `splitOffCheck` throws only already-mapped codes — `tab.not_open`, the reused transfer codes.)
   "table.not_joined": 409,
-  // Un-joining WITH items a table that solely anchors its tab — no other table shares the tab, so there
-  // is no join to split off — is `table.not_shared` (409): the ids may be valid, but the table's STATE
-  // (un-shared) forbids the un-join, the same 409 shape `table.not_joined`/`table.occupied` use. Thrown by
-  // `unjoinTable`'s with-items branch before it mints anything.
   "table.not_shared": 409,
-  // A transfer that would separate a modifier from its dish — a child line named on its own, or a
-  // partial split of a dish that carries modifiers (ordering modifiers). A malformed request regardless
-  // of any tab's STATE, so a 400, the same shape the other `tab.transfer_*` request-shape faults carry.
   "tab.transfer_modifier_line": 400,
-  // Manual service status (TS-2). Setting a table's status can fail two ways: an unknown status id
-  // (or a malformed one screened at the route) names no status → 404 (`status.not_found`); a
-  // deactivated status may not be set → 409 (`status.inactive`) — the id is valid but the status's
-  // STATE forbids it, the same 409 shape `table.inactive`/`tab.not_open` use. (A bad TABLE id on this
-  // route is `table.not_found`, already mapped above.)
   "status.not_found": 404,
   "status.inactive": 409,
-  // Manual cash-drawer open (counter receipt/drawer §3d). `POST /api/drawer/open` on a till whose
-  // `receipt_printer_id` is unset has no printer to kick the drawer through — a configuration gap the
-  // operator fixes via the dashboard's printer picker, so a request-shape 400 (errors.ts spells out the
-  // 400 and the `drawer.*`-not-`printer.*`/`till.*` naming). Listed explicitly though 400 is the map's
-  // default, matching `placement.invalid`'s both-maps precedent and the rest of this table's 400 entries.
   "drawer.no_printer": 400,
 };
 
-// The one error boundary every till route wraps its handler in — the shared `createErrorBoundary`
-// (see `error-boundary.ts` for its full behaviour) closed over this surface's `STATUS` map and its
-// `till.failed` log tag. Exported so Tasks 5/6's routes wrap theirs in this EXACT mapping rather than
-// each inventing one.
 export const run = createErrorBoundary(STATUS, "till.failed");
 
-/**
- * Screen a path `:id` param as a UUID before it reaches a query, returning it for the caller. A
- * malformed id passed straight into `eq(workingOrders.id, id)` is not refused by the column at all —
- * it matches no row and the route answers as if the order were absent (the id-screen note on
- * `shared.invalid_id` in the STATUS map above). Screening it here refuses it with the SAME domain
- * `code` an absent/wrong-state id gets on that route
- * — the fail-closed shape each route documents. `code` is the caller's deliberate per-route choice
- * (`working_order.not_found` for retrieve → 404 — the retrieve route's absent-order code;
- * `working_order.not_open` for edit/abandon/place → 409; `working_order.not_placed` for collect/cancel
- * → 409; `working_order.not_settled` for send-to-prep → 409, `sendToPrep`'s own guard code); every code
- * carries `{ workingOrderId }`. The retrieve/edit/abandon/place/prep/collect/cancel routes share this
- * one guard.
- */
+/** A malformed id is refused with the code the route gives an absent or wrong-state order. */
 function requireUuidId(
   id: string,
   code:
@@ -534,28 +307,15 @@ function requireUuidId(
 }
 
 /**
- * Parse and SCREEN the optional supervisor `override` on `POST /api/drawer/open` before it reaches
- * `authorize()`'s credential gate. The whole override is optional — a supervisor opening directly, and
- * every `open`-policy open, sends none, so an absent `raw` returns `undefined` (no override) and the
- * gate falls back to the operator's own role.
- *
- * When an override IS supplied it must be well-formed, mapped to the SAME codes the credential gate
- * gives a bad credential so a malformed one never becomes an opaque 500:
- *   • `personId` must be a UUID string — a non-string or malformed value is refused `person.not_found`
- *     (401) BEFORE it reaches `verifyPersonCredential`'s `persons.id` read, where it would simply
- *     match nothing — the same code a well-formed-but-absent id gets from that gate;
- *   • `pin` must be a string — a missing/non-string PIN is refused `pin.invalid` (401), the code a
- *     wrong PIN already gets, rather than reaching `verifyPin` as a non-string.
- * (A well-formed-but-UNKNOWN personId needs no screen here — the credential gate returns
- * `person.not_found` for it already.)
+ * An absent override leaves the operator's own role to decide. A malformed one gets the codes the
+ * credential gate gives a bad credential: `person.not_found` for a non-UUID id, `pin.invalid` for a
+ * non-string PIN.
  */
 function parseDrawerOverride(
   raw: { personId?: unknown; pin?: unknown } | undefined | null,
 ): { personId: string; pin: string } | undefined {
   if (raw === undefined || raw === null) return undefined;
   if (typeof raw.personId !== "string" || !isUuid(raw.personId)) {
-    // `raw.personId` is `unknown` here (a non-string or a non-UUID string); coerce for the debug param,
-    // which the ErrorParams type declares `string`. A caller-supplied id is safe to echo.
     throw new AppError("person.not_found", { personId: String(raw.personId) });
   }
   if (typeof raw.pin !== "string") {
@@ -565,18 +325,8 @@ function parseDrawerOverride(
 }
 
 /**
- * Screen a body `capacity` as a non-negative int4 before it reaches the `dining_tables.capacity`
- * column (int4) on the create/patch table routes. Optional, so an ABSENT capacity (`undefined`)
- * passes through untouched — the column stays NULL / unchanged; a value present but not a
- * non-negative integer within int4's range (`< 0`, `> 2_147_483_647`, fractional, or not a number)
- * would otherwise reach the insert/update and be STORED: `capacity` is `integer`, and this engine's
- * INTEGER is 64-bit whatever the declared type says, so nothing below this screen bounds the value
- * (`packages/db/src/schema/columns.ts` carries the measurement). The screen is the whole bound, the
- * same way the `:lineNo` range screen is.
- * Refused here as `management.request_invalid` naming the FIELD, the generic request-shape 400 the
- * sibling surfaces (`workforce-api.ts`'s `requireOffsetMinutes`) use for an out-of-range numeric body
- * field. Only the field NAME travels, matching that code's no-value discipline (a headcount is not a
- * secret, but the convention is uniform).
+ * The whole bound on `dining_tables.capacity`: it is a plain integer column with no check, so
+ * nothing below this screen refuses an out-of-range value.
  */
 function requireCapacity(capacity: number | undefined): void {
   if (capacity === undefined) return;
@@ -585,13 +335,7 @@ function requireCapacity(capacity: number | undefined): void {
   }
 }
 
-/**
- * Screen a tab `:id` path param as a UUID before it reaches a query — a malformed id passed into
- * `eq(workingOrders.id, id)` reaches no refusal of its own (the id-screen note above) and would match
- * nothing — the fail-closed shape the working-order routes' `requireUuidId` uses. A non-UUID names no
- * open tab exactly as legitimately as an absent one,
- * so it is refused with `tab.not_open` (409). See Plan note 3 on the param key (`tabId`).
- */
+/** A non-UUID names no open tab, so it gets the absent tab's `tab.not_open`. */
 function requireTabParam(id: string): string {
   if (!isUuid(id)) {
     throw new AppError("tab.not_open", { tabId: id });
@@ -599,19 +343,7 @@ function requireTabParam(id: string): string {
   return id;
 }
 
-/**
- * Screen a `:lineNo` path param as an in-range int4 line number before it reaches a query — the ONE
- * screen the void-line `DELETE /api/working-orders/:id/lines/:lineNo` (voidTabLine) route and the served
- * POST/DELETE all share. `line_no` is int4 (orders.ts) and `voidTabLine`/`markLineServed`/
- * `unmarkLineServed` bind it parameterised, so a non-numeric value (`NaN`) or a fractional one is
- * refused before any query, and an integer ABOVE int4's max (which clears `Number.isInteger`) is too —
- * un-screened it would reach `where line_no = $n` and match nothing, silently: the column is
- * `integer` and this engine's INTEGER is 64-bit whatever the declared type says, so no width refuses
- * it (`packages/db/src/schema/columns.ts`). A line number that cannot exist names no line,
- * so it is refused as `tab.line_not_found` (404) — the honest 404 an absent line gets, exactly as the
- * verbs themselves throw for an in-range `line_no` matching nothing. `tabId` travels for the same
- * fail-closed error shape the void-line route carries.
- */
+/** A value that cannot be a line number gets the absent line's `tab.line_not_found`. */
 function requireLineNo(tabId: string, raw: string): number {
   const lineNo = Number(raw);
   if (!Number.isInteger(lineNo) || lineNo < 1 || lineNo > 2_147_483_647) {
@@ -621,19 +353,8 @@ function requireLineNo(tabId: string, raw: string): number {
 }
 
 /**
- * Mount ONE per-course expo/kitchen verb route — `POST /api/orders/:id/courses/:courseId/<suffix>` — the
- * shared shape the three course verbs (`fire`/`ready`/`away`, KDS-2/3 §3c–d) are byte-for-byte identical
- * in. SESSION-GUARDED (`requireSession`, no permission — the `fire_control` venue setting decides which UI
- * SHOWS the button, not who may call it; every surface is session-gated, spec §3c). `:id` (the order) is
- * `isUuid`-screened as `working_order.not_found` (404) and `:courseId` as `course.not_found` (404) BEFORE
- * either reaches a query — a malformed id passed straight into `eq(…, id)` meets no refusal of its own
- * and matches nothing (the id-screen note above) — then `verb(tx, cfg, orderId, courseId)` runs in the till's own transaction and
- * the route returns 200 with an empty body (the display re-reads the queue). The three verbs differ only
- * in what they stamp on `ticket_items` and whether they existence-check the course — `fireCourse`/
- * `markCourseAway` do (via `requireCourse`, so an unknown/foreign course is `course.not_found`),
- * `bumpCourseReady` no-throws-on-empty (an unknown course updates zero rows, 200) — but that difference
- * lives IN the verb, not in this route shape. OPERATIONAL, not fiscal: every verb writes only the mutable
- * `ticket_items` (§4/§5), so none can block a sale. Each call site below carries its own verb-specific note.
+ * `POST /api/orders/:id/courses/:courseId/<suffix>`. Session-gated with no permission: the
+ * `fire_control` venue setting decides which UI shows the button, not who may call it.
  */
 function mountCourseVerb(
   app: Hono,
@@ -663,90 +384,51 @@ function mountCourseVerb(
  * handheld restriction because they write the deferred-settlement or amendment workflow.
  */
 export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
-  // The per-(device, person) wrong-PIN back-off (§5). Built ONCE here so its in-memory Map persists
-  // across requests for the life of the mounted API — in production `mountTillApi` runs once at boot,
-  // so "per-mount" is "per-process", the same singleton idiom `device-api.ts` uses for its enrol
-  // limiter. A test injects its own over a controllable clock; production omits it and gets the default
-  // policy (3 free failures, then 2/4/8/16/32/60s).
+  // Built once per mount so its in-memory state persists across requests.
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
 
-  // The deployment holds one tenant per database. Log in: verify the operator's PIN and set the
-  // httpOnly session cookie. The login runs under the till's tenant — `withTransaction`, exactly as
-  // the sale path does — in this database; a wrong PIN, unknown or suspended person surfaces as the
-  // identity credential codes `STATUS` maps to 401/403.
-  //
-  // DEVICE-GATED (§5/§6). The login resolves the calling device up front and fails closed without one
-  // (`device.unauthorized`), the same gate the sale routes apply (`requireSaleTillId`): the throttle
-  // keys off the authenticated device, so it cannot be evaded by dropping the cookie, and the shift
-  // records the DEVICE's own register rather than the box's env `cfg.tillId`. A kds display carries no
-  // roster login and never reaches here.
+  // Device-gated: the throttle keys on the authenticated device, so dropping the cookie cannot
+  // evade it, and the shift records the device's own till rather than `cfg.tillId`.
   app.post("/api/session", (c) =>
     run(c, log, async () => {
       const { personId: rawPersonId, pin } = await readJsonBody<{ personId: string; pin: string }>(
         c,
       );
-      // Canonicalise the personId BEFORE it keys the throttle — and before the lookup. The throttle
-      // keys on the STRING, so each spelling would otherwise be a distinct back-off bucket a
-      // brute-forcer cycles to evade the window (§5); and the id column is plain `text`, which folds
-      // no spellings, so an uppercase or dash-free personId would name nobody at all
-      // (`canonicaliseUuid` in `till-session.ts` carries the measurement). One canonical value feeds
-      // BOTH the throttle and the login. A value that is no UUID in any spelling names no person —
-      // refused `person.not_found`
-      // (401), the same code+status a well-formed-but-unknown id gets and the shape `parseDrawerOverride`
-      // gives a non-uuid personId — never reaching `persons.id`, where it would simply match no row.
+      // Canonicalised before it keys the throttle and the lookup: the throttle keys on the string,
+      // and the `text` id column folds no spellings (`canonicaliseUuid`).
       const personId = canonicaliseUuid(rawPersonId);
       if (personId === null)
         throw new AppError("person.not_found", { personId: String(rawPersonId) });
       const device = await requireDevice(deps, c);
-      // Every sale-capable device carries a non-null `till_id` by the §1.3 form-factor trigger; a
-      // till-less device (a kds display) should never reach a roster login, so guard the NOT NULL
-      // `sessions.till_id` defensively with `device.till_required`, the same code the sale path uses.
+      // `sessions.till_id` is NOT NULL, and a till-less device (a kds display) holds no shift.
       if (device.tillId === null) throw new AppError("device.till_required", {});
       const deviceTillId = device.tillId;
-      // Wrong-PIN back-off (§5) BEFORE the credential check: inside the wait window this throws
-      // `pin.throttled { retryAfterSeconds }` (→ 429) and `loginWithPin` never runs.
       pinThrottle.check(device.deviceId, personId);
       let session;
       try {
         session = await withTransaction(deps.db, async (tx) => {
           return loginWithPin(tx, {
-            // §6: the DEVICE's own register, not the box's env `cfg.tillId`.
             tillId: deviceTillId,
             personId,
             pin,
           });
         });
       } catch (err) {
-        // A wrong PIN escalates the back-off (past the 3 free, it opens/extends the window); every
-        // other identity fault (unknown/suspended person) rethrows untouched. `pin.invalid` is
-        // unchanged — codes are never renamed (§3).
         if (isAppError(err) && err.code === "pin.invalid") {
           pinThrottle.recordFailure(device.deviceId, personId);
         }
         throw err;
       }
-      // A clean login resets the streak, so the next wrong PIN starts from the free attempts again.
       pinThrottle.clear(device.deviceId, personId);
       setSessionCookie(c, session.token, deps.secureCookies);
-      // Surface the derived CAPABILITY the till needs — whether this operator may configure the till
-      // (FP-2's on-till "Editar plano") — computed server-side from the session's role via the identity
-      // package's own `roleHasPermission`, never mirrored as a role→permission map on the client (which
-      // would silently drift from `permissions.ts`). Convenience only: every server gate re-derives the
-      // role from the session and re-checks the permission via `authorize` (e.g. the placement route
-      // below), so a tampered client value grants nothing.
+      // Convenience only: every server gate re-checks the permission via `authorize`, so a tampered
+      // client value grants nothing.
       const canConfigureTill = roleHasPermission(session.role, "venue.configure");
-      // `locale` is the operator's OWN UI-language preference (`persons.locale`, carried on the session
-      // by `loginWithPin` — Task 3), or null when they have set none. The till app defaults to the
-      // venue locale (`GET /api/till`'s `locale`) until login, then switches to this per-user value.
       return c.json({ personId: session.personId, canConfigureTill, locale: session.locale });
     }),
   );
 
-  // Log out: end the shift session and clear the cookie. Idempotent — a request with no cookie, one
-  // whose cookie is not even UUID-shaped (so it names no session row), or one whose token names an
-  // already-closed session or none (`endSession` returns false), still clears the cookie and
-  // answers 200, so a double logout or a stale tab is never an error. The `isUuid` screen skips the
-  // database for a malformed cookie.
+  // Idempotent: a missing, malformed or closed session still clears the cookie and answers 200.
   app.delete("/api/session", (c) =>
     run(c, log, async () => {
       const token = readSessionToken(c);
@@ -760,15 +442,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Set the LOGGED-IN operator's OWN UI-language preference (`persons.locale`). SESSION-GUARDED,
-  // and the guard — not the body — supplies the identity: the write targets `session.personId`,
-  // so an operator can only ever set THEIR OWN locale (the body carries `locale` and nothing
-  // else). Read via `readJsonBody`, so an empty/malformed/`null` body coerces to `{}` (never an
-  // opaque 500) and flows through the same `locale` coercion below, so a
-  // missing/non-string/unparsable `locale` all coerce to `""`, which `setPersonLocale`'s
-  // `assertSupportedLocale` rejects as `locale.unsupported` (400) — the ONE rejection path, no
-  // separate request-invalid branch. Runs under `withTransaction` (the write selects the session
-  // person by id), and returns 204 on success (no body).
+  // The session, not the body, names the person, so an operator can set only their own locale. A
+  // missing or non-string `locale` becomes "", refused as `locale.unsupported`.
   app.put("/api/session/locale", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
@@ -781,11 +456,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The deployment holds one tenant per database. Pre-login roster for the lock screen.
-  // Deliberately UNAUTHENTICATED — it is what the operator picks their name from before any
-  // session exists — so it calls `listActiveStaff` under `withTransaction` rather than
-  // `requireSession`. `listActiveStaff` returns `{ personId, displayName }` only: no PIN
-  // material, role or status, so there is nothing here a bystander at the counter must not see.
+  // Deliberately unauthenticated: the lock screen's roster. No PIN material, role or status.
   app.get("/api/staff", (c) =>
     run(c, log, async () => {
       const staff = await withTransaction(deps.db, async (tx) => {
@@ -795,50 +466,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Public boot info for the till app. Also UNAUTHENTICATED (the browser fetches it before login)
-  // and deliberately free of secrets: `venueName` + `nif` are the receipt-issuer identity legally
-  // printed on every customer ticket (Task 17's ticket view reads them from here, so its client
-  // never touches server code), `locale` drives the UI language, and `orderFlow` (7c prepare &
-  // collect) is the location's pay-timing mode — already resolved onto `deps.cfg` at boot
-  // (`readOrderFlow`, `till-config.ts`), so this is a plain field read, no extra query. The till
-  // UI needs it BEFORE login to select which pay control to render (Place/Collect for Modes I/T
-  // vs the unchanged Pay for Mode P), so it rides on this same unauthenticated boot-info route
-  // rather than a session-guarded one. `venueName`/`nif` still come from the taxpayer row via
-  // `readTenant` (@waitron/db), under `withTransaction`, which reads
-  // `tenants`.
+  // Unauthenticated boot info the till needs before login; it carries no secrets.
   app.get("/api/till", (c) =>
     run(c, log, async () => {
-      // Resolve the CALLING device (if any) BEFORE the boot transaction: `tryReadDevice` opens its OWN
-      // `withTransaction` tx (auth + `last_seen_at`), so it cannot nest inside the read below. EVERY request
-      // resolves a canvas: a cookieless request (no device) gets the `till` form-factor default, and an
-      // ENROLLED device gets the canvas its DEVICE PROFILE references if set and resolvable, else the
-      // built-in default for its form factor (SP-B4, generalising SP-B1 / SP-A.2 §16.3; the profile is
-      // the sole canvas binding since the Task 10 cutover). The counter therefore always has a canvas
-      // to render from.
+      // Resolved before the boot transaction because `tryReadDevice` opens its own.
       const device = await tryReadDevice({ db: deps.db, devMode: deps.devMode }, c);
-      // The venue's server list (till-reroute §3.2). Read HERE, outside the boot transaction below:
-      // `node_membership` is a whole-DB singleton row, so it does not need the
-      // transaction. Read straight off `deps.db`, like every other read in this file.
       const held = await readNodeMembership(deps.db);
-      // ONE transaction reads the issuer identity
-      // and the authored receipt trim (`getReceipt`, its own `tenant_receipts` row — SP-B4), plus
-      // the resolved canvas below: all run inside the same `withTransaction` block,
-      // never a second connection. `getReceipt` does not authorize — this boot read is
-      // deliberately unauthenticated (the browser fetches it before login), and it carries no
-      // secrets, only the receipt trim + canvas, same as `venueName`/`orderFlow` already here.
       const boot = await withTransaction(deps.db, async (tx) => {
         const taxpayer = await readTenant(tx);
-        // The venue's KDS whole-ticket bump mode (KDS-1 §2e, `locations.bump_mode`) — read HERE
-        // from the till's own location rather than off `deps.cfg` like `orderFlow`: `orderFlow`
-        // rides the config because the SALE PATH dispatches on it, whereas `bump_mode` has no
-        // server-side consumer at all (it drives only the client's whole-ticket affordance), so
-        // it is read where it is used and kept off the config surface. Same `eq(id)` shape
-        // `readOrderFlow` uses, in the same transaction, so it selects exactly this till's
-        // location row. `fire_control` (KDS-2 §2c) rides the SAME location read as `bump_mode` —
-        // both are client-only display-convenience flags with no server-side sale-path consumer,
-        // so both are read here where they are used rather than lifted onto `deps.cfg`. The
-        // station-display screen reads it to show the per-course kitchen-fire action only for a
-        // `kitchen` venue.
         const [loc] = await tx
           .select({
             bumpMode: locations.bumpMode,
@@ -847,36 +482,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           })
           .from(locations)
           .where(eq(locations.id, deps.cfg.locationId));
-        // The venue's ACTIVE kitchen courses (KDS-2 §5b), by `display_order` then name — the coursing
-        // sequence the tab-order screen's per-line course picker offers, and the id→name map its
-        // waiter-fire actions read. Rides this same unauthenticated boot read for the same reason as
-        // `bump_mode`/`fire_control`: venue KDS config with no secrets, no server-side sale-path consumer,
-        // read where it is used rather than lifted onto `deps.cfg`. Trimmed to the picker's shape
-        // (`active` is always true here — `listCourses` is active-only — so it is dropped from the wire).
         const courses = (await listCourses(tx, deps.cfg)).map((course) => ({
           id: course.id,
           name: course.name,
           displayOrder: course.displayOrder,
         }));
-        // The authored receipt trim, or the built-in default when the tenant has never opened the editor:
-        // `getReceipt` reads it from `tenant_receipts`, returning DEFAULT_RECEIPT on absence — no backfill.
         const receipt = await getReceipt(tx);
-        // SP-B4 + device-profile §5.3: EVERY request resolves a CanvasDef (never undefined) plus the
-        // device's capability set, so the counter always has a canvas to render and the render axis
-        // knows which capability cards to draw. Capabilities relocated OFF the canvas onto the device
-        // PROFILE (Task 9), so both the canvas and the capabilities resolve THROUGH the profile:
-        //  - Cookieless (no device) → the `till` form-factor default canvas + `capabilities: []`.
-        //  - An enrolled device → resolve its profile (`getDeviceProfile`). The canvas is the profile's
-        //    referenced canvas if `profile.canvasId` resolves, else the built-in/default for the device's
-        //    form factor; the capabilities are `profile.capabilities`.
-        //  - An enrolled device with NO profile (`deviceProfileId === null`) → the form-factor default
-        //    canvas + `capabilities: []` (the render axis hides the capability cards; the server firewall
-        //    already refuses their actions — this makes render and firewall agree, design §5.3).
         let canvas: CanvasDef;
         let capabilities: CapabilityFlag[] = [];
-        // The device's per-profile inactivity auto-logout, in seconds, or null for the app default —
-        // resolved through the profile like `capabilities`, so `null` for a no-profile or cookieless
-        // request (`profile` is only in scope inside the `device != null` block below).
         let inactivityTimeoutSeconds: number | null = null;
         if (device != null) {
           const profile =
@@ -889,35 +502,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           if (profile?.canvasId != null) {
             assigned = (await getCanvas(tx, profile.canvasId))?.definition;
           }
-          // The `?.definition` (getCanvas's return is optional) then `??` is belt-and-braces: a
-          // NON-null `canvasId` that resolves to NO canvas is UNREACHABLE by construction, so it
-          // is intentionally untested. `device_profiles.canvas_id` is declared
-          // `onDelete: "restrict"` (`packages/db/src/schema/device-profiles.ts:46`), the baseline
-          // carries that clause (`packages/db/drizzle/0000_baseline.sql:497`), and every connection
-          // opens with `pragma foreign_keys = on` (`packages/store/src/index.ts`, `openConnection`)
-          // — without that pragma this engine records a foreign key and never enforces it. So a
-          // profile can neither reference a non-existent canvas id nor keep a reference to a canvas
-          // deleted out from under it. Both halves are measured WITH a control: deleting a
-          // referenced canvas is refused errcode 1811 while an otherwise identical unreferenced one
-          // deletes cleanly (`packages/db/src/schema/device-profiles.fk.test.ts:69`), and an insert
-          // naming a canvas id that does not exist is refused `FOREIGN KEY constraint failed`,
-          // errcode 787, where the same insert with the pragma OFF is accepted (probe on a
-          // two-table copy of this key, `node:sqlite`, Node v26.7.0, 2026-09-23). The `??` still
-          // yields a valid form-factor default should that invariant ever be relaxed, and covers a
-          // profile whose `canvasId` is NULL (a "default canvas + these capabilities" profile,
-          // §5.2).
+          // A set `canvasId` always resolves (`device_profiles.canvas_id` is `onDelete: "restrict"`
+          // and foreign keys are on); the fallback covers a NULL `canvasId`.
           canvas = assigned ?? (await getCanvasForFormFactor(tx, device.formFactor));
         } else {
           canvas = await getCanvasForFormFactor(tx, "till");
         }
-        // The integrated card provider is now PER-DEVICE (Task 12): the string the till reads to pick
-        // its card-collect route comes from the paying device's DEFAULT reader (`device_card_readers`
-        // → `card_readers`), mapped to the till's union. A cookieless request or a device with no
-        // default reader carries no provider here (→ `"none"` below). Read in THIS same boot tx.
-        // `defaultReaderId` rides alongside it (Task 17): `cardProvider` alone only names a PROVIDER
-        // TYPE, and a venue can have more than one active reader on the same provider, so the till
-        // needs the actual row id to look its NAME up in `activeReaders` below and pre-select it in
-        // the picker.
         let defaultReaderProvider: "sumup_cloud" | "stripe_terminal" | undefined;
         let defaultReaderId: string | undefined;
         if (device != null) {
@@ -936,8 +526,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             }
           }
         }
-        // The venue's ACTIVE readers for Task 17's picker — id + name + mapped provider, no secrets.
-        // A reader whose provider does not map (should not happen) is dropped rather than leaked.
         const activeReaders = (
           await tx
             .select({ id: cardReaders.id, name: cardReaders.name, provider: cardReaders.provider })
@@ -969,101 +557,47 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         boot.bumpMode === undefined ||
         boot.fireControl === undefined
       ) {
-        // Structurally unreachable: the taxpayer row is the database's one row and
-        // `deps.cfg.locationId` is the till's own location (provisioning stamped it), so both
-        // reads return a row. A misconfigured till pointed at a nonexistent location becomes an
-        // opaque 500 via `run`, never a partial payload.
+        // Unreachable once provisioned: the taxpayer row and the till's own location both exist.
         throw new Error(`GET /api/till: no taxpayer/location row for ${deps.cfg.locationId}`);
       }
       /* v8 ignore stop */
       return c.json({
-        // The venue's DEFAULT UI locale (`readVenueLocale`, boot.ts) — geography-derived + override,
-        // NOT the fiscal `cfg.locale`. The till app defaults its language to this until a per-user
-        // preference is loaded; `GET /api/locales` returns the same value as `venueDefault`.
         locale: deps.venueLocale,
-        // The RECEIPT (fiscal document) locale — the language the printed legal ticket renders in.
-        // Sourced from the fiscal `cfg.locale` (the pre-per-user-locale `locale` value), DELIBERATELY
-        // kept SEPARATE from the UI `locale` above: the venue-default UI derivation drops
-        // UI-unsupported codes (a `ca-ES` fiscal locale would surface as `es-ES` there), which must
-        // never reach the receipt. Decision 2 of the per-user-language spec: the receipt is the
-        // venue's language and is not an input to the UI derivation. The till threads THIS to
-        // `till-ticket-view.invoiceLocale`, and the UI `locale` to `setLocale` — two different things.
+        // The receipt's language, kept separate from the UI `locale`: the UI derivation drops
+        // UI-unsupported codes, which must never reach the receipt.
         invoiceLocale: deps.cfg.locale,
         onboardingIntent: deps.onboardingIntent,
         venueName: boot.issuer.venueName,
         nif: boot.issuer.nif,
         orderFlow: deps.cfg.orderFlow,
-        // The venue's whole-ticket bump mode (KDS-1 §2e), read from the location above — the till app
-        // threads it to the station-display screen to enable/disable the whole-ticket bump affordance.
         bumpMode: boot.bumpMode,
-        // The venue's KDS fire-control mode (KDS-2 §2c), read from the location above — the till app
-        // threads it to the station-display screen, which shows the per-course kitchen-fire action only
-        // when this is `kitchen` (under `waiter` the tab screen owns the fire, Task 7).
         fireControl: boot.fireControl,
-        // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the tab-order screen's course picker options
-        // and the id→name source for its waiter-fire actions. `[]` for a venue with no courses configured.
         courses: boot.courses,
-        // The integrated card terminal: the STRING provider selector the till app reads BEFORE login
-        // to pick its card-collect route (Task 8), now PER-DEVICE (Task 12). A practice install
-        // surfaces the local simulator selected at boot; otherwise it is the paying device's DEFAULT
-        // reader's provider mapped to the till's union (`boot.defaultReaderProvider`), or `"none"`
-        // when the device has no default reader (or the request is cookieless). `tipsEnabled` comes
-        // from `deps.cfg` — the single source (`TillConfig.tipsEnabled`, set at boot from `config.till`).
         cardProvider: (deps.cardProvider?.provider === "simulator"
           ? "simulator"
           : (boot.defaultReaderProvider ?? "none")) satisfies TillCardProvider,
-        // The DEFAULT reader's row id (Task 17), so the till can look its NAME up in `activeReaders`
-        // below rather than guessing from `cardProvider` alone (a venue can have more than one active
-        // reader on the same provider). Absent under practice mode's local simulator, like the real
-        // lookup it would otherwise shadow, and whenever the device has no default reader.
+        // A venue can have several active readers on one provider, so the till needs the row id.
         defaultReaderId:
           deps.cardProvider?.provider === "simulator" ? undefined : boot.defaultReaderId,
-        // The venue's ACTIVE card readers (Task 12) — `[{ id, name, provider(mapped) }]` — for Task
-        // 17's reader picker, so it needs no second fetch. `[]` when none are configured.
         activeReaders: boot.activeReaders,
         tipsEnabled: deps.cfg.tipsEnabled,
-        // The authored (or default) receipt trim (Task 8) — the till app threads it to its ticket view.
-        // Rides this same unauthenticated boot fetch, so the till makes no second request.
         receipt: boot.receipt,
         receiptPrintMode: boot.receiptPrintMode,
-        // The calling device's resolved layout CANVAS (SP-B4), a bare `CanvasDef`, ALWAYS present so the
-        // counter always has a canvas to render. For an enrolled device it is the profile's referenced
-        // canvas if it resolves, else the built-in default for its form factor; for a cookieless request
-        // it is the `till` form-factor default. There is no longer a `layout` field — the canvas replaces it.
         canvas: boot.canvas,
-        // The calling device's CAPABILITY set (device-profile §5.3, Task 9). Relocated OFF the canvas onto
-        // the device profile, so it rides the payload as an explicit sibling rather than inside `canvas`.
-        // `profile.capabilities` for an enrolled device with a profile; `[]` for a no-profile or cookieless
-        // request — the render axis hides `tender-pay`/`kds-board` when the flag is absent (`card-grid.ts`).
         capabilities: boot.capabilities,
-        // The device profile's inactivity auto-logout in seconds (device-profile timeout), or `null` for
-        // the app's built-in default. Resolved through the profile like `capabilities`; `null` for a
-        // no-profile or cookieless request. The till app arms its idle timer from this.
         inactivityTimeoutSeconds: boot.inactivityTimeoutSeconds,
-        // The node answering this request, and the venue's routable servers (till-reroute §3.2) — the
-        // till polls `GET /api/node` on each of them to follow the primary across a failover, and needs
-        // `nodeId` to tell which one it is currently talking to. `[]` while no document is held.
+        // The till polls each server's `GET /api/node` to follow the primary across a failover.
         nodeId: deps.cfg.nodeId,
         servers: routableServers(held),
       });
     }),
   );
 
-  // The public supported-locale list + the venue's default UI locale. Deliberately UNAUTHENTICATED
-  // (the till app fetches it before login, beside `GET /api/till`) and free of secrets — `locales` is
-  // the static catalogue the language picker offers and `venueDefault` is the geography-derived boot
-  // value (`deps.venueLocale`). NO session gate, matching the sibling `GET /management-api/locales`.
+  // Unauthenticated: the till fetches it before login.
   app.get("/api/locales", (c) =>
     run(c, log, async () => c.json({ locales: SUPPORTED_LOCALES, venueDefault: deps.venueLocale })),
   );
 
-  // The menu list of this till's location. SESSION-GUARDED: `requireSession` runs
-  // FIRST, so an unauthenticated request 401s (`session.required`) before any catalogue is read —
-  // the operator must be logged in to see prices. The read itself runs under the till's tenant
-  // (`withTransaction`), in the database holding this tenant. `menus` (the
-  // location's accessible catalogues, default flagged) and
-  // `products` (tagged with the catalogue each came from) are read in the SAME transaction so
-  // they describe one consistent snapshot of the accessible set.
   app.get("/api/products", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1112,27 +646,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Ring one walk-up sale — the HTTP face of the fiscal sale path. SESSION-GUARDED, and the guard
-  // supplies the attribution: the sale is filed as `operatorId = session.personId`, so who rang it is
-  // the logged-in operator, never a browser-sent value. `recordTillSale` opens its OWN
-  // `withTransaction` transaction and re-prices the basket authoritatively (the request
-  // carries no price), so it is called OUTSIDE any transaction here — nesting would deadlock the pool.
-  // The sale route neither opens nor rotates the session, so it emits no Set-Cookie.
   app.post("/api/sales", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // NOT fenced against a handheld (owner reversal, widened 2026-08-30): `POST /api/sales` settles a
-      // cash OR a manual-card tender, and both file under the submitting node's SIF (`nodeId`), not the
-      // till (record-sale.ts:79-82). The manual `card` tender is the datáfono leg — the operator charges a
-      // SEPARATE bank terminal the POS never talks to (`recordManualCardPayment` makes no network call), so
-      // it is fiscally identical to cash and needs no reader. Only the INTEGRATED reader (`POST /api/pay`,
-      // below) stays fenced (`assertNotHandheld`). An ordinary till carries no device cookie either way.
+      // Not fenced against a handheld: cash and manual-card sales file under the submitting node's
+      // SIF, not the till, and a manual card is charged on a terminal the POS never talks to. Only
+      // the integrated reader (`POST /api/pay`) is fenced, by capability.
       const body = await readJsonBody<TillSaleRequest>(c);
-      // `workingOrderId` is OPTIONAL: absent (a walk-up `recordTillSale` mints a fresh id for) and a
-      // well-formed-but-unknown one are both valid; only a MALFORMED one is an error. Un-screened it
-      // becomes `payWorkingOrder`'s `req.id` and travels unchallenged into its
-      // `eq(workingOrders.id, req.id)` read (till-sale.ts), matching nothing (the id-screen note
-      // above). `requireUuidParam` refuses it 400 first.
       if (body.workingOrderId !== undefined) {
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
       }
@@ -1140,9 +660,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
       const zoneId = await resolveHttpOrderZone(deps, body.lines.length, body.zoneId);
-      // SP-A.2 §16.4 cutover: the sale's `till_id` comes from the AUTHENTICATED enrolled device, not env.
-      // Only `tillId` changes — `nodeId`/`seriesId` (the SIF/chain key) stay `deps.cfg`; a `DeviceBinding`
-      // carries no node/series. `recordTillSale` reads `cfg.tillId` unchanged, now the device's via `saleCfg`.
+      // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay `deps.cfg`.
       const device = await tryReadDevice(deps, c);
       const saleCfg: TillConfig = {
         ...deps.cfg,
@@ -1159,39 +677,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Pay over the INTEGRATED card terminal (sub-project 7, Task 7) — a DELIBERATE divergence from
-  // /api/sales's throw-or-ticket shape: a payment outcome (declined / network-unavailable) is neither
-  // a client (4xx) nor a server (5xx) fault, so `payWorkingOrderIntegrated` returns it as DATA and this
-  // route answers 200 with the outcome UNCHANGED, even a decline (nothing may block a sale on anything
-  // but the sale itself, CLAUDE.md §5). Genuine faults still throw and map through `run`: an empty
-  // walk-up basket surfaces `sale.empty_basket` (400), a non-open/placed order `working_order.not_open`
-  // (409), and corruption or any other unexpected failure the opaque `server.internal` (500) every
-  // route gets — the same `STATUS` table above, unchanged. SESSION-GUARDED like `/api/sales`;
-  // `operatorId` is `session.personId`, never a browser-sent value.
+  // A payment outcome (declined, network unavailable) is neither a client nor a server fault, so it
+  // answers 200 with the outcome as data, even a decline.
   app.post("/api/pay", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Resolve the calling device ONCE and thread it to both device guards below (the capability
-      // firewall and `requireSaleTillId`): `tryReadDevice` opens a `withTransaction` tx and runs the CPU-heavy
-      // scrypt `verifySecret`, so a single read keeps both — and the one gated `last_seen_at` sighting —
-      // off the redundant second pass. `null` (no cookie) still threads through fail-closed.
+      // Resolved once for both device guards: `tryReadDevice` runs a scrypt verification.
       const device = await tryReadDevice(deps, c);
-      // Capability firewall (SP-A.2 §16): integrated card pay drives a real reader, so it requires the
-      // device's assigned device profile to declare `integrated-card-payment`. This generalises the old
-      // hardcoded handheld check — a handheld carries a capability-less device profile (or none), so it is
-      // still refused `device.forbidden_action` (403) here, before the provider guard and any fiscal
-      // write, so the fence holds even if the client were bypassed. A cookie-less caller passes THIS
-      // capability guard (there is no device to check) — but the route still nets to a rejection, because
-      // `requireSaleTillId` below fails closed with `device.unauthorized` on a missing cookie (§16.4): an
-      // ordinary env-only till is no longer a sellable box on `/api/pay`. (A handheld may still settle a
-      // cash or manual-card sale on `/api/sales`, node-keyed, which runs NO capability guard — only the
-      // INTEGRATED leg here is fenced.)
+      // A cookie-less caller passes this guard but is refused `device.unauthorized` by
+      // `requireSaleTillId` below.
       await assertDeviceCapability(deps, c, "integrated-card-payment", "pay", device);
       const body = await readJsonBody<IntegratedPayRequest>(c);
-      // The pay-body `id` is REQUIRED (it names the order to charge), and un-screened it travels
-      // unchallenged into `payWorkingOrderIntegrated`'s `eq(workingOrders.id, req.id)` read
-      // (till-sale.ts) — the identical exposure to `/api/sales`'s `workingOrderId`. Screened here (before the
-      // provider guard, so a malformed body is a 400 whatever the till's card config) as the 7b sibling.
+      // Screened before the provider guard, so a malformed body is a 400 whatever the card config.
       requireUuidParam(body.id, "WorkingOrderId");
       if (
         body.simulationOutcome !== undefined &&
@@ -1204,21 +701,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
       const zoneId = await resolveHttpOrderZone(deps, body.lines.length, body.zoneId);
-      // A named reader override (Task 17's picker) must be a well-formed uuid before it reaches the
-      // by-id read below, so a malformed one is a 400 rather than a read that quietly finds nothing.
       if (body.readerId !== undefined) {
         requireUuidParam(body.readerId, "CardReaderId");
       }
-      // SP-A.2 §16.4 cutover: the integrated pay's `till_id` comes from the AUTHENTICATED device, not env
-      // (only `tillId` changes — `nodeId`/`seriesId` stay `deps.cfg`). Resolved AFTER the capability
-      // firewall so its refusal keeps its status; `requireSaleTillId` fails closed with
-      // `device.unauthorized` on a missing cookie (§16.4), so past this line the caller is an
-      // authenticated device. Threads the once-resolved `device` so the fail-closed checks reuse the
-      // binding read above rather than a second scrypt pass.
+      // Resolved after the capability firewall so its refusal keeps its status.
       const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
 
-      // DEMO/PREPARE: the local simulator `boot.ts` built (`deps.cardProvider`), driven directly and
-      // stamping NO reader (`payments.reader_id` stays NULL — a practice sale touches no real reader).
+      // Practice mode: the local simulator, stamping no reader.
       if (deps.cardProvider?.provider === "simulator") {
         const outcome = await payWorkingOrderIntegrated(
           { db: deps.db, backend: deps.backend, clock: deps.clock, provider: deps.cardProvider },
@@ -1229,25 +718,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         return c.json(outcome); // 200 with the discriminated outcome — even a decline.
       }
 
-      // A LIVE/integration till (Task 12 cutover): route the charge to a reader's own provider. Resolve
-      // the reader (request `readerId`, else the device's default), by id — an unknown reader is
-      // `reader.not_found`, and a device with no default and no request reader is
-      // `reader.not_found` too (the deliberate "no sellable reader" refusal that replaced the old
-      // "no provider configured" 500). `resolvePayReader` ALSO pre-checks the provider is connected,
-      // throwing `reader.provider_disconnected` when no credential is sealed (the adapters would
-      // otherwise turn a deferred credential-read failure into a misleading decline).
       const reader = await resolvePayReader(deps, device?.deviceId, body.readerId);
-      // The pool is DB-free at construction and always supplied by a live boot; a reader that resolved
-      // without one is a boot misconfiguration, not a client fault.
+      // A live boot always supplies the pool; a missing one is a boot misconfiguration.
       /* v8 ignore start */
       if (deps.pool === undefined) {
         throw new Error("/api/pay: card provider pool not configured");
       }
       /* v8 ignore stop */
-      // The pool builds (or returns cached) the reader's provider. The provider carries NO reader:
-      // this sale's chosen reader travels as a per-collect input (`readerRef` below), so one cached
-      // provider serves every reader on the same vendor. A genuine decline / network stall is returned
-      // as DATA (200) by `payWorkingOrderIntegrated`, never thrown — only a real fault becomes a 500.
+      // The provider carries no reader: the chosen one travels per collect as `readerRef`, so one
+      // cached provider serves every reader on the same vendor.
       const provider = await deps.pool.get(reader.provider);
       const outcome = await payWorkingOrderIntegrated(
         {
@@ -1255,10 +734,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           backend: deps.backend,
           clock: deps.clock,
           provider,
-          // The chosen reader's vendor reference — passed into `provider.collect` as `readerRef` for
-          // THIS sale, so the shared cached provider charges the reader the operator picked.
           readerRef: reader.providerRef,
-          // Stamp the resolved reader on the captured payment (via `associatePaymentWithSale`).
           readerId: reader.id,
         },
         saleCfg,
@@ -1269,25 +745,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Park a working order to pay later (park & retrieve, sub-project 7b). SESSION-GUARDED like the
-  // sale routes: `requireSession` runs FIRST, and the guard — not the browser — supplies the
-  // attribution, so `operatorId` is `session.personId`. The client mints `body.id` and holds it stable
-  // across a retry, which makes park IDEMPOTENT: a re-sent park (a lost-response retry) PK-collides on
-  // the primary key, and `parkOrder` catches that refusal and REPLAYS the existing open order's
-  // `{ id, orderNumber }` — the same idempotent-replay shape pay uses (`payWorkingOrder`) — so at most
-  // one order is ever parked for the id and the retry sees the original result (a colliding id whose row
-  // is no longer open re-throws the raw refusal). `parkOrder` reads the zone's menu offers and
-  // prices authoritatively (the request carries no price), opening its OWN `withTransaction`
-  // transaction, so it is called OUTSIDE any transaction here. Returns the persisted
-  // `{ id, orderNumber }`.
+  // Idempotent on the client-minted `body.id`: a re-sent park collides on the primary key and
+  // replays the existing open order's `{ id, orderNumber }`.
   app.post("/api/working-orders", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
       const body = await readJsonBody<{
         id: string;
-        // A parked line MAY carry `extras` and `options` (spec §2.3, §3.4) and per-line `LineExtras`
-        // (NON-FISCAL) — all forwarded to `parkOrder` → `priceOrderLines`, which validates them
-        // against the dish's own definitions.
         lines: ({
           menuItemId: string;
           quantity: string;
@@ -1297,12 +761,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         zoneId?: string;
         label?: string;
       }>(c);
-      // The client MINTS `body.id` — it becomes the `working_orders.id` PK `createOpenOrder` INSERTs
-      // (a plain `text` column), so un-screened a malformed one is STORED as the order's id — the same
-      // 7b exposure as the sale/pay bodies, and this screen is the only thing refusing it (the
-      // id-screen note above). (Distinct from the re-park idempotency `parkOrder` now handles: that
-      // is a VALID id colliding with an existing open row, which REPLAYS; this is a malformed one refused
-      // before any INSERT.)
+      // The client mints `body.id`, which becomes the stored primary key; this screen is the only
+      // refusal of a malformed one.
       requireUuidParam(body.id, "WorkingOrderId");
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
@@ -1319,15 +779,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The deployment holds one tenant per database. The venue-wide held list: every OPEN working order
-  // any register in the venue can retrieve, whatever `node_id` it carries (venue-wide, till-reroute §3.6
-  // — a promoted node inherits the dead node's open tabs). SESSION-GUARDED — the operator must be
-  // logged in to see parked orders; the browser names nothing.
-  //
-  // Venue-wide reads need no per-node routing on a mirror (the old node-scope trap is gone), and a
-  // mirror never reaches this read anyway: a till session requires `POST /api/session` (a write), which
-  // the read-only gate (`read-only-gate.ts`) 403s on a mirror, so `requireSession` — which every route
-  // below calls FIRST — 401s before the read runs. `boot.mirror.test.ts` pins that reachability.
+  // Venue-wide: every open working order, whatever `node_id` it carries.
   app.get("/api/working-orders", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1336,14 +788,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Retrieve one parked order to rebuild its basket. SESSION-GUARDED. An id naming no OPEN order in
-  // the venue (an absent or settled/abandoned one; the read is venue-wide, till-reroute §3.6, so a
-  // same-tenant order on another node IS reachable) surfaces `working_order.not_found`, which `STATUS`
-  // maps to 404. Returns `{ id, orderNumber, label, lines }` — the pricing INPUTS only, never a stored
-  // price, so the till re-prices on retrieve. The id is `isUuid`-screened before the query: a
-  // malformed one passed straight into `eq(workingOrders.id, id)` meets no refusal of its own and
-  // matches nothing, so it is refused HERE as `working_order.not_found` — the SAME 404 an absent open
-  // order gets.
+  // Returns the pricing inputs only, never a stored price: the till re-prices on retrieve.
   app.get("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1353,20 +798,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Edit a parked order — the whole new basket plus an optional new label, a full REPLACEMENT.
-  // SESSION-GUARDED. Any `open` order in the venue may change (venue-wide, till-reroute §3.6); a
-  // non-open or unknown id surfaces `working_order.not_open` → 409. `updateHeldOrder` re-prices authoritatively (the request carries
-  // no price) and returns nothing, so this answers 200 with an empty body. The id is `isUuid`-screened
-  // before the query, refused as `working_order.not_open` → 409 — the SAME code a non-open/absent id
-  // gets — rather than a read that quietly matches nothing (the id-screen note above).
   app.put("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       const body = await readJsonBody<{
-        // A line MAY carry `extras` and `options` (spec §2.3, §3.4) and per-line `LineExtras`
-        // (NON-FISCAL) — all forwarded to `updateHeldOrder`, which compares them against what the
-        // stored line froze before deciding whether the edit is quantity-only.
         lines: ({
           menuItemId: string;
           quantity: string;
@@ -1383,11 +819,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Discard a parked order (`open → abandoned`). SESSION-GUARDED. A non-open, unknown, or foreign-node
-  // id surfaces `working_order.not_open` → 409, the same open-only guard `updateHeldOrder` makes. Returns 200 with
-  // an empty body. The id is `isUuid`-screened before the query, refused as `working_order.not_open`
-  // → 409 — the SAME code — rather than a read that quietly matches nothing (the id-screen note
-  // above).
   app.delete("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1397,32 +828,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Place a working order (7c prepare & collect, design §3): `open → placed`, freezing composition
-  // and opening the amendment log — and, for Modes I/T, enqueueing the node-scoped prep row at
-  // `queued` (send-to-prep = placing, inside `placeOrder` itself). SESSION-GUARDED — `operatorId` is
-  // `session.personId`, never a browser-sent value, both for the amendment's `actor_id` and (Mode I)
-  // the deferred invoice's attribution. The id is `isUuid`-screened BEFORE any query: passed straight
-  // into `eq(workingOrders.id, id)` a malformed one meets no refusal of its own and matches nothing,
-  // so it is refused as `working_order.not_open` instead — the SAME
-  // code an absent id gets, the fail-closed shape that code's own note in `errors.ts` describes.
   app.post("/api/working-orders/:id/place", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Handheld firewall (spec §5): placing a Mode-I order FILES a deferred chained invoice
-      // (`placeOrder` → `recordSale`) — the unrecoverable fiscal record (CLAUDE.md §5) — so a handheld,
-      // which never settles THROUGH place (that deferred invoice settles at the fixed till; a handheld's
-      // settlement is a cash or manual-card sale on `/api/sales`), is refused `device.forbidden_action` (403) HERE,
-      // before the id parse and any fiscal write, exactly as pay/collect are. An ordinary till carries no
-      // device cookie and passes.
-      // Resolve the calling device ONCE and thread it to both the handheld firewall and `requireSaleTillId`
-      // below, so scrypt + the `withTransaction` read run once per request rather than twice (perf; §16 path).
+      // Handheld firewall: placing a Mode-I order files a deferred chained invoice, and a handheld
+      // never settles through place.
       const device = await tryReadDevice(deps, c);
       await assertNotHandheld(deps, c, "place", device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
-      // SP-A.2 §16.4 cutover: a Mode-I place files a deferred chained invoice under the AUTHENTICATED
-      // device's `till_id`, which `placeOrder` takes as `saleTillId`. That device till reaches the FISCAL
-      // record ONLY; the `order_placed` amendment's `capturedByTillId` stays the box's CONFIGURED register
-      // (`deps.cfg.tillId`), matching `cancelPlacedOrder` so a re-homed box's place/cancel history agrees.
+      // The device's till reaches the fiscal record only; the `order_placed` amendment keeps the
+      // box's configured `cfg.tillId`, matching `cancelPlacedOrder`.
       const saleTillId = await requireSaleTillId(deps, c, device);
       const result = await placeOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
@@ -1435,19 +850,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Send a SETTLED order to the kitchen — Mode P's pickup (design §5, reworked to KDS-1's ticket model).
-  // SESSION-GUARDED. `sendToPrep` fires the order's lines through the shared `fireLines`, inserting one
-  // `ticket_items` row per line. A contextual order uses its frozen zone's preparation rules; a legacy
-  // order uses the product/category/default-station chain. The station is SNAPSHOTTED at fire time. It
-  // is the ONE fire path with a public route (place fires inside `placeOrder`; a tab round
-  // fires inside `addTabRound`), so this route stays — but it no longer advances anything (the removed
-  // `advancePrep` `{ to }` branch is gone; advancing is now per-line/whole-ticket, below). A non-settled,
-  // absent or foreign order is refused `working_order.not_settled` (409) BEFORE any write; a re-fire of an
-  // already-sent order collides on the per-line unique and is refused `ticket.already_fired` (409, mapped
-  // in `fireLines`) rather than an opaque 500; a venue with no default station fails the fire loud with
-  // `station.no_default` (409). The id is `isUuid`-screened before any query, refused as
-  // `working_order.not_settled` — the SAME code a non-settled/absent id gets — rather than a read
-  // that quietly matches nothing. Returns 200 with an empty body.
   app.post("/api/working-orders/:id/prep", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1457,12 +859,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The deployment holds one tenant per database. The venue's ACTIVE kitchen stations (KDS-1,
-  // design §3f), for the station-display picker. SESSION- GUARDED (kitchen staff log in with a
-  // PIN and pick a station, §0). `listStations` is location-scoped from `deps.cfg` in this
-  // database, ordered by display order then name — the same LIST-ONLY, active-only shape `GET
-  // /api/zones` uses; station CRUD is the MANAGEMENT API's, so this surface throws no config
-  // code.
   app.get("/api/stations", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1473,13 +869,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The deployment holds one tenant per database. One station's kitchen queue (KDS-1, design
-  // §3c/§3f) — the venue's ticket items AT `:id`, grouped by order, oldest first.
-  // SESSION-GUARDED. `listStationQueue` is venue-wide (till-reroute §3.6 — not node-scoped). The
-  // `:id` is `isUuid`-screened first: an unknown station id already yields an empty queue (it
-  // names no items), so a MALFORMED one — which likewise names no live station — is refused
-  // `station.not_found` (404) rather than reaching the `station_id` comparison, which would refuse
-  // nothing — the SAME 404 the config surface gives an absent station.
   app.get("/api/stations/:id/queue", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1492,24 +881,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Bump ONE ticket item one kitchen step (KDS-1 §3c) — the per-line advance that is the source of truth.
-  // Body `{ to }` (`"preparing" | "ready"`). SESSION-GUARDED. `advanceTicketItem` is a single conditional
-  // UPDATE: a skip/repeat/backwards move, an absent/foreign item, OR any non-{preparing,ready} `to`
-  // (including a missing body — the verb's TICKET_TRANSITIONS-table lookup throws BEFORE any query when
-  // `to` is not a key, so no bad enum reaches the DB) all surface `ticket.invalid_transition` (409). The
-  // `:id` is `isUuid`-screened first, refused as that SAME code — a malformed id names no item exactly as
-  // an absent one — rather than a read that quietly matches nothing. Returns 200 with an empty body; the display re-reads the
-  // station queue.
   app.post("/api/ticket-items/:id/advance", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("ticket.invalid_transition", { ticketItemId: id });
       const body = await readJsonBody<{ to?: string }>(c);
-      // `body.to` reaches `advanceTicketItem` as-is (cast): the verb owns the target validation, throwing
-      // `ticket.invalid_transition` for `"queued"`, a missing field, or any garbage value — no route-level
-      // `to` screen is needed because the verb's TICKET_TRANSITIONS-table lookup never lets an invalid
-      // value reach the enum column (a lookup miss is refused before the update runs, not after).
+      // `advanceTicketItem` refuses any target outside its transition table before the update runs.
       const to = body.to as TicketState;
       await withTransaction(deps.db, async (tx) => {
         await advanceTicketItem(tx, deps.cfg, id, to);
@@ -1518,15 +896,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Bump a WHOLE ticket — every not-yet-`to` line of one order at one station (KDS-1 §3c) — the
-  // convenience the `bump_mode = 'ticket'` venue setting (and a "bump all" affordance) drives, over the
-  // per-line truth above. `:id` is the order, `:sid` the station; body `{ to }` (`"preparing" | "ready"`).
-  // SESSION-GUARDED. UNLIKE the per-line verb, `advanceTicket` has no target-validation switch and NO-OPs
-  // on an empty match by design (bumping a ticket whose lines have all advanced is a convenience, not an
-  // error), so the route screens `to` itself — a non-{preparing,ready} value is `management.request_invalid`
-  // (400, the request-shape code the sibling routes use), which also keeps a bad enum off the column. A
-  // malformed order/station id names nothing, which is the SAME no-op the verb makes for an unknown one, so
-  // it is screened to a clean 200. Returns 200 empty.
+  // Unlike the per-line verb, `advanceTicket` does not validate `to` and no-ops on an empty match,
+  // so the route screens `to`, and a malformed id gets the same no-op 200.
   app.post("/api/orders/:id/stations/:sid/advance", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1536,8 +907,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.to !== "preparing" && body.to !== "ready") {
         throw new AppError("management.request_invalid", { field: "to" });
       }
-      // Bind `to` to a local: the narrowing above does not survive into the `withTransaction` closure (a
-      // captured property resets to its declared `string | undefined`), the login/create-person pattern.
+      // The narrowing above does not survive into the closure.
       const to = body.to;
       if (!isUuid(orderId) || !isUuid(stationId)) return c.body(null, 200);
       await withTransaction(deps.db, async (tx) => {
@@ -1547,22 +917,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Fire a HELD course of an order (KDS-2 §3c) — the operator's "release this course" action. `fireCourse`
-  // stamps `fired_at = now()` on every HELD item of this order + course, so they stop being greyed on the
-  // display and become advanceable. EXISTENCE-checks the course (`requireCourse`, EXISTENCE-not-liveness),
-  // so a DEACTIVATED course still fires and an absent/foreign one is `course.not_found` (404). Shared route
-  // shape, session gate and id screens are `mountCourseVerb`'s.
   mountCourseVerb(app, deps, log, "fire", fireCourse);
 
-  // The deployment holds one tenant per database. The expo (pass) queue (KDS-3 §3d) — the venue's
-  // live orders, aggregated into courses ACROSS stations, for the expediter's display.
-  // SESSION-GUARDED (kitchen/pass staff log in with a PIN, §0). `listExpoQueue` is venue-wide
-  // (till-reroute §3.6 — not node-scoped) — the SAME LIST-ONLY, session-gated shape the station
-  // queue (`GET /api/stations/:id/queue`) and the station list (`GET /api/stations`) use, minus a
-  // path param: the pass is the whole venue's, so there is nothing to screen. Returns the
-  // `ExpoOrder[]` aggregation (orders oldest-first, courses by display_order, each item carrying
-  // its station name + fired/away roll-ups); the display re-reads it after each bump/dispatch.
-  // READ-ONLY, no fiscal touch.
   app.get("/api/expo/queue", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1573,32 +929,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Bump a WHOLE course to `ready` across every station (KDS-3 §3d) — the expediter's "this course is all
-  // plated" lever on the pass. UNLIKE the fire/away verbs, `bumpCourseReady` does NOT existence-check the
-  // course (it is `advanceTicket`'s no-throw-on-empty bulk shape): a well-formed-but-unknown course, or one
-  // with nothing fired left to bump, updates zero rows and returns 200. Shared route shape, session gate
-  // and id screens are `mountCourseVerb`'s.
+  // Unlike `fire`/`away`, `bumpCourseReady` does not existence-check the course: an unknown one
+  // updates zero rows and answers 200.
   mountCourseVerb(app, deps, log, "ready", bumpCourseReady);
 
-  // Dispatch a plated course to the floor (KDS-3 §3d) — the expediter's "this course is away" verb, the
-  // pass counterpart to `ready`. Like `fire`, `markCourseAway` EXISTENCE-checks the course (`requireCourse`,
-  // EXISTENCE-not-liveness — a course deactivated while holding plated items is still dispatchable), so a
-  // well-formed-but-unknown/foreign course is `course.not_found` (404). It stamps `away_at = now()` on this
-  // course's `ready` items (idempotent: already-away items are skipped). Shared route shape, session gate
-  // and id screens are `mountCourseVerb`'s.
   mountCourseVerb(app, deps, log, "away", markCourseAway);
 
-  // Hand a SETTLED, fired order to the customer — Mode P's counter handover (KDS-1 §3e). SESSION-GUARDED.
-  // `markCollected` stamps the order-level `collected_at`, which drops the order off `listStationQueue`
-  // (the display shows an order until it is collected). NON-FISCAL — it writes ONLY `collected_at`,
-  // touching no sale/registro/tender/huella (the order was already paid + filed at settle). DISTINCT from
-  // the placed-collect FISCAL route `POST /api/working-orders/:id/collect` (`collectOrder`), hence the
-  // distinct `/api/orders/:id/collect` path (the sibling `/api/orders/:id/stations/:sid/advance` already
-  // lives here). A non-settled/absent/foreign id is refused `working_order.not_settled` (409), an
-  // already-handed-over order `working_order.already_collected` (409), and an order never fired
-  // `ticket.not_fired` (409) — all BEFORE any write. The id is `isUuid`-screened first, refused as
-  // `working_order.not_settled` (the SAME code an absent/non-settled id gets) rather than a read that
-  // quietly matches nothing. Returns 200 with an empty body; the display re-reads the queue.
+  // The non-fiscal counter handover; the fiscal collect is `POST /api/working-orders/:id/collect`.
   app.post("/api/orders/:id/collect", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1608,16 +945,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Reprint an order's current kitchen tickets (KDS-4 §3d) — the operator's "a jam ate the paper, print
-  // it again" lever, surfaced on the station display + expo. SESSION-GUARDED: an OPERATIONAL floor action
-  // a logged-in operator takes, gated by the session (not a permission), like the fire/bump verbs.
-  // `reprintOrderTickets` re-queries the order's currently-fired `ticket_items` and re-enqueues the WHOLE
-  // current ticket through the SAME never-block outbox path a fire uses (design §3d/§4) — so a
-  // broken/absent printer can never make this hang, and it touches no fiscal record. An order with no
-  // fired items (unknown/never-fired, or all-held) enqueues nothing and is a 200 NO-OP — no new error
-  // code (design §6). The `:id` is `isUuid`-screened first, refused as `working_order.not_found` (404,
-  // the honest "no such order") rather than a read that quietly matches nothing. Returns 200 with an
-  // empty body; the display re-reads its queue.
+  // Re-enqueues through the same outbox a fire uses, so a broken printer cannot make it hang.
   app.post("/api/orders/:id/reprint", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1655,15 +983,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The deployment holds one tenant per database. The eligible authorizers for a gated privileged
-  // action — the active persons whose role holds `cash.drawer` (cash-drawer-authorization §5).
-  // SESSION-GUARDED, not permission-gated: ANY logged-in operator may call it (they are about to
-  // request a supervisor override and need the picker of who could authorize it), so
-  // `requireSession` runs FIRST and no `authorize` gate follows. Runs under `withTransaction`,
-  // returning the SAME no-secrets `{ personId, displayName }` shape as `GET
-  // /api/staff` — no PIN material, role or status: the till shows this picker BEFORE the
-  // supervisor has entered their credential. The client sends the chosen `{ personId, pin }` only
-  // on the authenticated `POST /api/drawer/open` override request.
+  // Session-gated, not permission-gated: any operator may list who could authorize an override.
   app.get("/api/drawer/authorizers", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1674,31 +994,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Manually open the cash drawer (counter receipt/drawer §3d + cash-drawer-authorization §3) — the
-  // operator's "open drawer" button, for a no-sale open (giving change, a cash count). SESSION-GUARDED,
-  // AUTHORIZED and AUDITED: it records a `drawer_opens('manual')` row (who performed it, who authorized
-  // it, whether via override) beside a kick-only outbox job to the till's receipt printer (the drawer IS
-  // that printer's kick — deli-hardware §6).
-  //
-  // This is the FIRST till route to parse a supervisor OVERRIDE and call `authorize()` WITH one (FP-2
-  // already calls `authorize(…"venue.configure")` at the table-placement routes, but with NO override —
-  // it is the reusable OVERRIDE hop that is new here). The per-location `drawer_open_policy` decides:
-  //   • `open`  → any logged-in operator opens directly; `authorizedBy = personId`, `viaOverride = false`.
-  //   • `gated` → `authorize(tx, { sessionId, permission: "cash.drawer", override })`, satisfied by the
-  //     operator's OWN role OR a supervisor PIN override (a second person who holds `cash.drawer`); an
-  //     unpermitted operator with no/insufficient override throws `authorization.not_permitted` (403).
-  // The gate runs BEFORE the printer resolution (spec §3 order), so an unpermitted operator is refused
-  // regardless of printer state. An optional `override: { personId, pin }` is parsed from the body (a
-  // supervisor opening directly, and every `open`-policy open, sends NO body): a missing/empty/malformed
-  // body is coerced to `{}` (`readJsonBody`), never a 500. A present-but-malformed `override.personId`
-  // (non-UUID) is screened to `person.not_found` (401) rather than reaching the `persons.id` read,
-  // where it would match nothing — the same code a well-formed-but-absent id gets from that gate.
-  //
-  // A till with NO receipt printer set has nothing to kick, refused `drawer.no_printer` (400, errors.ts)
-  // — the resolve + throw is at this route layer (which imports errors.js), so `receipt-print.ts` stays
-  // throw-free. `resolveReceiptPrinter` takes the same `active = true` posture the sale hook uses (its
-  // row lock is gone with the engine — see that function), so an absent/inactive printer is the
-  // no-printer case. Returns 200 with an empty body.
+  // Audited: records a `drawer_opens('manual')` row beside a kick-only job to the till's receipt
+  // printer. The `drawer_open_policy` gate runs before the printer lookup, so an unpermitted
+  // operator is refused whatever the printer state.
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
       const { personId, sessionId } = await requireSession(deps, c);
@@ -1711,15 +1009,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           .select({ policy: locations.drawerOpenPolicy })
           .from(locations)
           .where(eq(locations.id, deps.cfg.locationId));
-        // The till's own location is selected by id (like the receipt-mode read in
-        // `receipt-print.ts`); if it somehow returns nothing, fall back to the SECURE 'gated'
-        // default so a missing row can never leave the gate open.
+        // A missing location row falls back to the secure 'gated' default.
         /* v8 ignore start -- unreachable: the provisioned till's own location row exists */
         const policy = loc?.policy ?? "gated";
         /* v8 ignore stop */
 
-        // `authorize()` returns `{ authorizedBy, viaOverride }` (plus `permission`), the same names the
-        // `'open'` branch supplies directly — so a ternary destructure covers both policies.
         const { authorizedBy, viaOverride } =
           policy === "open"
             ? { authorizedBy: personId, viaOverride: false }
@@ -1746,32 +1040,17 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Collect and finalise a PLACED order (7c prepare & collect): Mode I settles the ALREADY-issued
-  // deferred invoice, Mode T files `recordSale` immediate — `collectOrder`'s own mode dispatch
-  // (design §3). SESSION-GUARDED; `operatorId` is `session.personId`. The body carries only the
-  // tender: `collectOrder` ignores `req.lines` entirely (a placed order files its frozen stored
-  // composition, never a client basket — see `PayWorkingOrderRequest`'s own doc comment), so this
-  // route need not even ask the till for one. The id is `isUuid`-screened before any query, refused
-  // as `working_order.not_placed` — the SAME code an absent or non-placed id gets from `collectOrder`
-  // itself.
+  // `collectOrder` files the placed order's frozen composition, never a client basket, so the body
+  // carries only the tender.
   app.post("/api/working-orders/:id/collect", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Handheld firewall (spec §5): collecting SETTLES the order — Mode T files `recordSale` immediate,
-      // Mode I settles the deferred invoice (`collectOrder`) — a chained fiscal write, the unrecoverable
-      // record (CLAUDE.md §5). A handheld never settles THROUGH collect (that stays fenced even for cash;
-      // a handheld's settlement path is a cash or manual-card sale on `/api/sales`), so it is refused
-      // `device.forbidden_action` (403) HERE, before the id parse and any fiscal write. An ordinary till
-      // carries no device cookie and passes.
-      // Resolve the calling device ONCE and thread it to both the handheld firewall and `requireSaleTillId`
-      // below, so scrypt + the `withTransaction` read run once per request rather than twice (perf; §16 path).
+      // Handheld firewall: collecting settles the order, a chained fiscal write.
       const device = await tryReadDevice(deps, c);
       await assertNotHandheld(deps, c, "collect", device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ tender: TillTender }>(c);
-      // SP-A.2 §16.4 cutover: collect settles under the AUTHENTICATED device's `till_id`, not env — Mode T
-      // files `recordSale` immediate, Mode I settles the deferred invoice. Only `tillId` changes;
-      // `nodeId`/`seriesId` (the SIF/chain key) stay `deps.cfg`.
+      // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay `deps.cfg`.
       const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock },
@@ -1783,19 +1062,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Cancel a PLACED order (7c, spec §4): `placed → abandoned`, appending an `order_cancelled`
-  // amendment carrying the operator's reason. SESSION-GUARDED; `operatorId` is `session.personId`. An
-  // absent/empty/whitespace reason is refused by `cancelPlacedOrder` itself with
-  // `working_order.reason_required` (400) BEFORE any transition or amendment. The id is
-  // `isUuid`-screened before any query, refused as `working_order.not_placed` — the SAME code a
-  // non-placed or absent id gets.
   app.post("/api/working-orders/:id/cancel", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
-      // Handheld firewall (spec §5): cancelling a placed order APPENDS an `order_cancelled` entry to the
-      // tamper-evident hash-chained amendment log (`cancelPlacedOrder`) — a fiscal-adjacent mutation a
-      // handheld must not perform. Refused `device.forbidden_action` (403) HERE, before the reason/id
-      // parse and any amendment write. An ordinary till carries no device cookie and passes.
+      // Handheld firewall: cancelling appends to the hash-chained amendment log.
       await assertNotHandheld(deps, c, "cancel");
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ reason: string }>(c);
@@ -1810,19 +1080,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Create a dining table. SESSION-GUARDED. `createTable` throws table.label_taken (→ 409) on a
-  // duplicate label, or zone.not_found (→ 404) when `zoneId` names no floor_zones row. The client
-  // sends { label, zoneId?, capacity? }.
   app.post("/api/tables", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const body = await readJsonBody<{ label: string; zoneId?: string; capacity?: number }>(c);
       requireCapacity(body.capacity);
-      // Screen a present `zoneId` as a UUID BEFORE the DB touch — the twin of the `:id` screen on the
-      // sibling routes, one field over. A well-formed-but-missing zoneId already surfaces
-      // `zone.not_found`, from the verb's own zone read; a MALFORMED one un-screened would be stored
-      // in `zone_id` unchallenged, so it gets the SAME domain `zone.not_found`. An ABSENT zoneId (`undefined`) is a legitimate unassigned
-      // table and is left alone.
+      // A malformed zoneId would otherwise be stored in `zone_id`; it gets the missing zone's code.
       if (body.zoneId !== undefined && !isUuid(body.zoneId))
         throw new AppError("zone.not_found", { zoneId: body.zoneId });
       const result = await withTransaction(deps.db, async (tx) => {
@@ -1832,7 +1095,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The venue's active tables. SESSION-GUARDED; The location filter scope it.
   app.get("/api/tables", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1843,9 +1105,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The occupancy read-model (design §4). SESSION-GUARDED. Task 4 extended `listTablesWithState` so
-  // each row now carries `zoneId` (the table's floor zone) and `pendingToServe` (its open tab's lines
-  // still to serve); this route returns that shape DIRECTLY, so both flow through unchanged.
   app.get("/api/tables/state", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1856,11 +1115,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The venue's active floor-plan zones (FP-1, design §4). SESSION-GUARDED; The location filter
-  // scope `listZones` to this till's venue, ordered by `display_order`. LIST-ONLY: zone CRUD is
-  // the management API's (`POST/PATCH/DELETE /management-api/zones`, Task 5), so this surface
-  // throws none of the create-side codes (`zone.name_taken`) — the till only reads zones to
-  // render the live floor.
   app.get("/api/zones", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1871,11 +1125,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The deployment holds one taxpayer per database. The venue's ACTIVE service statuses (FP-1,
-  // TS-2), for the table-order screen's Estado picker. SESSION-GUARDED (operator PIN, NOT the
-  // manager-only `listStatuses`): `requireSession` runs FIRST, and `listServiceStatuses` reads the
-  // whole table. LIST-ONLY, active-only (a deactivated status can't be applied);
-  // status CRUD is the management API's, so this surface throws no domain code.
   app.get("/api/statuses", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1886,9 +1135,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Edit a table (label/zoneId/capacity). SESSION-GUARDED. A malformed :id is screened to
-  // table.not_found (→ 404) rather than a 500; `updateTable` throws table.not_found / table.label_taken,
-  // or zone.not_found (→ 404) when `zoneId` names no floor_zones row.
   app.patch("/api/tables/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1896,10 +1142,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       const body = await readJsonBody<{ label?: string; zoneId?: string; capacity?: number }>(c);
       requireCapacity(body.capacity);
-      // Screen a present `zoneId` as a UUID BEFORE the DB touch — same as the create route above and the
-      // `:id` screen on this route: a malformed zoneId un-screened would be stored in `zone_id`
-      // unchallenged, so it gets the SAME `zone.not_found` a well-formed-but-missing one does. An
-      // ABSENT zoneId is left alone (an unassigned table, legitimate).
+      // As on create: a malformed zoneId would otherwise be stored.
       if (body.zoneId !== undefined && !isUuid(body.zoneId))
         throw new AppError("zone.not_found", { zoneId: body.zoneId });
       await withTransaction(deps.db, async (tx) => {
@@ -1909,8 +1152,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Deactivate a table (DELETE = deactivate; the verb is the only thing keeping it one —
-  // (`tables.ts`'s `deactivateTable` note)). SESSION-GUARDED.
+  // DELETE deactivates; `deactivateTable` is the only thing keeping it a deactivation.
   app.delete("/api/tables/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1923,8 +1165,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Open the table's running tab. SESSION-GUARDED. Malformed :id → table.not_found (a bad table id names
-  // no table). `openTab` throws table.not_found / table.inactive / tab.already_open.
   app.post("/api/tables/:id/tab", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1940,23 +1180,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Append a round to an open tab. SESSION-GUARDED. Malformed :id → tab.not_open (a bad id names no open
-  // tab). `addTabRound` throws tab.not_open / sale.empty_basket.
   app.post("/api/working-orders/:id/round", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
-      // Each round line MAY carry a `courseId` OVERRIDE (KDS-2 §5b) the tab screen's per-line course
-      // picker set — the ring-time resolver applies `<override> ?? product.course_id` (`addTabRound` →
-      // `priceOrderLines`). Absent (the picker left on the product default) = the product's default course.
       const body = await readJsonBody<{
-        // A round line MAY carry `extras` and `options` — threaded through `addTabRound` →
-        // `priceOrderLines`, which validates both against the dish's own definitions and expands each
-        // pick into a child row. A round line MAY also carry per-line `LineExtras` (NON-FISCAL) — validated + persisted on the parent dish
-        // line and snapshotted onto its ticket item at fire. Coursing editing (A3): a round line MAY carry
-        // `hold: true` — the tab screen's per-line hold toggle; `addTabRound` inserts it HELD (no fire, no
-        // print) regardless of course, released later by `sendLines`.
         lines: ({
           menuItemId: string;
           quantity: string;
@@ -1973,12 +1202,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Void one line from an open tab. SESSION-GUARDED. Malformed :id → tab.not_open; a :lineNo that is
-  // not a valid int4 line number → tab.line_not_found (it names no line) — the SAME `requireLineNo`
-  // screen the served POST/DELETE routes use (see its doc for why the int4 upper bound is not cosmetic:
-  // `voidTabLine` binds `line_no` parameterised, so an out-of-range integer un-screened would reach
-  // the `where line_no = $n` delete and quietly match nothing — no width refuses it). `voidTabLine`
-  // still throws tab.not_open / tab.line_not_found for the in-range cases it reaches.
   app.delete("/api/working-orders/:id/lines/:lineNo", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -1992,13 +1215,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Read ONE open tab's lines for the table-order screen (design §3b, FP-1) — per line: `lineNo`,
-  // `productId`, `quantity`, the LOCKED gross unit price (`unitPriceGross`) and the `servedAt` marker.
-  // SESSION-GUARDED. A READ, so it makes only the status check (`readTabLines` uses `assertTabOpen`,
-  // not `assertAnchoredTabOpen`, so a tab no table points at still reads). Malformed :id →
-  // `tab.not_open` (a bad id names no open tab), the SAME `requireTabParam`
-  // screen the served routes use; `readTabLines` throws `tab.not_open` for a non-open/absent tab. Returns
-  // `TabLine[]`. A tab does NOT re-price — the STORED locked gross rides back verbatim (see `readTabLines`).
+  // A tab does not re-price: the stored locked gross rides back verbatim.
   app.get("/api/working-orders/:id/lines", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -2010,16 +1227,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Mark ONE line of an open tab as DELIVERED — `served_at = now()` (design §3b, FP-1), the live floor's
-  // "this went out" tap. SESSION-GUARDED; it is an OPERATIONAL verb a logged-in runner uses like ringing
-  // a sale, gated by the session (`requireSession`), NOT by a permission. `served_at` is a PRE-FISCAL
-  // operational field (design H2) — it never enters `registros`/`computeHuella`/`recordSale`, so this is
-  // a floor-ops route with no fiscal path. The `:id`/`:lineNo` screens are the SAME as the sibling
-  // void-line DELETE above (`requireTabParam` → `tab.not_open` on a malformed tab id; `requireLineNo` →
-  // `tab.line_not_found` on a non-int4/out-of-range one), so a bad param is a clean 4xx rather than a
-  // query that quietly matches nothing — neither the id column nor the line-number column refuses
-  // one (the id-screen note above). `markLineServed` still throws `tab.not_open` (a non-open/absent/foreign tab a
-  // table points at) / `tab.line_not_found` (an in-range line matching nothing) for the cases it reaches.
+  // Pre-fiscal: `served_at` never enters a filed record.
   app.post("/api/working-orders/:id/lines/:lineNo/served", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -2032,9 +1240,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Clear ONE line's delivered marker — `served_at = NULL` (the inverse of the POST above, for a
-  // mis-tap). SESSION-GUARDED, same `:id`/`:lineNo` screens, same PRE-FISCAL note; `unmarkLineServed`
-  // throws the same `tab.not_open`/`tab.line_not_found` guards.
   app.delete("/api/working-orders/:id/lines/:lineNo/served", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -2047,26 +1252,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Move ONE not-yet-fired line of an open tab into another course, or clear its course to null (coursing
-  // editing A1, design §3b) — the tab screen's per-line course re-picker. SESSION-GUARDED, an operational
-  // floor verb gated by the session, NOT a permission. `:id`/`:lineNo` screens are the SAME as the sibling
-  // served/void line routes (`requireTabParam` → `tab.not_open` on a malformed tab id; `requireLineNo` →
-  // `tab.line_not_found` on a non-int4/out-of-range one). A present-but-malformed body `courseId` is
-  // screened to `course.not_found` (it names no course) BEFORE it reaches `requireLiveCourse`'s uuid cast —
-  // the same 404 the fire route's `:courseId` screen gives — while `null` (clear the course) is left alone.
-  // `setLineCourse` then throws `tab.not_open` / `course.not_found` (absent/foreign/retired target) /
-  // `tab.line_not_found` (an in-range line matching nothing) / `ticket.already_fired` (the line's ticket
-  // has fired — corrected via recall, not a move) for the cases it reaches. Body: { courseId: string | null }.
   app.patch("/api/working-orders/:id/lines/:lineNo/course", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
       const body = await readJsonBody<{ courseId?: string | null }>(c);
-      // An absent `courseId` key means "clear the course" (the null branch) — coerce it so `undefined`
-      // never reaches `setLineCourse`, where an omitted query param would surface as an opaque
-      // `server.internal` 500 instead of the clean null-clear the `{ courseId: string | null }` contract
-      // declares. The `{}`-body route test proves the 200 and fails (500) if this coercion is reverted.
       const courseId = body.courseId ?? null;
       if (courseId !== null && !isUuid(courseId)) {
         throw new AppError("course.not_found", { courseId });
@@ -2078,15 +1269,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Fire SPECIFIC held lines of an open tab — a finer release than the whole-course fire route (coursing
-  // editing A2, design §3b). The line set rides in the BODY (`{ lineNos?: number[] }`), not a `:lineNo`
-  // path param, so ONE request releases several lines at once — and an OMITTED / empty list means "send
-  // all together" (release every held line of the tab), the `body.lineNos ?? []` default. SESSION-GUARDED,
-  // an operational floor verb gated by the session, NOT a permission. Malformed :id → `tab.not_open`
-  // (via `requireTabParam`, the same screen the sibling tab routes use); `sendLines` then locks the open
-  // tab (`tab.not_open` for a non-open/absent tab) and no-ops on a `line_no` naming no held line — an
-  // unknown or already-fired line simply matches nothing (idempotent, like the course fire). PRE-FISCAL:
-  // it writes only `ticket_items` (fired_at/queued_at) + the kitchen-print outbox, never a filed record.
+  // An omitted or empty `lineNos` releases every held line of the tab.
   app.post("/api/working-orders/:id/lines/send", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -2099,15 +1282,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // UN-SEND not-yet-started lines of an open tab — the inverse of the /lines/send route (coursing editing
-  // A4, design §3b). The line set rides in the BODY (`{ lineNos: number[] }`), not a `:lineNo` path param,
-  // like /lines/send — one request recalls several lines at once. SESSION-GUARDED, an operational floor verb
-  // gated by the session, NOT a permission. Malformed :id → `tab.not_open` (via `requireTabParam`, the same
-  // screen the sibling tab routes use); `recallLines` then locks the open tab (`tab.not_open` for a
-  // non-open/absent tab), throws `tab.line_not_found` for an absent `line_no` and `ticket.already_started`
-  // (409) for a line the kitchen has already started (preparing/ready) — an already-held line is a no-op.
-  // PRE-FISCAL: it writes `ticket_items` (clearing `fired_at`) plus, for a previously-fired line, a
-  // RECALLED correction slip to the `print_jobs` outbox; never a filed record.
   app.post("/api/working-orders/:id/lines/recall", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -2120,9 +1294,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Set (or clear) a table's manual service status (design §3b). SESSION-GUARDED. A malformed :id →
-  // table.not_found (a bad table id names no table). `setTableStatus` throws table.not_found /
-  // status.not_found / status.inactive. Body: { statusId: string | null }.
   app.post("/api/tables/:id/status", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -2130,7 +1301,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       const body = await readJsonBody<{ statusId: string | null }>(c);
       const statusId = body.statusId ?? null;
-      // A present-but-malformed statusId is screened to status.not_found (it names no status), not a 500.
       if (statusId !== null && !isUuid(statusId))
         throw new AppError("status.not_found", { statusId });
       await withTransaction(deps.db, async (tx) => {
@@ -2140,25 +1310,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Place a table on the FP-2 spatial floor plan (design §placement) — the FIRST on-till
-  // `authorize(venue.configure)` gate. Unlike every sibling above, `requireSession` is not the whole
-  // guard: the session only IDENTIFIES the operator, and the write is a manager-level venue-config
-  // action. So this route pulls `sessionId` out of the session (the sale routes ignore it) and, inside
-  // the route's transaction, calls `authorize(tx, { sessionId, permission: "venue.configure" })`
-  // — which resolves the OPERATOR's OWN role and throws `authorization.not_permitted` (→ 403) when it
-  // lacks the permission. NO supervisor `override` is parsed this slice (manager-on-till only, spec
-  // §3c): a staff/supervisor operator is simply refused. The gate runs BEFORE `setTablePlacement`, so a
-  // rejected operator performs no write (proven by-deletion in the suite — dropping the `authorize` call
-  // flips the staff case to a 204). The `:id` isUuid screen runs FIRST (before the tx), refusing a
-  // malformed value with the SAME domain code the sibling table routes use — `table.not_found` (404) —
-  // rather than a read that quietly matches nothing. The body-shape screen mirrors the
-  // `management-api.ts` placement sibling exactly: a non-object body → `management.request_invalid`
-  // naming "body", each MISSING or wrong-TYPE field → the same code naming THAT field, and a
-  // string-typed but MALFORMED `zoneId` → `zone.not_found` (the sibling POST/PATCH `/api/tables`
-  // convention, one field over — un-screened it reaches `setTablePlacement`'s `floor_zones` read,
-  // which refuses nothing and matches nothing). The verb owns the placement VALUE validation
-  // (`placement.invalid`) and the live-table/live-zone reads. Returns 204 (the management-api
-  // placement sibling's convention).
+  // Unlike the sibling table routes, placement is a manager-level venue-config write: `authorize`
+  // checks the operator's own `venue.configure`, with no supervisor override, before any write.
   app.put("/api/tables/:id/placement", (c) =>
     run(c, log, async () => {
       const { sessionId } = await requireSession(deps, c);
@@ -2176,9 +1329,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       if (typeof body.zoneId !== "string")
         throw new AppError("management.request_invalid", { field: "zoneId" });
-      // Screen a string-typed but MALFORMED zoneId as a UUID (the sibling table POST/PATCH shape): the
-      // verb reads `floor_zones … where id = ${zoneId}`, which neither refuses an un-screened
-      // non-UUID nor matches it. Give it the SAME zone.not_found a well-formed-but-missing one gets.
       if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
       if (typeof body.posX !== "number")
         throw new AppError("management.request_invalid", { field: "posX" });
@@ -2188,10 +1338,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         throw new AppError("management.request_invalid", { field: "shape" });
       if (typeof body.rotation !== "number")
         throw new AppError("management.request_invalid", { field: "rotation" });
-      // Bind the narrowed fields to locals (the typeof narrowings above do not survive into the
-      // `withTransaction` closure — a captured property resets to its declared type). `shape` is cast to
-      // `FloorTableShape` here; the verb re-validates enum membership (→ placement.invalid), so the cast
-      // asserts nothing the verb does not check.
+      // The narrowings above do not survive into the closure; the verb re-validates `shape`.
       const { zoneId, posX, posY, rotation } = body;
       const shape = body.shape as FloorTableShape;
       await withTransaction(deps.db, async (tx) => {
@@ -2202,12 +1349,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Un-place a table (NULL the four placement columns, leave zone_id as-is — an FP-1 assignment).
-  // Mirrors the PUT's gate exactly: the operator's OWN `venue.configure` via `authorize` (no override),
-  // BEFORE `clearPlacement`, so a staff operator is 403 and writes nothing. Malformed :id → table.not_found
-  // (the isUuid screen, which is the only refusal); an absent row → table.not_found (the verb's
-  // row-count check).
-  // Returns 204.
+  // The same gate as the PUT.
   app.delete("/api/tables/:id/placement", (c) =>
     run(c, log, async () => {
       const { sessionId } = await requireSession(deps, c);
@@ -2221,11 +1363,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The deployment holds one tenant per database. Relocate a tab to a free table (TS-3, design
-  // §3a). SESSION-GUARDED. The tab `:id` and the body `toTableId` are both isUuid-screened before
-  // any query — a malformed tab id → `tab.not_open` (409), a malformed target → `table.not_found`
-  // (404), never a 500. The verb runs on a fresh withTransaction transaction. Returns 200
-  // empty.
   app.post("/api/tabs/:id/move", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -2240,8 +1377,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Extend a tab's coverage to a free table (TS-3, a join). SESSION-GUARDED; same isUuid screening as
-  // move. Returns 200 empty.
   app.post("/api/tabs/:id/join", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -2255,9 +1390,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Combine two tabs onto one bill (TS-3). SESSION-GUARDED. The destination tab `:id` and the body
-  // `fromTabId` are both isUuid-screened → `tab.not_open` on a malformed id; a self-merge is
-  // `tab.merge_self` (400), a non-open tab `tab.not_open` (409), both from `mergeTabs`. Returns 200 empty.
   app.post("/api/tabs/:id/merge", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -2273,13 +1405,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Move SELECTED items — whole lines or PART of a line — from one open tab to another (TS-4, design
-  // §3a). `:id` is the SOURCE tab; the body carries the destination and the line selection. SESSION-
-  // GUARDED. Both ids are `isUuid`-screened BEFORE any query — a malformed one passed into
-  // `eq(workingOrders.id, …)` would meet no refusal and match nothing, so it is refused as
-  // `tab.not_open` (the SAME fail-closed code an absent/closed/foreign tab gets). `transferLines` is tx-level, so this route
-  // opens the `withTransaction` transaction around it. Returns 200 with an empty body; the till
-  // re-reads the two tabs' state.
   app.post("/api/tabs/:id/transfer", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
@@ -2296,38 +1421,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Split-bill (TS-5, design §3): spin SELECTED items off this open tab (`:id` = fromTabId) into a NEW
-  // separately-filing check — a detached, table-LESS open working order the till then pays via the
-  // existing pay path. SESSION-GUARDED. The tab `:id` is `requireTabParam`-screened (a malformed id →
-  // `tab.not_open` 409, the SAME fail-closed code the sibling tab routes use — a malformed id passed into
-  // `eq(workingOrders.id, …)` would meet no refusal and match nothing). The body is shape-screened (non-object/null/
-  // array → `management.request_invalid` naming "body") before any field access — a literal JSON `null`
-  // body used to reach `body.transfers` as a TypeError → opaque 500 (Copilot). `splitOffCheck` is
-  // tx-level, so this route opens the `withTransaction` transaction around it. Returns 200
-  // `{ checkId }`; no fiscal write happens here (the check files only when it is later paid), so this
-  // stays on the ALLOWED side of the order-only firewall like the other tab verbs.
+  // Spins selected items off into a new table-less check; nothing files until it is paid.
   app.post("/api/tabs/:id/split", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const fromTabId = requireTabParam(c.req.param("id"));
-      // Read the RAW parse — NOT `readJsonBody` (which would coalesce a null body to `{}`). This route
-      // must tell a null/empty/malformed body apart from a well-formed object so it can refuse the
-      // former as a body-shape fault (field "body") below. `readRawJsonBody` returns the parsed body,
-      // or `null` for a literal JSON `null`, an empty or malformed body (the SyntaxError), so all three
-      // land in the SAME refusal rather than escaping as an opaque `server.internal` 500; a
-      // non-SyntaxError (e.g. a double-read) is a real server fault and is rethrown.
+      // `readRawJsonBody`, not `readJsonBody`: a null, empty or malformed body must be refused as
+      // field "body", not coalesced to `{}`.
       const body = await readRawJsonBody<{ transfers: { lineNo: number; quantity?: string }[] }>(c);
-      // Screen the body shape BEFORE any field access: a null (literal, or the coerced empty/malformed
-      // body) and a non-object primitive/array all fail here as `management.request_invalid` naming
-      // "body" — the same guard the `/api/tables/:id/placement` sibling uses — before `body.transfers`
-      // could throw. A well-formed object carrying a bad `transfers` is caught just below.
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
-      // A non-array `transfers` ({}/5) reaches `splitOffCheck`'s `transfers.length` as a TypeError →
-      // opaque 500. Refused here as `management.request_invalid` naming the field (the generic
-      // request-shape 400, `requireCapacity`'s discipline). Only the array shape is screened — the verb +
-      // `assertDistinctTransferLines` + `carveOffLines` raise the domain errors for bad contents.
+      // Only the array shape is screened; the verb raises the domain errors for bad contents.
       if (!Array.isArray(body.transfers)) {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }
@@ -2338,44 +1443,22 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Un-join (TS-5, deferred from TS-3): detach a joined table (`:id` = the shared tabId) from its tab —
-  // WITH items into its own new table-anchored bill, or WITHOUT into a free table (turnover). SESSION-
-  // GUARDED; both the path `:id` (the shared tab) and the body `tableId` are `isUuid`-screened before any
-  // query. A malformed tab id → `tab.not_open` (409, via `requireTabParam`); a malformed `tableId` →
-  // `table.not_joined` (409) — the SAME code `unjoinTable` throws for a table not currently joined to this
-  // tab, so a malformed target fails closed to the honest "that table is not joined here" rather than an
-  // opaque 500. The body is shape-screened (non-object/null/array → `management.request_invalid` naming
-  // "body") BEFORE the `tableId` check — a literal JSON `null` body used to reach `body.tableId` as a
-  // TypeError → opaque 500 (Copilot); screening it first also keeps a missing body out of the
-  // domain-specific `table.not_joined`, since "no body" is a request-shape fault, not a claim about a
-  // table. The verb is tx-level, so this route opens the `withTransaction` transaction around
-  // it. Returns 200 `{ tabId }` (the new anchored tab, with items) or `{}` (freed). No fiscal write.
   app.post("/api/tabs/:id/unjoin", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const tabId = requireTabParam(c.req.param("id"));
-      // Read the RAW parse — same reasoning as `/split` above: this route must distinguish a
-      // null/empty/malformed body (refused as field "body") from a well-formed object, so it uses
-      // `readRawJsonBody`, not `readJsonBody`. A literal null, and a SyntaxError from an empty/malformed
-      // body, both surface as `null` to land in the same refusal rather than an opaque 500; other
-      // throws rethrow.
+      // Raw parse, as in `/split`.
       const body = await readRawJsonBody<{
         tableId: string;
         transfers?: { lineNo: number; quantity?: string }[];
       }>(c);
-      // Screen the body shape BEFORE any field access: a null (literal, or the coerced empty/malformed
-      // body) and a non-object primitive/array fail here as `management.request_invalid` naming "body",
-      // before `body.tableId` reaches `isUuid`. This keeps a bad body out of the domain-specific
-      // `table.not_joined` a well-formed-but-wrong `tableId` gets below — a missing body is a request-
-      // shape fault, not a claim about a table.
+      // Body shape first: a missing body is a request-shape fault, not `table.not_joined`.
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
       if (!isUuid(body.tableId))
         throw new AppError("table.not_joined", { tableId: body.tableId, tabId });
-      // `transfers` is OPTIONAL here (absent = free the table, a turnover), so screen only a PRESENT
-      // non-array before the verb: a present non-array reaches `unjoinTable`'s `transferLines` as
-      // `.length` → opaque 500. Same request-shape 400 as `/split`, naming the field.
+      // Optional (absent frees the table); only a present non-array is refused.
       if (body.transfers !== undefined && !Array.isArray(body.transfers)) {
         throw new AppError("management.request_invalid", { field: "transfers" });
       }

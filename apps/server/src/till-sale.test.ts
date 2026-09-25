@@ -32,9 +32,7 @@ import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-// Test-only infra of @waitron/fiscal — the sanctioned deep-import path core's tests and
-// `daily-close-demo.ts` already use. Its `recordSale` returns a FiscalRecordRef with NO
-// `verificationUrl`, which is how the "empty qr" branch below is exercised at all.
+// Its records carry NO `verificationUrl`, which exercises the ticket's empty-QR default.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -63,8 +61,6 @@ import type { ZoneOffers } from "./testing/zone-offers.js";
 
 // Exercise the sale path and the chained fiscal write end to end: provision a venue, seed a
 // catalogue, sell, and read the filed record back.
-//
-// Nothing here establishes what the deployment role, which no longer exists, may read or write.
 const LOCALE = "es-ES";
 
 const suite = useVenueDb({
@@ -75,11 +71,7 @@ const suite = useVenueDb({
 let backend: FiscalBackend;
 let clock: TrustedClock;
 
-/**
- * The wall clock at the moment this process runs, reported as already confident and anchored — the
- * identical stub shape `record-one-sale.ts` documents. `recordSale` reads
- * `now()` once and touches neither `anchor` nor `currentAnchor`.
- */
+/** The system wall clock, reported confident/anchored. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -99,8 +91,7 @@ function systemClock(): TrustedClock {
   };
 }
 
-// `tenants_country_tax_id_key` is unique, so two venues provisioned without a reset between them
-// need different NIFs. A local counter, the same shape `provision-till.test.ts`'s `nextNif` uses.
+// `tenants_country_tax_id_key` is unique, so each venue gets its own NIF.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -116,18 +107,14 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    // No integrated card terminal — the walk-up sale path neither builds nor drives one.
     tipsEnabled: false,
-    // The walk-up sale path is mode-agnostic; the provisioned venue defaults to prepay.
     orderFlow: "prepay",
   };
 }
 
 /**
- * Stand up a fresh chained venue + registered SIF, then seed a catalogue and read back the
- * sellable products — one `each` product (1.50 gross, general/21%) and one `weight` product
- * (24.90 €/kg, reduced/10%). Each test gets its OWN tenant so the `registros_facturacion` count is
- * that test's alone, order-independent (CLAUDE.md §4).
+ * A fresh venue with a seeded catalogue: one `each` product (1.50 gross, general/21%) and one
+ * `weight` product (24.90 €/kg, reduced/10%).
  */
 async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   cfg: TillConfig;
@@ -250,10 +237,8 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
     await tx.execute(sql`
       update zone_service_policies set default_menu_id = ${cat.id}
       where zone_id = ${zone.rows[0]!.id}`);
-    // `preparation_routes.id` names its own value here: the column's default moved client-side to
-    // `$defaultFn(newId)` (`packages/venue-service/src/schema/service.ts`), which a raw insert never
-    // reaches, and `newId` IS `randomUUID` (`packages/db/src/schema/columns.ts:270`). The insert
-    // stays raw because the station is chosen by a subquery.
+    // A raw insert never reaches the column's client-side `$defaultFn(newId)`, so it names its own
+    // id; it stays raw because the station is chosen by a subquery.
     await tx.execute(sql`
       insert into preparation_routes (id, location_id, category_id, station_id)
       values (${randomUUID()}, ${cfg.locationId}, ${bebidas.id},
@@ -283,10 +268,8 @@ beforeAll(() => {
   });
 });
 
-/** The six frozen names a raw read of `working_order_lines` / `sale_lines` hands back — the two
- *  `descriptions` columns as the TEXT the engine stores, because a raw `execute` bypasses the
- *  column's own JSON read mapping (measured 2026-09-22 against `menu_sections.name` in
- *  `catalogue-api.test.ts`, which came back as `{"en":"Drinks",…}` rather than an object). */
+/** The six frozen names a raw read of `working_order_lines` / `sale_lines` hands back. A raw
+ *  `execute` bypasses the columns' JSON read mapping, so the two `descriptions` columns are TEXT. */
 type StoredNames = {
   name: string;
   variant_name: string | null;
@@ -296,8 +279,7 @@ type StoredNames = {
   variant_descriptions: string | null;
 };
 
-/** Parse the two JSON columns at the row, leaving every assertion below exactly as it was. The
- *  decode moved out of the driver, not out of the test. */
+/** Parse the two JSON columns at the row. */
 function decodeNames<T extends StoredNames>(
   row: T,
 ): Omit<T, "descriptions" | "variant_descriptions"> & {
@@ -369,8 +351,7 @@ describe("recordTillSale", () => {
       { ...names, unit_price_gross: null },
     ]);
     // The open order's line names the variant as its product; the filed line keeps the frozen
-    // names and no catalogue reference at all (spec decision 11), so neither table has a
-    // `variant_id` column.
+    // names and no catalogue reference, so neither table has a `variant_id` column.
     const orderLines = await suite.db.execute<{ product_id: string }>(
       sql`select product_id from working_order_lines`,
     );
@@ -382,8 +363,8 @@ describe("recordTillSale", () => {
       expect(columns.rows.map((column) => column.name)).not.toContain("variant_id");
     }
   });
-  // Spec §15.5: a variant follows its parent onto the menu; with nothing set for it there, it is
-  // charged its own price (3.80), neither the parent's menu price (2.25) nor the old override (4.80).
+  // A variant follows its parent onto the menu; with nothing set for it there, it is charged its
+  // own price (3.80), neither the parent's menu price (2.25) nor the old override (4.80).
   it("sells a variant this menu sets nothing for at the variant's own price", async () => {
     const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
     await withTransaction(suite.db, (tx) => setMenuVariants(tx, waterOfferId, []));
@@ -395,7 +376,7 @@ describe("recordTillSale", () => {
     expect(result.total).toBe("3.80");
   });
 
-  // Spec §15.1: a product with no Active variant sells as itself, at its menu price.
+  // A product with no Active variant sells as itself, at its menu price.
   it("sells a product whose every variant was removed as itself", async () => {
     const { cfg, zoneId, waterOfferId, waterProductId, variantIds } = await setupVenue({
       variants: true,
@@ -425,9 +406,8 @@ describe("recordTillSale", () => {
       tender: { method: "cash", amount: "4.10" },
     });
 
-    // Straight from the filed sale into the REAL receipt formatter, so this is the paper a customer
-    // is handed. RD 1619/2012 art. 7.1.e is the identification of the goods: a 4.10 line that reads
-    // only "Agua mineral" does not say which size was sold, and the price makes sense only with it.
+    // The real receipt formatter, so this is the paper a customer is handed. The goods must be
+    // identified (RD 1619/2012 art. 7.1.e): "Agua mineral" alone does not say which size was sold.
     const paper = printedLines(
       formatReceipt({
         result,
@@ -569,8 +549,8 @@ describe("recordTillSale", () => {
     expect(prep.rows).toEqual([{ count: 1 }]);
   });
 
-  // Spec §15.3's last step: a menu that sets no price sells the product at its own (1.50), never
-  // at the old menu price (2.25) and never at nothing.
+  // A menu that sets no price sells the product at its own (1.50), never at the old menu price
+  // (2.25) and never at nothing.
   it("files a walk-up from a blank menu price at the product's own price", async () => {
     const { cfg, zoneId, waterOfferId } = await setupVenue();
     await withTransaction(suite.db, (tx) =>
@@ -607,7 +587,6 @@ describe("recordTillSale", () => {
       `);
     expect(prep.rows).toEqual([{ count: 1 }]);
 
-    // A genuine chained fiscal record exists — one for this tenant's single sale.
     const rows = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion);
     });
@@ -618,8 +597,7 @@ describe("recordTillSale", () => {
     const { cfg, available, zoneId, offers } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
 
-    // TillSaleRequest.lines has no price field; sending an extra `unitPrice` cast `as any` must not
-    // change the filed total — the server re-reads the catalogue and prices authoritatively.
+    // An extra `unitPrice` smuggled past the type must not change the filed total.
     const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
       zoneId,
       lines: [
@@ -656,8 +634,7 @@ describe("recordTillSale", () => {
       params: { menuItemId: UUID_NOT_IN_CAT, zoneId },
     });
 
-    // cash and card are supported (7a cash + this slice's manual card); every other tender_method is
-    // still refused. The `as unknown` cast is how an untrusted till sends one past the widened type.
+    // Every tender but cash and card is refused; the cast is how an untrusted till sends one.
     for (const method of ["voucher", "transfer", "other"] as const) {
       await expect(
         recordTillSale(deps, cfg, {
@@ -668,8 +645,7 @@ describe("recordTillSale", () => {
       ).rejects.toMatchObject({ code: "sale.unsupported_tender", params: { method } });
     }
 
-    // Under-tender: 1.00 tendered against a 1.50 total. `settleSale` (inside recordSale's immediate
-    // mode) raises `sale.tender_shortfall`; the whole transaction rolls back.
+    // 1.00 tendered against a 1.50 total.
     await expect(
       recordTillSale(deps, cfg, {
         zoneId,
@@ -680,11 +656,8 @@ describe("recordTillSale", () => {
   });
 
   it("returns an empty qr when the fiscal backend offers no verification url", async () => {
-    // `TillSaleResult.qr` defaults to "" when the regime offers no verification link
-    // (`FiscalRecordRef.verificationUrl` is optional). `VerifactuBackend` always sets one, so this
-    // uses `FakeFiscalBackend` — a real test double writing through the caller's transaction — whose
-    // records carry none. It exercises the same `recordSale` write path (real sale/lines/tenders/
-    // settlement rows), only the fiscal record's own link is absent.
+    // `FakeFiscalBackend`'s records carry no verification link, so the ticket's `qr` default of ""
+    // is exercised.
     const { cfg, available, zoneId, offers } = await setupVenue();
     const each = available.find((p) => p.pricingUnit === "each")!;
 
@@ -707,12 +680,9 @@ describe("recordTillSale", () => {
 });
 
 /**
- * Feature B: catalogue content is authored under the BARE language tag (`es` = "our Spanish"), and a
- * write-side transform (`toInvoiceLineDescriptions`, wired into `priceOrderLines`) re-keys it to the
- * location's full-tag `invoice_locales` at the single point content enters a fiscal line — so the
- * `working_order_lines_check_locales` trigger (which requires the per-line `descriptions` map to hold
- * EXACTLY the venue's `invoice_locales`) passes on the insert, and the same re-keyed `priced` flows on
- * to `sale_lines`. Like the sales above, the trigger and the chained record are the point. A bare-`es` product on a `{es-ES}` venue would otherwise be REJECTED by the trigger.
+ * Catalogue content is authored under the BARE language tag (`es`), and `priceOrderLines` re-keys it
+ * to the location's full-tag `invoice_locales`, which the `working_order_lines_check_locales` trigger
+ * requires the line's `descriptions` to hold exactly. The same re-keyed map flows on to `sale_lines`.
  */
 describe("priceOrderLines re-keys bare catalogue content to the venue invoice_locales", () => {
   // `customerName` is the per-language text the re-key acts on. The staff `name` is deliberately a
@@ -776,10 +746,8 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
   }
 
   it("re-keys bare `es` to full-tag `es-ES` — reading invoice_locales FRESH from the DB, not cfg", async () => {
-    // The venue's DB `invoice_locales` is {es-ES}; the catalogue product carries BARE `es`. We
-    // deliberately DRIFT `cfg.invoiceLocales` to a WRONG value — if the re-key read cfg (env-derived)
-    // rather than the DB, it would produce `ca-ES` and the trigger (checking the DB's {es-ES}) would
-    // REJECT the insert. That it succeeds with `es-ES` proves the re-key reads the location fresh.
+    // `cfg.invoiceLocales` is deliberately WRONG: a re-key that read cfg rather than the location
+    // would produce `ca-ES`, which the trigger refuses.
     const { cfg, zoneId, menuItemId } = await setupBareVenue(["es-ES"], { es: "Café" });
     const driftedCfg: TillConfig = { ...cfg, invoiceLocales: ["ca-ES"], locale: "ca-ES" };
     const workingOrderId = randomUUID();
@@ -808,10 +776,8 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
       return { woLines, slLines };
     });
 
-    // The working_order_lines insert SUCCEEDED (the trigger would reject bare `es`) with the re-keyed map…
     expect(woLines).toHaveLength(1);
     expect(woLines[0]!.descriptions).toEqual({ "es-ES": "Café" });
-    // …and the same re-keyed `priced` flowed on to the filed sale_lines.
     expect(slLines).toHaveLength(1);
     expect(slLines[0]!.descriptions).toEqual({ "es-ES": "Café" });
   });
@@ -841,12 +807,10 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
 });
 
 /**
- * Ordering extras and options: the till rings a dish answering the extras and options lists it
- * attaches, and `priceOrderLines` expands each picked extra into a CHILD line under the dish's
- * PARENT line, validating every answer server-side (the client is never the gate). These are the
- * fiscal-adjacent invariants — a filed order carries parent + child `sale_lines`, and a
- * parked-then-paid one re-prices its children from their add-time lock to the same total/desglose.
- * Like the sales above, the chained record and the self-referential `parent_line_id` are the point.
+ * Ordering extras and options: `priceOrderLines` expands each picked extra into a CHILD line under
+ * the dish's line, validating every answer server-side. A filed order carries parent and child
+ * `sale_lines`, and a parked-then-paid one re-prices its children from their add-time lock to the
+ * same total and desglose.
  */
 describe("ordering extras and options — parent + child lines", () => {
   interface ModifierVenue {
@@ -882,8 +846,7 @@ describe("ordering extras and options — parent + child lines", () => {
   }
 
   /**
-   * Stand up a fresh chained venue and seed a catalogue with four `each` dishes and one `weight`
-   * product, plus the extras and options lists they attach:
+   * A fresh venue with these dishes and the extras and options lists they attach:
    *  - "Hamburguesa" (each, 9.00 general) + extras "Extras" (min 0, max 3): Bacon 0.50 at the BACON
    *    product's own reduced rate, Queso 0.75 at general.
    *  - "Menú" (each, 12.00 general) + options "Tamaño" (Pequeño / Grande), which must be answered.
@@ -1026,10 +989,7 @@ describe("ordering extras and options — parent + child lines", () => {
         },
         cfg.locale,
       );
-      // "Alioli" is WITHDRAWN while the list stays active — the shape a till can still send, because
-      // its menu was loaded before the withdrawal. An active list with no available label at all
-      // cannot be built here: `parseOptionListInput` refuses it (`options.invalid`, field `labels`),
-      // which is where that authoring mistake is now caught.
+      // "Alioli" is WITHDRAWN while the list stays active — what a till with a stale menu can send.
       const salsaList = await createOptionList(
         tx,
         {
@@ -1112,8 +1072,7 @@ describe("ordering extras and options — parent + child lines", () => {
     // 9.00 dish + 0.50 bacon + 0.75 queso = 10.25 gross.
     expect(result.total).toBe("10.25");
     expect(result.tender).toEqual({ method: "cash", change: "9.75" });
-    // The receipt line list is parent + both children, each child showing the picked product's
-    // CUSTOMER-facing text rather than its staff or kitchen name.
+    // Each child shows the picked product's CUSTOMER-facing text.
     expect(result.lines).toHaveLength(3);
     expect(result.lines.map((l) => l.descriptions["es-ES"])).toEqual([
       "Hamburguesa",
@@ -1144,8 +1103,6 @@ describe("ordering extras and options — parent + child lines", () => {
       return { wol, sl };
     });
 
-    // THREE working_order_lines: one parent (the dish, no parent link), two children (the PICKED
-    // product, parent_line_id → the parent's id). A child answers no options list of its own.
     expect(wol).toHaveLength(3);
     const [parent, childBacon, childQueso] = wol;
     expect(parent!.productId).toBe(v.burgerId);
@@ -1160,7 +1117,6 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(childQueso!.parentLineId).toBe(parent!.id);
     expect(childQueso!.optionSnapshots).toEqual([]);
 
-    // THREE filed sale_lines too, the two children carrying parent_line_id.
     expect(sl).toHaveLength(3);
     expect(sl.filter((l) => l.parentLineId !== null)).toHaveLength(2);
   });
@@ -1214,16 +1170,13 @@ describe("ordering extras and options — parent + child lines", () => {
       return { wol, sl };
     });
 
-    // Parent burger ×2 unchanged; child Bacon at the COMBINED 6, priced 0.50 × 6 = 3.00 gross.
-    // Both columns are read straight off the row, so each is the whole number its own scale stores:
-    // 300 is that gross in cents, and 2000 and 6000 are the two quantities in thousandths.
+    // Child Bacon at the COMBINED 6, 0.50 × 6 = 3.00 gross: cents and thousandths as stored.
     expect(wol).toHaveLength(2);
     expect(wol[0]).toMatchObject({ productId: v.burgerId, parentLineId: null, quantity: 2000 });
     expect(wol[1]!.productId).toBe(v.baconId);
     expect(wol[1]!.quantity).toBe(6000);
     expect(wol[1]!.lineTotal).toBe(300);
 
-    // The FILED child sale_line carries the same combined quantity (fiscal record).
     expect(sl).toHaveLength(2);
     const child = sl.find((l) => l.parentLineId !== null)!;
     expect(child.quantity).toBe(6000);
@@ -1348,9 +1301,8 @@ describe("ordering extras and options — parent + child lines", () => {
     return { total: result.total, child };
   }
 
-  // A variant may be an extras item like any product (Review Focus 1 of the plan,
-  // `docs/superpowers/plans/2026-09-23-variants-as-products.md`). One that leaves its VAT and price
-  // blank is taxed and priced at its PARENT's, and carries its OWN three names, never Bacon's.
+  // A variant picked as an extra that leaves its VAT and price blank is taxed and priced at its
+  // PARENT's, and carries its OWN three names, never Bacon's.
   it("a variant picked as an extra files its parent's VAT and price under its own name", async () => {
     const { total, child } = await sellVariantAsExtra({
       stem: "Bacon doble",
@@ -1399,9 +1351,8 @@ describe("ordering extras and options — parent + child lines", () => {
       workingOrderId,
     });
 
-    // A walk-up never touches the stored lock: it is filed from the live `priceBasketWithOptions`
-    // result `createOpenOrder` returns, so the answers have to ride on THAT and not only on the
-    // working-order row this same call writes.
+    // A walk-up files from the price `createOpenOrder` returns, not the stored lock, so the answers
+    // must ride on that price too.
     const filed = await filedLinesOf(workingOrderId);
     expect(filed.map((line) => line.optionSnapshots)).toEqual([
       [grandeSnapshot(v.defaultLanguage)],
@@ -1429,8 +1380,8 @@ describe("ordering extras and options — parent + child lines", () => {
       );
     });
 
-    // The till sends no basket, so this files from `readLockedLines` — the answers reach the sale
-    // only if that reader selects `working_order_lines.option_snapshots` and carries it.
+    // No basket, so this files from the stored lock: the answers reach the sale only if that read
+    // carries `working_order_lines.option_snapshots`.
     await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
       id: workingOrderId,
       lines: [],
@@ -1460,12 +1411,9 @@ describe("ordering extras and options — parent + child lines", () => {
       workingOrderId,
     });
 
-    // Bacon is offered at 0.50 by the list and is a 3.00 product in its own right, at its OWN reduced
-    // rate where the burger is general — so name, quantity, price and VAT each come from the frozen
-    // pick rather than from the catalogue row or the dish. 0.50 gross at 10% is 0.45 net per unit,
-    // 0.91 for the two. Every one of these columns is read straight off `sale_lines`, so each is
-    // the whole number its own scale stores: 45 and 91 are the amounts in cents, 2000 is two units
-    // in thousandths, and 1000 is the 10% rate in basis points.
+    // Bacon is offered at 0.50 by the list but is a 3.00 product at its OWN reduced rate where the
+    // burger is general, so each column shows it came from the frozen pick. 0.50 gross at 10% is
+    // 0.45 net per unit, 0.91 for the two; the columns hold the stored whole numbers.
     const filed = await filedLinesOf(workingOrderId);
     expect(filed).toHaveLength(2);
     const child = filed.find((line) => line.parentLineId !== null)!;
@@ -1478,16 +1426,10 @@ describe("ordering extras and options — parent + child lines", () => {
       optionSnapshots: [],
     });
 
-    // The structural half of the same rule (spec decision 11, and `sale_lines`'s own "snapshotted
-    // values, never catalogue references" header): there is no column for the picked product at all,
-    // so no future write can put one there without this failing first. Same instrument as
-    // `packages/fiscal-verifactu/src/write-path.e2e.test.ts`'s note guard.
+    // `sale_lines` has no column for the picked product at all.
     const columns = await withTransaction(suite.db, async (tx) => {
-      // This engine has no `information_schema`; a table's columns come from the PRAGMA function,
-      // the same replacement `configuration-transfer.ts:403` takes. The structural claim is
-      // unchanged: an unknown table would yield no rows, and `toContain("option_snapshots")` below
-      // would fail first, so an empty answer cannot pass the two `not.toContain` assertions by
-      // vacuum.
+      // An unknown table yields no rows, so `toContain("option_snapshots")` keeps the
+      // `not.toContain` assertions from passing on an empty answer.
       const { rows } = await tx.execute<{ column_name: string }>(
         sql`select name as column_name from pragma_table_info('sale_lines')`,
       );
@@ -1503,8 +1445,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
 
-    // PARK: persist an OPEN order with parent + child lines, and capture the PREVIEW price its lines
-    // were built from (the same authoritative `priceBasketWithOptions` result).
+    // PARK, keeping the price its lines were built from.
     const preview = await withTransaction(suite.db, async (tx) => {
       const { priced } = await createOpenOrder(
         tx,
@@ -1526,30 +1467,20 @@ describe("ordering extras and options — parent + child lines", () => {
       return priced;
     });
 
-    // RETRIEVE + PAY: the till sends the parked order's id and NO basket, so payWorkingOrder files from
-    // the STORED locked lines (readLockedLines → priceStoredOrder), re-pricing the children from their
-    // add-time `unit_price_gross`/`vat_rate` — never a re-read of the catalogue.
+    // RETRIEVE + PAY with no basket, so the children are re-priced from their stored lock.
     const result = await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
       id: workingOrderId,
       lines: [],
       tender: { method: "cash", amount: "20.00" },
     });
 
-    // The filed total and desglose equal the previewed ones to the céntimo — the fiscal invariant a
-    // locked-line filing of a customised order must hold: it never diverges from its preview.
     expect(result.total).toBe(preview.total);
-    // `result.vatBreakdown` is `{rate, base, tax}` strings (the ticket shape); the preview's bands
-    // carry the same three fields (Decimals are branded strings), so compare that projection.
     expect(result.vatBreakdown).toEqual(
       preview.vatBreakdown.map((b) => ({ rate: b.rate, base: b.base, tax: b.tax })),
     );
-    // The filed record carries all three lines.
     expect(result.lines).toHaveLength(3);
 
-    // LINKAGE must survive the lock round-trip: the filed child sale_lines point at the filed
-    // PARENT's id, not `null`. `readLockedLines` reconstructs each child's `parentLineNo` from its
-    // stored `parent_line_id`, so the persisted-order file path preserves parent→child linkage
-    // exactly as a live walk-up does — a child sale_line is never orphaned by the re-price.
+    // The parent→child link survives the lock round-trip.
     const filed = await withTransaction(suite.db, async (tx) => {
       const [sale] = await tx
         .select({ id: sales.id })
@@ -1571,9 +1502,7 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(filedBacon!.parentLineId).toBe(filedParent!.id);
     expect(filedQueso!.parentLineId).toBe(filedParent!.id);
 
-    // The JSON-facing `TillSaleResult.lines[i].parentLineNo` carries the SAME linkage (the till's
-    // settled-ticket view groups on this field) — the dish renders `null`, each child the parent's
-    // own `lineNo`, proven against the real persisted lineNo rather than an assumed constant.
+    // The ticket's `parentLineNo` carries the same link.
     expect(result.lines[0]!.parentLineNo).toBeNull();
     expect(result.lines[1]!.parentLineNo).toBe(filedParent!.lineNo);
     expect(result.lines[2]!.parentLineNo).toBe(filedParent!.lineNo);
@@ -1640,8 +1569,7 @@ describe("ordering extras and options — parent + child lines", () => {
         tender: { method: "cash", amount: "50.00" },
       });
 
-    // 2 × 9.00 + (2 × 2) × 0.50. Counterpart: till-app.test.ts's "shows a retrieved pick no list
-    // offers any more, marked, and counts it in the total".
+    // 2 × 9.00 + (2 × 2) × 0.50.
     expect((await pay(unedited)).total).toBe("20.00");
 
     const [dish] = await suite.db
@@ -1719,10 +1647,7 @@ describe("ordering extras and options — parent + child lines", () => {
   });
 
   it("settling a TAB with extras files child sale_lines linked to their parent (the primary path)", async () => {
-    // Tabs are the PRIMARY customisation path and settle through `priceStoredOrder` (the locked-line
-    // file), so this proves the linkage survives openTab → addTabRound(extras) → settle, not just the
-    // parked counter retrieve above. Provisioning already ships the venue's default 'Cocina' station
-    // (so addTabRound can fire); we add only the dining table the tab opens on.
+    // A tab settles from its stored lock, like the parked retrieve above.
     const v = await setupModifierVenue();
 
     const tableId = randomUUID();
@@ -1736,7 +1661,6 @@ describe("ordering extras and options — parent + child lines", () => {
       });
     });
 
-    // Open a tab and send a round of the burger with two extras.
     const tabId = await withTransaction(suite.db, async (tx) => {
       const { tabId } = await openTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [
@@ -1752,7 +1676,6 @@ describe("ordering extras and options — parent + child lines", () => {
       return tabId;
     });
 
-    // Settle the tab (files from the STORED locked lines via priceStoredOrder).
     const result = await payWorkingOrder({ db: suite.db, backend, clock }, v.cfg, {
       id: tabId,
       lines: [],
@@ -1779,12 +1702,8 @@ describe("ordering extras and options — parent + child lines", () => {
   });
 
   it("settles a tab through recordTillSale (the /api/sales entry point) with an EMPTY basket", async () => {
-    // REGRESSION (table-service settle 400s). The tab-pay flow posts `lines: []` with the tab id to
-    // `POST /api/sales` (till-app `#onPayTab`) — a retrieved order files its STORED locked lines and
-    // IGNORES the sent basket. That route calls `recordTillSale`, whose entry-point empty-basket
-    // early-out fired BEFORE `payWorkingOrder`'s walk-up-ONLY guard, refusing every tab settle with
-    // `sale.empty_basket`. The sibling tab test above exercises `payWorkingOrder` directly and so
-    // never saw it; this drives the SAME entry point the HTTP route does, where the guard lived.
+    // The till pays a tab with `lines: []` through `recordTillSale`, which must not refuse it as an
+    // empty basket.
     const v = await setupModifierVenue();
 
     const tableId = randomUUID();
@@ -1812,11 +1731,8 @@ describe("ordering extras and options — parent + child lines", () => {
   });
 
   it("settles a NON-CONTIGUOUS tab (a voided child) with each child linked to its OWN dish", async () => {
-    // FIX 1 (Critical, unrepairable fiscal record): after a void leaves a tab's `line_no`
-    // non-contiguous, the STORED `line_no` space diverges from the COMPACTED array-position space
-    // `priceRows` renumbers into and `recordSale`'s `byLineNo` map is keyed on. `readLockedLines` must
-    // reconstruct each child's `parentLineNo` in that position space, else a child files with a WRONG
-    // `parent_line_id` (self / null / wrong sibling) — a permanent error in the append-only record.
+    // A void leaves the stored `line_no`s non-contiguous, while filing renumbers them by position;
+    // a child must still be linked to its own dish, or the append-only record is wrong for good.
     const v = await setupModifierVenue();
 
     const tableId = randomUUID();
@@ -1875,8 +1791,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const [dish1, dish2, quesoChild] = filed;
     expect(dish1!.parentLineId).toBeNull();
     expect(dish2!.parentLineId).toBeNull();
-    // The queso child points at DISH#2's filed id — never at itself (the self-reference the bug files),
-    // never null, never dish#1.
+    // The queso child points at DISH#2's filed id — never at itself, null, or dish#1.
     expect(quesoChild!.parentLineId).toBe(dish2!.id);
     expect(quesoChild!.parentLineId).not.toBe(quesoChild!.id);
     expect(quesoChild!.parentLineId).not.toBeNull();
@@ -1992,9 +1907,9 @@ describe("ordering extras and options — parent + child lines", () => {
     });
   });
 
-  // Spec §15.6 and the plan's V16: an extra is sold like any product, so one that is Unavailable
-  // or Inactive is refused with the code a pick the list does not offer already gets. Each product
-  // takes one state with the OTHER flag still set, so a read of the wrong column lets it through.
+  // An extra that is Unavailable or Inactive is refused like a pick the list does not offer. Each
+  // product takes one state with the OTHER flag still set, so a read of the wrong column lets it
+  // through.
   it("refuses an extras pick of an Unavailable or an Inactive product as a pick the list does not offer", async () => {
     const v = await setupModifierVenue();
     const deps = { db: suite.db, backend, clock };
