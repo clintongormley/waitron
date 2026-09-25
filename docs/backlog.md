@@ -2826,12 +2826,27 @@ image constraints under *Detail → Box image*.
   `src/state` and `src/i18n`, part c of four (#618, about 2,420 to about 1,130, parse-tree walk,
   tests included) and `apps/server`'s remaining files, part h1 (#620, about 4,010 to about 1,970,
   parse-tree walk, tests included; the 17 part-h files lane A's slice-2 branch or plan Tasks 7–10
-  name are held back as h2).
+  name are held back as h2) and the rest of `apps/till` — the files directly in `src/` and the
+  two configs, part d of four (#621, about 2,660 to about 1,250, parse-tree walk, tests included;
+  `till-app.ts` alone 1,286 to 349).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618 and #620 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620 and #621 and left for the package that owns each, all
   still OPEN:
+  - Found by #621 (the rest of `apps/till`), not fixable in a comments-only change.
+    **`apps/till/src/till-app.test.ts:7143` is an empty test**, `it("sends a walk-up line's options
+    answer without any local price preview", () => {})`, which passes whatever the code does
+    (`git blame`: 9fbdc8ba7, 2026-09-21). The review reported that "resets any leftover drill/active
+    tab on login" still passes with login's own clearing line deleted, because logout clears the
+    same state first (run in review, not re-run here). A question the prune moved here from a
+    deleted `menu-filter.ts` comment: should the `no-meat`/`no-fish` lenses also hide a dish whose
+    diet is still pending review, as `vegan`/`vegetarian` do? Today they hide only dishes known to
+    contain the tag. Comments inside `till-app.ts`'s template text still carry design-doc pointers
+    (`till-reroute §4.4` in a `css` rule and in `render()`, `cash-drawer-authorization §5`,
+    `device-enrolment §3.1`), and many `till-app.test.ts` titles carry plan and review labels
+    ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)", "Task 8", "(SP-B2.1)"), as do three
+    `session-activity.test.ts` titles ("(C3)").
   - Found by #620 (`apps/server` part h1), not fixable in a comments-only change.
     **`CLAUDE.md` §2's "shard can exit 1" trap is stale on Vitest 4**: it says the worker-to-main
     reporting call has a sixty-second timeout nothing can raise, but Vitest 4.1.11 passes
@@ -3868,16 +3883,13 @@ run without the code):
 - In `apps/till/src/session-activity.test.ts`, "is a clean no-op when the Wake Lock API is absent"
   passes `wakeLock: undefined`, which falls back to the real `navigator.wakeLock` — present in the
   test browser — so it does not test an absent API. The branch added a test that does.
-- `apps/till/src/till-app.test.ts`'s handheld face-set block (its opening comment and the "does NOT
-  leave the face-set when back-to-counter fires from the floor" case) still credits the app's
-  face-set gate; inside the shell it is the shell's first-tab fallback that keeps a handheld off
-  the counter, as the next case in that block says, and the two "show-floor …" cases in its
-  live-floor block select the floor tab rather than fire `show-floor`. Left for after the variants
-  branch, which changes that file.
+- The two "show-floor …" cases in `apps/till/src/till-app.test.ts`'s live-floor block select the
+  floor tab rather than fire `show-floor`, so their titles overstate them. (#621 cut the handheld
+  face-set block's comments that credited the app's face-set gate.)
 
 **Next action:** delete the unreachable arms, and `#onShowFloor` with its `show-floor` listener (or
 give it the lock check), with a receipt each; key the label lookup on own properties; rename or
-rewrite that wake-lock test; and correct those test comments.
+rewrite that wake-lock test; and rename those two show-floor test titles.
 
 **`quoteLiteral` still quotes for PostgreSQL, and SQLite refuses its backslash form — OPEN (found
 2026-09-23, identity's coverage review, PR #526).** `packages/shared/src/sql-literal.ts` doubles every
@@ -4440,12 +4452,12 @@ Five things it leaves open:
   `peerDependenciesMeta`), the four bumped manifests are the only thing choosing a vite in the tree,
   and pnpm deduped onto it. Nothing pins the five. If a future change ever puts a second vite in the
   tree, they could land on a different one silently.
-- **Four dependency-optimizer receipts were taken on vite 6 and were not re-measured.**
+- **A dependency-optimizer receipt taken on vite 6 was not re-measured.**
   `apps/dashboard/vitest.config.ts`, `apps/setup/vitest.config.ts`, `apps/till/vitest.config.ts` and
-  `packages/ui/vitest.config.ts` each carry an `optimizeDeps.include` list with a comment recording
-  a flake. Three of the four (`apps/dashboard`, `apps/setup`, `apps/till`) name Vite outright and
-  quote its warning — "Vite unexpectedly reloaded a test" — as the thing they were measured against;
-  `packages/ui`'s records no measurement at all. Vite 8 changes the optimizer underneath all four:
+  `packages/ui/vitest.config.ts` each carry an `optimizeDeps.include` list. Only `apps/setup`'s
+  comment still quotes Vite's warning — "Vite unexpectedly reloaded a test" — as the flake it
+  fixes; the comment pruning cut the dashboard's and the till's to one line with no measured
+  outcome (#612, #621), and `packages/ui`'s never recorded one. Vite 8 changes the optimizer underneath all four:
   its migration guide heads a section _"Dependency Optimizer Now Uses Rolldown"_ and says Rolldown
   "is now used for dependency optimization instead of esbuild"
   (`docs/guide/migration.md` on `vitejs/vite@main`, read 2026-09-19). Nobody re-checked that vite 8
