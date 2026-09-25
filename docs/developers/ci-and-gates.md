@@ -426,10 +426,12 @@ the browser shards (`test-ui`, `test-till`, `test-dashboard`, `test-setup`) and
 `--shard` splits by FILE COUNT, so shard imbalance is the real limit, and `N` must never exceed a
 package's test-file count.
 
-### A shard can exit 1 with every one of its tests passing
+### A shard can exit 1 with every one of its tests passing — RETIRED from CLAUDE.md
 
-Seen once, on PR #414's first run (run 35355113501, job 105632564989, `test-server (3)`). The shard
-printed `Test Files 87 passed (87)` and `Tests 1313 passed (1313)`, then `Errors 1 error`:
+Taken out of `CLAUDE.md` §2 on 2026-09-25: on Vitest 4.1.11 this call has no timeout, measured
+below. Kept as the receipt, not as a rule. Seen once, on Vitest 3.2.7: PR #414's first run
+(run 35355113501, job 105632564989, `test-server (3)`) printed `Test Files 87 passed (87)` and
+`Tests 1313 passed (1313)`, then `Errors 1 error`:
 
 ```
 Error: [vitest-worker]: Timeout calling "onTaskUpdate"
@@ -437,78 +439,43 @@ Error: [vitest-worker]: Timeout calling "onTaskUpdate"
  ❯ Timeout._onTimeout     node_modules/.../vitest/dist/chunks/index.B521nVV-.js
 ```
 
-It still exited 1, which failed the aggregate `ci` job. **`onTaskUpdate` is not a test.** It is the
-call a test worker makes to tell the main process a test finished, and the message says that call
-went unanswered for a full minute.
+and exited 1, which failed the aggregate `ci` job. `onTaskUpdate` is not a test: it is the call a
+test worker makes to tell the main process a test finished, and on 3.2.7 that call failed the run if
+it went unanswered for sixty seconds (birpc's `DEFAULT_TIMEOUT = 6e4`, which 3.2.7's fork pool never
+overrides). Vitest 4.1.11 passes `timeout: -1` for that channel (`dist/chunks/rpc.MzXet3jl.js:117`),
+and its bundled birpc starts a timer only for a timeout of zero or more
+(`dist/chunks/index.Chj8NDwU.js:63`).
 
-**It does NOT say the main process stalled**, which is the reading this entry carried first and the
-log refuses. Through the whole minute before the error the main process printed 90 lines of completed
-test files, the largest gap inside that window being 5.2 seconds; the largest output gap anywhere in
-the job is 21.9 seconds, during startup. So one worker's call went unanswered while the main process
-went on reporting other workers' files. The error is printed only in the end-of-run unhandled-error
-block, after the last file completed, so the log does not show when the timeout fired either.
+**The probe.** A one-test suite in a scratch directory outside the repository, with a reporter whose
+`onTaskUpdate` withholds its answer for 75 seconds once a passing result arrives, run as
+`node node_modules/vitest/vitest.mjs run` on Node v26.7.0 under the default fork pool. The failing
+case prints `Errors 1 error` and a timeout on `onTaskUpdate` after about sixty seconds, and exits 1.
 
-**The timeout is sixty seconds and nothing in this repository can change it.** Read out of the
-installed vitest (3.2.7) rather than the documentation: the worker builds that channel in
-`dist/chunks/rpc.-pEldfrD.js`, which passes a `timeout` only if its caller supplies one; the fork
-pool's caller is `dist/workers/forks.js` → `createForksRpcOptions(v8)`, which supplies none; so it
-falls back to birpc's `DEFAULT_TIMEOUT = 6e4` in `dist/chunks/index.B521nVV-.js`. `grep -rEoh 'process\.env\.VITEST_[A-Z_]+' node_modules/vitest/dist` finds only `MAX_FORKS`,
-`MIN_FORKS`, `MAX_THREADS`, `MIN_THREADS`, `POOL_ID`, `WORKER_ID`, `VM_POOL` and
-`SKIP_INSTALL_CHECKS`. The control, because a second grep that also finds nothing measures nothing:
-`process\.env\[[^]]+\]` DOES match — ten times — so the pattern is capable of hitting, and none of
-those ten names a `VITEST_` variable. **What that cannot exclude:** all ten are computed names
-(`env[key]`, `env[name]`, `env[envKey]`), so a dynamically-named read is outside what any grep here
-answers. So no `VITEST_*` variable reaches it, and no config key does. The claim is about
-the pool this repository uses: raising the timeout under the BUILT-IN fork pool would mean carrying a
-patched dependency. Vitest also documents a custom `pool`; whether one could supply this `timeout`
-was not checked, and by the mechanism above a custom pool reusing vitest's own forks worker would
-land on the same default — so treat it as unexplored rather than as a route.
+- The repository's installed Vitest 4.1.11 (linked into the scratch directory): `Tests 1 passed (1)`,
+  `Duration 75.10s`, no error, exit 0. The run waited for the answer.
+- Control, the same 4.1.11 installed from npm with that one `timeout: -1` edited to `timeout: 6e4`:
+  `Error: [birpc] timeout on calling "onTaskUpdate"`, `Errors 1 error`, `Duration 60.17s`, exit 1.
+- Control, Vitest 3.2.7 unedited: `Error: [vitest-worker]: Timeout calling "onTaskUpdate"`,
+  `Errors 1 error`, `Duration 60.14s`, exit 1.
 
-A review seat reproduced the signature rather than only reading about it. Running one passing test
-file locally, on vitest 3.2.7's built-in fork pool, a reporter that accepts a passing result and then
-withholds its completion produced `1 test passed` with `Errors 1 error`, the same `onTaskUpdate`
-message, both stack filenames above, and **exit 1 after 60,340ms** — which is the 60-second default
-plus that suite's own 340ms, on a run where nothing failed. The entry's own counts come from the
-original job log, which the same seat pulled with
-`gh api repos/clintongormley/waitron/actions/jobs/105632564989/logs`.
+No Vitest config in the tree sets `pool`, so every project without browser mode runs this fork
+pool, including the node projects of packages that also run a browser project. Browser mode's
+channel was read, not run: `@vitest/browser` 4.1.11 also passes `timeout: -1`
+(`dist/client.js:420`, `dist/index.js:3316`).
 
-
-**What this entry does NOT establish:** why that one call went unanswered. The SIGNATURE was
-reproduced deliberately (above); the incident was not, and the re-run that passed is evidence rather than proof — the second run
-(35356264571) was on a head differing from the first only in prose, and all three `test-server`
-shards passed. Starvation was the obvious suspect and was never measured: when this happened the
-shard ran four test workers plus the main process on a four-vCPU runner **with a PostgreSQL
-container alongside**. That last part is no longer true of the shard you would reproduce it on.
-`test-server` starts no container at all now — `grep -rn 'Container\|testcontainers\|docker'` over
-`apps/server/scripts/dev-setup.test.ts` and `apps/server/scripts/dev-onboard.test.ts`, the two files
-that used to start one, returns nothing on 2026-09-23, and no other file under `apps/server` imports
-a Testcontainers package. The worker count is unchanged (`apps/server/vitest.config.ts` sets
-`maxWorkers: 4`), so if the signature returns, the one load source this theory rested on is gone and
-the theory has to be rebuilt rather than reused.
-
-**What to do when you meet it.** Keep the job's log and its printed counts BEFORE you re-run: nobody
-knows the cause, and a second sighting's log is the cheapest evidence there is. The house rule, in
-`docs/backlog.md`'s register of unexplained incidents, is retain-then-retry rather than re-running to
-green. Then read the counts: every test passing plus this one error
-does not establish a failed assertion, and it does not identify a cause either — so start with the
-log and the job's timings rather than the diff. That is about ORDER, not innocence: with the cause
-unknown, nothing here rules the diff out, it just gives you nothing to look for in it. This is not the silent-shard case in
-[testing-guide.md](testing-guide.md) — there, tests were still unfinished; here they all finished.
-Then re-run the shard. If it starts recurring, the two levers are lightening what EVERY shard does per
-tick (four workers plus the main process on four vCPUs — the rebalance-shard-3 version is ruled out
-above) or patching vitest. Both are changes to CI machinery, and both still want a measurement of the
-stall itself, which nobody has.
-
-**2026-09-19 — the timeout is gone from the runner.** The Vitest 4 upgrade removes this failure's
-mechanism, though not the habit the entry asks for. Read out of the two installed copies, side by
-side: in 3.2.7 the worker builds its channel in `dist/chunks/rpc.-pEldfrD.js` with no `timeout`, so
-birpc's `DEFAULT_TIMEOUT = 6e4` applies and an unanswered call reaches the `onTimeoutError` handler
-that throws the message above; in 4.1.11 the same function in `dist/chunks/rpc.MzXet3jl.js` passes
-`timeout: -1`, which switches the timer off. One thing that did NOT change: the spread of the
-caller's options comes last in both, so a pool supplying its own `timeout` would still win — the
-built-in fork pool supplies none. Nobody ever established why that one call went unanswered, so
-this removes the way the symptom reached the exit code, not the underlying stall. Keep reading the
-counts before the diff.
+**What this does not settle:** why that one call went unanswered. The main process did not stall:
+through the minute before the error it kept printing pass marks, for completed test files and for
+slow tests listed under them, never more than 5.2 seconds apart, and the largest output gap
+anywhere in the job was 21.9 seconds, during startup. The error is printed only in the end-of-run
+unhandled-error block, after the last file completed, so the log does not show when the timeout
+fired. Nobody found the cause, and the probe does not model it: it shows a late answer being waited
+for, not one that never comes. A single-file variant whose reporter never answers printed the
+file's `✓`, no `Test Files` or `Tests` summary, and was still waiting when an outer `gtimeout 180`
+killed it (exit 124). So if the stall recurs on 4.1.11 and never clears, expect no summary and the
+job cancelled by its `timeout-minutes: 15` (`.github/workflows/ci.yml`); whether a shard's other
+files still finish meanwhile was not shown. This is not the silent-shard case in
+[testing-guide.md](testing-guide.md): there, tests were still unfinished; here they all finished.
+Keep the job log before re-running.
 
 ### CI does not run every check on every push
 
