@@ -94,3 +94,4 @@ export type { ResourceIdentity, ResourceChange, ChangeSource } from "./live-upda
 
 export type { OptionSelection, OptionSnapshot } from "./option-selection.js";
 export type { ExtraSelection } from "./extra-selection.js";
+export type { ClassificationEntry, SaleLineClassification } from "./sale-line-classification.js";

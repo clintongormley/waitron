@@ -25,6 +25,13 @@ declare module "@waitron/shared" {
     "label.invalid": { field: string };
     "label.name_taken": { name: string };
     "label.not_found": { labelId: string };
+    /** A sale line's classification snapshot names a category or label that does not exist, holds
+     * an empty name, repeats a category in its chain, or ends at a category that is not the
+     * product's main reporting category. */
+    "sale_classification.invalid": {
+      productId: string;
+      reason: "unknown_id" | "empty_name" | "repeated_id" | "wrong_leaf";
+    };
     /** Not thrown: deleting a category cascades instead. Kept because a shipped code is never
      * removed. */
     "category.in_use": { children: number; products: number; routes: number };

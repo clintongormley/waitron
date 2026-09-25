@@ -198,6 +198,23 @@ describe("priceBasket — grossLineTotals (the working-order draft's customer-fa
     expect(r.grossLineTotals).toHaveLength(r.lines.length);
     expect(sumDecimals(r.grossLineTotals)).toBe(r.total);
   });
+
+  it("carries each line's gross onto the line itself, for the sale line's `line_gross`", () => {
+    const r = priceBasketWithOptions([
+      {
+        product: each("1.50", "general"),
+        quantity: "2",
+        options: [
+          { name: "Lemon", descriptions: { en: "Lemon" }, priceDelta: "0.40", vatClass: null },
+        ],
+      },
+      { product: weight("24.90", "reduced"), quantity: "0.320", options: [] },
+    ]);
+    // The dish 3.00, its extra 0.80 (0.40 × 2) and the weighed line 7.97, each beside a different
+    // net base, so a line carrying its net total or another line's gross fails.
+    expect(r.lines.map((line) => line.lineGross)).toEqual(["3.00", "0.80", "7.97"]);
+    expect(r.lines.map((line) => line.lineGross)).toEqual(r.grossLineTotals);
+  });
 });
 
 // A dish + its selected options price as a PARENT line followed by its CHILD lines, through the

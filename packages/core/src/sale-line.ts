@@ -1,4 +1,4 @@
-import type { OptionSnapshot } from "@waitron/shared";
+import type { OptionSnapshot, SaleLineClassification } from "@waitron/shared";
 
 /** One line of a sale as the caller hands it in. Declared here, apart from `record-sale.ts`, so a
  * browser consumer can name the type without its program gaining that file's database imports. */
@@ -36,4 +36,16 @@ export interface RecordSaleLine {
   /** The variant's kitchen-facing name; `null` when the line names no variant. */
   variantKitchenName?: string | null;
   kitchenName?: string | null;
+  /** The product sold: the variant on a variant line, the picked product on an extras line. Stored
+   * as a value, never a key, and never hashed. */
+  productId?: string | null;
+  /** The variant's parent product; `null` on any other line. */
+  parentProductId?: string | null;
+  /** The menu, and its published version, the line was sold from; `null` when none. */
+  menuId?: string | null;
+  menuVersionId?: string | null;
+  /** The line's VAT-inclusive total as a decimal string, e.g. "12.10". */
+  lineGross?: string | null;
+  /** The product's reporting chain and labels at issuance. */
+  classification?: SaleLineClassification | null;
 }

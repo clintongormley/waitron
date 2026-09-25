@@ -1394,7 +1394,7 @@ describe("ordering extras and options — parent + child lines", () => {
     ]);
   });
 
-  it("files an extras pick as a snapshot-only child line, with no catalogue reference on the table", async () => {
+  it("files an extras pick as a snapshot-only child line, with no catalogue key on the table", async () => {
     const v = await setupModifierVenue();
     const workingOrderId = randomUUID();
 
@@ -1426,17 +1426,24 @@ describe("ordering extras and options — parent + child lines", () => {
       optionSnapshots: [],
     });
 
-    // `sale_lines` has no column for the picked product at all.
-    const columns = await withTransaction(suite.db, async (tx) => {
+    // `sale_lines` may name the picked product, as a value (sales classification spec §3), but no
+    // foreign key ties a filed line to the catalogue, and it has no column for the offer or the list.
+    const { columns, keys } = await withTransaction(suite.db, async (tx) => {
       // An unknown table yields no rows, so `toContain("option_snapshots")` keeps the
       // `not.toContain` assertions from passing on an empty answer.
       const { rows } = await tx.execute<{ column_name: string }>(
         sql`select name as column_name from pragma_table_info('sale_lines')`,
       );
-      return rows.map((row) => row.column_name);
+      const foreign = await tx.execute<{ from: string }>(
+        sql`select "from" from pragma_foreign_key_list('sale_lines')`,
+      );
+      return {
+        columns: rows.map((row) => row.column_name),
+        keys: foreign.rows.map((row) => row.from),
+      };
     });
     expect(columns).toContain("option_snapshots");
-    expect(columns).not.toContain("product_id");
+    expect(keys.sort()).toEqual(["parent_line_id", "sale_id"]);
     expect(columns).not.toContain("menu_item_id");
     expect(columns).not.toContain("extra_list_item_id");
   });

@@ -30,5 +30,11 @@ export function saleLineRows(saleId: string, lines: readonly RecordSaleLine[]) {
     variantDescriptions: line.variantDescriptions ?? null,
     variantKitchenName: line.variantKitchenName ?? null,
     kitchenName: line.kitchenName ?? null,
+    productId: line.productId ?? null,
+    parentProductId: line.parentProductId ?? null,
+    menuId: line.menuId ?? null,
+    menuVersionId: line.menuVersionId ?? null,
+    lineGross: line.lineGross == null ? null : stringToCents(line.lineGross),
+    classification: line.classification ?? null,
   }));
 }

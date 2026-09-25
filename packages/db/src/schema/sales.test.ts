@@ -454,16 +454,24 @@ describe("sales — immutability", () => {
     expect(engineErrorMessage(remove)).toBe("sales is append-only");
   });
 
-  it("carries no catalogue identifier and no live catalogue link", () => {
+  it("records what was sold as plain ids, never as a live catalogue link", () => {
+    // These ids record what was sold and from which menu (sales classification spec §3). They are
+    // values: no foreign key may point any of them at the catalogue. `menu_version_id` is one of
+    // them too, but its name falls outside the pattern.
     const catalogueShapedIds = columnsOf(suite.db, "sale_lines")
       .map((c) => c.name)
       .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant)_id$/i.test(n));
-    expect(catalogueShapedIds).toEqual([]);
+    expect(catalogueShapedIds.sort()).toEqual(["menu_id", "parent_product_id", "product_id"]);
 
-    const catalogueForeignKeys = suite.db
-      .all<{ from: string }>(sql.raw(`select "from" from pragma_foreign_key_list('sale_lines')`))
-      .filter((key) => /(product|item|catalogue|catalog|menu|sku|variant)_id$/i.test(key.from));
+    const foreignKeys = suite.db.all<{ from: string }>(
+      sql.raw(`select "from" from pragma_foreign_key_list('sale_lines')`),
+    );
+    const catalogueForeignKeys = foreignKeys.filter((key) =>
+      /(product|item|catalogue|catalog|menu|sku|variant)_id$/i.test(key.from),
+    );
     expect(catalogueForeignKeys).toEqual([]);
+    // Whatever a new column is named, the only keys are the line's own sale and parent line.
+    expect(foreignKeys.map((key) => key.from).sort()).toEqual(["parent_line_id", "sale_id"]);
   });
 });
 

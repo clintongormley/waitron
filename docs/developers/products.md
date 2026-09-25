@@ -77,7 +77,9 @@ rewrite yesterday's receipt. `working_order_lines` and `sale_lines` each carry:
 
 The open order's line names what it sells in `working_order_lines.product_id`: the chosen variant,
 or the product itself when it has no Active variant. The filed `sale_lines` row keeps the frozen
-names and no catalogue id at all (spec decision 11); neither table has a `variant_id` column.
+names, and records the same product in its own `product_id` and a variant's parent in
+`parent_product_id`, as plain values with no foreign key, so no catalogue edit reaches a filed line
+(sales classification spec §3). Neither table has a `variant_id` column.
 
 Because both customer maps (`descriptions` and `variant_descriptions`) had their fallback applied
 *before* being frozen, neither falls back again at render time, except that
@@ -282,7 +284,7 @@ it.
 A line sold as a variant has the variant as its `product_id`. It is priced and taxed at the
 variant's effective values above, and freezes the parent's names beside the variant's own
 (_What a sold line freezes_, above), so reports can group it under its parent. The filed
-`sale_lines` row carries no catalogue id. In the kitchen it takes its parent's product-level
+`sale_lines` row names the variant and its parent only as plain values, never as keys. In the kitchen it takes its parent's product-level
 preparation routes (a route can name only a top-level product, so a variant has none of its own)
 and the category routes of its effective category; its station, course, category, allergens and
 dietary labels are its effective values (`effectiveProductColumns`; `resolvePreparationRouteOutcomes`,

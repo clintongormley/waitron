@@ -10,6 +10,7 @@ import type { NodeId, SeriesId, TillId, WorkingOrderId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type {
   FiscalBackend,
+  SaleForFiscalRecord,
   IntegrityIssue,
   TrustedClock,
   VatBreakdownLine,
@@ -24,6 +25,7 @@ import {
   saleSettlements,
   sales,
   tenders,
+  triggerRaised,
   withTransaction,
   workingOrders,
 } from "@waitron/db";
@@ -1137,4 +1139,230 @@ it("persists the frozen options answers and child links on the issued lines", as
   expect(saved[0]!.parentLineId).toBeNull();
   expect(saved[1]!.parentLineId).toBe(saved[0]!.id);
   expect(saved.map((line) => line.category)).toEqual(["Drinks", "Drinks"]);
+});
+
+describe("recordSale — what each line sold and how it was classified", () => {
+  const cocktails = {
+    reporting: [
+      { id: "cat-drinks", name: "Drinks" },
+      { id: "cat-alcoholic", name: "Alcoholic drinks" },
+      { id: "cat-cocktails", name: "Cocktails" },
+    ],
+    labels: [{ id: "label-happy-hour", name: "Happy hour drinks" }],
+  };
+  const lemon = { reporting: [{ id: "cat-extras", name: "Extras" }], labels: [] };
+
+  /** The default two lines as a dish and an extras pick, with every pre-existing column set, so a
+   * column the new fields disturbed cannot hide behind a null on both sides. */
+  function plainLines(): RecordSaleInput["lines"] {
+    return input().lines.map((line, index) => ({
+      ...line,
+      optionSnapshots:
+        index === 0
+          ? [
+              {
+                listName: { en: "Ice" },
+                listCustomerName: { en: "How much ice?" },
+                listKitchenName: "ICE",
+                labelName: { en: "None" },
+                labelCustomerName: { en: "No ice" },
+                labelKitchenName: "NOICE",
+              },
+            ]
+          : [],
+      unitName: { "es-ES": "ud" },
+      unitPrecision: 0,
+      parentLineNo: index === 0 ? null : 1,
+      category: "Cocktails",
+      variantName: index === 0 ? "Doble" : null,
+      variantDescriptions: index === 0 ? { "es-ES": "Doble", "ca-ES": "Doble" } : null,
+      variantKitchenName: index === 0 ? "DBL" : null,
+      kitchenName: index === 0 ? "CAF" : "AGUA",
+    }));
+  }
+
+  function classifiedLines(): RecordSaleInput["lines"] {
+    return plainLines().map((line, index) => ({
+      ...line,
+      productId: index === 0 ? "product-double" : "product-lemon",
+      parentProductId: index === 0 ? "product-coffee" : null,
+      menuId: "menu-lunch",
+      menuVersionId: null,
+      // Gross of the net 10.00 at 21% and of the net 2.10 at 10%.
+      lineGross: index === 0 ? "12.10" : "2.31",
+      classification: index === 0 ? cocktails : lemon,
+    }));
+  }
+
+  it("stores each line's product, parent product, menu, gross and classification", async () => {
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), { lines: classifiedLines() });
+
+    const saved = await suite.db
+      .select()
+      .from(saleLines)
+      .where(eq(saleLines.saleId, saleId))
+      .orderBy(saleLines.lineNo);
+    expect(
+      saved.map((line) => ({
+        productId: line.productId,
+        parentProductId: line.parentProductId,
+        menuId: line.menuId,
+        menuVersionId: line.menuVersionId,
+        lineGross: line.lineGross,
+        classification: line.classification,
+      })),
+    ).toEqual([
+      {
+        productId: "product-double",
+        parentProductId: "product-coffee",
+        menuId: "menu-lunch",
+        menuVersionId: null,
+        lineGross: 1210,
+        classification: cocktails,
+      },
+      {
+        productId: "product-lemon",
+        parentProductId: null,
+        menuId: "menu-lunch",
+        menuVersionId: null,
+        lineGross: 231,
+        classification: lemon,
+      },
+    ]);
+  });
+
+  it("leaves every new field null on a line that names none of them", async () => {
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), { lines: plainLines() });
+
+    const saved = await suite.db.select().from(saleLines).where(eq(saleLines.saleId, saleId));
+    for (const line of saved) {
+      expect([
+        line.productId,
+        line.parentProductId,
+        line.menuId,
+        line.menuVersionId,
+        line.lineGross,
+        line.classification,
+      ]).toEqual([null, null, null, null, null, null]);
+    }
+  });
+
+  it("refuses to rewrite a filed line's classification, and the stored snapshot stays as filed", async () => {
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), { lines: classifiedLines() });
+
+    const mutation = await captureError(async () =>
+      suite.db.execute(
+        sql`update sale_lines set classification = '{"reporting":[],"labels":[]}' where sale_id = ${saleId}`,
+      ),
+    );
+
+    expect(triggerRaised(mutation, "sale_lines is append-only")).toBe(true);
+    const saved = await suite.db
+      .select({ classification: saleLines.classification })
+      .from(saleLines)
+      .where(eq(saleLines.saleId, saleId))
+      .orderBy(saleLines.lineNo);
+    expect(saved.map((line) => line.classification)).toEqual([cocktails, lemon]);
+  });
+
+  it("files the same fiscal record, sale header and pre-existing line columns with or without the new fields", async () => {
+    // Every column `sale_lines` had before the new fields. Pinned by hand rather than read off the
+    // schema, which now includes the new ones; the table check below keeps the list complete.
+    const PRE_EXISTING = [
+      "line_no",
+      "name",
+      "descriptions",
+      "variant_name",
+      "variant_descriptions",
+      "variant_kitchen_name",
+      "kitchen_name",
+      "option_snapshots",
+      "unit_name",
+      "unit_precision",
+      "quantity",
+      "unit_price",
+      "vat_rate",
+      "line_total",
+      "category",
+      "parent_line_id",
+    ];
+    const NEW = [
+      "product_id",
+      "parent_product_id",
+      "menu_id",
+      "menu_version_id",
+      "line_gross",
+      "classification",
+    ];
+    const tableColumns = await rows<{ name: string }>(
+      sql`select name from pragma_table_info('sale_lines')`,
+    );
+    expect(tableColumns.map((c) => c.name).sort()).toEqual(
+      [...PRE_EXISTING, ...NEW, "id", "sale_id"].sort(),
+    );
+
+    const fake = new FakeFiscalBackend(suite.db);
+    const filed: SaleForFiscalRecord[] = [];
+    const backend = wrapBackend(fake, {
+      recordSale: (tx, sale) => {
+        filed.push(sale);
+        return fake.recordSale(tx, sale);
+      },
+    });
+    const plain = await run(backend, { lines: plainLines() });
+    const classified = await run(backend, { lines: classifiedLines() });
+
+    const omit = (row: object, keys: string[]) =>
+      Object.fromEntries(Object.entries(row).filter(([key]) => !keys.includes(key)));
+    // What the backend chains from: everything but the sale's own id and its number in the series.
+    const chained = (sale: SaleForFiscalRecord) => omit(sale, ["saleId", "invoiceNumber"]);
+    expect(filed).toHaveLength(2);
+    expect(chained(filed[1]!)).toEqual(chained(filed[0]!));
+    expect(filed[1]!.invoiceNumber).toBe(filed[0]!.invoiceNumber + 1);
+
+    const header = async (saleId: string) => {
+      const [row] = await rows<Record<string, unknown>>(
+        sql`select * from sales where id = ${saleId}`,
+      );
+      return omit(row!, ["id", "invoice_number"]);
+    };
+    const plainHeader = await header(plain.saleId);
+    expect(await header(classified.saleId)).toEqual(plainHeader);
+    // The two figures Review Focus 5 names, stated rather than left inside the whole-row compare.
+    expect(plainHeader.total).toBe(1441);
+    expect(JSON.parse(plainHeader.vat_breakdown as string)).toEqual([
+      { rate: "21.00", base: "10.00", tax: "2.10" },
+      { rate: "10.00", base: "2.10", tax: "0.21" },
+    ]);
+
+    // A parent link is an id of the sale's own line, so it is compared as the line number it names.
+    const lineColumns = async (saleId: string) => {
+      const lines = await rows<Record<string, unknown>>(
+        sql`select * from sale_lines where sale_id = ${saleId} order by line_no`,
+      );
+      const lineNoById = new Map(lines.map((line) => [line.id, line.line_no]));
+      return lines.map((line) =>
+        PRE_EXISTING.map((column) =>
+          column === "parent_line_id"
+            ? [column, line.parent_line_id === null ? null : lineNoById.get(line.parent_line_id)]
+            : [column, line[column]],
+        ),
+      );
+    };
+    const plainLinesStored = await lineColumns(plain.saleId);
+    const classifiedLinesStored = await lineColumns(classified.saleId);
+    expect(plainLinesStored).toHaveLength(2);
+    for (const [index, columns] of classifiedLinesStored.entries()) {
+      for (const [position, [column, value]] of columns.entries()) {
+        expect([column, value], `line ${index + 1}, ${String(column)}`).toEqual(
+          plainLinesStored[index]![position],
+        );
+      }
+    }
+    // The child line's parent survived the compare as a real link, not as null on both sides.
+    expect(plainLinesStored[1]!.find(([column]) => column === "parent_line_id")).toEqual([
+      "parent_line_id",
+      1,
+    ]);
+  });
 });
