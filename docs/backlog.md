@@ -2900,13 +2900,14 @@ image constraints under *Detail → Box image*.
   `apps/server`'s `box-status.ts` and `awaiting-fiscal-cert.test.ts`, two held-back files the
   SQLite slice-2 plan's remaining tasks no longer name, part x (#629, 91 to 16 comment lines).
   Then `apps/server`'s `boot.ts`, `boot.test.ts` and `config.ts`, part c2 (#653, 2,536 to 820
-  comment lines, parse-tree walk, tests included).
-  (2026-09-25: slice 2's last task has landed, so e2, f2 and h2 no longer wait on it; they
-  are still to do.)
+  comment lines, parse-tree walk, tests included), the 14 held-back backup and restore files, part
+  e2 (#656, 979 to 614 comment lines), and the 11 held-back node, identity and setup files, part
+  f2 (#657, 1,194 to 524 comment lines; `membership-mint.ts` left as #655 wrote it, `box-status.ts`
+  and its test already done by #629). Part h2 is still to do.
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621, #622, #623, #624, #625, #629, #653 and #656 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621, #622, #623, #624, #625, #629, #653, #656 and #657 and left for the package that owns each, all
   still OPEN:
   - Found by the retroactive Codex reviews of #621–#626 and #629 (C3.18.12r, 2026-09-25; fixes
     landed as #632, #633, #635, #637 and #639; #626 and #629 came back clean), outside the files
@@ -2927,6 +2928,25 @@ image constraints under *Detail → Box image*.
     `packages/bookings/src/schema/bookings.test.ts` (near line 60) and
     `packages/catalogue/src/migrations.test.ts` (near line 304) is wider than the reset, which
     leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
+  - Found by #657 (`apps/server` part f2: the node, identity and setup files), outside its files
+    or not fixable in a comments-only change. A code defect its review reproduced, which predates
+    the branch (`git blame`: `fabdb224d1`, 2026-09-10): in `POST /setup-api/provision`
+    (`apps/server/src/setup-api.ts`), when recording the setup operation fails before `execute`
+    starts (for example with `setup.operation_conflict`), the in-memory setup lock stays set, so
+    every later setup request answers `409 setup.already_provisioning` until the server restarts;
+    the adopt route has the same shape (read, not run). Stale wording outside f2: "a device with no
+    profile" in `apps/server/src/till-api.test.ts` (near lines 1377–1395) and
+    `apps/till/src/till-app.test.ts` (near line 5765), though a device's profile column is NOT NULL;
+    the "four ids" test title in `apps/server/src/provision.test.ts`, which asserts five;
+    `config.ts`'s "minted once and reused" for the box certificate, which a restore re-issues; and
+    `errors.ts` describing `setup.already_provisioning` as a persistent-lease refusal, when it
+    mostly comes from the in-memory lock. Test titles carrying history, left because titles are
+    code: "(real Postgres)" describes and "(SP-A.2 §16, device-profile §5)" in
+    `device-session.test.ts`, "never a raw devices_pkey 23505" in `join-requests.test.ts`, and
+    "(SP-1b fiscal gate)" and "(unchanged)" in `setup-api.test.ts`. Read, not run:
+    `cookieDomainFor` (`device-session.ts`) lowercases the request's host but not the configured
+    tenant domain (whether configuration normalises it is unchecked), and `DeviceBinding`'s
+    `deviceProfileId` is typed `string | null` for a column that cannot be null.
   - Found by #656 (`apps/server` part e2: the backup and restore files), outside its files or not
     fixable in a comments-only change. `apps/server/src/errors.ts` still cites CLAUDE.md §5 for
     things §5 does not say, on `backup.recovery_key_unstorable` ("unrecoverable (CLAUDE.md §5)") and
@@ -3528,9 +3548,8 @@ image constraints under *Detail → Box image*.
   - The same false comments outside credentials, found by #577: "open database files keep the
     process alive" in `apps/server/scripts/record-one-sale.ts`, `register-till.ts` and
     `settle-invoice-first.ts` (#577 measured an unclosed `openVenueDatabase` exiting at once with
-    status 0); `apps/server/src/node-identity.ts` still says "ONE
-    tenant transaction" and omits `credentials.key_version_unknown` among another node's read
-    failures (the pointers to a missing `errors.reachability.test.ts` are gone:
+    status 0) (#657 removed `node-identity.ts`'s "ONE tenant transaction" and its incomplete list
+    of read failures) (the pointers to a missing `errors.reachability.test.ts` are gone:
     `git grep errors.reachability -- apps packages` prints nothing after #601); and two
     2026-07-26 specs still call the FNMT seal certificate's export unverified, which
     `docs/compliance/getting-to-production.md` §4 closed that day.
