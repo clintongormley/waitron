@@ -2612,13 +2612,13 @@ image constraints under *Detail → Box image*.
   **Next action:** either normalise the value where the plan is built, or narrow the documented type
   to `HH:MM:SS` — and add the failing case first.
 - **A database ahead of the box's image gets a raw driver error, not the classified one**
-  (2026-09-14). `assertNotAhead` (`provisioning.database_ahead`) runs AFTER `ensureInstance`
-  migrates (`apps/server/src/node-entry.ts:483-505`), so an ahead database meets the migration first
-  and surfaces something like a `42710` from the driver. #378 regenerated eleven
-  module baselines, so more existing databases are now ahead of an older image than before. A box
-  operator has no terminal — the recovery page is their only window — so a raw driver error leaves
-  them nothing to act on. **Next action:** run the ahead check before `ensureInstance` migrates, or
-  classify what the migration throws when the journal is ahead.
+  (2026-09-14) — **probably closed by #489, read, not run.** `ensureInstance` is gone, and
+  `runEntry` (`apps/server/src/node-entry.ts`) now calls `assertNotAhead`
+  (`provisioning.database_ahead`) before `startServer`, which is what migrates. The
+  `node-entry.test.ts` case "counts a boot that fails BEFORE the server" rejects with
+  `provisioning.database_ahead` but does not assert that `startServer` was never called (#617's review
+  found the stale pointer; the missing assertion was read on 2026-09-25). **Next action:** add that assertion, prove it by moving the call after
+  `startServer`, then delete this entry.
 
 ### B8. Module framework follow-ons
 
@@ -2820,12 +2820,35 @@ image constraints under *Detail → Box image*.
   server files' pointers into the pruned text repointed) and `apps/till/src/widgets`, part b of
   four (#616, about 1,870 to about 725, parse-tree walk, tests included, plus stale twins of its
   corrected claims in `till-app.ts`, `api/client.ts` and three screens; text inside `css` templates
-  left).
+  left) and `apps/server`'s join, node, membership, enrol, trust, setup, box, provision and device
+  files, part f1 (#617, about 2,360 to about 1,110, parse-tree walk, tests included; the 13 part-f
+  files the SQLite slice-2 plan will change are held back as f2).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615 and #616 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616 and #617 and left for the package that owns each, all
   still OPEN:
+  - Found by #617 (`apps/server` part f1), not fixable in a comments-only change.
+    **`fetchPeerMembershipDocument` throws on a 200 whose body is JSON `null`**
+    (`apps/server/src/membership-reconcile.ts`, the final `body.document ?? null` reads a property
+    of `null`; the review reproduced it in a script), and boot re-throws what reconciliation throws,
+    so boot fails where it meant to carry on. Read, not run: the boot comment above that call says
+    the peer credential rides in a header, but the fetch is given only the URL, and the returned
+    `superseded` is never read; `shouldFenceRestart` (`membership-fence.ts`) has no caller outside
+    its test (`git grep`); `device-api.ts`'s ticket-item advance route does not enforce the
+    `act-as-kds` capability, and the obstacle its comment gave (null profile ids) no longer exists;
+    `enrol-rate-limit.ts` keeps one global limit whose stated reason (snitun) is gone;
+    `provision-till.test.ts` inserts its tenant with `onConflictDoNothing`, so a second call's new
+    NIF is silently kept out; `provision.ts` stamps the deployment in its own transaction before
+    `applyVenue`, a split with no commented decision (believed to predate #617, not checked); and
+    `setup-operation.ts` (around lines 128–133) may treat a lock written by a different store as a
+    previous boot's, so a live process's lock could be taken over (a belief, not verified).
+    `node-entry.test.ts` fixtures are still PostgreSQL-shaped (a `Failed query` wrapper, code
+    `42703`). `packages/db/drizzle/0000_baseline.sql` still names an index
+    `tills_tenant_location_name_key`. Test titles #617 could not touch: "(real Postgres)" five
+    times and "(SP-A.2 §16, device-profile §5)" in `device-session.test.ts`; "since Task 7" and
+    "this tenant's devices" in `device-api.test.ts`; "never a raw devices_pkey 23505" in
+    `join-requests.test.ts`; "(R1 behaviour preserved)" in `membership-mint.test.ts`.
   - Found by #616 (`apps/till/src/widgets`), not fixable in a comments-only change. Test titles
     repeat claims the branch corrected: `apps/till/src/screens/till-allergen-screen.test.ts`
     "(escape/backdrop)" — `wt-dialog` closes on Escape and, measured in Playwright's Chromium 153,
@@ -2945,10 +2968,7 @@ image constraints under *Detail → Box image*.
     `packages/db/src/schema/tenants.ts`), at `apps/server/src/kitchen.ts:360`. Read only, not run: the recipe screen's `#loadRecipe` guard
     compares product ids, so choosing A, then B, then A again lets the first A answer apply and turn
     Save back on while the second A load is still running.
-  - Found by #606 (`packages/module`), outside its package. `apps/server/src/provision.ts` (the
-    comment above its refusal of a disabled `provision-only` module) says such a module "mints
-    unrecoverable state at provision", which is untrue of `fiscal-none`; #606 dropped the same
-    reason from `disabledProvisionOnly` (`packages/module/src/config.ts`).
+  - Found by #606 (`packages/module`), outside its package (#617 fixed its `provision.ts` half).
     `apps/server/src/kitchen.test.ts` (the station test's comment) says a refusal would end up
     "poisoning a shared transaction", the claim `working-order.test.ts` makes (below).
   - Found by #604 (`packages/ui`), not fixable in a comments-only change. **A table with no shape
@@ -3179,9 +3199,6 @@ image constraints under *Detail → Box image*.
     `packages/core`'s, #613 `till-sale.ts`'s chain-head lock):
     `boot.ts` named as the owner of the AEAT certificate resolver in `apps/server/src/boot.test.ts`
     (`packages/fiscal-verifactu/src/slot.ts` builds and closes it). Prune with those packages.
-  - `apps/server/src/provision.test.ts` repeats "a second taxpayer would expose one business's rows
-    to another", which #561 deleted from provisioning (`tenants` holds one row). Prune with
-    `apps/server`.
   - `apps/setup` code, found by #567 and not changed: `#onGoto` in `setup-app.ts` does not clear
     `fiscalTestError`, so the routed-back fiscal-test banner survives navigating away and back;
     `deployment.already_stamped` is labelled "Reload to open the till" on the provision path and
@@ -3248,11 +3265,10 @@ image constraints under *Detail → Box image*.
     making them static imports is a small code follow-up.
   - Found by #589 (`packages/db` outside `src/schema`), not changed. Line pointers from other
     packages into `packages/db/src/schema`, most of them made wrong by #585 and some pointing past
-    the end of their file: `apps/server/src/boot.test.ts:2761`, `join-requests.test.ts:388` and
-    `:700`, `kitchen-print.test.ts:138`, `retire.test.ts:76`, `sale-till-source.receipt.test.ts:212`
+    the end of their file: `apps/server/src/boot.test.ts:2761`, `kitchen-print.test.ts:138`, `retire.test.ts:76`, `sale-till-source.receipt.test.ts:212`
     and `:227`, `working-order.test.ts:103` (all under `apps/server/src`)
     (the `scripts/catalogue-engine-neutral.test.ts` pointers were removed by #602,
-    `packages/venue-service/src/operations.ts`'s by #611, and the `till-*` ones by #613)
+    `packages/venue-service/src/operations.ts`'s by #611, the `till-*` ones by #613, and `join-requests.test.ts`'s by #617)
     — name the file and the column instead, with each package's pruning. In
     `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES ANYTHING"
     repeats the first case under another name (a test change, not a comment one). The same

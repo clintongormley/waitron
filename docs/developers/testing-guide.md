@@ -816,8 +816,8 @@ header; comment-stripping was rejected because a block stripper mis-parses a `/*
 
 Mounting a route on a bare Hono app cannot establish that trading or recovery boot installs it.
 B1's standalone route tests passed while the real trading listener returned 404; the boot
-regressions now request the guide and certificate aliases (`apps/server/src/boot.test.ts`,
-`node-entry.test.ts`).
+regressions now request the real listeners: `apps/server/src/boot.test.ts` fetches the trust page
+and the CA certificate, and `node-entry.test.ts` fetches the recovery listener's trust page.
 
 ## Test provider HTTP refusals through the real client, as well as a throwing fake seat.
 
