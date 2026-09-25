@@ -163,6 +163,13 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     title: "Waitron did not finish starting.",
     action: "Press Retry. If it keeps failing, ask whoever installed this box to look at it.",
   },
+  "restore.placement_failed": {
+    // Which database was kept is in the params, which reach the installer's channel
+    // (`node-entry.ts` → `failureDetail`) and not this page.
+    title: "A restore could not put the restored database in place.",
+    action:
+      "Ask whoever installed this box to look at it before anything else. The server's own output says whether the box's previous database is unchanged or was left in a folder inside its venue folder, which must be moved back before the box is used.",
+  },
   "migrations.set_missing": {
     title: "The installed software is incomplete.",
     action: "Reinstall Waitron on this box.",

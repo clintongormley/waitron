@@ -350,3 +350,17 @@ describe("a start refused by a holder that stopped", () => {
     });
   });
 });
+
+// The setup wizard only stages a restore; the placement runs on the next start, so a placement
+// failure reaches the owner here, by code alone. Which database was kept goes to the installer's
+// channel (`node-entry.ts`), not to the log this page shows.
+describe("a restore whose database could not be put in place", () => {
+  it("sends the operator to whoever installed the box, and not to the log on this page", async () => {
+    const text = OPERATOR_TEXT["restore.placement_failed"];
+    expect(text).toBeDefined();
+    expect(text!.action).toMatch(/ask whoever installed this box/i);
+    expect(text!.action).not.toMatch(/log below/i);
+    const body = await pageFor("restore.placement_failed");
+    expect(body).toContain(escapeHtml(text!.action));
+  });
+});
