@@ -1,5 +1,6 @@
-import { mkdir, rename, rm, writeFile } from "node:fs/promises";
-import { join, posix } from "node:path";
+import { lstatSync } from "node:fs";
+import { mkdir, mkdtemp, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import { basename, join, posix } from "node:path";
 import { eq } from "drizzle-orm";
 import {
   AppError,
@@ -21,6 +22,7 @@ import {
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { orderedMigrationSets, type ProvisionedNode, type WaitronModule } from "@waitron/module";
+import { codeOf } from "@waitron/server-kit";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { writeFileAtomic } from "./fs-atomic.js";
 import { isUnset } from "./env-value.js";
@@ -66,6 +68,8 @@ export const RESTORE_STAGING_DIR = "restore-staging";
 const VENUE_SIDECARS = ["-wal", "-shm"] as const;
 /** Where the incoming database sits while it is still incoming — same directory, so the rename is atomic. */
 const INCOMING_SUFFIX = ".incoming";
+/** The `mkdtemp` prefix of the folder the old database is moved into, inside the venue directory. */
+const ASIDE_PREFIX = ".venue.db-replaced-";
 /** The venue file holds the whole database, the same protected content the artifact carried. */
 const VENUE_FILE_MODE = 0o600;
 
@@ -155,7 +159,7 @@ export interface ValidatedArtifact {
  * root every non-secret entry name is resolved against, which is what refuses a crafted-but-
  * authentic name before any write — and that resolution needs a real directory to `realpath`.
  *
- * The GATE and the GUARD live HERE, before any write, on purpose: {@link restoreDatabase} unlinks
+ * The GATE and the GUARD live HERE, before any write, on purpose: {@link restoreDatabase} replaces
  * the venue file irreversibly and secret writes land permanently on disk, so an incompatible
  * manifest or a single crafted-but-authentic entry name must abort before the first byte is written
  * — never after a half-restore (CLAUDE.md §5). R3 rejoin runs this BEFORE its irreversible wipe so
@@ -367,36 +371,37 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
  * secrets). Returns the path it wrote.
  *
  * The archive entry's bytes ARE a SQLite venue database (`archiveTo`, `packages/store/src/archive.ts`),
- * so there is no subprocess and nothing to feed one: the operation is a file placement. What it
- * amounts to is the ORDER of the filesystem calls below, and the `rm` loop is in that order because
- * overwriting in place is silently wrong. Both readings were measured on Node v26.7.0 against
- * `node:sqlite`, each
- * with a control in the other direction; the scripts and the tables are in
- * `docs/handoffs/2026-09-21-f1-the-flip.md` → "The restore-and-backup surgery", and the two cases
- * in `restore.test.ts` fail if the `rm` loop below is deleted.
+ * so the operation is a file placement, and what it amounts to is the ORDER of the calls below.
  *
- * 1. **The sidecars go with the main file.** A writer killed mid-service (a box losing power) leaves
- *    `venue.db-wal` and `venue.db-shm` behind, and a committed row can live in the `-wal` alone.
- *    Replacing `venue.db` and leaving those, the reopened database answers with the CRASHED
- *    database's own tail and the archive's rows are absent — with no error in either direction.
- *    Removing both first, the same reopen answers with the archive.
- * 2. **The target is UNLINKED, never renamed over.** If anything still holds `venue.db` open, a
- *    rename onto that path leaves the stale connection writing through to it: a fresh open
- *    afterwards reads the OLD database plus whatever that connection wrote AFTER the restore — the
- *    restore silently and completely undone, on the cold-recovery path CLAUDE.md §5 says has to
- *    work. Unlinking first leaves the stale connection on an orphaned inode, and the fresh open
- *    reads the archive. (It does not stop a live writer from carrying on; {@link writeValidated}
- *    refuses to restore while another process holds the folder.)
+ * **Old intact or new placed, never neither.** Nothing that is database content is deleted until
+ * the new file is at `venue.db`: the incoming bytes are written first, the old `venue.db` and its
+ * side files are then MOVED into a fresh folder beside them, and only after the incoming file is
+ * renamed into place is that folder removed. A failure part-way puts back everything that was
+ * moved. So a RAW error means nothing of the old database changed, and
+ * `restore.placement_failed` means something was moved and then put back (`previous`) or left, in
+ * the folder it names (`set_aside`). The one thing not put back is Litestream's folder, removed
+ * before anything moves: it records only what was uploaded, and Litestream is started only by the
+ * stream supervisor, whose run removes that folder before its first start of it (`#open` →
+ * `#startChild` with `fresh`, `packages/stream/src/supervisor.ts`).
  *
- * The incoming bytes are written BEFORE anything is removed, so a failed or short write leaves the
- * existing database where it was rather than nothing at all; the stale incoming file is dropped
- * first so `writeFile` CREATES it and `mode` is actually applied, the reason `fs-atomic.ts` gives
- * for the same call. `rename` within one directory is atomic on POSIX, so `venue.db` is never
- * observed half-written.
+ * **The side files go with the main file.** A writer killed mid-service (a box losing power) leaves
+ * `venue.db-wal` and `venue.db-shm` behind, and a committed row can live in the `-wal` alone.
+ * Measured 2026-09-25 on Node v26.7.0 by moving the main file alone, in the two real-file cases of
+ * `restore.test.ts`: after a killed writer the next open answered with the crashed database's row
+ * and none of the archive's, and with a connection still open on the old file it answered with
+ * that connection's rows, one written after the restore included. Moving the side files as well,
+ * both answer with the archive, whether the main file is moved or renamed over; it is moved so
+ * that it can be put back.
+ *
+ * A path here holding something other than a regular file is not database content, so it is not
+ * moved: a plain removal takes a symlink and refuses a directory. The stale incoming file is
+ * dropped first so `writeFile` CREATES it and `mode` is actually applied, the reason
+ * `fs-atomic.ts` gives for the same call. `rename` within one directory is atomic on POSIX, so
+ * `venue.db` is never observed half-written.
  *
  * **`node.db` IS LEFT ALONE, and that differs from the wipe — deliberately recorded rather than
  * discovered.** `db-wipe.ts` removes both files of the venue directory; this replaces `venue.db`,
- * its two sidecars and Litestream's folder beside it, and nothing else. The node file is created
+ * its two side files and Litestream's folder beside it, and nothing else. The node file is created
  * empty and holds no table (`applyMigrations` sends every set to the venue handle,
  * `packages/migrations/src/apply.ts`), and slice 2 keeps it that way: a node's own rows are keyed
  * by node id inside `venue.db` (slice-2 spec §2). A slice that puts tables into `node.db` has to
@@ -406,28 +411,90 @@ export async function restoreDatabase(args: {
   dumpBytes: Uint8Array;
   venueDir: string;
   log: Logger;
+  /** Tests inject failures here; production passes nothing. */
+  fs?: PlacementFs;
 }): Promise<string> {
+  const fs = args.fs ?? { rename, rm, rmdir };
   // The restore may be the first thing that ever writes here. An existing directory's permissions
   // belong to the operator and are not changed by mkdir.
   await mkdir(args.venueDir, { recursive: true, mode: 0o700 });
   const target = join(args.venueDir, VENUE_FILE);
   const incoming = `${target}${INCOMING_SUFFIX}`;
-  await rm(incoming, { force: true });
+  await fs.rm(incoming, { force: true });
+  let aside: string;
   try {
     await writeFile(incoming, args.dumpBytes, { mode: VENUE_FILE_MODE, flag: "w" });
-    // Litestream's record of what it uploaded describes the database being replaced. Removed
-    // before that database, so a folder that cannot be removed leaves it in place.
-    await rm(litestreamMetaDir(target), { recursive: true, force: true });
-    for (const suffix of ["", ...VENUE_SIDECARS]) {
-      await rm(`${target}${suffix}`, { force: true });
-    }
-    await rename(incoming, target);
+    await fs.rm(litestreamMetaDir(target), { recursive: true, force: true });
+    aside = await mkdtemp(join(args.venueDir, ASIDE_PREFIX));
   } catch (error) {
-    await rm(incoming, { force: true });
+    await fs.rm(incoming, { force: true });
     throw error;
+  }
+  const moved: string[] = [];
+  try {
+    for (const suffix of ["", ...VENUE_SIDECARS]) {
+      const member = `${target}${suffix}`;
+      const found = lstatSync(member, { throwIfNoEntry: false });
+      if (found === undefined) continue;
+      if (!found.isFile()) {
+        // Not database content. A directory is refused here, before anything is replaced.
+        await fs.rm(member, { force: true });
+        continue;
+      }
+      await fs.rename(member, join(aside, basename(member)));
+      moved.push(member);
+    }
+    await fs.rename(incoming, target);
+  } catch (error) {
+    await fs.rm(incoming, { force: true });
+    const putBack = await putBackMoved(fs, moved, aside);
+    if (moved.length === 0) throw error;
+    const params =
+      putBack === "all"
+        ? ({ kept: "previous" } as const)
+        : ({ kept: "set_aside", folder: basename(aside) } as const);
+    args.log("error", "restore.db.placement_failed", { ...params, errorCode: codeOf(error) });
+    throw new AppError("restore.placement_failed", params);
+  }
+  try {
+    await fs.rm(aside, { recursive: true, force: true });
+  } catch {
+    args.log("warn", "restore.db.aside_kept", { folder: basename(aside) });
   }
   args.log("info", "restore.db.placed", { bytes: args.dumpBytes.byteLength });
   return target;
+}
+
+/** The filesystem calls {@link restoreDatabase} makes whose failures its tests inject. */
+export interface PlacementFs {
+  readonly rename: (from: string, to: string) => Promise<void>;
+  readonly rm: (path: string, options: { recursive?: boolean; force: boolean }) => Promise<void>;
+  readonly rmdir: (path: string) => Promise<void>;
+}
+
+/**
+ * Moves each member back from `aside`, the last one moved first, so the main file goes back last.
+ * Stops at the first failure: a main file back WITHOUT a side file that holds committed rows opens
+ * as an older database with no error, so what cannot go back keeps the main file company.
+ */
+async function putBackMoved(
+  fs: PlacementFs,
+  moved: readonly string[],
+  aside: string,
+): Promise<"all" | "some_left"> {
+  for (const member of [...moved].reverse()) {
+    try {
+      await fs.rename(join(aside, basename(member)), member);
+    } catch {
+      return "some_left";
+    }
+  }
+  try {
+    await fs.rmdir(aside);
+  } catch {
+    // An empty folder left behind costs nothing; the old database is back either way.
+  }
+  return "all";
 }
 
 /**

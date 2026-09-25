@@ -812,6 +812,12 @@ declare module "@waitron/shared" {
      * returning series) and `code` the inner code, so the CLI's `restore.*` reporting shows both
      * without learning any module's namespaces. A non-`AppError` throw is not wrapped. */
     "restore.hook_failed": { module: string; code: string };
+    /** Placing the restored database failed after part of the old one had been moved aside
+     * (`restoreDatabase`, restore.ts). `previous`: every part was put back, so the server's old
+     * database is unchanged. `set_aside`: a part could not be put back, and what was not is in
+     * `folder`, a folder inside the venue folder, which must be moved back before the server starts.
+     * Carries no filesystem error text, which can name paths. */
+    "restore.placement_failed": { kept: "previous" } | { kept: "set_aside"; folder: string };
     /** The owner's bucket holds no `current.json` for the kit's venue: nothing to rebuild from. */
     "restore.stream_pointer_missing": Record<string, never>;
     /** `current.json` was not signed by the key the recovery kit carries (`signature`), or names a

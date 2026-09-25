@@ -1,6 +1,18 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  rmdir,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -1309,5 +1321,175 @@ describe("restore steps — failures part-way", () => {
 
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
     expect(logged).toEqual([]);
+  });
+});
+
+/**
+ * Whatever step of the placement fails, the venue folder ends with the OLD database or the NEW one,
+ * never neither. The failures a real filesystem cannot be made to produce on demand are injected
+ * through `restoreDatabase`'s `fs` argument.
+ */
+describe("restoreDatabase keeps one whole database whatever step fails", () => {
+  useTempDirs("waitron-place-fail-");
+
+  const OLD = { "": "OLD-MAIN", "-wal": "OLD-WAL", "-shm": "OLD-SHM" } as const;
+
+  async function seedOldSet(): Promise<void> {
+    await mkdir(venueDir, { recursive: true });
+    for (const [suffix, bytes] of Object.entries(OLD)) {
+      await writeFile(`${venueFile()}${suffix}`, bytes);
+    }
+  }
+
+  async function asideFolders(): Promise<string[]> {
+    return (await readdir(venueDir)).filter((name) => name.startsWith(".venue.db-replaced-"));
+  }
+
+  function injected(code: string): NodeJS.ErrnoException {
+    return Object.assign(new Error(`injected ${code}`), { code });
+  }
+
+  /** The real calls, with `rename` refused for the moves `refuse` picks. */
+  function renameRefusing(refuse: (from: string, to: string) => boolean) {
+    return {
+      rm,
+      rmdir,
+      rename: async (from: string, to: string) => {
+        if (refuse(from, to)) throw injected("EIO");
+        await rename(from, to);
+      },
+    };
+  }
+
+  it("puts the old database back when a side file is a directory, and says so with a code", async () => {
+    await seedOldSet();
+    await rm(`${venueFile()}-wal`);
+    await mkdir(`${venueFile()}-wal`);
+
+    await expect(
+      restoreDatabase({ dumpBytes: VENUE_BYTES, venueDir, log: noopLog }),
+    ).rejects.toMatchObject({ code: "restore.placement_failed", params: { kept: "previous" } });
+
+    expect(await readFile(venueFile(), "utf8")).toBe(OLD[""]);
+    expect(await readFile(`${venueFile()}-shm`, "utf8")).toBe(OLD["-shm"]);
+    expect((await stat(`${venueFile()}-wal`)).isDirectory()).toBe(true);
+    await expect(stat(incomingFile())).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await asideFolders()).toEqual([]);
+  });
+
+  it("puts the whole old set back when the incoming copy cannot be renamed into place", async () => {
+    await seedOldSet();
+
+    await expect(
+      restoreDatabase({
+        dumpBytes: VENUE_BYTES,
+        venueDir,
+        log: noopLog,
+        fs: renameRefusing((from) => from === incomingFile()),
+      }),
+    ).rejects.toMatchObject({ code: "restore.placement_failed", params: { kept: "previous" } });
+
+    for (const [suffix, bytes] of Object.entries(OLD)) {
+      expect(await readFile(`${venueFile()}${suffix}`, "utf8")).toBe(bytes);
+    }
+    await expect(stat(incomingFile())).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await asideFolders()).toEqual([]);
+  });
+
+  it("still reports the old set kept when its emptied aside folder cannot be removed", async () => {
+    await seedOldSet();
+
+    await expect(
+      restoreDatabase({
+        dumpBytes: VENUE_BYTES,
+        venueDir,
+        log: noopLog,
+        fs: {
+          ...renameRefusing((from) => from === incomingFile()),
+          rmdir: async () => {
+            throw injected("EBUSY");
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "restore.placement_failed", params: { kept: "previous" } });
+
+    for (const [suffix, bytes] of Object.entries(OLD)) {
+      expect(await readFile(`${venueFile()}${suffix}`, "utf8")).toBe(bytes);
+    }
+  });
+
+  it("names the aside folder holding the old database when putting it back fails", async () => {
+    await seedOldSet();
+    const failure = restoreDatabase({
+      dumpBytes: VENUE_BYTES,
+      venueDir,
+      log: noopLog,
+      fs: renameRefusing((from, to) => from === incomingFile() || to === `${venueFile()}-wal`),
+    });
+    await expect(failure).rejects.toMatchObject({
+      code: "restore.placement_failed",
+      params: { kept: "set_aside" },
+    });
+
+    const [folder] = await asideFolders();
+    await expect(failure).rejects.toMatchObject({ params: { folder } });
+    const aside = join(venueDir, folder!);
+    // The main file stays with the side file that could not go back, never back without it.
+    expect(await readFile(join(aside, "venue.db"), "utf8")).toBe(OLD[""]);
+    expect(await readFile(join(aside, "venue.db-wal"), "utf8")).toBe(OLD["-wal"]);
+    await expect(stat(venueFile())).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(incomingFile())).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("keeps the placed database and logs the aside folder when the old copy cannot be removed", async () => {
+    await seedOldSet();
+    const logged: { level: string; event: string; fields: unknown }[] = [];
+
+    await restoreDatabase({
+      dumpBytes: VENUE_BYTES,
+      venueDir,
+      log: (level, event, fields) => logged.push({ level, event, fields }),
+      fs: {
+        rename,
+        rmdir,
+        rm: async (path, options) => {
+          if (String(path).includes(".venue.db-replaced-")) throw injected("EACCES");
+          await rm(path, options);
+        },
+      },
+    });
+
+    await expectVenueRestored();
+    const [folder] = await asideFolders();
+    expect(await readFile(join(venueDir, folder!, "venue.db"), "utf8")).toBe(OLD[""]);
+    expect(logged).toContainEqual({
+      level: "warn",
+      event: "restore.db.aside_kept",
+      fields: { folder },
+    });
+  });
+
+  it("removes a symlink at a side-file path rather than moving it, and places the new database", async () => {
+    await seedOldSet();
+    const elsewhere = join(stagingDir, "not-the-venue");
+    await writeFile(elsewhere, "NOT-DATABASE-CONTENT");
+    await rm(`${venueFile()}-shm`);
+    await symlink(elsewhere, `${venueFile()}-shm`);
+
+    await restoreDatabase({ dumpBytes: VENUE_BYTES, venueDir, log: noopLog });
+
+    await expectVenueRestored();
+    await expect(stat(`${venueFile()}-shm`)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(elsewhere, "utf8")).toBe("NOT-DATABASE-CONTENT");
+    expect(await asideFolders()).toEqual([]);
+  });
+
+  it("leaves no aside folder once the new database is placed over an old set", async () => {
+    await seedOldSet();
+    await restoreDatabase({ dumpBytes: VENUE_BYTES, venueDir, log: noopLog });
+    await expectVenueRestored();
+    await expect(stat(`${venueFile()}-wal`)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(`${venueFile()}-shm`)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await asideFolders()).toEqual([]);
   });
 });
