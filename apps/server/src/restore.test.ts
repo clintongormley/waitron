@@ -655,9 +655,8 @@ describe("restore steps (R3 composition)", () => {
  * Neither is visible to a case whose writer was CLOSED rather than killed or left open: a clean
  * `close()` checkpoints the write-ahead file and deletes both sidecars, so the broken implementation
  * and the correct one behave identically. That is why these two cases exist and why they are built
- * the awkward way — a killed child process, and a connection deliberately left open. Delete the
- * `rm` loop in `restoreDatabase` and both fail; the readings are in `restore.ts`'s own comment and
- * in `docs/handoffs/2026-09-21-f1-the-flip.md`.
+ * the awkward way — a killed child process, and a connection deliberately left open. Leave the
+ * side files where they are in `restoreDatabase` and both fail; the readings are in its comment.
  */
 describe("restoreDatabase places a REAL venue file (the two silent failures)", () => {
   useTempDirs("waitron-place-");
@@ -757,7 +756,7 @@ describe("restoreDatabase places a REAL venue file (the two silent failures)", (
     expect(await markersIn(venueDir)).toEqual(["FROM-ARCHIVE"]);
   });
 
-  it("UNLINKS the venue file rather than renaming over it, so an open connection cannot undo the restore", async () => {
+  it("moves the side files with the venue file, so an open connection cannot undo the restore", async () => {
     const live = await openVenueDatabase(venueDir);
     live.venue.run(sql`create table marker (id integer primary key, v text)`);
     live.venue.run(sql`insert into marker (v) values ('LIVE')`);
