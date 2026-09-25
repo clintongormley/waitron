@@ -4302,7 +4302,7 @@ comment #609 deleted as partly false, so that is untested; the label filter, the
 no scan at all. **Next action:** move the non-search path back into SQL; how far to push the search
 path is a separate decision.
 
-**`sale_voids` has no index on `voided_at` — DONE (2026-09-26, lane A's A33, branch `feat/sale-voids-voided-at-index`; found 2026-09-24 by #605).**
+**`sale_voids` has no index on `voided_at` — DONE (2026-09-26, lane A's A33, #663; found 2026-09-24 by #605).**
 Core migration `0011_sale_voids_voided_at_idx` adds `sale_voids_voided_at_idx`, declared in
 `packages/db/src/schema/sale-voids.ts`. Measured on the real core schema (node v26.7.0, an empty
 migrated venue, no `ANALYZE` statistics): before, the void count scanned `sales` (one node) or
