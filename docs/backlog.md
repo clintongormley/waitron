@@ -352,7 +352,10 @@ its sales being double-counted; at most one membership is primary and names the 
 kitchen route. Categories get their own page at `/manage/categories` with translation, a picture, a
 parent, and a delete that previews what will change and then proceeds rather than refusing. Labels on
 past orders stay readable. [Design](superpowers/specs/2026-09-12-product-categories-design.md),
-[API and integration guide](developers/product-categories.md).
+[API and integration guide](developers/product-categories.md). _2026-09-25: the several-categories
+membership is gone. Sales classification Task 1 gives each product one main reporting category in a
+strict tree, plus any number of flat labels, and drops `product_categories`; the guide above is
+rewritten for it._
 
 What it left open:
 
@@ -370,38 +373,26 @@ What it left open:
   what that line can claim are in [the workflow guide](developers/workflow-guide.md). The underlying
   trap is unchanged: **a populated development database still has to be reset by hand.**
 - **Category authoring serialises across the whole database, and nobody has measured what that
-  costs.** Hierarchy edits, membership replacement and category deletion take no lock of their own
+  costs.** Hierarchy edits, main-category changes and category deletion take no lock of their own
   since the storage switch: `withTransaction` admits one write transaction per venue file, which is
   what makes the races safe (`packages/catalogue/src/categories.ts`, above `listCategories`). The review confirmed the specific
   races are handled but reported no throughput measurement, so there is no evidence either way about
   how this behaves with several managers editing the catalogue at once. **Next action:** measure it
   before anyone widens category authoring to more concurrent editors, rather than assuming it is fine.
-- **Routing from category memberships is still not designed** — that item is unchanged and sits under
-  A9 below. This merge kept the existing single-route behaviour on purpose; choosing the primary
-  category as the reporting label does not decide anything about the later routing design.
+- **Routing to several destinations is still not designed** — that item sits under A9 below. The
+  memberships it was first written about are gone (2026-09-25); labels are to be the conditions for
+  kitchen routing rules instead (menus spec §10.5).
 - **A category's colour is stored but shown nowhere outside the categories screen.** Nothing on the
   till, in menus or in reports reads it yet. The colour is data a future consumer can follow; nobody
   has decided whether or how one should.
-- **One legacy write path still ties the reporting category to membership.** Sending
-  `categoryId: null` in a product patch (`updateProduct` in `packages/catalogue/src/operations.ts`)
-  refuses with `category.primary_required` when the product has more than one membership, and
-  otherwise clears every membership along with the reporting category — the coupling
-  `replaceProductCategories` dropped. Left alone on purpose: nothing first-party sends `categoryId` in
-  a product patch any more. **Next action:** remove the coupling if and when a real client needs the
-  relaxed behaviour on that route, rather than pre-emptively changing a legacy contract.
 - **No "category dependants" seat exists on the module contract.** The delete-preview route
   (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
   dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.
-- **The delete confirmation and the add-products button use a plural even for one.** The counts are
-  dropped into fixed plural sentences (`categories.delete_warning_products`,
-  `categories.delete_warning_children_under`, `categories.delete_warning_children_top`,
-  `categories.add_selected` in `apps/dashboard/src/i18n/strings.ts`), so one product or child reads
-  "Al eliminarla se quitará de 1 productos", "Sus 1 categorías hijas se moverán …" or "Añadir 1
-  productos", and the English is just as wrong. The plural sentences predate #362; the three
-  `delete_warning_*` keys are the delete-confirmation strings after #366
-  consolidated the old `delete_products`/`delete_children_*` lines into one warning (the plural bug
-  came along unchanged). **Next action:** give each a one-item form, or use a plural-aware formatter
-  if the dashboard adopts one.
+- **The add-products button uses a plural even for one.** The count is dropped into a fixed plural
+  sentence (`categories.add_selected` in `apps/dashboard/src/i18n/strings.ts`), so picking one
+  product reads "Añadir 1 productos", and the English "Add 1 products" is just as wrong. **Next
+  action:** give it a one-item form, as the delete warnings have, or use a plural-aware formatter if
+  the dashboard adopts one.
 - **Nothing stops the next screen making the same mistake.** A check that compares the class names a
   screen's own stylesheet styles against the class names it puts inside `wt-data-table` cell callbacks
   looks feasible and would catch this whole kind of bug; nobody has tried to write it.
@@ -425,18 +416,9 @@ categories screen: the colour picker now lays its twenty-four swatches out as hu
 splits across a line break (the palette order is now pinned by a test), and a product's other-category
 tags collapse to a localized count once there are four or more.
 
-What it left open:
-
-- **Three is a hardcoded number with nothing behind it.**
-  `OTHER_CATEGORIES_PREVIEW_LIMIT` in `apps/dashboard/src/screens/categories-screen.ts` was chosen to
-  look right at the column's current width, not measured against it, and the same table on a phone
-  has far less room than the number assumes. **Next action:** if the column looks crowded or empty on
-  a real screen, measure before changing it, and consider deriving the limit from the available width
-  rather than pinning another guess.
-- **The collapsed count tells you how many, not which.** A manager who wants to see a product's full
-  membership list has to open the product's category editor; the table offers no hover, tooltip or
-  expansion. That is a deliberate omission rather than an oversight, but nobody has watched anyone use
-  it. **Next action:** leave it until someone using the screen asks for the names back.
+What it left open was a fixed preview limit of three other-category tags, and a collapsed count that
+said how many categories a product had but not which. _2026-09-25: both are gone with the
+several-categories membership (sales classification Task 1)._
 
 **Product modifiers — LANDED #341 (2026-09-13).** Modifiers (free text, extras, options and a plain
 yes/no) are written once and attached to many products, and the till asks for them when the dish is
@@ -2306,7 +2288,9 @@ ongoing overhaul listed at the top of Track A.
   with nothing using it; #362 (2026-09-14) is the first adopter, for the
   category form's parent picker (`apps/dashboard/src/widgets/category-form.ts`) and the
   product-categories editor's category and reporting-category dropdowns
-  (`apps/dashboard/src/widgets/category-membership-picker.ts`). Left out on purpose, per its
+  (`apps/dashboard/src/widgets/category-membership-picker.ts`). _2026-09-25: the product-categories
+  editor is gone; the product's main-category and labels pickers
+  (`apps/dashboard/src/widgets/classification-fields.ts`) use it now._ Left out on purpose, per its
   [design](superpowers/specs/2026-09-13-wt-combobox-design.md): searching on the server, disabling
   single options, taking part in a native `<form>`, and showing chosen options as chips (it shows a
   count instead). **Undecided:** how it relates to the `wt-select` row above. The combobox does not
@@ -2379,8 +2363,9 @@ ongoing overhaul listed at the top of Track A.
   languages are a separate setting and already follow the province.
 - **Category-driven routing to multiple printers/destinations** (owner, 2026-09-12): deferred from
   the [Products overhaul](superpowers/specs/2026-09-12-products-overhaul-design.md). Decide how a
-  product's category memberships select one or more preparation/printing destinations, how matching
-  rules combine and how duplicate output is prevented. Keep reporting attribution separate so one
+  product's labels (menus spec §10.5; category memberships are gone since 2026-09-25) select one or
+  more preparation/printing destinations, how matching rules combine and how duplicate output is
+  prevented. Keep reporting attribution separate so one
   sale is counted once. The overhaul retains the current routing path; its reporting-category
   choice does not settle this later routing design.
 - **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility

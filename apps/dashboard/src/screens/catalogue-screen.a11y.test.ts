@@ -24,7 +24,7 @@ const products: Product[] = [
     modifiers: [],
     catalogueId: "cat-a",
     categoryId: "c1",
-    categoryIds: ["c1"],
+    labelIds: [],
     primaryCategoryId: "c1",
     name: "Croquetas de jamón",
     customerName: { es: "Croquetas caseras de jamón ibérico" },

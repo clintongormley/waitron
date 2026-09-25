@@ -24,8 +24,10 @@ const repoRoot = join(import.meta.dirname, "..");
 const CATALOGUE_FILES = [
   "packages/catalogue/src/schema/options.ts",
   "packages/catalogue/src/schema/extras.ts",
+  "packages/catalogue/src/schema/labels.ts",
   "packages/catalogue/src/options.ts",
   "packages/catalogue/src/extras.ts",
+  "packages/catalogue/src/labels.ts",
   "packages/catalogue/src/product-modifiers.ts",
 ] as const;
 

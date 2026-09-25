@@ -218,7 +218,22 @@ async function createCategoryVia(app: Hono, name: Record<string, string>): Promi
   return ((await res.json()) as { id: string }).id;
 }
 
-/** A named product with no reporting category and no memberships, in a catalogue of its own. */
+/** A named product with no main category and no labels, in a catalogue of its own. */
+async function createLabelVia(app: Hono, name: string): Promise<string> {
+  const res = await send(app, "POST", "/management-api/labels", { body: { name } });
+  expect(res.status).toBe(201);
+  return ((await res.json()) as { id: string }).id;
+}
+
+/** The main category the product row itself stores. */
+async function mainCategoryOf(productId: string): Promise<string | null> {
+  return (
+    await suite.db.execute<{ category_id: string | null }>(
+      sql`select category_id from products where id = ${productId}`,
+    )
+  ).rows[0]!.category_id;
+}
+
 async function createNamedProductVia(app: Hono, name: string): Promise<string> {
   const catalogueId = await createCatalogueVia(app, `Catalogue for ${name}`);
   const res = await send(app, "POST", "/management-api/products", {
@@ -521,7 +536,7 @@ describe("mountCatalogueApi — categories", () => {
     expect(
       (
         await send(app, "PUT", `/management-api/products/${productId}/categories`, {
-          body: { categoryIds: [parent] },
+          body: { primaryCategoryId: parent },
         })
       ).status,
     ).toBe(200);
@@ -529,7 +544,7 @@ describe("mountCatalogueApi — categories", () => {
     const res = await send(app, "GET", `/management-api/categories/${parent}/dependants`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      products: [{ id: productId, name: "Rioja", reporting: true }],
+      products: [{ id: productId, name: "Rioja" }],
       children: [{ id: childId, name: { es: "Vinos" } }],
       parentId: null,
       // The venue-service module is not migrated in this suite, so the optional route table is
@@ -556,11 +571,15 @@ describe("mountCatalogueApi — categories", () => {
     expect(await absent.json()).toMatchObject({ error: { code: "category.not_found" } });
   });
 
-  it("bulk-adds products to a category in one write", async () => {
+  it("bulk-adds products to a category in one write, moving each from where it was", async () => {
     const app = mountApp();
     const id = await createCategoryVia(app, { es: "Tapas" });
+    const elsewhere = await createCategoryVia(app, { es: "Raciones" });
     const first = await createNamedProductVia(app, "Croquetas");
     const second = await createNamedProductVia(app, "Boquerones");
+    await send(app, "PUT", `/management-api/products/${second}/categories`, {
+      body: { primaryCategoryId: elsewhere },
+    });
 
     const res = await send(app, "POST", `/management-api/categories/${id}/products`, {
       body: { productIds: [first, second] },
@@ -573,10 +592,105 @@ describe("mountCatalogueApi — categories", () => {
         }[]
       ).map((p) => p.id),
     ).toEqual([first, second].sort());
-    // Neither product had a reporting category, so the bulk add gave each one this category.
+    expect(await mainCategoryOf(first)).toBe(id);
+    expect(await mainCategoryOf(second)).toBe(id);
     expect(
-      await (await send(app, "GET", `/management-api/products/${first}/categories`)).json(),
-    ).toEqual({ categoryIds: [id], primaryCategoryId: id });
+      await (await send(app, "GET", `/management-api/categories/${elsewhere}/products`)).json(),
+    ).toEqual([]);
+  });
+
+  it("lists a category's products, and with descendants=1 the products of the categories below it", async () => {
+    const app = mountApp();
+    const parent = await createCategoryVia(app, { es: "Bebidas" });
+    const child = (
+      (await (
+        await send(app, "POST", "/management-api/categories", {
+          body: { name: { es: "Vinos" }, parentId: parent },
+        })
+      ).json()) as { id: string }
+    ).id;
+    const wine = await createNamedProductVia(app, "Rioja");
+    const water = await createNamedProductVia(app, "Agua");
+    const label = await createLabelVia(app, `Alcohólico ${crypto.randomUUID()}`);
+    await send(app, "POST", `/management-api/categories/${child}/products`, {
+      body: { productIds: [wine] },
+    });
+    await send(app, "POST", `/management-api/categories/${parent}/products`, {
+      body: { productIds: [water] },
+    });
+    await send(app, "PUT", `/management-api/products/${wine}/labels`, {
+      body: { labelIds: [label] },
+    });
+    const path = `/management-api/categories/${parent}/products`;
+    expect(await (await send(app, "GET", path)).json()).toEqual([
+      { id: water, name: "Agua", active: true, primaryCategoryId: parent, labelIds: [] },
+    ]);
+    const below = await send(app, "GET", `${path}?descendants=1`);
+    expect(below.status).toBe(200);
+    expect(
+      ((await below.json()) as { id: string }[]).sort((a, b) => a.id.localeCompare(b.id)),
+    ).toEqual(
+      [
+        { id: water, name: "Agua", active: true, primaryCategoryId: parent, labelIds: [] },
+        { id: wine, name: "Rioja", active: true, primaryCategoryId: child, labelIds: [label] },
+      ].sort((a, b) => a.id.localeCompare(b.id)),
+    );
+  });
+
+  it("deletes a category, moving its products and children to its parent unless the body says otherwise", async () => {
+    const app = mountApp();
+    const top = await createCategoryVia(app, { es: "Comida" });
+    const other = await createCategoryVia(app, { es: "Postres" });
+    const make = async (name: string, parentId: string) =>
+      (
+        (await (
+          await send(app, "POST", "/management-api/categories", {
+            body: { name: { es: name }, parentId },
+          })
+        ).json()) as { id: string }
+      ).id;
+    const middle = await make("Tapas", top);
+    const leaf = await make("Frías", middle);
+    const product = await createNamedProductVia(app, "Ensaladilla");
+    await send(app, "PUT", `/management-api/products/${product}/categories`, {
+      body: { primaryCategoryId: middle },
+    });
+
+    for (const [body, field] of [
+      [{ productsTo: 7 }, "productsTo"],
+      [{ childrenTo: "not-a-uuid" }, "childrenTo"],
+    ] as const) {
+      const res = await send(app, "DELETE", `/management-api/categories/${middle}`, { body });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    const intoItself = await send(app, "DELETE", `/management-api/categories/${middle}`, {
+      body: { childrenTo: leaf },
+    });
+    expect(intoItself.status).toBe(400);
+    expect(await intoItself.json()).toMatchObject({
+      error: { code: "category.reassign_invalid", params: { field: "childrenTo" } },
+    });
+    const unknown = await send(app, "DELETE", `/management-api/categories/${middle}`, {
+      body: { productsTo: "11111111-1111-4111-8111-111111111111" },
+    });
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { code: "category.not_found" } });
+    expect(await mainCategoryOf(product)).toBe(middle);
+
+    const moved = await send(app, "DELETE", `/management-api/categories/${middle}`, {
+      body: { productsTo: other, childrenTo: null },
+    });
+    expect(moved.status).toBe(204);
+    expect(await mainCategoryOf(product)).toBe(other);
+    const leafRead = await send(app, "GET", `/management-api/categories/${leaf}`);
+    expect(((await leafRead.json()) as { parentId: string | null }).parentId).toBeNull();
+
+    // No body: the defaults, the deleted category's parent — none for a top-level one.
+    expect((await send(app, "DELETE", `/management-api/categories/${other}`)).status).toBe(204);
+    expect(await mainCategoryOf(product)).toBeNull();
   });
 
   it("screens the bulk-add body and gates the write", async () => {
@@ -611,24 +725,158 @@ describe("mountCatalogueApi — categories", () => {
     ).toBe(401);
   });
 
-  it("accepts a null reporting category on the membership PUT", async () => {
+  it("sets and clears a product's main category on the PUT, and screens its body", async () => {
     const app = mountApp();
     const food = await createCategoryVia(app, { es: "Comida" });
-    const drinks = await createCategoryVia(app, { es: "Bebidas" });
     const productId = await createNamedProductVia(app, "Vermut");
     const path = `/management-api/products/${productId}/categories`;
-    const res = await send(app, "PUT", path, {
-      body: { categoryIds: [food, drinks], primaryCategoryId: null },
+    const set = await send(app, "PUT", path, { body: { primaryCategoryId: food } });
+    expect(set.status).toBe(200);
+    expect(await set.json()).toEqual({ primaryCategoryId: food });
+    expect(await mainCategoryOf(productId)).toBe(food);
+    for (const body of [{}, { primaryCategoryId: 7 }, { primaryCategoryId: "not-a-uuid" }]) {
+      const res = await send(app, "PUT", path, { body });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "primaryCategoryId" } },
+      });
+    }
+    const unknown = await send(app, "PUT", path, {
+      body: { primaryCategoryId: "11111111-1111-4111-8111-111111111111" },
     });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      categoryIds: [food, drinks].sort(),
-      primaryCategoryId: null,
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { code: "category.not_found" } });
+    expect(await mainCategoryOf(productId)).toBe(food);
+    const cleared = await send(app, "PUT", path, { body: { primaryCategoryId: null } });
+    expect(await cleared.json()).toEqual({ primaryCategoryId: null });
+    expect(await mainCategoryOf(productId)).toBeNull();
+    // The membership read is retired: there is no membership left to read.
+    expect((await send(app, "GET", path)).status).toBe(404);
+    expect(
+      (await send(app, "PUT", path, { body: { primaryCategoryId: null }, cookie: staffCookie }))
+        .status,
+    ).toBe(403);
+  });
+});
+
+describe("mountCatalogueApi — labels", () => {
+  it("creates, lists, renames and deletes a label, and sets a product's labels", async () => {
+    const app = mountApp();
+    const name = `Alcohólico ${crypto.randomUUID()}`;
+    const created = await send(app, "POST", "/management-api/labels", {
+      body: { name: ` ${name} ` },
     });
-    expect(await (await send(app, "GET", path)).json()).toEqual({
-      categoryIds: [food, drinks].sort(),
-      primaryCategoryId: null,
+    expect(created.status).toBe(201);
+    const label = (await created.json()) as { id: string; name: string };
+    expect(label).toEqual({ id: label.id, name });
+    const productId = await createNamedProductVia(app, "Cerveza");
+    const labelsPath = `/management-api/products/${productId}/labels`;
+    const other = await createLabelVia(app, `Otra ${crypto.randomUUID()}`);
+    const both = [label.id, other].sort();
+    const set = await send(app, "PUT", labelsPath, {
+      body: { labelIds: [both[1]!.toUpperCase(), both[0]] },
     });
+    expect(set.status).toBe(200);
+    expect(await set.json()).toEqual({ labelIds: both });
+    expect(await (await send(app, "GET", labelsPath)).json()).toEqual({ labelIds: both });
+    expect(
+      await (await send(app, "PUT", labelsPath, { body: { labelIds: [label.id] } })).json(),
+    ).toEqual({ labelIds: [label.id] });
+    const listed = (await (await send(app, "GET", "/management-api/labels")).json()) as {
+      id: string;
+    }[];
+    expect(listed.find((l) => l.id === label.id)).toEqual({ id: label.id, name, productCount: 1 });
+
+    const renamed = await send(app, "PATCH", `/management-api/labels/${label.id}`, {
+      body: { name: `${name} 2` },
+    });
+    expect(renamed.status).toBe(200);
+    expect(await renamed.json()).toEqual({ id: label.id, name: `${name} 2` });
+    expect((await send(app, "DELETE", `/management-api/labels/${label.id}`)).status).toBe(204);
+    expect(await (await send(app, "GET", labelsPath)).json()).toEqual({ labelIds: [] });
+    const gone = await send(app, "DELETE", `/management-api/labels/${label.id}`);
+    expect(gone.status).toBe(404);
+    expect(await gone.json()).toMatchObject({
+      error: { code: "label.not_found", params: { labelId: label.id } },
+    });
+  });
+
+  it("screens label bodies, refuses a duplicate or blank name, and gates every write", async () => {
+    const app = mountApp();
+    const name = `Sin gluten ${crypto.randomUUID()}`;
+    const id = await createLabelVia(app, name);
+    for (const [method, path] of [
+      ["POST", "/management-api/labels"],
+      ["PATCH", `/management-api/labels/${id}`],
+    ] as const) {
+      const shape = await send(app, method, path, { body: { name: 7 } });
+      expect(shape.status).toBe(400);
+      expect(await shape.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "name" } },
+      });
+      const blank = await send(app, method, path, { body: { name: "  " } });
+      expect(blank.status).toBe(400);
+      expect(await blank.json()).toMatchObject({
+        error: { code: "label.invalid", params: { field: "name" } },
+      });
+      expect(
+        (await send(app, method, path, { body: { name: "X" }, cookie: staffCookie })).status,
+      ).toBe(403);
+      expect((await send(app, method, path, { body: { name: "X" }, cookie: null })).status).toBe(
+        401,
+      );
+    }
+    const duplicate = await send(app, "POST", "/management-api/labels", { body: { name } });
+    expect(duplicate.status).toBe(409);
+    expect(await duplicate.json()).toMatchObject({
+      error: { code: "label.name_taken", params: { name } },
+    });
+    expect((await send(app, "GET", "/management-api/labels", { cookie: null })).status).toBe(401);
+    expect(
+      (await send(app, "DELETE", `/management-api/labels/${id}`, { cookie: staffCookie })).status,
+    ).toBe(403);
+    expect((await send(app, "DELETE", "/management-api/labels/not-a-uuid")).status).toBe(400);
+    const unknown = await send(
+      app,
+      "PATCH",
+      "/management-api/labels/11111111-1111-4111-8111-111111111111",
+      {
+        body: { name: "Y" },
+      },
+    );
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { code: "label.not_found" } });
+  });
+
+  it("screens a product's label selection", async () => {
+    const app = mountApp();
+    const productId = await createNamedProductVia(app, "Sidra");
+    const path = `/management-api/products/${productId}/labels`;
+    for (const labelIds of [undefined, "nope", [7], ["not-a-uuid"]]) {
+      const res = await send(app, "PUT", path, { body: { labelIds } });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "labelIds" } },
+      });
+    }
+    const unknown = await send(app, "PUT", path, {
+      body: { labelIds: ["11111111-1111-4111-8111-111111111111"] },
+    });
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { code: "label.not_found" } });
+    const missing = "22222222-2222-4222-8222-222222222222";
+    for (const method of ["GET", "PUT"] as const) {
+      const res = await send(app, method, `/management-api/products/${missing}/labels`, {
+        ...(method === "PUT" ? { body: { labelIds: [] } } : {}),
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "product.not_found", params: { productId: missing } },
+      });
+    }
+    expect(
+      (await send(app, "PUT", path, { body: { labelIds: [] }, cookie: staffCookie })).status,
+    ).toBe(403);
   });
 });
 
@@ -748,7 +996,8 @@ describe("mountCatalogueApi — products", () => {
     const product = (await res.json()) as {
       id: string;
       catalogueId: string;
-      categoryIds: string[];
+      categoryId: string | null;
+      labelIds: string[];
       primaryCategoryId: string | null;
       name: string;
       customerName: Record<string, string> | null;
@@ -761,7 +1010,8 @@ describe("mountCatalogueApi — products", () => {
     };
     expect(product).toMatchObject({
       catalogueId,
-      categoryIds: [categoryId],
+      categoryId,
+      labelIds: [],
       primaryCategoryId: categoryId,
       name: "Café solo",
       customerName: { es: "Café con leche" },
@@ -789,6 +1039,7 @@ describe("mountCatalogueApi — products", () => {
       body: { name: { es: "Cafés" } },
     });
     const categoryId = ((await category.json()) as { id: string }).id;
+    const labelId = await createLabelVia(app, `Caliente ${crypto.randomUUID()}`);
     const optionList = await send(app, "POST", "/management-api/modifiers/options", {
       body: { name: "Nota", labels: [{ name: "Sin azúcar" }] },
     });
@@ -826,7 +1077,7 @@ describe("mountCatalogueApi — products", () => {
           active: true,
         },
       ],
-      categoryIds: [categoryId],
+      labelIds: [labelId],
       primaryCategoryId: categoryId,
       modifiers: [{ kind: "options", id: optionListId }],
       allergens: {},
@@ -947,7 +1198,7 @@ describe("mountCatalogueApi — products", () => {
       soldAlone: true,
       vatClass: "general",
       variants: [],
-      categoryIds: [],
+      labelIds: [],
       primaryCategoryId: null,
       modifiers: [],
       allergens: null,
@@ -1024,22 +1275,24 @@ describe("mountCatalogueApi — products", () => {
       ).status,
     ).toBe(204);
 
-    const readCategories = await send(
-      app,
-      "GET",
-      `/management-api/products/${variantId}/categories`,
-    );
-    expect(readCategories.status).toBe(404);
-    expect(await readCategories.json()).toMatchObject(notFound);
-    const membership = { categoryIds: [categoryId], primaryCategoryId: categoryId };
+    const main = { primaryCategoryId: categoryId };
     const writeCategories = await send(
       app,
       "PUT",
       `/management-api/products/${variantId}/categories`,
-      { body: membership },
+      { body: main },
     );
     expect(writeCategories.status).toBe(404);
     expect(await writeCategories.json()).toMatchObject(notFound);
+    const label = await createLabelVia(app, `Tinto ${crypto.randomUUID()}`);
+    const readLabels = await send(app, "GET", `/management-api/products/${variantId}/labels`);
+    expect(readLabels.status).toBe(404);
+    expect(await readLabels.json()).toMatchObject(notFound);
+    const writeLabels = await send(app, "PUT", `/management-api/products/${variantId}/labels`, {
+      body: { labelIds: [label] },
+    });
+    expect(writeLabels.status).toBe(404);
+    expect(await writeLabels.json()).toMatchObject(notFound);
     const addToCategory = await send(
       app,
       "POST",
@@ -1054,13 +1307,17 @@ describe("mountCatalogueApi — products", () => {
     expect(
       (
         await suite.db.execute(
-          sql`select product_id from product_categories where product_id = ${variantId}`,
+          sql`select product_id from product_labels where product_id = ${variantId}`,
         )
       ).rows,
     ).toEqual([]);
 
     expect(
-      (await send(app, "GET", `/management-api/products/${parent.id}/categories`)).status,
+      (
+        await send(app, "PUT", `/management-api/products/${parent.id}/labels`, {
+          body: { labelIds: [label] },
+        })
+      ).status,
     ).toBe(200);
     expect(
       (
@@ -1072,7 +1329,7 @@ describe("mountCatalogueApi — products", () => {
     expect(
       (
         await send(app, "PUT", `/management-api/products/${parent.id}/categories`, {
-          body: membership,
+          body: main,
         })
       ).status,
     ).toBe(200);
@@ -1088,10 +1345,12 @@ describe("mountCatalogueApi — products", () => {
     variantId: string;
     categoryId: string;
     ownCategoryId: string;
+    labelId: string;
   }> {
     const catalogueId = await createCatalogueVia(app, "Variant page");
     const categoryId = await createCategoryVia(app, { es: `Cafés ${crypto.randomUUID()}` });
     const ownCategoryId = await createCategoryVia(app, { es: `Solos ${crypto.randomUUID()}` });
+    const labelId = await createLabelVia(app, `Cafeína ${crypto.randomUUID()}`);
     const created = await send(
       app,
       "POST",
@@ -1104,7 +1363,7 @@ describe("mountCatalogueApi — products", () => {
           description: { es: "Tostado natural" },
           unitPrice: "2.00",
           vatClass: "reduced",
-          categoryIds: [categoryId],
+          labelIds: [labelId],
           primaryCategoryId: categoryId,
           allergens: { milk: { presence: "contains" } },
           dietaryDeclarations: ["vegan"],
@@ -1124,12 +1383,18 @@ describe("mountCatalogueApi — products", () => {
     );
     expect(created.status).toBe(201);
     const parent = (await created.json()) as { id: string; variants: { id: string }[] };
-    return { parentId: parent.id, variantId: parent.variants[0]!.id, categoryId, ownCategoryId };
+    return {
+      parentId: parent.id,
+      variantId: parent.variants[0]!.id,
+      categoryId,
+      ownCategoryId,
+      labelId,
+    };
   }
 
   it("reads a variant's own page: its own names, its blanks blank, its parent's values beside", async () => {
     const app = mountApp("es-ES");
-    const { parentId, variantId, categoryId } = await parentWithVariant(app);
+    const { parentId, variantId, categoryId, labelId } = await parentWithVariant(app);
     const read = await send(app, "GET", `/management-api/products/${variantId}/editor`);
     expect(read.status).toBe(200);
     expect(await read.json()).toMatchObject({
@@ -1141,7 +1406,7 @@ describe("mountCatalogueApi — products", () => {
       description: null,
       unitPrice: "2.40",
       vatClass: null,
-      categoryIds: [],
+      labelIds: [],
       primaryCategoryId: null,
       allergens: null,
       dietaryDeclarations: null,
@@ -1151,7 +1416,7 @@ describe("mountCatalogueApi — products", () => {
         description: { es: "Tostado natural" },
         unitPrice: "2.00",
         vatClass: "reduced",
-        categoryIds: [categoryId],
+        labelIds: [labelId],
         primaryCategoryId: categoryId,
         allergens: { milk: { presence: "contains" } },
         dietaryDeclarations: ["vegan"],
@@ -1170,7 +1435,7 @@ describe("mountCatalogueApi — products", () => {
       (
         await suite.db.execute<Record<string, unknown>>(
           sql`select vat_class, unit_price, category_id, manual_allergens, station_id,
-                (select count(*) from product_categories where product_id = ${variantId}) as memberships
+                (select count(*) from product_labels where product_id = ${variantId}) as labels
               from products where id = ${variantId}`,
         )
       ).rows[0];
@@ -1180,7 +1445,7 @@ describe("mountCatalogueApi — products", () => {
       category_id: null,
       manual_allergens: null,
       station_id: null,
-      memberships: 0,
+      labels: 0,
     };
 
     const kept = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
@@ -1200,7 +1465,6 @@ describe("mountCatalogueApi — products", () => {
         ...value,
         vatClass: "general",
         unitPrice: "2.60",
-        categoryIds: [ownCategoryId],
         primaryCategoryId: ownCategoryId,
         allergens: { eggs: { presence: "contains" } },
         stationId,
@@ -1211,7 +1475,8 @@ describe("mountCatalogueApi — products", () => {
     expect(await overridden.json()).toMatchObject({
       vatClass: "general",
       unitPrice: "2.60",
-      categoryIds: [ownCategoryId],
+      primaryCategoryId: ownCategoryId,
+      labelIds: [],
       allergens: { eggs: { presence: "contains" } },
       stationId,
       courseId,
@@ -1222,7 +1487,7 @@ describe("mountCatalogueApi — products", () => {
       category_id: ownCategoryId,
       manual_allergens: JSON.stringify({ eggs: { presence: "contains" } }),
       station_id: stationId,
-      memberships: 1,
+      labels: 0,
     });
 
     const cleared = await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
@@ -1351,9 +1616,10 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
-  it("lists every variant, a removed one too, with its own price and its effective price, VAT and categories", async () => {
+  it("lists every variant, a removed one too, with its own price and its effective price, VAT, category and labels", async () => {
     const app = mountApp("es-ES");
-    const { parentId, variantId, categoryId, ownCategoryId } = await parentWithVariant(app);
+    const { parentId, variantId, categoryId, ownCategoryId, labelId } =
+      await parentWithVariant(app);
     // Café doble sets its own price (2.40, where the parent's is 2.00), and here its own VAT class
     // and category; Café corto, added Inactive, leaves all three blank.
     const own = (await (
@@ -1365,7 +1631,6 @@ describe("mountCatalogueApi — products", () => {
           body: {
             ...own,
             vatClass: "general",
-            categoryIds: [ownCategoryId],
             primaryCategoryId: ownCategoryId,
           },
         })
@@ -1409,7 +1674,7 @@ describe("mountCatalogueApi — products", () => {
           unitPrice: "2.40",
           vatClass: "general",
           primaryCategoryId: ownCategoryId,
-          categoryIds: [ownCategoryId],
+          labelIds: [labelId],
         },
       }),
       expect.objectContaining({
@@ -1420,7 +1685,7 @@ describe("mountCatalogueApi — products", () => {
           unitPrice: "2.00",
           vatClass: "reduced",
           primaryCategoryId: categoryId,
-          categoryIds: [categoryId],
+          labelIds: [labelId],
         },
       }),
     ]);
@@ -2241,7 +2506,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
         name: string;
         vatClass: string;
         pricingUnit: string;
-        categoryIds: string[];
+        categoryId: string | null;
         primaryCategoryId: string | null;
         image: string | null;
       }[]
@@ -2250,7 +2515,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
       name: "después",
       vatClass: "reduced",
       pricingUnit: "weight",
-      categoryIds: [categoryId],
+      categoryId,
       primaryCategoryId: categoryId,
       image: "pic.png",
     });
@@ -3293,7 +3558,7 @@ describe("menu-section list", () => {
   });
 });
 
-it("authors translated hierarchy and shares full membership replacement through the API", async () => {
+it("authors translated hierarchy and sets a product's main category through the API", async () => {
   const app = mountApp("en-GB");
   await suite.db.execute(sql`delete from content_languages`);
   const created = await send(app, "POST", "/management-api/categories", {
@@ -3310,7 +3575,7 @@ it("authors translated hierarchy and shares full membership replacement through 
     color: null,
   });
   expect((await send(app, "PATCH", path, { body: { parentId: category.id } })).status).toBe(400);
-  const catalogueId = await createCatalogueVia(app, "Membership menu");
+  const catalogueId = await createCatalogueVia(app, "Main category menu");
   const response = await send(app, "POST", "/management-api/products", {
     body: {
       catalogueId,
@@ -3323,28 +3588,36 @@ it("authors translated hierarchy and shares full membership replacement through 
   });
   expect(response.status).toBe(201);
   const product = (await response.json()) as { id: string };
-  const memberships = `/management-api/products/${product.id}/categories`;
+  const mainCategory = `/management-api/products/${product.id}/categories`;
   expect(
-    await (await send(app, "PUT", memberships, { body: { categoryIds: [category.id] } })).json(),
-  ).toEqual({ categoryIds: [category.id], primaryCategoryId: category.id });
+    await (
+      await send(app, "PUT", mainCategory, { body: { primaryCategoryId: category.id } })
+    ).json(),
+  ).toEqual({ primaryCategoryId: category.id });
   expect(
     ((await (await send(app, "GET", `${path}/products`)).json()) as { id: string }[]).map(
       (p) => p.id,
     ),
   ).toEqual([product.id]);
-  // Deleting a category that still has a member product CASCADES rather than refusing: the
-  // membership goes with it and the product survives, having lost its reporting category.
+  // Deleting a category that still has a product moves the product rather than refusing: a
+  // top-level category has no parent, so the product becomes Uncategorised and survives.
   expect((await send(app, "DELETE", path)).status).toBe(204);
-  expect(await (await send(app, "GET", memberships)).json()).toEqual({
-    categoryIds: [],
-    primaryCategoryId: null,
-  });
+  const [listed] = (await (
+    await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`)
+  ).json()) as { id: string; categoryId: string | null }[];
+  expect(listed).toMatchObject({ id: product.id, categoryId: null });
   expect(
-    (await send(app, "PUT", memberships, { body: { categoryIds: [] }, cookie: staffCookie }))
-      .status,
+    (
+      await send(app, "PUT", mainCategory, {
+        body: { primaryCategoryId: null },
+        cookie: staffCookie,
+      })
+    ).status,
   ).toBe(403);
   expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
-  expect((await send(app, "PUT", memberships, { body: { categoryIds: [] } })).status).toBe(200);
+  expect((await send(app, "PUT", mainCategory, { body: { primaryCategoryId: null } })).status).toBe(
+    200,
+  );
   expect((await send(app, "GET", path)).status).toBe(404);
 });
 
@@ -3587,7 +3860,7 @@ describe("catalogue routes that already refused a negative price", () => {
       soldAlone: true,
       vatClass: "general",
       variants: [variant("A", "2.00"), variant("B", "3.00")],
-      categoryIds: [],
+      labelIds: [],
       primaryCategoryId: null,
       modifiers: [],
       allergens: {},

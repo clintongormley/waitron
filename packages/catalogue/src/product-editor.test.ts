@@ -11,6 +11,7 @@ import {
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { createUnit } from "./units.js";
 import { createCategory } from "./categories.js";
+import { createLabel } from "./labels.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { useCatalogueDb } from "../test/fixtures.js";
@@ -62,7 +63,7 @@ beforeEach(async () => {
         active: true,
       },
     ],
-    categoryIds: [],
+    labelIds: [],
     primaryCategoryId: null,
     modifiers: [],
     allergens: null,
@@ -335,6 +336,7 @@ it("round-trips real category, extras and options associations in the order they
     );
     return {
       category: await createCategory(tx, { name: { en: "Drinks" } }, "en"),
+      label: await createLabel(tx, "Alcoholic"),
       sauces: await createExtraList(
         tx,
         { name: "Sauces", items: [{ productId: topping.id }] },
@@ -356,14 +358,14 @@ it("round-trips real category, extras and options associations in the order they
       catalogueId,
       {
         ...input,
-        categoryIds: [associations.category.id],
+        labelIds: [associations.label.id],
         primaryCategoryId: associations.category.id,
         modifiers: sent,
       },
       "en",
     ),
   );
-  expect(saved.categoryIds).toEqual([associations.category.id]);
+  expect(saved.labelIds).toEqual([associations.label.id]);
   expect(saved.primaryCategoryId).toBe(associations.category.id);
   expect(saved.modifiers).toEqual(sent);
   // And the same order comes back from a fresh read, not just from the save's own return value.
@@ -377,7 +379,7 @@ it("round-trips real category, extras and options associations in the order they
       catalogueId,
       {
         ...input,
-        categoryIds: [associations.category.id],
+        labelIds: [],
         primaryCategoryId: associations.category.id,
         modifiers: [sent[1]!],
       },
@@ -385,15 +387,31 @@ it("round-trips real category, extras and options associations in the order they
     ),
   );
   expect(reordered.modifiers).toEqual([sent[1]]);
+  expect(reordered.labelIds).toEqual([]);
 });
 
 it.each([
+  ["primaryCategoryId", "category.not_found", "categoryId"],
+  ["labelIds", "label.not_found", "labelId"],
+] as const)(
+  "refuses a %s naming nothing, and rolls the whole product back",
+  async (field, code, param) => {
+    const missing = crypto.randomUUID();
+    const body = { ...input, [field]: field === "labelIds" ? [missing] : missing };
+    await expect(
+      withTransaction(fx.db, (tx) => saveProductEditor(tx, null, catalogueId, body, "en")),
+    ).rejects.toMatchObject({ code, params: { [param]: missing } });
+    expect(await withTransaction(fx.db, (tx) => listProducts(tx, catalogueId))).toEqual([]);
+  },
+);
+
+it.each([
   ["unitId", "not-an-id"],
-  ["categoryIds", ["not-an-id"]],
+  ["labelIds", ["not-an-id"]],
   ["modifiers", null],
   ["variants", null],
   ["name", null],
-  ["primaryCategoryId", crypto.randomUUID()],
+  ["primaryCategoryId", "not-an-id"],
   ["image", 42],
 ] as const)("rejects malformed %s before writing", async (field, value) => {
   await expect(
@@ -462,6 +480,7 @@ describe("a variant's own page", () => {
   let parentId: string;
   let variantId: string;
   let categories: { parent: string; own: string };
+  let parentLabelId: string;
   let kgUnitId: string;
   let routing: { stationId: string; courseId: string };
   beforeEach(async () => {
@@ -480,6 +499,7 @@ describe("a variant's own page", () => {
         .returning({ id: kitchenCourses.id });
       const parentCategory = await createCategory(tx, { name: { en: "Coffee" } }, "en");
       const ownCategory = await createCategory(tx, { name: { en: "Espresso" } }, "en");
+      const parentLabel = await createLabel(tx, "Hot drinks");
       const kg = await createUnit(
         tx,
         { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
@@ -496,7 +516,7 @@ describe("a variant's own page", () => {
           image: "coffee.webp",
           active: false,
           unitId: kg.id,
-          categoryIds: [parentCategory.id],
+          labelIds: [parentLabel.id],
           primaryCategoryId: parentCategory.id,
           allergens: { milk: { presence: "contains" } },
           variants: [
@@ -520,6 +540,7 @@ describe("a variant's own page", () => {
       return {
         parent,
         parentCategory: parentCategory.id,
+        parentLabel: parentLabel.id,
         ownCategory: ownCategory.id,
         kg: kg.id,
         routing: { stationId: station!.id, courseId: course!.id },
@@ -529,6 +550,7 @@ describe("a variant's own page", () => {
     parentId = setup.parent.id;
     variantId = setup.parent.variants[0]!.id;
     categories = { parent: setup.parentCategory, own: setup.ownCategory };
+    parentLabelId = setup.parentLabel;
     kgUnitId = setup.kg;
   });
 
@@ -565,7 +587,7 @@ describe("a variant's own page", () => {
       unitId: null,
       unitPrice: "2.00",
       vatClass: null,
-      categoryIds: [],
+      labelIds: [],
       primaryCategoryId: null,
       allergens: null,
       dietaryDeclarations: null,
@@ -579,7 +601,7 @@ describe("a variant's own page", () => {
         unitPrice: "9.00",
         vatClass: "reduced",
         unitId: kgUnitId,
-        categoryIds: [categories.parent],
+        labelIds: [parentLabelId],
         primaryCategoryId: categories.parent,
         stationId: routing.stationId,
         courseId: routing.courseId,
@@ -627,7 +649,6 @@ describe("a variant's own page", () => {
       unitPrice: "2.50",
       vatClass: "general",
       unitId: input.unitId,
-      categoryIds: [categories.own],
       primaryCategoryId: categories.own,
       allergens: { eggs: { presence: "may_contain" } },
       dietaryDeclarations: ["halal"],
@@ -636,11 +657,17 @@ describe("a variant's own page", () => {
       unitPrice: "2.50",
       vatClass: "general",
       unitId: input.unitId,
-      categoryIds: [categories.own],
+      labelIds: [],
       primaryCategoryId: categories.own,
       allergens: { eggs: { presence: "may_contain" } },
       dietaryDeclarations: ["halal"],
       inherited: value.inherited,
+    });
+    expect(await storedRow(variantId)).toMatchObject({ categoryId: categories.own });
+    // A variant's labels are its parent's, so it cannot be given its own.
+    await expect(save(variantId, { ...value, labelIds: [parentLabelId] })).rejects.toMatchObject({
+      code: "product.variant_invalid",
+      params: { field: "labelIds" },
     });
     expect(await storedRow(variantId)).toMatchObject({ pricingUnit: "each" });
     const cleared = await save(variantId, value);

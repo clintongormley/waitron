@@ -59,7 +59,7 @@ it.each(["unit", "category"] as const)(
     expect(fx.focus).toHaveBeenCalledWith(kind);
     expect(fx.loadError).toHaveBeenCalledOnce();
     expect(fx.el.currentValue.name).toBe("Dirty coffee");
-    expect(kind === "unit" ? fx.el.currentValue.unitId : fx.el.currentValue.categoryIds[0]).toBe(
+    expect(kind === "unit" ? fx.el.currentValue.unitId : fx.el.currentValue.primaryCategoryId).toBe(
       saved.id,
     );
   },

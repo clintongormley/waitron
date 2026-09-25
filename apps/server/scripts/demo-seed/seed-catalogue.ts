@@ -6,11 +6,12 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
+  createLabel,
   createMenuItem,
   createMenuSection,
   createProduct,
   createUnit,
-  replaceProductCategories,
+  setProductLabels,
   setProductVariants,
   writeContentLanguages,
 } from "@waitron/catalogue";
@@ -88,7 +89,6 @@ export async function seedCatalogues(
   });
   const productsByImage = new Map<string, string>();
   const menuItemsByProduct = new Map<string, string>();
-  const categoriesByEnglishName = new Map<string, string>();
 
   const { rows: provisionedMenus } = await tx.execute<{ id: string }>(sql`
     select default_menu_id as id from zone_service_policies
@@ -108,7 +108,6 @@ export async function seedCatalogues(
     }
     for (const [categoryIndex, cat] of data.categories.entries()) {
       const category = await createCategory(tx, { name: cat.name });
-      categoriesByEnglishName.set(cat.name.en, category.id);
       if (cat.station !== null) {
         // The create op takes no station.
         await tx.execute(
@@ -191,17 +190,20 @@ export async function seedCatalogues(
   const diaId = await seedOne(MENU_DEL_DIA);
   const deliId = await seedOne(DELI_TAKEAWAY);
 
-  const coffeeId = productsByImage.get("cafe-solo.png");
-  const drinksId = categoriesByEnglishName.get("Drinks");
-  if (coffeeId === undefined || drinksId === undefined)
-    throw new Error("demo-seed: Coffee or Drinks was not created");
-  const hotDrinks = await createCategory(tx, {
-    name: { en: "Hot drinks", es: "Bebidas calientes" },
-  });
-  await replaceProductCategories(tx, coffeeId, {
-    categoryIds: [drinksId, hotDrinks.id],
-    primaryCategoryId: drinksId,
-  });
+  // Two labels that overlap, one of them crossing into a soft drink.
+  const alcoholic = await createLabel(tx, "Alcoholic");
+  const happyHour = await createLabel(tx, "Happy hour drinks");
+  const labelled: [string, string[]][] = [
+    ["negroni.png", [alcoholic.id]],
+    ["vino-tinto.png", [alcoholic.id, happyHour.id]],
+    ["cana-cerveza.png", [alcoholic.id, happyHour.id]],
+    ["refresco-cola.png", [happyHour.id]],
+  ];
+  for (const [image, labelIds] of labelled) {
+    const productId = productsByImage.get(image);
+    if (productId === undefined) throw new Error(`demo-seed: '${image}' was not created`);
+    await setProductLabels(tx, productId, labelIds);
+  }
 
   const negroniId = productsByImage.get("negroni.png");
   if (negroniId === undefined) throw new Error("demo-seed: Negroni product was not created");

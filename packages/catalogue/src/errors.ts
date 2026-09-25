@@ -12,7 +12,19 @@ declare module "@waitron/shared" {
     /** A category colour is neither null nor a lower-case `#rrggbb` string. */
     "category.color_invalid": Record<string, never>;
     "category.membership_invalid": Record<string, never>;
+    /** Not thrown: a product's main reporting category needs no membership. Kept because a shipped
+     * code is never removed. */
     "category.primary_required": Record<string, never>;
+    /**
+     * A category delete names somewhere its products or subcategories cannot go: the category being
+     * deleted, or, for `childrenTo`, a category below it.
+     */
+    "category.reassign_invalid": { field: "productsTo" | "childrenTo" };
+    /** A label name is blank or not text (`field` "name"), or a label selection is not a list of
+     * distinct ids (`field` "labelIds"). */
+    "label.invalid": { field: string };
+    "label.name_taken": { name: string };
+    "label.not_found": { labelId: string };
     /** Not thrown: deleting a category cascades instead. Kept because a shipped code is never
      * removed. */
     "category.in_use": { children: number; products: number; routes: number };

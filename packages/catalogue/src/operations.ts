@@ -10,9 +10,10 @@ import {
   stringToCents,
 } from "@waitron/shared";
 import { catalogues, categories, locationCatalogues, locations, now, products } from "@waitron/db";
-import { productCategories } from "./schema/categories.js";
+import { productLabels } from "./schema/labels.js";
 import { readContentLanguages } from "./content-languages.js";
-import { categoryIdArray, replaceProductCategories, readProductCategories } from "./categories.js";
+import { readCategory, setMainReportingCategory } from "./categories.js";
+import { labelIdArray } from "./labels.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
@@ -43,10 +44,10 @@ import {
 } from "./units.js";
 import { validateDietaryDeclarations, type DietaryLabel } from "./dietary-declarations.js";
 import {
-  categoryOwnerJoin,
   clearedPricingUnit,
   effectiveProductColumns as effective,
   isTopLevelProduct,
+  labelOwnerJoin,
   parentJoin,
   parentProducts,
   productWithId,
@@ -230,17 +231,13 @@ interface RawProduct {
 
 // `pricing_unit`/`vat_class` are constrained to their unions by a CHECK (catalogue.ts), which is
 // what makes the casts below safe.
-function toProduct(
-  row: RawProduct,
-  categoryIds: string[],
-  variants: ListedVariant[] = [],
-): Product {
+function toProduct(row: RawProduct, labelIds: string[], variants: ListedVariant[] = []): Product {
   const { unitName, unitAbbreviation, unitPrecision, hardwareUnit, ...product } = row;
   const unit = sellableUnit(row.unitId, unitName, unitPrecision, hardwareUnit, unitAbbreviation);
   return {
     ...product,
     unitPrice: centsToDecimal(row.unitPrice),
-    categoryIds,
+    labelIds,
     primaryCategoryId: row.categoryId,
     modifiers: [],
     unit,
@@ -834,34 +831,29 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
   // derivations — computed as `republishOverlays` would.
   const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
   const dietOverride = validateDietOverride(input.dietOverride ?? null);
-  const [row] = await tx
-    .insert(products)
-    .values({
-      catalogueId: input.catalogueId,
-      categoryId: null,
-      name: input.name,
-      customerName: input.customerName ?? null,
-      description: input.description ?? null,
-      kitchenName: input.kitchenName?.trim() || null,
-      dietaryDeclarations: validateDietaryDeclarations(input.dietaryDeclarations ?? []),
-      pricingUnit: selectedUnit === null ? "each" : legacyPricingUnit(selectedUnit),
-      unitPrice: stringToCents(input.unitPrice),
-      vatClass: input.vatClass,
-      active: input.active ?? true,
-      available: input.available ?? true,
-      soldAlone: input.soldAlone ?? true,
-      manualAllergens: allergens,
-      allergens: republish(allergens, null),
-      dietOverride,
-      diet: overlayDietProfile(deriveDietProfile({ origins: [], pending: true }), dietOverride),
-      image: input.image ?? null,
-    })
-    .returning({ id: products.id });
+  const values = {
+    catalogueId: input.catalogueId,
+    categoryId: input.categoryId,
+    name: input.name,
+    customerName: input.customerName ?? null,
+    description: input.description ?? null,
+    kitchenName: input.kitchenName?.trim() || null,
+    dietaryDeclarations: validateDietaryDeclarations(input.dietaryDeclarations ?? []),
+    pricingUnit: selectedUnit === null ? "each" : legacyPricingUnit(selectedUnit),
+    unitPrice: stringToCents(input.unitPrice),
+    vatClass: input.vatClass,
+    active: input.active ?? true,
+    available: input.available ?? true,
+    soldAlone: input.soldAlone ?? true,
+    manualAllergens: allergens,
+    allergens: republish(allergens, null),
+    dietOverride,
+    diet: overlayDietProfile(deriveDietProfile({ origins: [], pending: true }), dietOverride),
+    image: input.image ?? null,
+  };
+  if (input.categoryId !== null) await readCategory(tx, input.categoryId);
+  const [row] = await tx.insert(products).values(values).returning({ id: products.id });
   if (selectedUnit !== null) await assignProductUnit(tx, row!.id, selectedUnit.id);
-  const membership = await replaceProductCategories(tx, row!.id, {
-    categoryIds: input.categoryId === null ? [] : [input.categoryId],
-    primaryCategoryId: input.categoryId,
-  });
   const [created] = await tx
     .select(PRODUCT_COLUMNS)
     .from(products)
@@ -869,23 +861,21 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
     .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
     .where(eq(products.id, row!.id));
-  return toProduct(
-    { ...created!, categoryId: membership.primaryCategoryId },
-    membership.categoryIds,
-  );
+  // Created just now, so it carries no labels yet.
+  return toProduct(created!, []);
 }
 
 export async function listProducts(tx: Transaction, catalogueId?: string): Promise<Product[]> {
   const rows = await tx
     .select({
       ...PRODUCT_COLUMNS,
-      categoryIds: categoryIdArray,
+      labelIds: labelIdArray,
     })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
-    .leftJoin(productCategories, categoryOwnerJoin)
+    .leftJoin(productLabels, labelOwnerJoin)
     .where(
       and(
         isTopLevelProduct,
@@ -905,7 +895,7 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
     rows.map((row) => row.id),
   );
   return rows.map((row) => ({
-    ...toProduct(row, row.categoryIds, variantsByProduct.get(row.id) ?? []),
+    ...toProduct(row, row.labelIds, variantsByProduct.get(row.id) ?? []),
     modifiers: modifiers.get(row.id) ?? [],
   }));
 }
@@ -930,11 +920,11 @@ async function listedVariantsOfProducts(
       unitPrice: effective.unitPrice,
       vatClass: effective.vatClass,
       primaryCategoryId: effective.categoryId,
-      categoryIds: categoryIdArray,
+      labelIds: labelIdArray,
     })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
-    .leftJoin(productCategories, categoryOwnerJoin)
+    .leftJoin(productLabels, labelOwnerJoin)
     .where(inArray(products.parentId, [...productIds]))
     .groupBy(products.id)
     .orderBy(products.parentId, products.variantOrder, products.id);
@@ -945,7 +935,7 @@ async function listedVariantsOfProducts(
     unitPrice,
     vatClass,
     primaryCategoryId,
-    categoryIds,
+    labelIds,
     ...row
   } of rows) {
     const held = grouped.get(parentId!) ?? [];
@@ -956,7 +946,7 @@ async function listedVariantsOfProducts(
         unitPrice: centsToDecimal(unitPrice),
         vatClass: vatClass as VatClass,
         primaryCategoryId,
-        categoryIds,
+        labelIds,
       },
     });
     grouped.set(parentId!, held);
@@ -987,18 +977,7 @@ export async function updateProduct(
     unitPrice,
     ...rest
   } = patch;
-  if (categoryId !== undefined) {
-    // Deliberately keeps the legacy coupling of reporting category and membership, unlike
-    // `replaceProductCategories`: no first-party caller sends `categoryId` here any more.
-    // See docs/developers/product-categories.md.
-    const current = await readProductCategories(tx, id);
-    if (categoryId === null && current.categoryIds.length > 1)
-      throw new AppError("category.primary_required", {});
-    await replaceProductCategories(tx, id, {
-      categoryIds: categoryId === null ? [] : [...new Set([...current.categoryIds, categoryId])],
-      primaryCategoryId: categoryId,
-    });
-  }
+  if (categoryId !== undefined) await setMainReportingCategory(tx, id, categoryId);
   if (allergens != null) validateAllergens(allergens);
   if (dietOverride !== undefined) validateDietOverride(dietOverride);
   const directDietary =

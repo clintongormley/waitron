@@ -1,12 +1,13 @@
 import { eq } from "drizzle-orm";
 import { catalogues, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { categoryIdArray, replaceProductCategories } from "./categories.js";
+import { setMainReportingCategory } from "./categories.js";
 import { validateContentTranslations } from "./content-languages.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import { createProduct, updateProduct } from "./operations.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
-import { productCategories } from "./schema/categories.js";
+import { labelIdArray, setProductLabels } from "./labels.js";
+import { productLabels } from "./schema/labels.js";
 import { productUnits } from "./schema/units.js";
 import { priceOrNull } from "./offer-price.js";
 import { productWithId } from "./variant-fallback.js";
@@ -18,7 +19,8 @@ export type { InheritedValues, ProductEditorValue } from "./product-types.js";
 import type { VatClass } from "./pricing.js";
 import "./errors.js";
 
-/** The row as stored: a variant's blanks read blank here, never as its parent's. */
+/** The row as stored: a variant's blanks read blank here, never as its parent's. A variant stores no
+ * labels, so its `labelIds` is empty and its parent's are in `inherited`. */
 const columns = {
   id: products.id,
   parentId: products.parentId,
@@ -38,7 +40,7 @@ const columns = {
   courseId: products.courseId,
   unitId: productUnits.unitId,
   primaryCategoryId: products.categoryId,
-  categoryIds: categoryIdArray,
+  labelIds: labelIdArray,
 };
 
 /** The row as stored, and beside it the PUBLISHED allergens (the manual overlay merged with the
@@ -49,7 +51,7 @@ async function readStored(tx: Transaction, productId: string) {
     .select({ ...columns, publishedAllergens: products.allergens })
     .from(products)
     .leftJoin(productUnits, eq(productUnits.productId, products.id))
-    .leftJoin(productCategories, eq(productCategories.productId, products.id))
+    .leftJoin(productLabels, eq(productLabels.productId, products.id))
     .where(eq(products.id, productId))
     .groupBy(products.id);
   if (!row) throw new AppError("product.not_found", { productId });
@@ -78,7 +80,7 @@ async function readInherited(tx: Transaction, parentId: string): Promise<Inherit
     unitPrice: parent.unitPrice!,
     vatClass: parent.vatClass!,
     unitId: parent.unitId,
-    categoryIds: parent.categoryIds,
+    labelIds: parent.labelIds,
     primaryCategoryId: parent.primaryCategoryId,
     stationId: parent.stationId,
     courseId: parent.courseId,
@@ -187,13 +189,9 @@ export async function saveProductEditor(
     });
   }
   // The row is known here (found above, or just created), so the scope only has to admit a variant.
-  await replaceProductCategories(
-    tx,
-    productId,
-    { categoryIds: value.categoryIds, primaryCategoryId: value.primaryCategoryId },
-    "any",
-  );
+  await setMainReportingCategory(tx, productId, value.primaryCategoryId, "any");
   if (!isVariant) {
+    await setProductLabels(tx, productId, value.labelIds);
     await setProductVariants(tx, productId, value.variants, fallbackLanguage);
     await writeProductModifiers(tx, productId, value.modifiers);
   }

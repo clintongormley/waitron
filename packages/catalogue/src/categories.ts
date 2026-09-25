@@ -1,10 +1,16 @@
 import { categories, now, products, type Transaction } from "@waitron/db";
 import { AppError, FALLBACK_LOCALE, isUuid } from "@waitron/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
-import { categoryDetails, productCategories } from "./schema/categories.js";
+import { categoryDetails } from "./schema/categories.js";
+import { productLabels } from "./schema/labels.js";
 import { validateContentTranslations } from "./content-languages.js";
-import { isTopLevelProduct, productWithId, type ProductScope } from "./variant-fallback.js";
+import { labelIdArray } from "./labels.js";
+import {
+  isTopLevelProduct,
+  labelOwnerJoin,
+  productWithId,
+  type ProductScope,
+} from "./variant-fallback.js";
 import "./errors.js";
 
 export interface Category {
@@ -20,26 +26,12 @@ export interface CategoryInput {
   color?: string | null;
   parentId?: string | null;
 }
-export interface ProductCategoryMembership {
-  categoryIds: string[];
-  primaryCategoryId: string | null;
+/** Where a deleted category's products and direct children go. An absent key takes the default: the
+ * deleted category's parent, which for a top-level category is none (Uncategorised, or the top level). */
+export interface CategoryReassignment {
+  productsTo?: string | null;
+  childrenTo?: string | null;
 }
-export interface ProductCategoryInput {
-  categoryIds: string[];
-  primaryCategoryId?: string | null;
-}
-/**
- * A product's category ids, gathered in one column and decoded to an array.
- *
- * The driver hands back the JSON TEXT `json_group_array` built, never a JavaScript array — the
- * `.mapWith` parses it. With the `filter` removing every row the aggregate returns the string `[]`,
- * not null. The filter is there because a product with no membership reaches this through a left
- * join and would otherwise gather one null.
- */
-export const categoryIdArray =
-  sql`json_group_array(${productCategories.categoryId} order by ${productCategories.categoryId}) filter (where ${productCategories.categoryId} is not null)`.mapWith(
-    (value: string): string[] => JSON.parse(value) as string[],
-  );
 
 const columns = {
   id: categories.id,
@@ -50,7 +42,7 @@ const columns = {
 };
 
 /*
- * Hierarchy edits, membership replacement and deletion take no lock: `withTransaction`
+ * Hierarchy edits, main-category changes and deletion take no lock: `withTransaction`
  * (`packages/db/src/tenancy.ts`) runs its body inside the venue file's write queue, which admits
  * one write transaction at a time (`packages/store/src/write-queue.ts`), so two of these paths
  * cannot overlap however they are started. Receipt: `racePair` in
@@ -153,19 +145,43 @@ export async function updateCategory(
     });
   return readCategory(tx, id);
 }
-export async function deleteCategory(tx: Transaction, id: string): Promise<void> {
+/** Every category below `id` in the tree, at any depth; not `id` itself. */
+async function descendantsOf(tx: Transaction, id: string): Promise<Set<string>> {
+  const { rows } = await tx.execute<{ id: string }>(sql`
+    with recursive below(id) as (
+      select category_id from category_details where parent_id = ${id}
+      union
+      select d.category_id from category_details d join below on d.parent_id = below.id
+    )
+    select id from below`);
+  return new Set(rows.map((row) => row.id));
+}
+export async function deleteCategory(
+  tx: Transaction,
+  id: string,
+  reassign: CategoryReassignment = {},
+): Promise<void> {
   const category = await readCategory(tx, id); // 404s an absent id
+  const productsTo = reassign.productsTo === undefined ? category.parentId : reassign.productsTo;
+  const childrenTo = reassign.childrenTo === undefined ? category.parentId : reassign.childrenTo;
+  if (productsTo === id) throw new AppError("category.reassign_invalid", { field: "productsTo" });
+  if (childrenTo === id) throw new AppError("category.reassign_invalid", { field: "childrenTo" });
+  if (productsTo !== null) await readCategory(tx, productsTo);
+  if (childrenTo !== null) {
+    await readCategory(tx, childrenTo);
+    if ((await descendantsOf(tx, id)).has(childrenTo))
+      throw new AppError("category.reassign_invalid", { field: "childrenTo" });
+  }
   // No lock: one write transaction runs on the venue file at a time, so no concurrent route insert
   // can slip between these steps; see the note above `listCategories`.
-  await tx.delete(productCategories).where(eq(productCategories.categoryId, id));
   await tx
     .update(products)
-    .set({ categoryId: null, updatedAt: now() })
+    .set({ categoryId: productsTo, updatedAt: now() })
     .where(eq(products.categoryId, id));
-  // Reparent direct children to this category's own parent (clears the RESTRICT parent FK).
+  // Clears the RESTRICT parent key before the delete below.
   await tx
     .update(categoryDetails)
-    .set({ parentId: category.parentId })
+    .set({ parentId: childrenTo })
     .where(eq(categoryDetails.parentId, id));
   if (await tablePresent(tx, "preparation_routes"))
     await tx.execute(sql`delete from preparation_routes where category_id = ${id}`);
@@ -173,7 +189,8 @@ export async function deleteCategory(tx: Transaction, id: string): Promise<void>
   await tx.delete(categories).where(eq(categories.id, id));
 }
 export interface CategoryDependants {
-  products: { id: string; name: string; reporting: boolean }[];
+  /** Every product, variants included, whose OWN main category is this one. */
+  products: { id: string; name: string }[];
   children: { id: string; name: Record<string, string> }[];
   parentId: string | null;
   routes: { id: string; station: string | null; zone: string | null }[];
@@ -182,12 +199,9 @@ export interface CategoryDependants {
 export async function categoryDependants(tx: Transaction, id: string): Promise<CategoryDependants> {
   const category = await readCategory(tx, id); // 404s an absent id
   const productRows = await tx
-    .select({ id: products.id, name: products.name, primary: products.categoryId })
+    .select({ id: products.id, name: products.name })
     .from(products)
-    .innerJoin(
-      productCategories,
-      and(eq(productCategories.productId, products.id), eq(productCategories.categoryId, id)),
-    )
+    .where(eq(products.categoryId, id))
     .orderBy(products.id);
   const childRows = await tx
     .select({ id: categories.id, name: categories.name })
@@ -212,76 +226,37 @@ export async function categoryDependants(tx: Transaction, id: string): Promise<C
     routes.push(...routeRows.rows);
   }
   return {
-    products: productRows.map((p) => ({ id: p.id, name: p.name, reporting: p.primary === id })),
+    products: productRows,
     children: childRows,
     parentId: category.parentId,
     routes,
   };
 }
-/** A product's OWN memberships: a variant with none inherits its parent's. */
-export async function readProductCategories(
+/**
+ * Set a product's main reporting category: any category, or null for Uncategorised. On a variant
+ * (reached only with scope `"any"`) null means it follows its parent's.
+ */
+export async function setMainReportingCategory(
   tx: Transaction,
   productId: string,
+  categoryId: string | null,
   scope: ProductScope = "top-level",
-): Promise<ProductCategoryMembership> {
+): Promise<{ primaryCategoryId: string | null }> {
   const [product] = await tx
-    .select({
-      primaryCategoryId: products.categoryId,
-      categoryIds: categoryIdArray,
-    })
+    .select({ id: products.id })
     .from(products)
-    .leftJoin(productCategories, eq(productCategories.productId, products.id))
-    .where(productWithId(productId, scope))
-    .groupBy(products.id);
+    .where(productWithId(productId, scope));
   if (!product) throw new AppError("product.not_found", { productId });
-  return product;
-}
-/** Replace a product's own memberships; on a variant, an empty set returns it to inheriting. */
-export async function replaceProductCategories(
-  tx: Transaction,
-  productId: string,
-  input: ProductCategoryInput,
-  scope: ProductScope = "top-level",
-): Promise<ProductCategoryMembership> {
-  const current = await readProductCategories(tx, productId, scope);
-  if (
-    !Array.isArray(input.categoryIds) ||
-    new Set(input.categoryIds).size !== input.categoryIds.length
-  )
-    throw new AppError("category.membership_invalid", {});
-  for (const id of input.categoryIds) await readCategory(tx, id);
-  // A reporting category is optional. When omitted, keep a surviving current one, fall back to the
-  // first submitted id only when there was none, and otherwise leave it cleared.
-  let primary = input.primaryCategoryId;
-  if (primary === undefined) {
-    if (!input.categoryIds.length) primary = null;
-    else if (current.primaryCategoryId === null) primary = input.categoryIds[0]!;
-    else if (input.categoryIds.includes(current.primaryCategoryId))
-      primary = current.primaryCategoryId;
-    else primary = null;
-  }
-  // Covers a primary sent with an EMPTY set too: nothing is in an empty array, so the `includes`
-  // check below is what rejects that case.
-  if (primary !== null && !input.categoryIds.includes(primary))
-    throw new AppError("category.membership_invalid", {});
-  await tx.delete(productCategories).where(eq(productCategories.productId, productId));
-  if (input.categoryIds.length)
-    await tx
-      .insert(productCategories)
-      .values(input.categoryIds.map((categoryId) => ({ productId, categoryId })));
+  if (categoryId !== null) await readCategory(tx, categoryId);
   await tx
     .update(products)
-    .set({ categoryId: primary, updatedAt: now() })
-    .where(eq(products.id, productId));
-  return { categoryIds: [...input.categoryIds].sort(), primaryCategoryId: primary };
+    .set({ categoryId, updatedAt: now() })
+    .where(eq(products.id, product.id));
+  return { primaryCategoryId: categoryId };
 }
 /**
- * Add many products to one category. A product with no reporting category gets this one; a product
- * that already has one keeps it. Resubmitting a product that is already a member is safe — it never
- * fails and never duplicates the membership — but it is not a no-op: the reporting category is
- * chosen from the product's own current value, not from whether the membership is new, so an
- * existing member that still has no reporting category is given this one. Only an existing member
- * that already has a reporting category comes out unchanged.
+ * Make this category the main category of every listed product, moving each from wherever it was.
+ * Resubmitting a product already here is safe and changes nothing but its `updated_at`.
  */
 export async function addProductsToCategory(
   tx: Transaction,
@@ -296,39 +271,45 @@ export async function addProductsToCategory(
   // refused before anything is written rather than part-way through a loop: a repeat leaves the
   // count short exactly as an absent id does.
   const found = await tx
-    .select({ id: products.id, primaryCategoryId: products.categoryId })
+    .select({ id: products.id })
     .from(products)
     .where(and(inArray(products.id, productIds), isTopLevelProduct));
   if (found.length !== productIds.length) throw new AppError("category.membership_invalid", {});
   await tx
-    .insert(productCategories)
-    .values(productIds.map((productId) => ({ productId, categoryId })))
-    .onConflictDoNothing();
-  const needReporting = found.filter((p) => p.primaryCategoryId === null).map((p) => p.id);
-  if (needReporting.length)
-    await tx
-      .update(products)
-      .set({ categoryId, updatedAt: now() })
-      .where(inArray(products.id, needReporting));
+    .update(products)
+    .set({ categoryId, updatedAt: now() })
+    .where(inArray(products.id, productIds));
 }
-export async function listCategoryProducts(tx: Transaction, categoryId: string) {
+export interface CategoryProduct {
+  id: string;
+  name: string;
+  active: boolean;
+  primaryCategoryId: string | null;
+  labelIds: string[];
+}
+/**
+ * The top-level products whose main category is this one — or, with `includeDescendants`, this one
+ * or any category below it.
+ */
+export async function listCategoryProducts(
+  tx: Transaction,
+  categoryId: string,
+  opts: { includeDescendants?: boolean } = {},
+): Promise<CategoryProduct[]> {
   await readCategory(tx, categoryId);
-  const selected = alias(productCategories, "selected_membership");
-  const rows = await tx
+  const ids = [categoryId];
+  if (opts.includeDescendants) ids.push(...(await descendantsOf(tx, categoryId)));
+  return tx
     .select({
       id: products.id,
       name: products.name,
       active: products.active,
       primaryCategoryId: products.categoryId,
-      categoryIds: categoryIdArray,
+      labelIds: labelIdArray,
     })
     .from(products)
-    .innerJoin(
-      selected,
-      and(eq(selected.productId, products.id), eq(selected.categoryId, categoryId)),
-    )
-    .innerJoin(productCategories, eq(productCategories.productId, products.id))
+    .leftJoin(productLabels, labelOwnerJoin)
+    .where(and(inArray(products.categoryId, ids), isTopLevelProduct))
     .groupBy(products.id)
     .orderBy(products.id);
-  return rows;
 }

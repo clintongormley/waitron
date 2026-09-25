@@ -48,7 +48,7 @@ beforeEach(async () => {
       available: true,
       vatClass: "reduced",
       variants: [],
-      categoryIds: [],
+      labelIds: [],
       primaryCategoryId: null,
       modifiers: [],
       allergens: null,

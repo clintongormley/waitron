@@ -233,12 +233,7 @@ describe("category dependants and bulk add", () => {
     expect(
       (await send(app, "POST", path, v.managerCookie, { productIds: [first, second] })).status,
     ).toBe(204);
-    const members = await suite.db.execute<{ product_id: string }>(
-      sql`select product_id from product_categories
-          where category_id = ${categoryId} order by product_id`,
-    );
-    expect(members.rows.map((r) => r.product_id)).toEqual([first, second].sort());
-    // Neither product had a reporting category, so each took this one.
+    // Each product's main category is now this one.
     const reporting = await suite.db.execute<{ category_id: string | null }>(
       sql`select category_id from products
           where id in (${first}, ${second})`,

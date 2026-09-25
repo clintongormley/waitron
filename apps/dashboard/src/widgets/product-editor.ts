@@ -20,11 +20,11 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "./allergen-dietary-picker.js";
-import "./category-membership-picker.js";
 import "./image-upload.js";
 import "./variant-form.js";
 import "./variant-table.js";
 import { categoryPath } from "./category-form.js";
+import { categoryField, labelsField, labelsText } from "./classification-fields.js";
 import {
   nonBlankNames,
   optionalTextFields,
@@ -35,7 +35,7 @@ import {
 } from "./form-fields.js";
 import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
-import type { CategorySummary, DashboardApi, ProductCategories } from "../api/client.js";
+import type { CategorySummary, DashboardApi, Label } from "../api/client.js";
 import type { ProductModifierRef } from "@waitron/catalogue/src/product-types.js";
 import type {
   EditorVariant,
@@ -98,8 +98,8 @@ const SERVER_FIELDS: Record<string, string> = {
   unitId: "unit",
   unitPrice: "unit-price",
   vatClass: "tax",
-  categoryIds: "primary",
   primaryCategoryId: "primary",
+  labelIds: "labels",
   active: "active",
 };
 
@@ -159,7 +159,7 @@ function emptyDraft(): ProductEditorDraft {
     soldAlone: true,
     vatClass: "general",
     variants: [],
-    categoryIds: [],
+    labelIds: [],
     primaryCategoryId: null,
     modifiers: [],
     allergens: null,
@@ -253,31 +253,6 @@ export class ProductEditor extends LitElement {
         margin: 0;
         color: var(--wt-color-text-muted);
       }
-      /* A chip is the lozenge's tap target, so the BUTTON carries the minimum size rather than
-         stretching something inside it past its own box. */
-      .chip {
-        display: inline-flex;
-        align-items: center;
-        min-width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        padding: 0;
-        border: 0;
-        background: transparent;
-        color: var(--wt-color-text);
-        font: inherit;
-        cursor: pointer;
-      }
-      .chip:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-      /* The reporting category is marked by a RING, not by its colour: a category's colour is
-         optional, so a colour-only rule leaves two identical chips whenever the reporting one has
-         none. The ring is drawn on the lozenge so it follows the pill rather than the 44px button. */
-      .chip.reporting wt-lozenge {
-        border-radius: var(--wt-radius-full);
-        box-shadow: 0 0 0 2px var(--wt-color-primary);
-      }
       textarea {
         box-sizing: border-box;
         width: 100%;
@@ -338,6 +313,7 @@ export class ProductEditor extends LitElement {
   @property({ attribute: false }) value: ProductEditorDraft | null = null;
   @property({ attribute: false }) units: UnitChoice[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
+  @property({ attribute: false }) labels: Label[] = [];
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   @property({ attribute: false }) stations: ProductRoutingChoice[] = [];
@@ -353,9 +329,6 @@ export class ProductEditor extends LitElement {
   @state() private errors: Record<string, string> = {};
   @state() private imageOpen = false;
   @state() private unitPickerOpen = false;
-  /** The memberships the categories modal opened with. Non-null exactly while it is open, and a
-   * stable object so the picker's own draft is not reseeded by an unrelated re-render. */
-  @state() private categoriesValue: ProductCategories | null = null;
   @state() private variantOpen = false;
   /** Which variant the variant window is editing, or null while it is adding a new one. */
   @state() private variantIndex: number | null = null;
@@ -392,7 +365,6 @@ export class ProductEditor extends LitElement {
       this.errors = {};
       this.submitted = false;
       this.unitPickerOpen = false;
-      this.categoriesValue = null;
       this.variantOpen = false;
       this.variantIndex = null;
       this.#variantProblems = new Map();
@@ -443,13 +415,7 @@ export class ProductEditor extends LitElement {
     return structuredClone(this.draft);
   }
   private get suspended() {
-    return (
-      this.busy ||
-      this.childOpen ||
-      this.imageOpen ||
-      this.variantOpen ||
-      this.categoriesValue !== null
-    );
+    return this.busy || this.childOpen || this.imageOpen || this.variantOpen;
   }
   private error(name: string) {
     return this.fieldErrors[name] ?? this.errors[name] ?? "";
@@ -565,13 +531,7 @@ export class ProductEditor extends LitElement {
   /** A nested create returns through the composing screen, without reseeding the product. */
   selectRelated(kind: ProductChildKind, id: string): void {
     if (kind === "unit") this.change("unitId", id);
-    if (kind === "category" && !this.draft.categoryIds.includes(id)) {
-      this.draft = {
-        ...this.draft,
-        categoryIds: [...this.draft.categoryIds, id],
-        primaryCategoryId: this.draft.primaryCategoryId ?? id,
-      };
-    }
+    if (kind === "category") this.change("primaryCategoryId", id);
     if (kind === "extras" || kind === "options") {
       if (this.draft.modifiers.some((ref) => ref.kind === kind && ref.id === id)) return;
       this.change("modifiers", [...this.draft.modifiers, { kind, id }]);
@@ -591,11 +551,6 @@ export class ProductEditor extends LitElement {
     // first entry is the field focus lands in.
     const errors: Record<string, string> = {};
     if (!this.draft.name.trim()) errors.name = t("editor.name_required");
-    if (
-      this.draft.primaryCategoryId !== null &&
-      !this.draft.categoryIds.includes(this.draft.primaryCategoryId)
-    )
-      errors.primary = t("editor.reporting_category_invalid");
     const variantPage = this.inherited !== null;
     // On a variant a blank VAT class and a blank price read the parent's; set, they must be valid.
     const blankPrice = !(this.draft.unitPrice ?? "").trim();
@@ -637,15 +592,6 @@ export class ProductEditor extends LitElement {
     this.dispatchEvent(new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }));
   }
 
-  private openCategories(event: Event) {
-    event.stopPropagation();
-    if (this.suspended) return;
-    this.categoriesValue = {
-      categoryIds: [...this.draft.categoryIds],
-      primaryCategoryId: this.draft.primaryCategoryId,
-    };
-  }
-
   private addVariant(event: Event) {
     event.stopPropagation();
     if (this.suspended) return;
@@ -675,39 +621,28 @@ export class ProductEditor extends LitElement {
     this.change("variants", variants);
   }
 
+  /** The main category and the labels. A variant's empty main category reads as its parent's, which
+   * the combobox names as its empty choice, like a select's "Same as" option. A variant has no labels
+   * of its own, so its page shows the parent's as a hint. */
   private renderCategories() {
-    const chips = this.draft.categoryIds.map((id) => ({
-      id,
-      reporting: id === this.draft.primaryCategoryId,
-      color: this.categories.find((category) => category.id === id)?.color ?? "",
-      path: this.categoryLabel(id),
-    }));
+    const parent = this.inherited;
+    const parentCategory = parent?.primaryCategoryId
+      ? this.categoryLabel(parent.primaryCategoryId)
+      : null;
     return html`<div class="group" data-section="categories">
-      <span class="group-label">${t("editor.categories")}</span>
-      <div class="chips">
-        ${chips.map(
-          (chip) =>
-            html`<button
-              type="button"
-              class=${chip.reporting ? "chip reporting" : "chip"}
-              data-test="category-chip"
-              data-category=${chip.id}
-              aria-label=${`${chip.reporting ? t("editor.reporting_category") : t("editor.choose_categories")}: ${chip.path}`}
-              ?disabled=${this.suspended}
-              @click=${this.openCategories}
-            >
-              <wt-lozenge color=${chip.color}>${chip.path}</wt-lozenge>
-            </button>`,
-        )}
-        <wt-button
-          shape="round"
-          variant="secondary"
-          data-test="pick-categories"
-          aria-label=${t("editor.choose_categories")}
-          ?disabled=${this.suspended}
-          @click=${this.openCategories}
-          ><wt-icon name="plus"></wt-icon
-        ></wt-button>
+      <span class="group-label">${t("editor.classification")}</span>
+      ${categoryField({
+        name: "primary",
+        label: t("editor.main_category"),
+        categories: this.categories,
+        languages: currentContentLanguages(),
+        value: this.draft.primaryCategoryId,
+        noneLabel: parent ? this.sameAs(parentCategory) : t("categories.uncategorised"),
+        error: this.error("primary"),
+        disabled: this.suspended,
+        change: (id) => this.change("primaryCategoryId", id),
+      })}
+      <div class="row">
         <wt-button
           variant="secondary"
           data-test="add-category"
@@ -716,21 +651,23 @@ export class ProductEditor extends LitElement {
           >${t("editor.add_category")}</wt-button
         >
       </div>
-      ${this.categoriesHint()}
-      <span class="error" id="primary-error">${this.error("primary")}</span>
+      ${
+        parent
+          ? this.hint(
+              "labels-hint",
+              `${t("labels.field")}: ${this.sameAs(
+                labelsText(parent.labelIds, this.labels, t("editor.missing_choice")),
+              )}`,
+            )
+          : labelsField({
+              labels: this.labels,
+              value: this.draft.labelIds,
+              error: this.error("labels"),
+              disabled: this.suspended,
+              change: (ids) => this.change("labelIds", ids),
+            })
+      }
     </div>`;
-  }
-
-  /** A variant with no categories of its own is in its parent's, reporting category included, so
-   * the two are named together. */
-  private categoriesHint() {
-    const parent = this.inherited;
-    if (!parent || this.draft.categoryIds.length) return nothing;
-    const list = parent.categoryIds.map((id) => this.categoryLabel(id)).join(", ");
-    const reporting = parent.primaryCategoryId
-      ? `${SUMMARY_SEPARATOR}${t("editor.reporting_category")}: ${this.categoryLabel(parent.primaryCategoryId)}`
-      : "";
-    return this.hint("categories-hint", `${this.sameAs(list)}${reporting}`);
   }
 
   private renderKitchen() {
@@ -1386,36 +1323,7 @@ export class ProductEditor extends LitElement {
           event.stopPropagation();
           this.closeVariant();
         }}
-      ></dashboard-variant-form>
-      ${
-        this.categoriesValue
-          ? html`<wt-modal
-              .open=${true}
-              heading=${t("editor.categories")}
-              @wt-close=${(event: Event) => {
-                if (event.target === event.currentTarget) this.categoriesValue = null;
-              }}
-              ><dashboard-category-membership-picker
-                .categories=${this.categories}
-                .languages=${currentContentLanguages()}
-                .value=${this.categoriesValue}
-                @wt-submit=${(event: CustomEvent<{ value: ProductCategories }>) => {
-                  event.stopPropagation();
-                  this.draft = {
-                    ...this.draft,
-                    categoryIds: [...event.detail.value.categoryIds],
-                    primaryCategoryId: event.detail.value.primaryCategoryId,
-                  };
-                  this.categoriesValue = null;
-                }}
-                @wt-cancel=${(event: Event) => {
-                  event.stopPropagation();
-                  this.categoriesValue = null;
-                }}
-              ></dashboard-category-membership-picker
-            ></wt-modal>`
-          : nothing
-      }`;
+      ></dashboard-variant-form>`;
   }
 }
 

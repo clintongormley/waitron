@@ -59,6 +59,16 @@ it.each([
   ["getOptionList", ["o1"], ["option_lists", "option_labels"]],
   ["listExtraLists", [], ["extra_lists", "extra_list_items"]],
   ["getExtraList", ["e1"], ["extra_lists", "extra_list_items"]],
+  // A label's product count is read from `product_labels` (`listLabels`, packages/catalogue/src/labels.ts).
+  ["listLabels", [], ["labels", "product_labels"]],
+  ["getProductLabels", ["p1"], ["products", "product_labels"]],
+  ["listLibraryProducts", [], ["products", "product_labels"]],
+  // "Below it too" walks `category_details`' parent links (`listCategoryProducts`, categories.ts).
+  [
+    "listCategoryProducts",
+    ["c1", { includeDescendants: true }],
+    ["categories", "category_details", "products", "product_labels"],
+  ],
 ] as const)(
   "subscribes %s to exactly the tables its read selects from",
   async (name, args, types) => {

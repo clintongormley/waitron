@@ -38,19 +38,25 @@ sees, and filling in a kitchen name does not change what the diner reads.
 
 You can also add a customer-facing description and a picture, both under **Descriptors**.
 
-## Organise the product without changing its route
+## Give the product a main category and labels
 
-A product can appear in several categories. You may choose one of them as its **Reporting
-Category**, which supplies the single category recorded for reporting, so the same sale is not
-counted once for every category membership. A product left without a Reporting Category records no
-reporting label at all on its new order lines, and none of its memberships contributes a kitchen
-route on its own — the category route is simply absent rather than falling back to any one
-membership.
+Each product has one **Main category**, chosen under **Category and labels** in the product editor.
+Categories form a tree, so the field shows each category's full path. Leave it empty and the product
+is Uncategorised. The main category also plays a part in choosing the kitchen station a dish goes to,
+as described below.
 
-Extra category memberships help people find and organise the product. They do not create extra
-kitchen destinations. Use the product's station and course fields, under **Kitchen**, to keep the
-existing preparation routing behavior. They save with the product now, so you can set them while
-creating it, and cancelling the editor leaves them as they were.
+Labels are for the groupings a single tree cannot hold, such as **Alcoholic** or **Happy hour
+drinks**, which cut across your categories and can overlap each other. A product can carry any
+number of labels, or none. A label's name is for staff and is not translated, so it reads the same
+in every language. You create, rename and delete labels on the **Labels** tab of the **Categories**
+screen, and choose a product's labels in the same editor section as its main category. Labels never
+decide where a dish is prepared.
+
+Use the product's **Kitchen station** and **Default course** fields, under **Kitchen**, for its
+preparation routing. They save with the product, so you can set them while creating it, and
+cancelling the editor leaves them as they were. When a dish is sent to the kitchen, a service route
+set for the product or for its main category comes first. After that comes the product's own
+**Kitchen station**, then its main category's station, then the venue's default station.
 
 You can create a unit, a category, an extras list or an options list without abandoning a product
 you are editing. Open the nested form, save the new item and select it when you return. The unsaved
@@ -79,13 +85,15 @@ arrow keys. Each row's **Available** switch marks the variant sold out or back o
 offers **Open**, **Edit** and **Remove**. **Edit** reopens the small window. Changes you make in the
 table, including the Available switch, are saved when you save the product.
 
-**Open** takes you to the variant's own page, where it can have its own VAT, categories, allergens
-and the other product details. Apart from the names, each detail you leave blank there shows the
-product's value greyed out as a hint, and the variant uses the product's value. The description
-works as one value across all languages: to use the product's description, leave every language of
-the description blank. Once you write the description in one language, the variant uses only its
-own description, and the languages you left blank stay blank. The page has no
-Modifiers or Variants section, because a variant always uses its product's extras and options lists.
+**Open** takes you to the variant's own page, where it can have its own VAT, main category,
+allergens and the other product details. Apart from the names, each detail you leave blank there
+shows the product's value greyed out as a hint, and the variant uses the product's value. The
+description works as one value across all languages: to use the product's description, leave every
+language of the description blank. Once you write the description in one language, the variant uses
+only its own description, and the languages you left blank stay blank. A variant has no labels of
+its own: its page shows the product's labels as a hint, and it carries the product's labels. The
+page has no Modifiers or Variants section, because a variant always uses its product's extras and
+options lists.
 **Open** appears once the variant has been saved, and it waits while the product has unsaved
 changes, because leaving the product would lose them: save the product first.
 
@@ -98,10 +106,11 @@ You cannot add or restore an Active variant on a product that an extras list off
 product with Active variants cannot be an extra. The save is refused, and the dashboard names the
 extras lists to take the product off first.
 
-The products list shows each variant under its product, with its own name, the price it sells at and
-its categories. If a variant's VAT differs from its product's, the list notes it under the variant's
-price. A variant's row menu offers **Remove** or **Restore** there too, and an Inactive variant is
-listed once you change the **Status** filter from **Active**.
+The products list shows each variant under its product, with its own name, the price it sells at,
+its main category (its own, or the product's when it has none) and the product's labels. If a
+variant's VAT differs from its product's, the list notes it under the variant's price. A variant's
+row menu offers **Remove** or **Restore** there too, and an Inactive variant is listed once you
+change the **Status** filter from **Active**.
 
 A variant follows its product onto every menu the product is on, including a variant you add later.
 In the menu offer you can optionally give a variant its own price on that menu, or clear its
@@ -143,8 +152,10 @@ When you park or complete an order, Waitron saves the chosen product and variant
 prices and modifier answers. Later catalogue edits apply to new selections. The parked order,
 kitchen ticket, receipt and reprint continue to show the facts saved with that order.
 
-The demo venue includes a bilingual coffee with two categories, a Reporting Category, a custom unit,
-two variants, a separate kitchen name and direct dietary declarations. The demo menus set no price
+The demo venue includes a bilingual coffee with a custom unit, two variants, a separate kitchen name
+and direct dietary declarations. It also has two labels that overlap: **Alcoholic** on the Negroni,
+Tinto casa and Caña, and **Happy hour drinks** on Tinto casa, Caña and the cola, which shows a label
+crossing from alcoholic drinks into a soft drink. The demo menus set no price
 of their own for anything except the Negroni, at 9.00 on the Menú del Día, so everything else,
 including each coffee variant, sells at its own price. The demo sirloin carries a seeded options
 list, **Punto**, asking how the steak should be cooked. The demo venue seeds no extras list, so

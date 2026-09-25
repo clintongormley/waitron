@@ -1,5 +1,5 @@
 import { userEvent } from "vitest/browser";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { CategoriesScreen } from "./categories-screen.js";
 import type { CategoryDependants, DashboardApi, CategorySummary, Product } from "../api/client.js";
@@ -48,13 +48,14 @@ const product: Product = {
   description: null,
   kitchenName: null,
   dietaryDeclarations: [],
-  categoryIds: ["food", "drink"],
+  labelIds: ["l-happy"],
   primaryCategoryId: "food",
   active: true,
   available: true,
   soldAlone: true,
   variants: [],
 };
+const happyHour = { id: "l-happy", name: "Happy hour drinks", productCount: 1 };
 function apiFixture() {
   const api = {
     getContentLanguages: vi
@@ -65,9 +66,8 @@ function apiFixture() {
     createCategory: vi.fn().mockResolvedValue({ ...food, id: "new" }),
     updateCategory: vi.fn().mockResolvedValue(food),
     deleteCategory: vi.fn().mockResolvedValue(undefined),
-    replaceProductCategories: vi
-      .fn()
-      .mockResolvedValue({ categoryIds: ["drink"], primaryCategoryId: "drink" }),
+    listLabels: vi.fn().mockResolvedValue([happyHour]),
+    setMainCategory: vi.fn().mockResolvedValue({ primaryCategoryId: null }),
     getCategoryDependants: vi
       .fn()
       .mockResolvedValue({ products: [], children: [], parentId: null, routes: [] }),
@@ -95,10 +95,14 @@ async function typeTableSearch(el: CategoriesScreen, value: string): Promise<voi
   await el.updateComplete;
   await table.updateComplete;
 }
-it("counts direct memberships and opens category products", async () => {
+it("counts the products whose main category it is, and opens them", async () => {
   const { el } = await mount();
   const table = el.shadowRoot!.querySelector("wt-data-table")!;
   await table.updateComplete;
+  const count = (id: string) =>
+    table.shadowRoot!.querySelectorAll(`tr[data-row-key="${id}"] td`)[1]!.textContent!.trim();
+  expect(count("food")).toBe("1");
+  expect(count("drink")).toBe("0");
   table.shadowRoot!.querySelector<HTMLElement>('[data-category="food"]')!.click();
   await el.updateComplete;
   const products = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
@@ -107,63 +111,26 @@ it("counts direct memberships and opens category products", async () => {
   await products.updateComplete;
   expect(products.rows.map((row) => (row as { id: string }).id)).toEqual(["p"]);
 });
-// Removing a membership that was the reporting category clears it (see #assign); the picker accepts
-// that as a valid, final choice instead of demanding a replacement before submission.
-it("saves a membership with no reporting category after removing the primary", async () => {
+// Taking a product out of a category leaves it Uncategorised; the dialog opens set to that, so the
+// change is still confirmed with Save rather than written at once.
+it("takes a product out of the category by saving no main category", async () => {
   const { el, api } = await mount();
-  const table = el.shadowRoot!.querySelector("wt-data-table")!;
-  await table.updateComplete;
-  table.shadowRoot!.querySelector<HTMLElement>('[data-category="food"]')!.click();
-  await el.updateComplete;
-  const products = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
-    'wt-data-table[data-test="category-products"]',
-  )!;
-  await products.updateComplete;
-  products.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-membership"]')!.click();
-  await el.updateComplete;
-  const picker = el.shadowRoot!.querySelector("dashboard-category-membership-picker")!;
-  await picker.updateComplete;
-  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
-  await vi.waitFor(() =>
-    expect(api.replaceProductCategories).toHaveBeenCalledWith("p", {
-      categoryIds: ["drink"],
-      primaryCategoryId: null,
-    }),
-  );
+  await openProducts(el, "food");
+  const dialog = await openMainCategory(el, true);
+  expect(mainCategoryCombobox(el).value).toBe("");
+  dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
+  await vi.waitFor(() => expect(api.setMainCategory).toHaveBeenCalledWith("p", null));
 });
-it("still lets you choose a replacement reporting category before saving", async () => {
+it("lets you choose another main category before saving", async () => {
   const { el, api } = await mount();
-  const table = el.shadowRoot!.querySelector("wt-data-table")!;
-  await table.updateComplete;
-  table.shadowRoot!.querySelector<HTMLElement>('[data-category="food"]')!.click();
-  await el.updateComplete;
-  const products = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
-    'wt-data-table[data-test="category-products"]',
-  )!;
-  await products.updateComplete;
-  products.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-membership"]')!.click();
-  await el.updateComplete;
-  const picker = el.shadowRoot!.querySelector("dashboard-category-membership-picker")!;
-  await picker.updateComplete;
-  const primary = picker.shadowRoot!.querySelector<HTMLElement>(
-    'wt-combobox[data-test="reporting-category"]',
-  )!;
-  Object.assign(primary, { value: "drink" });
-  primary.dispatchEvent(
-    new CustomEvent("wt-change", {
-      detail: { value: "drink" },
-      bubbles: true,
-      composed: true,
-    }),
+  await openProducts(el, "food");
+  const dialog = await openMainCategory(el, true);
+  mainCategoryCombobox(el).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "drink" }, bubbles: true, composed: true }),
   );
-  await picker.updateComplete;
-  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
-  await vi.waitFor(() =>
-    expect(api.replaceProductCategories).toHaveBeenCalledWith("p", {
-      categoryIds: ["drink"],
-      primaryCategoryId: "drink",
-    }),
-  );
+  await el.updateComplete;
+  dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
+  await vi.waitFor(() => expect(api.setMainCategory).toHaveBeenCalledWith("p", "drink"));
 });
 it("closes after a successful write even when refreshing fails and preserves failed-save drafts", async () => {
   const { el, api } = await mount();
@@ -235,7 +202,7 @@ it("keeps the confirmation open and explains a rejected delete, then closes on s
   // Retrying the same delete succeeds, and the dialog closes itself.
   deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   await vi.waitFor(() => expect(modal.open).toBe(false));
-  expect(api.deleteCategory).toHaveBeenCalledWith("food");
+  expect(api.deleteCategory).toHaveBeenCalledWith("food", { productsTo: null, childrenTo: null });
 });
 
 it("opens the products modal from the name and lists members with lozenges", async () => {
@@ -244,10 +211,10 @@ it("opens the products modal from the name and lists members with lozenges", asy
     ...product,
     id: "r",
     name: "Napkin",
-    categoryIds: ["food"],
+    labelIds: [],
     primaryCategoryId: "food",
   };
-  fx.api.listCategories.mockResolvedValue([food, { ...drink, color: "#2244aa" }]);
+  fx.api.listCategories.mockResolvedValue([{ ...food, color: "#2244aa" }, drink]);
   fx.api.listLibraryProducts.mockResolvedValue([product, lone]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -267,9 +234,8 @@ it("opens the products modal from the name and lists members with lozenges", asy
   await products.updateComplete;
   expect(products.rows.map((row) => (row as { id: string }).id).sort()).toEqual(["p", "r"]);
   const lozenges = [...products.shadowRoot!.querySelectorAll("wt-lozenge")];
-  expect(lozenges.some((lozenge) => lozenge.textContent?.trim() === "Drinks")).toBe(true);
-  // "Napkin" has no membership beyond its reporting category, so its Other categories cell falls
-  // back to the muted dash. The cell lands in the TABLE's shadow root, so read the painted colour back:
+  expect(lozenges.some((lozenge) => lozenge.textContent?.trim() === "Food")).toBe(true);
+  // "Napkin" carries no labels, so its Labels cell falls back to the muted dash. The cell lands in the TABLE's shadow root, so read the painted colour back:
   // presence alone passes while the dash renders unmuted.
   const dash = products.shadowRoot!.querySelector<HTMLElement>('[part~="muted"]');
   expect(dash).not.toBeNull();
@@ -286,8 +252,8 @@ it("opens the products modal from the name and lists members with lozenges", asy
 // shadow root. Selecting two rows and pressing Add sends both ids in one call.
 it("adds products via the table's own per-row selection in one call", async () => {
   const fx = apiFixture();
-  const q: Product = { ...product, id: "q", name: "Juice", categoryIds: [] };
-  const r: Product = { ...product, id: "r", name: "Napkin", categoryIds: [] };
+  const q: Product = { ...product, id: "q", name: "Juice", labelIds: [], primaryCategoryId: null };
+  const r: Product = { ...product, id: "r", name: "Napkin", labelIds: [], primaryCategoryId: null };
   fx.api.listLibraryProducts.mockResolvedValue([q, r]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -315,6 +281,10 @@ it("adds products via the table's own per-row selection in one call", async () =
   )!;
   expect(addButton.textContent?.trim()).toBe(t("categories.add_selected").replace("{count}", "2"));
   addButton.click();
+  await el.updateComplete;
+  // Adding SETS each product's main category, so it is confirmed first and nothing is written yet.
+  expect(fx.api.addProductsToCategory).not.toHaveBeenCalled();
+  await confirmMove(el);
   await vi.waitFor(() =>
     expect(fx.api.addProductsToCategory).toHaveBeenCalledWith(
       "food",
@@ -329,8 +299,8 @@ it("adds products via the table's own per-row selection in one call", async () =
 // then sends the whole picked set.
 it("adds products using the table's own select-all", async () => {
   const fx = apiFixture();
-  const q: Product = { ...product, id: "q", name: "Juice", categoryIds: [] };
-  const r: Product = { ...product, id: "r", name: "Napkin", categoryIds: [] };
+  const q: Product = { ...product, id: "q", name: "Juice", labelIds: [], primaryCategoryId: null };
+  const r: Product = { ...product, id: "r", name: "Napkin", labelIds: [], primaryCategoryId: null };
   fx.api.listLibraryProducts.mockResolvedValue([q, r]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -351,6 +321,7 @@ it("adds products using the table's own select-all", async () => {
   addTable.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-all"]')!.click();
   await el.updateComplete;
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-selected"]')!.click();
+  await confirmMove(el);
   await vi.waitFor(() =>
     expect(fx.api.addProductsToCategory).toHaveBeenCalledWith(
       "food",
@@ -383,7 +354,7 @@ it("titles the delete dialog with the category name, shows affected products, an
   setLocale("en-GB");
   const { el, api } = await mount();
   api.getCategoryDependants.mockResolvedValue({
-    products: [{ id: "p", name: "Toast", reporting: true }],
+    products: [{ id: "p", name: "Toast" }],
     children: [],
     parentId: null,
     routes: [{ id: "r", station: "Pass", zone: null }],
@@ -408,7 +379,7 @@ it("titles the delete dialog with the category name, shows affected products, an
     'wt-data-table[data-test="category-delete-products"]',
   )!;
   await table.updateComplete;
-  // The dependant resolves to a full product row inside the table's shadow root, with no per-row
+  // The dependant is listed by its staff name inside the table's shadow root, with no per-row
   // "will be cleared" flag: the warning is a single top block.
   expect(table.shadowRoot!.textContent).toContain("Toast");
   expect(table.shadowRoot!.textContent).not.toContain("will be cleared");
@@ -439,7 +410,7 @@ it("shows the delete preview with the affected products and child links, disabli
   )!;
   expect(deleteButton.disabled).toBe(true);
   resolveDependants({
-    products: [{ id: "p", name: "Toast", reporting: true }],
+    products: [{ id: "p", name: "Toast" }],
     children: [{ id: "breakfast", name: { en: "Breakfast" } }],
     parentId: null,
     routes: [{ id: "r1", station: "Grill", zone: "Bar" }],
@@ -470,12 +441,10 @@ it("shows one red warning at the top combining every consequence, and drops the 
     color: null,
     parentId: null,
   };
-  // The category being deleted sits under Meals, so its orphaned children move up under Meals —
-  // exercising the "children move under {parent}" sentence rather than the top-level one.
   const foodUnderMeals: CategorySummary = { ...food, parentId: "meals" };
   fx.api.listCategories.mockResolvedValue([meals, foodUnderMeals, drink]);
   fx.api.getCategoryDependants.mockResolvedValue({
-    products: [{ id: "p", name: "Toast", reporting: true }],
+    products: [{ id: "p", name: "Toast" }],
     children: [{ id: "breakfast", name: { en: "Breakfast" } }],
     parentId: "meals",
     routes: [],
@@ -503,7 +472,7 @@ it("shows one red warning at the top combining every consequence, and drops the 
   const warning = warnings[0]!;
   expect(warning.getAttribute("role")).toBe("alert");
   expect(warning.textContent!.replace(/\s+/g, " ").trim()).toBe(
-    "This cannot be undone. Deleting it removes it from 1 products. Its 1 child categories will move under Meals.",
+    "This cannot be undone. 1 product has it as its main category. It has 1 subcategory.",
   );
   // It has to LOOK like a warning: the paragraph lives in the screen's own shadow root, so the
   // screen's .error rule reaches it — read the painted colour rather than assume it.
@@ -549,14 +518,10 @@ it("shows no warning block when nothing depends on the category", async () => {
   expect(modal.querySelector("wt-spinner")).toBeNull();
 });
 
-// A product's search haystack includes every category it belongs to, not only its name and
-// reporting category, so a term unique to one of its OTHER categories finds it.
-it("finds a product by a category it belongs to beyond its reporting one", async () => {
+// A product's search haystack includes its labels, not only its name and main category.
+it("finds a product by one of its labels", async () => {
   const fx = apiFixture();
-  // "Beverages" appears nowhere except as Toast's non-reporting (other) category, so a match on it
-  // proves the other-categories column contributes to search.
-  fx.api.listCategories.mockResolvedValue([food, { ...drink, name: { en: "Beverages" } }]);
-  fx.api.listLibraryProducts.mockResolvedValue([product]);
+  fx.api.listLibraryProducts.mockResolvedValue([product, { ...product, id: "q", labelIds: [] }]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
   });
@@ -564,44 +529,14 @@ it("finds a product by a category it belongs to beyond its reporting one", async
     expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
   );
   await openProducts(el, "food");
-  await typeInto(el, "category-products", "Beverages");
-  expect(renderedKeys(el, "category-products")).toEqual(["p"]);
-});
-
-it("summarises many other categories without losing category-name search", async () => {
-  setLocale("en-GB");
-  const fx = apiFixture();
-  const others = Array.from({ length: 8 }, (_, index): CategorySummary => ({
-    id: `other-${index + 1}`,
-    name: { en: index === 7 ? "Seasonal specials" : `Other ${index + 1}` },
-    image: null,
-    color: null,
-    parentId: null,
-  }));
-  fx.api.listCategories.mockResolvedValue([food, ...others]);
-  fx.api.listLibraryProducts.mockResolvedValue([
-    {
-      ...product,
-      categoryIds: [food.id, ...others.map((category) => category.id)],
-      primaryCategoryId: food.id,
-    },
-  ]);
-  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
-    api: fx.client,
-  });
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(9),
-  );
-  await openProducts(el, "food");
-  const table = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+  const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
     'wt-data-table[data-test="category-products"]',
   )!;
-  await table.updateComplete;
-  const row = table.shadowRoot!.querySelector('tr[data-row-key="p"]')!;
-  expect(row.textContent).toContain("8 other categories");
-  expect(row.querySelectorAll("wt-lozenge")).toHaveLength(1);
-
-  await typeInto(el, "category-products", "Seasonal specials");
+  await members.updateComplete;
+  expect(members.shadowRoot!.querySelector('tr[data-row-key="p"]')!.textContent).toContain(
+    "Happy hour drinks",
+  );
+  await typeInto(el, "category-products", "Happy hour");
   expect(renderedKeys(el, "category-products")).toEqual(["p"]);
 });
 
@@ -1092,23 +1027,38 @@ async function closeProducts(el: CategoriesScreen): Promise<void> {
 }
 
 it.each([
-  ["a different category", "drink"],
-  ["the same category", "food"],
-])("starts the products dialog with an empty search when reopened for %s", async (_, next) => {
-  const { el } = await mount();
+  ["a different category", "drink", "d"],
+  ["the same category", "food", "p"],
+])("starts the products dialog with an empty search when reopened for %s", async (_, next, key) => {
+  const fx = apiFixture();
+  fx.api.listLibraryProducts.mockResolvedValue([
+    product,
+    { ...product, id: "d", name: "Cola", categoryId: "drink", primaryCategoryId: "drink" },
+  ]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+  );
   await openProducts(el, "food");
   await typeInto(el, "category-products", "does-not-match");
   expect(renderedKeys(el, "category-products")).toEqual([]);
   await closeProducts(el);
   await openProducts(el, next);
   expect((await tableSearch(el, "category-products")).value).toBe("");
-  // Toast belongs to both Food and Drinks, so an unfiltered table shows it either way.
-  expect(renderedKeys(el, "category-products")).toEqual(["p"]);
+  expect(renderedKeys(el, "category-products")).toEqual([key]);
 });
 
 it("starts the add-products list with an empty search each time it opens", async () => {
   const fx = apiFixture();
-  const juice: Product = { ...product, id: "q", name: "Juice", categoryIds: [] };
+  const juice: Product = {
+    ...product,
+    id: "q",
+    name: "Juice",
+    labelIds: [],
+    primaryCategoryId: null,
+  };
   fx.api.listLibraryProducts.mockResolvedValue([product, juice]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -1133,7 +1083,7 @@ it("starts the add-products list with an empty search each time it opens", async
 it("starts the delete preview's product list with an empty search each time it opens", async () => {
   const { el, api } = await mount();
   api.getCategoryDependants.mockResolvedValue({
-    products: [{ id: "p", name: "Toast", reporting: true }],
+    products: [{ id: "p", name: "Toast" }],
     children: [],
     parentId: null,
     routes: [],
@@ -1158,24 +1108,17 @@ it("starts the delete preview's product list with an empty search each time it o
   expect(renderedKeys(el, "category-delete-products")).toEqual(["p"]);
 });
 
-it("keeps the products dialog's Close button disabled while a membership save is in flight", async () => {
+it("keeps the products dialog's Close button disabled while a main-category save is in flight", async () => {
   const { el, api } = await mount();
   let finish!: () => void;
-  api.replaceProductCategories.mockReturnValue(
+  api.setMainCategory.mockReturnValue(
     new Promise((resolve) => {
-      finish = () => resolve({ categoryIds: ["drink"], primaryCategoryId: null });
+      finish = () => resolve({ primaryCategoryId: null });
     }),
   );
   await openProducts(el, "food");
-  const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
-    'wt-data-table[data-test="category-products"]',
-  )!;
-  await members.updateComplete;
-  members.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-membership"]')!.click();
-  await el.updateComplete;
-  const picker = el.shadowRoot!.querySelector("dashboard-category-membership-picker")!;
-  await picker.updateComplete;
-  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
+  const dialog = await openMainCategory(el, true);
+  dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
   await el.updateComplete;
   const close = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
     '[data-test="close-products"]',
@@ -1208,7 +1151,7 @@ it("words each filter's catch-all option as All …, like the other screens' fil
   await (members as HTMLElementTagNameMap["wt-data-table"]).updateComplete;
   expect(
     members.shadowRoot!.querySelector('select[data-filter="primary"] option')!.textContent!.trim(),
-  ).toBe("All reporting categories");
+  ).toBe("All main categories");
 });
 
 it("restores the categories table's sort after the screen is reopened, but not its search", async () => {
@@ -1236,8 +1179,8 @@ it("restores the categories table's sort after the screen is reopened, but not i
 
 it("keeps a picked product picked after a search hides it, and adds it with the rest", async () => {
   const fx = apiFixture();
-  const q: Product = { ...product, id: "q", name: "Juice", categoryIds: [] };
-  const r: Product = { ...product, id: "r", name: "Napkin", categoryIds: [] };
+  const q: Product = { ...product, id: "q", name: "Juice", labelIds: [], primaryCategoryId: null };
+  const r: Product = { ...product, id: "r", name: "Napkin", labelIds: [], primaryCategoryId: null };
   fx.api.listLibraryProducts.mockResolvedValue([q, r]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -1260,6 +1203,7 @@ it("keeps a picked product picked after a search hides it, and adds it with the 
   const add = el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-selected"]')!;
   expect(add.textContent!.trim()).toBe(t("categories.add_selected").replace("{count}", "2"));
   add.click();
+  await confirmMove(el);
   await vi.waitFor(() => expect(fx.api.addProductsToCategory).toHaveBeenCalledTimes(1));
   expect([...(fx.api.addProductsToCategory.mock.calls[0]![1] as string[])].sort()).toEqual([
     "q",
@@ -1267,7 +1211,7 @@ it("keeps a picked product picked after a search hides it, and adds it with the 
   ]);
 });
 
-it("labels each member row's edit action Edit product categories", async () => {
+it("labels each member row's edit action Change main category", async () => {
   setLocale("en-GB");
   const { el } = await mount();
   await openProducts(el, "food");
@@ -1276,10 +1220,10 @@ it("labels each member row's edit action Edit product categories", async () => {
   )!;
   await members.updateComplete;
   const actions = members.shadowRoot!.querySelector('tr[data-row-key="p"] wt-row-actions')!;
-  expect(actions.querySelector("wt-button")!.textContent!.trim()).toBe("Edit product categories");
+  expect(actions.querySelector("wt-button")!.textContent!.trim()).toBe("Change main category");
 });
 
-it("offers only categories something refers to in the Parent and Reporting category filters", async () => {
+it("offers only categories something refers to in the Parent and Main category filters", async () => {
   const fx = apiFixture();
   const breakfast: CategorySummary = {
     id: "breakfast",
@@ -1296,7 +1240,7 @@ it("offers only categories something refers to in the Parent and Reporting categ
   };
   fx.api.listCategories.mockResolvedValue([food, breakfast, eggs, drink]);
   fx.api.listLibraryProducts.mockResolvedValue([
-    { ...product, categoryIds: ["food", "eggs"], primaryCategoryId: "eggs" },
+    { ...product, categoryId: "eggs", primaryCategoryId: "eggs" },
   ]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -1319,13 +1263,13 @@ it("offers only categories something refers to in the Parent and Reporting categ
     ["food", "Food"],
     ["breakfast", "Food / Breakfast"],
   ]);
-  await openProducts(el, "food");
+  await openProducts(el, "eggs");
   const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
     'wt-data-table[data-test="category-products"]',
   )!;
   await members.updateComplete;
-  // Only Eggs is some product's reporting category, labelled by its own name.
-  expect(options(members, "primary")).toEqual([["eggs", "Eggs"]]);
+  // Only Eggs is some product's main category, labelled by its path.
+  expect(options(members, "primary")).toEqual([["eggs", "Food / Breakfast / Eggs"]]);
 });
 
 const breakfastUnderFood: CategorySummary = {
@@ -1418,7 +1362,7 @@ it("resets the Parent filter to All parents when the chosen parent stops being o
 // The dashboard names a product by its STAFF name, never by the guest-facing translation. Every
 // surface of this screen that names one is covered here in one pass: the members table cell, that
 // table's search box, the row-actions menu label, the add-products checkbox label and the
-// membership dialog's opening line. The fixture's two names differ, so each of these fails if the
+// main-category dialog's opening line. The fixture's two names differ, so each of these fails if the
 // customer-facing name is read instead.
 it("names a product by its staff name on every surface of the products modal", async () => {
   const { el } = await mount();
@@ -1443,9 +1387,7 @@ it("names a product by its staff name on every surface of the products modal", a
 it("names a product by its staff name in the add-products checkbox label", async () => {
   const fx = apiFixture();
   // Only in Food, so opening Drinks offers it in the add list rather than the member list.
-  fx.api.listLibraryProducts.mockResolvedValue([
-    { ...product, categoryIds: ["food"], primaryCategoryId: "food" },
-  ]);
+  fx.api.listLibraryProducts.mockResolvedValue([{ ...product, primaryCategoryId: "food" }]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
   });
@@ -1464,18 +1406,10 @@ it("names a product by its staff name in the add-products checkbox label", async
   ).toBe(`${t("categories.add_products")}: Toast`);
 });
 
-it("names the product by its staff name in the membership dialog", async () => {
+it("names the product by its staff name in the main-category dialog", async () => {
   const { el } = await mount();
   await openProducts(el, "food");
-  const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
-    'wt-data-table[data-test="category-products"]',
-  )!;
-  await members.updateComplete;
-  members.shadowRoot!.querySelector("wt-row-actions")!.querySelectorAll("wt-button")[0]!.click();
-  await el.updateComplete;
-  const dialog = [...el.shadowRoot!.querySelectorAll("wt-modal")].find(
-    (modal) => modal.querySelector("dashboard-category-membership-picker") !== null,
-  )!;
+  const dialog = await openMainCategory(el, false);
   expect(dialog.querySelector("p")!.textContent!.trim()).toBe("Toast");
 });
 
@@ -1487,11 +1421,6 @@ function deferred<T>() {
     reject = fail;
   });
   return { promise, resolve, reject };
-}
-function modalByHeading(el: CategoriesScreen, heading: string): HTMLElementTagNameMap["wt-modal"] {
-  return [...el.shadowRoot!.querySelectorAll("wt-modal")].find(
-    (modal) => modal.getAttribute("heading") === heading,
-  )!;
 }
 async function rowAction(el: CategoriesScreen, id: string, index: number): Promise<void> {
   const list = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -1521,19 +1450,35 @@ function tableKeys(table: Element): string[] {
     row.getAttribute("data-row-key")!,
   );
 }
-async function openMembership(el: CategoriesScreen, remove: boolean) {
+/** Opens the first member row's main-category dialog: through Change, or through Remove, which
+ * opens it set to no category. */
+async function openMainCategory(el: CategoriesScreen, remove: boolean) {
   const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
     'wt-data-table[data-test="category-products"]',
   )!;
   await members.updateComplete;
   members
     .shadowRoot!.querySelector("wt-row-actions")!
-    .querySelectorAll<HTMLElement>("wt-button")
-    [remove ? 1 : 0]!.click();
+    .querySelector<HTMLElement>(
+      remove ? '[data-test="remove-from-category"]' : '[data-test="change-main"]',
+    )!
+    .click();
   await el.updateComplete;
-  const picker = el.shadowRoot!.querySelector("dashboard-category-membership-picker")!;
-  await picker.updateComplete;
-  return picker;
+  const dialog = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    'wt-modal[data-test="main-category-dialog"]',
+  )!;
+  await mainCategoryCombobox(el).updateComplete;
+  return dialog;
+}
+function mainCategoryCombobox(el: CategoriesScreen) {
+  return el.shadowRoot!.querySelector<
+    HTMLElement & { value: string; updateComplete: Promise<unknown> }
+  >('wt-modal[data-test="main-category-dialog"] wt-combobox[name="main-category"]')!;
+}
+async function confirmMove(el: CategoriesScreen): Promise<void> {
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-move"]')!.click();
+  await el.updateComplete;
 }
 
 it("opens in the flat view when that was the view last chosen", async () => {
@@ -1689,7 +1634,9 @@ it("keeps the products dialog open when a different category is deleted", async 
 
 it("adds nothing when Add is pressed with no product picked", async () => {
   const fx = apiFixture();
-  fx.api.listLibraryProducts.mockResolvedValue([{ ...product, id: "q", categoryIds: [] }]);
+  fx.api.listLibraryProducts.mockResolvedValue([
+    { ...product, id: "q", labelIds: [], primaryCategoryId: null },
+  ]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
   });
@@ -1708,7 +1655,7 @@ it("adds nothing when Add is pressed with no product picked", async () => {
 async function pickForFood() {
   const fx = apiFixture();
   fx.api.listLibraryProducts.mockResolvedValue([
-    { ...product, id: "q", name: "Juice", categoryIds: [], primaryCategoryId: null },
+    { ...product, id: "q", name: "Juice", labelIds: [], primaryCategoryId: null },
   ]);
   const mounted = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -1736,6 +1683,7 @@ it("explains a refused add and keeps the add list and its picks open", async () 
   const { el, api, add } = await pickForFood();
   api.addProductsToCategory.mockRejectedValueOnce({ code: "product.not_found" });
   add.click();
+  await confirmMove(el);
   const products = el.shadowRoot!.querySelector('wt-modal[data-test="products-modal"]')!;
   await vi.waitFor(() =>
     expect(products.querySelector('p[role="alert"]')?.textContent).toBe(
@@ -1753,7 +1701,10 @@ it("keeps the products dialog open against Escape and a close, and adds once, wh
   const adding = deferred<void>();
   api.addProductsToCategory.mockReturnValueOnce(adding.promise);
   add.click();
-  add.click();
+  await el.updateComplete;
+  const move = el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-move"]')!;
+  move.click();
+  move.click();
   await el.updateComplete;
   const products = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
     'wt-modal[data-test="products-modal"]',
@@ -1772,76 +1723,63 @@ it("keeps the products dialog open against Escape and a close, and adds once, wh
   expect(products.open).toBe(true);
 });
 
-it("makes a product's only category its reporting one when its membership is edited", async () => {
-  const fx = apiFixture();
-  fx.api.listLibraryProducts.mockResolvedValue([
-    { ...product, categoryIds: ["food"], primaryCategoryId: null },
-  ]);
-  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
-    api: fx.client,
-  });
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
-  );
-  await openProducts(el, "food");
-  const picker = await openMembership(el, false);
-  expect(picker.value).toEqual({ categoryIds: ["food"], primaryCategoryId: "food" });
-});
-
-it("closes the membership dialog from the picker's Cancel without saving", async () => {
+it("closes the main-category dialog from its Cancel without saving", async () => {
   const { el, api } = await mount();
   await openProducts(el, "food");
-  const picker = await openMembership(el, false);
-  const membership = modalByHeading(el, t("categories.membership"));
-  expect(membership.open).toBe(true);
-  picker.shadowRoot!.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+  const dialog = await openMainCategory(el, false);
+  expect(dialog.open).toBe(true);
+  expect(mainCategoryCombobox(el).value).toBe("food");
+  dialog.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
   await el.updateComplete;
-  expect(membership.open).toBe(false);
-  expect(api.replaceProductCategories).not.toHaveBeenCalled();
+  expect(dialog.open).toBe(false);
+  expect(api.setMainCategory).not.toHaveBeenCalled();
 });
 
-it("explains a refused membership save and keeps the membership dialog open", async () => {
+it("explains a refused main-category save and keeps its dialog open", async () => {
   const { el, api } = await mount();
-  api.replaceProductCategories.mockRejectedValueOnce({ code: "category.not_found" });
+  api.setMainCategory.mockRejectedValueOnce({ code: "category.not_found" });
   await openProducts(el, "food");
-  const picker = await openMembership(el, true);
-  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.click();
-  const membership = modalByHeading(el, t("categories.membership"));
+  const dialog = await openMainCategory(el, true);
+  dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
   await vi.waitFor(() =>
-    expect(membership.querySelector('p[role="alert"]')?.textContent).toBe(
+    expect(dialog.querySelector('p[role="alert"]')?.textContent).toBe(
       codeMessage("category.not_found"),
     ),
   );
-  expect(membership.open).toBe(true);
+  expect(dialog.open).toBe(true);
 });
 
-it("keeps the membership dialog open against Escape and a close, and saves once, while saving", async () => {
+it("keeps the main-category dialog open against Escape and a close, and saves once, while saving", async () => {
   const { el, api } = await mount();
-  const saving = deferred<unknown>();
-  api.replaceProductCategories.mockReturnValueOnce(saving.promise);
+  const saving = deferred<{ primaryCategoryId: string | null }>();
+  api.setMainCategory.mockReturnValueOnce(saving.promise);
   await openProducts(el, "food");
-  const picker = await openMembership(el, true);
-  const membership = modalByHeading(el, t("categories.membership"));
-  const submit = () =>
-    picker.dispatchEvent(
-      new CustomEvent("wt-submit", {
-        detail: { value: { categoryIds: ["drink"], primaryCategoryId: null } },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  submit();
-  submit();
+  const dialog = await openMainCategory(el, true);
+  const save = dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!;
+  save.click();
+  save.click();
   await el.updateComplete;
-  expect(membership.contains(el.shadowRoot!.activeElement)).toBe(true);
+  expect(dialog.contains(el.shadowRoot!.activeElement)).toBe(true);
   await userEvent.keyboard("{Escape}");
-  membership.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+  dialog.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
   await el.updateComplete;
-  expect(membership.shadowRoot!.querySelector("dialog")!.open).toBe(true);
-  expect(membership.open).toBe(true);
-  expect(api.replaceProductCategories).toHaveBeenCalledOnce();
-  saving.resolve({ categoryIds: ["drink"], primaryCategoryId: null });
-  await vi.waitFor(() => expect(membership.open).toBe(false));
+  expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  expect(dialog.open).toBe(true);
+  expect(api.setMainCategory).toHaveBeenCalledOnce();
+  saving.resolve({ primaryCategoryId: null });
+  await vi.waitFor(() => expect(dialog.open).toBe(false));
+});
+
+it("closes the main-category dialog after a save even when the refresh fails", async () => {
+  const { el, api } = await mount();
+  await openProducts(el, "food");
+  const dialog = await openMainCategory(el, true);
+  api.listCategories.mockRejectedValueOnce(new Error("refresh"));
+  dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
+  await vi.waitFor(() => expect(dialog.open).toBe(false));
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector('[data-test="load-error"]')).not.toBeNull(),
+  );
 });
 
 it("sorts the flat list by parent path, top-level categories first", async () => {
@@ -1852,39 +1790,41 @@ it("sorts the flat list by parent path, top-level categories first", async () =>
   expect(tableKeys(list)).toEqual(["food", "drink", "juice", "breakfast"]);
 });
 
-it("sorts and filters a category's products by name and reporting category", async () => {
+it("sorts and filters a category's products by name and main category", async () => {
   const fx = apiFixture();
+  fx.api.listCategories.mockResolvedValue([food, breakfastUnderFood, drink]);
   const jam: Product = {
     ...product,
     id: "jam",
     name: "Jam",
-    categoryIds: ["food"],
-    primaryCategoryId: null,
+    categoryId: "breakfast",
+    primaryCategoryId: "breakfast",
   };
   fx.api.listLibraryProducts.mockResolvedValue([product, jam]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
   });
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(3),
   );
   await openProducts(el, "food");
+  await includeBelow(el);
   const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
     'wt-data-table[data-test="category-products"]',
   )!;
   await members.updateComplete;
   expect(tableKeys(members)).toEqual(["p", "jam"]);
-  const reportingCell = (key: string) =>
+  const mainCell = (key: string) =>
     members.shadowRoot!.querySelectorAll(`tr[data-row-key="${key}"] td`)[1]!.textContent!.trim();
-  expect(reportingCell("jam")).toBe(t("categories.none"));
-  expect(reportingCell("p")).toBe("Food");
+  expect(mainCell("jam")).toBe("Food / Breakfast");
+  expect(mainCell("p")).toBe("Food");
 
   await sortBy(members, "name");
   expect(tableKeys(members)).toEqual(["jam", "p"]);
   await sortBy(members, "name");
   expect(tableKeys(members)).toEqual(["p", "jam"]);
   await sortBy(members, "primary");
-  expect(tableKeys(members)).toEqual(["jam", "p"]);
+  expect(tableKeys(members)).toEqual(["p", "jam"]);
 
   const filter = members.shadowRoot!.querySelector<HTMLSelectElement>(
     'select[data-filter="primary"]',
@@ -1895,37 +1835,171 @@ it("sorts and filters a category's products by name and reporting category", asy
   expect(tableKeys(members)).toEqual(["p"]);
 });
 
-it("leaves the parent's name blank in the delete warning when that parent is not in the list", async () => {
+it("counts more than one product and subcategory in the plural in the delete warning", async () => {
   setLocale("en-GB");
-  const fx = apiFixture();
-  fx.api.getCategoryDependants.mockResolvedValue({
-    products: [],
-    children: [{ id: "breakfast", name: { en: "Breakfast" } }],
-    parentId: "gone",
+  const { el, api } = await mount();
+  api.getCategoryDependants.mockResolvedValue({
+    products: [
+      { id: "p", name: "Toast" },
+      { id: "q", name: "Jam" },
+    ],
+    children: [
+      { id: "breakfast", name: { en: "Breakfast" } },
+      { id: "lunch", name: { en: "Lunch" } },
+    ],
+    parentId: null,
     routes: [],
   });
+  const { dialog } = await openFoodDelete(el);
+  expect(
+    dialog.querySelector('[data-test="delete-warning"]')!.textContent!.replace(/\s+/g, " ").trim(),
+  ).toBe(
+    "This cannot be undone. 2 products have it as their main category. It has 2 subcategories.",
+  );
+});
+
+it.each(["Cancel", "a close"])(
+  "clears a refused main-category save's message when the window is left by %s",
+  async (way) => {
+    const { el, api } = await mount();
+    api.setMainCategory.mockRejectedValueOnce({ code: "category.not_found" });
+    await openProducts(el, "food");
+    const dialog = await openMainCategory(el, true);
+    dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
+    await vi.waitFor(() => expect(dialog.querySelector('p[role="alert"]')).not.toBeNull());
+    if (way === "Cancel") dialog.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+    else dialog.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(dialog.open).toBe(false);
+    const products = el.shadowRoot!.querySelector('wt-modal[data-test="products-modal"]')!;
+    expect(products.querySelector('p[role="alert"]')).toBeNull();
+  },
+);
+
+/** Opens Food's delete dialog and waits for its preview. */
+async function openFoodDelete(el: CategoriesScreen) {
+  await rowAction(el, "food", 1);
+  const dialog = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    'wt-modal[data-test="delete-dialog"]',
+  )!;
+  const remove = dialog.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    'wt-button[variant="danger"]',
+  )!;
+  await vi.waitFor(() => expect(remove.disabled).toBe(false));
+  const picker = (name: string) =>
+    dialog.querySelector<
+      HTMLElement & {
+        value: string;
+        placeholder: string;
+        error: string;
+        options: { value: string; label: string }[];
+        updateComplete: Promise<unknown>;
+      }
+    >(`wt-combobox[name="${name}"]`)!;
+  return { dialog, remove, picker };
+}
+const everything: CategoryDependants = {
+  products: [{ id: "p", name: "Toast" }],
+  children: [{ id: "breakfast", name: { en: "Breakfast" } }],
+  parentId: null,
+  routes: [],
+};
+
+it("prefills the delete dialog's two pickers with the category's parent", async () => {
+  const fx = apiFixture();
+  const meals: CategorySummary = { ...drink, id: "meals", name: { en: "Meals" } };
+  fx.api.listCategories.mockResolvedValue([
+    meals,
+    { ...food, parentId: "meals" },
+    breakfastUnderFood,
+    drink,
+  ]);
+  fx.api.getCategoryDependants.mockResolvedValue({ ...everything, parentId: "meals" });
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
   });
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(4),
   );
-  await rowAction(el, "food", 1);
-  const dialog = el.shadowRoot!.querySelector('[data-test="delete-dialog"]')!;
+  const { picker } = await openFoodDelete(el);
+  expect(picker("products-to").value).toBe("meals");
+  expect(picker("children-to").value).toBe("meals");
+  // Neither may be the category being deleted, and its subcategories cannot move below themselves.
+  expect(picker("products-to").options.map((option) => option.value)).toEqual([
+    "",
+    "drink",
+    "meals",
+    "breakfast",
+  ]);
+  expect(picker("children-to").options.map((option) => option.value)).toEqual([
+    "",
+    "drink",
+    "meals",
+  ]);
+});
+
+it("prefills Uncategorised and the top level when a top-level category is deleted", async () => {
+  const { el, api } = await mount();
+  api.getCategoryDependants.mockResolvedValue(everything);
+  const { picker, remove } = await openFoodDelete(el);
+  expect(picker("products-to").value).toBe("");
+  expect(picker("products-to").placeholder).toBe(t("categories.uncategorised"));
+  expect(picker("children-to").value).toBe("");
+  expect(picker("children-to").placeholder).toBe(t("categories.top_level"));
+  remove.click();
   await vi.waitFor(() =>
-    expect(dialog.querySelector('[data-test="delete-warning"]')).not.toBeNull(),
+    expect(api.deleteCategory).toHaveBeenCalledWith("food", { productsTo: null, childrenTo: null }),
   );
-  expect(
-    dialog.querySelector('[data-test="delete-warning"]')!.textContent!.replace(/\s+/g, " ").trim(),
-  ).toBe(
-    [
-      t("categories.delete_warning_intro"),
-      t("categories.delete_warning_children_under").replace("{count}", "1").replace("{parent}", ""),
-    ]
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim(),
+});
+
+it("deletes with the destinations chosen in the two pickers", async () => {
+  const { el, api } = await mount();
+  api.getCategoryDependants.mockResolvedValue(everything);
+  const { picker, remove } = await openFoodDelete(el);
+  picker("products-to").dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "drink" }, bubbles: true, composed: true }),
   );
+  picker("children-to").dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "drink" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  remove.click();
+  await vi.waitFor(() =>
+    expect(api.deleteCategory).toHaveBeenCalledWith("food", {
+      productsTo: "drink",
+      childrenTo: "drink",
+    }),
+  );
+});
+
+it("shows only the picker for what the category actually holds", async () => {
+  const { el, api } = await mount();
+  api.getCategoryDependants.mockResolvedValue({ ...everything, children: [] });
+  const { dialog } = await openFoodDelete(el);
+  expect(dialog.querySelector('wt-combobox[name="products-to"]')).not.toBeNull();
+  expect(dialog.querySelector('wt-combobox[name="children-to"]')).toBeNull();
+});
+
+it("puts a refused destination beside the picker it names", async () => {
+  const { el, api } = await mount();
+  api.getCategoryDependants.mockResolvedValue(everything);
+  api.deleteCategory.mockRejectedValueOnce({
+    code: "category.reassign_invalid",
+    params: { field: "childrenTo" },
+  });
+  const { dialog, picker, remove } = await openFoodDelete(el);
+  remove.click();
+  await vi.waitFor(() =>
+    expect(picker("children-to").error).toBe(codeMessage("category.reassign_invalid")),
+  );
+  expect(picker("products-to").error).toBe("");
+  expect(dialog.open).toBe(true);
+  // Choosing again clears the refusal it was about.
+  picker("children-to").dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "drink" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(picker("children-to").error).toBe("");
 });
 
 it("retries a failed load from the Retry button", async () => {
@@ -1971,14 +2045,13 @@ it("dismisses each dialog with Escape when nothing is being saved", async () => 
     'wt-modal[data-test="products-modal"]',
   )!;
   // Chromium closes every modal opened since the last user activation on one Escape, so a real
-  // click inside the products dialog first keeps the membership dialog from sharing its group.
-  await userEvent.click(products.querySelector("h2")!);
-  const picker = await openMembership(el, false);
-  const membership = modalByHeading(el, t("categories.membership"));
-  expect(membership.open).toBe(true);
-  picker.shadowRoot!.querySelector<HTMLElement>('[data-test="save-membership"]')!.focus();
+  // click inside the products dialog first keeps the main-category dialog from sharing its group.
+  await userEvent.click(products.querySelector('[data-test="category-products"]')!);
+  const main = await openMainCategory(el, false);
+  expect(main.open).toBe(true);
+  main.querySelector<HTMLElement>('[data-test="save-main-category"]')!.focus();
   await userEvent.keyboard("{Escape}");
-  await vi.waitFor(() => expect(membership.open).toBe(false));
+  await vi.waitFor(() => expect(main.open).toBe(false));
   expect(products.open).toBe(true);
 
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="close-products"]')!.focus();
@@ -1993,4 +2066,168 @@ it("dismisses each dialog with Escape when nothing is being saved", async () => 
   dialog.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.focus();
   await userEvent.keyboard("{Escape}");
   await vi.waitFor(() => expect(dialog.open).toBe(false));
+});
+
+async function includeBelow(el: CategoriesScreen): Promise<void> {
+  const toggle = el.shadowRoot!.querySelector<HTMLElement & { checked: boolean }>(
+    'wt-switch[name="include-descendants"]',
+  )!;
+  toggle.checked = true;
+  toggle.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+}
+
+it("lists the products below the category too once its toggle is on", async () => {
+  const fx = apiFixture();
+  const eggs: CategorySummary = { ...breakfastUnderFood, id: "eggs", parentId: "breakfast" };
+  fx.api.listCategories.mockResolvedValue([food, breakfastUnderFood, eggs, drink]);
+  fx.api.listLibraryProducts.mockResolvedValue([
+    product,
+    { ...product, id: "b", name: "Porridge", primaryCategoryId: "breakfast" },
+    { ...product, id: "e", name: "Omelette", primaryCategoryId: "eggs" },
+    { ...product, id: "d", name: "Cola", primaryCategoryId: "drink" },
+    { ...product, id: "u", name: "Napkin", primaryCategoryId: null },
+  ]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(4),
+  );
+  await openProducts(el, "food");
+  const toggle = el.shadowRoot!.querySelector<HTMLElement & { checked: boolean; label: string }>(
+    'wt-switch[name="include-descendants"]',
+  )!;
+  expect(toggle.checked).toBe(false);
+  expect(toggle.label).toBe(t("categories.include_descendants"));
+  const keys = async () => {
+    const table = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      'wt-data-table[data-test="category-products"]',
+    )!;
+    await table.updateComplete;
+    return table.rows.map((row) => (row as Product).id).sort();
+  };
+  expect(await keys()).toEqual(["p"]);
+  await includeBelow(el);
+  expect(await keys()).toEqual(["b", "e", "p"]);
+  // A product below the category is in a subcategory, so only Change is offered on its row, never
+  // "Remove from this category".
+  const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-products"]',
+  )!;
+  await members.updateComplete;
+  const actions = (key: string) =>
+    [
+      ...members.shadowRoot!.querySelectorAll(`tr[data-row-key="${key}"] wt-row-actions wt-button`),
+    ].map((button) => button.getAttribute("data-test"));
+  expect(actions("p")).toEqual(["change-main", "remove-from-category"]);
+  expect(actions("e")).toEqual(["change-main"]);
+});
+
+it("confirms how many products Add moves, naming the category, before moving them", async () => {
+  setLocale("en-GB");
+  const fx = apiFixture();
+  const cocktails: CategorySummary = { ...drink, id: "cocktails", name: { en: "Cocktails" } };
+  fx.api.listCategories.mockResolvedValue([food, cocktails]);
+  fx.api.listLibraryProducts.mockResolvedValue([
+    product,
+    { ...product, id: "q", name: "Juice", primaryCategoryId: null },
+    { ...product, id: "r", name: "Negroni", primaryCategoryId: "food" },
+  ]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
+  );
+  await openProducts(el, "cocktails");
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-products"]')!.click();
+  await el.updateComplete;
+  const addTable = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+    'wt-data-table[data-test="category-add-products"]',
+  )!;
+  await addTable.updateComplete;
+  addTable.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-all"]')!.click();
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-selected"]')!.click();
+  await el.updateComplete;
+  const confirm = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    'wt-modal[data-test="move-confirm"]',
+  )!;
+  expect(confirm.open).toBe(true);
+  expect(confirm.getAttribute("heading")).toBe("Move 3 products to Cocktails?");
+  // Cancel goes back to the add list with the picks kept, and moves nothing.
+  confirm.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+  await el.updateComplete;
+  expect(confirm.open).toBe(false);
+  expect(fx.api.addProductsToCategory).not.toHaveBeenCalled();
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-selected"]')!.textContent!.trim(),
+  ).toBe(t("categories.add_selected").replace("{count}", "3"));
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-selected"]')!.click();
+  await confirmMove(el);
+  await vi.waitFor(() => expect(fx.api.addProductsToCategory).toHaveBeenCalledOnce());
+  expect([...(fx.api.addProductsToCategory.mock.calls[0]![1] as string[])].sort()).toEqual([
+    "p",
+    "q",
+    "r",
+  ]);
+});
+
+it("words a one-product move in the singular", async () => {
+  setLocale("en-GB");
+  const { el } = await pickForFood();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-selected"]')!.click();
+  await el.updateComplete;
+  expect(
+    el.shadowRoot!.querySelector('wt-modal[data-test="move-confirm"]')!.getAttribute("heading"),
+  ).toBe("Move 1 product to Food?");
+});
+
+describe("tabs", () => {
+  beforeEach(() => history.replaceState(null, "", "/manage/categories"));
+  function tabs(el: CategoriesScreen) {
+    return el.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-tabs")!;
+  }
+
+  it("records the Labels tab in the path and walks back to the categories", async () => {
+    const { el } = await mount();
+    expect(tabs(el).value).toBe("categories");
+    expect(location.pathname).toBe("/manage/categories/view/categories");
+    tabs(el).dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "labels" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(location.pathname).toBe("/manage/categories/view/labels");
+    expect(el.shadowRoot!.querySelector('[slot="labels"] dashboard-labels-panel')).not.toBeNull();
+    history.back();
+    await vi.waitFor(() => expect(location.pathname).toBe("/manage/categories/view/categories"));
+    await vi.waitFor(() => expect(tabs(el).value).toBe("categories"));
+  });
+
+  it("opens on the Labels tab when the path names it", async () => {
+    history.replaceState(null, "", "/manage/categories/view/labels");
+    const { el } = await mount();
+    expect(tabs(el).value).toBe("labels");
+  });
+
+  it("falls back to the categories for an unknown tab without adding a history entry", async () => {
+    history.replaceState(null, "", "/manage/categories/view/bogus");
+    const before = history.length;
+    const { el } = await mount();
+    expect(tabs(el).value).toBe("categories");
+    expect(location.pathname).toBe("/manage/categories/view/categories");
+    expect(history.length).toBe(before);
+  });
+
+  it("ignores a change event from a control inside a tab", async () => {
+    const { el } = await mount();
+    el.shadowRoot!.querySelector('[slot="categories"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "labels" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(tabs(el).value).toBe("categories");
+  });
 });

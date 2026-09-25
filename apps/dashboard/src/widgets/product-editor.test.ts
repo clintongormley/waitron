@@ -9,7 +9,7 @@ import {
   productEditorTranslationField,
 } from "./product-editor.js";
 import type { EditorVariant, ProductEditorDraft } from "./product-editor-model.js";
-import type { CategorySummary, ExtraList, OptionList } from "../api/client.js";
+import type { CategorySummary, ExtraList, Label, OptionList } from "../api/client.js";
 import type { InheritedValues } from "@waitron/catalogue/src/product-types.js";
 import { resolveVatRate, priceLockedLines } from "@waitron/catalogue/src/pricing.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -36,7 +36,7 @@ const product: ProductEditorDraft = {
   soldAlone: true,
   vatClass: "reduced",
   variants: [],
-  categoryIds: [],
+  labelIds: [],
   primaryCategoryId: null,
   modifiers: [],
   allergens: null,
@@ -780,87 +780,70 @@ it("returns focus to the Modifiers control after every nested form it can open",
   }
 });
 
-it("edits the product's categories through the membership picker's own Save", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, categoryIds: ["drinks"], primaryCategoryId: "drinks" },
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
-    categories,
-  });
-  expect(
-    [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=category-chip]")].map(
-      (chip) => chip.dataset.category,
-    ),
-  ).toEqual(["drinks"]);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=pick-categories]")!.click();
-  await el.updateComplete;
-  const picker = el.shadowRoot!.querySelector<
-    HTMLElement & { value: { categoryIds: string[]; primaryCategoryId: string | null } }
-  >("dashboard-category-membership-picker")!;
-  expect(picker.value).toEqual({ categoryIds: ["drinks"], primaryCategoryId: "drinks" });
-  picker.dispatchEvent(
-    new CustomEvent("wt-submit", {
-      detail: { value: { categoryIds: ["snacks", "drinks"], primaryCategoryId: "drinks" } },
-      bubbles: true,
-      composed: true,
-    }),
+const labels: Label[] = [
+  { id: "l-happy", name: "Happy hour drinks" },
+  { id: "l-alc", name: "Alcoholic" },
+];
+type Combobox = HTMLElement & {
+  value: string;
+  values: string[];
+  placeholder: string;
+  options: { value: string; label: string }[];
+};
+function combobox(el: ProductEditor, name: string) {
+  return el.shadowRoot!.querySelector<Combobox>(`wt-combobox[name="${name}"]`);
+}
+async function pickIn(el: ProductEditor, name: string, detail: object) {
+  combobox(el, name)!.dispatchEvent(
+    new CustomEvent("wt-change", { detail, bubbles: true, composed: true }),
   );
   await el.updateComplete;
-  expect(el.currentValue.categoryIds).toEqual(["snacks", "drinks"]);
-  expect(el.currentValue.primaryCategoryId).toBe("drinks");
-  expect(el.shadowRoot!.querySelector("dashboard-category-membership-picker")).toBeNull();
-  const chips = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=category-chip]")];
-  expect(chips.map((chip) => chip.dataset.category)).toEqual(["snacks", "drinks"]);
-  // Every chip keeps its OWN colour — both of these have one, and they differ, so a rule that
-  // coloured only the reporting chip reads differently here from one that colours them all.
-  expect(chips.map((chip) => chip.querySelector("wt-lozenge")!.getAttribute("color"))).toEqual([
-    "#aa4455",
-    "#112233",
-  ]);
-});
+}
 
-it("marks the reporting category even when it has no colour of its own", async () => {
+it("chooses the main category and the labels in the editor itself, and saves no categoryIds", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
-    // "plates" is the reporting category and has no colour; "snacks" has one. A mark that rode on
-    // the colour would leave the coloured chip looking like the reporting one.
-    value: { ...product, categoryIds: ["snacks", "plates"], primaryCategoryId: "plates" },
+    value: { ...product, primaryCategoryId: "drinks", labelIds: ["l-happy"] },
     locales: ["en"],
     units: [unit],
     taxChoices: reduced,
     categories,
+    labels,
   });
-  const chips = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=category-chip]")];
-  expect(chips.map((chip) => chip.dataset.category)).toEqual(["snacks", "plates"]);
-  expect(chips.map((chip) => chip.classList.contains("reporting"))).toEqual([false, true]);
-  // And the mark has to PAINT: a class no rule reaches leaves the chip looking ordinary while every
-  // attribute assertion still passes.
-  const ring = (index: number) =>
-    getComputedStyle(chips[index]!.querySelector("wt-lozenge")!).boxShadow;
-  expect(ring(0)).toBe("none");
-  expect(ring(1)).not.toBe("none");
-  expect(chips[1]!.getAttribute("aria-label")).toBe(`${t("editor.reporting_category")}: Platos`);
-});
-
-it("flags a reporting category that is not one of the chosen categories", async () => {
-  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
-    open: true,
-    value: { ...product, categoryIds: ["drinks"], primaryCategoryId: "snacks" },
-    locales: ["en"],
-    units: [unit],
-    taxChoices: reduced,
-    categories,
-  });
+  expect(combobox(el, "primary")!.value).toBe("drinks");
+  expect(combobox(el, "labels")!.values).toEqual(["l-happy"]);
+  // "plates" is a category the product was never in: any category can be the main one.
+  await pickIn(el, "primary", { value: "plates" });
+  await pickIn(el, "labels", { values: ["l-happy", "l-alc"] });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
-  await el.updateComplete;
-  expect(submit).not.toHaveBeenCalled();
-  expect(el.shadowRoot!.getElementById("primary-error")!.textContent).toBe(
-    t("editor.reporting_category_invalid"),
-  );
+  const value = submit.mock.calls[0]![0].detail.value;
+  expect(value.primaryCategoryId).toBe("plates");
+  expect(value.labelIds).toEqual(["l-happy", "l-alc"]);
+  expect("categoryIds" in value).toBe(false);
+});
+
+it("offers Uncategorised as the main category, and saves it as none", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, primaryCategoryId: "drinks" },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+    categories,
+    labels,
+  });
+  expect(combobox(el, "primary")!.placeholder).toBe(t("categories.uncategorised"));
+  expect(combobox(el, "primary")!.options[0]).toEqual({
+    value: "",
+    label: t("categories.uncategorised"),
+  });
+  await pickIn(el, "primary", { value: "" });
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.primaryCategoryId).toBeNull();
 });
 
 it("offers all six product dietary declarations without changing the saved set", async () => {
@@ -1024,7 +1007,7 @@ it("saves station and course with a new product, without a separate routing even
     soldAlone: true,
     vatClass: "general",
     variants: [],
-    categoryIds: [],
+    labelIds: [],
     primaryCategoryId: null,
     modifiers: [],
     allergens: null,
@@ -1342,6 +1325,7 @@ it("maps a rejected product body's field onto the editor field that holds it", (
   expect(productEditorField("unitPrice", "es")).toBe("unit-price");
   expect(productEditorField("vatClass", "es")).toBe("tax");
   expect(productEditorField("primaryCategoryId", "es")).toBe("primary");
+  expect(productEditorField("labelIds", "es")).toBe("labels");
   expect(productEditorField("variants.2.unitPrice", "es")).toBe("variant-2-price");
   expect(productEditorField("variants.0.name", "es")).toBe("variant-0-name");
   // A refused attachment names a POSITION in the product's list; the Modifiers section holds one
@@ -1721,7 +1705,7 @@ const parentValues: InheritedValues = {
   unitPrice: "9.00",
   vatClass: "reduced",
   unitId: litre.id,
-  categoryIds: ["drinks", "snacks"],
+  labelIds: ["l-happy", "l-alc"],
   primaryCategoryId: "drinks",
   stationId: "bar",
   courseId: "mains",
@@ -1741,7 +1725,7 @@ const glass: ProductEditorDraft = {
   unitId: null,
   unitPrice: null,
   vatClass: null,
-  categoryIds: [],
+  labelIds: [],
   primaryCategoryId: null,
   allergens: null,
   dietaryDeclarations: null,
@@ -1770,6 +1754,7 @@ async function mountVariant(value: ProductEditorDraft = glass) {
       units: [unit, litre],
       taxChoices: taxes,
       categories,
+      labels,
       stations,
       courses,
       api: { imageLibraryRequest: vi.fn().mockResolvedValue({}) } as never,
@@ -1906,11 +1891,15 @@ it("marks a variant's own choice selected over the 'Same as' option", async () =
   expect(control<HTMLSelectElement>(el, "product-course").value).toBe("desserts");
 });
 
-it("hints the parent's categories, allergens, dietary declarations and photo beside their controls", async () => {
+it("hints the parent's category, labels, allergens, dietary declarations and photo beside their controls", async () => {
   const el = await mountVariant();
-  expect(hint(el, "categories-hint")).toBe(
-    `${sameAs("Bebidas, Aperitivos")} · ${t("editor.reporting_category")}: Bebidas`,
+  expect(combobox(el, "primary")!.placeholder).toBe(sameAs("Bebidas"));
+  expect(combobox(el, "primary")!.options[0]).toEqual({ value: "", label: sameAs("Bebidas") });
+  // A variant carries no labels of its own, so its parent's are shown and cannot be changed here.
+  expect(hint(el, "labels-hint")).toBe(
+    `${t("labels.field")}: ${sameAs("Alcoholic, Happy hour drinks")}`,
   );
+  expect(combobox(el, "labels")).toBeNull();
   expect(hint(el, "allergens-hint")).toBe(
     `${t("modifiers.allergens")}: ${sameAs(allergenName("milk"))}`,
   );
@@ -1925,12 +1914,10 @@ it("hints the parent's categories, allergens, dietary declarations and photo bes
 it("drops a hint once the variant sets that field itself", async () => {
   const el = await mountVariant({
     ...glass,
-    categoryIds: ["plates"],
     primaryCategoryId: "plates",
     allergens: { gluten: { presence: "contains" } },
     dietaryDeclarations: ["vegan"],
   });
-  expect(hint(el, "categories-hint")).toBeUndefined();
   expect(hint(el, "allergens-hint")).toBeUndefined();
   expect(hint(el, "dietary-hint")).toBeUndefined();
 });
@@ -1952,7 +1939,7 @@ it("saves every field a variant left blank as null, so it keeps reading the pare
     image: null,
     allergens: null,
     dietaryDeclarations: null,
-    categoryIds: [],
+    labelIds: [],
     primaryCategoryId: null,
     variants: [],
     modifiers: [],

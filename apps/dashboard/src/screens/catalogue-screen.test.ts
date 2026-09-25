@@ -77,7 +77,7 @@ const products: Product[] = [
     modifiers: [],
     catalogueId: "cat-a",
     categoryId: "c1",
-    categoryIds: ["c1"],
+    labelIds: [],
     primaryCategoryId: "c1",
     name: "Croquetas",
     customerName: { es: "Croquetas caseras de jamón" },
@@ -115,7 +115,7 @@ const value: ProductEditorValue = {
   soldAlone: true,
   vatClass: "reduced",
   variants: [],
-  categoryIds: ["c1"],
+  labelIds: [],
   primaryCategoryId: "c1",
   // One attachment the editor's Modifiers section shows, so the tests below can tell an unrelated
   // save carrying it back untouched from one that wipes it.
@@ -126,11 +126,14 @@ const value: ProductEditorValue = {
   courseId: null,
 };
 
+const labels = [{ id: "l1", name: "Happy hour drinks", productCount: 1 }];
+
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   const api = {
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCatalogues: vi.fn().mockResolvedValue(catalogues),
     listCategories: vi.fn().mockResolvedValue(categories),
+    listLabels: vi.fn().mockResolvedValue(labels),
     listUnits: vi.fn().mockResolvedValue(units),
     listExtraLists: vi.fn().mockResolvedValue(extraLists),
     listOptionLists: vi.fn().mockResolvedValue(optionLists),
@@ -190,6 +193,8 @@ describe("catalogue-screen", () => {
     expect(api.listProducts).toHaveBeenCalledWith("cat-a");
     expect(api.listProducts).toHaveBeenCalledWith("cat-b");
     expect(list(el).products).toEqual(products);
+    expect(list(el).labels).toEqual(labels);
+    expect(editor(el).labels).toEqual(labels);
     expect(el.shadowRoot!.querySelector("dashboard-category-manager")).toBeNull();
     expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();
   });
@@ -813,7 +818,7 @@ describe("catalogue-screen", () => {
               unitPrice: "8.50",
               vatClass: "reduced",
               primaryCategoryId: "c1",
-              categoryIds: ["c1"],
+              labelIds: [],
             },
           },
         ],
@@ -830,7 +835,7 @@ describe("catalogue-screen", () => {
       unitId: null,
       unitPrice: null,
       vatClass: null,
-      categoryIds: [],
+      labelIds: [],
       primaryCategoryId: null,
       modifiers: [],
       allergens: null,
@@ -841,7 +846,7 @@ describe("catalogue-screen", () => {
         unitPrice: "8.50",
         vatClass: "reduced",
         unitId: "u1",
-        categoryIds: ["c1"],
+        labelIds: [],
         primaryCategoryId: "c1",
         stationId: null,
         courseId: null,

@@ -33,7 +33,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { recordSale } from "@waitron/core";
-import { categoryDetails, productCategories } from "@waitron/catalogue";
+import { categoryDetails, labels, productLabels } from "@waitron/catalogue";
 import { availability, employments, shiftTemplates } from "@waitron/workforce";
 import { convenioConfig } from "@waitron/workforce-es";
 import { bookings } from "@waitron/bookings";
@@ -261,9 +261,12 @@ describe("configuration transfer database path", () => {
         categoryId: "23232323-aaaa-aaaa-aaaa-232323232323",
         image: uploaded.image.filename,
       });
-      await tx.insert(productCategories).values({
+      await tx
+        .insert(labels)
+        .values({ id: "24242424-aaaa-aaaa-aaaa-242424242424", name: "Caliente" });
+      await tx.insert(productLabels).values({
         productId: "22222222-aaaa-aaaa-aaaa-222222222222",
-        categoryId: "23232323-aaaa-aaaa-aaaa-232323232323",
+        labelId: "24242424-aaaa-aaaa-aaaa-242424242424",
       });
       await tx
         .update(products)
@@ -428,7 +431,7 @@ describe("configuration transfer database path", () => {
       const category = await tx.execute<{
         image: string;
         primary: number;
-        member: number;
+        labelled: string | null;
       }>(sql`
         select d.image,
           -- The alias is quoted: primary is a keyword to this parser, so a bare "as primary" is
@@ -436,22 +439,22 @@ describe("configuration transfer database path", () => {
           -- Measured on node:sqlite, Node v26.7.0, with "as member" as the control that needs no
           -- quoting.
           p.category_id = c.id as "primary",
-          exists (
-            select 1 from product_categories pc
-            where pc.product_id = p.id and pc.category_id = c.id
-          ) as member
+          (
+            select l.name from product_labels pl join labels l on l.id = pl.label_id
+            where pl.product_id = p.id
+          ) as labelled
         from categories c
         join category_details d on d.category_id = c.id
         cross join products p
         where p.name = 'Café'
       `);
-      // 1, not `true`: both are SQL expressions, which the `flag` helper's boolean mapping never
-      // reaches. A category the product did NOT belong to would answer 0.
+      // 1, not `true`: an SQL expression, which the `flag` helper's boolean mapping never
+      // reaches. A category that is not the product's main one would answer 0.
       expect(category.rows).toEqual([
         {
           image: metadata!.filename,
           primary: 1,
-          member: 1,
+          labelled: "Caliente",
         },
       ]);
     });

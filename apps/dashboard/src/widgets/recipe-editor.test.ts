@@ -30,7 +30,7 @@ const PRODUCT: Product = {
   modifiers: [],
   catalogueId: "cat-1",
   categoryId: null,
-  categoryIds: [],
+  labelIds: [],
   primaryCategoryId: null,
   name: "Bizcocho",
   customerName: { es: "Bizcocho de la abuela" },

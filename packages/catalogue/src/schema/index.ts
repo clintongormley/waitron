@@ -4,3 +4,4 @@ export * from "./units.js";
 export * from "./variant-overrides.js";
 export * from "./options.js";
 export * from "./extras.js";
+export * from "./labels.js";

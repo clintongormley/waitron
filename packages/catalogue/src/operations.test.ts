@@ -421,6 +421,25 @@ describe("catalogue operations", () => {
     });
   });
 
+  it("refuses a create naming an unknown category before writing the product", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      const missing = crypto.randomUUID();
+      await expect(
+        createProduct(tx, {
+          catalogueId: cat.id,
+          categoryId: missing,
+          name: "Stray",
+          unitId: eachUnitId,
+          unitPrice: "1.00",
+          vatClass: "general",
+        }),
+      ).rejects.toMatchObject({ code: "category.not_found", params: { categoryId: missing } });
+      // Read inside the same transaction, which a refused create leaves open for the caller.
+      expect(await listProducts(tx, cat.id)).toEqual([]);
+    });
+  });
+
   it("still rejects a create with neither unitId nor pricingUnit", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });

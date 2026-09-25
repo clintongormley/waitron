@@ -488,13 +488,13 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("uses the category hierarchy and membership endpoints with their response shapes", async () => {
+  it("uses the category hierarchy and main-category endpoints with their response shapes", async () => {
     const category = { id: "cat1", name: { es: "Entrantes" }, image: null, parentId: null };
     const product = {
       id: "p1",
       catalogueId: "menu1",
       categoryId: "cat1",
-      categoryIds: ["cat1"],
+      labelIds: ["l1"],
       primaryCategoryId: "cat1",
       name: "Croquetas",
       customerName: { es: "Croquetas caseras" },
@@ -507,18 +507,17 @@ describe("DashboardApi", () => {
       dietOverride: null,
       image: null,
     };
-    const memberships = { categoryIds: ["cat1", "cat2"], primaryCategoryId: "cat2" };
+    const listed = { id: "p1", name: "Croquetas", active: true, primaryCategoryId: "cat2" };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(category))
       .mockResolvedValueOnce(jsonResponse({ ...category, image: "food.jpg" }))
       .mockResolvedValueOnce(emptyResponse())
-      .mockResolvedValueOnce(
-        jsonResponse([{ id: "p1", name: "Croquetas", active: true, ...memberships }]),
-      )
+      .mockResolvedValueOnce(emptyResponse())
+      .mockResolvedValueOnce(jsonResponse([{ ...listed, labelIds: [] }]))
+      .mockResolvedValueOnce(jsonResponse([{ ...listed, labelIds: ["l1"] }]))
       .mockResolvedValueOnce(jsonResponse([product]))
-      .mockResolvedValueOnce(jsonResponse(memberships))
-      .mockResolvedValueOnce(jsonResponse(memberships));
+      .mockResolvedValueOnce(jsonResponse({ primaryCategoryId: null }));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.getCategory("cat1")).toEqual(category);
     expect(await api.updateCategory("cat1", { image: "food.jpg" })).toEqual({
@@ -526,26 +525,63 @@ describe("DashboardApi", () => {
       image: "food.jpg",
     });
     await api.deleteCategory("cat1");
-    expect(await api.listCategoryProducts("cat1")).toEqual([
-      { id: "p1", name: "Croquetas", active: true, ...memberships },
+    await api.deleteCategory("cat1", { productsTo: "cat0", childrenTo: null });
+    expect(await api.listCategoryProducts("cat1")).toEqual([{ ...listed, labelIds: [] }]);
+    expect(await api.listCategoryProducts("cat1", { includeDescendants: true })).toEqual([
+      { ...listed, labelIds: ["l1"] },
     ]);
     expect(await api.listLibraryProducts()).toEqual([product]);
-    expect(await api.getProductCategories("p1")).toEqual(memberships);
-    expect(await api.replaceProductCategories("p1", memberships)).toEqual(memberships);
+    expect(await api.setMainCategory("p1", null)).toEqual({ primaryCategoryId: null });
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method, init.body])).toEqual([
       ["/management-api/categories/cat1", "GET", undefined],
       ["/management-api/categories/cat1", "PATCH", JSON.stringify({ image: "food.jpg" })],
       ["/management-api/categories/cat1", "DELETE", undefined],
+      [
+        "/management-api/categories/cat1",
+        "DELETE",
+        JSON.stringify({ productsTo: "cat0", childrenTo: null }),
+      ],
       ["/management-api/categories/cat1/products", "GET", undefined],
+      ["/management-api/categories/cat1/products?descendants=1", "GET", undefined],
       ["/management-api/products", "GET", undefined],
-      ["/management-api/products/p1/categories", "GET", undefined],
-      ["/management-api/products/p1/categories", "PUT", JSON.stringify(memberships)],
+      [
+        "/management-api/products/p1/categories",
+        "PUT",
+        JSON.stringify({ primaryCategoryId: null }),
+      ],
+    ]);
+  });
+
+  it("uses the label collection, item and product-label routes with their response shapes", async () => {
+    const label = { id: "l1", name: "Happy hour drinks" };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([{ ...label, productCount: 3 }]))
+      .mockResolvedValueOnce(jsonResponse(label, true, 201))
+      .mockResolvedValueOnce(jsonResponse({ ...label, name: "Alcoholic" }))
+      .mockResolvedValueOnce(emptyResponse())
+      .mockResolvedValueOnce(jsonResponse({ labelIds: ["l1"] }))
+      .mockResolvedValueOnce(jsonResponse({ labelIds: [] }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listLabels()).toEqual([{ ...label, productCount: 3 }]);
+    expect(await api.createLabel("Happy hour drinks")).toEqual(label);
+    expect(await api.renameLabel("l1", "Alcoholic")).toEqual({ ...label, name: "Alcoholic" });
+    await expect(api.deleteLabel("l1")).resolves.toBeUndefined();
+    expect(await api.getProductLabels("p1")).toEqual({ labelIds: ["l1"] });
+    expect(await api.setProductLabels("p1", [])).toEqual({ labelIds: [] });
+    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method, init.body])).toEqual([
+      ["/management-api/labels", "GET", undefined],
+      ["/management-api/labels", "POST", JSON.stringify({ name: "Happy hour drinks" })],
+      ["/management-api/labels/l1", "PATCH", JSON.stringify({ name: "Alcoholic" })],
+      ["/management-api/labels/l1", "DELETE", undefined],
+      ["/management-api/products/p1/labels", "GET", undefined],
+      ["/management-api/products/p1/labels", "PUT", JSON.stringify({ labelIds: [] })],
     ]);
   });
 
   it("getCategoryDependants GETs the dependants for the delete confirmation", async () => {
     const dependants = {
-      products: [{ id: "p1", name: { es: "Croquetas" }, reporting: true }],
+      products: [{ id: "p1", name: "Croquetas" }],
       children: [{ id: "cat2", name: { es: "Postres" } }],
       parentId: "cat0",
       routes: [{ id: "r1", station: "bar", zone: null }],
@@ -607,7 +643,7 @@ describe("DashboardApi", () => {
         id: "p1",
         catalogueId: "c1",
         categoryId: null,
-        categoryIds: [],
+        labelIds: [],
         primaryCategoryId: null,
         name: "Café solo",
         customerName: { es: "Café solo de la casa" },
