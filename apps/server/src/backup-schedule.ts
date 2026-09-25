@@ -1,6 +1,3 @@
-// Next-fire math for the backup sweep's wall-clock cadence, with no time zone library: `Intl` gives
-// an instant's local parts, and a fixed point over the zone's offset gives the inverse.
-
 import { createHash } from "node:crypto";
 import type { BackupSchedule } from "./backup-config.js";
 
@@ -83,8 +80,8 @@ export function nextFireMs(
   }
 
   const allowed = (wd: number) => schedule.days === "daily" || schedule.days.includes(wd);
-  // Steps the local CIVIL date, not elapsed 24h: a spring-forward day is 23h long, and elapsed
-  // days would skip its date and could jump a week past an allowed weekday.
+  // Steps the local CIVIL date, not elapsed 24h: a spring-forward day is shorter than 24h, and
+  // elapsed days can skip its date and could jump a week past an allowed weekday.
   const start = localParts(now, clock.timeZone);
   for (let add = 0; add <= 7; add++) {
     const civil = new Date(Date.UTC(start.year, start.month - 1, start.day + add));
