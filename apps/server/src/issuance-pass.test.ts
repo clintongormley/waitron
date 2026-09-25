@@ -57,7 +57,7 @@ import {
   openTab,
   parkOrder,
   placeOrder,
-  priceStoredOrderForIssue,
+  priceStoredOrderForIssuance,
 } from "./working-order.js";
 import type { PricedOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -488,7 +488,7 @@ describe("what a filed sale line records about its product", () => {
   });
 });
 
-describe("the snapshot is taken when the record is issued, on every filing path (spec §7 example 10)", () => {
+describe("the snapshot is taken when the record is issued, on every till filing path (spec §7 example 10)", () => {
   it("a tab rung before the move and paid after it records the chain at payment", async () => {
     const v = await setupVenue();
     const tabId = await openTableTab(v, [
@@ -688,8 +688,8 @@ describe("issuancePass", () => {
     ]);
 
     await withTransaction(suite.db, async (tx) => {
-      const pricedOne = await priceStoredOrderForIssue(tx, one);
-      const pricedFive = await priceStoredOrderForIssue(tx, five);
+      const pricedOne = await priceStoredOrderForIssuance(tx, one);
+      const pricedFive = await priceStoredOrderForIssuance(tx, five);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
 
       await issuancePass(tx, v.cfg, one, pricedOne);
@@ -719,7 +719,7 @@ describe("issuancePass", () => {
       .where(and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.lineNo, 2)));
 
     const issued = await withTransaction(suite.db, async (tx) =>
-      issuancePass(tx, v.cfg, id, await priceStoredOrderForIssue(tx, id)),
+      issuancePass(tx, v.cfg, id, await priceStoredOrderForIssuance(tx, id)),
     );
 
     expect(issued.lines.map((l) => [l.productId, l.parentProductId, l.classification])).toEqual([
@@ -740,7 +740,7 @@ describe("issuancePass", () => {
     );
 
     const issued = await withTransaction(suite.db, async (tx) =>
-      issuancePass(tx, v.cfg, id, await priceStoredOrderForIssue(tx, id)),
+      issuancePass(tx, v.cfg, id, await priceStoredOrderForIssuance(tx, id)),
     );
 
     expect(issued.lines.map((l) => [l.productId, l.menuId])).toEqual([[v.products.negroni, null]]);
@@ -751,7 +751,7 @@ describe("issuancePass", () => {
     const id = await basketOrder(v, [{ productId: v.products.negroni }]);
 
     await withTransaction(suite.db, async (tx) => {
-      const { priced, identities }: PricedOrder = await priceStoredOrderForIssue(tx, id);
+      const { priced, identities }: PricedOrder = await priceStoredOrderForIssuance(tx, id);
       const doubled = { ...priced, lines: [...priced.lines, ...priced.lines] };
       await expect(issuancePass(tx, v.cfg, id, { priced: doubled, identities })).rejects.toThrow(
         /do not line up/,

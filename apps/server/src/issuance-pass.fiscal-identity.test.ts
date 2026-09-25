@@ -65,7 +65,7 @@ const fixedClock: TrustedClock = {
   currentAnchor: () => null,
 };
 
-/** The sale-line classification columns (spec §4), left out of the comparison. */
+/** The sale-line classification columns (spec §3), left out of the comparison. */
 const CLASSIFICATION_COLUMNS = [
   "product_id",
   "parent_product_id",

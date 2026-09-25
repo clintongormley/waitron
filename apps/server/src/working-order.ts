@@ -521,7 +521,7 @@ export async function readLockedLines(
   return { locked, identities: stored.map(({ id, productId }) => ({ id, productId })) };
 }
 
-/** A working-order line's own identity, which the filed sale line does not carry. */
+/** A working-order line's own identity. The filed sale line does not keep the line `id`. */
 export interface OrderLineIdentity {
   id: string;
   productId: string | null;
@@ -533,17 +533,17 @@ export interface PricedOrder {
   identities: OrderLineIdentity[];
 }
 
-/** Price a persisted order from its add-time locked prices; refuses a lineless order (see
- * {@link readLockedLines}). */
+/** {@link priceStoredOrderForIssuance} without the line identities, to rebuild a filed ticket. */
 export async function priceStoredOrder(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<PricedLines> {
-  return (await priceStoredOrderForIssue(tx, workingOrderId)).priced;
+  return (await priceStoredOrderForIssuance(tx, workingOrderId)).priced;
 }
 
-/** {@link priceStoredOrder}, with each priced line's working-order identity for `issuancePass`. */
-export async function priceStoredOrderForIssue(
+/** Price a persisted order from its add-time locked prices, with each priced line's working-order
+ * identity for `issuancePass`; refuses a lineless order (see {@link readLockedLines}). */
+export async function priceStoredOrderForIssuance(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<PricedOrder> {
@@ -2557,7 +2557,7 @@ export async function placeOrder(
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     let issuedOrderLabel: string | null | undefined;
     if (orderFlow === "invoice_first") {
-      const priced = await issuancePass(tx, cfg, id, await priceStoredOrderForIssue(tx, id));
+      const priced = await issuancePass(tx, cfg, id, await priceStoredOrderForIssuance(tx, id));
       // The fiscal record's `till_id` is the DEVICE till, while the amendment below records the box's
       // CONFIGURED register. The chain is keyed by the node, not the device.
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {

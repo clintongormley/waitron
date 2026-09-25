@@ -19,8 +19,8 @@ import type { PricedOrder } from "./working-order.js";
  * never does.
  *
  * `order.identities[i]` is the working-order line `order.priced.lines[i]` was priced from, as
- * `priceStoredOrderForIssue` and `createOpenOrder` both return them. The classification is read once
- * for the whole sale.
+ * `priceStoredOrderForIssuance` and `createOpenOrder` both return them. The classification is read
+ * once for the whole sale.
  */
 export async function issuancePass(
   tx: Transaction,

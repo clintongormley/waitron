@@ -41,7 +41,7 @@ import {
   createOpenOrder,
   fireLines,
   priceStoredOrder,
-  priceStoredOrderForIssue,
+  priceStoredOrderForIssuance,
   readInvoiceNumber,
   toVatBreakdown,
 } from "./working-order.js";
@@ -241,7 +241,7 @@ export interface PayWorkingOrderRequest {
  * working-order id. It carries NO tender — the provider drives the card. Same basket semantics:
  *  - WALK-UP (no `working_orders` row for `id`): `lines` is the basket to price and file.
  *  - RETRIEVED / PLACED order (the row exists): `lines` is IGNORED — the order files its own STORED
- *    locked lines (`priceStoredOrder`).
+ *    locked lines (`priceStoredOrderForIssuance`).
  */
 export interface IntegratedPayRequest {
   id: string;
@@ -304,8 +304,8 @@ export type IntegratedPayDeps = TillSaleDeps & {
  *  3. Any other non-`open` status → `working_order.not_open`.
  *  4. Absent → WALK-UP: create it `open` with freshly-priced lines (`createOpenOrder`) and file that
  *     price.
- *  5. `open` (RETRIEVED) → file the STORED locked lines (`priceStoredOrder`), never a re-price of
- *     `req.lines`.
+ *  5. `open` (RETRIEVED) → file the STORED locked lines (`priceStoredOrderForIssuance`), never a
+ *     re-price of `req.lines`.
  *  6. A unique violation is replayed in a FRESH transaction, filing nothing. Step 1 already
  *     serialises pays in this process; the backstop stays because `sales_working_order_id_key`
  *     refuses a second sale for one working order whatever wrote it.
@@ -355,10 +355,10 @@ export async function payWorkingOrder(
           deliveryTableId: req.deliveryTableId,
           zoneId: req.zoneId,
         });
-        order = { priced: created.priced, identities: created.identities };
+        order = created;
         newlyCreatedLines = created.lineRows;
       } else {
-        order = await priceStoredOrderForIssue(tx, req.id);
+        order = await priceStoredOrderForIssuance(tx, req.id);
       }
 
       const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
@@ -698,7 +698,7 @@ export async function payWorkingOrderIntegrated(
     const order: PricedOrder =
       locked === undefined
         ? await createOpenOrder(tx, cfg, req.id, req.lines, null, { zoneId: req.zoneId })
-        : await priceStoredOrderForIssue(tx, req.id);
+        : await priceStoredOrderForIssuance(tx, req.id);
     // The record is issued from THIS pricing, in P3, whatever changes while the reader runs.
     const priced = await issuancePass(tx, cfg, req.id, order);
     // A `placed` order here is a counter collect, so `finalizeCapture` stamps `collected_at`.
@@ -894,7 +894,12 @@ async function finalizeRecovery(
       };
     }
 
-    const priced = await issuancePass(tx, cfg, req.id, await priceStoredOrderForIssue(tx, req.id));
+    const priced = await issuancePass(
+      tx,
+      cfg,
+      req.id,
+      await priceStoredOrderForIssuance(tx, req.id),
+    );
     const capturedAmount = decimal(captured.amount);
 
     if (compareDecimal(capturedAmount, priced.total) < 0) {
@@ -1276,7 +1281,7 @@ export async function collectOrder(
       return ticket;
     }
 
-    const order = await priceStoredOrderForIssue(tx, req.id);
+    const order = await priceStoredOrderForIssuance(tx, req.id);
     return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId, true);
   });
 }

@@ -1062,8 +1062,8 @@ picked product is offered by more than one of the dish's active lists.
   the refusal sits on the held-order edit path, which is where the wrong price was measured being
   written; whether any other path can pair a stored child with the wrong list's price was not looked
   at. **Next action:** an owner decision on whether an OPEN-ORDER extras child may carry its list
-  id. It is not Task 9's — that one writes the FILED sale line, where decision 11 already bans a
-  catalogue reference.
+  id. It is not Task 9's — that one writes the FILED sale line, which holds no catalogue key
+  (decision 11).
 
 Task 9 has landed as **#469**: the filed sale line carries a dish's frozen answers in
 `sale_lines.option_snapshots` (core migration 0041), written by both filing routes, and the customer
@@ -4756,8 +4756,8 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
    `markCollected` takes a `TillConfig` and discards it (`void cfg;`), then selects and updates on
    `eq(workingOrders.id, id)`; `cancelPlacedOrder` selects and updates the same way and uses `cfg`
    only to stamp the amendment's till and node; `readLockedLines` takes no `cfg` at all, and neither
-   does its one caller `priceStoredOrder`, which is reached from five sites in `till-sale.ts` and one
-   inside `working-order.ts` itself. Named by function rather than by line, because the line numbers
+   does its caller `priceStoredOrderForIssuance`, which the filing sites in `till-sale.ts` and
+   `working-order.ts` call and `priceStoredOrder` wraps to rebuild a filed ticket. Named by function rather than by line, because the line numbers
    this item used to carry went stale when the file moved.
 2. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.
