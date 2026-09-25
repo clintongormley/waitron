@@ -1595,6 +1595,65 @@ const SHARED_RESTORE_REFUSALS: [AppError, number][] = [
   [new AppError("restore.stream_source_unchecked", { reason: "clock" }), 409],
 ];
 
+describe("the archive and Cloud restore routes, on the refusals they share with the bucket rebuild", () => {
+  it("answers the refusals an archive restore shares with the rebuild with the same statuses", async () => {
+    const seen: [string, number][] = [];
+    for (const [error] of SHARED_RESTORE_REFUSALS) {
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          stageRestore: vi.fn().mockRejectedValue(error),
+          requestRestart: vi.fn(),
+        },
+        noopLog,
+      );
+      const res = await postRestore(app, Uint8Array.from([1]));
+      expect((await res.json()) as unknown).toMatchObject({ error: { code: error.code } });
+      seen.push([error.code, res.status]);
+    }
+    expect(seen).toEqual(SHARED_RESTORE_REFUSALS.map(([error, status]) => [error.code, status]));
+  });
+
+  it("answers the refusals a Cloud restore shares with the rebuild with the same statuses", async () => {
+    const requestId = "3728e560-fbb2-41aa-8c2b-d21f3ce1ce92";
+    const pointId = "9f41b8b8-b14e-472a-8eb4-f9259b80f0d1";
+    const seen: [string, number][] = [];
+    for (const [error] of SHARED_RESTORE_REFUSALS) {
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          cloudRecovery: {
+            binding: vi.fn(async () => ({ requestId, pointId })),
+            restore: vi.fn(async (stage: (request: RestoreRequest) => Promise<void>) => {
+              await stage({
+                artifact: Uint8Array.from([1]),
+                recoveryKey: "key",
+                environment: "preproduction",
+                managedCloud: { requestId, pointId },
+              });
+            }),
+          } as unknown as SetupDeps["cloudRecovery"],
+          stageRestore: vi.fn().mockRejectedValue(error),
+          requestRestart: vi.fn(),
+        },
+        noopLog,
+      );
+      const res = await app.request("/setup-api/cloud-recovery/restore", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pointId }),
+      });
+      expect((await res.json()) as unknown).toMatchObject({ error: { code: error.code } });
+      seen.push([error.code, res.status]);
+    }
+    expect(seen).toEqual(SHARED_RESTORE_REFUSALS.map(([error, status]) => [error.code, status]));
+  });
+});
+
 describe("POST /setup-api/restore", () => {
   it("stages the encrypted artifact under the persistent operation lease and restarts", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-restore-operation-"));
@@ -1859,63 +1918,6 @@ describe("POST /setup-api/restore-bucket", () => {
       seen.push([error.code, res.status]);
     }
     expect(seen).toEqual(cases.map(([error, status]) => [error.code, status]));
-  });
-
-  it("answers the refusals an archive restore shares with the rebuild with the same statuses", async () => {
-    const seen: [string, number][] = [];
-    for (const [error] of SHARED_RESTORE_REFUSALS) {
-      const app = new Hono();
-      mountSetup(
-        app,
-        {
-          environment: "preproduction",
-          stageRestore: vi.fn().mockRejectedValue(error),
-          requestRestart: vi.fn(),
-        },
-        noopLog,
-      );
-      const res = await postRestore(app, Uint8Array.from([1]));
-      expect((await res.json()) as unknown).toMatchObject({ error: { code: error.code } });
-      seen.push([error.code, res.status]);
-    }
-    expect(seen).toEqual(SHARED_RESTORE_REFUSALS.map(([error, status]) => [error.code, status]));
-  });
-
-  it("answers the refusals a Cloud restore shares with the rebuild with the same statuses", async () => {
-    const requestId = "3728e560-fbb2-41aa-8c2b-d21f3ce1ce92";
-    const pointId = "9f41b8b8-b14e-472a-8eb4-f9259b80f0d1";
-    const seen: [string, number][] = [];
-    for (const [error] of SHARED_RESTORE_REFUSALS) {
-      const app = new Hono();
-      mountSetup(
-        app,
-        {
-          environment: "preproduction",
-          cloudRecovery: {
-            binding: vi.fn(async () => ({ requestId, pointId })),
-            restore: vi.fn(async (stage: (request: RestoreRequest) => Promise<void>) => {
-              await stage({
-                artifact: Uint8Array.from([1]),
-                recoveryKey: "key",
-                environment: "preproduction",
-                managedCloud: { requestId, pointId },
-              });
-            }),
-          } as unknown as SetupDeps["cloudRecovery"],
-          stageRestore: vi.fn().mockRejectedValue(error),
-          requestRestart: vi.fn(),
-        },
-        noopLog,
-      );
-      const res = await app.request("/setup-api/cloud-recovery/restore", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ pointId }),
-      });
-      expect((await res.json()) as unknown).toMatchObject({ error: { code: error.code } });
-      seen.push([error.code, res.status]);
-    }
-    expect(seen).toEqual(SHARED_RESTORE_REFUSALS.map(([error, status]) => [error.code, status]));
   });
 
   // Reconciliation N26: the owner sees whose copy it is before anything is staged.
