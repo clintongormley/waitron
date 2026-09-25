@@ -89,7 +89,7 @@ export interface StreamHostDeps {
  * `reload()` never throw for a bucket or vault problem: a copy that cannot start is logged and reads
  * off, and the till is untouched. The only bucket wait on their path is a stopping supervisor's
  * (`StreamSupervisor.stop()`), which both wait for before starting the next. At most one supervisor
- * runs, and the old one has stopped before the next starts.
+ * runs, and the old one's `stop()` has resolved before the next starts.
  */
 export class StreamHost {
   readonly #deps: StreamHostDeps;

@@ -113,10 +113,7 @@ export interface SupervisorDeps {
   readCommandLine?: (pid: number) => Promise<string | null>;
   /** Subscribes to the venue database's commits; returns the unsubscribe. */
   onCommit(listener: () => void): () => void;
-  /**
-   * Shared by every supervisor one process starts for this venue, so a pointer an earlier one sent
-   * that lands late is not read as another box's.
-   */
+  /** Shared by every supervisor one process starts for this venue; see `SentPointers`. */
   sentPointers: SentPointers;
 }
 
@@ -236,8 +233,8 @@ interface Keeper {
  *
  * Opening (spec §4.4): claim the generation with a create-only marker, start Litestream into it,
  * wait until a full copy is visible in the bucket, then move `current.json` only if it is unchanged
- * since it was read at the start. A pointer that changed is another box writing this venue: the
- * supervisor stops and reads `refused`. Nothing on the sale path waits for any of it: `start()`
+ * since it was read at the start. A pointer that changed to anything but a pointer this process sent
+ * (see `#movePointer`) stops the supervisor, which reads `refused`. Nothing on the sale path waits for any of it: `start()`
  * returns once the work is scheduled.
  *
  * It restarts an exited Litestream with a backoff. From the moment Litestream starts, the side file
@@ -474,8 +471,6 @@ export class StreamSupervisor {
         if (signal.aborted) throw error;
         this.#deps.log("warn", "stream.open_failed", { errorCode: codeOf(error) });
         await this.#stopChild();
-        // A pointer write already sent cannot be called back. Landing after the next attempt reads
-        // the pointer, it would make that attempt's own write be refused as another box's.
         await moving.catch(() => undefined);
         await this.#sleep(OPEN_RETRY_MS, signal);
       }
@@ -521,9 +516,8 @@ export class StreamSupervisor {
    * Replaces `current.json` only if it is unchanged since `previousEtag` was read; false when
    * refused. `writePointer` already counts a refusal of this box's own landed write as success. A
    * refusal because the pointer now holds one this process sent earlier (a stopped supervisor's
-   * write landing late) is retried against that version: at once the first time, and after
-   * {@link OPEN_RETRY_MS} after that, since a bucket whose reads lag its conditional check would
-   * otherwise be asked again without pause.
+   * write landing late) is retried against that version, with a pause after the first retry, since
+   * a bucket whose reads lag its conditional check would otherwise be asked again without pause.
    */
   async #movePointer(
     pointer: SignedPointer,

@@ -262,6 +262,9 @@ the measurements of §8.1 and the prototype, whose verdicts do not carry across 
   replaced**, whatever the conditional write would allow (§0.16). **A "conflict" answer is retried, not treated as
   a loss** — Amazon documents that a conditional write can be answered with a conflict when a delete
   races it, and that the write may be retried (topology §13, risk 11's note).
+  (2026-09-25: Task 8a added a second exception — a refusal because the pointer now holds a pointer
+  this process sent earlier, landing late across a reload, is retried against that version; see
+  `SentPointers` in `packages/stream/src/pointer.ts`.)
 - **History.** Litestream's own words, from its configuration reference
   (<https://litestream.io/reference/config/>, fetched with `curl` 2026-09-23): full copies are
   `snapshot: interval` ("How often Litestream takes a full snapshot. Defaults to 24h") and

@@ -138,10 +138,9 @@ export class SentPointers {
 
 /**
  * Replace `current.json` only if it is still the version this box read (`previousEtag`), or create it
- * only if there is none (`null`). A refusal is another box writing this venue, and is thrown
- * (`backup.stream_precondition_failed`) — unless the pointer now holds exactly these bytes, which is
- * this box's own write answered twice, or bytes `sent` holds, whose version tag is answered to retry
- * against.
+ * only if there is none (`null`). A refusal is thrown (`backup.stream_precondition_failed`) unless
+ * the pointer now holds exactly these bytes, which is this write answered twice, or bytes `sent`
+ * holds, whose version tag is answered to retry against.
  */
 export async function writePointer(
   store: ObjectStore,

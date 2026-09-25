@@ -5136,6 +5136,7 @@ refused requests included. Left open by #560, both since decided by the owner: (
 was only logged (`backup.sealed_state_failed`); Task 7 now raises it as a dashboard alert too;
 (2) every node writes its own row at every start, standby and mirror nodes included, while the
 backup job runs only on the primary — kept by design (owner, 2026-09-24). Nothing outside the backup routes
+or the bucket-copy settings' Save (which writes a recovery key into `backup.env` when the box holds none)
 rewrites a sealed file while the server keeps running (#560's per-task review traced each writer:
 promotion rewrites `trading.env` and then restarts; `modules.json`, `secrets.env` and the TLS files
 are written in setup or by the command line, before a restart); Task 8a calls the one
@@ -5224,7 +5225,9 @@ landing after the new supervisor read the pointer, so the box takes its own writ
 and refuses itself — closed on Task 8a's branch: a supervisor retries its pointer write when the
 refusal was caused by one of this process's own earlier pointers, matched byte for byte, the last 16
 kept. Still open: a pointer write from a process that has since died, landing after the restart,
-can still make the box refuse itself, because a restarted process starts with an empty record;
+can still make the box refuse itself, because a restarted process starts with an empty record, and
+so does a `current.json` deleted after the supervisor read it; in both cases the owner's alert
+(`backup.stream_refused` in `apps/dashboard/src/i18n/alert-messages.ts`) still says another box is writing;
 (3) `StreamHost` streams on any node whose role is primary, while the Cloud snapshot worker also
 requires that the node has not been cut off from acting as primary (`cloudPrimary`) — should a
 cut-off primary stream?; (4) the server's 8-second shutdown stops the stream last, after the Cloud
@@ -5275,7 +5278,9 @@ switch-offs take turns with each other and with the backup routes' `apply` and `
 set the recovery key. Before contacting the bucket, Test and Save run the check Litestream's
 configuration runs, refusing with `backup.stream_config_unsafe` naming the field (for the bucket
 name, the fix is lowercase letters, digits, dots and hyphens only), and refuse a prefix of a single
-`-`, which the vault would store as no prefix. The screen is Task 8b's. Left open: the pointer write left open under
+`-`, which the vault would store as no prefix. The routes and the kit's decoder read the bucket settings through
+one reader (`packages/stream/src/bucket-config.ts`), and the kit is sent with `Cache-Control: no-store`.
+The screen is Task 8b's. Left open: the pointer write left open under
 Task 6, item (2), one from a process that has since died, landing after the restart.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The

@@ -13,8 +13,9 @@ export type BucketOperation = "get" | "put" | "list" | "delete";
 declare module "@waitron/shared" {
   interface ErrorParams {
     /** A conditional write was refused: the object existed when "only if absent" was asked, or had
-     * changed since the version named. For `current.json` or a generation's marker, that is another
-     * box writing this venue. */
+     * changed since the version named. For `current.json` or a generation's marker, that is usually
+     * another box writing this venue, but can be this box: a pointer write landing late from a
+     * process that has since restarted, or a deleted pointer. */
     "backup.stream_precondition_failed": { key: string };
     /** Any other failure talking to the bucket, after conflict retries are spent. `status` is the HTTP
      * status, or null when no answer arrived at all. A file refused inside a batch delete the bucket
@@ -34,13 +35,11 @@ declare module "@waitron/shared" {
      * named it). */
     "backup.stream_name_invalid": { field: string; value: string };
     /** A value bound for Litestream could not be written into its configuration safely
-     * (`litestream.ts`). `field` names the value, never its content. For `bucket` the fix is a name
-     * of lowercase letters, digits, dots and hyphens only. The settings routes refuse with it
-     * before any bucket is contacted. */
+     * (`litestream.ts`). `field` names the value, never its content. */
     "backup.stream_config_unsafe": { field: string };
     /** Text offered as a recovery kit is not one: `not_found` (no kit token in it), `encoding` (the
-     * token does not decode to JSON) or `shape` (a field is missing, mistyped or carries a control
-     * character). Never carries any of the text: a kit holds the recovery key and the bucket's
+     * token does not decode to JSON) or `shape` (the decoded kit is not a kit this package accepts).
+     * Never carries any of the text: a kit holds the recovery key and the bucket's
      * secret key. */
     "backup.stream_kit_invalid": { reason: "not_found" | "encoding" | "shape" };
   }

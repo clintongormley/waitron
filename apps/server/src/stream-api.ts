@@ -151,8 +151,8 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     }),
   );
 
-  // The order is the invariant: a key exists, the locked row is written under it, and only then
-  // does a generation open, so the first generation already holds a row a rebuild can unlock. The
+  // A key is ensured and the sealed-state refresh attempted before the settings are stored and the
+  // copy reloaded. A failed refresh does not block Save; it surfaces as the sealed-state alert. The
   // reload runs after the credential has committed: inside the transaction, the write lock refuses
   // the host's own read of the settings.
   app.put("/api/backup/stream", (c) =>
