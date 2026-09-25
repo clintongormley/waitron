@@ -11,27 +11,13 @@ import { needsModifierPicker } from "../state/order-line.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 
 /** A product with variants is sold only as one of them, so one whose variants are all unavailable
- * here has nothing to sell and gets no tile (spec §15.4). */
+ * here has nothing to sell and gets no tile. */
 function hasSomethingToSell(product: TillProduct): boolean {
   const variants = product.variants ?? [];
   return variants.length === 0 || variants.some((variant) => variant.available);
 }
 
-/**
- * The wall of tappable product tiles — the till's primary input surface. One `<wt-button>` per
- * product with something to sell — a product whose variants are all unavailable gets none — with a
- * 44px tap target and focus ring for free, showing the product's name in the current locale
- * and its price. Tiles coordinate only through the store (spec §3): they never reference the basket
- * or total widgets.
- *
- * Tapping is driven by the selected unit:
- *  - a whole, non-hardware tile that offers nothing rings up one straight away —
- *    `store.addProduct(product, "1")`, the common tap;
- *  - a whole, non-hardware tile that offers an extras or options list, or has variants, opens the
- *    modifier picker instead, and rings the dish with the answers once the operator confirms;
- *  - a fractional or hardware-mapped tile needs quantity entry, so it BROADCASTS the pick
- *    (`emit("product-selected", …)`) for the keypad. It does not touch the basket itself.
- */
+/** Tiles coordinate only through the store: they never reference the basket or total widgets. */
 @customElement("till-product-grid")
 export class TillProductGrid extends LitElement {
   constructor() {
@@ -73,20 +59,13 @@ export class TillProductGrid extends LitElement {
 
   @property({ type: Number }) columns?: number;
 
-  /** The product whose modifier picker is currently open, or `undefined` when none is. Set when an
-   * whole, non-hardware product WITH a non-empty group is tapped; cleared on confirm or cancel. */
   @state() private pickerProduct?: TillProduct;
 
-  /** Price text for a tile: a money string suffixed by the localized selected unit. */
   #priceLabel(product: TillProduct): string {
     const price = formatMoney(product.unitPrice);
     return `${price}/${unitName(product)}`;
   }
 
-  /**
-   * Ring up a whole, non-hardware pick, or open its modifier picker when it carries options;
-   * broadcast any fractional or hardware-mapped pick for quantity entry.
-   */
   #pick(product: TillProduct): void {
     const unit = productUnit(product);
     if (unit.hardwareUnit !== null || unit.precision > 0) {
@@ -99,16 +78,12 @@ export class TillProductGrid extends LitElement {
   }
 
   #onModifierConfirm(detail: ModifierConfirmDetail): void {
-    // The detail IS the line's selection (it extends `LineSelection`, note included), so it is handed
-    // over whole; the store attaches only the keys that name something, so a note-free confirm leaves
-    // the line byte-identical to a one-tap add.
     this.store.addProduct(detail.product, "1", detail);
     this.pickerProduct = undefined;
   }
 
   override render() {
-    // When `columns` is set, override the responsive default with a fixed N equal-width columns;
-    // unset, `nothing` removes the inline attribute so the stylesheet's auto-fill grid governs.
+    // `nothing` removes the inline attribute, so the stylesheet's auto-fill grid governs.
     const gridStyle =
       this.columns === undefined ? nothing : `grid-template-columns: repeat(${this.columns}, 1fr);`;
     return html`

@@ -52,7 +52,6 @@ const portion: TillProduct = {
   },
 };
 
-/** Taps one keypad key inside the widget and lets the parent re-render with the new value. */
 async function press(el: TillTenderPay, key: string): Promise<void> {
   const pad = el.shadowRoot!.querySelector("till-numeric-pad")!;
   await (pad as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
@@ -60,12 +59,10 @@ async function press(el: TillTenderPay, key: string): Promise<void> {
   await el.updateComplete;
 }
 
-/** Taps a string of keys in order — each character is a `data-key` on the pad. */
 async function type(el: TillTenderPay, keys: string): Promise<void> {
   for (const key of keys) await press(el, key);
 }
 
-/** Types free text into a `wt-input` (matched by `selector`) by driving its inner `<input>`. */
 async function typeInput(el: TillTenderPay, selector: string, text: string): Promise<void> {
   const input = el.shadowRoot!.querySelector(selector) as HTMLElement & {
     updateComplete: Promise<unknown>;
@@ -77,16 +74,12 @@ async function typeInput(el: TillTenderPay, selector: string, text: string): Pro
   await el.updateComplete;
 }
 
-/** Types free text into the hold-label field. */
 const typeLabel = (el: TillTenderPay, text: string) => typeInput(el, ".label-input", text);
-/** Types free text into the card operation-number (externalRef) field. */
 const typeRef = (el: TillTenderPay, text: string) => typeInput(el, ".ref-input", text);
-/** Types a gross tip into the integrated-card idle screen's tip field (Task 9). */
 const typeTip = (el: TillTenderPay, text: string) => typeInput(el, ".tip-input", text);
 
-/** Toggles a `wt-switch` (matched by `selector`) by clicking its inner native checkbox — the same
- * pattern `wt-switch.test.ts` itself uses (a real `click()` toggles `checked` before `change` fires,
- * unlike a synthetic `change` event on an unchanged checkbox). */
+/** A real `click()` toggles `checked` before `change` fires, unlike a synthetic `change` event on an
+ * unchanged checkbox. */
 async function toggleSwitch(el: TillTenderPay, selector: string): Promise<void> {
   const sw = el.shadowRoot!.querySelector(selector) as HTMLElement & {
     updateComplete: Promise<unknown>;
@@ -238,8 +231,6 @@ describe("till-tender-pay", () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2"); // Pay would otherwise be enabled
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, busy: true });
-    // busy is the visible half of the app-level single-flight guard; dropping `|| this.busy` here
-    // enables Pay mid-submit (the deletion proof).
     expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(true);
   });
 
@@ -263,9 +254,6 @@ describe("till-tender-pay", () => {
     store.emit("product-selected", jamon);
     await el.updateComplete;
     await type(el, "0.320");
-    // Two synchronous clicks before Lit re-renders: the first flips mode to "idle" BEFORE addProduct,
-    // so the second (against the still-mounted button, product captured in its closure) is a no-op.
-    // Deleting the `if (this.mode !== "weighing") return` guard rings the line twice.
     click(el, ".add");
     click(el, ".add");
     expect(addSpy).toHaveBeenCalledTimes(1);
@@ -390,8 +378,6 @@ describe("till-tender-pay", () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2"); // Hold would otherwise be enabled
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, busy: true });
-    // Same visible half of the single-flight guard as Pay: a sale in flight disables Hold too, so an
-    // order cannot be parked mid-settle. Dropping `|| this.busy` here enables Hold — the deletion proof.
     expect(query(el, ".hold")!.hasAttribute("disabled")).toBe(true);
   });
 
@@ -479,7 +465,6 @@ describe("till-tender-pay", () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2"); // Card would otherwise be enabled
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, busy: true });
-    // Same visible half of the single-flight guard as Pay/Hold: dropping `|| this.busy` enables Card.
     expect(query(el, ".pay-card")!.hasAttribute("disabled")).toBe(true);
   });
 
@@ -551,11 +536,6 @@ describe("till-tender-pay", () => {
   });
 
   it("both idle views (pay + collect) render the Card button by default", async () => {
-    // Asserts BOTH idle views show the Card button by default (they share `#renderCardButton`, but this
-    // pins the observable behaviour, not the extraction itself). Every settling face renders it — the
-    // counter/fixed till AND the handheld: a handheld settles a MANUAL card tender on `POST /api/sales`
-    // (the server fences only the INTEGRATED reader, `/api/pay`), and the handheld table-order screen
-    // threads no `cardProvider`, so Card stays the #62 manual path.
     const payStore = new WorkingOrderStore();
     payStore.addProduct(cafe, "2");
     const pay = await mountWidget<TillTenderPay>("till-tender-pay", { store: payStore });
@@ -575,7 +555,6 @@ describe("till-tender-pay", () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, stage: "collect" });
-    // mode defaults to "prepay", which ignores `stage` entirely — the walk-up idle view is unchanged.
     expect(query(el, ".pay")).not.toBeNull();
     expect(query(el, ".hold")).not.toBeNull();
     expect(el.shadowRoot!.textContent).toContain(t("action.pay"));
@@ -744,12 +723,6 @@ describe("till-tender-pay", () => {
     expect(el.shadowRoot!.textContent).not.toContain(t("weigh.prompt")); // never heard the pick
   });
 
-  // -----------------------------------------------------------------------------------------------
-  // Integrated card terminal (sub-project 7, Task 9): the collecting / card_outcome state machine,
-  // Cancel as a client-side abort, and the tip/offline-consent affordances. UI-unit (browser mode):
-  // this is a pure DOM+event concern — no DB, no privilege — so the hermetic browser target used by
-  // this whole file is the right one (CLAUDE.md §4), unchanged from every other test above.
-  // -----------------------------------------------------------------------------------------------
   describe("integrated card terminal (Task 9)", () => {
     it("shows local simulator outcomes and sends the selected decline scenario", async () => {
       const store = new WorkingOrderStore();
@@ -840,8 +813,6 @@ describe("till-tender-pay", () => {
         cardProvider: "stripe_terminal",
         tipsEnabled: true,
       });
-      // The tip is entered on the IDLE screen, before the first attempt — it is not re-readable once
-      // card_outcome shows (the idle screen, and its field, are gone by then).
       await typeTip(el, "0.50");
       click(el, ".pay-card");
       await el.updateComplete;

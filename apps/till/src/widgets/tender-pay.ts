@@ -16,108 +16,41 @@ import { productUnit, unitName } from "./product-name.js";
 import { needsModifierPicker } from "../state/order-line.js";
 
 /**
- * The payload of the `confirm-payment` event — either tender the widget can settle:
- * - `cash`: `amount` is the FULL operator-entered tendered amount (a Decimal string), never the
- *   total — the server records the fiscal tender at the total and returns the change.
- * - `card`: a manual bank-terminal (datáfono) charge. `amount` is the sale total exactly (a card is
- *   charged the total, never over-tendered, so there is no change), and `externalRef` is the
- *   terminal's optional operation number, omitted when the operator did not key one.
+ * For `cash`, `amount` is the FULL operator-entered tendered amount, never the total — the
+ * server records the fiscal tender at the total and returns the change. `card` is a manual
+ * bank-terminal (datáfono) charge: `amount` is the sale total, and `externalRef` is the terminal's
+ * optional operation number.
  */
 export type ConfirmPaymentDetail =
   { method: "cash"; amount: string } | { method: "card"; amount: string; externalRef?: string };
 
-/** The payload of the `park-order` event: the operator's optional free-text name for the parked order. */
 export interface ParkOrderDetail {
-  /** A free-text order name ("Mesa 4", "Barra"), or `undefined` when parked unnamed. */
   label?: string;
 }
 
-/**
- * The payload of the `collect-card` event (integrated card terminal, sub-project 7 Task 8/9) — the
- * till-entered gross tip and any per-transaction staff consent to accept the card offline if the
- * network is down, both optional. Emitted by `#onCardTap`/`#retryCard` below and consumed by
- * `till-app`'s `#onCollectCard`, which posts it to `POST /api/pay` almost verbatim. Owned here, like
- * `ConfirmPaymentDetail`/`ParkOrderDetail` above, because this widget is the one that emits it — it
- * used to live on `till-app.ts` (Task 8, before this widget existed to own it).
- */
 export interface CollectCardDetail {
   tip?: string;
   allowOffline?: boolean;
   simulationOutcome?: "captured" | "declined";
-  /** The reader the operator picked this session (Task 17's picker), or absent when they never
-   * opened it — the server then falls back to the paying device's own default reader. Rides `POST
-   * /api/pay`'s `readerId` (`till-app`'s `#onCollectCard` reads it straight off this detail). */
+  /** Absent when the operator never picked one — the server then falls back to the paying
+   * device's own default reader. */
   readerId?: string;
 }
 
-/**
- * The till's integrated-card wiring (Task 8/9), mirroring `GET /api/till`'s `cardProvider`
- * (`TillInfo`, `../api/client.js`) as a LOCAL type — same decoupling as every alias in that file.
- * `"none"` keeps the Card button on the #62 manual (datáfono) path; every other value makes it emit
- * `collect-card` instead. `"simulator"` is selected by Demo/Prepare onboarding, never device config.
- */
+/** `"none"` keeps the Card button on the manual (datáfono) path; every other value emits
+ * `collect-card`. */
 export type CardProvider =
   "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";
 
-/**
- * The non-`captured` variants of `POST /api/pay`'s outcome (`PayOutcome`, `../api/client.js`) — the
- * shape `till-app`'s `cardOutcome` carries and this widget reads to drive the `"card_outcome"` view
- * (see `willUpdate`).
- */
 export type CardOutcome = Exclude<PayOutcome, { outcome: "captured" }>["outcome"];
 
-/** Zero, precomputed — the floor a quantity entry must clear. */
 const ZERO = decimal("0");
 
-/**
- * One widget, seven VIEWS: the idle buttons, the cash-tender screen, the quantity screen, the hold
- * label prompt, the manual card-tender screen, and (Task 9, integrated card terminal) the
- * `"collecting"` spinner and the `"card_outcome"` decline/timeout/network-unavailable screen. Named
- * `View` (not `Mode`) to keep it distinct from the {@link TillTenderPay.mode} property below, which
- * is the per-VENUE pay-timing mode (7c) — an unrelated axis the widget also renders against.
- */
 type View = "idle" | "paying" | "weighing" | "holding" | "card" | "collecting" | "card_outcome";
 
 /**
- * The pay flow and unit-quantity entry — the two moments the walk-up sale needs a numeric keypad.
- * It owns a small view state (idle → paying / weighing / holding / card → idle) and renders exactly
- * one view at a time, sharing the `till-numeric-pad` between cash and quantity entry.
- *
- * It coordinates only through the store (spec §3): it subscribes to `"changed"` so the Pay button's
- * enabled state tracks the basket, and to `"product-selected"` so a unit that needs quantity entry
- * opens the keypad. It never references a sibling widget.
- *
- * MONEY DISCIPLINE. Every amount is an `@waitron/shared` Decimal, never a float, and both tenders
- * read the store's previewed total, so the number the operator settles against is the same one the
- * server re-prices and files. The two tenders diverge in what the terminal event carries: for cash
- * (`#confirm`), `amount` is the operator-entered tendered amount, never the total — the displayed
- * change is `tendered − total` by decimal subtraction, and the server records the fiscal tender at
- * the total and returns the change. For card (`#confirmCard`), there is no operator entry to tender
- * against; `amount` is `this.store.total` itself, since a card is charged the exact total and there
- * is no change.
- *
- * PER-MODE CONTROL (7c prepare & collect, design §3). {@link mode} names the location's pay-timing
- * config and {@link stage} names where in that order's life this widget instance sits; together they
- * pick which idle control renders:
- *  - `mode === "prepay"` (Mode P, the default): the walk-up flow above, unchanged — Pay/Card/Hold,
- *    `stage` is irrelevant (a prepay sale is always settled at order).
- *  - `mode !== "prepay"` (Modes I/T) at `stage === "order"`: no tender is collected here — placing
- *    freezes composition (and, for Mode I, issues a deferred invoice) but a walk-up basket is not
- *    filed against a tender YET — so only Place and Hold are offered. Place emits `place-order`.
- *  - `mode !== "prepay"` at `stage === "collect"`: the order is already placed (Mode I already
- *    invoiced); this is where the tender is finally collected. The SAME cash/card screens Mode P
- *    uses (keypad, change, the optional card ref field) are reused — only their idle button's label
- *    and their terminal event's name differ: `collect-order` instead of `confirm-payment` (see
- *    `#confirm`/`#confirmCard`). No Hold (a placed order is not something you park again).
- *
- * INTEGRATED CARD (Task 9, sub-project 7). When {@link cardProvider} is not `"none"`, the SAME idle
- * Card button takes a different path: `#onCardTap` reads the idle screen's tip/offline-consent
- * fields and emits `collect-card` (not `confirm-payment`/`collect-order`) instead of opening the
- * manual `#renderCard` screen, and the widget enters `"collecting"` (a spinner + a Cancel that is a
- * CLIENT-SIDE ABORT ONLY — see `#cancel`'s own doc). `willUpdate` reacts to {@link cardOutcome} —
- * data on a prop from `till-app`'s `#onCollectCard` (Task 8), not an event — by entering
- * `"card_outcome"`, which offers Retry / Switch tender / Wait. `cardProvider === "none"` leaves every
- * one of these untouched: `#onCardTap` falls straight through to `#startCard`.
+ * The pay flow and unit-quantity entry. It coordinates only through the store and never
+ * references a sibling widget.
  */
 @customElement("till-tender-pay")
 export class TillTenderPay extends LitElement {
@@ -215,91 +148,38 @@ export class TillTenderPay extends LitElement {
   /** The order this widget settles. Set before the widget connects (its lifecycle subscribes). */
   @property({ attribute: false }) store!: WorkingOrderStore;
   /**
-   * A sale is in flight — the app is awaiting `recordSale` (see `till-app`'s `submitting`). While set,
-   * the idle Pay and Hold buttons AND the Confirm-payment button are all disabled (`#renderIdle` gates
-   * both idle actions on `busy`, `#renderPaying` gates Confirm), so mid-submit the operator can neither
-   * start a new settlement, park the basket, nor re-fire the settlement. This is the VISIBLE half of
-   * the double-file guard; the real safety is the app-level single-flight flag, which blocks a second
-   * `confirm-payment` regardless of this state.
+   * A sale is in flight. Disabling the controls is only the VISIBLE half of the double-file guard;
+   * the real safety is the app-level single-flight flag (`till-app`'s `submitting`).
    */
   @property({ type: Boolean }) busy = false;
-  /**
-   * The location's pay-timing mode (7c, design §3) — `"prepay"` (Mode P, pay at order, the default
-   * that reproduces 7a/7b's walk-up flow unchanged) or `"invoice_first"` / `"ticket_then_pay"`
-   * (Modes I/T, place then collect). See the class doc's PER-MODE CONTROL section for exactly which
-   * idle control each combination of `mode`/`stage` renders.
-   */
   @property() mode: OrderFlow = "prepay";
-  /**
-   * Where in a Mode-I/T order's life this widget instance sits: `"order"` (composing/placing, the
-   * default) or `"collect"` (the order is already placed; this instance collects its tender).
-   * Ignored entirely when {@link mode} is `"prepay"` — a prepay sale has no separate collect stage.
-   */
+  /** Ignored when {@link mode} is `"prepay"`, which has no separate collect stage. */
   @property() stage: "order" | "collect" = "order";
-  /**
-   * The till's integrated-card wiring (Task 9, threaded from `till-app`'s `GET /api/till` via
-   * `till-counter-screen`). `"none"` (the default) keeps the Card button on the #62 manual
-   * (datáfono) path — every earlier slice's behaviour is unchanged until a real value is threaded.
-   */
   @property() cardProvider: CardProvider = "none";
-  /** Whether the till prompts for a tip on an integrated-card collection (Task 9, mirrors
-   * `GET /api/till`'s `tipsEnabled`). Ignored under the manual path (`cardProvider === "none"`). */
   @property({ type: Boolean }) tipsEnabled = false;
-  /**
-   * The outcome of the most recent non-captured `collect-card` attempt (Task 8's
-   * `till-app.cardOutcome`, threaded through `till-counter-screen`) — `undefined` while none is
-   * pending. A fresh (CHANGED) value drives this widget into the `"card_outcome"` view; see
-   * `willUpdate`.
-   */
   @property() cardOutcome?: CardOutcome;
-  /**
-   * The venue's ACTIVE card readers (Task 12/17, threaded from `till-app` via `till-counter-screen` →
-   * `card-grid`), feeding the "use a different reader" control and the picker it opens. `[]` (the
-   * default) hides the control entirely — see {@link readerPickerAvailable}.
-   */
   @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
-  /**
-   * The paying device's DEFAULT reader id (Task 17, mirrors `GET /api/till`'s `defaultReaderId`), or
-   * `undefined` when it has none. Used only to NAME the default on the idle screen (looked up in
-   * {@link activeReaders}) before the operator has picked anything this session — never sent to the
-   * server itself; an unset {@link chosenReaderId} already means "use the device default".
-   */
+  /** Only NAMES the default on screen — never sent; an unset {@link chosenReaderId} already means
+   * "use the device default". */
   @property() defaultReaderId?: string;
 
   @state() private view: View = "idle";
-  /** The digits the keypad has entered — a partial number string shared by both keypad screens. */
   @state() private entry = "";
-  /** The free-text order name typed into the hold prompt; set only while {@link view} is `"holding"`. */
   @state() private labelEntry = "";
-  /** The optional bank-terminal operation number typed on the card screen; set only while `"card"`. */
   @state() private refEntry = "";
-  /** The product awaiting quantity entry; set only while {@link view} is `"weighing"`. */
   @state() private selected?: TillProduct;
-  /** The gross tip typed into the integrated-card idle screen (Task 9); read at `#onCardTap` time,
-   * shown only when {@link tipsEnabled}. */
   @state() private tipEntry = "";
-  /** Per-transaction staff consent to accept the card offline if the network is down (Task 9); read
-   * at `#onCardTap` time, shown only for `cardProvider === "stripe_on_device"`. */
   @state() private allowOffline = false;
   @state() private simulationOutcome: "captured" | "declined" = "captured";
-  /** The detail of the most recent `collect-card` emission (Task 9) — replayed verbatim by
-   * `#retryCard` so a retry doesn't silently drop a tip/offline-consent the operator already entered
-   * on the idle screen, which is no longer on screen by the time Retry is tapped. Not `@state`: it
-   * never drives a render on its own. */
+  /** Replayed by `#retryCard`: the idle screen's tip and offline fields are gone by the time
+   * Retry is tapped. */
   #lastCollectDetail: CollectCardDetail = {};
-  /** The reader the operator explicitly picked this session (Task 17), or `undefined` while they have
-   * never opened the picker (or opened it and cancelled) — the manual path never sets this. Persists
-   * across repeated taps of this same widget instance, so a chosen reader stays chosen for the next
-   * sale too, until the operator opens the picker again. */
+  /** Stays chosen for later sales on this widget instance, until the operator picks again. */
   @state() private chosenReaderId?: string;
-  /** Whether the reader-picker dialog is showing over the idle screen (Task 17). */
   @state() private pickingReader = false;
 
   constructor() {
     super();
-    // Two store channels, each its own controller (spec §3 — coordinate only through the store):
-    // `"changed"` re-renders so the Pay button tracks the basket; `"product-selected"` opens the
-    // quantity screen. Both `() => this.store` read lazily on connect.
     new StoreChangeController(this, () => this.store);
     new StoreChangeController(
       this,
@@ -309,7 +189,6 @@ export class TillTenderPay extends LitElement {
     );
   }
 
-  /** Open quantity entry for fractional units and units explicitly mapped to hardware. */
   #onProductSelected(product: TillProduct): void {
     const unit = productUnit(product);
     if (unit.hardwareUnit === null && unit.precision === 0) return;
@@ -319,14 +198,10 @@ export class TillTenderPay extends LitElement {
   }
 
   /**
-   * Enter the `"card_outcome"` view the moment {@link cardOutcome} CHANGES to a defined value (Task
-   * 9) — a decline/timeout/network-unavailable is DATA on a prop (Task 8), not an event, so there is
-   * no click handler to drive this transition. Lit's default `hasChanged` (`!==`) means
-   * re-committing the SAME outcome string is not a change, which is what lets "switch tender"
-   * (`#cancel`, → `"idle"`) and "keep waiting" (`#wait`, → `"collecting"`) leave {@link view} where
-   * the operator put it instead of snapping straight back to the outcome screen — neither touches
-   * `cardOutcome` itself; only a genuinely NEW attempt (`#onCardTap`/`#retryCard`, via `till-app`'s
-   * `#onCollectCard` clearing it first) produces a fresh value for this to react to.
+   * Lit's default `hasChanged` (`!==`) means re-committing the SAME outcome is not a change, which
+   * is what lets Switch tender and Keep waiting leave {@link view} where the operator put it. A new
+   * attempt produces a fresh value because `till-app`'s `#onCollectCard` clears `cardOutcome`
+   * first.
    */
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("cardOutcome") && this.cardOutcome !== undefined) {
@@ -334,11 +209,8 @@ export class TillTenderPay extends LitElement {
     }
   }
 
-  /**
-   * The entered pad string as a valid Decimal. A trailing dot (`"0."`, mid-entry) is stripped and an
-   * empty pad reads as `"0"` — the two shapes `decimal()` would reject — so this never throws on a
-   * partial entry.
-   */
+  /** A trailing dot (`"0."`, mid-entry) and an empty pad are the two shapes `decimal()` would
+   * reject. */
   #enteredDecimal(): Decimal {
     const trimmed = this.entry.endsWith(".") ? this.entry.slice(0, -1) : this.entry;
     return decimal(trimmed === "" ? "0" : trimmed);
@@ -354,21 +226,16 @@ export class TillTenderPay extends LitElement {
     this.view = "paying";
   }
 
-  /** Open the hold label prompt with an empty field — the operator may name the order or leave it blank. */
   #startHolding(): void {
     this.labelEntry = "";
     this.view = "holding";
   }
 
-  /** Open the card-tender screen with an empty operation-number field (the field is optional). */
   #startCard(): void {
     this.refEntry = "";
     this.view = "card";
   }
 
-  /** Card tapped from idle (Task 9): the manual path (`cardProvider === "none"`) is the #62 screen,
-   * UNCHANGED; otherwise read the tip/offline-consent fields entered alongside the idle Card button
-   * (`#renderCardExtras`) and start an integrated collection. */
   #onCardTap(): void {
     if (this.cardProvider === "none") {
       this.#startCard();
@@ -381,14 +248,10 @@ export class TillTenderPay extends LitElement {
         ? { allowOffline: true }
         : {}),
       ...(this.cardProvider === "simulator" ? { simulationOutcome: this.simulationOutcome } : {}),
-      // The operator's picked reader (Task 17), if any — omitted when they never opened the picker
-      // (or opened it and cancelled), so the server falls back to the device's own default.
       ...(this.chosenReaderId === undefined ? {} : { readerId: this.chosenReaderId }),
     });
   }
 
-  /** Emit `collect-card` with `detail` and enter the collecting spinner (Task 9) — the ONE place
-   * that fires the event, shared by the first attempt (`#onCardTap`) and a replay (`#retryCard`). */
   #collectCard(detail: CollectCardDetail): void {
     this.#lastCollectDetail = detail;
     this.view = "collecting";
@@ -397,22 +260,12 @@ export class TillTenderPay extends LitElement {
     );
   }
 
-  /** Retry (card_outcome screen, Task 9): replay the SAME detail the failed attempt sent, rather
-   * than re-reading the idle screen's fields (no longer on screen) — safe against a double-charge
-   * via the capture-idempotency guard (spec §4: a replayed attempt settles the same PaymentIntent,
-   * never a second one). */
   #retryCard(): void {
     this.#collectCard(this.#lastCollectDetail);
   }
 
-  /**
-   * "Keep waiting" (card_outcome screen, Task 9): return to the collecting spinner without retrying
-   * or switching tender. The `POST /api/pay` this outcome came from has already resolved — `pay()`
-   * (`till-app`'s `#onCollectCard`) never leaves a request in flight past its one `await` — so
-   * nothing is actually running to wait ON; this only lets the operator sit on the spinner (e.g.
-   * while they check the physical terminal) instead of the decline banner, until they pick Retry or
-   * Switch tender.
-   */
+  /** The `POST /api/pay` this outcome came from has already resolved, so nothing is running to wait
+   * ON; this only puts the spinner back up. */
   #wait(): void {
     this.view = "collecting";
   }
@@ -427,11 +280,7 @@ export class TillTenderPay extends LitElement {
     this.allowOffline = (event as CustomEvent<{ checked: boolean }>).detail.checked;
   }
 
-  /**
-   * Whether the "use a different reader" control is worth showing at all (Task 17): the manual
-   * path (`cardProvider === "none"`) and practice mode's local simulator have no real reader to pick
-   * an ALTERNATIVE to, and an empty {@link activeReaders} leaves nothing to offer either way.
-   */
+  /** The manual path and the simulator have no real reader to pick an ALTERNATIVE to. */
   get #readerPickerAvailable(): boolean {
     return (
       this.cardProvider !== "none" &&
@@ -440,38 +289,24 @@ export class TillTenderPay extends LitElement {
     );
   }
 
-  /** The reader whose name shows on the idle screen: the operator's own pick this session, else the
-   * device's default — looked up in {@link activeReaders} by id. `undefined` when neither resolves to
-   * a listed reader (a stale id, or a boot before any reader was configured). */
   get #displayedReader(): TillActiveReader | undefined {
     const id = this.chosenReaderId ?? this.defaultReaderId;
     return id === undefined ? undefined : this.activeReaders.find((reader) => reader.id === id);
   }
 
-  /** Open the reader picker (Task 17), pre-selecting whichever reader is currently in effect. */
   #openReaderPicker(): void {
     this.pickingReader = true;
   }
 
-  /** A pick from the dialog (Task 17): remember it for every collection from here on and close the
-   * dialog. Read straight off the event rather than trusting a stale closure — the dialog is the only
-   * thing that ever fires this. */
   #onReaderChosen(event: Event): void {
     this.chosenReaderId = (event as CustomEvent<{ readerId: string }>).detail.readerId;
     this.pickingReader = false;
   }
 
-  /** Dismiss the picker without changing the current reader (Cancel / Escape / backdrop). */
   #onReaderPickerCancel(): void {
     this.pickingReader = false;
   }
 
-  /**
-   * Place the order (Modes I/T at the order stage, 7c): freezes composition (and, for Mode I, issues
-   * a deferred invoice) with NO tender collected here — a fire-and-forget trigger, unlike Pay/Collect,
-   * so it carries no detail. The app reads `store.id` itself, the same way `#park` leaves the id
-   * implicit.
-   */
   #place(): void {
     this.dispatchEvent(new CustomEvent("place-order", { bubbles: true, composed: true }));
   }
@@ -486,13 +321,8 @@ export class TillTenderPay extends LitElement {
     this.refEntry = (event as CustomEvent<{ value: string }>).detail.value;
   }
 
-  /**
-   * Emit `park-order` with the (optional) label and return to idle. The app parks the basket and clears
-   * it on success; a blank/whitespace-only field parks the order UNNAMED (`label` undefined), matching
-   * the store's optional label. The view and label are reset BEFORE the dispatch (unlike `#confirm`,
-   * which resets after), so the view is back to idle regardless of what the handler does next — even a
-   * synchronous listener that throws leaves the widget idle.
-   */
+  /** Reset BEFORE the dispatch, so even a synchronous listener that throws leaves the widget
+   * idle. */
   #park(): void {
     const label = this.labelEntry.trim();
     this.view = "idle";
@@ -507,23 +337,9 @@ export class TillTenderPay extends LitElement {
   }
 
   /**
-   * Abandon the cash, weigh, hold-label or card screen and return to idle WITHOUT settling anything —
-   * no terminal tender event, no `park-order`, no line added. It is the way back from any of those
-   * views for an operator who opened Pay/Collect/Hold/Card (or quantity entry) by mistake;
-   * without it those views are one-way. The basket is left exactly as it was.
-   *
-   * Also the handler for TWO integrated-card actions (Task 9), both a plain return to idle with no
-   * event of their own:
-   *  - Cancel, from the `"collecting"` spinner — a CLIENT-SIDE ABORT ONLY. `PaymentProvider` has no
-   *    `cancel` method (`packages/payments/src/provider.ts`), so there is nothing to tell the
-   *    reader or the server; the in-flight `POST /api/pay` (`till-app`'s `#onCollectCard`) keeps
-   *    running to its own terminal outcome regardless, and a later retry replays safely (capture
-   *    idempotency, spec §4).
-   *    A server-side reader-cancel endpoint is a DEFERRED `PaymentProvider` extension, not built here.
-   *  - Switch tender, from the `"card_outcome"` screen — leaves cash / manual card one tap away
-   *    (CLAUDE.md §5: a card decline must never wedge the till). `cardOutcome` itself is left
-   *    untouched (only `till-app` clears it); see `willUpdate` for why that does not immediately snap
-   *    the view back to `"card_outcome"`.
+   * Cancel from the `"collecting"` spinner is a CLIENT-SIDE ABORT ONLY: `PaymentProvider` has no
+   * `cancel` method (`packages/payments/src/provider.ts`), so the in-flight `POST /api/pay` keeps
+   * running to its own outcome. Switch tender leaves `cardOutcome` untouched; see `willUpdate`.
    */
   #cancel(): void {
     this.selected = undefined;
@@ -533,18 +349,12 @@ export class TillTenderPay extends LitElement {
     this.view = "idle";
   }
 
-  /**
-   * The terminal tender event's NAME (7c, design §3): Mode P's cash/card screens settle a fresh sale
-   * (`confirm-payment`, the app's `recordSale`); Modes I/T's collect-stage screens settle an already
-   * PLACED order instead (`collect-order`, the app's `collectOrder`) — same screens, same detail
-   * shape, different verb because a different server route answers it.
-   */
   #tenderEventName(): "confirm-payment" | "collect-order" {
     return this.mode === "prepay" ? "confirm-payment" : "collect-order";
   }
 
-  /** Emit the cash tender and return to idle. Guarded so a short tender can never be emitted, even
-   * if Confirm is force-clicked past its disabled state. */
+  /** Guarded so a short tender can never be emitted, even if Confirm is force-clicked past its
+   * disabled state. */
   #confirm(): void {
     if (compareDecimal(this.#enteredDecimal(), this.store.total) < 0) return;
     this.dispatchEvent(
@@ -558,13 +368,7 @@ export class TillTenderPay extends LitElement {
     this.entry = "";
   }
 
-  /**
-   * Emit the card tender at the sale total and return to idle. A card is charged the exact total, so
-   * `amount` is `this.store.total` (not an operator entry) and there is no change. `externalRef` — the
-   * bank terminal's operation number — rides along only when the operator keyed one; a blank or
-   * whitespace-only field is omitted. The view and field are reset BEFORE the dispatch (like `#park`,
-   * per the 7b Copilot fix), so a synchronous listener that throws still leaves the widget idle.
-   */
+  /** Reset BEFORE the dispatch, like `#park`. */
   #confirmCard(): void {
     const ref = this.refEntry.trim();
     const detail: ConfirmPaymentDetail = {
@@ -583,15 +387,13 @@ export class TillTenderPay extends LitElement {
     );
   }
 
-  /**
-   * Ring up the entered quantity and return to idle. A zero/empty value is a no-op, and
-   * single-flight so two rapid clicks before Lit re-renders ring the line ONCE: the view is flipped to
-   * `"idle"` BEFORE `addProduct`, so the second synchronous call sees `view !== "weighing"` and
-   * returns. (The click handler captures `product` from the render closure, so it would otherwise fire
-   * again against a stale button.)
-   */
   @state() private modifierDraft?: { product: TillProduct; quantity: string };
 
+  /**
+   * Single-flight, so two rapid clicks before Lit re-renders ring the line ONCE: the view is
+   * flipped to `"idle"` first, so the second synchronous call sees `view !== "weighing"` and
+   * returns.
+   */
   #addWeight(product: TillProduct): void {
     if (this.view !== "weighing") return;
     const quantity = this.#enteredDecimal();
@@ -606,7 +408,6 @@ export class TillTenderPay extends LitElement {
     }
   }
 
-  /** What the keypad has entered so far, shown as `"0"` rather than blank when nothing is typed. */
   #entryDisplay(): string {
     return this.entry === "" ? "0" : this.entry;
   }
@@ -629,8 +430,7 @@ export class TillTenderPay extends LitElement {
               if (!this.modifierDraft) return;
               const quantity = this.modifierDraft.quantity;
               this.modifierDraft = undefined;
-              // The detail IS the selection (it extends `LineSelection`, note included); the store
-              // attaches only the keys that name something.
+              // The detail IS the selection: it extends `LineSelection`, note included.
               this.store.addProduct(event.detail.product, quantity, event.detail);
             }}
             @wt-modifier-cancel=${(event: Event) => {
@@ -652,12 +452,7 @@ export class TillTenderPay extends LitElement {
     return this.#renderIdle();
   }
 
-  /**
-   * The reader-picker dialog (Task 17), shown OVER whichever view is on screen while
-   * {@link pickingReader} is set — it is only ever opened from the idle screen's "use a different
-   * reader" control, but rendered here (not inlined into `#renderIdle`) so it is never torn down by a
-   * view switch racing its own open state.
-   */
+  /** Rendered outside `#renderIdle` so a view switch cannot tear the open dialog down. */
   #renderReaderPicker() {
     if (!this.pickingReader) return nothing;
     return html`<till-reader-picker
@@ -669,7 +464,6 @@ export class TillTenderPay extends LitElement {
   }
 
   #renderIdle() {
-    // Every idle control shares the same gate — a non-empty basket and no sale in flight.
     const disabled = this.store.lineCount === 0 || this.busy;
     if (this.mode !== "prepay" && this.stage === "order") return this.#renderIdlePlace(disabled);
     if (this.mode !== "prepay" && this.stage === "collect")
@@ -677,10 +471,6 @@ export class TillTenderPay extends LitElement {
     return this.#renderIdlePay(disabled);
   }
 
-  /**
-   * Modes I/T at the order stage (7c): no tender is collected here (design §3) — Place freezes
-   * composition (and, for Mode I, issues a deferred invoice); Hold still parks the basket unplaced.
-   */
   #renderIdlePlace(disabled: boolean) {
     return html`
       <div class="actions">
@@ -707,12 +497,8 @@ export class TillTenderPay extends LitElement {
   }
 
   /**
-   * The Card (manual datáfono) tender button, shared verbatim by both idle views (pay + collect).
-   * Extracted so a change to the button lives in one place and the two views cannot drift, matching this
-   * file's own `#renderCardExtras` idiom. A handheld renders it too: it settles a manual card tender on
-   * `POST /api/sales` (the datáfono leg, no reader), which the server firewall permits — only the
-   * INTEGRATED reader (`/api/pay`) is fenced, and the handheld table-order screen threads no provider so
-   * the Card button stays on the manual `#62` path.
+   * A handheld renders it too: a manual card tender goes to `POST /api/sales`, which the server
+   * does not fence against a handheld — only the INTEGRATED reader (`/api/pay`) is fenced.
    */
   #renderCardButton(disabled: boolean) {
     return html`
@@ -728,12 +514,7 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
-  /**
-   * Modes I/T at the collect stage (7c): the order is already placed, so this collects its tender —
-   * reusing the SAME cash/card screens Mode P's Pay/Card open (`#startPaying`/`#startCard`); only the
-   * cash button's label changes (Collect, not Pay) and the terminal Confirm emits `collect-order`
-   * (see `#tenderEventName`). No Hold — a placed order is not parked again.
-   */
+  /** No Hold: a placed order is not parked again. */
   #renderIdleCollect(disabled: boolean) {
     return html`
       ${this.#renderCardExtras()}
@@ -752,11 +533,7 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
-  /** Mode P (prepay, the default): pay at order, unchanged from 7a/7b. */
   #renderIdlePay(disabled: boolean) {
-    // Pay, Card and Hold share the same gate — all need a non-empty basket and no sale in flight. Pay
-    // (cash) and Card are the two tender options; Hold is secondary (parking is the lesser action).
-    // All size "lg" like Pay so every one clears the 44px POS touch minimum.
     return html`
       ${this.#renderCardExtras()}
       <div class="actions">
@@ -783,24 +560,6 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
-  /**
-   * The integrated-card affordances shown ALONGSIDE the idle Card button (Task 9) — never for the
-   * manual path (`cardProvider === "none"` returns `nothing`, so #62's idle screens are pixel-for-
-   * pixel unchanged). The tip field shows only when {@link tipsEnabled}; the offline-consent toggle
-   * only for `"stripe_on_device"` — a server-driven `"stripe_terminal"` fixed-counter reader has no
-   * device-local offline queue to consent INTO (`StripeTerminalProvider.forward`'s own doc: "no
-   * device-local offline queue... the pass is always a no-op",
-   * `packages/payments-stripe/src/provider.ts`). Read at tap time by `#onCardTap`, not bound
-   * into the emitted event until then.
-   */
-  /**
-   * The reader name + "use a different reader" control (Task 17), shown above the rest of
-   * `#renderCardExtras`'s affordances whenever there is a real reader to pick an alternative
-   * to — see `#readerPickerAvailable`'s own doc for the manual/simulator exclusions. Names
-   * whichever reader is CURRENTLY in effect (the operator's pick this session, else the device
-   * default); a name that fails to resolve (a stale id, or no reader configured at all) falls back to
-   * naming nothing rather than guessing, so the control still opens the picker to let it be fixed.
-   */
   #renderReaderControl() {
     if (!this.#readerPickerAvailable) return nothing;
     const reader = this.#displayedReader;
@@ -819,6 +578,11 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
+  /**
+   * The offline-consent toggle shows only for `"stripe_on_device"`: a server-driven
+   * `"stripe_terminal"` reader has no device-local offline queue to consent INTO
+   * (`StripeTerminalProvider.forward`, `packages/payments-stripe/src/provider.ts`).
+   */
   #renderCardExtras() {
     if (this.cardProvider === "none") return nothing;
     return html`
@@ -879,8 +643,6 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
-  /** The `"collecting"` view (Task 9): a spinner-equivalent status line plus a client-side-abort
-   * Cancel — see `#cancel`'s own doc for why Cancel fires no event. */
   #renderCollecting() {
     return html`
       <div class="summary collecting">
@@ -894,14 +656,8 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
-  /**
-   * The `"card_outcome"` view (Task 9) — a decline/timeout/network-unavailable, ENTERED reactively
-   * by `willUpdate` off {@link cardOutcome}, never by a click. One message regardless of WHICH of
-   * the three it was (only `card.declined` is specced; `"timeout"` now fires on a SumUp poll-window
-   * stall, but the till renders it and `"declined"` identically today — a deliberate single
-   * treatment), and three actions: Retry (`#retryCard`), Switch tender (`#cancel` — see its doc),
-   * Wait (`#wait`).
-   */
+  /** One message whichever of decline, timeout or network-unavailable it was — a deliberate
+   * single treatment. */
   #renderCardOutcome() {
     return html`
       <div class="summary card-outcome">
@@ -942,8 +698,6 @@ export class TillTenderPay extends LitElement {
   }
 
   #renderCard() {
-    // A card is charged the exact total on the standalone terminal — no keypad, no tendered/change
-    // rows. The only input is the OPTIONAL operation number; Confirm settles at the store total.
     return html`
       <div class="summary">
         <p class="tender-kind">${t("tender.card")}</p>
@@ -1024,8 +778,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #renderWeighing() {
-    // `view === "weighing"` is only ever entered with a product set (see #onProductSelected), so
-    // `selected` is defined here — asserting it keeps a dead, uncoverable runtime guard out.
+    // `view === "weighing"` is only ever entered with a product set (see #onProductSelected).
     const product = this.selected as TillProduct;
     const invalid =
       compareDecimal(this.#enteredDecimal(), ZERO) <= 0 || !this.#quantityFitsUnit(product);

@@ -660,7 +660,7 @@ export class TillTableOrderScreen extends LitElement {
     this.cancelLine = null;
   }
 
-  /** Always present, driven by {@link cancelLine}, so escape/backdrop flows back through `wt-close` into
+  /** Always present, driven by {@link cancelLine}, so an Escape close flows back through `wt-close` into
    * the state rather than fighting the `.open` binding. */
   #cancelDialog(): TemplateResult {
     const line = this.cancelLine;

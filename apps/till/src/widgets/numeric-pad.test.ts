@@ -4,9 +4,6 @@ import { TillNumericPad, nextPadValue, nextPinValue } from "./numeric-pad.js";
 
 afterEach(cleanupWidgets);
 
-// The pure string-builder the pad emits on each key. It is exported and tested directly so every
-// branch (leading-zero suppression, the single decimal point, the transient trailing dot) is
-// pinned independently of the DOM plumbing that carries its result to the parent.
 describe("nextPadValue", () => {
   it("appends a digit to a fresh pad", () => {
     expect(nextPadValue("", "5")).toBe("5");
@@ -49,8 +46,6 @@ describe("nextPadValue", () => {
   });
 });
 
-// The pin-mode string-builder: digit-append with leading zeros preserved, so a PIN round-trips.
-// Chained through a whole key sequence to prove the fix (the decimal builder collapses the same run).
 describe("nextPinValue", () => {
   const build = (keys: string, next = nextPinValue) => {
     let value = "";
@@ -92,9 +87,6 @@ describe("nextPinValue", () => {
 });
 
 describe("till-numeric-pad", () => {
-  // The visual key order, read straight off the rendered `[data-key]` sequence. A blank grid cell
-  // (pin mode's placeholder where the calculator layout carries `.`) has no `data-key`, so it never
-  // appears here.
   const keyOrder = (el: TillNumericPad): (string | null)[] =>
     [...el.shadowRoot!.querySelectorAll("[data-key]")].map((node) => node.getAttribute("data-key"));
 

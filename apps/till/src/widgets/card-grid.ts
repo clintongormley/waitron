@@ -1,17 +1,13 @@
 import type { DietPredicate } from "../menu-filter.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-// Side-effect imports: registering each widget element so the switch below can render its tag. This
-// host names them only as tags, never as classes — the canvas is the wiring, exactly as the counter
-// screen's layout is (till-counter-screen.ts).
+// Side-effect imports: registering each widget element so the switch below can render its tag.
 import "./product-grid.js";
 import "./basket.js";
 import "./total.js";
 import "./tender-pay.js";
 import "./held-orders.js";
 import "./station-queue.js";
-// The big-card screens (SP-B2.1): each self-registers its tag, mounted embedded (chrome-suppressed) by
-// the switch below. Same side-effect-import-then-name-by-tag shape as the widgets above.
 import "../screens/till-floor-screen.js";
 import "../screens/till-expo-screen.js";
 import "../screens/till-station-screen.js";
@@ -38,16 +34,8 @@ import type { WorkingOrderStore } from "../state/working-order.js";
 import type { CardOutcome, CardProvider } from "./tender-pay.js";
 
 /**
- * SP-B1 renderer: lays a canvas TAB's cards on a fluid grid (`repeat(columns, 1fr)`), each
- * card spanning colSpan×rowSpan. Every card is handed the SAME `store` (or an app-owned list), exactly
- * as the counter screen threads them today (`till-counter-screen.ts`'s `#gridBody`); card events
+ * Lays a canvas tab's cards on a grid. Every store-backed card is handed the SAME `store`; card events
  * bubble past this host to `till-app` unchanged — this host installs no listeners on them.
- *
- * All three visibility axes are honoured here (SP-B2.1): capability→absent (`#capable`),
- * permission→locked (`#locked`, a dimmed `?inert` cell), and `visibleWhen` (data-condition show/hide,
- * fail-open when the state is uncomputable). The `floor-plan`, `table-layout-editor`, `expo`,
- * `kds-board` and `table-order` big cards render by mounting their screens EMBEDDED (chrome-suppressed);
- * only `notifications` renders nothing here and arrives later.
  */
 @customElement("till-card-grid")
 export class TillCardGrid extends LitElement {
@@ -69,71 +57,39 @@ export class TillCardGrid extends LitElement {
     }
   `;
 
-  /** The tab to render. Undefined until the app resolves a canvas — renders nothing meanwhile. */
   @property({ attribute: false }) tab?: TabDef;
-  /** The shared working order every store-backed card reads and mutates. Set before connect. */
   @property({ attribute: false }) store!: WorkingOrderStore;
-  /** The tiles the product-grid card shows (the app narrows by menu/diet before handing them here). */
   @property({ attribute: false }) products: TillProduct[] = [];
-  /** The node's open parked orders, handed to the held-orders card (app owns and refreshes them). */
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
-  /** The default station's queue, grouped by order, handed to the prep-queue card. */
   @property({ attribute: false }) stationQueue: StationQueueGroup[] = [];
-  /** The default station's id, threaded to the prep-queue card (its bump is keyed by station). */
   @property({ attribute: false }) defaultStationId?: string;
-  /** A sale is in flight — threaded straight through to the pay card. */
   @property({ type: Boolean }) busy = false;
-  /** The location's pay-timing mode, threaded through to the pay card's own `mode`. */
   @property() orderFlow: OrderFlow = "prepay";
-  /** Where the current basket sits in a Mode-I/T order's life, threaded to the pay card's `stage`. */
   @property() stage: "order" | "collect" = "order";
-  /** The till's integrated-card wiring, threaded through to the pay card's own `cardProvider`. */
   @property() cardProvider: CardProvider = "none";
-  /** Whether the till prompts for a tip on an integrated-card collection, threaded to the pay card. */
   @property({ type: Boolean }) tipsEnabled = false;
-  /** The outcome of the most recent non-captured `collect-card` attempt, threaded to the pay card. */
   @property() cardOutcome?: CardOutcome;
-  /** The venue's ACTIVE card readers (Task 17), threaded through to the pay card's own
-   * `activeReaders` — feeds its "use a different reader" picker. */
   @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
-  /** The paying device's DEFAULT reader id (Task 17), threaded through to the pay card's own
-   * `defaultReaderId` — names the reader shown before the operator picks anything. */
   @property() defaultReaderId?: string;
-  /** The device's granted capability flags — a card whose required capability is absent is skipped. */
   @property({ attribute: false }) capabilities: CapabilityFlag[] = [];
-  /** The HTTP face of the till, threaded to the big-card screens (floor placement writes, expo levers). */
   @property({ attribute: false }) api?: TillApi;
-  /** The venue's `fire_control` mode, threaded to the embedded expo screen's own `fireControl`. */
   @property() fireControl?: FireControlMode;
-  /** The venue's floor zones, threaded to the embedded floor screen (the app owns and refreshes them). */
   @property({ attribute: false }) zones: FloorZone[] = [];
-  /** The live-floor occupancy read-model, threaded to the embedded floor screen. */
   @property({ attribute: false }) tables: TableState[] = [];
-  /** Whether this operator may configure the till — the sole permission gating a card (table-layout-editor). */
   @property({ type: Boolean }) canConfigureTill = false;
-  /** Per-line (default) vs whole-ticket bump — the `bump_mode` venue setting, threaded to the embedded
-   * station screen (kds-board card), which passes it straight to its queue widget. */
   @property() bumpMode: BumpMode = "line";
   /** Whether the embedded station screen (kds-board card) runs as an always-on ENROLLED display (no
-   * login, one bound station) rather than the session-gated operator path — threaded straight through.
-   * `{type: Boolean}` matches the source `till-station-screen.deviceMode`, though it is always property-bound. */
+   * login, one bound station) rather than the session-gated operator path. */
   @property({ type: Boolean }) deviceMode = false;
   /** The device station the app already probed at cold boot, handed to the embedded station screen so it
-   * does not re-fetch on mount (device-mode only; undefined on the operator path). */
+   * does not re-fetch on mount. */
   @property({ attribute: false }) initialDeviceStation?: DeviceStation;
-  /** The open tab's lines, threaded to the embedded table-order screen (its own `lines` prop). The app
-   * owns and reloads them; renamed `tabLines` here so it never collides with a future basket-lines prop. */
   @property({ attribute: false }) tabLines: TabLine[] = [];
-  /** The zone's menus, threaded to the embedded table-order screen's menu switcher. */
   @property({ attribute: false }) menus: TillMenu[] = [];
-  /** The menu (catalogue) the table-order round grid currently shows, threaded straight through. */
   @property() selectedMenuId = "";
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
-  /** The table service statuses the table-order Estado picker offers, threaded straight through. */
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
-  /** The venue's active kitchen courses, threaded to the embedded table-order screen's course picker. */
   @property({ attribute: false }) courses: TillCourse[] = [];
-  /** The tab's working-order id, threaded to the embedded table-order screen for reference/parity. */
   @property() orderId?: string;
 
   override render(): TemplateResult | typeof nothing {
@@ -145,22 +101,9 @@ export class TillCardGrid extends LitElement {
   }
 
   /**
-   * Capability→ABSENT (spec §5.1). tender-pay is sale-critical + takes cash → ALWAYS rendered.
-   *
-   * This client gate is ADVISORY (SP-B2.1 follow-up c): it only ever REMOVES a card the device is not
-   * equipped for — it can never WIDEN access, because a truthy result is a necessary-not-sufficient
-   * condition for a card to render. What actually fences access is the SERVER, which independently guards
-   * the two capability-bearing OPERATIONS via `assertDeviceCapability`
-   * (`apps/server/src/device-session.ts:359`): the integrated-card payment for the "pay" action
-   * (`apps/server/src/till-api.ts:849`) and the cash-drawer open for "drawer_open"
-   * (`apps/server/src/till-api.ts:1294`). So a card that leads to ONE OF THOSE TWO operations, if shown
-   * through a bug or a stale canvas, still cannot perform it — those two endpoints fail CLOSED
-   * regardless of what the grid rendered. The third capability, `act-as-kds` (the only one this gate
-   * actually consults, since tender-pay short-circuits above), has no live server enforcement in B2.1
-   * (comment-only at `apps/server/src/device-api.ts:256`); its one card, `kds-board`, now renders here
-   * (SP-B2.2), so it is the one card gated by the advisory client check alone. The station display it
-   * mounts performs only kitchen-queue reads/advances, not either of the two server-fenced operations
-   * above, so the absence of a live `act-as-kds` server gate widens no fiscal or cash path.
+   * Advisory: it only ever removes a card. The server checks the integrated-card, print and drawer
+   * capabilities on the operations themselves (`assertDeviceCapability`); no route checks `act-as-kds`
+   * (apps/server/src/device-api.ts), so `kds-board`'s capability is checked here alone.
    */
   #capable(card: CardInstance): boolean {
     if (card.type === "tender-pay") return true; // cash path — never gated absent
@@ -168,11 +111,6 @@ export class TillCardGrid extends LitElement {
     return required === undefined || this.capabilities.includes(required);
   }
 
-  /**
-   * Permission→LOCKED (spec §5.2). Only `venue.configure` (on `table-layout-editor`) exists in the
-   * catalogue, so this can only ever be true for that card — never for a sale-critical card
-   * (product-grid/basket/total/tender-pay carry no required permission).
-   */
   #locked(card: CardInstance): boolean {
     return CARD_REQUIRED_PERMISSION[card.type] === "venue.configure" && !this.canConfigureTill;
   }
@@ -191,17 +129,11 @@ export class TillCardGrid extends LitElement {
     </div>`;
   }
 
-  /**
-   * Map one card to its element — called for each card in the active tab's {@link TabDef.cards} list. The
-   * switch is EXHAUSTIVE over {@link CardType}, so adding a card type without a case here is a compile
-   * error rather than a silently-dropped card.
-   */
+  /** No `default`: a card type without a case here is a compile error rather than a dropped card. */
   #element(card: CardInstance): TemplateResult | typeof nothing {
     switch (card.type) {
       case "product-grid": {
-        // Thread the one wired per-card config key, `product-grid.columns`. The config bag is
-        // `Record<string, unknown>`, so narrow to a number and pass it through only then — a
-        // missing/malformed value leaves the widget's responsive auto-fill default.
+        // A missing or non-number value leaves the widget's responsive auto-fill default.
         const columns = card.config.columns;
         return html`<till-product-grid
           .products=${this.products}
@@ -228,22 +160,11 @@ export class TillCardGrid extends LitElement {
       case "held-orders":
         return html`<till-held-orders .orders=${this.heldOrders}></till-held-orders>`;
       case "prep-queue":
-        // KDS-1: the prep-queue card renders the default station's queue as a ticket RAIL (grouped by
-        // order), per-line bump. The kanban board + station picker live on the station-display screen.
         return html`<till-station-queue
           .groups=${this.stationQueue}
           .view=${"rail"}
           .stationId=${this.defaultStationId}
         ></till-station-queue>`;
-      // Big-card screens (SP-B2.1), each mounted EMBEDDED so it renders only its BODY — its own header
-      // and Back are suppressed, and navigation chrome comes from the tab shell / drill-in host, not
-      // from this grid cell (the cell itself draws no title/close). `.canExitToCounter=${false}` keeps a stray back-to-counter
-      // from escaping the tab shell. The floor screen serves both the read-only floor-plan card and the
-      // manager's table-layout-editor card — the latter with `canEdit`. The table-layout-editor card's
-      // permission LOCK (venue.configure) is enforced by `#locked`/`.cell.locked` at the CELL level above,
-      // not here. `canEdit` is @property({ attribute: false }) on the floor screen, so it must be set as a
-      // PROPERTY (`.canEdit=`), never a bare attribute — a bare `canEdit` would not reach it. The
-      // read-only floor-plan card mounts the SAME screen without edit; the two arms differ only by `canEdit`.
       case "floor-plan":
       case "table-layout-editor":
         return html`<till-floor-screen
@@ -261,12 +182,8 @@ export class TillCardGrid extends LitElement {
           .fireControl=${this.fireControl}
         ></till-expo-screen>`;
       case "kds-board":
-        // The KDS station display (SP-B2.2), mounted EMBEDDED like the floor/expo screens. It is
-        // SELF-FETCHING — it owns `.api` and reads its own station list + queue (device-mode: its one
-        // bound station) — so the grid host threads only the venue settings it configures with, never a
-        // queue. The default-station queue the host DOES hold (`stationQueue`) is the counter's own
-        // prep-queue widget's data, not this display's picked/bound station, so it is deliberately not
-        // passed here.
+        // Self-fetching: it reads its own station list and queue. `stationQueue` is the prep-queue
+        // card's default-station data, not this display's station, so it is deliberately not passed.
         return html`<till-station-screen
           embedded
           .api=${this.api}
@@ -276,9 +193,7 @@ export class TillCardGrid extends LitElement {
           .initialDeviceStation=${this.initialDeviceStation}
         ></till-station-screen>`;
       case "table-order":
-        // The tab (table-order) screen (SP-B2.2), mounted EMBEDDED like the floor/expo/station screens.
-        // The app owns every write and reload; the grid host only threads the props through. `canSettle`
-        // is left the screen's DEFAULT `true` — a card-mounted tab settles like the standalone screen
+        // `canSettle` is left the screen's DEFAULT `true` — a card-mounted tab settles like the standalone screen
         // (cash + manual-card tenders; the server fences only the integrated reader, `/api/pay`) — so it
         // is not passed.
         return html`<till-table-order-screen
@@ -295,7 +210,6 @@ export class TillCardGrid extends LitElement {
           .orderId=${this.orderId}
           .busy=${this.busy}
         ></till-table-order-screen>`;
-      // This arrives later — still not rendered on any tab yet.
       case "notifications":
         return nothing;
     }
@@ -306,21 +220,12 @@ export class TillCardGrid extends LitElement {
     const states = card.visibleWhen;
     if (states === undefined || states.length === 0) return true;
     const current = this.#currentState(card.type);
-    // Fail OPEN when the host cannot compute this card's state (e.g. a self-fetching big card): a card
-    // the host can't evaluate must not silently vanish (SP-B2.1 follow-up d). Cards the host CAN compute
-    // (held-orders, prep-queue) still hide when their state is out of the list.
+    // Fail OPEN when the host cannot compute this card's state (a self-fetching big card): a card the
+    // host can't evaluate must not silently vanish.
     if (current === undefined) return true;
     return states.includes(current);
   }
 
-  /**
-   * Each card's data-condition state, computed from data the host already holds (spec §7).
-   *
-   * `kds-board` (like `expo`) is deliberately NOT a case here — both are SELF-FETCHING screens whose
-   * `has-tickets`/`idle` the host cannot compute (see the `kds-board` arm in {@link #element} for why
-   * `stationQueue` doesn't cover it), so they return `undefined` from `default` and fail OPEN via
-   * {@link #visible} (SP-B2.1 follow-up d) rather than silently vanish.
-   */
   #currentState(type: CardType): string | undefined {
     switch (type) {
       case "held-orders":

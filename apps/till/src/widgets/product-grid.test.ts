@@ -79,9 +79,7 @@ describe("till-product-grid", () => {
     }
   });
 
-  // Spec §15.4: every Active, Available offer gets a tile, sold alone or not — neither the offer
-  // nor the till product carries `sold_alone`, so nothing here can filter on it. A parent whose
-  // variants are all unavailable has nothing to sell and gets none.
+  // Neither the offer nor the till product carries `sold_alone`, so nothing here can filter on it.
   it("gives a tile to a product with no variants and to one with an available variant, never to one whose variants are all unavailable", async () => {
     const variant = (id: string, available: boolean) => ({
       ...sellingValuesOf(cafe),
@@ -216,7 +214,6 @@ describe("till-product-grid", () => {
       columns: 4,
     });
     const grid = el.shadowRoot!.querySelector<HTMLElement>(".grid")!;
-    // An explicit column count overrides the responsive default with a fixed N-column track list.
     expect(grid.style.gridTemplateColumns).toBe("repeat(4, 1fr)");
   });
 
@@ -227,7 +224,6 @@ describe("till-product-grid", () => {
       store,
     });
     const grid = el.shadowRoot!.querySelector<HTMLElement>(".grid")!;
-    // No inline grid-template-columns, so the stylesheet's repeat(auto-fill, minmax(9rem, 1fr)) governs.
     expect(grid.style.gridTemplateColumns).toBe("");
   });
 

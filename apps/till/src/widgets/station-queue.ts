@@ -15,81 +15,47 @@ import type {
   TicketState,
 } from "../api/client.js";
 
-/** The kitchen state each ticket item advances TO next. `ready` is terminal (a counter order's handover
- *  is an order-level collect, not a kitchen state — KDS-1 §2d), so a `ready` line has no bump. */
+/** `ready` is terminal: a counter order's handover is an order-level collect, not a kitchen state. */
 const NEXT: Record<TicketState, Exclude<TicketState, "queued"> | undefined> = {
   queued: "preparing",
   preparing: "ready",
   ready: undefined,
 };
 
-/** The three kitchen states in flow order — the kanban columns (Nuevo / Preparando / Listo), left to
- *  right, and the order a `ready`-tail line sorts after a fresh one. */
 const COLUMNS: readonly TicketState[] = ["queued", "preparing", "ready"];
 
-/** How the two views bump: `line` (the source of truth) advances the one tapped item; `ticket` (the
- *  convenience the `bump_mode = 'ticket'` venue setting drives) advances the whole order at the station. */
+/** `line` advances the one tapped item; `ticket` (the venue's `bump_mode` setting) advances the whole
+ *  order at the station. */
 export type BumpMode = "line" | "ticket";
 
-/** Which surface owns the per-course fire action (KDS-2/3 §2c, `locations.fire_control`): `kitchen` (the
- *  station display shows "Empezar curso" on a held course), `waiter` (the tab screen does — so this widget
- *  shows no fire affordance) or `expo` (KDS-3 — the expo/pass display owns it, so again not this widget).
- *  Threaded from the app via the boot payload. */
+/** Which surface owns the per-course fire action (`locations.fire_control`): `kitchen` is this widget;
+ *  under `waiter` the table-order screen fires and under `expo` the expo screen does. */
 export type FireControlMode = "waiter" | "kitchen" | "expo";
 
-/** A line paired with the order it belongs to — what a kanban column renders (its cells cut across
- *  orders, so each carries back its order's number + queued-time for the label and the age accent). */
 interface FlatItem {
   item: StationQueueItem;
   group: StationQueueGroup;
 }
 
-/** One coursing subsection of an order's rail card (KDS-2 §5a): a course (or `null` for the courseless,
- *  auto-fired earliest lines) with its lines and whether the whole course is still HELD (every line
- *  unfired). Held ⇒ greyed lines + the kitchen-fire affordance; a null course is never held (its lines
- *  auto-fire), so it never offers fire. */
 interface CourseSection {
   course: StationQueueCourse | null;
   items: StationQueueItem[];
   held: boolean;
 }
 
-/** A course's ordering key: the null (courseless) group sorts FIRST — it is the auto-fired earliest set —
- *  then named courses by `displayOrder` ascending, matching the server's coursing sequence. */
+/** Courseless lines sort first: the server fires them at once unless the send asks to hold them. */
 function courseOrder(course: StationQueueCourse | null): number {
   return course === null ? Number.NEGATIVE_INFINITY : course.displayOrder;
 }
 
 /**
- * The per-station KITCHEN QUEUE (KDS-1, design §5a): one station's ticket items grouped by order, shown
- * through one of two lenses — a **kanban board** (Nuevo / Preparando / Listo columns, the default) or a
- * **ticket rail** (a card per order). Both render the SAME data; the parent flips {@link view}.
+ * One station's ticket items grouped by order, shown as a kanban board (a column per kitchen state) or a
+ * ticket rail (a card per order). A pure view: the container owns {@link groups} and turns the events
+ * this emits into API calls.
  *
- * It is the per-line/per-station successor to #63's whole-order prep-queue widget. Like that widget (and
- * `till-held-orders`) it is a PURE VIEW: it holds no state, never talks to the store or the API, and the
- * container it sits in (the station screen, or — for the default station — the app) owns the {@link groups}
- * and refreshes them. A tap on a line emits a composed, bubbling advance the container turns into an API
- * call, exactly the event → container → server shape the prep-queue widget established (only the events and
- * the entry shape changed): {@link BumpMode} `line` (the default) fires `advance-ticket-item { itemId, to }`
- * — the per-line source of truth — while `ticket` fires `advance-ticket { orderId, stationId, to }`, the
- * whole-order convenience (so ticket mode needs {@link stationId}). A `ready` line is terminal and renders
- * inert (no button), like the prep-queue's collected row.
- *
- * AGE (KDS order-timing alerts, design §3/§7.1). Each order is banded by how long its OLDEST line has
- * waited ({@link StationQueueGroup.queuedAt}) against ITS STATION's own thresholds
- * ({@link StationQueueGroup.thresholds}), via the shared `classifyBand` (`@waitron/shared`): fresh → warm
- * → overdue → **forgotten**. The accent is a LEFT BORDER, never a text background, so the arbitrary
- * colour cannot fail a11y contrast (the `till-floor-screen` occupancy-accent trick) — applied to the
- * rail's `.ticket` card AND, nested outside the kitchen-state border, the kanban's per-cell wrapper. A
- * `forgotten` band additionally FLASHES the border unless the OS/browser has asked for reduced motion
- * (`prefers-reduced-motion`, checked live or injected via {@link reducedMotion}), in which case it
- * renders the same steady red instead — never colour/motion as the only signal, and the header's
- * {@link #overdueCount} count badge is the non-colour tell for the whole station. A `TickingClock`
- * ({@link #clock}) advances the display while it sits idle, between the container's own refreshes; `now`
- * is still directly injectable so a test controls the band deterministically.
- *
- * Lit + `@waitron/ui` `baseStyles` + theme tokens only — no hardcoded chrome colour/spacing, so it follows
- * the operator's theme like every sibling. Copy is the till's i18n (`station.*`); identifiers stay English.
+ * An order is aged by its oldest line against its own station's thresholds. The age accent is a left
+ * border, never a text background, so its colour cannot fail contrast; a `forgotten` border flashes
+ * unless reduced motion is asked for, and the header's overdue count is the signal that is not colour.
  */
 @customElement("till-station-queue")
 export class TillStationQueue extends LitElement {
@@ -445,57 +411,25 @@ export class TillStationQueue extends LitElement {
     `,
   ];
 
-  /** One station's ticket items grouped by order, oldest first (the container owns + refreshes them). */
   @property({ attribute: false }) groups: StationQueueGroup[] = [];
-  /** The lens: `kanban` board (default) or `ticket` rail — flipped by the station screen's toggle. */
   @property() view: "kanban" | "rail" = "kanban";
-  /** Per-line (default) vs whole-ticket bump — the `bump_mode` venue setting, threaded from the app. */
   @property() bumpMode: BumpMode = "line";
   /** The station these items are AT — required for the whole-ticket bump's event (ticket mode). */
   @property() stationId?: string;
-  /** Whether THIS display owns the per-course fire action (KDS-2 §5a) — `kitchen` shows "Empezar curso"
-   * on a held course's rail section; `waiter` (the default) shows none (the tab screen fires, Task 7). */
   @property() fireControl: FireControlMode = "waiter";
-  /**
-   * ADVANCE-ONLY (device-identity-1 §5a). When `true` the widget renders NEITHER the Mode-P collect
-   * handover NOR the kitchen-fire button — an enrolled DEVICE display has an advance-only surface (spec
-   * §3d: the device routes are the per-line advance alone; there is no device collect/fire route, so
-   * those buttons would only 401 → silently no-op). Default `false` keeps the operator display unchanged
-   * (it owns a session and both verbs). Advancing itself, and the held-line greying, are unaffected.
-   */
+  /** For an enrolled device display: the server's device routes are the per-line advance alone, and the
+   *  collect and fire routes need a session, so both buttons are hidden. */
   @property({ type: Boolean }) advanceOnly = false;
-  /**
-   * Whether to offer the per-order REPRINT action (KDS-4 §3d) on each rail card. Default `false` — the
-   * counter's default-station widget (`till-app`) and the counter screen embed this widget WITHOUT a
-   * reprint affordance, so it must be opt-in and off for them. Only the station-display screen turns it on,
-   * and only in OPERATOR mode (`!deviceMode`): the reprint route is session-guarded, so an enrolled device
-   * display holds no session for it (there is no device reprint route — the R-K ruling). A per-order
-   * `reprint-order { orderId }` event the container turns into a `reprintOrder` call, the same
-   * event → container → server shape a bump/collect/fire uses. Rail-only, like collect: kanban columns cut
-   * across orders, so a per-order action has no home there.
-   */
+  /** Rail-only, like collect: kanban columns cut across orders, so a per-order action has no home there. */
   @property({ type: Boolean }) showReprint = false;
-  /** Injectable clock for age colouring; falls back to the {@link #clock}'s ticked time (never a bare
-   *  `Date.now()`, so a re-render from the tick and a re-render from a fresh fetch use the SAME clock
-   *  source) when unset. Set in tests for deterministic bands. */
+  /** Injectable clock for age colouring. Set in tests for deterministic bands. */
   @property({ attribute: false }) now?: number;
-  /**
-   * Whether to render the FORGOTTEN band's flash as a steady accent instead (house a11y rule — never
-   * colour/motion as the only signal, and the flash must honour `prefers-reduced-motion`). `undefined`
-   * (the default) checks the live media query on every render; a test injects `true`/`false` for a
-   * deterministic assertion, the same injectable-override shape {@link now} already uses.
-   */
   @property({ attribute: false }) reducedMotion?: boolean;
 
-  /** Drives the display forward while it sits idle — no refetch, just the client-side re-tick the
-   *  order-timing design calls for (§5.2): every ~20s it bumps {@link TickingClock.now} and requests a
-   *  re-render, so a ticket can climb fresh → warm → overdue → forgotten between the container's own
-   *  refreshes. {@link now}, when set, always wins (tests stay deterministic). */
+  /** Re-renders while the display sits idle, so a ticket can climb fresh → warm → overdue → forgotten
+   *  between the container's own refreshes. */
   readonly #clock = new TickingClock(this);
 
-  /** Advance the tapped line — per-line in `line` mode (the truth), whole-ticket in `ticket` mode (the
-   * convenience). A terminal (`ready`) line has no successor, so this is a no-op for it; ticket mode with
-   * no {@link stationId} likewise no-ops (the whole-ticket route is keyed by station). */
   #bump(group: StationQueueGroup, item: StationQueueItem): void {
     const to = NEXT[item.state];
     if (to === undefined) return;
@@ -519,10 +453,6 @@ export class TillStationQueue extends LitElement {
     }
   }
 
-  /** Hand a collectable order to the customer — the Mode-P counter handover (KDS-1 §3e). Emits a
-   * composed, bubbling `mark-collected { orderId }` the container (the app, or the station screen)
-   * turns into a `markCollected` call, the same event → container → server shape a bump uses. Order-level
-   * (not per-line): `collected_at` is on the order, so it is one action for the whole card. */
   #collect(group: StationQueueGroup): void {
     this.dispatchEvent(
       new CustomEvent("mark-collected", {
@@ -533,10 +463,6 @@ export class TillStationQueue extends LitElement {
     );
   }
 
-  /** Fire a HELD course of an order (KDS-2 §5a) — the kitchen's "release this course" tap in
-   * `fire_control = 'kitchen'` mode. Emits a composed, bubbling `fire-course { orderId, courseId }` the
-   * container turns into a `fireCourse` call, the same event → container → server shape a bump/collect
-   * uses. Per-order/per-course (the route is `/api/orders/:id/courses/:courseId/fire`), so both ids ride. */
   #fire(group: StationQueueGroup, course: StationQueueCourse): void {
     this.dispatchEvent(
       new CustomEvent("fire-course", {
@@ -547,10 +473,6 @@ export class TillStationQueue extends LitElement {
     );
   }
 
-  /** Reprint an order's current kitchen tickets (KDS-4 §3d) — the "a jam ate the paper, print it again"
-   * tap on a rail card. Emits a composed, bubbling `reprint-order { orderId }` the container (the station
-   * screen) turns into a `reprintOrder` call, the same event → container → server shape a bump/collect/fire
-   * uses. Order-level (the route is `/api/orders/:id/reprint`), so only the order id rides. */
   #reprint(group: StationQueueGroup): void {
     this.dispatchEvent(
       new CustomEvent("reprint-order", {
@@ -561,11 +483,9 @@ export class TillStationQueue extends LitElement {
     );
   }
 
-  /** Group one order's lines into coursing subsections (KDS-2 §5a): keyed by course id (the null course
-   * its own key), each carrying whether the whole course is still HELD. Sorted null-course-first then by
-   * `displayOrder`, so the sections render in the kitchen's coursing sequence. Item order WITHIN a course
-   * is preserved (the server already ordered by `queued_at, line_no`). A missing/undefined course is
-   * treated as the null course, so an older/partial payload still groups cleanly. */
+  /** Item order WITHIN a course is preserved (the server already ordered by `queued_at, line_no`). A
+   * missing/undefined course is treated as the null course, so an older/partial payload still groups
+   * cleanly. */
   #courseSections(group: StationQueueGroup): CourseSection[] {
     const byCourse = new Map<string | null, CourseSection>();
     for (const item of group.items) {
@@ -577,57 +497,37 @@ export class TillStationQueue extends LitElement {
         byCourse.set(key, section);
       }
       section.items.push(item);
-      // A course is HELD only while EVERY line is unfired; one fired line means it is on.
       if (item.firedAt !== null) section.held = false;
     }
     return [...byCourse.values()].sort((a, b) => courseOrder(a.course) - courseOrder(b.course));
   }
 
-  /** The current clock reading for age classification: {@link now} when injected (deterministic
-   *  tests), else the {@link #clock}'s own ticked time — never a fresh `Date.now()` call, so every
-   *  render in one tick sees the identical `now` and the display genuinely advances only when the
-   *  clock ticks (or a test moves {@link now}). */
+  /** Never a fresh `Date.now()` call, so every render in one tick sees the identical `now`. */
   #clockNow(): number {
     return this.now ?? this.#clock.now;
   }
 
-  /** The escalation band for a group's oldest line, against its OWN station's thresholds
-   *  (`classifyBand`, `@waitron/shared`) — fresh / warm / overdue / forgotten (KDS order-timing
-   *  alerts, design §3). Replaces the old hardcoded 5/10-minute two-band `#ageBucket`. */
   #band(group: StationQueueGroup): TimingBand {
     return classifyBand(Date.parse(group.queuedAt), this.#clockNow(), group.thresholds);
   }
 
-  /** Whole minutes a group has waited (never negative), for the "N min" age label. */
   #elapsedMinutes(queuedAt: string): number {
     return Math.max(0, Math.floor((this.#clockNow() - Date.parse(queuedAt)) / 60000));
   }
 
-  /** Whether the flash animation should be suppressed in favour of a steady accent — the live
-   *  `prefers-reduced-motion` media query unless {@link reducedMotion} is injected (house a11y rule:
-   *  motion must respect the OS preference; the ticking of bands themselves is unaffected). */
   #prefersReducedMotion(): boolean {
     return this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   }
 
-  /** The age-accent class list for a band: always `age-${band}`, plus `flash` for `forgotten` unless
-   *  motion is reduced — the CSS `.age-forgotten.flash` rule carries the `@keyframes`, so a reduced-
-   *  motion render never gets the class an animation is defined against (belt-and-suspenders with the
-   *  `@media` guard in the stylesheet, which also disables it if this check is ever bypassed). */
   #accentClasses(band: TimingBand): string {
     const flash = band === "forgotten" && !this.#prefersReducedMotion();
     return `age-${band}${flash ? " flash" : ""}`;
   }
 
-  /** Count of groups whose band has escalated to at least `overdue` (overdue OR forgotten,
-   *  `BAND_RANK`) — the header's non-colour tell (design §7.1): a cook who cannot distinguish the
-   *  border colours still sees a number. */
   #overdueCount(): number {
     return this.groups.filter((group) => BAND_RANK[this.#band(group)] >= BAND_RANK.overdue).length;
   }
 
-  /** The queue header: the overdue+forgotten count badge, shown only when the count is non-zero (a
-   *  station running entirely fresh/warm shows no badge at all, rather than a noisy "0 overdue"). */
   #header(): TemplateResult | typeof nothing {
     const count = this.#overdueCount();
     if (count === 0) return nothing;
@@ -641,7 +541,6 @@ export class TillStationQueue extends LitElement {
     return html`${this.#header()}${this.view === "rail" ? this.#rail() : this.#kanban()}`;
   }
 
-  /** RAIL — a card per order, its lines GROUPED BY COURSE (KDS-2 §5a) with per-line bump on fired lines. */
   #rail(): TemplateResult {
     return html`<div class="rail">
       ${this.groups.map((group) => {
@@ -662,8 +561,6 @@ export class TillStationQueue extends LitElement {
     </div>`;
   }
 
-  /** One coursing subsection of a rail card (KDS-2 §5a): its named course's header (the null course has
-   *  none), its lines, and — for a HELD course under `fire_control = 'kitchen'` — the fire button. */
   #courseSection(group: StationQueueGroup, section: CourseSection): TemplateResult {
     return html`<div class="course" data-course=${section.course?.id ?? "none"}>
       ${section.course ? html`<div class="course-head">${section.course.name}</div>` : nothing}
@@ -674,13 +571,7 @@ export class TillStationQueue extends LitElement {
     </div>`;
   }
 
-  /** The per-course kitchen-fire button, shown only when THIS display owns the fire
-   *  (`fire_control = 'kitchen'`) AND the course is a NAMED course still fully HELD — the null (auto-fired)
-   *  course and any already-fired course have nothing to release, so they offer none. Emits `fire-course`
-   *  (via {@link #fire}); the label names the course for an accessible control. Under `waiter` the tab
-   *  screen owns the fire (Task 7), so this renders nothing here. */
   #fireAction(group: StationQueueGroup, section: CourseSection): TemplateResult | typeof nothing {
-    // Advance-only device display: no device fire route (§3d), so never offer the fire button.
     if (this.advanceOnly) return nothing;
     if (this.fireControl !== "kitchen" || section.course === null || !section.held) return nothing;
     const course = section.course;
@@ -694,12 +585,9 @@ export class TillStationQueue extends LitElement {
     </button>`;
   }
 
-  /** The per-order collect button, shown only for a COLLECTABLE order — a `settled` Mode-P pickup awaiting
-   * its counter handover (every order on the queue is already non-abandoned and uncollected; the server
-   * filters both, so `settled` is the whole collectability test). An `open` (tab) or `placed` (awaiting the
-   * fiscal collect) order renders none. The label names the order for an accessible control. */
+  /** Every order on the queue is already non-abandoned and uncollected (the server filters both), so
+   * `settled` is the whole collectability test. */
   #collectAction(group: StationQueueGroup): TemplateResult | typeof nothing {
-    // Advance-only device display: no device collect route (§3d), so never offer the handover button.
     if (this.advanceOnly) return nothing;
     if (group.status !== "settled") return nothing;
     return html`<button
@@ -712,12 +600,8 @@ export class TillStationQueue extends LitElement {
     </button>`;
   }
 
-  /** The per-order reprint button (KDS-4 §3d), shown only when {@link showReprint} is on (the station
-   * display's OPERATOR mode — the R-K guard). A full-width secondary `wt-button` at the card foot, under
-   * the collect handover. Its accessible name is the slotted "Reprint" text; that suffices here (a
-   * "Reprint" button is self-explanatory and the order context comes from the card heading, #N), so no
-   * `aria-label` is added and no differentiated per-order name is needed — the light/dark axe sweeps pass
-   * with the button present. Emits `reprint-order` (via {@link #reprint}). */
+  /** Its accessible name is the slotted "Reprint" text; the order context comes from the card heading,
+   * so no `aria-label` is added. */
   #reprintAction(group: StationQueueGroup): TemplateResult | typeof nothing {
     if (!this.showReprint) return nothing;
     return html`<wt-button
@@ -730,9 +614,7 @@ export class TillStationQueue extends LitElement {
     </wt-button>`;
   }
 
-  /** KANBAN — three state columns, each holding every order's lines in that state, oldest order first. */
   #kanban(): TemplateResult {
-    // Flatten to (item, group) pairs once, preserving the groups' oldest-first order, then bucket by state.
     const flat: FlatItem[] = this.groups.flatMap((group) =>
       group.items.map((item) => ({ item, group })),
     );
@@ -747,18 +629,13 @@ export class TillStationQueue extends LitElement {
     </div>`;
   }
 
-  /** A kanban cell wrapped in its order's age accent (KDS order-timing alerts, design §7.1 — the
-   *  kanban lens carried no age colour before this; today only the rail's `.ticket` did). The accent
-   *  is the WRAPPER's own left border, nested outside the inner `.line`'s kitchen-STATE border — the
-   *  same outer/inner nesting the rail's `.ticket`/`.line` pair already uses — so the age colour never
-   *  overwrites the queued/preparing/ready colour the cell itself carries. */
+  /** The age accent is the WRAPPER's own left border, so it never overwrites the inner `.line`'s
+   *  kitchen-state colour. */
   #kanbanCell(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
     const band = this.#band(group);
     return html`<div class="cell ${this.#accentClasses(band)}">${this.#cell(group, item)}</div>`;
   }
 
-  /** A rail line: the dish (`qty× name`) + its localised state, tappable to bump unless terminal
-   *  (`ready`). The card head already names the order, so a line needs only its dish + state. */
   #line(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
     const state = html`<span class="line-state"
       >${t(`station.state.${item.state}` as const)}</span
@@ -766,9 +643,7 @@ export class TillStationQueue extends LitElement {
     return this.#renderLine(group, item, state);
   }
 
-  /** A kanban cell: the dish (`qty× name`) tagged with its order — the columns cut across orders, so a
-   *  cell keeps the order number (which order this dish belongs to) beside the dish. Tappable to bump
-   *  unless terminal (`ready`). */
+  /** The columns cut across orders, so a cell keeps the order number beside the dish. */
   #cell(group: StationQueueGroup, item: StationQueueItem): TemplateResult {
     const tag = html`<span class="number"
       >#${group.orderNumber}${group.label ? html` · ${group.label}` : nothing}</span
@@ -776,13 +651,6 @@ export class TillStationQueue extends LitElement {
     return this.#renderLine(group, item, tag);
   }
 
-  /** The shared line box both lenses render: the dish label followed by a `secondary` element (the
-   *  rail's state text or the kanban's order tag), plus the dish's selected options as indented `+ name`
-   *  sub-text beneath (ordering modifiers, Task 14) — empty for a plain dish, so nothing renders there. A
-   *  line is a NON-INTERACTIVE span — never a bump button — when it is HELD (its course unfired, KDS-2
-   *  §5a: greyed + non-advanceable, carrying `.held`) or TERMINAL (`ready`, no successor). Any other line
-   *  is the tappable bump button, with the SAME class/aria-label/@click wiring across both views, so the
-   *  two lenses stay a single source of truth. */
   #renderLine(
     group: StationQueueGroup,
     item: StationQueueItem,
@@ -812,9 +680,6 @@ export class TillStationQueue extends LitElement {
     </button>`;
   }
 
-  /** The line's per-line kitchen customisation (order-line customisation, Task 5) as indented muted
-   *  sub-text beneath the dish: the free-text NOTE the server SNAPSHOTTED at fire. `nothing` when the
-   *  line carried none (an empty/absent note), so a plain dish renders exactly as before this task. */
   #customisation(item: StationQueueItem): TemplateResult | typeof nothing {
     const note = item.note ?? null;
     if (note === null || note === "") return nothing;
@@ -823,16 +688,8 @@ export class TillStationQueue extends LitElement {
     </span>`;
   }
 
-  /**
-   * The dish's OWN allergen profile (modifier↔allergen), indented beneath the dish + its modifiers: the
-   * dish's OWN {@link StationQueueItem.asServed} codes as localised "contains" chips (`allergenName`,
-   * never a hardcoded EU-14 list), and a "not reviewed" warning whenever the profile is `pending` (the
-   * dish's own allergens unreviewed — the Cautious policy, since a cook must never read an unverified
-   * plate as allergen-free). Colour is NEVER the only signal (house a11y rule, the order-timing bands'
-   * convention): the chips carry their names, the warning its text/weight. `nothing` when there is
-   * nothing to say — no profile attached, not pending — so a plain dish renders exactly as before this
-   * task. Each extra's own allergens are shown separately.
-   */
+  /** A `pending` profile shows a "not reviewed" warning: a cook must never read an unverified plate as
+   *  allergen-free. Each extra's own allergens are shown separately. */
   #allergens(item: StationQueueItem): TemplateResult | typeof nothing {
     const asServed = item.asServed;
     const codes = asServed ? Object.keys(asServed.allergens).sort() : [];
@@ -855,11 +712,8 @@ export class TillStationQueue extends LitElement {
     </span>`;
   }
 
-  /** The dish's extras and its frozen options answers as indented sub-text beneath the dish row,
-   *  matching the printed kitchen ticket's own sub-text style (`apps/server/src/kitchen-ticket.ts`).
-   *  A cook reads the KITCHEN wording of an answer (spec §10), which carries no per-language text and
-   *  so needs no locale; an extra's own name is still a locale map and resolves like the dish name.
-   *  `nothing` when the item has neither, so a plain dish renders as a single row. */
+  /** A cook reads the KITCHEN wording of an answer, which carries no per-language text and so needs
+   *  no locale; an extra's own name is still a locale map. */
   #modifiers(item: StationQueueItem): TemplateResult | typeof nothing {
     const modifiers = item.modifiers ?? [];
     const answers = optionAnswers(item.optionSnapshots, { reads: "kitchen" });
@@ -879,15 +733,12 @@ export class TillStationQueue extends LitElement {
     </span>`;
   }
 
-  /** The line's dish label for the kitchen display: `qty× name`, e.g. "2× Paella". The name is the
-   *  server-resolved kitchen label and is rendered as sent; the quantity is the line's three-place
-   *  decimal string trimmed of trailing zeros ({@link trimQuantity}, shared with the table screen). */
+  /** The name is the server-resolved kitchen label and is rendered as sent. */
   #dish(item: StationQueueItem): string {
     const unit = item.unitName == null ? "" : ` ${snapshotDescriptionFor(item.unitName, "")}`;
     return `${trimQuantity(item.quantity)}${unit}× ${item.name}`;
   }
 
-  /** The accessible name for a bump control — whole-ticket vs per-line, named with the order number. */
   #bumpLabel(group: StationQueueGroup): string {
     const verb = this.bumpMode === "ticket" ? t("station.bump_ticket") : t("station.advance");
     return `${verb} #${group.orderNumber}`;

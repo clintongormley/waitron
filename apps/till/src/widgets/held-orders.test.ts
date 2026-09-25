@@ -97,10 +97,8 @@ describe("till-held-orders", () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [mesa, barra] });
     const retrieves = el.shadowRoot!.querySelectorAll("wt-button.retrieve");
     const discards = el.shadowRoot!.querySelectorAll("wt-button.discard");
-    // a labelled order names both its number and its label, so a screen reader can tell rows apart
     expect(retrieves[0]!.getAttribute("aria-label")).toBe(`${t("held.retrieve")} #5 Mesa 4`);
     expect(discards[0]!.getAttribute("aria-label")).toBe(`${t("held.discard")} #5 Mesa 4`);
-    // an unlabelled order names only its number
     expect(retrieves[1]!.getAttribute("aria-label")).toBe(`${t("held.retrieve")} #6`);
     expect(discards[1]!.getAttribute("aria-label")).toBe(`${t("held.discard")} #6`);
   });

@@ -1,33 +1,20 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, queryAssignedElements } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-// `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` (its
-// `@customElement("wt-button")`) as a side effect — the same way `till-counter-screen` gets it.
+// `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` as a side effect.
 import { t } from "../i18n/t.js";
 import type { TabDef } from "../layout.js";
-// Side-effect import: registers the language chooser element (copied from
-// `till-counter-screen.ts`). It only EMITS a composed `locale-selected`; the shell re-emits it.
 import "./language-chooser.js";
 
-/** The till's product WORDMARK — the brand label slot in the header. A fixed name, never translated
- * UI copy (same reason the counter screen keeps it a constant). */
+/** The product WORDMARK: a fixed name, never translated UI copy. */
 const BRAND = "Waitron";
 
-/**
- * The operator affordances the shell can offer beside the sale — the non-tab nav buttons relocated
- * off the counter screen. Each maps to one intent event (`show-station`/`show-expo`/`show-schedule`).
- */
 export type ShellAffordance = "station" | "expo" | "schedule";
 
 /**
- * SP-B2.1 tab shell: renders the tab bar (from `profile.tabs`), the operator header chrome relocated
- * off the counter screen, and slots for the active-tab body (default slot) + a drill-in overlay
- * (`drill`). Dumb + presentational — `till-app` (a later task) owns data, active-tab state, and the
- * drill-in stack; the shell only emits intent. Tokens only, no data logic.
- *
- * The drill-in mechanism is slot-driven: when the `drill` slot has assigned nodes the body slot is
- * marked `inert` (so nothing behind the overlay is focusable or clickable) and the drill overlay is
- * shown; a `slotchange` on either slot re-renders so the two stay in step with what `till-app` slots.
+ * Presentational: `till-app` owns data, active-tab state and the drill-in stack; the shell only emits
+ * intent. While the `drill` slot has assigned nodes the body is `inert`, so nothing behind the overlay
+ * is focusable or clickable.
  */
 @customElement("till-tab-shell")
 export class TillTabShell extends LitElement {
@@ -109,36 +96,24 @@ export class TillTabShell extends LitElement {
     `,
   ];
 
-  /** The profile's tabs, rendered one button each in the tab bar. Set by `till-app`. */
   @property({ attribute: false }) tabs: TabDef[] = [];
-  /** The key of the tab currently shown — marks its button `aria-selected`. */
   @property() activeTabKey?: string;
-  /** The logged-in operator's display name, shown in the header. Data, never translated. */
   @property() operatorName = "";
-  /** Which operator affordance buttons to offer (see {@link ShellAffordance}). */
   @property({ attribute: false }) affordances: ShellAffordance[] = [];
-  /** Fetch the offered languages for the language chooser — threaded straight through to
-   * `till-language-chooser`'s own `loadLocales` (the app adapts `TillApi.getLocales`). */
   @property({ attribute: false }) loadLocales?: () => Promise<{ code: string; label: string }[]>;
-  /** SP-B2.2: when `true`, suppresses the ENTIRE operator `<header>` — tab bar and session chrome
-   * both — leaving the body slot, drill-slot machinery and language chooser. The kds kitchen-display shape
-   * (owner decision 2026-09-04): a board shows just its cards, no operator chrome. Default `false`
-   * keeps the B2.1 shell byte-identical. */
+  /** Suppresses the whole operator `<header>`: a kitchen display shows just its cards, no operator
+   * chrome (owner decision 2026-09-04). */
   @property({ type: Boolean }) kiosk = false;
 
-  /** The nodes slotted into `drill` — when non-empty the body is inert and the overlay shows. */
   @queryAssignedElements({ slot: "drill" }) private drillNodes!: HTMLElement[];
 
-  /** Emit a composed, bubbling intent event — the shell's only output; `till-app` acts on it. */
   #emit(type: string, detail?: unknown): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
   override render(): TemplateResult {
     const hasDrill = this.drillNodes?.length > 0;
-    // The EFFECTIVE active tab: `activeTabKey` when it names a real tab, else the first tab — mirroring
-    // `till-app`'s `#activeTab()` fallback, so the tab marked selected matches the body actually rendered
-    // (never "no tab selected" while a body shows).
+    // Mirrors `till-app`'s `#activeTab()` fallback, so the tab marked selected matches the body rendered.
     const activeKey = this.tabs.some((tab) => tab.key === this.activeTabKey)
       ? this.activeTabKey
       : this.tabs[0]?.key;

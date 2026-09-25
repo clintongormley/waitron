@@ -12,7 +12,6 @@ import { snapshotDescriptionFor, trimQuantity } from "../widgets/dish-format.js"
 import type { ExpoCourse, ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
 
-/** The null (courseless) group sorts FIRST: it is the auto-fired earliest set. */
 function courseOrder(course: ExpoCourse): number {
   return course.courseId === null ? Number.NEGATIVE_INFINITY : (course.displayOrder ?? 0);
 }

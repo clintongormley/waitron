@@ -3,7 +3,6 @@ import { t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillDietFilter } from "./diet-filter.js";
 
-/** The interactive lens options the filter renders (vegan / vegetarian / no-meat / no-fish). */
 function options(el: TillDietFilter): HTMLElement[] {
   return [...el.shadowRoot!.querySelectorAll<HTMLElement>('[data-test^="diet-filter-"]')];
 }

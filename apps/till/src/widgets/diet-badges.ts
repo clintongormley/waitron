@@ -3,9 +3,6 @@ import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import type { DietProfile } from "../api/client.js";
 
-/** The four positive suitability labels a modifier choice may declare, mapped to their `diet.*` copy
- * keys. A choice states suitability (never a recipe-derived preference), so this is deliberately the
- * four-label set, not the six-label product set. */
 const SUITABILITY_KEYS = {
   vegan: "diet.vegan",
   vegetarian: "diet.vegetarian",
@@ -13,23 +10,14 @@ const SUITABILITY_KEYS = {
   kosher: "diet.kosher",
 } as const;
 
-/** One positive-suitability pill — the identical chip {@link dietBadges} and {@link extraNutrition}
- * both render for a claim (`vegan`/`vegetarian`/`halal`/`kosher`), kept in one place so they cannot
- * drift. `key` drives the `diet-*` class and `data-diet`; `label` is the already-localized copy. */
 function dietBadge(key: string, label: string): TemplateResult {
   return html`<span class="diet-badge diet-${key}" data-diet=${key}>${label}</span>`;
 }
 
 /**
- * A SELECTED EXTRA's OWN nutrition, shown beside the dish's own on the basket, the KDS station display
- * and the expo/pass board — its own allergens as "contains" chips and its own positive dietary
- * suitability as badges (nutrition redesign, pass 1). This is NOT a fold: the dish shows its figures and
- * each extra shows its own, independently. Unlike {@link dietBadges} (the dish's recipe-derived profile),
- * an extra's suitability is a DIRECT positive claim, so there is no pending/"not reviewed" state — an
- * absent label is simply not shown. Returns `nothing` when the extra declares neither, so a plain extra
- * adds no chrome. Text labels carry the meaning (colour is never the only signal — the house a11y rule).
- * `allergensTest`/`dietTest` are echoed as each sub-span's `data-test` so a caller targets a specific
- * extra; `locale` (optional) forces the copy language, else `currentLocale()` via `t`/`allergenName`.
+ * A SELECTED EXTRA's OWN nutrition. This is NOT a fold: the dish shows its figures and each extra shows
+ * its own. Unlike {@link dietBadges}, an extra's suitability is a DIRECT positive claim, so there is no
+ * pending/"not reviewed" state.
  */
 export function extraNutrition(
   extra: {
@@ -68,34 +56,10 @@ export function extraNutrition(
 }
 
 /**
- * The shared DIET & CONTAINS badge row (dietary-classification, Task 7) — rendered beside the
- * as-served allergen chips on the basket line, the KDS station display and the expo/pass board, so all
- * three read a plate's diet identically. Kept in one place (unlike the per-screen allergen `#allergens`
- * helpers, which predate this) precisely so the CAUTIOUS rule below cannot drift between surfaces.
- *
- * What it renders, from a {@link DietProfile} (the client-side `asServedDiet(line)` for a basket line,
- * or the server-projected `asServedDiet` on a station/expo item):
- *  - a POSITIVE label badge for each claim the profile actually ASSERTS — `vegan`/`vegetarian` only
- *    when exactly `"yes"`, `halal`/`kosher` only when `"yes"`. A `"no"` or `"unknown"` renders NO
- *    badge: the absence of a badge is not a claim, so an unreviewed or non-vegan dish never shows one.
- *  - a "contains meat"/"contains fish" chip for each entry in `contains`, which the derivation asserts
- *    from KNOWN ingredient presence (spec §3.1) — shown regardless of the pending state.
- *  - a NEUTRAL "not reviewed" note whenever EITHER derived label is pending (`vegan === "unknown" ||
- *    vegetarian === "unknown"`) — checking `vegan` alone under-reports: a staff override can resolve
- *    `vegan` (e.g. force it to `"no"`) while leaving `vegetarian` unreviewed, and the two are
- *    independent labels. This is the ONLY thing a pending profile says about vegan/vegetarian — never
- *    a positive claim (§2, the food-safety invariant). halal/kosher are explicit staff assertions, not
- *    derived, so they never factor into pending.
- *
- * Returns `nothing` when there is nothing to say — no positive claim, no contains-tag, not pending — so
- * a plain reviewed-but-unremarkable dish (e.g. contains dairy, not vegan, nothing tagged) renders no
- * row at all rather than an empty one.
- *
- * `dataTest` is echoed as the row's `data-test` so a caller can target a specific line/item. `locale`
- * (optional) forces the copy language — the allergen screen's Print path passes the INVOICE locale so
- * the printed sheet's badges follow the customer's language, exactly as its allergen names do; on-screen
- * callers omit it and get `currentLocale()`. The badges carry text labels, so the text IS the accessible
- * name (no `aria-label` needed) — the same approach the allergen chips take.
+ * Kept in one place so the CAUTIOUS rule cannot drift between surfaces: a badge only for `"yes"` (the
+ * absence of a badge is not a claim), and "not reviewed" when EITHER derived label is `"unknown"` — a
+ * staff override can resolve `vegan` while leaving `vegetarian` unreviewed. halal/kosher are never
+ * derived, so they never make a profile pending.
  */
 export function dietBadges(
   diet: DietProfile | null | undefined,
@@ -128,13 +92,8 @@ export function dietBadges(
   </span>`;
 }
 
-/**
- * The badge-row styles, shared into each host's `static styles` array (a Lit template function cannot
- * carry styles across shadow boundaries). A POSITIVE claim reads as a success-toned pill and a CONTAINS
- * chip as a plain outlined pill — but colour is NEVER the only signal (house a11y rule): each carries
- * its own text label, so the meaning survives a monochrome display and the contrast sweep. The pending
- * note earns weight, like the allergen-pending note beside it.
- */
+/** Shared into each host's `static styles`: a Lit template function cannot carry styles across shadow
+ * boundaries. */
 export const dietBadgeStyles = css`
   .line-diet {
     display: flex;

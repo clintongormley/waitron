@@ -6,17 +6,9 @@ import { t } from "../i18n/t.js";
 import type { HeldOrderSummary } from "../api/client.js";
 
 /**
- * The cross-till HELD-ORDERS list (park & retrieve, sub-project 7b): one row per parked order the
- * node holds — its human order number, the operator's optional label, the line count and the running
- * total — each with a Retrieve control (load it back into the basket) and a Discard control (abandon
- * it). Because the list is the whole node's OPEN orders, an order parked on one register is retrieved
- * on another; that is the cross-till story this widget completes.
- *
- * It is a PURE VIEW: it holds no state and never talks to the store or the API. The app owns the
- * list (`till-app.heldOrders`, refreshed on entering the counter and after every park/retrieve/discard)
- * and hands it down; the two controls emit composed, bubbling `retrieve-order`/`discard-order` events
- * carrying only the order `id`, which the app turns into a `retrieveWorkingOrder`/`abandonWorkingOrder`
- * call. The widget names no sibling and reaches for no store (spec §3).
+ * Lists every open order in the venue, so an order parked on one register is retrieved on another.
+ * A pure view: the app owns the list and turns the `retrieve-order` and `discard-order` events into API
+ * calls.
  */
 @customElement("till-held-orders")
 export class TillHeldOrders extends LitElement {
@@ -71,10 +63,8 @@ export class TillHeldOrders extends LitElement {
     `,
   ];
 
-  /** The node's open parked orders to list. The app owns and refreshes this; the widget only renders it. */
   @property({ attribute: false }) orders: HeldOrderSummary[] = [];
 
-  /** Ask the app to load parked order `id` back into the basket. */
   #retrieve(id: string): void {
     this.dispatchEvent(
       new CustomEvent<{ id: string }>("retrieve-order", {
@@ -85,7 +75,6 @@ export class TillHeldOrders extends LitElement {
     );
   }
 
-  /** Ask the app to abandon parked order `id`. */
   #discard(id: string): void {
     this.dispatchEvent(
       new CustomEvent<{ id: string }>("discard-order", {

@@ -20,9 +20,6 @@ const counterTab: TabDef = {
   ],
 };
 
-// A valid HeldOrderSummary — the shape held-orders.test.ts uses (id/orderNumber/label/itemCount/
-// total(string)/openedAt), NOT the brief's inline sketch. The renderer keys visibility on the list
-// length, not the shape, but the held-orders widget itself reads these fields.
 const mesa: HeldOrderSummary = {
   id: "wo-1",
   orderNumber: 5,
@@ -41,7 +38,6 @@ const barra: HeldOrderSummary = {
   openedAt: "2026-08-05T10:05:00.000Z",
 };
 
-// A minimal valid StationQueueGroup — one queued line at one station (shape from station-queue.test.ts).
 const stationGroup: StationQueueGroup = {
   orderId: "wo-1",
   orderNumber: 5,
@@ -104,9 +100,7 @@ const orderTab: TabDef = {
   cards: [{ type: "table-order", colSpan: 12, rowSpan: 12, config: {} }],
 };
 
-// A big card whose data-condition state the host CANNOT compute (`#currentState("expo")` is
-// undefined), but which carries a visibleWhen gate. Under B1 this was hidden (fail closed); SP-B2.1
-// follow-up d fails it OPEN so a self-fetching big card never silently vanishes.
+// A big card whose data-condition state the host CANNOT compute, but which carries a visibleWhen gate.
 const gatedBigCard: TabDef = {
   key: "expo",
   title: "Expo",
@@ -250,9 +244,6 @@ describe("till-card-grid", () => {
 
   it("still skips notifications (later), rendering no cell for it", async () => {
     const store = new WorkingOrderStore();
-    // floor-plan / table-layout-editor / expo / kds-board / table-order now RENDER (tested below);
-    // `notifications` is the ONLY type that still returns `nothing`, so a tab carrying it shows only the
-    // basket.
     const bigTab: TabDef = {
       key: "counter",
       title: "Counter",
@@ -263,7 +254,6 @@ describe("till-card-grid", () => {
       ],
     };
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: bigTab, store });
-    // Only the basket card renders; the still-skipped notifications card yields no cell at all.
     expect(el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
     expect(el.shadowRoot!.querySelectorAll(".cell")).toHaveLength(1);
   });
@@ -281,7 +271,6 @@ describe("till-card-grid", () => {
     >("till-floor-screen")!;
     expect(floor).not.toBeNull();
     expect(floor.embedded).toBe(true);
-    // A plain floor-plan card is the read-only floor — no edit affordance.
     expect(floor.canEdit).toBe(false);
   });
 
@@ -322,7 +311,6 @@ describe("till-card-grid", () => {
       canConfigureTill: true,
     });
     expect(el.shadowRoot!.querySelector(".cell.locked")).toBeNull();
-    // The cell still renders — visible, just unlocked.
     expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull();
   });
 
@@ -353,16 +341,13 @@ describe("till-card-grid", () => {
   it("shows a big card with a visibleWhen gate the host cannot evaluate (fail open, follow-up d)", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", { tab: gatedBigCard, store });
-    // expo renders `till-expo-screen` (Task 5); `#currentState("expo")` is undefined, so the gate
-    // cannot be evaluated — fail open means the CELL is present (not filtered out).
     expect(el.shadowRoot!.querySelectorAll(".cell").length).toBe(1);
     expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
   });
 
   it("ALWAYS renders tender-pay even without integrated-card-payment (cash path, sale-critical)", async () => {
     const store = new WorkingOrderStore();
-    // tender-pay carries a required capability (integrated-card-payment) in CARD_REQUIRED_CAPABILITY,
-    // but it takes cash and is sale-critical, so the grid renders it regardless of capabilities.
+    // tender-pay requires integrated-card-payment, but it takes cash, so it renders regardless.
     const payTab: TabDef = {
       key: "counter",
       title: "Counter",
@@ -378,23 +363,14 @@ describe("till-card-grid", () => {
   });
 
   it("never WIDENS access: the advisory gate is MONOTONIC — more caps ⇒ a superset of cards (SP-B2.1 follow-up c)", async () => {
-    // The client capability gate is advisory — the server's assertDeviceCapability is authoritative. It
-    // can only ever REMOVE a card, never one that manufactures access to a server-fenced operation: a
-    // truthy #capable is necessary-not-sufficient for a card to render. kds-board REQUIRES act-as-kds;
-    // absent, #capable filters it out; present (SP-B2.2), it renders the station display — a
-    // kitchen-queue read/advance surface that touches NEITHER server-fenced operation (the pay endpoint
-    // or the cash-drawer open). So granting the capability yields a strict SUPERSET of the ungated set
-    // (the ungated basket stays; kds-board is ADDED), never a different-or-smaller set — the gate is
-    // monotonic and cannot remove a card the device was already entitled to. The direction of the
-    // per-card skip itself is pinned by the two capability tests + the prove-by-deletion control above.
     const store = new WorkingOrderStore();
     const mixed: TabDef = {
       key: "x",
       title: "X",
       columns: 12,
       cards: [
-        { type: "basket", colSpan: 4, rowSpan: 4, config: {} }, // ungated — always renders
-        { type: "kds-board", colSpan: 12, rowSpan: 6, config: {} }, // gated on act-as-kds
+        { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
+        { type: "kds-board", colSpan: 12, rowSpan: 6, config: {} },
       ],
     };
     const absent = await mountWidget<TillCardGrid>("till-card-grid", {
@@ -402,7 +378,6 @@ describe("till-card-grid", () => {
       store,
       capabilities: [],
     });
-    // Absent: only the ungated basket; the gated kds-board is filtered out.
     expect(absent.el.shadowRoot!.querySelectorAll(".cell")).toHaveLength(1);
     expect(absent.el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
     expect(absent.el.shadowRoot!.querySelector("till-station-screen")).toBeNull();
@@ -411,7 +386,6 @@ describe("till-card-grid", () => {
       store,
       capabilities: ["act-as-kds"],
     });
-    // Present: the SUPERSET — the ungated basket still renders (nothing was removed) AND kds-board is added.
     expect(present.el.shadowRoot!.querySelectorAll(".cell")).toHaveLength(2);
     expect(present.el.shadowRoot!.querySelector("till-basket")).not.toBeNull();
     expect(present.el.shadowRoot!.querySelector("till-station-screen")).not.toBeNull();
@@ -479,9 +453,6 @@ describe("till-card-grid", () => {
 
   it("passes a visibleWhen gate OPEN for a card type with no data-condition mapping (follow-up d)", async () => {
     const store = new WorkingOrderStore();
-    // `basket` has no data-condition state (`#currentState → undefined`), so the host cannot evaluate
-    // a visibleWhen gate on it. SP-B2.1 follow-up d fails such a card OPEN — it renders rather than
-    // silently vanishing (B1 hid it, fail closed).
     const gatedBasketTab: TabDef = {
       key: "counter",
       title: "Counter",
@@ -497,9 +468,8 @@ describe("till-card-grid", () => {
 
   it("STILL hides a card whose host-COMPUTED state is out of the visibleWhen list (fail-open is undefined-only)", async () => {
     const store = new WorkingOrderStore();
-    // Regression that fail-open only opens the `#currentState → undefined` branch, never the
-    // computed-but-mismatched one: held-orders' state IS computable — `heldOrders: []` yields "empty",
-    // which is NOT in the gate, so the card stays HIDDEN exactly as under B1.
+    // Fail-open covers only a state the host cannot compute: `heldOrders: []` computes "empty", which
+    // is not in the gate, so the card stays hidden.
     const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
       tab: heldTab,
       store,

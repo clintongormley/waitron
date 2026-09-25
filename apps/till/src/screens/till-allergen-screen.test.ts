@@ -274,7 +274,7 @@ describe("till-allergen-screen", () => {
     await el.updateComplete;
     const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
     expect(dialog.open).toBe(true);
-    // The native <dialog> closing (escape/backdrop) surfaces as wt-close; the screen must sync its own
+    // The native <dialog> closing on Escape surfaces as wt-close; the screen must sync its own
     // state, or the .open binding would immediately reopen the dialog.
     dialog.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
     await el.updateComplete;

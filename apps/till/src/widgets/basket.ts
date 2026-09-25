@@ -16,17 +16,9 @@ import { StoreChangeController } from "../state/store-controller.js";
 import type { LineSelection, OrderLine, WorkingOrderStore } from "../state/working-order.js";
 import { lineProductName, productUnit } from "./product-name.js";
 
-/**
- * The multiplication sign for a pick's count badge (`×2`). The SAME `×` (U+00D7) the printed
- * receipt (`apps/server/src/receipt-ticket.ts`) and the settled-ticket view use, so the badge reads
- * identically on the screen basket, the paper receipt and the filed ticket.
- */
+/** The same `×` (U+00D7) the printed receipt and the settled-ticket view use. */
 const QTY_BADGE = "×";
 
-/**
- * The `×N` badge for an extra taken more than once per dish, or "" for the common one-per-dish case
- * so a single pick renders without one. `quantity` is the per-dish count carried on the pick itself.
- */
 function pickQuantityBadge(quantity: number): string {
   return quantity > 1 ? ` ${QTY_BADGE}${quantity}` : "";
 }
@@ -36,14 +28,8 @@ function notOfferedMarker() {
 }
 
 /**
- * The running order: one row per rung-up line, each with the product's name, localized unit quantity,
- * gross line total, and a remove control. It reads the
- * store and re-renders on every `"changed"` event — it holds no basket state of its own, so it can
- * never disagree with the store the pay flow reads.
- *
- * The line total is the SAME arithmetic the server prices with — `unitPrice × quantity` at money
- * scale, in `@waitron/shared` Decimals, never a float — so a row can never round differently from
- * the grand total or the filed ticket.
+ * The running order. It holds no basket state of its own, so it can never disagree with the store the
+ * pay flow reads.
  */
 @customElement("till-basket")
 export class TillBasket extends LitElement {
@@ -210,40 +196,30 @@ export class TillBasket extends LitElement {
   /** The order this basket shows and mutates. Set before the widget connects (its lifecycle subscribes). */
   @property({ attribute: false }) store!: WorkingOrderStore;
 
-  /** The index of the line whose note editor (order-line customisation) is expanded, or `null`
-   * when none is — only one line's editor is open at a time. Toggled by each line's Note button. It is a
-   * POSITIONAL index into `store.lines`, so it must be kept in step with any structural change that
-   * shifts positions: {@link #removeLine} adjusts it atomically with an in-basket removal, and a
-   * whole-basket swap (clear / loadFrom) closes it via {@link #onStoreChanged} — otherwise a note (which
-   * can carry allergy info) would reattach to whatever line slid into the edited line's old slot. */
+  /** A POSITIONAL index into `store.lines`, so it must follow any change that shifts positions:
+   * {@link #removeLine} adjusts it and a whole-basket swap closes it. Otherwise a note, which can carry
+   * allergy information, would reattach to whatever line slid into the edited line's slot. */
   @state() private editingIndex: number | null = null;
 
-  /** The line whose modifier picker is open, or `null` when none is. Assigned only through
-   * {@link #openModifierPicker} / {@link #closeModifierPicker}, which keep
+  /** Assigned only through {@link #openModifierPicker} / {@link #closeModifierPicker}, which keep
    * {@link #modifierSelection} in step with it. */
   @state() private modifierLine: OrderLine | null = null;
 
   /**
-   * The seed handed to the open picker, built ONCE when it opens rather than per render. Lit's
-   * default `hasChanged` is an identity check, so a fresh object literal in `render()` would set the
-   * property on every basket render — including the ones a note keystroke causes — and re-render the
-   * dialog each time. Non-null exactly while {@link modifierLine} is.
+   * Built once when the picker opens, not per render: Lit's default `hasChanged` is an identity check,
+   * so a fresh literal in `render()` would re-render the dialog on every basket render.
    */
   #modifierSelection: LineSelection | null = null;
 
-  /** The `store.id` last seen by {@link #onStoreChanged}, used to detect a whole-basket swap. `clear`
-   * mints a fresh id and `loadFrom` adopts a retrieved order's id, so a change of id means the lines an
-   * open editor pointed at are gone; a plain add / remove / edit keeps the id. `undefined` until the
-   * first change fires (the initial render already starts with no editor open). */
+  /** Detects a whole-basket swap: `clear` mints a fresh id and `loadFrom` adopts the retrieved order's,
+   * while an in-basket add / remove / edit keeps it. */
   #lastStoreId?: string;
 
-  /** Open the picker on `line`, freezing the selection it is seeded with. */
   #openModifierPicker(line: OrderLine): void {
     this.modifierLine = line;
     this.#modifierSelection = { extras: line.extras ?? [], options: line.options ?? [] };
   }
 
-  /** Close the picker, dropping the seed with it. */
   #closeModifierPicker(): void {
     this.modifierLine = null;
     this.#modifierSelection = null;
@@ -252,9 +228,6 @@ export class TillBasket extends LitElement {
   constructor() {
     super();
     new ContentLanguageController(this);
-    // Re-render on any basket change (add / remove / clear); the controller owns the subscription
-    // lifecycle. `() => this.store` is read lazily on connect, after the property is assigned. The
-    // custom handler also closes a dangling editor when the whole basket is swapped out.
     new StoreChangeController(
       this,
       () => this.store,
@@ -265,19 +238,10 @@ export class TillBasket extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    // Seed the swap detector with the store's CURRENT id (the `store` property is assigned before
-    // connect). Without this the first `"changed"` would see `#lastStoreId` still `undefined`, read the
-    // unchanged id as a swap, and wrongly close an editor on the first in-basket add / remove.
+    // Without this the first `"changed"` would read the unchanged id as a swap and close an open editor.
     this.#lastStoreId = this.store.id;
   }
 
-  /**
-   * Handle a store `"changed"` notification. Besides re-rendering, it closes any open note
-   * editor when the basket was SWAPPED WHOLESALE — `clear` (fresh id) or `loadFrom` (a retrieved order's
-   * id) — because the line the editor pointed at no longer exists and a positional index into the new
-   * basket would open the editor on an unrelated line. An in-basket add / remove / edit keeps the id and
-   * is handled positionally ({@link #removeLine}), so it does not close the editor here.
-   */
   #onStoreChanged(): void {
     if (this.store.id !== this.#lastStoreId) {
       this.#lastStoreId = this.store.id;
@@ -289,14 +253,6 @@ export class TillBasket extends LitElement {
     this.requestUpdate();
   }
 
-  /**
-   * Remove the line at `index`, keeping the open editor's {@link editingIndex} in step with the splice so
-   * a note never reattaches to the wrong dish. Removing the EDITED line closes the editor; removing an
-   * EARLIER line slides every later line (the edited one included) down by one, so the tracked index must
-   * follow it down. A later line's removal leaves the edited line's index unchanged. This adjustment is
-   * done BEFORE `store.removeLine` so the re-render that its `"changed"` fires already sees the corrected
-   * index.
-   */
   #removeLine(index: number): void {
     if (this.editingIndex !== null) {
       if (index === this.editingIndex) {
@@ -308,29 +264,17 @@ export class TillBasket extends LitElement {
     this.store.removeLine(index);
   }
 
-  /** The line's own label: the STAFF name, the chosen variant's own when there is one. A new line reads it
-   * from the live catalogue product; a retrieved line reads the name frozen onto it at add time. It
-   * is plain text either way, so it needs no language fallback. */
   #lineName(line: OrderLine): string {
     return lineProductName(line.product);
   }
 
-  /**
-   * A line's frozen options answers, in the STAFF wording a server at the till reads (spec §10) —
-   * never the kitchen shorthand or the diner's text. ONE source: the six frozen names, whether the
-   * operator answered here (the picker builds them at confirm) or the line came back from a held
-   * order (the server built them).
-   */
   #answers(line: OrderLine): string[] {
     return optionAnswers(line.optionSnapshots, { reads: "staff" });
   }
 
   /**
-   * One pick's OWN allergens and dietary suitability, resolved LIVE from the dish's offer by the
-   * PICKED PRODUCT — an extra IS a product, and its declarations are read at display time rather
-   * than frozen onto the line (spec §3.4). `undefined` when no offered list names that product any
-   * more, and on a retrieved line whose stored snapshot carries no offer, so the row adds no
-   * per-extra chrome rather than claiming an empty declaration.
+   * A pick's own allergens and diet, read live from the dish's offer rather than frozen onto the line.
+   * `undefined` when no offered list names the product, so the row claims no empty declaration.
    */
   #extraOwnNutrition(
     line: OrderLine,
@@ -390,10 +334,9 @@ export class TillBasket extends LitElement {
           ${
             // Offered lists alone, NOT `needsModifierPicker`: `setLineModifiers` replaces a line's
             // answers and never its product, so a dish whose only question is its variant gets no
-            // Edit button rather than a dialog whose save would carry nothing ("offers no Edit on a
-            // line whose only question was its variant", basket.test.ts). This gate does not reach
-            // the MIXED case — variants AND an offered list — which still opens the dialog, re-asks
-            // the variant and discards it; open in `docs/backlog.md`, Task 12.
+            // Edit button rather than a dialog whose save would carry nothing. The MIXED case —
+            // variants AND an offered list — still re-asks the variant and discards it; open in
+            // `docs/backlog.md`.
             line.product.offeredModifiers?.length
               ? html`<wt-button
                   class="edit-modifiers"
@@ -406,11 +349,8 @@ export class TillBasket extends LitElement {
           }
           ${this.#extrasRow(line, index)} ${this.#extrasEditor(line, index)}
           ${(line.extras ?? []).map(
-            // Each pick on its own indented row — the picked product's STAFF name and its own gross
-            // (0,00 for a free pick). No remove control: a child goes only with its dish above, which
-            // drops the whole line, picks and all. A pick taken more than once per dish shows a "×N"
-            // badge. Beneath it, that product's OWN allergens and diet, resolved live from the offer
-            // and shown beside the dish's own rows below — never folded into them (spec §3.4).
+            // No remove control: a pick goes only with its dish. Its own allergens and diet sit
+            // beside the dish's rows, never folded into them.
             (extra, i) => {
               const own = this.#extraOwnNutrition(line, extra.productId);
               return html`
@@ -459,16 +399,10 @@ export class TillBasket extends LitElement {
     `;
   }
 
-  /** Open the note editor for `index`, or close it if it is already the open one (the Note
-   * button toggles). A store change never closes an open editor — only the button does. */
   #toggleEditor(index: number): void {
     this.editingIndex = this.editingIndex === index ? null : index;
   }
 
-  /**
-   * The line's SET note as an at-a-glance indented sub-row (order-line customisation), or `nothing` when
-   * the line carries none — so a plain line adds no chrome. Mirrors the option/allergen/diet rows.
-   */
   #extrasRow(line: OrderLine, index: number) {
     if (line.note === undefined) return nothing;
     return html`
@@ -480,14 +414,6 @@ export class TillBasket extends LitElement {
     `;
   }
 
-  /**
-   * The inline note EDITOR (order-line customisation) for the line at `index`, shown only while that
-   * line's Note button has it expanded — the SAME shared field group the modifier picker renders
-   * ({@link renderLineExtrasEditor}). Each change drives the store's
-   * {@link WorkingOrderStore.setLineExtras}, which trims/omits and notifies (re-rendering the sub-row
-   * above). This is the affordance that makes the note reachable on a plain fast-added line that never
-   * opened the picker.
-   */
   #extrasEditor(line: OrderLine, index: number) {
     if (this.editingIndex !== index) return nothing;
     return html`
@@ -500,25 +426,14 @@ export class TillBasket extends LitElement {
     `;
   }
 
-  /**
-   * The line's as-served DIET row (dietary-classification, Task 7), or `nothing`. Rendered ONLY when the
-   * product carries genuine diet data — a recipe-derived `dietDerivation` or a staff `dietOverride` — so
-   * a plain no-recipe item (a coffee) never sprouts a "not reviewed" note it has no diet to review. When
-   * it does render, the badges are the CLIENT-computed {@link asServedDiet} (the same shared fold the KDS
-   * and expo use), and a pending derivation shows the NEUTRAL "not reviewed" note, never a positive claim.
-   */
+  /** Only with real diet data, so a no-recipe item (a coffee) never shows a "not reviewed" note. */
   #dietRow(line: OrderLine, index: number) {
     const hasDietData = line.product.dietDerivation != null || line.product.dietOverride != null;
     if (!hasDietData) return nothing;
     return dietBadges(asServedDiet(line), `line-diet-${index}`);
   }
 
-  /**
-   * A whole, non-hardware line gets a −/count/+ stepper: `+` bumps the count via
-   * {@link WorkingOrderStore.setLineQuantity} (no line merge — each add stays its
-   * own line), `−` lowers it but is DISABLED at 1 because deletion is the × remove control's job, never
-   * the stepper's. A fractional or hardware-mapped line keeps the static localized quantity label.
-   */
+  /** `−` is disabled at 1: removing a line is the × control's job, never the stepper's. */
   #quantityCell(line: OrderLine, index: number) {
     const unit = productUnit(line.product);
     if (unit.hardwareUnit !== null || unit.precision > 0) {
@@ -552,14 +467,6 @@ export class TillBasket extends LitElement {
     `;
   }
 
-  /**
-   * The line's as-served allergen row, or `nothing` for the noise-free common case: a plain line with
-   * NO picks AND no declared allergens on the dish renders nothing at all. When it DOES render, the
-   * chips are the folded `asServedAllergens` set (localised via the till's allergen-name i18n) and the
-   * "not fully reviewed" note appears whenever the fold is pending (the dish's own allergens unreviewed
-   * — the Cautious policy, since a removed-but-unknown base can't be proven allergen-free). A reviewed
-   * fold that leaves an empty set reads as "No declared allergens" rather than a bare label.
-   */
   #allergenRow(line: OrderLine, index: number) {
     const hasExtras = (line.extras ?? []).length > 0;
     const hasAllergens = line.product.allergens != null;

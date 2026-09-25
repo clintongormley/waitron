@@ -1,12 +1,5 @@
 import { css } from "lit";
 
-/**
- * The shared `.option` styling for the till's segmented controls — a native `<button>` option with a
- * `aria-pressed="true"` active state. Used byte-for-byte by both `till-menu-switcher` and
- * `till-diet-filter` (both render `role="group"` of native option buttons above the product grid), so
- * the rules live here once. Each widget keeps its own `:host` and inner-container (`.switcher` /
- * `.filter`) rules — those differ per widget — and appends this block.
- */
 export const segmentedOptionStyles = css`
   .option {
     min-height: var(--wt-tap-min);

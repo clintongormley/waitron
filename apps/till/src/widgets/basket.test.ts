@@ -125,7 +125,6 @@ describe("till-basket", () => {
       expect(
         [...el.shadowRoot!.querySelectorAll(".line > .name")].map((node) => node.textContent),
       ).toEqual(["Pan de pueblo", "Bread"]);
-      // A modifier is still named from its own per-language map — only the DISH name changed.
       expect(el.shadowRoot!.querySelector(".option .name")!.textContent).toContain("Mantequilla");
       expect(el.shadowRoot!.querySelector(".step-inc")!.getAttribute("aria-label")).toContain(
         "Pan de pueblo",
@@ -213,9 +212,6 @@ describe("till-basket", () => {
     expect(store.lines[0]!.product).toBe(jamon);
   });
 
-  // Dish-line quantity (feature B): an `each` line carries a −/+ stepper that drives the store's
-  // setLineQuantity WITHOUT merging lines; a weight line keeps its static kg label (a measured weight
-  // has no +/-). Deletion stays with the × remove control — `−` never removes a line.
   it("an each line renders a −/count/+ stepper and + increments the line quantity via the store", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");
@@ -369,8 +365,6 @@ describe("till-basket", () => {
   });
 
   // ── As-served allergens (modifier↔allergen) ──────────────────────────────────────────────────
-  // The basket shows each line's OWN allergen profile CLIENT-side — the dish's declared allergens, with
-  // no modifier contribution. Each extra's own allergens are shown separately (Task 4).
 
   it("shows the dish's OWN allergens, ignoring a gluten-free bun picked as an extra", async () => {
     const bun = offeredItem("p-gf-bun", "Pan sin gluten", "0.00");
@@ -602,10 +596,6 @@ describe("till-basket", () => {
   });
 
   // ── As-served diet & contains badges (dietary-classification) ────────────────────────────────
-  // The basket shows each line's OWN DIET profile CLIENT-side (`asServedDiet`, the diet twin of
-  // `asServedAllergens`) — the dish's recipe-derived diet, no modifier contribution — and renders
-  // vegan/vegetarian/halal/kosher badges + contains chips beside the allergen chips, with a NEUTRAL
-  // "not reviewed" note (never a positive claim) when pending.
 
   it("shows a vegan badge for a plant-only reviewed dish", async () => {
     const salad: TillProduct = {
@@ -761,18 +751,11 @@ describe("till-basket", () => {
     expect(el.shadowRoot!.querySelector(`[data-test="line-diet-0"]`)).toBeNull();
   });
 
-  // ── Per-line note (order-line customisation, Task 4b) ─────────────────────────────────
-  // EVERY basket line — including a plain no-modifier product fast-added with one tap — carries a
-  // "Note" affordance that opens the shared note editor for THAT line. On change the store's
-  // `setLineExtras` records it; the line's current note shows as an indented sub-row so staff see
-  // it at a glance. Fast-add stays one tap — the editor is opened from the basket, never on the
-  // ring-up path.
+  // ── Per-line note ─────────────────────────────────────────────────────────────────────────
 
-  /** The per-line note toggle button for the line at `index`. */
   function noteButton(el: TillBasket, index: number): HTMLElement | null {
     return el.shadowRoot!.querySelector<HTMLElement>(`[data-test="line-note-button-${index}"]`);
   }
-  /** The open editor's note textarea for the line at `index`, or null when the editor is closed. */
   function noteBox(el: TillBasket): HTMLTextAreaElement | null {
     return el.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]');
   }
@@ -838,7 +821,7 @@ describe("till-basket", () => {
     // Basket [cafe, steak, seabass]. Open the MIDDLE line's (steak) editor, then remove the FIRST line
     // (cafe). Every later line slides down one slot, so the editor must follow steak to its new index —
     // otherwise a typed note (which can carry allergy info, per the placeholder) lands on seabass, the
-    // line that slid into steak's old slot. This reproduces the positional-index reattach bug.
+    // line that slid into steak's old slot.
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "1"); // A — index 0
     store.addProduct(steak, "1"); // B — index 1, the one we edit
