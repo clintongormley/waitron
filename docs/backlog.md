@@ -5273,7 +5273,7 @@ lost (the JSON report and stderr still carry it; a box's `logs` volume always ex
 store's `close()` waits for the watchdog thread to end, not a bare `release()`. The recovery page,
 English-only apart from the stalled-holder row when #608 landed, is now written in English and
 translated into Spanish, one language per page chosen from the browser's `Accept-Language`
-(this change); its Spanish has not been read by a native speaker. Also
+(#650); its Spanish has not been read by a native speaker. Also
 left by #566's review, no behaviour change: the migrator's lock and
 the venue lock use one technique in two copies, and the test helper that holds the lock from another
 process is copied into several test files.
