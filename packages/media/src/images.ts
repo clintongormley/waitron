@@ -3,6 +3,7 @@ import {
   parentJoin,
   parentProducts,
   readContentLanguages,
+  sections,
   staffPresentationName,
   validateContentTranslations,
 } from "@waitron/catalogue";
@@ -28,13 +29,16 @@ export interface ImageRecord extends ImageMetadataInput {
   filename: string;
   createdAt: Date;
   updatedAt: Date;
-  /** How many products (variants among them) and categories reference this photo. `readImage`
-   * counts `listImageUsages`; `listImages` counts the same two sources in its own SQL, and the two
-   * must stay in step or the library shows a free photo that then refuses to delete. */
+  /** How many products (variants among them), categories and sections reference this photo.
+   * `readImage` counts `listImageUsages`; `listImages` counts the same three sources in its own
+   * SQL, and the two must stay in step or the library shows a free photo that then refuses to
+   * delete. */
   usageCount: number;
 }
 export type ImageUsage =
   | { kind: "category"; id: string; names: Record<string, string> }
+  /** Any section, a list a menu owns included; `internalName` is the staff-facing name. */
+  | { kind: "section"; id: string; internalName: string }
   | {
       kind: "product";
       id: string;
@@ -163,6 +167,11 @@ export async function listImageUsages(tx: Transaction, imageId: string): Promise
     .innerJoin(categories, eq(categories.id, categoryDetails.categoryId))
     .where(eq(categoryDetails.image, image[0].filename))
     .orderBy(categories.id);
+  const sectionRows = await tx
+    .select({ id: sections.id, internalName: sections.internalName })
+    .from(sections)
+    .where(eq(sections.image, image[0].filename))
+    .orderBy(sections.id);
   const usage = ({
     parentId,
     parentName,
@@ -183,6 +192,7 @@ export async function listImageUsages(tx: Transaction, imageId: string): Promise
   return [
     ...productRows.map(usage),
     ...categoryRows.map((row): ImageUsage => ({ kind: "category", ...row })),
+    ...sectionRows.map((row): ImageUsage => ({ kind: "section", ...row })),
   ];
 }
 
@@ -526,9 +536,9 @@ export async function listImages(
 }
 
 /**
- * How many products (variants among them) and categories name each of `filenames`.
+ * How many products (variants among them), categories and sections name each of `filenames`.
  *
- * The two reads are the same two `listImageUsages` scans, and a source added there is added
+ * The three reads are the same three `listImageUsages` scans, and a source added there is added
  * here too — or the library shows a free photo that then refuses to delete. They are separate
  * statements on one transaction and are awaited in turn, never `Promise.all` (`CLAUDE.md` §3).
  */
@@ -552,6 +562,12 @@ async function countUsages(
     .select({ image: categoryDetails.image })
     .from(categoryDetails)
     .where(inArray(categoryDetails.image, wanted))) {
+    tally(row.image);
+  }
+  for (const row of await tx
+    .select({ image: sections.image })
+    .from(sections)
+    .where(inArray(sections.image, wanted))) {
     tally(row.image);
   }
   return counts;

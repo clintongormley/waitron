@@ -24,8 +24,10 @@ import type { ImageApi, ImageMetadata, ImageQuery, ImageUsage, LibraryImage } fr
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { t } from "./strings.js";
 
+type LinkedUsage = Exclude<ImageUsage, { kind: "section" }>;
+
 /** Where a blocking use sends the operator: a variant opens its own product page. */
-function usageHref(use: ImageUsage): string {
+function usageHref(use: LinkedUsage): string {
   if (use.kind === "category") return `/manage/categories?category=${encodeURIComponent(use.id)}`;
   return `/manage/catalogue/product/${encodeURIComponent(use.id)}`;
 }
@@ -178,6 +180,13 @@ export class ImageLibrary extends LitElement {
   }
   #text(value: Record<string, string>): string {
     return resolveEnabledContentText(value, currentLocale(), currentContentLanguages());
+  }
+  /** A section has no screen to link to yet, so it is named without a link. */
+  #usage(use: ImageUsage) {
+    if (use.kind === "section") return use.internalName;
+    const name = use.kind === "category" ? this.#text(use.names) : use.name;
+    const inactive = use.kind === "category" || use.active ? "" : ` (${t("image.inactive")})`;
+    return html`<a href=${usageHref(use)}>${name}${inactive}</a>`;
   }
 
   async #load(passive = false): Promise<void> {
@@ -587,7 +596,7 @@ export class ImageLibrary extends LitElement {
               ${this.deleteError ? html`<p role="alert" class="error">${t("image.delete_error")}</p>` : nothing}
               <p>${t(this.deletion.uses.length ? "image.in_use" : "image.confirm_help")}</p>
               <ul>
-                ${this.deletion.uses.map((use) => html`<li><a href=${usageHref(use)}>${use.kind === "category" ? this.#text(use.names) : use.name}${use.kind === "category" || use.active ? "" : ` (${t("image.inactive")})`}</a></li>`)}
+                ${this.deletion.uses.map((use) => html`<li>${this.#usage(use)}</li>`)}
               </ul>
               <wt-form-actions slot="footer"
                 ><wt-button

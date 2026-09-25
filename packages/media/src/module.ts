@@ -16,8 +16,8 @@ export const MEDIA_CONFIGURATION_TRANSFER = {
   kind: "tables",
   validate: validateMediaConfiguration,
   tables: [
-    { name: "media_images", before: ["products", "category_details"] },
-    { name: "media_image_data", before: ["products", "category_details"] },
+    { name: "media_images", before: ["products", "category_details", "sections"] },
+    { name: "media_image_data", before: ["products", "category_details", "sections"] },
   ],
 } as const;
 export const MEDIA_PERMISSIONS: readonly ModulePermission[] = [

@@ -678,6 +678,46 @@ it("protects an image used only by a category and releases it after clearing the
   });
 });
 
+it("protects an image used by sections, a menu's own list among them, and counts each use", async () => {
+  const { createSection, updateSection, sections } = await import("@waitron/catalogue");
+  await seedTenant(suite.db);
+  await withTransaction(suite.db, async (tx) => {
+    const { image } = await uploadImage(
+      tx,
+      { image: photo, names: { en: "Drinks" }, altText: { en: "Glasses" }, labels: [] },
+      {},
+    );
+    const drinks = await createSection(tx, {
+      internalName: "Drinks (internal)",
+      names: { en: "Drinks (customer)" },
+      image: image.filename,
+    });
+    const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
+      id: catalogues.id,
+    });
+    const [root] = await tx
+      .insert(sections)
+      .values({
+        internalName: "Lunch root",
+        role: "menu_root",
+        ownerMenuId: menu!.id,
+        image: image.filename,
+      })
+      .returning({ id: sections.id });
+    const uses = [
+      { kind: "section" as const, id: drinks.id, internalName: "Drinks (internal)" },
+      { kind: "section" as const, id: root!.id, internalName: "Lunch root" },
+    ].sort((a, b) => a.id.localeCompare(b.id));
+    expect(await listImageUsages(tx, image.id)).toEqual(uses);
+    expect((await readImage(tx, image.id)).usageCount).toBe(2);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(2);
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    await updateSection(tx, drinks.id, { image: null });
+    await tx.update(sections).set({ image: null }).where(eq(sections.id, root!.id));
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+  });
+});
+
 describe("relevance scores and tie-breaks", () => {
   const add = async (
     tx: Transaction,
