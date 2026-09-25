@@ -26,7 +26,6 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
         floorZones: [],
         products: [],
         offers: [],
-        sections: [],
       }),
     } as unknown as VenueServiceApi;
     host.append(el);
@@ -84,8 +83,6 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
             id: "i1",
             menuId: "m1",
             productId: "p1",
-            sectionId: "s1",
-            sectionName: { en: "Wine" },
             name: "Wine by the glass",
             customerName: null,
             grossPrice: "4.50",
@@ -103,7 +100,6 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
             ],
           },
         ],
-        sections: [],
       }),
     } as unknown as VenueServiceApi;
     host.append(el);
@@ -153,8 +149,6 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
             id: "i1",
             menuId: "m1",
             productId: "p1",
-            sectionId: "s1",
-            sectionName: { en: "Snacks" },
             name: "Olives",
             customerName: null,
             grossPrice: null,
@@ -162,7 +156,6 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
             variants: [],
           },
         ],
-        sections: [],
       }),
     } as unknown as VenueServiceApi;
     host.append(el);
@@ -200,8 +193,6 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
       id,
       menuId: "m1",
       productId,
-      sectionId: "s1",
-      sectionName: { en: "Snacks" },
       name,
       customerName: null,
       grossPrice,
@@ -222,7 +213,6 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
         floorZones: [],
         products: [product("p1", "Olives", "3.00"), product("p2", "Almonds", "4.00")],
         offers: [offer("i1", "p1", "Olives", null), offer("i2", "p2", "Almonds", "3.50")],
-        sections: [],
       }),
     } as unknown as VenueServiceApi;
     host.append(el);

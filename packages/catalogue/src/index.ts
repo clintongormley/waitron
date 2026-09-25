@@ -19,6 +19,12 @@ export * from "./labels.js";
 export * from "./section-types.js";
 export * from "./section-graph.js";
 export * from "./sections.js";
+export {
+  createMenuShell,
+  readMenuStructure,
+  syncMenuOffers,
+  type MenuStructureNode,
+} from "./menu-structure.js";
 export * from "./sale-classification.js";
 
 export * from "./option-contract.js";

@@ -4,9 +4,11 @@ import {
   CATALOGUE_MIGRATIONS,
   createCatalogue,
   createCategory,
-  createMenuItem,
-  createMenuSection,
+  addMember,
+  addProductToMenu,
   createProduct,
+  createSection,
+  readMenuStructure,
   setProductVariants,
   writeContentLanguages,
 } from "@waitron/catalogue";
@@ -128,6 +130,55 @@ async function seedUnitTenant(): Promise<{
 }
 
 describe("venue service routing", () => {
+  it("counts a menu reaching a product only through nested sections as not empty", async () => {
+    await seedUnitTenant();
+    const locationId = brandLocationId(await seedLocation("Venue"));
+    const zone = await seedZone(locationId, "Terrace");
+    await scoped(async (tx) => {
+      const department = await createDepartment(
+        tx,
+        { locationId },
+        { name: "Restaurant", defaultServiceMode: "table_tab" },
+      );
+      await configureZone(tx, { locationId }, { zoneId: zone, departmentId: department.id });
+      const menu = await createCatalogue(tx, { name: "Terrace menu" });
+      await allowMenuInZone(tx, { locationId }, zone, menu.id, { makeDefault: true });
+      const { rootSectionId } = await readMenuStructure(tx, menu.id);
+      const drinks = await createSection(tx, { internalName: "Drinks" });
+      const soft = await createSection(tx, { internalName: "Soft drinks" });
+      await addMember(tx, rootSectionId, { kind: "section", sectionId: drinks.id });
+      await addMember(tx, drinks.id, { kind: "section", sectionId: soft.id });
+      const menuEmpty = {
+        code: "zone.menu_empty",
+        zoneId: zone,
+        zoneName: "Terrace",
+        menuId: menu.id,
+        menuName: "Terrace menu",
+      };
+      // Sections alone sell nothing.
+      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([menuEmpty]);
+
+      const product = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: null,
+        name: "Lemonade",
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      });
+      await addMember(tx, soft.id, { kind: "product", productId: product.id });
+      await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
+        {
+          code: "zone.route_missing",
+          zoneId: zone,
+          zoneName: "Terrace",
+          productId: product.id,
+          productName: "Lemonade",
+        },
+      ]);
+    });
+  });
+
   it("reports incomplete active zones and refuses to deactivate their department", async () => {
     await seedUnitTenant();
     const location = await seedLocation("Venue");
@@ -180,14 +231,9 @@ describe("venue service routing", () => {
         unitPrice: "0.00",
         vatClass: "general",
       });
-      const section = await createMenuSection(tx, {
-        menuId: menu.id,
-        name: { en: "Drinks", fr: "Boissons" },
-      });
-      await createMenuItem(tx, {
+      await addProductToMenu(tx, {
         menuId: menu.id,
         productId: product.id,
-        sectionId: section.id,
         grossPrice: "3.00",
       });
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
@@ -376,25 +422,15 @@ describe("venue service routing", () => {
         unitPrice: "0.00",
         vatClass: "reduced",
       });
-      const section = await createMenuSection(tx, {
-        menuId: menu.id,
-        name: { en: "Counter" },
-      });
-      const offer = await createMenuItem(tx, {
+      const offer = await addProductToMenu(tx, {
         menuId: menu.id,
         productId: ham.id,
-        sectionId: section.id,
         grossPrice: "24.90",
       });
       const hiddenMenu = await createCatalogue(tx, { name: "Staff" });
-      const hiddenSection = await createMenuSection(tx, {
-        menuId: hiddenMenu.id,
-        name: { en: "Staff" },
-      });
-      const hiddenOffer = await createMenuItem(tx, {
+      const hiddenOffer = await addProductToMenu(tx, {
         menuId: hiddenMenu.id,
         productId: ham.id,
-        sectionId: hiddenSection.id,
         grossPrice: "1.00",
       });
       await allowMenuInZone(tx, { locationId }, zone, menu.id, {
@@ -577,14 +613,9 @@ describe("venue service routing", () => {
         vatClass: "general",
       });
       await tx.execute(sql`delete from product_units where product_id = ${sweets.id}`);
-      const section = await createMenuSection(tx, {
-        menuId: menu.id,
-        name: { en: "Counter" },
-      });
-      const offer = await createMenuItem(tx, {
+      const offer = await addProductToMenu(tx, {
         menuId: menu.id,
         productId: sweets.id,
-        sectionId: section.id,
         grossPrice: "1.20",
       });
       await allowMenuInZone(tx, { locationId }, zone, menu.id, {
@@ -1110,20 +1141,14 @@ describe("resolvePreparationRoutes", () => {
       const grill = await insertStation(tx, cfg.locationId, "Grill");
       const closedBar = await insertStation(tx, cfg.locationId, "Closed bar");
       const menu = await createCatalogue(tx, { name: "Dining" });
-      const section = await createMenuSection(tx, {
-        menuId: menu.id,
-        name: { en: "Everything" },
-      });
       const inactive = await productWithCategory(tx, menu.id, "Closed cocktail");
       const ok = await productWithCategory(tx, menu.id, "Steak");
       const missing = await productWithCategory(tx, menu.id, "Mystery dish");
-      for (const [displayOrder, product] of [inactive, ok, missing].entries()) {
-        await createMenuItem(tx, {
+      for (const product of [inactive, ok, missing]) {
+        await addProductToMenu(tx, {
           menuId: menu.id,
           productId: product.id,
-          sectionId: section.id,
           grossPrice: "5.00",
-          displayOrder,
         });
       }
       await allowMenuInZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
@@ -1158,7 +1183,6 @@ describe("resolvePreparationRoutes", () => {
     const { cfg, zoneId, otherZoneId } = await seedRoutingVenue();
     await scoped(async (tx) => {
       const menu = await createCatalogue(tx, { name: "Tapas" });
-      const section = await createMenuSection(tx, { menuId: menu.id, name: { en: "Tapas" } });
       const croquetas = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: null,
@@ -1168,10 +1192,9 @@ describe("resolvePreparationRoutes", () => {
         vatClass: "general",
         available: false,
       });
-      const offer = await createMenuItem(tx, {
+      const offer = await addProductToMenu(tx, {
         menuId: menu.id,
         productId: croquetas.id,
-        sectionId: section.id,
         grossPrice: "6.00",
       });
       await allowMenuInZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
@@ -1256,7 +1279,6 @@ async function seedSellingVenue() {
     await configureZone(tx, cfg, { zoneId: diningZone, departmentId: restaurant.id });
     await configureZone(tx, cfg, { zoneId: barZone, departmentId: bar.id, serviceMode: "prepay" });
     const menu = await createCatalogue(tx, { name: "All day" });
-    const section = await createMenuSection(tx, { menuId: menu.id, name: { en: "All day" } });
     const product = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
@@ -1265,10 +1287,9 @@ async function seedSellingVenue() {
       unitPrice: "0.00",
       vatClass: "general",
     });
-    const offer = await createMenuItem(tx, {
+    const offer = await addProductToMenu(tx, {
       menuId: menu.id,
       productId: product.id,
-      sectionId: section.id,
       grossPrice: "4.50",
     });
     for (const zoneId of [diningZone, barZone]) {

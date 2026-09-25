@@ -4,7 +4,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import { codeOf } from "@waitron/dashboard-kit";
-import { resolveContentText, resolveEnabledContentText } from "@waitron/shared";
+import { resolveEnabledContentText } from "@waitron/shared";
 import {
   baseStyles,
   ContentLanguageController,
@@ -19,7 +19,6 @@ import type {
   FloorZone,
   HoursInterval,
   MenuOffer,
-  MenuSection,
   NamedRow,
   PreparationRoute,
   Product,
@@ -39,7 +38,6 @@ type Editor =
   | { kind: "department"; row?: Department }
   | { kind: "menu"; row?: NamedRow }
   | { kind: "offer"; menuId: string; row?: MenuOffer }
-  | { kind: "section"; row: MenuSection }
   | { kind: "hours"; row?: HoursInterval; index?: number }
   | { kind: "zone"; row: FloorZone }
   | { kind: "assignment"; zoneId: string; menuId?: string }
@@ -177,7 +175,6 @@ export class VenueOperationsScreen extends LitElement {
   /** The offer's price as typed so far, while an offer editor is open; undefined until it is edited. */
   @state() private offerPrice?: string;
   #opener?: HTMLElement;
-  #editorLanguages = currentContentLanguages();
 
   constructor() {
     super();
@@ -244,8 +241,6 @@ export class VenueOperationsScreen extends LitElement {
       ><s>${own}</s> ${row.unitPrice}`;
   }
   #open(editor: Editor): void {
-    // A live language change must not relabel text already entered in an open editor.
-    this.#editorLanguages = currentContentLanguages();
     this.editor = editor;
     // The operator has picked nothing yet; which product an offer form is about is derived where the
     // form is built, from the products that menu can still be given.
@@ -377,7 +372,7 @@ export class VenueOperationsScreen extends LitElement {
       ...MODES.map((id) => ({ id, name: t(`venue.${id}`) })),
     ];
   }
-  /** Resolve a content-translated name — a menu section's or a category's. A product's, a variant's
+  /** Resolve a content-translated name — a category's. A product's, a variant's
    * and an offer's name are plain staff strings and are rendered directly, never through here. */
   #name(names: Record<string, string>): string {
     return resolveEnabledContentText(names, currentLocale(), currentContentLanguages());
@@ -594,13 +589,6 @@ export class VenueOperationsScreen extends LitElement {
                   },
                 },
                 {
-                  key: `sections-${row.id}`,
-                  label: t("venue.sections"),
-                  run: () => {
-                    this.menuId = row.id;
-                  },
-                },
-                {
                   key: `new-offer-${row.id}`,
                   label: t("venue.add_offer"),
                   run: () => this.#open({ kind: "offer", menuId: row.id }),
@@ -613,80 +601,47 @@ export class VenueOperationsScreen extends LitElement {
       ${
         menu
           ? html` ${this.#toolbar(`${menu.name}: ${t("venue.products")}`, [{ key: "new-offer", label: t("venue.add_offer"), run: () => this.#open({ kind: "offer", menuId: menu.id }) }])}
-              ${this.#table(
-                `menu-offers-${menu.id}`,
-                menu.name,
-                model.offers.filter((row) => row.menuId === menu.id),
-                [
-                  {
-                    key: "section",
-                    label: t("venue.section"),
-                    cell: (row) => this.#name(row.sectionName),
-                    sortValue: (row) => this.#name(row.sectionName),
-                  },
-                  {
-                    key: "product",
-                    label: t("venue.product"),
-                    cell: (row) => row.name,
-                    sortValue: (row) => row.name,
-                  },
-                  {
-                    key: "price",
-                    label: t("venue.price"),
-                    align: "end",
-                    cell: (row) => this.#offerPrice(row, model.products),
-                    sortValue: (row) => Number(row.unitPrice),
-                  },
-                  {
-                    key: "actions",
-                    label: t("venue.actions"),
-                    cell: (row) =>
-                      this.#actions(row.name, [
-                        {
-                          key: `edit-offer-${row.id}`,
-                          label: t("venue.edit"),
-                          run: () => this.#open({ kind: "offer", menuId: menu.id, row }),
-                        },
-                        {
-                          key: `remove-offer-${row.id}`,
-                          label: t("venue.remove_offer"),
-                          run: () =>
-                            this.#confirm(row.name, () =>
-                              this.api.deactivateMenuItem(menu.id, row.id),
-                            ),
-                        },
-                      ]),
-                  },
-                ],
-                (row) => row.id,
-              )}
-              <h3>${menu.name}: ${t("venue.sections")}</h3>
-              ${this.#table(
-                `menu-sections-${menu.id}`,
-                t("venue.sections"),
-                model.sections.filter((section) => section.menuId === menu.id),
-                [
-                  {
-                    key: "name",
-                    label: t("venue.section"),
-                    cell: (row) => this.#name(row.name),
-                    sortValue: (row) => this.#name(row.name),
-                  },
-                  {
-                    key: "actions",
-                    label: t("venue.actions"),
-                    cell: (row) =>
-                      this.#actions(this.#name(row.name), [
-                        {
-                          key: `edit-section-${row.id}`,
-                          label: t("venue.edit"),
-                          run: () => this.#open({ kind: "section", row }),
-                        },
-                      ]),
-                  },
-                ],
-                (row) => row.id,
-              )}`
+            ${this.#table(
+              `menu-offers-${menu.id}`,
+              menu.name,
+              model.offers.filter((row) => row.menuId === menu.id),
+              [
+                {
+                  key: "product",
+                  label: t("venue.product"),
+                  cell: (row) => row.name,
+                  sortValue: (row) => row.name,
+                },
+                {
+                  key: "price",
+                  label: t("venue.price"),
+                  align: "end",
+                  cell: (row) => this.#offerPrice(row, model.products),
+                  sortValue: (row) => Number(row.unitPrice),
+                },
+                {
+                  key: "actions",
+                  label: t("venue.actions"),
+                  cell: (row) =>
+                    this.#actions(row.name, [
+                      {
+                        key: `edit-offer-${row.id}`,
+                        label: t("venue.edit"),
+                        run: () => this.#open({ kind: "offer", menuId: menu.id, row }),
+                      },
+                      {
+                        key: `remove-offer-${row.id}`,
+                        label: t("venue.remove_offer"),
+                        run: () =>
+                          this.#confirm(row.name, () =>
+                            this.api.deactivateMenuItem(menu.id, row.id),
+                          ),
+                      },
+                    ]),
+                },
+              ],
+              (row) => row.id,
+            )}`
           : nothing
       }
     </section>`;
@@ -917,33 +872,6 @@ export class VenueOperationsScreen extends LitElement {
             );
           },
         };
-      case "section": {
-        const { defaultLanguage, languages } = this.#editorLanguages;
-        const languageNames = new Intl.DisplayNames([currentLocale()], { type: "language" });
-        const orderedLanguages = [
-          defaultLanguage,
-          ...languages.filter((language) => language !== defaultLanguage),
-        ];
-        return {
-          heading: t("venue.edit_section"),
-          body: html`${orderedLanguages.map((language) => this.#input(`section-name-${language}`, `${t("venue.section")} (${languageNames.of(language)})`, resolveContentText(editor.row.name, language, language), "text", language === defaultLanguage))}`,
-          save: () => {
-            if (
-              !this.#validate([
-                { name: `section-name-${defaultLanguage}`, label: t("venue.section") },
-              ])
-            )
-              return;
-            const name = { ...editor.row.name };
-            for (const language of orderedLanguages) {
-              const value = this.#value(`section-name-${language}`).trim();
-              if (value === "") delete name[language];
-              else name[language] = value;
-            }
-            void this.#save(() => this.api.updateMenuSection(editor.row.id, { name }));
-          },
-        };
-      }
       case "offer": {
         const { menuId, row } = editor;
         const products = model.products.filter(
@@ -978,19 +906,11 @@ export class VenueOperationsScreen extends LitElement {
             offered: overridesById.get(variant.id)?.offered ?? true,
             applicablePrice: variant.unitPrice ?? parentPrice,
           }));
-        const { defaultLanguage, languages } = this.#editorLanguages;
-        const sectionField = (language: string) =>
-          `offer-section-${menuId}${language === defaultLanguage ? "" : `-${language}`}`;
-        const sectionLanguages = [
-          defaultLanguage,
-          ...languages.filter((language) => language !== defaultLanguage),
-        ];
-        const languageNames = new Intl.DisplayNames([currentLocale()], { type: "language" });
         return {
           heading: `${model.menus.find((menu) => menu.id === menuId)?.name}: ${t(row ? "venue.edit_offer" : "venue.add_offer")}`,
           body: html`${
             row
-              ? html`<p>${row.name} · ${this.#name(row.sectionName)}</p>`
+              ? html`<p>${row.name}</p>`
               : html`${this.#select(
                   `offer-product-${menuId}`,
                   t("venue.product"),
@@ -1005,15 +925,7 @@ export class VenueOperationsScreen extends LitElement {
                     this.offerProductId = value;
                   },
                 )}`
-          }${sectionLanguages.map((language) =>
-            this.#input(
-              sectionField(language),
-              `${t("venue.section")} (${languageNames.of(language)})`,
-              resolveContentText(row?.sectionName ?? {}, language, language),
-              "text",
-              language === defaultLanguage,
-            ),
-          )}${this.#input(priceName, t("venue.price"), row?.grossPrice ?? "", "text", false, {
+          }${this.#input(priceName, t("venue.price"), row?.grossPrice ?? "", "text", false, {
             placeholder: product?.unitPrice ?? "",
             hint: t("venue.offer_price_hint"),
             onInput: (value) => {
@@ -1051,7 +963,6 @@ export class VenueOperationsScreen extends LitElement {
           save: () => {
             if (
               !this.#validate([
-                { name: `offer-section-${menuId}`, label: t("venue.section") },
                 ...(row
                   ? []
                   : [
@@ -1091,51 +1002,12 @@ export class VenueOperationsScreen extends LitElement {
               };
               return;
             }
-            const sectionNames = Object.fromEntries(
-              sectionLanguages
-                .map((language) => [language, this.#value(sectionField(language)).trim()] as const)
-                .filter(([, value]) => value !== ""),
-            );
-            const sectionName = sectionNames[defaultLanguage];
             void this.#save(async () => {
-              const existing =
-                row ??
-                model.offers.find(
-                  (offer) =>
-                    offer.menuId === menuId &&
-                    resolveContentText(offer.sectionName, defaultLanguage, defaultLanguage) ===
-                      sectionName,
-                );
-              if (existing) {
-                const name = { ...existing.sectionName, ...sectionNames };
-                if (row) {
-                  for (const language of sectionLanguages) {
-                    if (sectionNames[language] === undefined) delete name[language];
-                  }
-                }
-                const changed = Object.keys({ ...existing.sectionName, ...name }).some(
-                  (language) => existing.sectionName[language] !== name[language],
-                );
-                if (changed) await this.api.updateMenuSection(existing.sectionId, { name });
-              }
               if (row) {
                 await this.api.updateMenuItem(menuId, row.id, { grossPrice });
                 return this.api.setMenuVariants(menuId, row.id, variants);
               }
-              const sectionId =
-                existing?.sectionId ??
-                (
-                  await this.api.createMenuSection(menuId, {
-                    name: sectionNames,
-                    displayOrder: 0,
-                  })
-                ).id;
-              const created = await this.api.createMenuItem(menuId, {
-                sectionId,
-                productId,
-                grossPrice,
-                displayOrder: 0,
-              });
+              const created = await this.api.addProductToMenu(menuId, { productId, grossPrice });
               await this.api.setMenuVariants(menuId, created.id, variants);
             });
           },

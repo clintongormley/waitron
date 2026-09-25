@@ -21,7 +21,6 @@ const model: VenueServiceView = {
   floorZones: [],
   products: [],
   offers: [],
-  sections: [],
 };
 
 beforeEach(() => setLocale("en"));

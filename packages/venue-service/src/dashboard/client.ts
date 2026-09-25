@@ -76,7 +76,6 @@ export interface VenueServiceChoices {
   floorZones: FloorZone[];
   products: Product[];
   offers: MenuOffer[];
-  sections: MenuSection[];
 }
 /** The subset of `@waitron/catalogue`'s `Product` these screens read. `name` is the plain staff name
  * every dashboard surface shows; `customerName` is the language map only a diner ever sees. */
@@ -114,19 +113,10 @@ export interface MenuVariantOverride {
   price: string | null;
   offered: boolean;
 }
-export interface MenuSection {
-  id: string;
-  menuId: string;
-  name: Record<string, string>;
-  displayOrder: number;
-  active: boolean;
-}
 export interface MenuOffer {
   id: string;
   menuId: string;
   productId: string;
-  sectionId: string;
-  sectionName: Record<string, string>;
   name: string;
   customerName: Record<string, string> | null;
   /** The price this menu sets, or null when the product's own price applies. */
@@ -160,7 +150,7 @@ export class VenueServiceApi {
       this.#read<VenueServiceChoices["stations"]>("/management-api/stations"),
       this.#read<FloorZone[]>("/management-api/zones"),
     ]);
-    const [productLists, offerLists, sectionLists] = await Promise.all([
+    const [productLists, offerLists] = await Promise.all([
       Promise.all(
         menus.map((menu) =>
           this.#read<Product[]>(`/management-api/catalogues/${menu.id}/products`),
@@ -169,11 +159,6 @@ export class VenueServiceApi {
       Promise.all(
         menus.map((menu) =>
           this.#read<MenuOffer[]>(`/management-api/catalogues/${menu.id}/offers`),
-        ),
-      ),
-      Promise.all(
-        menus.map((menu) =>
-          this.#read<MenuSection[]>(`/management-api/catalogues/${menu.id}/sections`),
         ),
       ),
     ]);
@@ -188,7 +173,6 @@ export class VenueServiceApi {
       floorZones,
       products,
       offers: offerLists.flat(),
-      sections: sectionLists.flat(),
     };
   }
 
@@ -227,25 +211,10 @@ export class VenueServiceApi {
     return this.request(`/management-api/catalogues/${menuId}`, "PATCH", { name });
   }
 
-  createMenuSection(
+  /** Puts the product on the menu's top level, at `grossPrice` (null: the product's own). */
+  addProductToMenu(
     menuId: string,
-    input: { name: Record<string, string>; displayOrder: number },
-  ): Promise<{ id: string }> {
-    return this.request(`/management-api/catalogues/${menuId}/sections`, "POST", input);
-  }
-
-  updateMenuSection(sectionId: string, input: { name: Record<string, string> }): Promise<void> {
-    return this.request(`/management-api/menu-sections/${sectionId}`, "PATCH", input);
-  }
-
-  createMenuItem(
-    menuId: string,
-    input: {
-      productId: string;
-      sectionId: string;
-      grossPrice: string | null;
-      displayOrder: number;
-    },
+    input: { productId: string; grossPrice: string | null },
   ): Promise<{ id: string }> {
     return this.request(`/management-api/catalogues/${menuId}/items`, "POST", input);
   }
