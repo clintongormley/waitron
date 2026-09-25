@@ -2811,12 +2811,27 @@ image constraints under *Detail → Box image*.
   directly in `src/`, `src/i18n`, `src/state` and the two configs (#612, about 1,375 to about 377,
   parse-tree walk, tests included; comments inside `css` template text are strings and were left) and `packages/media` (#609, about 505 to about 310, parse-tree walk, tests included; the shipped
   `drizzle/` SQL untouched) and `packages/venue-service` (#611, about 478 to about 220, parse-tree
-  walk, tests included).
+  walk, tests included) and `apps/server`'s `till-*` files, part a of eight (#613, about 4,330 to
+  about 1,915, parse-tree walk, tests included).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611 and #612 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612 and #613 and left for the package that owns each, all
   still OPEN:
+  - Found by #613 (`apps/server` `till-*`), outside its files or not fixable in a comments-only
+    change. `apps/server/src/errors.ts` (around lines 743 and 755) and `errors.test.ts` (around
+    line 14) say the zone verbs have no HTTP route; `management-api.ts` has zone routes. Present-tense
+    "a malformed id becomes a 500" survives in `catalogue-api.test.ts`, `print-api.printer-wiring.test.ts`,
+    `print-api.test.ts`, `recipe-api.test.ts` and `working-order.test.ts` (ids are text columns, so
+    no `22P02`). Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`,
+    `finalizeSettle`) cite `provider.ts:66-83`; the checker compares tool comments character for
+    character, so repointing them to `PaymentResult` in `packages/payments/src/provider.ts` is not
+    a comments-only change. `apps/server/src/receipt-lines.ts` still carries "(Finding 2)" and
+    "(Task 8)" (part h). Test titles #613 could not touch: "lost-T2" in
+    `till-sale-integrated.db.test.ts` (a captured card payment whose sale was never filed),
+    "Tasks 5 & 6", "7b", "FP-1, Task 6", "FP-2, Task 4", "SP-A.2 cutover", "Task 12 cutover",
+    "KDS-2/3", "(Copilot)" and "int4" in the `till-api*` and `till-config` suites, and 29 titles
+    saying "opaque 500", five of them naming `22P02`.
   - Found by #612 (the rest of `apps/dashboard`), not fixable in a comments-only change.
     `apps/dashboard/src/dashboard-app.ts` (a comment inside its `css` template, around line 435)
     points at `till-counter-screen.ts:111` for the 48rem breakpoint; that file no longer contains
@@ -2842,7 +2857,7 @@ image constraints under *Detail → Box image*.
     commit-time case, and the title, are a test change. `operations.test.ts`'s placeholder unit id
     no longer shows an empty string refused: `unit_id` is plain text. The PostgreSQL-deferral
     history ("DEFERRABLE INITIALLY DEFERRED", "three statements where PostgreSQL took two") is
-    still in `apps/server/src/till-api.test.ts`, `tabs.test.ts`, `served-at-huella.test.ts`,
+    still in `apps/server/src/tabs.test.ts`, `served-at-huella.test.ts`,
     `working-order.test.ts` and `testing/clear-provision-fixture.ts`.
   - Found by #609 (`packages/media`), not fixable in a comments-only change. **The
     `media_images` filename CHECK accepts a name with an embedded NUL**: the review stored 64 hex
@@ -2966,11 +2981,10 @@ image constraints under *Detail → Box image*.
     `scripts/errors-reachable.test.ts` without the hedge #601 gave reporting's (the guard matches
     text).
   - Found by #600 (the small packages), not fixable in a comments-only change. `apps/server` test
-    comments AND test titles still say an unscreened malformed id raises PostgreSQL's 22P02 or
-    becomes an opaque 500, although ids are text columns now: `till-api.test.ts` lines 1689, 1773,
-    2071, 2214, 2330, 2584, 2867, 2888, 3125 (title), 3129, 3153 (title) and 3159;
-    `till-api.courses.test.ts` 475, 730 and 756; `till-api.status.test.ts` 222 and 234; and
-    `catalogue-api.test.ts` 2592 (line numbers on `9a9adb80`). The wording to copy is at
+    titles still say an unscreened malformed id raises PostgreSQL's 22P02 or becomes an opaque 500,
+    although ids are text columns now (#613 removed the comments in the `till-*` suites; the titles
+    stay, e.g. `till-api.test.ts`'s two "never an opaque 22P02 500" cases), and a comment says it at
+    `catalogue-api.test.ts` 2592 (line number on `9a9adb80`). The wording to copy is at
     `management-api.device-profiles.test.ts:31`. Also found by reading only, not run: nothing the
     review could find copies `node_membership` from the primary to a standby, so a promoting
     standby may take `nextStandings`' fallback that appends it with an empty `contactUrl`
@@ -2992,8 +3006,7 @@ image constraints under *Detail → Box image*.
     `sale.already_settled` (`packages/core/src/settle-sale.ts`); #598 measured the earlier check
     stopping both concurrent-settlement tests first. `sale.number_reused` is registered in
     `packages/core/src/errors.ts` and `git grep number_reused -- apps packages` finds no thrower.
-    Outside core, the same retired claims survive: `apps/server/src/till-sale.ts` still describes
-    a chain-head lock, "trigger WT002" and a failing transaction left aborted; and
+    Outside core (`till-sale.ts`'s copies went with #613),
     `docs/developers/conventions-data.md` says the stored breakdown holds "the literals a fiscal
     record hashes" (#598 found the hash covers the totals, not the breakdown).
   - Found by #597 (`packages/payments-sumup`, `packages/migrations`), not fixable in a
@@ -3111,8 +3124,7 @@ image constraints under *Detail → Box image*.
       `test/write-path-fixtures.ts:37-44`, which have moved; the receipt they cite is back in
       `test/fixtures.ts`. Correct them only in a change allowed to touch that file.
   - The same false comments #562 removed from `fiscal-verifactu` survive elsewhere (#598 removed
-    `packages/core`'s): a "chain-head lock" in `apps/server/src/till-sale.ts` (the head read takes
-    no lock), and
+    `packages/core`'s, #613 `till-sale.ts`'s chain-head lock):
     `boot.ts` named as the owner of the AEAT certificate resolver in `apps/server/src/boot.test.ts`
     (`packages/fiscal-verifactu/src/slot.ts` builds and closes it). Prune with those packages.
   - `apps/server/src/provision.test.ts` repeats "a second taxpayer would expose one business's rows
@@ -3177,8 +3189,7 @@ image constraints under *Detail → Box image*.
     CLAUDE.md §3's measured rule contradicts. The shipped migration
     `packages/db/drizzle/0001_behavioural_triggers.sql:348` says `requireDevice` touches
     `last_seen_at` "on every authenticated request", which the review found too wide (the migration
-    cannot be edited; #602 removed the same claim from `scripts/behavioural-triggers.test.ts`). Stale line pointers:
-    `apps/server/src/till-api.fiscal-sale-paths.test.ts:662` cites `sales.ts:247`, and the shipped
+    cannot be edited; #602 removed the same claim from `scripts/behavioural-triggers.test.ts`). Stale line pointer: the shipped
     migration's line 378 points at history deleted from `device-profiles.trigger.test.ts`.
     `packages/db/src/schema/columns.test.ts` still imports `../index.js` and `./drawer-opens.js`
     dynamically; the comment #585 deleted was the only note that this was meant to be temporary, so
@@ -3187,10 +3198,9 @@ image constraints under *Detail → Box image*.
     packages into `packages/db/src/schema`, most of them made wrong by #585 and some pointing past
     the end of their file: `apps/server/src/boot.test.ts:2761`, `join-requests.test.ts:388` and
     `:700`, `kitchen-print.test.ts:138`, `retire.test.ts:76`, `sale-till-source.receipt.test.ts:212`
-    and `:227`, `till-api.fiscal-sale-paths.test.ts:662`, `till-api.ts:895` and `:902`,
-    `till-sale.test.ts:255`, `working-order.test.ts:103` (all under `apps/server/src`)
-    (the `scripts/catalogue-engine-neutral.test.ts` pointers were removed by #602, and
-    `packages/venue-service/src/operations.ts`'s by #611)
+    and `:227`, `working-order.test.ts:103` (all under `apps/server/src`)
+    (the `scripts/catalogue-engine-neutral.test.ts` pointers were removed by #602,
+    `packages/venue-service/src/operations.ts`'s by #611, and the `till-*` ones by #613)
     — name the file and the column instead, with each package's pruning. In
     `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES ANYTHING"
     repeats the first case under another name (a test change, not a comment one). The same
@@ -4887,8 +4897,9 @@ Left by #554's review, not fixed there (items 1 and 2): (1) with the cookie now 
 fails when the UUID shape screens in `requireSession` and the till logout route are deleted —
 measured 2026-09-24, the three malformed-cookie cases in `apps/server/src/till-api.test.ts` still
 pass, because a non-UUID value hashes to no row; the screens now only save a lookup. (2) Test
-titles and comments still promising "not a 500" from PostgreSQL's `22P02` remain in
-`till-api.courses.test.ts`, `till-api.receipt.test.ts` and `till-api.reprint.test.ts`. (3) Fixed
+titles still promising "not a 500" from PostgreSQL's `22P02` remain in
+`till-api.courses.test.ts`, `till-api.receipt.test.ts` and `till-api.reprint.test.ts` (#613
+removed the comments). (3) Fixed
 by #554: the mirror viewer's ambient `admin` session (`apps/server/src/mirror-session.ts`)
 used its fixed, public row id as its cookie, so a copy of the database, or a node served without
 the mirror's middleware, accepted that public value as an admin login. Its cookie is now a random
