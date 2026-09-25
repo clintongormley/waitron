@@ -17699,6 +17699,8 @@ export async function writeValidated(
 
 where `placeValidated` is Task 3a's private function (today's `writeValidated` body), unchanged. (`validateArtifact` has already created `stateDir`, so the `mkdir` changes
 nothing on the archive path; it is there because `writeValidated` is also called on its own.)
+_(2026-09-25, Task 9a review: removed — every caller, Task 9b's `writeStreamRestore` included, hands
+`writeValidated` what `validateArtifact`/`validateEntries` returned, and both create `stateDir`.)_
 
 Run: `pnpm --filter @waitron/server exec vitest run src/rebuild-first-start.test.ts src/restore.test.ts src/restore-fiscal-e2e.test.ts src/rejoin-command.test.ts`
 Expected: PASS — the new cases (seven in `rebuild-first-start.test.ts`, counting each `it.each` row,
