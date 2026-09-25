@@ -13,10 +13,8 @@ import { formatEnvFile } from "./env-file.js";
 import type { TlsFiles } from "./tls.js";
 
 /**
- * The three TLS file paths `node:https` needs to serve setup-mode HTTPS from the box's self-signed
- * identity — `cert`/`key` are the leaf, `caCertFile` is the CA a setup client trusts to accept it.
- * The CA private key (`ca.key`) is written to disk too, for {@link reissueBoxLeaf}, but it is not a
- * server input, so it is not returned.
+ * `certFile`/`keyFile` are the leaf; `caCertFile` is the CA a setup client trusts. The CA private
+ * key is on disk too, for {@link reissueBoxLeaf}, but is not a server input, so it is not returned.
  */
 export interface BoxTlsFiles {
   certFile: string;
@@ -24,17 +22,11 @@ export interface BoxTlsFiles {
   caCertFile: string;
 }
 
-/**
- * The on-disk path of the box's self-signed CA certificate under a state dir. Exported as the ONE
- * source of truth for the `tls/ca.crt` layout convention: `ensureBoxSecrets` WRITES it here and
- * `discovery-api.ts`'s `GET /setup-api/ca.crt` READS it back, so neither re-derives the path and the
- * two can never drift apart (CLAUDE.md §1's "grep the siblings before asserting a convention").
- */
+/** The box CA certificate's path, shared by its writer and every reader so none re-derives it. */
 export function caCertPath(stateDir: string): string {
   return join(stateDir, "tls", "ca.crt");
 }
 
-/** The four TLS files under a state dir. */
 function boxTlsPaths(stateDir: string) {
   const tlsDir = join(stateDir, "tls");
   return {
@@ -46,23 +38,14 @@ function boxTlsPaths(stateDir: string) {
   };
 }
 
-/**
- * The leaf's iPAddress SANs: loopback plus `listIpv4()`, filtered to the CA's permitted subtrees
- * (see {@link ensureBoxSecrets}).
- */
 function leafIpv4s(listIpv4: () => string[]): string[] {
   return Array.from(new Set(["127.0.0.1", ...listIpv4()])).filter(isPermittedLeafIpv4);
 }
 
 /**
- * The box's own minted leaf (`<stateDir>/tls/server.{crt,key}`), or `undefined` when it has never
- * completed a setup boot. The ONE source of truth for the leaf-path convention, shared by every
- * serve site that falls back to it: the recovery page (`node-entry.ts`) AND the trading branches
- * (`boot.ts`). A phone or till trusts the box's CA, not the leaf, so a new leaf the same CA signs
- * needs no new trust step. `server.key` is `ensureBoxSecrets`'s own
- * presence sentinel (written last of the quartet); both halves are checked because `buildServeOptions`
- * reads both and a half-written pair would throw inside the one serve call. A leaf-less box falls back
- * to plain HTTP, the honest limit — refusing to serve would hand the operator nothing.
+ * The box's own minted leaf, or `undefined` when either half is missing: `buildServeOptions` reads
+ * both, and a half-written pair would throw inside the serve call. A phone or till trusts the box's
+ * CA, not the leaf, so a new leaf the same CA signs needs no new trust step.
  */
 export function mintedBoxLeaf(stateDir: string): TlsFiles | undefined {
   const { certFile, keyFile } = boxTlsPaths(stateDir);
@@ -71,29 +54,22 @@ export function mintedBoxLeaf(stateDir: string): TlsFiles | undefined {
 }
 
 export interface EnsureBoxSecretsDeps {
-  /** Directory the box owns its state under; the layout below is materialised beneath it. */
   stateDir: string;
-  /**
-   * dNSName SANs beyond the box IPs — defaults handled by the caller (boot passes
-   * ["waitron.local", "localhost"]).
-   */
+  /** dNSName SANs on the leaf. */
   hostnames: string[];
   now: () => Date;
-  // Injectables (all default to the real implementations):
   mint?: typeof mintSelfSignedServerCert;
-  makeKeyRing?: () => GeneratedKeyRing; // default generateKeyRing
+  makeKeyRing?: () => GeneratedKeyRing;
   /**
-   * The addresses the leaf's iPAddress SANs cover beyond 127.0.0.1. Defaults to this host's
-   * default-route interface IPv4s (`listBoxIpv4`); boot passes the operator override when one is
-   * configured, because a containerised box's own interface address is not the one devices dial.
+   * The addresses the leaf's iPAddress SANs cover beyond 127.0.0.1. Boot passes the operator
+   * override when one is configured, because a containerised box's own interface address is not the
+   * one devices dial.
    */
   listIpv4?: () => string[];
 }
 
-// ENOENT means genuinely absent, so callers proceed to mint. Any other error (EACCES/EIO/etc.) is
-// "can't tell" rather than "absent" — treating it as absent would make ensureBoxSecrets regenerate
-// secrets.env's unrepairable vault master key over an existing one it merely couldn't read, orphaning
-// anything already sealed under it. Rethrow instead, so setup boot fails loudly.
+// Only ENOENT is "absent". Treating an unreadable file as absent would regenerate secrets.env's
+// vault master key over one it merely could not read, orphaning everything sealed under it.
 const exists = (p: string): Promise<boolean> =>
   access(p).then(
     () => true,
@@ -104,34 +80,14 @@ const exists = (p: string): Promise<boolean> =>
   );
 
 /**
- * Materialise the box's self-signed cert + secrets ONCE under `stateDir`, then reuse them on every
- * later boot. Presence is the whole idempotency contract: each write is guarded on the target being
- * absent, so a second call returns byte-identical files and never regenerates a key —
- * the tell a POS depends on, since a fresh CA on every boot would break every already-trusting
- * setup client and a fresh key ring would strand every sealed credential.
+ * Write the box's self-signed CA, leaf and vault key ring ONCE under `stateDir`, then reuse them on
+ * every later boot. Presence is the whole idempotency contract: each write is guarded on its target
+ * being absent, because a fresh CA would break every already-trusting setup client and a fresh key
+ * ring would strand every sealed credential.
  *
- * Layout written/read — the four PEMs and secrets.env are each written 0600 (owner-only), which is
- * the guarantee that matters; the `tls/` subdir (and `<stateDir>` itself, when this call creates it)
- * is made 0700, but a PRE-EXISTING `<stateDir>` keeps whatever mode it already had — we do not chmod
- * a directory the operator supplied:
- *
- *     <stateDir>/tls/ca.crt          <stateDir>/tls/ca.key    (0600)
- *     <stateDir>/tls/server.crt      <stateDir>/tls/server.key (0600)
- *     <stateDir>/secrets.env         (0600)   # KEY=VALUE, LF-terminated
- *
- * The leaf's iPAddress SANs are `127.0.0.1` plus the box's default-route interface IPv4s
- * (`listBoxIpv4`) that fall inside the CA's permitted subtrees (`isPermittedLeafIpv4` — loopback +
- * RFC1918), so a dial by loopback or by LAN IP authenticates. An out-of-set address (a `100.64/10` CGNAT / Tailscale address, a
- * `169.254` link-local, a public IP) is dropped rather than added: a SAN the name-constrained CA
- * cannot vouch for would make `ca.verify(leaf)` fail and the box serve no HTTPS at all. This does
- * NOT load or consume the secrets — that
- * is the next boot's job (slice 2b / trading); it only guarantees the files are present.
- *
- * Note on the `0o600` mode arg: `writeFileAtomic` passes it to `writeFile`, which applies `mode`
- * only when it CREATES the temp file, and `rename` preserves that mode on the target. The effective
- * mode is `mode & ~umask` — `0o600` for any sane umask (022/002/077). It is not a post-hoc `chmod`,
- * so do not "fix" it to one: on a reused file the presence guard means we never rewrite it, and on a
- * created one the umask cannot widen `0o600`.
+ * The four PEMs and `secrets.env` are created 0600 and the `tls/` directory 0700; a `stateDir`
+ * that already exists keeps its mode. The file mode is applied when the file is created, not by a
+ * later `chmod`: a reused file is never rewritten.
  */
 export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxTlsFiles> {
   const mint = deps.mint ?? mintSelfSignedServerCert;
@@ -139,36 +95,17 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
   const listIpv4 = deps.listIpv4 ?? listBoxIpv4;
 
   const files = boxTlsPaths(deps.stateDir);
-  // 0o700 so the dir holding the private material is owner-only too (defense in depth around the
-  // 0o600 files). `mode` applies only to dirs THIS call CREATES (tls and any missing parent such as
-  // stateDir) and is subject to umask — 0o700 under any sane umask — matching the file-mode note.
   await mkdir(files.tlsDir, { recursive: true, mode: 0o700 });
 
-  // server.key is the presence sentinel for the whole TLS quartet: mint + write all four only when
-  // it is absent, so a reused install keeps its CA and leaf byte-for-byte.
+  // server.key is the presence sentinel for all four TLS files.
   if (!(await exists(files.keyFile))) {
-    // Filter every candidate IP down to the CA's permitted subtrees before minting: the leaf's SANs
-    // must be a SUBSET of what the box CA can vouch for, or `ca.verify(leaf)` fails on a permitted-
-    // subtree violation and the box cannot serve HTTPS at all. An out-of-set interface address (a
-    // Tailscale CGNAT 100.64/10, a 169.254/16 link-local, a public IP, an IPv6 address) is dropped
-    // from the SAN rather than poisoning the whole cert. 127.0.0.1 is inside 127.0.0.0/8 and kept; a
-    // box whose only reachable IPs are all out-of-set still gets a leaf carrying the hostnames
-    // (waitron.local/localhost), so mDNS reach survives and operator-supplied TLS covers the rest.
     const m = mint({
       hostnames: deps.hostnames,
       ipAddresses: leafIpv4s(listIpv4),
       now: deps.now(),
     });
-    // Each file is written to a temp path and atomically renamed, so a reader never observes a
-    // partial or truncated PEM — only the whole file or its absence. server.key is renamed LAST, on
-    // purpose: it is the quartet's presence sentinel the guard above tests, so a crash BETWEEN the
-    // four renames leaves the quartet incomplete (server.key still absent) and the next boot re-mints
-    // all four cleanly. The guard's correctness depends on this ordering.
-    // All four PEMs are written 0600: the CA cert and the leaf cert are public-by-content (they carry
-    // no secret), but both live in the 0700 state dir, owned by the server process, and the CA cert is
-    // distributed to a setup client via an HTTP route (a later slice) that reads it server-side — not
-    // via world-read filesystem permissions — so there is no reason for either to be world-readable.
-    // Uniform 0600 across all persisted material is simpler to reason about than a two-tier scheme.
+    // server.key is written LAST: a crash part-way leaves the sentinel absent, so the next boot
+    // re-mints all four.
     await writeFileAtomic(files.caCertFile, m.caCertPem, 0o600);
     await writeFileAtomic(files.caKeyFile, m.caKeyPem, 0o600);
     await writeFileAtomic(files.certFile, m.serverCertPem, 0o600);
@@ -182,8 +119,6 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
       WAITRON_CREDENTIALS_KEY: ring.key,
       WAITRON_CREDENTIALS_KEY_VERSION: String(ring.version),
     });
-    // A single atomic write: secrets.env holds the unrepairable vault master key, so it must never be
-    // observed torn — temp-then-rename means it is either fully present or absent, never truncated.
     await writeFileAtomic(secretsFile, body, 0o600);
   }
 
