@@ -562,6 +562,23 @@ describe("a menu's own switch for a product", () => {
     ]);
   });
 
+  it("lists a switched-off product, marked off, only to a read that asks for it", async () => {
+    const f = await fixture();
+    await app(async (tx) => {
+      await addMember(tx, f.drinks, product(f.lemonade));
+      await addMember(tx, f.drinks, product(f.water));
+      await addMember(tx, f.lunchRoot, section(f.drinks));
+    });
+    const item = (await app((tx) => menuItemRow(tx, f.lunch, f.lemonade)))!;
+    await app((tx) => deactivateMenuItem(tx, f.lunch, item.id));
+    const listed = await app((tx) => listMenuOffers(tx, [f.lunch], { includeSwitchedOff: true }));
+    expect(listed.map(({ id, name, active }) => ({ id, name, active }))).toEqual([
+      { id: item.id, name: "Lemonade (staff)", active: false },
+      { id: expect.any(String), name: "Water (staff)", active: true },
+    ]);
+    expect(await offerNames(f.lunch)).toEqual(["Water (staff)"]);
+  });
+
   it("refuses a setting for a product the menu no longer reaches", async () => {
     const f = await fixture();
     await app((tx) => addMember(tx, f.lunchRoot, product(f.lemonade)));

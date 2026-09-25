@@ -101,6 +101,15 @@ its `children`; an unknown menu is `catalogue.not_found` (404). The top level is
 member routes above on `rootSectionId`, and `POST /management-api/catalogues/:id/items`
 (`{ productId, grossPrice }`) puts a product on it with the menu's price in one request.
 
+`PATCH /management-api/catalogues/:id/items/:itemId` → 204 sets the menu's settings for one
+product its structure reaches: `grossPrice` (a price, or null for the product's own) and `active`,
+the menu's own switch for the product (a boolean, else `management.request_invalid` naming
+`active`). Either may be left out. `DELETE` on the same path switches the product off, and leaves
+it where the structure put it. An item whose product the structure no longer reaches is
+`menu_item.not_found` (404). `GET /management-api/catalogues/:id/offers` lists every product the
+structure reaches, switched-off ones included with `active: false`; the till's offers leave them
+out.
+
 ## Moving and deleting
 
 Moving a category to a new parent, or a product to a new main category, is always allowed. Sale

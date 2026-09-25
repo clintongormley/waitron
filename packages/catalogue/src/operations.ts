@@ -439,13 +439,15 @@ function offerLineValues(row: OfferLineRow, defaultLanguage: string) {
  * The Active offers on the given menus: the products each menu's structure reaches, menus by name
  * and each in its structure's order (`reachableProducts`). Unavailable (sold-out) products are left
  * out unless the caller is a management read passing `includeUnavailable`: spec §15.6 lets Available
- * hide an item from the till, never from the dashboard. Only a top-level product is an offer; each
- * Active variant of it is nested under its offer, an Unavailable one listed as unavailable.
+ * hide an item from the till, never from the dashboard. A product switched off on the menu
+ * (`menu_items.active`) is left out unless the caller passes `includeSwitchedOff`, so the dashboard
+ * can switch it back on. Only a top-level product is an offer; each Active variant of it is nested
+ * under its offer, an Unavailable one listed as unavailable.
  */
 export async function listMenuOffers(
   tx: Transaction,
   menuIds: string[],
-  options: { includeUnavailable?: boolean } = {},
+  options: { includeUnavailable?: boolean; includeSwitchedOff?: boolean } = {},
 ): Promise<MenuOffer[]> {
   if (menuIds.length === 0) return [];
   const roots = await menuRoots(tx, menuIds);
@@ -487,7 +489,7 @@ export async function listMenuOffers(
       .where(
         and(
           inArray(menuItems.menuId, menuIds),
-          eq(menuItems.active, true),
+          options.includeSwitchedOff === true ? undefined : eq(menuItems.active, true),
           eq(catalogues.active, true),
           isTopLevelProduct,
           eq(products.active, true),

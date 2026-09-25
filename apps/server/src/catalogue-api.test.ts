@@ -952,7 +952,8 @@ describe("mountCatalogueApi — products", () => {
     const updated = await send(app, "GET", `/management-api/catalogues/${upstairsMenuId}/offers`);
     const removed = await send(app, "GET", `/management-api/catalogues/${downstairsMenuId}/offers`);
     expect(((await updated.json()) as { grossPrice: string }[])[0]!.grossPrice).toBe("12.50");
-    expect(await removed.json()).toEqual([]);
+    // The dashboard still lists it, switched off, so it can be switched back on.
+    expect(await removed.json()).toMatchObject([{ id: downstairsItemId, active: false }]);
   });
 
   it("GET /management-api/catalogues/:id/products with a non-uuid id → shared.invalid_id 400", async () => {
@@ -3507,10 +3508,11 @@ describe("a menu's structure", () => {
         (await (await send(app, "GET", `/management-api/catalogues/${menuId}/offers`)).json()) as {
           id: string;
           grossPrice: string | null;
+          active: boolean;
         }[]
-      ).map(({ id, grossPrice }) => ({ id, grossPrice }));
+      ).map(({ id, grossPrice, active }) => ({ id, grossPrice, active }));
     expect((await send(app, "DELETE", `${items}/${itemId}`)).status).toBe(204);
-    expect(await offered()).toEqual([]);
+    expect(await offered()).toEqual([{ id: itemId, grossPrice: "2.00", active: false }]);
     // Still on the menu's top level, so adding it again is refused rather than duplicated.
     const again = await send(app, "POST", items, { body: { productId, grossPrice: null } });
     expect(again.status).toBe(409);
@@ -3523,7 +3525,29 @@ describe("a menu's structure", () => {
     expect(
       (await send(app, "PATCH", `${items}/${itemId}`, { body: { active: true } })).status,
     ).toBe(204);
-    expect(await offered()).toEqual([{ id: itemId, grossPrice: "2.00" }]);
+    expect(await offered()).toEqual([{ id: itemId, grossPrice: "2.00", active: true }]);
+  });
+
+  it("takes a product off a menu's top level, and then adds it again on the same row", async () => {
+    const app = mountApp();
+    const menuId = await createCatalogueVia(app, "Removed menu");
+    const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
+    const items = `/management-api/catalogues/${menuId}/items`;
+    const created = await send(app, "POST", items, { body: { productId, grossPrice: "2.00" } });
+    const itemId = ((await created.json()) as { id: string }).id;
+    const structure = (await (
+      await send(app, "GET", `/management-api/catalogues/${menuId}/structure`)
+    ).json()) as { rootSectionId: string; nodes: { memberId: string }[] };
+    const member = `/management-api/sections/${structure.rootSectionId}/members/${structure.nodes[0]!.memberId}`;
+    expect((await send(app, "DELETE", member)).status).toBe(204);
+    const offers = `/management-api/catalogues/${menuId}/offers`;
+    expect(await (await send(app, "GET", offers)).json()).toEqual([]);
+    const again = await send(app, "POST", items, { body: { productId, grossPrice: null } });
+    expect(again.status).toBe(201);
+    expect(await again.json()).toMatchObject({ id: itemId });
+    expect(await (await send(app, "GET", offers)).json()).toMatchObject([
+      { id: itemId, grossPrice: null, active: true },
+    ]);
   });
 });
 
