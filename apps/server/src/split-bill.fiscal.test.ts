@@ -314,8 +314,8 @@ describe("split-bill: pay each check files its own registro", () => {
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId));
-      // Every filed sale_line, tagged with its check. sale_lines carries NO product_id, so partition
-      // by vat_rate (the single 10% jamón line vs the three 21% agua lines).
+      // Every filed sale_line, tagged with its check, partitioned by vat_rate (the single 10% jamón
+      // line vs the three 21% agua lines).
       const filedRows = await tx
         .select({
           workingOrderId: sales.workingOrderId,

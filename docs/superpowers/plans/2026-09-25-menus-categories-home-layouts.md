@@ -1494,6 +1494,11 @@ whichever lands second reuses the other's seam.
 | `POST /api/working-orders/:id/place` (invoice-first) | `priceStoredOrder` in `placeOrder` (`working-order.ts:2530`) | Placed at 10%, class corrected, collected: the sale keeps 10%, and `collectOrder` reads `sales.total` and re-prices nothing. |
 | `POST /api/working-orders/:id/collect` (ticket-then-pay) | `priceStoredOrder` in `collectOrder` (`till-sale.ts:1282`) | Added at 10%, corrected before collect, files at 21%. |
 
+_2026-09-25: the till's filing sites in this table now call `priceStoredOrderForIssuance` and then
+`issuancePass` (`apps/server/src/issuance-pass.ts`); `priceStoredOrder` is now only the wrapper
+`readSettledTicket` uses to rebuild a filed ticket. The VAT rate change belongs in `readLockedLines`
+and the pricing it feeds, or in the issuance pass, not in the `priceStoredOrder` wrapper._
+
 **Files:**
 - Modify: `apps/server/src/working-order.ts` (`priceStoredOrder` / `readLockedLines`, around
   `:465-523`): the pass resolves each line's VAT class from its product's CURRENT effective VAT

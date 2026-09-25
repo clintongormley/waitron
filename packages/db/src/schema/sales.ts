@@ -1,4 +1,4 @@
-import type { OptionSnapshot } from "@waitron/shared";
+import type { OptionSnapshot, SaleLineClassification } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import {
@@ -147,7 +147,7 @@ export const sales = table(
   ],
 );
 
-/** Snapshotted values, never catalogue references (architecture §6). */
+/** Snapshotted values, never catalogue keys (architecture §6). */
 export const saleLines = table(
   "sale_lines",
   {
@@ -182,6 +182,20 @@ export const saleLines = table(
     // the dish it was picked for; a top-level line leaves it NULL. Presentation/reporting metadata
     // only.
     parentLineId: id("parent_line_id"),
+    // What was sold and from which menu: values, never keys, so a filed line keeps no link to a
+    // catalogue row. A foreign key declared on `product_id` made drizzle-kit 0.31.10 generate a
+    // rebuild of this append-only table (copy into `__new_sale_lines`, `DROP TABLE`, rename), not an
+    // `ALTER`; the command and output are in the commit message that added this comment. Null where
+    // the filing path records none, as on every line filed before they existed; a variant line
+    // names the variant, `parent_product_id` its parent.
+    productId: id("product_id"),
+    parentProductId: id("parent_product_id"),
+    menuId: id("menu_id"),
+    menuVersionId: id("menu_version_id"),
+    // The line's VAT-inclusive total, beside `line_total`'s net base.
+    lineGross: money("line_gross"),
+    // The product's reporting chain and labels as they stood when the sale was issued.
+    classification: json<SaleLineClassification>("classification"),
   },
   (t) => [
     foreignKey({

@@ -350,7 +350,7 @@ Six things it is worth knowing about that payload:
 
 ## On the filed sale
 
-A filed sale is a snapshot and never a catalogue reference (`packages/db/src/schema/sales.ts`,
+A filed sale is a snapshot and never holds a catalogue key (`packages/db/src/schema/sales.ts`,
 architecture §6), so the two kinds of answer land differently:
 
 - An options answer is copied onto the DISH's own `sale_lines.option_snapshots` — the same six names
@@ -358,9 +358,9 @@ architecture §6), so the two kinds of answer land differently:
   priced from, a retrieved order from `working_order_lines.option_snapshots`, read by
   `readLockedLines` (`apps/server/src/working-order.ts`).
 - An extras pick is already its own CHILD line, and that line IS the record: the picked product's
-  frozen name, its quantity, the price it sold at and its own VAT rate. Unlike the open order's child
-  line it carries NO `product_id` — `sale_lines` has no such column. "How much bacon did we sell"
-  therefore groups on the frozen name, the way the top-sellers report groups products.
+  frozen name, its quantity, the price it sold at and its own VAT rate. Like the open order's child
+  line it names the picked product in `product_id`, here as a plain value with no foreign key, and
+  its classification is the picked product's own (sales classification spec §3).
 
 **The frozen ANSWERS never reach the fiscal fingerprint. A line's AMOUNTS do.** Do not read the
 first half as the second. What `backend.recordSale` is handed is the sale as a whole — its till,
@@ -436,9 +436,9 @@ switch, unverified, with nothing checking those letters against anything — the
 read them back from, and its single live consumer is `scripts/write-path-tables.test.ts`, which uses
 only the four tables marked read-only and none of the catalogue's.
 
-An extras pick's child line is the record on both sides: on an OPEN order it names the product it
-is, and on a FILED sale it carries the frozen names with no `product_id` at all, because `sale_lines`
-has no such column. That difference is deliberate and is what _On the filed sale_ above describes.
+An extras pick's child line is the record on both sides, and names the product it is on both: on an
+OPEN order in `working_order_lines.product_id`, and on a FILED sale in `sale_lines.product_id`, a
+plain value with no foreign key beside the frozen names (_On the filed sale_, above).
 
 This feature takes no lock of any kind, and asks no JSON containment question. That is a change: on
 PostgreSQL it reached an advisory lock through a shared helper, and it took row locks of its own,

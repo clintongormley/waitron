@@ -62,6 +62,9 @@ immutable child table — modifiers reuse the existing line rows.
 - **New nullable `option_group_item_id`** on `working_order_lines` **only** (authoring traceability).
   It is **not** copied to `sale_lines`, which keeps its "snapshotted values, never catalogue
   references" rule (`sales.ts` doc). `sale_lines` has no product ref today and gains none.
+  _2026-09-25: superseded — `sale_lines` now records the product sold in `product_id`, a plain value
+  with no foreign key
+  ([sales classification spec](2026-09-25-sales-classification-and-category-reports-design.md) §3)._
 - **Child line columns are the ones that already exist:** `descriptions` (the option's name,
   locale-keyed, re-keyed by `toInvoiceLineDescriptions` exactly as dishes are), `quantity` (inherits
   the parent's), `unit_price_gross` = the option's `price_delta` (€0.00 for free), `vat_rate` = the

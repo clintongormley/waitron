@@ -196,7 +196,12 @@ confirm the deletion defaults (spec §2.1: products and subcategories go to the 
 top-level category, products become Uncategorised and subcategories top-level); whether label names
 should ignore capitals (today "Alcoholic" and "alcoholic" can both exist — a small migration if so);
 `Product.categoryId` and `primaryCategoryId` now always hold the same value; and the per-product
-label routes and `?descendants=1` on a category's products have no dashboard caller yet. The owner lifted the
+label routes and `?descendants=1` on a category's products have no dashboard caller yet.
+**Classification Task 2 (in progress, branch `feat/classification-sale-line-classification`):**
+every till filing path records each sale line's product, a variant's parent, its menu, its gross
+and its reporting chain and labels when the record is issued. `sale_lines.menu_version_id` stays
+null on every line until the menus plan's Task 7 (sell from the published version) fills it; that
+task wires it, because it lands second. Two follow-ups it leaves: the till shows "try again" when `sale_classification.invalid` refuses a sale (it happens only on corrupt category data, and retrying cannot succeed), so the code wants its own till message on the permanent-refusal list; and a card recovery refused that way leaves a captured payment unlinked until the catalogue is fixed, as recovery's existing below-locked-total refusal already does. The demo seed (`apps/server/scripts/demo-seed/seed-sales.ts`), the other scripts that call `recordSale` directly (`record-one-sale.ts`, `settle-invoice-first.ts`, `daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts` file sales without the issuance pass, so seeded demo lines carry no product id, classification or gross, and the spec's category reports would show every one as Not recorded — classification Task 3 cannot measure its reports on seeded sales until the seed records them. The owner lifted the
 wait: the dependency upgrades are finished, and the work does not wait for SQLite slice 2. The
 menus plan's decisions D1–D23 settle the spec's open integration points; D6, D9, D10, D11, D12,
 D13 and D22 are the ones flagged for the owner. Menus Task 3 wipes existing venues (it rebuilds
@@ -1057,8 +1062,8 @@ picked product is offered by more than one of the dish's active lists.
   the refusal sits on the held-order edit path, which is where the wrong price was measured being
   written; whether any other path can pair a stored child with the wrong list's price was not looked
   at. **Next action:** an owner decision on whether an OPEN-ORDER extras child may carry its list
-  id. It is not Task 9's — that one writes the FILED sale line, where decision 11 already bans a
-  catalogue reference.
+  id. It is not Task 9's — that one writes the FILED sale line, which holds no catalogue key
+  (decision 11).
 
 Task 9 has landed as **#469**: the filed sale line carries a dish's frozen answers in
 `sale_lines.option_snapshots` (core migration 0041), written by both filing routes, and the customer
@@ -4751,8 +4756,8 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
    `markCollected` takes a `TillConfig` and discards it (`void cfg;`), then selects and updates on
    `eq(workingOrders.id, id)`; `cancelPlacedOrder` selects and updates the same way and uses `cfg`
    only to stamp the amendment's till and node; `readLockedLines` takes no `cfg` at all, and neither
-   does its one caller `priceStoredOrder`, which is reached from five sites in `till-sale.ts` and one
-   inside `working-order.ts` itself. Named by function rather than by line, because the line numbers
+   does its caller `priceStoredOrderForIssuance`, which the filing sites in `till-sale.ts` and
+   `working-order.ts` call and `priceStoredOrder` wraps to rebuild a filed ticket. Named by function rather than by line, because the line numbers
    this item used to carry went stale when the file moved.
 2. **A concurrent-corrective race in `settleSale` is untranslated** — a raw `P0001` from the coverage
    trigger with no `sale.*` code. Give the trigger a SQLSTATE and translate it when reachable.

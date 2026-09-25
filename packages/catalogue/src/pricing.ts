@@ -166,6 +166,7 @@ function priceRows(rows: readonly PricingRow[]): PricedLines {
       variantDescriptions: row.variantDescriptions ?? null,
       variantKitchenName: row.variantKitchenName ?? null,
       kitchenName: row.kitchenName ?? null,
+      lineGross: gross,
     });
     grossLineTotals.push(gross);
     grossUnitPrices.push(grossUnit);

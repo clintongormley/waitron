@@ -56,6 +56,12 @@ describe("saleLineRows", () => {
       vatRate: 1000,
       lineTotal: 300,
       category: "Drinks",
+      productId: null,
+      parentProductId: null,
+      menuId: null,
+      menuVersionId: null,
+      lineGross: null,
+      classification: null,
     });
   });
 
@@ -123,6 +129,50 @@ describe("saleLineRows", () => {
       vatRate: 1000,
       lineTotal: 100,
       category: null,
+      productId: null,
+      parentProductId: null,
+      menuId: null,
+      menuVersionId: null,
+      lineGross: null,
+      classification: null,
+    });
+  });
+
+  it("carries what was sold, where from, its gross and its classification onto the row", () => {
+    const classification = {
+      reporting: [
+        { id: "cat-drinks", name: "Drinks" },
+        { id: "cat-wine", name: "Wine" },
+      ],
+      labels: [{ id: "label-alcoholic", name: "Alcoholic" }],
+    };
+    const line: RecordSaleLine = {
+      lineNo: 1,
+      name: "Wine 175",
+      descriptions: { "en-GB": "Wine" },
+      quantity: "2",
+      unitPrice: "3.72",
+      vatRate: "21.00",
+      lineTotal: "7.44",
+      productId: "product-variant",
+      parentProductId: "product-parent",
+      menuId: "menu-lunch",
+      menuVersionId: "menu-lunch-v3",
+      lineGross: "9.00",
+      classification,
+    };
+
+    const [row] = saleLineRows("sale-1", [line]);
+
+    expect(row).toMatchObject({
+      productId: "product-variant",
+      parentProductId: "product-parent",
+      menuId: "menu-lunch",
+      menuVersionId: "menu-lunch-v3",
+      // Whole cents, and the VAT-inclusive figure: the net line total on the same row is 744.
+      lineGross: 900,
+      lineTotal: 744,
+      classification,
     });
   });
 });

@@ -94,7 +94,7 @@ export const workingOrders = table(
 /**
  * Prices and descriptions are snapshotted here, never read live from the catalogue, so a later
  * catalogue edit is a freshness problem, never a correctness one — and the filed `sale_lines`
- * carry these snapshots and NO product reference at all.
+ * carry these snapshots, naming a product only as a value, never a key.
  *
  * The line-add snapshot IS the filed price: a retrieved order is FILED from the locked columns
  * without a re-price (priceLockedLines, @waitron/catalogue). `product_id` is a pricing INPUT only

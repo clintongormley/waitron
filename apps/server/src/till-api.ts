@@ -242,6 +242,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // basket, so 409 rather than 400 or 500.
   "fiscal.record_invalid": 409,
   "fiscal.foreign_recipient_unsupported": 409,
+  // The issuance pass refuses a classification snapshot the catalogue's data cannot make valid:
+  // permanent until the catalogue is fixed, and not the till's fault.
+  "sale_classification.invalid": 409,
   "working_order.not_found": 404,
   "working_order.not_open": 409,
   "working_order.not_placed": 409,
