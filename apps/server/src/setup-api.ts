@@ -272,9 +272,19 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
 // `"setup.adopt_failed"` is the LOG TAG for the unexpected-crash branch, not a wire code (as with
 // `runProvision` above): a non-`AppError` reaching the boundary is answered `server.internal`.
 const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
-/** An archive with bucket settings may be a copy of a server still selling (slice-2 plan N23). */
+/**
+ * The refusals every restore route (archive, Cloud and bucket) meets from the same validation, so
+ * each code answers one status on all three: a copy or key that cannot be opened is 422; an
+ * environment or schema conflict, or an old server that may still be selling, is 409.
+ */
 const ARCHIVE_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
   ...PROVISION_STATUS,
+  "recovery.passphrase_invalid": 422,
+  "backup.artifact_invalid": 422,
+  "backup.archive_invalid": 422,
+  "restore.environment_mismatch": 409,
+  "restore.schema_too_new": 409,
+  "provisioning.database_ahead": 409,
   "restore.stream_source_live": 409,
   "restore.stream_source_unchecked": 409,
 };
@@ -283,9 +293,9 @@ const ARCHIVE_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
 const MAX_KIT_BYTES = 64 * 1024;
 
 /**
- * The bucket rebuild's refusals. The bucket or Litestream failing is this box's upstream failing
- * (502, as `mirror.bundle_fetch_failed` is for adopt); a pointer, copy or key the kit cannot open
- * is 422; a live old server, an unconfirmed venue, or an environment or schema conflict is 409.
+ * The bucket rebuild's own refusals, beside the shared ones. The bucket or Litestream failing is
+ * this box's upstream failing (502, as `mirror.bundle_fetch_failed` is for adopt); a pointer the kit
+ * cannot open is 422; an unconfirmed venue is 409.
  */
 const BUCKET_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
   ...ARCHIVE_RESTORE_STATUS,
@@ -295,13 +305,7 @@ const BUCKET_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
   "backup.stream_pointer_invalid": 422,
   "restore.stream_integrity_failed": 422,
   "restore.stream_state_missing": 422,
-  "recovery.passphrase_invalid": 422,
-  "backup.artifact_invalid": 422,
-  "backup.archive_invalid": 422,
   "restore.stream_venue_unconfirmed": 409,
-  "restore.environment_mismatch": 409,
-  "restore.schema_too_new": 409,
-  "provisioning.database_ahead": 409,
   "backup.stream_request_failed": 502,
   "backup.stream_restore_failed": 502,
   "restore.stream_disk_full": 507,

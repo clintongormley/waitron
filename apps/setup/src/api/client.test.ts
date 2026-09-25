@@ -393,12 +393,12 @@ describe("SetupApi", () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(
-        jsonResponse({ error: { code: "restore.environment_mismatch" } }, false, 400),
+        jsonResponse({ error: { code: "restore.environment_mismatch" } }, false, 409),
       );
     const api = new SetupApi("", fetchImpl);
     await expect(
       api.restore(new Blob([Uint8Array.from([1])]), "recovery-key", "production"),
-    ).rejects.toEqual({ code: "restore.environment_mismatch", params: undefined, status: 400 });
+    ).rejects.toEqual({ code: "restore.environment_mismatch", params: undefined, status: 409 });
   });
 
   it("rejects a refused configuration export with the envelope's code and the HTTP status", async () => {

@@ -3722,7 +3722,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           ),
         });
         const body = (await response.json()) as { error?: { code: string } };
-        expect(response.status).toBe(400);
+        expect(response.status).toBe(422);
         expect(body.error?.code).toBe("recovery.passphrase_invalid");
         await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
           code: "ENOENT",

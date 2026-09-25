@@ -10,6 +10,7 @@ import { verifyPassword, verifyPin } from "@waitron/identity";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { ProvisionRequest } from "./provision.js";
+import type { RestoreRequest } from "./restore-request.js";
 import type { AdoptCredential, AdoptRequest } from "./adopt.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
@@ -1579,6 +1580,21 @@ describe("POST /setup-api/configuration", () => {
   });
 });
 
+/** Refusals every restore route can meet from the same validation, with the one status each answers. */
+const SHARED_RESTORE_REFUSALS: [AppError, number][] = [
+  [new AppError("recovery.passphrase_invalid", {}), 422],
+  [new AppError("backup.artifact_invalid", { reason: "tag" }), 422],
+  [new AppError("backup.archive_invalid", { reason: "truncated" }), 422],
+  [
+    new AppError("restore.environment_mismatch", { backup: "preproduction", target: "production" }),
+    409,
+  ],
+  [new AppError("restore.schema_too_new", { module: "core", backup: 9, target: 8 }), 409],
+  [new AppError("provisioning.database_ahead", { set: "core", unknownMigrations: ["0009"] }), 409],
+  [new AppError("restore.stream_source_live", { lastChangeAt: "2026-09-23T11:58:00Z" }), 409],
+  [new AppError("restore.stream_source_unchecked", { reason: "clock" }), 409],
+];
+
 describe("POST /setup-api/restore", () => {
   it("stages the encrypted artifact under the persistent operation lease and restarts", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-restore-operation-"));
@@ -1843,6 +1859,63 @@ describe("POST /setup-api/restore-bucket", () => {
       seen.push([error.code, res.status]);
     }
     expect(seen).toEqual(cases.map(([error, status]) => [error.code, status]));
+  });
+
+  it("answers the refusals an archive restore shares with the rebuild with the same statuses", async () => {
+    const seen: [string, number][] = [];
+    for (const [error] of SHARED_RESTORE_REFUSALS) {
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          stageRestore: vi.fn().mockRejectedValue(error),
+          requestRestart: vi.fn(),
+        },
+        noopLog,
+      );
+      const res = await postRestore(app, Uint8Array.from([1]));
+      expect((await res.json()) as unknown).toMatchObject({ error: { code: error.code } });
+      seen.push([error.code, res.status]);
+    }
+    expect(seen).toEqual(SHARED_RESTORE_REFUSALS.map(([error, status]) => [error.code, status]));
+  });
+
+  it("answers the refusals a Cloud restore shares with the rebuild with the same statuses", async () => {
+    const requestId = "3728e560-fbb2-41aa-8c2b-d21f3ce1ce92";
+    const pointId = "9f41b8b8-b14e-472a-8eb4-f9259b80f0d1";
+    const seen: [string, number][] = [];
+    for (const [error] of SHARED_RESTORE_REFUSALS) {
+      const app = new Hono();
+      mountSetup(
+        app,
+        {
+          environment: "preproduction",
+          cloudRecovery: {
+            binding: vi.fn(async () => ({ requestId, pointId })),
+            restore: vi.fn(async (stage: (request: RestoreRequest) => Promise<void>) => {
+              await stage({
+                artifact: Uint8Array.from([1]),
+                recoveryKey: "key",
+                environment: "preproduction",
+                managedCloud: { requestId, pointId },
+              });
+            }),
+          } as unknown as SetupDeps["cloudRecovery"],
+          stageRestore: vi.fn().mockRejectedValue(error),
+          requestRestart: vi.fn(),
+        },
+        noopLog,
+      );
+      const res = await app.request("/setup-api/cloud-recovery/restore", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pointId }),
+      });
+      expect((await res.json()) as unknown).toMatchObject({ error: { code: error.code } });
+      seen.push([error.code, res.status]);
+    }
+    expect(seen).toEqual(SHARED_RESTORE_REFUSALS.map(([error, status]) => [error.code, status]));
   });
 
   // Reconciliation N26: the owner sees whose copy it is before anything is staged.
