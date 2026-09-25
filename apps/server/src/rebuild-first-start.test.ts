@@ -2,7 +2,7 @@ import { X509Certificate, createPrivateKey } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { deleteCredential, loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
 import {
@@ -18,6 +18,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import {
+  endorseKey,
   generateNodeKeyPair,
   verifyMembershipDocument,
   type MembershipNode,
@@ -286,6 +287,39 @@ describe("completeRebuild", () => {
     );
     await completeRebuild(deps(stateDir));
     expect((await readNodeMembership(suite.db))!.body.nodes).toEqual([other]);
+  });
+
+  // A node promoted from a mirror is trusted by the other peers only through the endorsement of its
+  // key by the primary that adopted it, which adopt stored on its node row and promotion put on its
+  // document.
+  it("carries this node's endorsement forward, so a peer trusting only the endorser accepts the new term", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    const endorser = generateNodeKeyPair();
+    const ownKey = (await readMembershipTrustSet(suite.db))[NODE]!;
+    const endorsement = endorseKey(NODE, ownKey, OTHER_NODE, endorser.privateKey);
+    await suite.db.update(nodes).set({ endorsement }).where(eq(nodes.id, NODE));
+    try {
+      const held = await readNodeMembership(suite.db);
+      const promoted = await mintNextMembershipDocument(
+        { db: suite.db, ring: RING },
+        {
+          heldDocument: held,
+          nodes: held!.body.nodes,
+          signerNodeId: NODE,
+          endorsements: [endorsement],
+        },
+      );
+      await writeNodeMembership(suite.db, promoted);
+      const peerTrust = { [OTHER_NODE]: endorser.publicKey };
+      expect(verifyMembershipDocument(promoted, peerTrust)).toMatchObject({ valid: true });
+      await completeRebuild(deps(stateDir));
+      const after = (await readNodeMembership(suite.db))!;
+      expect(after.body.term).toBe(promoted.body.term + 1);
+      const verdict = verifyMembershipDocument(after, peerTrust);
+      expect(verdict.valid ? "valid" : verdict.reason).toBe("valid");
+    } finally {
+      await suite.db.update(nodes).set({ endorsement: null }).where(eq(nodes.id, NODE));
+    }
   });
 
   it("signs term 0 naming this node alone when the restored database holds no document", async () => {

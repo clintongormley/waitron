@@ -5352,10 +5352,14 @@ only a peer that answers during the same start (see the first item below). A mir
 node re-issues and signs nothing; the marker stays and the copy is held. An adoption-pending box
 returns from boot before the first start, so it neither runs nor defers it: it keeps serving the old
 certificate and the marker stays. The new certificate and key are written under working names and
-renamed into place only when both are written, so a failed write keeps the old matching pair; a
+renamed into place only when both are written, so a failed write keeps the old matching pair and
+a failed rename of the key puts the old certificate back unless that rename fails too; a
 crash between the two renames leaves a mismatched pair, which the next start replaces before the
 listener reads it, because the marker is still there — unless that start defers the first start
-(fenced, mirror or adoption-pending), when the listener refuses the pair. Left open:
+(fenced, mirror or adoption-pending), when the listener refuses the pair. The next membership
+document carries this node's stored endorsement, as mirror promotion does
+(`apps/server/src/promote.ts`), so a peer that trusts only the endorser (the primary that adopted
+this node) still accepts it. Left open:
 - A restored box whose cloud peer does not answer during its first start signs the next term and
   removes the marker; a fencing document the peer serves later at that same term reads as not
   newer, so the box is never fenced. This task's review reproduced it with a temporary two-boot case in
@@ -5364,6 +5368,11 @@ listener reads it, because the marker is still there — unless that start defer
   it cannot happen today — the only writer of `mirror_config`, which the peer check needs, is
   `apps/server/src/adopt.ts`, for a standby that never finishes adoption — from reading, not a run.
   Recorded, not redesigned.
+- When the key rename and the put-back both fail, the new certificate is left beside the old key
+  (the listener refuses the pair) and `server.crt.previous` holds the old certificate until the
+  next reissue overwrites it. The next start repairs it as in the crash case, because the marker
+  stays — unless that start defers the first start. Publishing the pair through one atomic switch
+  (for example a directory swapped by a single rename) would remove this case.
 - The pointer read gives up after 15 seconds but does not cancel the request: the bucket interface
   takes no way to stop one.
 - The pointer's term is taken without checking its signature, as the supervisor already does, so
@@ -5377,6 +5386,14 @@ listener reads it, because the marker is still there — unless that start defer
   (`promoteMirrorToPrimary`, `apps/server/src/promote.ts`) keeps the bucket copy held, reading off
   with the reason `first_start_pending` and raising no alert, until the box next starts; that start
   runs the first start, because the marker is still there. From reading, not a run.
+- Three other places sign a membership document without this node's stored endorsement:
+  `apps/server/src/retire.ts` passes `endorsements: []` (matters for a fenced former mirror
+  retiring itself); `appendStandbyToChart` in `apps/server/src/mirror-bundle-api.ts` passes none
+  (matters when the designated primary signing it is itself a former mirror);
+  `promoteLocalSecondaryToPrimary` in `apps/server/src/promote.ts` passes none (matters only if a
+  former mirror can become a local secondary again, for which no path was found). A peer that
+  trusts only the endorser would refuse those documents. Found by reading during this branch's
+  review; not reproduced.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence

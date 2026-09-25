@@ -51,8 +51,7 @@ export async function insertReservedSeriesTx(
 
 /**
  * Returns the node's endorsement, or null when the row or endorsement is absent.
- * A provisioned primary with no endorsement trusts its own key; mirror promotion includes a
- * stored endorsement when signing its new membership document.
+ * A provisioned primary has none: peers hold its key directly.
  */
 export function readNodeEndorsement(db: Database, nodeId: string): Promise<Endorsement | null> {
   return withTransaction(db, async (tx) => {
