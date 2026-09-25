@@ -542,6 +542,9 @@ Each on 0.5.17, each stating in advance what the failing result would print:
   SeaweedFS is the recorded fallback. Garage and rclone overwrote the object instead of refusing. MinIO
   is not an option: its repository is archived and its binaries are no longer published. The
   prototype rig stays as a record.
+  (2026-09-25: "Garage and rclone overwrote the object" is wrong about Garage. Of those two, only
+  rclone was run, and it overwrote the object; Garage was ruled out by reading, not run — its issue #1052 says it does not
+  support the conditional write. See `docs/developers/testing-guide.md`, "Why versitygw 1.8.0".)
 - **Proved by deletion** (CLAUDE.md §4), each with the case in the other direction:
   - removing the "only if unchanged" condition fails a test;
   - moving the pointer before the first full copy fails a test;

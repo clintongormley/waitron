@@ -227,6 +227,10 @@ The topology design (§2.1) splits the node's data across `venue.db` (everything
 keys). The existing classification contribution decides which file a table lives in; no new
 declaration is invented.
 
+> **Pointer, 2026-09-25 (slice 2).** As built, every table, `local` ones included, is in `venue.db`;
+> `node.db` stays empty, reserved for a later slice. See the topology design's §2.1 pointer
+> and [slice-2 spec §2](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
+
 The design suggested reaching across the two with SQLite's `ATTACH`. **A Drizzle table definition
 cannot name a table in an attached file.** Read from the SQL Drizzle emits for a table named
 `node.sessions`, on 2026-09-16:
@@ -258,6 +262,9 @@ That setting exists because Litestream does the checkpointing instead — and Li
 until slice 2. **Slice 1 leaves automatic checkpointing at SQLite's default**, and slice 2 turns it off
 in the same change that starts the Litestream supervisor. Landing slice 1 with checkpointing disabled
 and nothing else checkpointing would let the write-ahead file grow without limit from day one.
+
+> **Pointer, 2026-09-25 (slice 2).** Slice 2 did not turn it off: its measurement 2 found no need,
+> and `packages/store/src/index.ts` keeps SQLite's default. See the topology design's §8.3 pointer.
 
 ---
 

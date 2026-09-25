@@ -6,6 +6,7 @@ life. Back those up and you have backed up the box.
 
 **The venue's own database is a folder inside the `state` volume.** The app opens
 `/var/lib/waitron/state/venue/`, which holds `venue.db`, `node.db`, their write-ahead sidecars,
+Litestream's `.venue.db-litestream/` folder once the box has streamed to a bucket,
 the `migrations.lock` file two migrating processes queue on, and the `venue.lock` file that refuses
 a second process opening the folder with the lock, and `venue.holder.json`, which names the process
 holding the folder (a killed holder leaves it behind for the next holder to overwrite). The state
@@ -15,13 +16,13 @@ lock files holds data; do not delete them, because a process that finds one miss
 lock beside the one still held.
 There is no database server in the app's path, no connection string and no database password.
 
-| volume        | mounted at                     | holds                                                                                                                           |
-| ------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `state`       | `/var/lib/waitron/state`       | the box's identity and its database: `venue/`, `secrets.env`, `trading.env`, `backup.env`, `modules.json`, the CA and leaf PEMs |
-| `logs`        | `/var/lib/waitron/logs`        | the rotating log file, and `crash-reports/`: one JSON file per process the venue watchdog killed                                |
-| `backups`     | `/var/lib/waitron/backups`     | local encrypted backup archives, when they are switched on                                                                      |
-| `mailpit`     | `/data`                        | the local dev/prepare mail inbox (account email captured when no SMTP credential exists)                                        |
-| `print_agent` | `/var/lib/waitron-print-agent` | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                                             |
+| volume        | mounted at                     | holds                                                                                                                                                                                       |
+| ------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state`       | `/var/lib/waitron/state`       | the box's identity and its database: `venue/`, `secrets.env`, `trading.env`, `backup.env`, `modules.json`, `stream/` (Litestream's configuration and process-id file), the CA and leaf PEMs |
+| `logs`        | `/var/lib/waitron/logs`        | the rotating log file, and `crash-reports/`: one JSON file per process the venue watchdog killed                                                                                            |
+| `backups`     | `/var/lib/waitron/backups`     | local encrypted backup archives, when they are switched on                                                                                                                                  |
+| `mailpit`     | `/data`                        | the local dev/prepare mail inbox (account email captured when no SMTP credential exists)                                                                                                    |
+| `print_agent` | `/var/lib/waitron-print-agent` | the print agent's join token, saved config, and the pinned box CA (`server-ca.crt`)                                                                                                         |
 
 A box installed before the box ran its own database server was retired also carries a `waitron_db`
 volume holding that old database. Nothing reads it and nothing on the box removes it, including
