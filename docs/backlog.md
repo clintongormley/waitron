@@ -5289,7 +5289,7 @@ one reader (`packages/stream/src/bucket-config.ts`), and the kit is sent with `C
 Left open: the pointer write left open under
 Task 6, item (2), one from a process that has since died, landing after the restart.
 Task 8b, the Backups screen's bucket-copy panel and the archive setup reusing a held recovery key
-(this branch). The panel (`apps/dashboard/src/screens/stream-settings-panel.ts`) takes the bucket's
+(#628). The panel (`apps/dashboard/src/screens/stream-settings-panel.ts`) takes the bucket's
 settings with Test and Save, turns the copy off after a second, confirming tap, shows the copy's
 state, how many minutes of changes wait and the last confirmed copy, and the recovery kit with a copy
 button and a download; when a settings read of a set-up copy shows a different recovery key, it
