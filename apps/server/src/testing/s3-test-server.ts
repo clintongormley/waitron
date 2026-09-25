@@ -4,11 +4,14 @@ import { createConnection, createServer, type AddressInfo } from "node:net";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { LITESTREAM_VERSION } from "@waitron/stream";
 import { isUnset } from "../env-value.js";
 
-// versitygw run as a plain child process: the S3-compatible server the stream loop test streams to.
-// No package suite may start a container (CLAUDE.md §4). Why versitygw, and the measurements behind
-// the flags below, are in docs/developers/testing-guide.md → "The stream loop test".
+// versitygw run as a plain child process: the S3-compatible server the stream loop test streams to,
+// plus the lookup of the litestream binary that test also needs. No package suite may start a
+// container (CLAUDE.md §4). Why versitygw, and the measurements behind the flags below, are in
+// docs/developers/testing-guide.md → "The stream loop test skips locally without its two binaries,
+// and a skip reads as a pass".
 
 /** Must equal `VERSITYGW_VERSION` in `scripts/setup-s3-test-server.mjs`; that script's suite reads this line. */
 export const VERSITYGW_VERSION = "1.8.0";
@@ -18,11 +21,15 @@ const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 /** Where `node scripts/setup-s3-test-server.mjs` installs it. `WAITRON_VERSITYGW_BIN` overrides. */
 export const DEFAULT_VERSITYGW_BIN = join(REPO_ROOT, ".bin", "versitygw");
 
+/** Where `node scripts/setup-litestream.mjs` installs it. `WAITRON_LITESTREAM_BIN` overrides. */
+export const DEFAULT_LITESTREAM_BIN = join(REPO_ROOT, ".bin", "litestream");
+
 const ACCESS_KEY_ID = "waitronlooptest";
 const SECRET_ACCESS_KEY = "waitron-loop-test-secret";
 /** At least three characters: versitygw refuses shorter names with `InvalidBucketName`. */
 const BUCKET = "waitron-loop";
-const READY_TIMEOUT_MS = 10_000;
+/** How long `startS3TestServer` waits for the port to accept, before it gives up. */
+export const READY_TIMEOUT_MS = 10_000;
 const STOP_GRACE_MS = 5_000;
 const VERSION_TIMEOUT_MS = 10_000;
 
@@ -65,6 +72,31 @@ export async function resolveVersitygw(env: NodeJS.ProcessEnv): Promise<BinaryLo
     return {
       ok: false,
       reason: `versitygw is not runnable at ${bin}: ${(error as Error).message}`,
+    };
+  }
+}
+
+/** The pinned Litestream, or why it is not usable here. Never throws. */
+export async function resolveLitestream(env: NodeJS.ProcessEnv): Promise<BinaryLookup> {
+  const bin = isUnset(env.WAITRON_LITESTREAM_BIN)
+    ? DEFAULT_LITESTREAM_BIN
+    : env.WAITRON_LITESTREAM_BIN;
+  try {
+    const { stdout } = await promisify(execFile)(bin, ["version"], {
+      timeout: VERSION_TIMEOUT_MS,
+    });
+    const version = stdout.trim();
+    if (version !== LITESTREAM_VERSION) {
+      return {
+        ok: false,
+        reason: `${bin} reports litestream ${version}, not the pinned ${LITESTREAM_VERSION}`,
+      };
+    }
+    return { ok: true, bin };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `litestream is not runnable at ${bin}: ${(error as Error).message}`,
     };
   }
 }

@@ -1,10 +1,11 @@
 /**
- * `node scripts/setup-s3-test-server.mjs` — install the pinned versitygw release at `.bin/versitygw`
+ * `pnpm setup:s3-test-server` — install the pinned versitygw release at `.bin/versitygw`
  * under the repository root, where the stream loop test looks for it
  * (`apps/server/src/testing/s3-test-server.ts`).
  *
  * versitygw is the S3-compatible server that test runs as a plain child process; why this one is in
- * docs/developers/testing-guide.md → "The stream loop test". The archive's SHA-256 is checked against
+ * docs/developers/testing-guide.md → "The stream loop test skips locally without its
+ * two binaries, and a skip reads as a pass". The archive's SHA-256 is checked against
  * the value pinned here, copied from the release's own `checksums.txt`, before anything is unpacked.
  */
 import { Buffer } from "node:buffer";
@@ -30,6 +31,10 @@ export const VERSITYGW_ASSETS = {
   "darwin-arm64": {
     name: "versitygw_v1.8.0_Darwin_arm64",
     sha256: "4953096f65a9c0d62ab184fb6b2ba7c2435229205cf00a56cb62cd4bf6b216ca",
+  },
+  "darwin-x64": {
+    name: "versitygw_v1.8.0_Darwin_x86_64",
+    sha256: "104bd978e80ef0173554cfd8630ccc5bac24b00da440510b60365a3b6b6ab134",
   },
 };
 
@@ -60,9 +65,29 @@ export function parseVersion(output) {
   return /^Version\s*:\s*(\S+)\s*$/m.exec(output)?.[1] ?? null;
 }
 
-/** Download, verify, unpack and version-check one release into `dest`; returns `dest`. */
+/** `dest`'s version, or null when it prints no version line; throws when it will not run. */
+function reportedVersion(dest) {
+  return parseVersion(
+    execFileSync(dest, ["--version"], { encoding: "utf8", stdio: "pipe", timeout: 10_000 }),
+  );
+}
+
+/** `reportedVersion`, or null when `dest` is missing or will not run. */
+function installedVersion(dest) {
+  try {
+    return reportedVersion(dest);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Download, verify, unpack and version-check one release into `dest`, unless the binary already
+ * there reports the pinned version.
+ */
 export async function install({ platform, arch, assets, fetchImpl, dest }) {
   const asset = assetFor(platform, arch, assets);
+  if (installedVersion(dest) === VERSITYGW_VERSION) return { dest, downloaded: false };
   const response = await fetchImpl(asset.url);
   if (!response.ok) {
     throw new Error(`${asset.url} answered ${response.status} ${response.statusText}`);
@@ -85,25 +110,25 @@ export async function install({ platform, arch, assets, fetchImpl, dest }) {
   } finally {
     rmSync(staging, { recursive: true, force: true });
   }
-  const version = parseVersion(
-    execFileSync(dest, ["--version"], { encoding: "utf8", timeout: 10_000 }),
-  );
+  const version = reportedVersion(dest);
   if (version !== VERSITYGW_VERSION) {
     throw new Error(`${dest} reports version ${version}, not the pinned ${VERSITYGW_VERSION}`);
   }
-  return dest;
+  return { dest, downloaded: true };
 }
 
 // The process wiring alone; the suite calls `install` with the download and the platform injected.
 /* v8 ignore start */
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const dest = await install({
+  const { dest, downloaded } = await install({
     platform: process.platform,
     arch: process.arch,
     assets: VERSITYGW_ASSETS,
     fetchImpl: globalThis.fetch,
     dest: VERSITYGW_BIN,
   });
-  console.log(`versitygw ${VERSITYGW_VERSION} installed at ${dest}`);
+  console.log(
+    `versitygw ${VERSITYGW_VERSION} ${downloaded ? "installed" : "already installed"} at ${dest}`,
+  );
 }
 /* v8 ignore stop */

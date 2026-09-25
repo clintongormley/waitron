@@ -33,14 +33,20 @@ afterEach(() => {
   for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-/** A release tarball shaped like versitygw's: `<name>/versitygw` at the top, nothing else needed. */
-function fixtureRelease(printedVersion) {
+/**
+ * A release tarball shaped like versitygw's: `<name>/versitygw` at the top, nothing else needed.
+ * `script` replaces the binary's body when a case needs one that does not print a version.
+ */
+function fixtureRelease(
+  printedVersion,
+  script = `echo "Version  : ${printedVersion}"\necho "Build    : fixture"\n`,
+) {
   const dir = mkdtempSync(join(tmpdir(), "waitron-vgw-fixture-"));
   scratch.push(dir);
   const name = "versitygw_fixture";
   mkdirSync(join(dir, name));
   const bin = join(dir, name, "versitygw");
-  writeFileSync(bin, `#!/bin/sh\necho "Version  : ${printedVersion}"\necho "Build    : fixture"\n`);
+  writeFileSync(bin, `#!/bin/sh\n${script}`);
   chmodSync(bin, 0o755);
   const archive = join(dir, "fixture.tar.gz");
   execFileSync("tar", ["-czf", archive, "-C", dir, name]);
@@ -67,9 +73,10 @@ function answering(bytes, seen = []) {
 }
 
 describe("the pinned versitygw release", () => {
-  it("pins exactly the three platforms the loop test runs on, each with a 64-hex SHA-256", () => {
+  it("pins exactly the four platforms it installs for, each with a 64-hex SHA-256", () => {
     expect(Object.keys(VERSITYGW_ASSETS).sort()).toEqual([
       "darwin-arm64",
+      "darwin-x64",
       "linux-arm64",
       "linux-x64",
     ]);
@@ -87,7 +94,7 @@ describe("the pinned versitygw release", () => {
 
   it("refuses a platform it has no pin for, naming the ones it has", () => {
     expect(() => assetFor("win32", "x64", VERSITYGW_ASSETS)).toThrow(
-      "versitygw 1.8.0 is pinned for linux-x64, linux-arm64, darwin-arm64; this host is win32-x64",
+      "versitygw 1.8.0 is pinned for linux-x64, linux-arm64, darwin-arm64, darwin-x64; this host is win32-x64",
     );
   });
 
@@ -121,8 +128,43 @@ describe("install", () => {
         fetchImpl: answering(release.bytes, seen),
         dest,
       }),
-    ).resolves.toBe(dest);
+    ).resolves.toEqual({ dest, downloaded: true });
     expect(seen).toEqual([assetFor(process.platform, process.arch, release.assets).url]);
+    expect(execFileSync(dest, ["--version"], { encoding: "utf8" })).toContain("Version  : 1.8.0");
+  });
+
+  it("leaves a binary already reporting the pinned version alone, and downloads nothing", async () => {
+    const release = fixtureRelease(VERSITYGW_VERSION);
+    const dest = join(release.dir, "versitygw_fixture", "versitygw");
+    const seen = [];
+    await expect(
+      install({
+        platform: process.platform,
+        arch: process.arch,
+        assets: release.assets,
+        fetchImpl: answering(release.bytes, seen),
+        dest,
+      }),
+    ).resolves.toEqual({ dest, downloaded: false });
+    expect(seen).toEqual([]);
+  });
+
+  it("replaces a binary reporting another version", async () => {
+    const release = fixtureRelease(VERSITYGW_VERSION);
+    const dest = join(release.dir, "out", "versitygw");
+    mkdirSync(join(release.dir, "out"));
+    writeFileSync(dest, `#!/bin/sh\necho "Version  : 0.0.1"\n`, { mode: 0o755 });
+    const seen = [];
+    await expect(
+      install({
+        platform: process.platform,
+        arch: process.arch,
+        assets: release.assets,
+        fetchImpl: answering(release.bytes, seen),
+        dest,
+      }),
+    ).resolves.toEqual({ dest, downloaded: true });
+    expect(seen).toHaveLength(1);
     expect(execFileSync(dest, ["--version"], { encoding: "utf8" })).toContain("Version  : 1.8.0");
   });
 
@@ -166,6 +208,22 @@ describe("install", () => {
         dest: join(release.dir, "out", "versitygw"),
       }),
     ).rejects.toThrow("reports version 9.9.9, not the pinned 1.8.0");
+  });
+
+  it("surfaces the real error when the downloaded binary will not run", async () => {
+    const release = fixtureRelease(
+      VERSITYGW_VERSION,
+      `echo "cannot start: missing library" >&2\nexit 3\n`,
+    );
+    const failure = install({
+      platform: process.platform,
+      arch: process.arch,
+      assets: release.assets,
+      fetchImpl: answering(release.bytes),
+      dest: join(release.dir, "out", "versitygw"),
+    });
+    await expect(failure).rejects.toThrow("cannot start: missing library");
+    await expect(failure).rejects.not.toThrow("reports version");
   });
 });
 

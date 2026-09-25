@@ -10,7 +10,6 @@
 // binaries with `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. Without
 // them this case is reported SKIPPED, with the reason in its note. With CI=true (GitHub sets it on
 // every job) or WAITRON_REQUIRE_STREAM_BINARIES=1, a missing binary FAILS the case instead.
-import { execFile } from "node:child_process";
 import { X509Certificate } from "node:crypto";
 import { copyFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type AddressInfo } from "node:net";
@@ -18,8 +17,6 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { connect as tlsConnect } from "node:tls";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
 import { afterAll, describe, expect, it } from "vitest";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
@@ -35,7 +32,6 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue, quoteIdent } from "@waitron/provisioning";
 import {
-  LITESTREAM_VERSION,
   createS3ObjectStore,
   encodeRecoveryKit,
   probeBucket,
@@ -51,7 +47,6 @@ import { startServer, type StartedServer } from "./boot.js";
 import { loadBoxEnv } from "./box-env.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
-import { isUnset } from "./env-value.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -59,14 +54,14 @@ import { runRestore } from "./restore-command.js";
 import { unsealNodeState } from "./sealed-state.js";
 import { streamSettingsPayload } from "./stream-host.js";
 import {
+  READY_TIMEOUT_MS as S3_READY_MS,
   VERSITYGW_VERSION,
+  resolveLitestream,
   resolveVersitygw,
   startS3TestServer,
-  type BinaryLookup,
   type S3TestServer,
 } from "./testing/s3-test-server.js";
 
-const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const INSTALL = "node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs";
 const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM_BINARIES === "1";
 
@@ -86,7 +81,6 @@ const TIMED_SALES = 10;
 const RESTORE_MS = 30_000;
 const REBUILD_MS = 120_000;
 const BOOT_MS = 30_000;
-const S3_READY_MS = 10_000;
 const UNTIMED_MS = 60_000;
 const POLL_MS = 500;
 const LOOP_TIMEOUT_MS =
@@ -100,28 +94,6 @@ const LOOP_TIMEOUT_MS =
   REBUILD_MS +
   RESTORE_MS +
   UNTIMED_MS;
-
-async function resolveLitestream(env: NodeJS.ProcessEnv): Promise<BinaryLookup> {
-  const bin = isUnset(env.WAITRON_LITESTREAM_BIN)
-    ? join(REPO_ROOT, ".bin", "litestream")
-    : env.WAITRON_LITESTREAM_BIN;
-  try {
-    const { stdout } = await promisify(execFile)(bin, ["version"], { timeout: 10_000 });
-    const version = stdout.trim();
-    if (version !== LITESTREAM_VERSION) {
-      return {
-        ok: false,
-        reason: `${bin} reports litestream ${version}, not the pinned ${LITESTREAM_VERSION}`,
-      };
-    }
-    return { ok: true, bin };
-  } catch (error) {
-    return {
-      ok: false,
-      reason: `litestream is not runnable at ${bin}: ${(error as Error).message}`,
-    };
-  }
-}
 
 const litestream = await resolveLitestream(process.env);
 const versitygw = await resolveVersitygw(process.env);
@@ -240,10 +212,30 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
   let serverB: StartedServer | undefined;
 
   afterAll(async () => {
-    if (serverA !== undefined) await serverA.close();
-    if (serverB !== undefined) await serverB.close();
-    if (s3 !== undefined) await s3.stop();
-    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
+    // Each cleanup runs even when an earlier one rejects, so a failed close cannot leave versitygw
+    // running.
+    const failures: unknown[] = [];
+    for (const cleanup of [
+      async () => {
+        if (serverA !== undefined) await serverA.close();
+      },
+      async () => {
+        if (serverB !== undefined) await serverB.close();
+      },
+      async () => {
+        if (s3 !== undefined) await s3.stop();
+      },
+      async () => {
+        if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
+      },
+    ]) {
+      try {
+        await cleanup();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0) throw new AggregateError(failures, "stream loop teardown failed");
   });
 
   it(
@@ -283,7 +275,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       const store = createS3ObjectStore(bucket);
       expect(
         await probeBucket(store),
-        `versitygw ${VERSITYGW_VERSION} failed the conditional-write probe; see testing-guide.md → "The stream loop test". Server log: ${s3.log()}`,
+        `versitygw ${VERSITYGW_VERSION} failed the conditional-write probe; see testing-guide.md → "The stream loop test skips locally without its two binaries, and a skip reads as a pass". Server log: ${s3.log()}`,
       ).toEqual({ ok: true });
 
       // 2. Box A, provisioned the way a setup boot leaves a box: secrets and TLS in the state folder,
@@ -582,8 +574,8 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
       // 8b. Sales keep their normal time with the S3 server stopped — spec §8.2, against the real
       //     Litestream (Task 7's stream-host case uses a fake one and cannot show this). The server is
       //     frozen with SIGSTOP, so every bucket call hangs rather than being refused. A sale that
-      //     waited on the bucket would hang with it, or take the S3 client's own timeout of seconds;
-      //     the bound sits far below that and far above a healthy sale.
+      //     waited on the bucket would hang with it; the bound sits far below that and far above a
+      //     healthy sale.
       const idsB = {
         tillId: tradingB.WAITRON_TILL_TILL_ID!,
         nodeId: tradingB.WAITRON_TILL_NODE_ID!,
