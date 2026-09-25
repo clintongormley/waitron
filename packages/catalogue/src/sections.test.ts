@@ -95,7 +95,7 @@ async function fixture(): Promise<Fixture> {
   });
 }
 
-/** A list a menu owns. Task 3 creates these properly; here the row is written directly. */
+/** A list a menu owns, written directly: no write here creates one. */
 async function menuOwned(role: "menu_root" | "home_layout", menuId: string): Promise<string> {
   const id = crypto.randomUUID();
   await fx.db.execute(sql`
@@ -606,7 +606,7 @@ describe("duplicate", () => {
   });
 });
 
-describe("replace (D23)", () => {
+describe("replace", () => {
   it("puts the new member at the old one's position", async () => {
     const f = await fixture();
     const drinks = await create("Drinks");

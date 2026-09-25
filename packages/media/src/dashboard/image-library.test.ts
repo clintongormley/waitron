@@ -666,7 +666,7 @@ it("names a section using the image by its internal name, and blocks the delete"
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe("Drinks (internal)"),
   );
-  // No sections screen exists yet to link to.
+  // No screen shows a single section, so there is nothing to link to.
   expect(el.shadowRoot!.querySelector("wt-modal li a")).toBeNull();
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
 });

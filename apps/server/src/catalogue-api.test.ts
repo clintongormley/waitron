@@ -3999,7 +3999,7 @@ describe("mountCatalogueApi — sections", () => {
       201,
     );
   }
-  /** A menu's own list; Task 3 creates these properly. */
+  /** A menu's own list, written directly: no route creates one. */
   async function menuRoot(menuId: string): Promise<string> {
     const id = crypto.randomUUID();
     await suite.db.execute(sql`

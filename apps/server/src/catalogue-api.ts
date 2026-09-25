@@ -165,8 +165,7 @@ function categoryInput(body: Record<string, unknown>, creating: boolean): Partia
   return result;
 }
 
-/** A section body's fields, shape only: `createSection`/`updateSection` trim the name and check the
- * language codes, the colour's format and that the image exists. */
+/** A section body's fields, shape only: `createSection`/`updateSection` check the values. */
 function sectionInput(body: Record<string, unknown>, creating: boolean): SectionPatch {
   const result: SectionPatch = {};
   if (creating || body.internalName !== undefined) {
