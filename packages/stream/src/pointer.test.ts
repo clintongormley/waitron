@@ -7,6 +7,7 @@ import {
   pointerKey,
   pointerMessage,
   readPointer,
+  SENT_POINTERS_KEPT,
   SentPointers,
   signPointer,
   verifyPointer,
@@ -240,5 +241,20 @@ describe("SentPointers", () => {
     const twin = signPointer(body(), OTHER_KEYS.privateKey);
     await writePointer(store, VENUE, twin, (await readPointer(store, VENUE))!.etag);
     expect(sent.includes((await store.get(pointerKey(VENUE)))!.body)).toBe(false);
+  });
+
+  it("forgets the oldest pointer once it holds more than it keeps", () => {
+    const sent = new SentPointers();
+    const pointers = Array.from({ length: SENT_POINTERS_KEPT + 1 }, (_, i) =>
+      signPointer(
+        body({ writtenAt: new Date(Date.UTC(2026, 8, 23, 10, 5, i)).toISOString() }),
+        KEYS.privateKey,
+      ),
+    );
+    const bytes = (pointer: SignedPointer) =>
+      new TextEncoder().encode(canonicalize(pointer as unknown as CanonicalValue));
+    for (const pointer of pointers) sent.add(pointer);
+    expect(sent.includes(bytes(pointers[0]!))).toBe(false);
+    expect(pointers.slice(1).every((pointer) => sent.includes(bytes(pointer)))).toBe(true);
   });
 });

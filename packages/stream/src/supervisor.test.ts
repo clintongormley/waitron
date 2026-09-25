@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AppError } from "@waitron/shared";
 import { claimGeneration, generationPrefix, markerKey } from "./generations.js";
 import { generationName } from "./names.js";
 import {
@@ -20,6 +21,7 @@ import type { BucketConfig } from "./s3-store.js";
 import { FakeLitestream } from "./testing/fake-litestream.js";
 import { SwitchableStore } from "./testing/switchable-store.js";
 import {
+  OPEN_RETRY_MS,
   PRUNE_EVERY_MS,
   RESTART_BACKOFF_MS,
   StreamSupervisor,
@@ -166,7 +168,7 @@ interface HarnessOptions {
   stopWaitMs?: number;
   /** How far the bucket's clock runs ahead of this box's; negative when behind. */
   bucketAheadMs?: number;
-  /** False gives each supervisor its own record of the pointers sent, as when none is passed. */
+  /** False gives `successor()` a record of the pointers sent of its own, not the first one's. */
   shareSentPointers?: boolean;
 }
 
@@ -207,6 +209,7 @@ async function harness(options: HarnessOptions = {}) {
   let walHeld: Promise<void> | undefined;
   let walWaiting = false;
   const logs: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
+  const sentPointers = new SentPointers();
   const deps: SupervisorDeps = {
     litestreamBin: options.litestreamBin ?? "litestream",
     venueDbPath,
@@ -250,7 +253,7 @@ async function harness(options: HarnessOptions = {}) {
         listener = undefined;
       };
     },
-    ...(options.shareSentPointers === false ? {} : { sentPointers: new SentPointers() }),
+    sentPointers,
     ...(options.stopWaitMs === undefined ? {} : { stopWaitMs: options.stopWaitMs }),
     ...(options.readCommandLine === undefined ? {} : { readCommandLine: options.readCommandLine }),
   };
@@ -264,8 +267,11 @@ async function harness(options: HarnessOptions = {}) {
   return {
     supervisor,
     /** The next supervisor on the same box and bucket, as a reload builds it. */
+    sentPointers,
     successor: () => {
-      const next = new StreamSupervisor(deps);
+      const next = new StreamSupervisor(
+        options.shareSentPointers === false ? { ...deps, sentPointers: new SentPointers() } : deps,
+      );
       successors.push(next);
       return next;
     },
@@ -960,11 +966,134 @@ describe("opening a generation", () => {
     expect((await readPointer(h.store, VENUE))?.pointer.body.generation).toBe(second);
   });
 
-  it("takes a predecessor's late pointer as another box's when the two share no record of what was sent", async () => {
+  it("takes a predecessor's late pointer as another box's when each keeps its own record of what was sent", async () => {
     const h = await reloadWithLateWrite({ shareSentPointers: false });
     h.store.upload(fullCopyOf(h.next.status().generation!));
     await h.clock.until(() => ["streaming", "refused"].includes(h.next.status().state));
     expect(h.next.status()).toMatchObject({ state: "refused", reason: "pointer_changed" });
+  });
+
+  it("retries in place, on the same generation, when the read after a refusal fails", async () => {
+    const h = await harness();
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    const generation = h.supervisor.status().generation!;
+    // A predecessor's pointer, landing after this supervisor read the pointer as absent.
+    const late = pointerFrom(NODE, 2, "gen-2-node-a-20260923T110000Z");
+    h.sentPointers.add(late);
+    await writePointer(h.store, VENUE, late, null);
+    // The first read after the refusal is `writePointer`'s own; the second is the one that fails.
+    const get = h.store.get.bind(h.store);
+    let reads = 0;
+    h.store.get = async (key) => {
+      if (key === pointerKey(VENUE) && ++reads === 2) {
+        throw new AppError("backup.stream_request_failed", {
+          operation: "get",
+          key,
+          status: null,
+          name: "ECONNRESET",
+        });
+      }
+      return get(key);
+    };
+    h.store.upload(fullCopyOf(generation));
+    await h.clock.until(
+      () =>
+        ["streaming", "refused"].includes(h.supervisor.status().state) ||
+        h.litestream.replicas().length > 1,
+    );
+    expect(h.litestream.replicas()).toHaveLength(1);
+    expect(h.supervisor.status()).toMatchObject({ state: "streaming", generation });
+    expect(h.logs.map((line) => line.event)).toContain("stream.pointer_write_failed");
+    expect(h.logs.map((line) => line.event)).not.toContain("stream.open_failed");
+  });
+
+  // A bucket whose reads lag its conditional-write check keeps refusing the write while showing a
+  // pointer this box sent.
+  it("waits between retries once a retry against its own pointer is refused again", async () => {
+    const h = await harness();
+    const own = pointerFrom(NODE, 2, "gen-2-node-a-20260923T110000Z");
+    h.sentPointers.add(own);
+    await writePointer(h.store, VENUE, own, null);
+    const put = h.store.put.bind(h.store);
+    const get = h.store.get.bind(h.store);
+    let writes = 0;
+    h.store.put = async (key, body, cond) => {
+      if (key !== pointerKey(VENUE)) return put(key, body, cond);
+      writes += 1;
+      throw new AppError("backup.stream_precondition_failed", { key });
+    };
+    h.store.get = async (key) => {
+      // Through the event loop, so a retry that never waits still lets this test run.
+      await new Promise((resolve) => setImmediate(resolve));
+      return get(key);
+    };
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => writes >= 2);
+    for (let turn = 0; turn < 20; turn += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    expect(writes).toBe(2);
+    const slept = h.clock.slept.length;
+    await h.clock.until(() => writes === 3);
+    expect(h.clock.slept.slice(slept)).toContain(OPEN_RETRY_MS);
+    expect(h.supervisor.status().state).toBe("opening");
+    expect(h.litestream.replicas()).toHaveLength(1);
+  });
+
+  // Two reloads, each leaving a pointer write unanswered; the OLDER one lands after the third
+  // supervisor reads the pointer. A record that kept fewer than three pointers would have
+  // forgotten it.
+  it("takes the oldest of two predecessors' late pointers as its own, after two reloads", async () => {
+    const h = await harness();
+    await writePointer(
+      h.store,
+      VENUE,
+      pointerFrom("node-b", 2, "gen-2-node-b-20260923T110000Z"),
+      null,
+    );
+    const put = h.store.put.bind(h.store);
+    const get = h.store.get.bind(h.store);
+    const held: (() => void)[] = [];
+    let holding = true;
+    h.store.put = async (key, body, cond) => {
+      if (key === pointerKey(VENUE) && holding) {
+        await new Promise<void>((resolve) => held.push(resolve));
+      }
+      return put(key, body, cond);
+    };
+    let armed = false;
+    h.store.get = async (key) => {
+      const answer = await get(key);
+      if (key === pointerKey(VENUE) && armed) for (const release of held) release();
+      return answer;
+    };
+    const opened = async (supervisor: StreamSupervisor, writesHeld: number) => {
+      await supervisor.start();
+      await h.clock.until(() => h.litestream.running() !== undefined);
+      const generation = supervisor.status().generation!;
+      h.store.upload(fullCopyOf(generation));
+      await h.clock.until(() => held.length === writesHeld);
+      await supervisor.stop();
+      return generation;
+    };
+    const first = await opened(h.supervisor, 1);
+    await opened(h.successor(), 2);
+    holding = false;
+    armed = true;
+    const third = h.successor();
+    await third.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    await vi.waitFor(async () =>
+      expect((await readPointer(h.store, VENUE))?.pointer.body.generation).toBe(first),
+    );
+    const generation = third.status().generation!;
+    h.store.upload(fullCopyOf(generation));
+    await h.clock.until(() => ["streaming", "refused"].includes(third.status().state));
+    expect(third.status()).toMatchObject({ state: "streaming", generation });
+    expect((await readPointer(h.store, VENUE))?.pointer.body.generation).toBe(generation);
   });
 
   // The pointers a rebuilt twin or a later term would write: the same node id is not this box.
@@ -2074,6 +2203,7 @@ describe("constructed without test seams", () => {
       now: () => new Date(START),
       log: () => {},
       onCommit: () => () => {},
+      sentPointers: new SentPointers(),
     });
     expect(supervisor.status()).toEqual({
       state: "off",

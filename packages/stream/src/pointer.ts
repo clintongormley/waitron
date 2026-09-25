@@ -113,17 +113,23 @@ export async function readPointer(
   return { pointer, etag: stored.etag };
 }
 
+/** A pointer is needed only while a write of it can still land. */
+export const SENT_POINTERS_KEPT = 16;
+
 /**
- * The exact bytes of every pointer a process has sent, so a refusal caused by one of them landing
- * after a later read is told from another box's write. Byte-exact, not "this node id and term": a
- * rebuild reuses the dead box's node id and can sign the same term (spec §4.4). Never pruned: a
- * supervisor adds one entry per generation it opens.
+ * The exact bytes of the pointers a process has sent most recently, so a refusal caused by one of
+ * them landing after a later read is told from another box's write. Byte-exact, not "this node id
+ * and term": a rebuild reuses the dead box's node id and can sign the same term (spec §4.4).
  */
 export class SentPointers {
+  /** In the order first added, oldest first. */
   readonly #sent = new Set<string>();
 
   add(pointer: SignedPointer): void {
     this.#sent.add(Buffer.from(encode(pointer)).toString("base64"));
+    if (this.#sent.size > SENT_POINTERS_KEPT) {
+      this.#sent.delete(this.#sent.values().next().value!);
+    }
   }
 
   includes(bytes: Uint8Array): boolean {
