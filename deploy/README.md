@@ -6,6 +6,7 @@ life. Back those up and you have backed up the box.
 
 **The venue's own database is a folder inside the `state` volume.** The app opens
 `/var/lib/waitron/state/venue/`, which holds `venue.db`, `node.db`, their write-ahead sidecars,
+Litestream's `.venue.db-litestream/` folder once the box has streamed to a bucket,
 the `migrations.lock` file two migrating processes queue on, and the `venue.lock` file that refuses
 a second process opening the folder with the lock, and `venue.holder.json`, which names the process
 holding the folder (a killed holder leaves it behind for the next holder to overwrite). The state

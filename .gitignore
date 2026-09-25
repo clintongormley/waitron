@@ -9,7 +9,8 @@ build/
 
 # Test / tooling caches
 coverage/
-# Pinned test and dev binaries the setup scripts download (`pnpm setup:litestream`).
+# Pinned test and dev binaries the setup scripts download (`scripts/setup-litestream.mjs`,
+# `scripts/setup-s3-test-server.mjs`).
 /.bin/
 .vitest/
 # vitest `--reporter=blob` output — the per-shard coverage blobs the sharded CI jobs (test-heavy /

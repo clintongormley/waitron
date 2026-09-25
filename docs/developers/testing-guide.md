@@ -525,6 +525,64 @@ is no `process.title` anywhere in `vitest@4.1.11`'s `dist/`. Measured 2026-09-19
 `packages/identity`, one version each: 3.2.7 showed `node (vitest)` and `node (vitest 1)`, 4.1.11
 showed no `(vitest` at any sample and a worker running `…/vitest/dist/workers/forks.js`.
 
+## The stream loop test
+
+`apps/server/src/stream-loop.e2e.test.ts` runs slice 2 end to end with the real pinned Litestream
+and a real S3-compatible server started as a plain child process, because no package suite starts a
+container. Box A streams to the bucket and dies; box B is rebuilt from the recovery kit, sells under a
+fresh installation number, opens a generation of its own and moves the pointer; and a restore of B's
+generation must equal B's database, every table but Litestream's own two
+([conventions-data.md](conventions-data.md), the last section). On the owner's Mac it takes about
+twelve seconds (2026-09-25). Its timeout is the sum of its waits and budgets, a little under ten
+minutes, for the reason the "per-test timeout" section above gives.
+
+**Binaries.** `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs` installs
+both under `.bin/` at the repository root; `WAITRON_LITESTREAM_BIN` and `WAITRON_VERSITYGW_BIN` point
+the test elsewhere. A missing binary, or one reporting another version, SKIPS the case locally, and
+FAILS it when `CI=true` (GitHub Actions sets it on every job) or `WAITRON_REQUIRE_STREAM_BINARIES=1`.
+CI's `test-server` shards install both first (`.github/workflows/ci.yml`; see
+[ci-and-gates.md](ci-and-gates.md), "`test-server`'s shards download two binaries").
+
+**A skipped run looks like a quiet pass.** Measured 2026-09-25 with Vitest 4.1.11 and
+`WAITRON_LITESTREAM_BIN=/nonexistent`: `pnpm --filter @waitron/server exec vitest run
+src/stream-loop.e2e.test.ts` printed `Tests  1 skipped (1)`, `Test Files  1 passed (1)` and exited 0,
+with neither the `stream loop test SKIPPED: …` warning the file prints nor the skip note. The same
+command with `--reporter=verbose` printed both, the note naming the missing binary and the install
+command. With `CI=true` added it failed: `Error: stream loop test cannot run: litestream is not
+runnable at /nonexistent`, exit 1. So after a local run of `apps/server`, look for the skip count
+before taking the loop as tested.
+
+**The frozen-server stage.** Ten sales are timed with the S3 server up, then it is frozen with
+`SIGSTOP` (every call hangs rather than being refused) and ten more are timed. The slowest frozen sale
+must stay under the larger of one second and five times the slowest sale before the freeze. It never
+drives the side file to the 256 MiB limit, so it says nothing about the pause.
+
+**Why versitygw 1.8.0.** Five candidates were run on 2026-09-23 with the same probe: a write "only if
+absent" over an existing key, a write "only if unchanged" with a stale ETag, and twenty parallel
+create-only writes (the slice-2 plan, Task 10's drafting notes, "Receipts for the choices in this
+task"). versitygw, SeaweedFS 4.47 and MinIO's last binary release refused both conditional writes with
+412 and let one writer of twenty win. rclone `serve s3` overwrote the object both times. Garage does
+not support the conditional write; its issue #1052 is open, and a maintainer wrote that "adding this
+to Garage is not possible with our weak-consistency replication model". versitygw was preferred
+because it answers `If-Match` on a missing key with 404 as AWS documents (SeaweedFS answers 412), it
+is one process on one port, and its release publishes SHA-256 checksums (SeaweedFS publishes MD5).
+MinIO's repository is archived and its community binaries are no longer published.
+
+**It runs with `--sidecar`** (`apps/server/src/testing/s3-test-server.ts`), which keeps object
+metadata in a plain directory instead of extended attributes, so it does not depend on what the
+temporary filesystem supports. Litestream 0.5.17 replicated to it and restored from it in both modes
+on darwin/arm64 (the same notes). It had not run on Linux when this section was written; CI's
+`test-server` shards are its first Linux runs.
+
+**If the conditional-write probe fails**, which is the case's first assertion and prints the probe's
+reason and the server's log, suspect the server before the product. Check `.bin/versitygw
+--version`. The recorded fallback is SeaweedFS 4.47, whose run passed the same probe; weigh its
+MD5-only checksums, eleven listening ports and three-second stop before swapping.
+
+**An interrupted run can leave either binary running.** `pnpm reap` kills a parentless process whose
+command starts with a Waitron checkout's `.bin/litestream` or `.bin/versitygw`
+(`scripts/reap-testcontainers.mjs`, `isTestBinaryProcess`).
+
 ## A probe that needs a Unix SOCKET runs inside the container — RETIRED from CLAUDE.md
 
 Taken out of `CLAUDE.md` on 2026-09-23: no suite starts a container, and the measurement below was
@@ -766,7 +824,7 @@ PostgreSQL, and the rule it paid for has been removed from CLAUDE.md rather than
 has no `ctid` to key on, and a claim runs inside a write transaction no other writer can interleave
 with, so the failure shape cannot arise. It is kept here because the *lesson* — a locking selection
 has to carry its choice out on something that survives a rewrite — is about databases, not about
-PostgreSQL, and slice 2 puts a second writer back. The suite named below was deleted with the rest
+PostgreSQL. The suite named below was deleted with the rest
 of the real-PostgreSQL tier; read it with
 `git show aabdde6a8^:packages/db/src/job-claim.pg.test.ts`.
 

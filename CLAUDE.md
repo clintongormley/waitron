@@ -544,9 +544,15 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   a real database through `applyMigrations` and then tries a plain `UPDATE` and `DELETE` on every
   declared table, and leaves the other two shapes to `packages/store/src/append-only.test.ts`, where
   a conflicting key is available.
+- **A streamed `venue.db` holds two tables no migration created, and its folder a directory no
+  store opened.** Litestream adds `_litestream_seq` and `_litestream_lock` to the database it
+  streams, a restore of the stream carries both, and it keeps `.venue.db-litestream/` beside the
+  file; a freshly migrated database has neither. Code that lists a live or restored database's
+  tables, or that empties, copies or restores the venue folder, must expect them; no guard finds a
+  new site that does not. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **A `local` row belongs to one node, so no foreign key may join a `local` table to a
-  `ledger`/`state` one, in either direction.** Every table is in `venue.db`, the file slice 2 will
-  stream (slice-2 spec §2); `node.db` is reserved and empty, and a key across the classes would stop
+  `ledger`/`state` one, in either direction.** Every table is in `venue.db`, which streams whole to
+  the owner's bucket (slice-2 spec §2); `node.db` is reserved and empty, and a key across the classes would stop
   a later slice moving `local` tables into it. A `local` row that needs a venue row keeps the plain
   id and names, at the column, what establishes the target exists — or that nothing does, and where
   the refusal moved to. Guard: `scripts/two-file-foreign-keys.test.ts`, weaker than its name — it
@@ -561,6 +567,14 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   holding another node's copy of `venue.db` must read its own rows or none. No guard makes a new
   `local` table say which. Which node filters a deletion pins:
   [conventions-data.md](docs/developers/conventions-data.md).
+- **Anything that works as a live login is stored as a hash, because the whole database streams to
+  the owner's bucket.** The dashboard and till session cookies carry a random token and the row
+  keeps its SHA-256 (`hashSessionToken`, `@waitron/identity`), as pairing tokens and the Google
+  sign-in state already did: reading the bucket must never let anyone into the live box. Guards,
+  weaker than the rule: the "what a copy of the database holds" cases in
+  `apps/server/src/me-api.test.ts` and `apps/server/src/till-api.test.ts` present the row's id
+  alone, and only the dashboard's stored hash is tried as a token
+  (`packages/identity/src/management-session.test.ts`); a new login table is seen by nothing.
 - **A module depends on another migration set when its SQL `REFERENCES` one of that set's tables,
   puts a `CREATE TRIGGER … ON` one of them, or names one inside a trigger's body — and its
   descriptor's `requires` must name it.** `packages/media/drizzle/0001_image_references.sql` has
@@ -657,6 +671,15 @@ browser test** — most of these rules exist because a test passed while proving
   removes them by label and age — but not every rig stamps the label. Never a blanket
   `docker volume prune`, and `docker volume inspect` before any manual `rm`. Which rig is which:
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
+- **The stream loop test (`apps/server/src/stream-loop.e2e.test.ts`) needs two pinned binaries:
+  without them it is SKIPPED locally and FAILS in CI.** It runs the real Litestream against
+  versitygw started as a plain child process. Install both with
+  `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`; with `CI=true` or
+  `WAITRON_REQUIRE_STREAM_BINARIES=1` a missing one fails the case. **Vitest's default reporter
+  prints a skipped run as `1 skipped` and nothing else** — the reason shows only under
+  `--reporter=verbose` — so a local green run of `apps/server` may not have run it. That CI installs
+  them is guarded by `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT. See
+  [testing-guide.md](docs/developers/testing-guide.md).
 - **A container port-binding timeout needs Docker state as well as the container's own logs.** Save
   `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the
   container. The live subjects are the two `bench/` rigs that start a container, both of which
@@ -847,6 +870,15 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   residuals_). The till follows the primary and never chooses
   (`2026-09-05-till-reroute-design.md` §2); only the primary sells. Fiscal submission is an outbox,
   never inline.
+- **The bucket stream is external too: it never blocks a sale and never fails `/health`.** A copy
+  fifteen minutes behind raises `backup.stream_behind`. The side file is bounded by stopping
+  Litestream at a size limit (`backup.stream_paused`) and then folding the file back; that
+  checkpoint takes its turn in the write queue with no busy wait (`checkpointTruncate`,
+  `packages/store/src/index.ts`), so a sale can queue behind it but never waits on Litestream or the
+  bucket. Guards, narrower than the rule: the frozen-server stage of
+  `apps/server/src/stream-loop.e2e.test.ts` times ten sales against a bound, never reaches the size
+  limit, and is skipped locally without its binaries (§4); the bucket-copy cases in
+  `apps/server/src/health.test.ts` hold `/health`.
 - **`registros_facturacion` is immutable**: it is the table declared `appendOnly()`
   (`packages/fiscal-verifactu/src/classification.ts`), so `applyMigrations` puts a `RAISE(ABORT)`
   trigger on its updates and its deletes. Do not work around them; a value written wrong there stays
@@ -857,7 +889,10 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   unverifiable under the other environment.
 - **Re-registering a node starts a new chain** and mints a fresh installation number. Correct for a
   reimaged box, destructive for a working one. A cold restore (`waitron-restore`) does it
-  automatically for a node that was filing: it floors the installation counter by the clock (the counter is in
+  automatically for a node that was filing, and so does a rebuild from the bucket
+  (`waitron-restore restore --from-bucket`, or the setup wizard's "Restore from my bucket"), which
+  places its copy through the same path — one restore takes one source, never both, or one event
+  would mint two installation numbers. It floors the installation counter by the clock (the counter is in
   the backup, so an older artifact would otherwise re-mint a number a previous restore used), retires
   the node's invoice series and opens disjoint ones, and writes the box's identity only after that
   commits — `docs/superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md`. UNLIKE the
@@ -868,7 +903,10 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   `UNIQUE constraint failed: time_entries.node_id, …`, errcode 2067 — it names the COLUMNS, never
   the index) however it reaches the database; nothing
   carries rows between nodes today. Guard:
-  `packages/workforce/src/restore-continuation.test.ts`.
+  `packages/workforce/src/restore-continuation.test.ts`. On a node that files, every start puts each
+  sale left "being sent" back to waiting before its first filing pass (`resetInFlightClaims`,
+  `apps/server/src/restart-reset.ts`) — safe only
+  because the store refuses a second process on the venue folder (`provisioning.database_in_use`).
 
 ---
 

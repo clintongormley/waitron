@@ -127,6 +127,11 @@ vice versa, or the two files could not be backed up independently.
 > only in hand-written migration SQL is outside it. The six, and the one whose id is configuration
 > rather than a row already read, are in the plan's task P7 step 5.
 
+> **Pointer, 2026-09-25 (slice 2).** Superseded: every table stays in `venue.db` and streams. A row
+> that belongs to one machine is keyed by `node_id` instead of living in `node.db`, which stays empty,
+> reserved for slice 5's mirror box. Anything that works as a live login is stored as a hash, because
+> the bucket now holds it. [Slice-2 spec §2](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
+
 ### 2.2 Generations
 
 Each venue owns one prefix in the store, `venues/<venue-id>/`. Under it the history is a set of
@@ -167,6 +172,13 @@ which store and verifies it, since an older S3-compatible target may lack it.
 > reads `current.json`, not only the membership term.
 
 Retention prunes generations older than the configured window (§7).
+
+> **Pointer, 2026-09-25 (slice 2).** A generation's name also carries when it was opened,
+> `gen-<term>-<node-id>-<opened-at, UTC>` (`packages/stream/src/names.ts`), and opening one starts
+> with a create-only write of a marker object inside it (`claimGeneration`,
+> `packages/stream/src/generations.ts`). A slice-2 rebuild reuses the dead box's node id, and without
+> the time it could sign the same term into a folder that already exists. The pointer, not the name,
+> says which generation is live. [Slice-2 spec §4.4](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
 
 ---
 
@@ -497,6 +509,12 @@ frequent snapshots (hourly) and 30 days' retention. **This replaces the schedule
 does **not** also upload a second copy of the database next to the stream — that is the same data twice
 in one place.
 
+> **Pointer, 2026-09-25 (slice 2).** Slice 2 sets one full copy a day and 168 hours' (seven days')
+> retention, not hourly copies and 30 days (`litestreamConfig`, `packages/stream/src/litestream.ts`).
+> Litestream's retention is set in hours only. Which older restore points survive the window is
+> measured in the [results note](../../research/2026-09-16-sqlite-failover-prototype.md)'s slice-2 section, measurement 3.
+> [Slice-2 spec §4.4](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
+
 ### 7.2 A second copy stays a user option
 
 The backup regime's decision 4 (copies in more than one place, so a dead box and a lost bucket are not
@@ -545,6 +563,11 @@ posture, memory `cold-recovery-no-hot-failover-posture`). When the owner
 later switches on Waitron Cloud, the primary opens `gen-0001`, Litestream takes its first full snapshot,
 and the cloud seat is minted; the venue becomes topology 4.1 with no restart and no wipe.
 
+> **Pointer, 2026-09-25 (slice 2).** The stream goes to S3-compatible buckets only. Litestream 0.5
+> cannot encrypt what it uploads, so a NAS folder or a USB disk would hold the venue's whole database
+> in the clear; the encrypted archive stays the way to put a copy on a USB disk.
+> [Slice-2 spec §0](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md), decision 2.
+
 ### 7.4 Superseded: ciphertext-only offsite, for the stream
 
 The regime's decision 5 required offsite storage to see only ciphertext under the operator's recovery
@@ -576,6 +599,12 @@ is weakened knowingly: the records the stream holds are, once submitted, already
    live ledger**: rolling the ledger back would re-issue invoice numbers. Going back for real is a cold
    restore with a fresh chain, by design.
 
+> **Pointer, 2026-09-25 (slice 2).** Slice 2's rebuild from the bucket claims no seat; seats arrive
+> with promotion in slice 3. It resumes the dead node's own identity from a row locked with the
+> recovery key that streams with the database, and places the copy through the archive restore's own
+> path, so the fiscal restore hook mints a fresh installation number, series and chain as it does for
+> an archive. [Slice-2 spec §3.1 and §5](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
+
 ### 7.6 The legible export the regulation requires
 
 Art. 8.2(c) of RD 1007/2023 requires "un procedimiento de descarga, volcado y archivo seguro de los
@@ -589,6 +618,13 @@ fiscal module's surface.
 Litestream exports its own status (a `status` command and Prometheus metrics) reporting how far behind
 the store is; this feeds the existing backup-age incident, which bounds the loss window for a venue with
 no second box.
+
+> **Pointer, 2026-09-25 (slice 2).** Freshness is read from the bucket, not from Litestream's own
+> status: the supervisor lists the live generation about once a minute and reports how long the
+> oldest change not yet there has waited. It shows on `/health` (which it never fails), the box
+> status page, and the dashboard alerts `backup.stream_behind`, `backup.stream_paused`,
+> `backup.stream_refused`, `backup.stream_bucket_unusable`, `backup.stream_settings_unusable` and
+> `backup.stream_stopped` (`apps/server/src/alert-sources.ts`). [Slice-2 spec §7](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
 
 ---
 
@@ -642,6 +678,13 @@ no-tenant-column guard.
     *(2026-09-21, task P6: of the two alternatives offered for a rate, basis points was taken — every
     rate column is `integer`. A quantity is `bigint`, not `integer`: `numeric(12, 3)` admitted
     999999999999 thousandths, past what four bytes hold. `packages/shared/src/scales.ts`.)*
+
+> **Pointer, 2026-09-25 (slice 2).** `packages/store` keeps SQLite's default automatic checkpoint
+> (every 1000 pages, and passive), not `wal_autocheckpoint = 0` (`packages/store/src/index.ts`).
+> Slice 2's measurement 2 found that, with the bucket reachable, the default restored completely and
+> Litestream logged no warning, with a peak side file below the switched-off arm's by about 0.5% and
+> 1.5% in its two runs, a close comparison ([results note](../../research/2026-09-16-sqlite-failover-prototype.md), slice-2 section). The side file
+> is bounded instead by stopping Litestream at a size limit (slice-2 spec §4.5).
 
 ---
 
@@ -738,6 +781,12 @@ Several specs, not one. Each gets its own spec and plan.
    venue works end to end. The largest slice by far.
 2. **Stream and cold restore.** Litestream supervisor, generations, the store, archive via
    `VACUUM INTO`, freshness on `/health`. Topologies 4.1 and 4.3 without promotion.
+
+   > **Pointer, 2026-09-25.** "Archive via `VACUUM INTO`" landed in slice 1 (slice-1 spec,
+   > decision 7), not here. Slice 2 landed as [its spec](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md): the stream to the owner's bucket,
+   > the rebuild from it, freshness, and the restart reset. It streams to an owner-supplied bucket
+   > only, not to Waitron Cloud, and promotes nothing.
+
 3. **Seats and promotion.** A cloud instance or a box promoted from the store.
 4. **Return, tail shipper, rejoin.**
 5. **The on-prem mirror.** LAN target, follower, copy-up, retarget when the mirror dies.

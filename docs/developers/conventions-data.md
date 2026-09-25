@@ -889,8 +889,8 @@ Run both after adding any table anywhere.
 
 ## A `local` row belongs to one node, so no foreign key may join a `local` table to a `ledger`/`state` one
 
-Every table is in `venue.db`, the file slice 2 will stream (slice-2 spec §2, which replaced the
-topology design's plan to put `local` tables in `node.db`). A `local` row means nothing to another
+Every table is in `venue.db`, which streams whole to the owner's bucket (slice-2 spec §2, which
+replaced the topology design's plan to put `local` tables in `node.db`). A `local` row means nothing to another
 node, so no venue row may depend on one, and `node.db` stays reserved for a later slice that may
 move `local` tables into it — which a key in either direction would block. Guard:
 `scripts/two-file-foreign-keys.test.ts`.
@@ -1214,8 +1214,8 @@ process per folder.
 **Litestream is a second process on `venue.db`, and it takes no lock.** While a primary streams its
 copy to the owner's bucket, the server runs Litestream as its own child process
 (`packages/stream/src/supervisor.ts`), and Litestream reads and writes `venue.db` without
-`venue.lock`; the slice-2 plan (Reconciliation L1) records that it adds `_litestream_seq` and
-`_litestream_lock` tables inside the file and a `.venue.db-litestream/` folder beside it. It is only
+`venue.lock`; it adds `_litestream_seq` and `_litestream_lock` tables inside the file and a
+`.venue.db-litestream/` folder beside it (the last section of this file). It is only
 ever started by the server that holds the lock, and `stopWork` stops it before the store closes
 (`apps/server/src/boot.ts`).
 
@@ -1632,3 +1632,28 @@ unchanged. (That target became `(id, product_id)` when the tenant column went, 2
 receipt was `pnpm --filter @waitron/catalogue test src/variants.db.test.ts`, which exercised the
 migration; the suite still exists, while the `TESTCONTAINERS_RYUK_DISABLED=true` prefix it ran under
 does not — there is no Testcontainers PostgreSQL tier any more.
+
+## A streamed `venue.db` holds Litestream's own tables and a directory beside it
+
+Litestream 0.5.17 adds two tables, `_litestream_seq` and `_litestream_lock`, to the database it
+replicates, and keeps its own copies of what it uploaded in `.venue.db-litestream/` beside the file.
+A restore of the stream carries the two tables too; a migrated database that nothing has streamed has
+neither.
+
+Measured 2026-09-25 on darwin/arm64 with the pinned binaries under `.bin/` (Litestream 0.5.17,
+versitygw 1.8.0 started with `--sidecar`), on a scratch database holding one table `t`. Before
+streaming, `sqlite3 venue.db "select type, name from sqlite_schema"` printed `table|t` alone and the
+folder held `venue.db`, `venue.db-shm` and `venue.db-wal`. After `litestream replicate -once`, the same
+query printed `table|t`, `table|_litestream_seq` and `table|_litestream_lock`, and `find` showed
+`.venue.db-litestream/ltx/0/0000000000000001-0000000000000001.ltx` beside the file. A
+`litestream restore -o restored.db` of that replica listed the same three tables. (The slice-2 plan's
+Task 10 drafter recorded the same result on 2026-09-23.)
+
+So a comparison of two venue databases leaves the two tables out, as the stream loop test's
+`tableContents` does (`apps/server/src/stream-loop.e2e.test.ts`), and a check that lists a live or
+restored database's tables has to leave them out explicitly. The directory goes with the database it
+describes: `wipeVenueDatabases` (`apps/server/src/db-wipe.ts`) and `restoreDatabase`
+(`apps/server/src/restore.ts`) remove it with `venue.db`, and the stream supervisor removes it before
+it starts Litestream on a new generation (`packages/stream/src/supervisor.ts`). What Litestream itself
+does with a stale directory beside a replaced `venue.db` was not measured. Nothing finds a new piece
+of code that lists tables or empties the folder and forgets either.

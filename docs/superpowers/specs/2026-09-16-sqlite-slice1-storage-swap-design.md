@@ -259,6 +259,9 @@ until slice 2. **Slice 1 leaves automatic checkpointing at SQLite's default**, a
 in the same change that starts the Litestream supervisor. Landing slice 1 with checkpointing disabled
 and nothing else checkpointing would let the write-ahead file grow without limit from day one.
 
+> **Pointer, 2026-09-25 (slice 2).** Slice 2 did not turn it off: its measurement 2 found no need,
+> and `packages/store/src/index.ts` keeps SQLite's default. See the topology design's §8.3 pointer.
+
 ---
 
 ## 4. The transaction helper, and the write queue

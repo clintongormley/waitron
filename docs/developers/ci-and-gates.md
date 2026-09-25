@@ -676,6 +676,33 @@ file of its own, another bundler, or esbuild reached by path — is not flagged.
 so the other bundles the server's `build` makes, and `waitron-provision` (`dist/bin.js` in
 `packages/provisioning`), are not read by it.
 
+### `test-server`'s shards download two binaries for the stream loop test
+
+Each of the three `test-server` shards runs `node scripts/setup-litestream.mjs` and
+`node scripts/setup-s3-test-server.mjs` before its tests, because file sharding decides which shard
+gets `apps/server/src/stream-loop.e2e.test.ts`, and that test fails rather than skips in CI without
+them ([testing-guide.md](testing-guide.md), "The stream loop test"). That is about 13.5 MB of
+Litestream and 27.5 MB of versitygw per shard for linux/amd64 (the release APIs' `size` fields,
+read 2026-09-25), from GitHub's release downloads, each checked against a pinned SHA-256. The time
+it adds to a shard has not been measured.
+
+They are not cached. On 2026-09-25 `gh api repos/:owner/:repo/actions/cache/usage` reported
+11,174,362,480 bytes across 1,066 entries, and the plan's grouping of the entries on 2026-09-23 put
+about nine tenths of it in Docker layers; a new entry would compete under least-recently-used eviction
+with the pnpm store and Playwright entries the test jobs restore (see "The GHA cache is a shared
+per-repository budget" above). An error answer from a release download fails the shard with a message
+naming the URL.
+
+**A change to either installer alone runs no `test-server` shard.** Neither script is in
+`ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`), so a push touching only one of them is root
+machinery. Checked 2026-09-25 by piping each path into `node scripts/changed-packages.mjs`: both
+printed `code=false`, `scope=root`, while `scripts/bundle-node.mjs`, a listed consumer, printed
+`code=true` with `@waitron/server` in `packages`. `main` forces `scope=global` but keeps that
+`code=false` (the `changes` job in `.github/workflows/ci.yml`), so the merge of such a change runs no
+shard either. The installers' own suites run in the root project on every push, with the download
+injected; the first real download through a changed installer is the next run that tests
+`apps/server`. Not fixed: listing them would send every installer change through the server shards.
+
 ## Two TypeScript compilers are installed, and that is deliberate
 
 Since 2026-09-20 a package's `tsc` is **TypeScript 7** — the compiler rewritten in Go. Measured on

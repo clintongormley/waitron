@@ -513,6 +513,10 @@ Stated together, because each is something a reader would otherwise assume the g
   and its refusal to run against a configuration file it did not write — are driven by no scenario. They
   are there because the failure they prevent is silent. A later task should pin them or delete them.
 
+**Pointer, 2026-09-25 (slice 2).** A rebuilt box's generation, and a restore that follows
+`current.json`, are exercised by `apps/server/src/stream-loop.e2e.test.ts` against
+versitygw 1.8.0, not against a production store. A promoted node's generation is still unowned.
+
 ## Standing obligations
 
 - **Re-run S6 against the real store when Waitron Cloud picks one**, and against any self-host target the
@@ -531,6 +535,10 @@ Stated together, because each is something a reader would otherwise assume the g
 - **Measure the sales-a-day rate** before quoting S4's days-per-GiB at anyone; 250 is an assumption.
 - **Re-run everything on a litestream or MinIO bump.** The verdicts do not carry across a version.
 
+**Pointer, 2026-09-25 (slice 2).** The conditional write is now checked on each owner's own bucket by the Backups screen's Test
+(`probeBucket`, `packages/stream/src/probe.ts`), and on versitygw 1.8.0 by the stream loop test.
+Waitron Cloud's store, and any other self-host target the product claims, still need their own run.
+
 ## What this gate leaves to be built
 
 Two design decisions this measurement hands to slice 2:
@@ -545,6 +553,10 @@ Two design decisions this measurement hands to slice 2:
 - **The fence-before-ship rule removes S2's failing sequences** — an argument from the design, since
   nothing here fences a sender — so whichever slice turns promotion on owns it, together with the
   restart reset above. **2026-09-23:** the restart reset is built — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`), see `docs/backlog.md`.
+
+**Pointer, 2026-09-25 (slice 2).** The offline side file is bounded by stopping Litestream at a
+256 MiB limit and then folding the file back with a checkpoint that does not wait on a busy database
+(slice-2 spec §4.5; `StreamSupervisor`, `packages/stream/src/supervisor.ts`, #590).
 
 ## Slice 2 measurements
 
