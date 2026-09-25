@@ -655,6 +655,22 @@ it("links category-only image usage to its category without an inactive-product 
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
 });
 
+it("names a section using the image by its internal name, and blocks the delete", async () => {
+  const client = api();
+  client.getImage.mockResolvedValue({
+    image,
+    uses: [{ kind: "section", id: "drinks", internalName: "Drinks (internal)" }],
+  });
+  await mount(client);
+  click("[data-test=delete-one]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe("Drinks (internal)"),
+  );
+  // No screen shows a single section, so there is nothing to link to.
+  expect(el.shadowRoot!.querySelector("wt-modal li a")).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
+});
+
 function openDialog(): HTMLDialogElement {
   return el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!;
 }

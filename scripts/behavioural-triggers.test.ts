@@ -58,10 +58,11 @@ import {
  */
 
 /**
- * The other triggers a fully migrated venue carries: they stand in for the two foreign keys
- * `products.image` and `category_details.image` (`packages/media/drizzle/0001_image_references.sql`
- * carries the reasoning). Named here only because the assertion below is an EQUALITY over every
- * non-append-only trigger.
+ * The other triggers a fully migrated venue carries: they stand in for the three foreign keys
+ * `products.image`, `category_details.image` and `sections.image`
+ * (`packages/media/drizzle/0001_image_references.sql` carries the reasoning, and
+ * `packages/media/drizzle/0002_section_image_references.sql` adds the four on `sections.image`).
+ * Named here only because the assertion below is an EQUALITY over every non-append-only trigger.
  */
 const IMAGE_REFERENCE_TRIGGERS = [
   "category_details_media_image_fk_insert",
@@ -72,6 +73,10 @@ const IMAGE_REFERENCE_TRIGGERS = [
   "products_media_image_fk_parent_delete",
   "products_media_image_fk_parent_rename",
   "products_media_image_fk_update",
+  "sections_media_image_fk_insert",
+  "sections_media_image_fk_parent_delete",
+  "sections_media_image_fk_parent_rename",
+  "sections_media_image_fk_update",
 ];
 
 /**

@@ -16,6 +16,7 @@ import { createUnit } from "./units.js";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { extraLists } from "./schema/extras.js";
 import { units } from "./schema/units.js";
+import { sections } from "./schema/sections.js";
 
 // Every row below is written through its drizzle table: an `id` comes from the table's own
 // `$defaultFn` rather than from a SQL default. The serialisation cases are in
@@ -253,6 +254,43 @@ describe("site content languages", () => {
       // null or an empty map — is no gap, the same split the option kinds above make.
       expect(gaps).not.toContainEqual({ kind: "extra_list", id: plain });
       expect(gaps).not.toContainEqual({ kind: "extra_list", id: blank });
+    });
+  });
+
+  it("reports a library section's partly filled customer names as a gap, and an empty map as none", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const menu = await createCatalogue(tx, { name: "Lunch" });
+      const section = async (
+        names: Record<string, string>,
+        role: "library" | "menu_root" = "library",
+      ) =>
+        (
+          await tx
+            .insert(sections)
+            .values({
+              internalName: "Drinks (internal)",
+              names,
+              role,
+              ownerMenuId: role === "library" ? null : menu.id,
+            })
+            .returning({ id: sections.id })
+        )[0]!.id;
+      const spanishOnly = await section({ es: "Bebidas" });
+      const none = await section({});
+      const both = await section({ en: "Drinks", es: "Bebidas" });
+      // A menu's own list is not in the sections library, so the report does not name it.
+      const root = await section({ es: "Carta" }, "menu_root");
+
+      const gaps = await listContentTranslationGaps(tx, "en");
+
+      expect(gaps).toContainEqual({ kind: "library_section", id: spanishOnly });
+      expect(gaps).not.toContainEqual({ kind: "library_section", id: none });
+      expect(gaps).not.toContainEqual({ kind: "library_section", id: both });
+      expect(gaps.map((gap) => gap.id)).not.toContain(root);
+      await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] });
+      await expect(
+        writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
+      ).rejects.toMatchObject({ code: "content.default_missing", params: { language: "en" } });
     });
   });
 

@@ -967,7 +967,9 @@ The live instance of the trigger edge is `packages/media`. Its
 `drizzle/0001_image_references.sql` carries eight triggers standing in for two foreign keys, and four
 of them sit on tables another set owns: `products`, created by core in
 `packages/db/drizzle/0000_baseline.sql` and rebuilt by core's
-`0003_variant_inherited_nullable.sql`, and `category_details`, created by catalogue. Both are
+`0003_variant_inherited_nullable.sql`, and `category_details`, created by catalogue.
+`drizzle/0002_section_image_references.sql` adds four more of the same shape for `sections.image`,
+two of them on catalogue's `sections`. Both edges are
 declared — media's descriptor reads `requires: { core: "*", modules: { catalogue: "*" } }`
 (`packages/media/src/module.ts`) — which is what the guard checks; the guard's job is the case where
 such an edge is NOT declared. Core's own triggers, in its migration files under

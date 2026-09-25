@@ -1,13 +1,18 @@
 import {
+  addMember,
   createCatalogue,
   createExtraList,
   createMenuItem,
   createMenuSection,
   createOptionList,
   createProduct,
+  createSection,
   listExtraLists,
   listMenuOffers,
   listOptionLists,
+  listSections,
+  readSection,
+  sections,
   setMenuItemExtraLists,
   updateOptionList,
   writeProductModifiers,
@@ -771,5 +776,85 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     const extras = coffee.offeredModifiers[0]!;
     if (extras.kind !== "extras") throw new Error("expected the extras list first");
     expect(extras.items.map((item) => item.price)).toEqual(["0.90"]);
+  });
+});
+
+it("transfers sections and their members, remapping ids, with a section's image", async () => {
+  const photo = await samplePreparedImage({ width: 8 });
+  const source = await applyVenue(planVenue(venue("B55667788"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const original = await withTransaction(suite.db, async (tx) => {
+    const { image } = await uploadImage(
+      tx,
+      { image: photo, names: { es: "Bebidas" }, altText: { es: "Vasos" }, labels: [] },
+      {},
+    );
+    const menu = await createCatalogue(tx, { name: "Sections menu" });
+    const water = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: "Agua",
+      pricingUnit: "each",
+      unitPrice: "1.00",
+      vatClass: "general",
+    });
+    const drinks = await createSection(tx, {
+      internalName: "Bebidas (interno)",
+      names: { es: "Bebidas" },
+      image: image.filename,
+    });
+    const beer = await createSection(tx, { internalName: "Cervezas" });
+    await addMember(tx, drinks.id, { kind: "product", productId: water.id });
+    await addMember(tx, drinks.id, { kind: "section", sectionId: beer.id });
+    const [root] = await tx
+      .insert(sections)
+      .values({ internalName: "Carta", role: "menu_root", ownerMenuId: menu.id })
+      .returning({ id: sections.id });
+    await addMember(tx, root!.id, { kind: "section", sectionId: drinks.id });
+    return { drinks: drinks.id, image: image.filename };
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-09-25T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.sections).toHaveLength(3);
+  expect(transferred.tables.section_members).toHaveLength(3);
+  await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  await withTransaction(targetSuite.db, async (tx) => {
+    const library = await listSections(tx);
+    expect(library.map((row) => row.internalName)).toEqual(["Bebidas (interno)", "Cervezas"]);
+    const [drinks, beer] = library;
+    expect(drinks!.id).not.toBe(original.drinks);
+    expect(drinks).toMatchObject({ names: { es: "Bebidas" }, image: original.image });
+    const [product] = await tx
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.name, "Agua"));
+    expect(drinks!.members.map((member) => member.ref)).toEqual([
+      { kind: "product", productId: product!.id },
+      { kind: "section", sectionId: beer!.id },
+    ]);
+    const [menu] = await tx
+      .select({ id: catalogues.id })
+      .from(catalogues)
+      .where(eq(catalogues.name, "Sections menu"));
+    const [root] = await tx
+      .select({ id: sections.id })
+      .from(sections)
+      .where(eq(sections.ownerMenuId, menu!.id));
+    expect((await readSection(tx, root!.id)).members.map((member) => member.ref)).toEqual([
+      { kind: "section", sectionId: drinks!.id },
+    ]);
   });
 });

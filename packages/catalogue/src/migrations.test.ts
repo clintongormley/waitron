@@ -59,6 +59,8 @@ const TABLES = [
   "menu_item_extra_lists",
   "menu_item_extra_items",
   "product_modifiers",
+  "sections",
+  "section_members",
 ];
 
 /**
@@ -163,6 +165,8 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_item_extra_lists: "menu_item_id, list_id",
       menu_item_extra_items: "menu_item_id, list_id, product_id",
       product_modifiers: "id",
+      sections: "id",
+      section_members: "id",
     });
 
     expect(foreignKeys).toEqual({
@@ -191,6 +195,10 @@ describe("the catalogue migration set carries no tenant column", () => {
       "product_modifiers(product_id)": "products(id) on delete cascade",
       "product_units(product_id)": "products(id) on delete cascade",
       "product_units(unit_id)": "units(id) on delete restrict",
+      "section_members(child_section_id)": "sections(id) on delete cascade",
+      "section_members(product_id)": "products(id) on delete cascade",
+      "section_members(section_id)": "sections(id) on delete cascade",
+      "sections(owner_menu_id)": "catalogues(id) on delete no action",
     });
 
     expect(checks).toEqual({
@@ -211,6 +219,9 @@ describe("the catalogue migration set carries no tenant column", () => {
       extra_list_items_price_ck: `"extra_list_items"."price" >= 0`,
       menu_item_extra_items_price_ck: `"menu_item_extra_items"."price" >= 0`,
       product_modifiers_one_reference_ck: `("product_modifiers"."extra_list_id" is null) <> ("product_modifiers"."option_list_id" is null)`,
+      sections_role_ck: `"sections"."role" in ('library', 'menu_root', 'home_layout')`,
+      sections_owner_ck: `("sections"."role" = 'library') = ("sections"."owner_menu_id" is null)`,
+      section_members_one_ref_ck: `("section_members"."product_id" is null) <> ("section_members"."child_section_id" is null)`,
     });
   });
 
@@ -261,6 +272,12 @@ describe("the catalogue migration set carries no tenant column", () => {
       product_modifiers_product_sort_idx: { unique: false, columns: "product_id, sort" },
       product_units_unit_idx: { unique: false, columns: "unit_id" },
       units_seed_key_key: { unique: true, columns: "seed_key" },
+      sections_owner_menu_idx: { unique: false, columns: "owner_menu_id" },
+      section_members_product_uq: { unique: true, columns: "section_id, product_id" },
+      section_members_child_uq: { unique: true, columns: "section_id, child_section_id" },
+      section_members_order_idx: { unique: false, columns: "section_id, position" },
+      section_members_child_idx: { unique: false, columns: "child_section_id" },
+      section_members_product_idx: { unique: false, columns: "product_id" },
     });
   });
 });

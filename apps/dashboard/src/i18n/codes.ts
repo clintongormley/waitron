@@ -71,6 +71,34 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Choose a place outside this category and its subcategories.",
     es: "Elige un destino fuera de esta categoría y de sus subcategorías.",
   },
+  "menu_section.not_found": {
+    en: "This section, or the item in it, no longer exists. Refresh the list.",
+    es: "Esta sección, o el elemento que contiene, ya no existe. Actualiza la lista.",
+  },
+  "menu_section.invalid": {
+    en: "Check the section's details or the position you chose, and try again.",
+    es: "Revisa los datos de la sección o la posición elegida y vuelve a intentarlo.",
+  },
+  "menu_section.translation_required": {
+    en: "Add the section's customer name in the default content language, or remove the customer names.",
+    es: "Añade el nombre de la sección para clientes en el idioma de contenido predeterminado, o quita los nombres para clientes.",
+  },
+  "menu_section.member_cycle": {
+    en: "A section cannot contain itself, directly or through another section.",
+    es: "Una sección no puede contenerse a sí misma, ni directamente ni a través de otra sección.",
+  },
+  "menu_section.member_duplicate": {
+    en: "This list already contains that item.",
+    es: "Esta lista ya contiene ese elemento.",
+  },
+  "menu_section.not_library": {
+    en: "A menu's own list cannot be used this way.",
+    es: "La lista propia de un menú no se puede usar de esta forma.",
+  },
+  "menu_section.membership_invalid": {
+    en: "Some of the chosen items cannot be used. Refresh the list and try again.",
+    es: "Algunos de los elementos elegidos no se pueden usar. Actualiza la lista e inténtalo de nuevo.",
+  },
   "label.invalid": {
     en: "Enter a label name, and choose each label only once.",
     es: "Introduce un nombre de etiqueta y elige cada etiqueta una sola vez.",

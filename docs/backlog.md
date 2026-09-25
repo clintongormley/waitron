@@ -201,7 +201,27 @@ label routes and `?descendants=1` on a category's products have no dashboard cal
 every till filing path records each sale line's product, a variant's parent, its menu, its gross
 and its reporting chain and labels when the record is issued. `sale_lines.menu_version_id` stays
 null on every line until the menus plan's Task 7 (sell from the published version) fills it; that
-task wires it, because it lands second. Two follow-ups it leaves: the till shows "try again" when `sale_classification.invalid` refuses a sale (it happens only on corrupt category data, and retrying cannot succeed), so the code wants its own till message on the permanent-refusal list; and a card recovery refused that way leaves a captured payment unlinked until the catalogue is fixed, as recovery's existing below-locked-total refusal already does. The demo seed (`apps/server/scripts/demo-seed/seed-sales.ts`), the other scripts that call `recordSale` directly (`record-one-sale.ts`, `settle-invoice-first.ts`, `daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts` file sales without the issuance pass, so seeded demo lines carry no product id, classification or gross, and the spec's category reports would show every one as Not recorded — classification Task 3 cannot measure its reports on seeded sales until the seed records them. A dev venue that applied the branch's first migration name before it was regenerated as `0010_sale_line_classification` needs `wa-wt reset demo <name>`. Next in the lane: menus Task 1 (sections). The owner lifted the
+task wires it, because it lands second. Two follow-ups it leaves: the till shows "try again" when `sale_classification.invalid` refuses a sale (it happens only on corrupt category data, and retrying cannot succeed), so the code wants its own till message on the permanent-refusal list; and a card recovery refused that way leaves a captured payment unlinked until the catalogue is fixed, as recovery's existing below-locked-total refusal already does. The demo seed (`apps/server/scripts/demo-seed/seed-sales.ts`), the other scripts that call `recordSale` directly (`record-one-sale.ts`, `settle-invoice-first.ts`, `daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts` file sales without the issuance pass, so seeded demo lines carry no product id, classification or gross, and the spec's category reports would show every one as Not recorded — classification Task 3 cannot measure its reports on seeded sales until the seed records them. A dev venue that applied the branch's first migration name before it was regenerated as `0010_sale_line_classification` needs `wa-wt reset demo <name>`. **Menus Task 1 (sections), on `feat/menus-sections` (2026-09-25):**
+reusable, ordered, nestable sections (`sections`, `section_members`), with section and member
+routes under `/management-api/sections` (add, add several products, move, remove, replace in
+place, duplicate — optionally replacing in the same request — and usages), and four media triggers
+guarding a section's image. Menus do not use them yet; Task 3 does. Measured: a venue built and
+demo-seeded by `main` at `f19d556d4`, upgraded by this branch through `applyMigrations`, applied one
+catalogue and one media migration and changed no row count in the fourteen tables compared, and the
+upgraded file refused a section naming a missing image — so this task needs no venue reset. Left for
+Task 2 (the sections library screen): the image library names a section using a photo without a
+link, because no sections screen exists yet; `docs/content-and-images.md` tells readers the
+dashboard cannot edit a reusable section's names or remove its photo, and must point them at the
+sections screen once it exists; and `packages/catalogue/src/section-types.ts` holds a runtime
+constant (`SECTION_ROLES`), so it cannot join the type-only list in
+`scripts/dashboard-browser-purity.test.ts` as its siblings `menu-types.ts` and
+`modifier-list-types.ts` do — before the dashboard imports it, split the constant out or give the
+guard a way to admit it. A follow-up that is not Task 2's: each table that can hold a photo is
+named by hand in several places in `packages/media` (the triggers, `listImageUsages`,
+`countUsages`, the live-query dependencies, the `before` lists in `module.ts`, the `ImageUsage`
+unions), and only a comment keeps `countUsages` and `listImageUsages` in step; one list of
+photo-holding tables that those derive from, checked against the triggers, would make the next
+such table one edit. Next in the lane: menus Task 2. The owner lifted the
 wait: the dependency upgrades are finished, and the work does not wait for SQLite slice 2. The
 menus plan's decisions D1–D23 settle the spec's open integration points; D6, D9, D10, D11, D12,
 D13 and D22 are the ones flagged for the owner. Menus Task 3 wipes existing venues (it rebuilds

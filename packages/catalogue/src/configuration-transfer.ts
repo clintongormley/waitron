@@ -18,5 +18,7 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     { name: "menu_item_extra_lists" },
     { name: "menu_item_extra_items" },
     { name: "product_modifiers" },
+    { name: "sections" },
+    { name: "section_members" },
   ],
 } as const;

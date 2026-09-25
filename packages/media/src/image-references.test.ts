@@ -1,15 +1,29 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, catalogues, categories, products, type Database } from "@waitron/db";
-import { CATALOGUE_MIGRATIONS, categoryDetails } from "@waitron/catalogue";
+import {
+  CORE_MIGRATIONS,
+  catalogues,
+  categories,
+  products,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
+import {
+  CATALOGUE_MIGRATIONS,
+  categoryDetails,
+  createSection,
+  sections,
+  updateSection,
+} from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 
 /**
- * `products.image` and `category_details.image` may only name a photo that exists, and a photo one
- * of them still names cannot be deleted or renamed. The rules are triggers, not keys
- * (`packages/media/drizzle/0001_image_references.sql`, whose header carries why).
+ * `products.image`, `category_details.image` and `sections.image` may only name a photo that
+ * exists, and a photo one of them still names cannot be deleted or renamed. The rules are triggers, not keys
+ * (`packages/media/drizzle/0001_image_references.sql`, whose header carries why, and
+ * `0002_section_image_references.sql` for `sections.image`).
  *
  * READING `sqlite_master` IS NOT ENOUGH, so the names are pinned AND every rule has a real
  * offending write with an ACCEPTING control in the other direction — without the control a trigger
@@ -30,9 +44,10 @@ interface Fixture {
   catalogueId: string;
   productId: string;
   categoryId: string;
+  sectionId: string;
 }
 
-/** One image, one catalogue with a product, and one category with its details row. */
+/** One image, one catalogue with a product, one category with its details row, and one section. */
 async function fixture(db: Database): Promise<Fixture> {
   await db
     .insert(mediaImages)
@@ -55,7 +70,16 @@ async function fixture(db: Database): Promise<Fixture> {
     .values({ name: { en: "Bakery" } })
     .returning({ id: categories.id });
   await db.insert(categoryDetails).values({ categoryId: category!.id });
-  return { catalogueId: menu!.id, productId: product!.id, categoryId: category!.id };
+  const [section] = await db
+    .insert(sections)
+    .values({ internalName: "Bakery" })
+    .returning({ id: sections.id });
+  return {
+    catalogueId: menu!.id,
+    productId: product!.id,
+    categoryId: category!.id,
+    sectionId: section!.id,
+  };
 }
 
 async function removeImages(): Promise<void> {
@@ -76,7 +100,7 @@ beforeEach(async () => {
   ids = await fixture(suite.db);
 });
 
-it("creates the eight triggers that stand in for the two foreign keys", async () => {
+it("creates the twelve triggers that stand in for the three foreign keys", async () => {
   const rows = await suite.db.execute<{ name: string }>(sql`
     select name from sqlite_master where type = 'trigger' and name glob '*media_image_fk*'
     order by name`);
@@ -89,6 +113,10 @@ it("creates the eight triggers that stand in for the two foreign keys", async ()
     "products_media_image_fk_parent_delete",
     "products_media_image_fk_parent_rename",
     "products_media_image_fk_update",
+    "sections_media_image_fk_insert",
+    "sections_media_image_fk_parent_delete",
+    "sections_media_image_fk_parent_rename",
+    "sections_media_image_fk_update",
   ]);
 });
 
@@ -170,6 +198,49 @@ describe("a written image filename", () => {
   });
 });
 
+describe("a section's image", () => {
+  const insert = async (image: string | null): Promise<void> => {
+    await suite.db.insert(sections).values({ internalName: "Drinks", image });
+  };
+  const update = async (image: string): Promise<void> => {
+    await suite.db.execute(sql`update sections set image = ${image} where id = ${ids.sectionId}`);
+  };
+
+  it("is refused on a sections insert unless an image carries it", async () => {
+    await expect(insert(ABSENT)).rejects.toMatchObject({
+      message: "sections_media_image_fk",
+    });
+    await insert(PRESENT);
+    await insert(null);
+    const rows = await suite.db.execute<{ n: number }>(
+      sql`select count(*) as n from sections where internal_name = 'Drinks'`,
+    );
+    expect(rows.rows[0]!.n).toBe(2);
+  });
+
+  it("is refused on a sections update unless an image carries it", async () => {
+    await expect(update(ABSENT)).rejects.toMatchObject({ message: "sections_media_image_fk" });
+    await update(PRESENT);
+    const rows = await suite.db.execute<{ image: string }>(
+      sql`select image from sections where id = ${ids.sectionId}`,
+    );
+    expect(rows.rows[0]!.image).toBe(PRESENT);
+  });
+
+  it("is checked by the section writes before the database is asked", async () => {
+    const created = await withTransaction(suite.db, (tx) =>
+      createSection(tx, { internalName: "Bread", image: PRESENT }),
+    );
+    expect(created.image).toBe(PRESENT);
+    await expect(
+      withTransaction(suite.db, (tx) => updateSection(tx, created.id, { image: ABSENT })),
+    ).rejects.toMatchObject({ code: "menu_section.invalid", params: { field: "image" } });
+    await expect(
+      withTransaction(suite.db, (tx) => createSection(tx, { internalName: "X", image: ABSENT })),
+    ).rejects.toMatchObject({ code: "menu_section.invalid", params: { field: "image" } });
+  });
+});
+
 describe("an image a catalogue row still names", () => {
   it("cannot be deleted or renamed while a product names it, and can once the product lets go", async () => {
     await suite.db.execute(sql`update products set image = ${PRESENT} where id = ${ids.productId}`);
@@ -195,6 +266,19 @@ describe("an image a catalogue row still names", () => {
       message: "category_details_media_image_fk",
     });
     await suite.db.execute(sql`update category_details set image = null`);
+    await removeImages();
+    expect(await imageCount()).toBe(0);
+  });
+
+  it("cannot be deleted or renamed while a section names it, and can once the section lets go", async () => {
+    await suite.db.execute(sql`update sections set image = ${PRESENT} where id = ${ids.sectionId}`);
+    await expect(removeImages()).rejects.toMatchObject({
+      message: "sections_media_image_fk",
+    });
+    await expect(renameImages()).rejects.toMatchObject({
+      message: "sections_media_image_fk",
+    });
+    await suite.db.execute(sql`update sections set image = null`);
     await removeImages();
     expect(await imageCount()).toBe(0);
   });

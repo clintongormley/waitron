@@ -1,6 +1,7 @@
 import { categories, now, products, type Transaction } from "@waitron/db";
 import { AppError, FALLBACK_LOCALE, isUuid } from "@waitron/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { batches } from "./batches.js";
 import { categoryDetails } from "./schema/categories.js";
 import { productLabels } from "./schema/labels.js";
 import { validateContentTranslations } from "./content-languages.js";
@@ -72,14 +73,18 @@ async function validateParent(tx: Transaction, id: string, parentId: string | nu
     parentId = (await readCategory(tx, parentId)).parentId;
   }
 }
-async function validateImage(tx: Transaction, filename: string | null): Promise<void> {
-  if (filename === null) return;
-  if (!(await tablePresent(tx, "media_images"))) throw new AppError("category.image_not_found", {});
-  // The media module owns the foreign key. The row cannot be deleted between this read and the
+/** Does the media library hold this file? Never, where the media module is not installed. */
+export async function mediaImageExists(tx: Transaction, filename: string): Promise<boolean> {
+  if (!(await tablePresent(tx, "media_images"))) return false;
+  // The media module owns the reference. The row cannot be deleted between this read and the
   // write that depends on it: one write transaction runs on the venue file at a time, so there is
   // no concurrent deleter to hold the reference against.
   const image = await tx.execute(sql`select 1 from media_images where filename = ${filename}`);
-  if (!image.rows.length) throw new AppError("category.image_not_found", {});
+  return image.rows.length > 0;
+}
+async function validateImage(tx: Transaction, filename: string | null): Promise<void> {
+  if (filename !== null && !(await mediaImageExists(tx, filename)))
+    throw new AppError("category.image_not_found", {});
 }
 /**
  * Has an optional module's table been migrated into this database?
@@ -95,9 +100,12 @@ async function tablePresent(tx: Transaction, name: string): Promise<boolean> {
   );
   return found.rows[0]!.n > 0;
 }
+export function isHexColor(value: unknown): value is string {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/.test(value);
+}
 function validateColor(color: string | null | undefined): void {
   if (color === undefined || color === null) return;
-  if (!/^#[0-9a-f]{6}$/.test(color)) throw new AppError("category.color_invalid", {});
+  if (!isHexColor(color)) throw new AppError("category.color_invalid", {});
 }
 export async function createCategory(
   tx: Transaction,
@@ -232,6 +240,23 @@ export async function categoryDependants(tx: Transaction, id: string): Promise<C
     routes,
   };
 }
+/** Are these all distinct top-level products? A repeat leaves the count short, as an absent id does. */
+export async function allTopLevelProducts(
+  tx: Transaction,
+  ids: readonly unknown[],
+): Promise<boolean> {
+  if (ids.some((id) => typeof id !== "string")) return false;
+  // Counted as a set, so a repeat in a later batch than its first still leaves the count short.
+  const found = new Set<string>();
+  for (const batch of batches(ids as string[])) {
+    const rows = await tx
+      .select({ id: products.id })
+      .from(products)
+      .where(and(inArray(products.id, batch), isTopLevelProduct));
+    for (const row of rows) found.add(row.id);
+  }
+  return found.size === ids.length;
+}
 /**
  * Set a product's main reporting category: any category, or null for Uncategorised. On a variant
  * (reached only with scope `"any"`) null means it follows its parent's.
@@ -267,14 +292,8 @@ export async function addProductsToCategory(
   if (!Array.isArray(productIds) || productIds.some((id) => !isUuid(id)))
     throw new AppError("category.membership_invalid", {});
   if (productIds.length === 0) return;
-  // Resolve the whole selection in one read, so an unknown, repeated or variant's id is
-  // refused before anything is written rather than part-way through a loop: a repeat leaves the
-  // count short exactly as an absent id does.
-  const found = await tx
-    .select({ id: products.id })
-    .from(products)
-    .where(and(inArray(products.id, productIds), isTopLevelProduct));
-  if (found.length !== productIds.length) throw new AppError("category.membership_invalid", {});
+  if (!(await allTopLevelProducts(tx, productIds)))
+    throw new AppError("category.membership_invalid", {});
   await tx
     .update(products)
     .set({ categoryId, updatedAt: now() })
