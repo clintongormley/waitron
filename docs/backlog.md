@@ -5524,9 +5524,13 @@ open:
   backup settings screen's Test and Save buttons run (`probeBucket`, opened in
   `apps/server/src/boot.ts`, called from `apps/server/src/stream-api.ts`). A per-call abort signal or request timeout
   inside `createS3ObjectStore` would bound and cancel every caller's calls.
-- Open question: the first start's pointer read and the bucket calls of the command line and the
-  setup restores use different limits (15 seconds and 60 seconds) and report different codes
-  (`restore.pointer_unreadable` and `backup.stream_request_failed`). Neither the code nor the plan says why they differ.
+- Open question: the first start's pointer read and the bucket rebuild's calls (the command line's
+  `--from-bucket` and the wizard's `/setup-api/restore-bucket`) use different limits (15 seconds
+  and 60 seconds) and report different codes (`restore.pointer_unreadable` and
+  `backup.stream_request_failed`). Neither the code nor the plan says why they differ. The
+  backup-file restores (command line and wizard) and the Cloud restore make their bucket calls
+  inside `refuseIfArchiveSourceLive` (`apps/server/src/restore-stream.ts`), which reports a
+  timed-out call as `restore.stream_source_unchecked` with reason `bucket`.
 
 Task 9c, "Restore from my bucket" in the setup wizard. A third card on the wizard's "Join or
 recover an existing restaurant" screen takes the recovery kit (pasted or read from a file) and the
