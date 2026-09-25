@@ -284,6 +284,18 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "Antes de nada, pide a quien instaló este equipo que lo revise. La salida del propio servidor indica si la base de datos anterior del equipo sigue sin cambios o quedó en una carpeta dentro de la carpeta de su local; en ese caso hay que devolverla a su sitio antes de usar el equipo.",
     },
   },
+  "restore.database_set_aside": {
+    "en-GB": {
+      title: "This box's database was moved aside by a restore that did not finish.",
+      action:
+        "Ask whoever installed this box to look at it before anything else. The database is in a folder inside the venue folder, named in the server's own output. It must be moved back, or the restore run again, before the box can start.",
+    },
+    "es-ES": {
+      title: "La base de datos de este equipo quedó apartada por una restauración que no terminó.",
+      action:
+        "Antes de nada, pide a quien instaló este equipo que lo revise. La base de datos está en una carpeta dentro de la carpeta del local, cuyo nombre aparece en la salida del propio servidor. Hay que devolverla a su sitio, o volver a hacer la restauración, antes de que el equipo pueda arrancar.",
+    },
+  },
   "migrations.set_missing": {
     "en-GB": {
       title: "The installed software is incomplete.",

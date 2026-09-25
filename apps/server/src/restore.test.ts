@@ -45,6 +45,7 @@ import type { BackupManifest } from "./backup-manifest.js";
 import type { Logger } from "./logger.js";
 import {
   type RestoreDeps,
+  clearReplacedDatabases,
   restoreDatabase,
   restoreFromArtifact,
   restoreSecrets,
@@ -1560,5 +1561,40 @@ describe("restoreDatabase keeps one whole database whatever step fails", () => {
     await expect(stat(`${venueFile()}-wal`)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(stat(`${venueFile()}-shm`)).rejects.toMatchObject({ code: "ENOENT" });
     expect(await asideFolders()).toEqual([]);
+  });
+});
+
+describe("clearReplacedDatabases", () => {
+  useTempDirs("waitron-clear-");
+
+  it("leaves a FILE whose name starts like a set-aside folder: no placement makes one", async () => {
+    await mkdir(venueDir, { recursive: true });
+    await writeFile(join(venueDir, "venue.db"), "current rows");
+    await writeFile(join(venueDir, ".venue.db-replaced-notes"), "an operator's file");
+    await clearReplacedDatabases(venueDir, vi.fn());
+    expect(await readFile(join(venueDir, ".venue.db-replaced-notes"), "utf8")).toBe(
+      "an operator's file",
+    );
+  });
+
+  it("logs a folder it cannot remove and carries on to the next, rather than failing the start", async () => {
+    await mkdir(join(venueDir, ".venue.db-replaced-first"), { recursive: true });
+    await mkdir(join(venueDir, ".venue.db-replaced-second"), { recursive: true });
+    await writeFile(join(venueDir, "venue.db"), "current rows");
+    const log = vi.fn<Logger>();
+    const refused = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+    const fsRm = vi.fn((path: string, options: { recursive?: boolean; force: boolean }) =>
+      path.endsWith("first") ? Promise.reject(refused) : rm(path, options),
+    );
+    await clearReplacedDatabases(venueDir, log, { rm: fsRm });
+    expect(existsSync(join(venueDir, ".venue.db-replaced-first"))).toBe(true);
+    expect(existsSync(join(venueDir, ".venue.db-replaced-second"))).toBe(false);
+    expect(log).toHaveBeenCalledWith("warn", "restore.db.aside_kept", {
+      folder: ".venue.db-replaced-first",
+      errno: "EACCES",
+    });
+    expect(log).toHaveBeenCalledWith("info", "restore.db.aside_removed", {
+      folder: ".venue.db-replaced-second",
+    });
   });
 });

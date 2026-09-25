@@ -1,5 +1,5 @@
 import { lstatSync } from "node:fs";
-import { mkdir, mkdtemp, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { basename, join, posix } from "node:path";
 import { eq } from "drizzle-orm";
 import {
@@ -443,6 +443,44 @@ async function removeIncoming(fs: PlacementFs, incoming: string, log: Logger): P
     await fs.rm(incoming, { force: true });
   } catch (error) {
     log("warn", "restore.db.incoming_kept", { file: basename(incoming), errno: errnoOf(error) });
+  }
+}
+
+/**
+ * Removes the folders {@link restoreDatabase} set an old database aside into and did not remove.
+ *
+ * Safe only while the caller holds the venue folder: every placement holds it for its whole run
+ * ({@link writeValidated}), so no placement that could still put its folder's contents back is in
+ * progress. With a `venue.db` beside it, a folder's contents are a database a placement replaced:
+ * {@link putBackMoved} moves the main file back last, so a folder still holding anything beside a
+ * main file is one whose placement put the new file in. With no `venue.db`, a folder holding
+ * anything may be the only copy of the venue's database, so it is kept and the start refused with
+ * `restore.database_set_aside`; an empty one is removed.
+ */
+export async function clearReplacedDatabases(
+  venueDir: string,
+  log: Logger,
+  /** Tests inject failures here; production passes nothing. */
+  fs: Pick<PlacementFs, "rm"> = { rm },
+): Promise<void> {
+  const folders = (await readdir(venueDir, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith(ASIDE_PREFIX))
+    .map((entry) => entry.name);
+  const main = lstatSync(join(venueDir, VENUE_FILE), { throwIfNoEntry: false });
+  if (main === undefined || !main.isFile()) {
+    for (const folder of folders) {
+      if ((await readdir(join(venueDir, folder))).length > 0) {
+        throw new AppError("restore.database_set_aside", { folder });
+      }
+    }
+  }
+  for (const folder of folders) {
+    try {
+      await fs.rm(join(venueDir, folder), { recursive: true, force: true });
+      log("info", "restore.db.aside_removed", { folder });
+    } catch (error) {
+      log("warn", "restore.db.aside_kept", { folder, errno: errnoOf(error) });
+    }
   }
 }
 

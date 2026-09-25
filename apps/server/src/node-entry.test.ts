@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { generateKeyPairSync } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -30,6 +31,8 @@ function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
     // Stubbed: the real default opens the venue directory, and these suites name one that does
     // not exist.
     assertNotAhead: vi.fn(() => Promise.resolve()),
+    clearReplacedDatabases: vi.fn(() => Promise.resolve()),
+    lockVenue: vi.fn(() => Promise.resolve({ release: () => {} })),
     loadBoxEnv: vi.fn((base: NodeJS.ProcessEnv) => Promise.resolve({ ...base })),
     readRecoveryState: vi.fn(() => Promise.resolve(FRESH)),
     writeRecoveryState: vi.fn(() => Promise.resolve()),
@@ -1304,6 +1307,36 @@ setInterval(() => {}, 1000);`;
   );
 
   it(
+    "a restore still placing keeps its set-aside folder, even with the new venue.db already in",
+    async () => {
+      const stateDir = await tempDir("wt-entry-state-");
+      const venueDir = join(await tempDir("wt-entry-venue-"), "venue");
+      await holdVenue(venueDir, "restore");
+      // The moment after the incoming file is renamed in and before its folder is removed.
+      const aside = join(venueDir, ".venue.db-replaced-x9Y8z7");
+      await mkdir(aside);
+      await writeFile(join(aside, "venue.db"), "old rows");
+      await writeFile(join(venueDir, "venue.db"), "restored rows");
+      await expect(
+        runEntry(
+          deps({
+            stateDir,
+            venueDir,
+            lockVenue: undefined,
+            clearReplacedDatabases: undefined,
+            runStagedRestore: vi.fn(() => Promise.resolve(false)),
+            readRecoveryState,
+            writeRecoveryState,
+            withRecoveryLock: undefined,
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
+      expect(await readFile(join(aside, "venue.db"), "utf8")).toBe("old rows");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "a holder with no holder file: each refusal counts, and the page names no particular program",
     async () => {
       const stateDir = await tempDir("wt-entry-state-");
@@ -1325,6 +1358,112 @@ setInterval(() => {}, 1000);`;
     },
     TEST_TIMEOUT_MS,
   );
+});
+
+// `restoreDatabase` (restore.ts) moves the old database into a `.venue.db-replaced-` folder and
+// can leave that folder behind. The real venue lock and the real folder, in a temporary directory.
+describe("a start with a folder a restore set the old database aside into", () => {
+  const dirs: string[] = [];
+  afterEach(async () => {
+    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
+  async function venueWithAside(opts: { venueDb: boolean; asideFiles: string[] }) {
+    const root = await mkdtemp(join(tmpdir(), "wt-entry-aside-"));
+    dirs.push(root);
+    const venueDir = join(root, "venue");
+    const folder = ".venue.db-replaced-a1B2c3";
+    await mkdir(join(venueDir, folder), { recursive: true });
+    for (const name of opts.asideFiles) await writeFile(join(venueDir, folder, name), "old rows");
+    if (opts.venueDb) await writeFile(join(venueDir, "venue.db"), "current rows");
+    return { venueDir, folder, aside: join(venueDir, folder) };
+  }
+
+  it("removes the folder beside a venue database before the server starts", async () => {
+    const { venueDir, folder, aside } = await venueWithAside({
+      venueDb: true,
+      asideFiles: ["venue.db", "venue.db-wal"],
+    });
+    let presentAtStart: boolean | undefined;
+    const startServer = vi.fn<StartServer>(() => {
+      presentAtStart = existsSync(aside);
+      return Promise.resolve({ close: () => Promise.resolve() });
+    });
+    const log = vi.fn();
+    await runEntry(
+      deps({ venueDir, lockVenue: undefined, clearReplacedDatabases: undefined, startServer, log }),
+    );
+    expect(startServer).toHaveBeenCalledOnce();
+    expect(presentAtStart).toBe(false);
+    expect(await readFile(join(venueDir, "venue.db"), "utf8")).toBe("current rows");
+    expect(log).toHaveBeenCalledWith("info", "restore.db.aside_removed", { folder });
+  });
+
+  it("keeps a folder holding a database when no venue database is beside it, and refuses the start naming it", async () => {
+    const { venueDir, folder, aside } = await venueWithAside({
+      venueDb: false,
+      asideFiles: ["venue.db"],
+    });
+    const volume = recoveryVolume(FRESH);
+    const startServer = vi.fn<StartServer>();
+    const assertAhead = vi.fn(() => Promise.resolve());
+    await expect(
+      runEntry(
+        deps({
+          venueDir,
+          lockVenue: undefined,
+          clearReplacedDatabases: undefined,
+          startServer,
+          assertNotAhead: assertAhead,
+          ...volume.deps,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "restore.database_set_aside", params: { folder } });
+    expect(await readFile(join(aside, "venue.db"), "utf8")).toBe("old rows");
+    expect(existsSync(join(venueDir, "venue.db"))).toBe(false);
+    expect(assertAhead).not.toHaveBeenCalled();
+    expect(startServer).not.toHaveBeenCalled();
+    expect(volume.current().lastErrorCode).toBe("restore.database_set_aside");
+  });
+
+  it("lets go of its hold on the venue folder once the server has started, or has failed to", async () => {
+    for (const started of [true, false]) {
+      const order: string[] = [];
+      const startServer = vi.fn<StartServer>(() => {
+        order.push("startServer");
+        return started
+          ? Promise.resolve({ close: () => Promise.resolve() })
+          : Promise.reject(new Error("boot failed"));
+      });
+      const lockVenue = vi.fn((venueDir: string) => {
+        order.push(`lock:${venueDir}`);
+        return Promise.resolve({ release: () => void order.push("release") });
+      });
+      await runEntry(deps({ lockVenue, startServer })).catch(() => {});
+      expect(order).toStrictEqual(["lock:/venue", "startServer", "release"]);
+    }
+  });
+
+  it("removes an EMPTY folder even when no venue database is beside it", async () => {
+    const { venueDir, aside } = await venueWithAside({ venueDb: false, asideFiles: [] });
+    const { migrationsRoot } = await migratedVenue();
+    const startServer = vi.fn<StartServer>(() =>
+      Promise.resolve({ close: () => Promise.resolve() }),
+    );
+    // The real ahead check opens the folder while the start holds it: one process shares the hold.
+    await runEntry(
+      deps({
+        venueDir,
+        migrationsRoot,
+        lockVenue: undefined,
+        clearReplacedDatabases: undefined,
+        assertNotAhead: undefined,
+        startServer,
+      }),
+    );
+    expect(startServer).toHaveBeenCalledOnce();
+    expect(existsSync(aside)).toBe(false);
+  });
 });
 
 describe("assertNotAhead", () => {

@@ -5675,11 +5675,13 @@ open:
     the server's own output (`failureDetail`, `apps/server/src/node-entry.ts`). One option is to keep
     the staged request on `restore.placement_failed`, so repeated failed starts end on the recovery
     page. **Owner decision 2026-09-25: leave it as it is.**
-  - A `.venue.db-replaced-` folder can be left in the venue folder whenever its removal fails
-    (`restore.db.aside_kept` after a placed database, emptied after a full put-back), after a
-    `set_aside` failure, or when the process is killed mid-placement. Nothing removes it, and
-    nothing refuses to start beside it. **Owner decision 2026-09-25: clean them up** — queued as
-    lane A's A31.
+  - Fixed by A31 (fix/restore-clean-aside-folders): a `.venue.db-replaced-` folder left in the
+    venue folder is removed by the box's next start (`clearReplacedDatabases`,
+    `apps/server/src/restore.ts`, called from `runEntry`, `apps/server/src/node-entry.ts`), which
+    holds the venue folder from the clearing until the server's own store holds it. A folder still
+    holding files with no `venue.db` beside it is kept, and the start refused with
+    `restore.database_set_aside`. Only the container's entry clears them: a server started any other
+    way (the dev stack) does not.
 - The bucket client sets no time limit of its own: `createS3ObjectStore` (`packages/stream`) has
   none. The command line and the setup restores wrap it for every object-store call they make
   (`boundObjectStore`, which abandons a call but never cancels it),
