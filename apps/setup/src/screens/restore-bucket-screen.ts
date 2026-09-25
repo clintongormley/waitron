@@ -60,7 +60,7 @@ export class SetupRestoreBucketScreen extends LitElement {
         color: var(--wt-color-text);
         font-family: var(--wt-font-family-mono);
         font-size: var(--wt-font-size-sm);
-        word-break: break-all;
+        overflow-wrap: anywhere;
         resize: vertical;
       }
       input[type="file"] {
