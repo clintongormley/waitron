@@ -22,7 +22,6 @@ import {
 import { generationName } from "./names.js";
 import type { ListedObject, ObjectStore } from "./object-store.js";
 import {
-  pointerKey,
   pointerMessage,
   readPointer,
   writePointer,
@@ -537,25 +536,22 @@ export class StreamSupervisor {
     for (;;) {
       signal.throwIfAborted();
       try {
-        const landed = await writePointer(this.#store, this.#deps.venueId, pointer, expected).then(
-          () => true,
-          (error: unknown) => {
-            if (isPreconditionFailure(error)) return false;
-            throw error;
-          },
+        const retryAgainst = await writePointer(
+          this.#store,
+          this.#deps.venueId,
+          pointer,
+          expected,
+          this.#sentPointers,
         );
-        if (landed) return true;
-        signal.throwIfAborted();
-        const current = await this.#store.get(pointerKey(this.#deps.venueId));
-        signal.throwIfAborted();
-        if (current === null || !this.#sentPointers.includes(current.body)) return false;
-        expected = current.etag;
+        if (retryAgainst === undefined) return true;
+        expected = retryAgainst;
         if (!retriedAtOnce) {
           retriedAtOnce = true;
           continue;
         }
       } catch (error) {
         signal.throwIfAborted();
+        if (isPreconditionFailure(error)) return false;
         this.#deps.log("warn", "stream.pointer_write_failed", { errorCode: codeOf(error) });
       }
       await this.#sleep(OPEN_RETRY_MS, signal);

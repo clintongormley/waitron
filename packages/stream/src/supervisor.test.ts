@@ -982,11 +982,10 @@ describe("opening a generation", () => {
     const late = pointerFrom(NODE, 2, "gen-2-node-a-20260923T110000Z");
     h.sentPointers.add(late);
     await writePointer(h.store, VENUE, late, null);
-    // The first read after the refusal is `writePointer`'s own; the second is the one that fails.
     const get = h.store.get.bind(h.store);
     let reads = 0;
     h.store.get = async (key) => {
-      if (key === pointerKey(VENUE) && ++reads === 2) {
+      if (key === pointerKey(VENUE) && ++reads === 1) {
         throw new AppError("backup.stream_request_failed", {
           operation: "get",
           key,

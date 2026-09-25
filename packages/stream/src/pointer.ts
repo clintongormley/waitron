@@ -140,21 +140,25 @@ export class SentPointers {
  * Replace `current.json` only if it is still the version this box read (`previousEtag`), or create it
  * only if there is none (`null`). A refusal is another box writing this venue, and is thrown
  * (`backup.stream_precondition_failed`) — unless the pointer now holds exactly these bytes, which is
- * this box's own write answered twice.
+ * this box's own write answered twice, or bytes `sent` holds, whose version tag is answered to retry
+ * against.
  */
 export async function writePointer(
   store: ObjectStore,
   venueId: string,
   pointer: SignedPointer,
   previousEtag: string | null,
-): Promise<void> {
+  sent?: SentPointers,
+): Promise<string | undefined> {
   const problem = pointerProblem(pointer);
   if (problem !== null) throw invalid(problem);
   if (pointer.body.venueId !== venueId) throw invalid("other_venue");
-  await putOwnBytes(
+  const stored = await putOwnBytes(
     store,
     pointerKey(venueId),
     encode(pointer),
     previousEtag === null ? { ifNoneMatch: "*" } : { ifMatch: previousEtag },
+    sent && ((bytes) => sent.includes(bytes)),
   );
+  return stored.landed ? undefined : stored.etag;
 }

@@ -189,6 +189,39 @@ describe("writePointer", () => {
     expect((await readPointer(store, VENUE))?.pointer).toEqual(pointer);
   });
 
+  // A pointer this process sent earlier, landing after the read the write was conditioned on.
+  it("answers the stored version to retry against when refused by a pointer it sent, from one read", async () => {
+    const store = createMemoryObjectStore();
+    const earlier = signPointer(body(), KEYS.privateKey);
+    const sent = new SentPointers();
+    sent.add(earlier);
+    await writePointer(store, VENUE, earlier, null);
+    const next = signPointer(body({ term: 3 }), KEYS.privateKey);
+    sent.add(next);
+    const calls = store.calls.length;
+    const version = await writePointer(store, VENUE, next, null, sent);
+    expect(version).toBe(store.snapshot().get(pointerKey(VENUE))?.etag);
+    expect(store.calls.slice(calls).map((call) => call.operation)).toEqual(["put", "get"]);
+    expect((await readPointer(store, VENUE))?.pointer).toEqual(earlier);
+  });
+
+  it("still refuses, with a record of what it sent, a pointer it never sent", async () => {
+    const store = createMemoryObjectStore();
+    const sent = new SentPointers();
+    await writePointer(
+      store,
+      VENUE,
+      signPointer(body({ nodeId: OTHER_NODE }), OTHER_KEYS.privateKey),
+      null,
+    );
+    const ours = signPointer(body(), KEYS.privateKey);
+    sent.add(ours);
+    expect(await rejection(writePointer(store, VENUE, ours, null, sent))).toEqual({
+      code: "backup.stream_precondition_failed",
+      params: { key: pointerKey(VENUE) },
+    });
+  });
+
   it("passes every other failure through unchanged", async () => {
     const store = createMemoryObjectStore();
     store.failNext({
