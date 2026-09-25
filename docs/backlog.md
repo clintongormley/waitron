@@ -2914,7 +2914,9 @@ image constraints under *Detail → Box image*.
   comment lines, parse-tree walk, tests included), the 14 held-back backup and restore files, part
   e2 (#656, 979 to 614 comment lines), and the 11 held-back node, identity and setup files, part
   f2 (#657, 1,194 to 524 comment lines; `membership-mint.ts` left as #655 wrote it, `box-status.ts`
-  and its test already done by #629). Part h2 is still to do.
+  and its test already done by #629), and the remaining held-back files, part h2 (#658, 607 to
+  281 comment lines in 13 of 16 files; `sealed-state.ts`, its test and `stream-host.test.ts` needed
+  nothing).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
@@ -2939,6 +2941,15 @@ image constraints under *Detail → Box image*.
     `packages/bookings/src/schema/bookings.test.ts` (near line 60) and
     `packages/catalogue/src/migrations.test.ts` (near line 304) is wider than the reset, which
     leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
+  - Found by #658 (`apps/server` part h2: the remaining held-back files), not fixable in a
+    comments-only change. `unpackBundleToDir` and `resolveSafeEntryPath`
+    (`apps/server/src/state-secrets.ts`) make only a folder they CREATE owner-only (`mkdir` with
+    mode 0700): an existing destination keeps its permissions. The run-it review ran the real
+    `unpackBundleToDir` into an existing folder and it stayed 0755, reproduced with a control. The
+    `mkdir` lines date from `f57ab02acf` (2026-08-29) and `2956302ebe` (2026-09-05), before the
+    branch. Whether a restore ever unpacks into a folder another process made world-readable is
+    not checked. **Next action:** decide whether the writer should `chmod` an existing destination.
+    The lock-file measurement kept in `db-wipe.ts` names no engine version or platform.
   - Found by #657 (`apps/server` part f2: the node, identity and setup files), outside its files
     or not fixable in a comments-only change. A code defect its review reproduced, which predates
     the branch (`git blame`: `fabdb224d1`, 2026-09-10): in `POST /setup-api/provision`
@@ -2994,10 +3005,7 @@ image constraints under *Detail → Box image*.
     `streamHost.start()`). Test titles #653 could not touch in `boot.test.ts` carry the history
     tags "(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
   - Found by #625 (`apps/server` part e1), outside its files or not fixable in a comments-only
-    change. Comments in files the SQLite slice-2 plan still changes (fix them in e2, c2 or h2):
-    `db-wipe.ts` (near its top) says the empty node-file fact is recorded where
-    `rejoin-command.ts` and `break-glass-command.ts` open their handles, and #625 deleted it from
-    both. Docs: `docs/developers/conventions-ui.md` (the recovery page section) says a
+    change. Docs: `docs/developers/conventions-ui.md` (the recovery page section) says a
     caught error's own text goes to the container's stdout only, but the page's log tail can carry
     it (the file sink masks only credentials in a URL); `docs/developers/conventions-data.md`'s
     `busy_timeout` receipt, which `recovery-lock.ts` now points at, should carry the date and Node
@@ -3116,10 +3124,7 @@ image constraints under *Detail → Box image*.
     the log is unchecked. `apps/server/vitest.config.ts`'s `coverage.exclude` lists `scripts/**`,
     which its `src/**/*.ts` include already leaves out (read only). The adoption-pending entry below
     still gives PostgreSQL's SQLSTATE 23503 on `nodes_location_id_locations_id_fk` as evidence; this
-    engine reports `FOREIGN KEY constraint failed` and names no constraint. Held back in h2,
-    `apps/server/scripts/record-one-sale.ts` still says leaking its two SQLite files keeps the
-    process alive (false per #577 below), that the repository has no till application, and "see
-    this task's own report". Test titles #620 could not touch: "never a 23514 500" in
+    engine reports `FOREIGN KEY constraint failed` and names no constraint. Test titles #620 could not touch: "never a 23514 500" in
     `schedule-api.test.ts`, "masks the password in a postgres URL" in `redact-secrets.test.ts`,
     "(design §3b(2))" in `set-table-status.test.ts`, "(owner decision 2026-08-02)" in
     `workforce-api.test.ts`, "(guard by deletion)" in `seed-sales.test.ts`.
@@ -3556,10 +3561,9 @@ image constraints under *Detail → Box image*.
     `credentials.test.ts`'s fixtures `sk_test_rls`/`whsec_rls` carry a PostgreSQL-era name. The
     `beforeEach` deletes in the store, cli and rotate suites may be redundant beside `useVenueDb`'s
     per-test reset (not tried).
-  - The same false comments outside credentials, found by #577: "open database files keep the
-    process alive" in `apps/server/scripts/record-one-sale.ts`, `register-till.ts` and
-    `settle-invoice-first.ts` (#577 measured an unclosed `openVenueDatabase` exiting at once with
-    status 0) (#657 removed `node-identity.ts`'s "ONE tenant transaction" and its incomplete list
+  - The same false comments outside credentials, found by #577 (the "open database files keep the
+    process alive" claim is gone from all three scripts: #620 removed it from `register-till.ts`
+    and `settle-invoice-first.ts`, #658 from `record-one-sale.ts`) (#657 removed `node-identity.ts`'s "ONE tenant transaction" and its incomplete list
     of read failures) (the pointers to a missing `errors.reachability.test.ts` are gone:
     `git grep errors.reachability -- apps packages` prints nothing after #601); and two
     2026-07-26 specs still call the FNMT seal certificate's export unverified, which
@@ -5429,7 +5433,7 @@ Every synchronous `deriveKey` caller still blocks the event loop while it derive
 `encryptArtifact`); everything reaching `decryptArtifact` (`apps/server/src/artifact-cipher.ts`) —
 `decodeConfigurationBundle` (`apps/server/src/configuration-transfer.ts`, on the request path,
 decoding an uploaded bundle), `validateArtifact` (`apps/server/src/restore.ts`) and `unsealNodeState`
-(`apps/server/src/sealed-state.ts:33`); and the recovery bundle's `encryptBundle` and
+(`apps/server/src/sealed-state.ts:32`); and the recovery bundle's `encryptBundle` and
 `decryptBundle` (`apps/server/src/recovery-bundle.ts`). Task 2b moved the backup
 sweep's encryption and `sealNodeState` to `encryptArtifactAsync`.
 Task 6, the Litestream supervisor (`@waitron/stream`'s `StreamSupervisor`, the server's
