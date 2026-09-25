@@ -167,7 +167,7 @@ same key:**
   read only alongside an archive destination: `loadBackupConfig` returns nothing when no destination
   is configured, before it reads the key (`apps/server/src/backup-config.ts`). The plan separates the
   two, so a venue can stream without also archiving. (2026-09-25: on a box whose backups the
-  environment manages — one of the `WAITRON_BACKUP_*` variables the server reads is set — and which
+  environment manages — a variable `BACKUP_ENV_KEYS` in `apps/server/src/boot.ts` lists is set — and which
   holds no key, Save is refused with `backup.managed_by_environment` instead.)
 - **Rotating the recovery key re-locks the row and reissues the recovery kit** (§4.3). Rows already in
   the 7-day history stay locked with the old key, so restoring to a point before the rotation needs
@@ -267,8 +267,10 @@ the measurements of §8.1 and the prototype, whose verdicts do not carry across 
   (2026-09-25: Task 8a added a second exception — a refusal because the pointer now holds a pointer
   this process sent earlier, landing late across a reload, is retried against that version; see
   `SentPointers` in `packages/stream/src/pointer.ts`. Two cases are still refused as if another box
-  were writing: a late write from a process that has since restarted, and a pointer that was deleted;
-  both are recorded in `docs/backlog.md`.)
+  were writing: a late write from a process that has since restarted, and — on a bucket that answers
+  a conditional write to a missing object with 412 — a pointer that was deleted; a bucket answering
+  404 instead makes the supervisor retry the write until it stops. All three are recorded in
+  `docs/backlog.md`.)
 - **History.** Litestream's own words, from its configuration reference
   (<https://litestream.io/reference/config/>, fetched with `curl` 2026-09-23): full copies are
   `snapshot: interval` ("How often Litestream takes a full snapshot. Defaults to 24h") and

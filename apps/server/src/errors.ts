@@ -653,8 +653,8 @@ declare module "@waitron/shared" {
     "backup.source_kind_unsupported": { kind: string };
     /**
      * A backup admin route (`apply`/`rotate`), or the bucket copy's Save on a box holding no
-     * recovery key, was refused because one of the `WAITRON_BACKUP_*` variables the server reads is
-     * set in the environment. The environment then owns this box's backup settings, and the server
+     * recovery key, was refused because a variable `BACKUP_ENV_KEYS` (`boot.ts`) lists is set in the
+     * environment. The environment then owns this box's backup settings, and the server
      * does not write `backup.env` beside it. No params: an env var could hold the recovery key. */
     "backup.managed_by_environment": Record<string, never>;
     /**
@@ -728,7 +728,8 @@ declare module "@waitron/shared" {
     "backup.stream_paused": Record<string, never>;
     /** The bucket copy stopped because the pointer changed under it, or names a newer term: usually
      * another box writing this venue; it can also be a late pointer write by this box from before a
-     * restart, or a pointer that was deleted. Built as data by the backups alert source, never
+     * restart, or, on a bucket that refuses a conditional write to a missing object with 412, a
+     * pointer that was deleted. Built as data by the backups alert source, never
      * thrown. */
     "backup.stream_refused": Record<string, never>;
     /** The bucket copy refused to start because a value bound for Litestream could not be written

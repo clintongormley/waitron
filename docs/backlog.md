@@ -5226,8 +5226,13 @@ and refuses itself — closed on Task 8a's branch: a supervisor retries its poin
 refusal was caused by one of this process's own earlier pointers, matched byte for byte, the last 16
 kept. Still open: a pointer write from a process that has since died, landing after the restart,
 can still make the box refuse itself, because a restarted process starts with an empty record, and
-so does a `current.json` deleted after the supervisor read it; in both cases the owner's alert
-(`backup.stream_refused` in `apps/dashboard/src/i18n/alert-messages.ts`) still says another box is writing;
+so does a `current.json` deleted after the supervisor read it, on a bucket that answers a conditional
+write to a missing object with 412 (SeaweedFS; the in-memory test store); in both cases the owner's alert
+(`backup.stream_refused` in `apps/dashboard/src/i18n/alert-messages.ts`) still says another box is writing. On a bucket that answers that write with 404 instead (AWS, as it
+documents; versitygw, as measured — the plan's Task 10 notes), the deleted pointer surfaces as
+`backup.stream_request_failed` and `#movePointer` (`packages/stream/src/supervisor.ts`) logs
+`stream.pointer_write_failed` and retries every `OPEN_RETRY_MS` until the supervisor stops, never
+reaching `refused`;
 (3) `StreamHost` streams on any node whose role is primary, while the Cloud snapshot worker also
 requires that the node has not been cut off from acting as primary (`cloudPrimary`) — should a
 cut-off primary stream?; (4) the server's 8-second shutdown stops the stream last, after the Cloud

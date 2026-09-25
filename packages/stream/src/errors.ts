@@ -15,7 +15,8 @@ declare module "@waitron/shared" {
     /** A conditional write was refused: the object existed when "only if absent" was asked, or had
      * changed since the version named. For `current.json` or a generation's marker, that is usually
      * another box writing this venue; it can also be a late pointer write by this box from before a
-     * restart, or a pointer that was deleted. */
+     * restart, or, on a bucket that answers a conditional write to a missing object with 412, a
+     * pointer that was deleted (a bucket answering 404 gives `backup.stream_request_failed`). */
     "backup.stream_precondition_failed": { key: string };
     /** Any other failure talking to the bucket, after conflict retries are spent. `status` is the HTTP
      * status, or null when no answer arrived at all. A file refused inside a batch delete the bucket
@@ -39,8 +40,8 @@ declare module "@waitron/shared" {
     "backup.stream_config_unsafe": { field: string };
     /** Text offered as a recovery kit is not one: `not_found` (no kit token in it), `encoding` (the
      * token does not decode to JSON) or `shape` (the decoded kit is not an object, is not version 1,
-     * has a text field that is missing, empty, not a string or holds a control character, or carries
-     * bucket settings refused by the kit's own check in `kit.ts` — no prefix field, a prefix of "-",
+     * has a text field that is missing, empty, not a string or holds a control character, has no bucket
+     * object, or carries bucket settings refused by the kit's own check in `kit.ts` — no prefix field, a prefix of "-",
      * an empty endpoint — by the shared reader in `bucket-config.ts`, or by Litestream's settings
      * check). Never carries any of the text: a kit holds the recovery key and the bucket's
      * secret key. */

@@ -277,7 +277,8 @@ export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.m
  */
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
 
-/** Every `WAITRON_BACKUP_*` env var `loadBackupConfig` reads. The supervisor's `isManagedByEnvironment`
+/** The `WAITRON_BACKUP_*` env vars `loadBackupConfig` reads, except `WAITRON_BACKUP_STALE_AFTER_MS`
+ * and `WAITRON_BACKUP_KEY_ROTATED_AT`. The supervisor's `isManagedByEnvironment`
  * reports true iff any is non-empty in the RAW base env — the provenance signal that distinguishes an
  * env-injected backup config (a cloud profile) from a file-sourced one written by the wizard (spec
  * §3.2). Only presence matters here; the parse/validation of the values lives in `loadBackupConfig`. */
