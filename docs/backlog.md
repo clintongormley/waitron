@@ -201,7 +201,7 @@ label routes and `?descendants=1` on a category's products have no dashboard cal
 every till filing path records each sale line's product, a variant's parent, its menu, its gross
 and its reporting chain and labels when the record is issued. `sale_lines.menu_version_id` stays
 null on every line until the menus plan's Task 7 (sell from the published version) fills it; that
-task wires it, because it lands second. The owner lifted the
+task wires it, because it lands second. Two follow-ups it leaves: the till shows "try again" when `sale_classification.invalid` refuses a sale (it happens only on corrupt category data, and retrying cannot succeed), so the code wants its own till message on the permanent-refusal list; and a card recovery refused that way leaves a captured payment unlinked until the catalogue is fixed, as recovery's existing below-locked-total refusal already does. The owner lifted the
 wait: the dependency upgrades are finished, and the work does not wait for SQLite slice 2. The
 menus plan's decisions D1–D23 settle the spec's open integration points; D6, D9, D10, D11, D12,
 D13 and D22 are the ones flagged for the owner. Menus Task 3 wipes existing venues (it rebuilds
