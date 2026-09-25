@@ -919,7 +919,8 @@ describe("onCommit", () => {
   });
 
   // An UPDATE setting a value the row already holds moves `total_changes()` and writes nothing to
-  // the side file, so a copy of the file never shows it (measured in commit b62ada502).
+  // the side file, so a copy of the file never shows it (measured on Node v26.7.0: 0 bytes, against
+  // 4120 for a real change).
   it("does not tell listeners about an update that sets a value the row already holds, on any path", async () => {
     const { store, heard } = await setUp();
     store.venue.run(sql`insert into sales (id, total) values (1, 5)`);

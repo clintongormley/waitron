@@ -125,8 +125,7 @@ export interface Connections {
    * The side file is compared by size and modification time. After a checkpoint a commit rewrites
    * it from its beginning, at an unchanged size while it fits, so a commit landing in the same
    * modification-time tick as the one before is not reported. Measured on macOS APFS only, not on
-   * the box's filesystem; the receipt is in commit b62ada502. A commit that changes the side
-   * file but no row (DDL) is not reported and does not move the comparison either, so a
+   * the box's filesystem. A commit that changes the side file but no row (DDL) is not reported and does not move the comparison either, so a
    * same-value update right after one IS reported.
    */
   reportIfChanged: (mark: number | null) => void;
