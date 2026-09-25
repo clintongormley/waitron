@@ -2240,7 +2240,7 @@ ongoing overhaul listed at the top of Track A.
   bar" on the till while it sold from Deli counter, fixed by #365 (CLAUDE.md §3). Found by a text scan, checked by
   hand: `apps/dashboard/src/screens/my-schedule-screen.ts:351`, `:365`, `:417`,
   `apps/dashboard/src/screens/units-screen.ts:486`, and
-  `apps/till/src/screens/till-schedule-screen.ts:390`, `:404`, `:457`. By reading, every one opens
+  `apps/till/src/screens/till-schedule-screen.ts:353`, `:367`, `:420`. By reading, every one opens
   on its first option — an empty placeholder or the first absence type — which is what that shape
   shows anyway, so the fault stays hidden until one opens with another value. **Next action:** when
   one of them is next touched, mark its options `.selected` the way
@@ -2812,12 +2812,29 @@ image constraints under *Detail → Box image*.
   parse-tree walk, tests included; comments inside `css` template text are strings and were left) and `packages/media` (#609, about 505 to about 310, parse-tree walk, tests included; the shipped
   `drizzle/` SQL untouched) and `packages/venue-service` (#611, about 478 to about 220, parse-tree
   walk, tests included) and `apps/server`'s `till-*` files, part a of eight (#613, about 4,330 to
-  about 1,915, parse-tree walk, tests included).
+  about 1,915, parse-tree walk, tests included) and `apps/till/src/screens`, part a of four (#614,
+  about 2,233 to about 800, parse-tree walk, tests included, plus stale twins of its corrected claims
+  in `till-app.ts`, `api/client.ts` and `widgets/card-grid.ts`; text inside `css` templates left).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612 and #613 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613 and #614 and left for the package that owns each, all
   still OPEN:
+  - Found by #614 (`apps/till/src/screens`), not fixable in a comments-only change. Read, not run:
+    the till always mounts the counter screen `embedded` (`apps/till/src/till-app.ts`, the
+    `<till-counter-screen>` in its render), so the screen's own header — its Allergens, Floor,
+    Station, Expo, Schedule and Log out buttons and its allergen toggle — is reached only by the
+    screen's own tests; the floor screen's only mount (`widgets/card-grid.ts`) passes `embedded` and
+    `canExitToCounter=false`, so its standalone header, Back button and that property are likewise
+    test-only; and in device mode the station screen's `#reload` swallows a `device.unauthorized`,
+    so a device cookie revoked mid-session raises nothing until the next connect. Test NAMES still
+    say `till.configure` where the permission is `venue.configure`, in `apps/till/src/api/client.test.ts`
+    and `till-app.test.ts`, and so do comments and test names in `apps/server/src/kitchen.ts`,
+    `kitchen.test.ts` and `promote-endpoint-e2e.test.ts`. The screens' `css` templates still carry
+    task and spec numbers ("Task 7", "KDS-4 §3d"). Unchecked and kept: the allergen screen's legal
+    citation (RD 126/2015 Art. 6.5.a.2°). Not restored because nothing confirms it: the table-order
+    screen's `#lineGross` "same arithmetic the server files with" (the server does not call
+    `grossOf`).
   - Found by #613 (`apps/server` `till-*`), outside its files or not fixable in a comments-only
     change. `apps/server/src/errors.ts` (around lines 743 and 755) and `errors.test.ts` (around
     line 14) say the zone verbs have no HTTP route; `management-api.ts` has zone routes. Present-tense
@@ -2877,9 +2894,7 @@ image constraints under *Detail → Box image*.
     (`apps/till/src/widgets/language-chooser.ts:31`, `menu-switcher.ts:26`; it also sets
     `aria-busy` from its `loading` property).
   - Found by #607 (`apps/dashboard/src/screens`), outside the screens folder; #610 fixed the
-    dashboard's copies. Still open: "these methods never send a personId" is false for
-    `requestSwap`, which sends `toPersonId`, at `apps/till/src/api/client.ts:2105` and
-    `apps/till/src/screens/till-schedule-screen.ts:66`; and the fire-control modes are listed as
+    dashboard's copies and #614 the till's "never send a personId". Still open: the fire-control modes are listed as
     `waiter`/`kitchen` only, leaving out `expo` (`fireControlMode`,
     `packages/db/src/schema/tenants.ts`), at `apps/server/src/kitchen.ts:360`. Read only, not run: the recipe screen's `#loadRecipe` guard
     compares product ids, so choosing A, then B, then A again lets the first A answer apply and turn
@@ -3762,7 +3777,7 @@ run without the code):
   skips the call), and the `?? []` on the shell's `.tabs` binding.
 - `trust-check.ts:83` (`timer` is always set by then), `widgets/station-queue.ts:501` (the bump
   button renders only when a next step exists), `session-activity.ts:67` and `:125`,
-  `screens/till-station-screen.ts:302` and four `?? []` fallbacks in
+  `screens/till-station-screen.ts:227` and four `?? []` fallbacks in
   `screens/till-schedule-screen.ts`.
 - `api/server-router.ts` writes a tracked server's `nodeId` at `:184`, `:208` and `:214`, and
   nothing reads it.
