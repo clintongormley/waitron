@@ -228,13 +228,20 @@ screen)** is on `feat/menus-section-library`, not yet landed: **Products and rec
 `GET /management-api/sections/usages`), shows each place a section is nested, and edits, duplicates
 and deletes sections and their members. Until Task 3 drops the old per-menu headings, the dashboard
 has two things called Sections: this library, and **Venue operations**, **Menus**, **Sections**.
-Next in the lane after it: menus Task 3. The owner lifted the
-wait: the dependency upgrades are finished, and the work does not wait for SQLite slice 2. The
-menus plan's decisions D1–D23 settle the spec's open integration points; D6, D9, D10, D11, D12,
-D13 and D22 are the ones flagged for the owner. Menus Task 3 wipes existing venues (it rebuilds
-`menu_items`); every other migrating task adds tables or columns only and measures its own upgrade.
-Every dev venue then needs `wa-wt reset demo <name>`, and the owner's box should be wiped once
-after menus Task 7 lands.
+Next in the lane after Task 2: menus Task 3. The owner lifted the wait: the dependency upgrades are
+finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
+the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
+owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
+adds tables or columns only and measures its own upgrade. Every dev venue then needs
+`wa-wt reset demo <name>`, and the owner's box should be wiped once after menus Task 7 lands.
+A note Task 2 leaves for Task 3: the image library links every `section` use of a photo to
+`/manage/sections?section=<id>`, but that use can also be a list a menu owns, which the sections
+screen does not list and so does nothing for. The writes of `sections` that
+`git grep -nP "(insert|update)\((schema\.)?sections\b|into sections|update sections|INTO sections" -- apps packages scripts deploy bench ':!*.test.ts' ':!*.md'`
+finds are three, all in `packages/catalogue/src/sections.ts` (lines 208, 230 and 406), and none of
+them puts a photo on a menu's own list: the two inserts create library sections and the update
+refuses any other. So when Task 3 lets a menu's list carry a photo, link it to the menu editor or
+narrow the link to library sections.
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
 shared look, and the rules for it live in [design-system.md](developers/design-system.md). That

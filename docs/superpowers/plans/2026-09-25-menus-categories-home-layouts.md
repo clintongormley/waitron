@@ -883,6 +883,9 @@ that plan left them. There are no menu changes yet; menus still use the old per-
   export async function duplicateSection(tx, sourceId: string, input: { internalName: string; memberIds: string[]; replaceIn?: { sectionId: string; memberId: string } }): Promise<LibrarySection>; // with replaceIn: duplicate AND replace in one transaction (D23)
   export async function sectionUsages(tx, sectionId: string): Promise<SectionUsages>;
   ```
+  _2026-09-25: as built, `SECTION_ROLES` is a private, unexported constant in
+  `packages/catalogue/src/schema/sections.ts`; `SectionRole` is written out by hand in
+  `section-types.ts`, and `schema/sections.ts` checks the two against each other at compile time._
 - A **structure-change hook**: every member write calls `onStructureChanged(tx, menuIds)`. It is a
   no-op in this task; Task 3 makes it call `syncMenuOffers`. A write that REMOVES links works out
   the affected menus (`menusContaining`) BEFORE the delete, because the cascade removes the links it

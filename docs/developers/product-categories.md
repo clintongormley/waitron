@@ -68,6 +68,7 @@ session and permission as the category routes below. A body of the wrong shape i
 | Route | Body → success | Refusals |
 | --- | --- | --- |
 | `GET /management-api/sections` | → 200, `LibrarySection[]`: library sections only, by internal name | |
+| `GET /management-api/sections/usages` | → 200, a map from each library section's id to the `{ menus, sections }` its `/:id/usages` answers; a menu's own lists are not keys | |
 | `POST /management-api/sections` | `{ internalName, names?, image?, color? }` → 201, `LibrarySection` | `invalid`, `translation_required`, `content.language_invalid` |
 | `GET /management-api/sections/:id` | → 200, `LibrarySection`; a menu's own list is readable too | `not_found` |
 | `PATCH /management-api/sections/:id` | Any supplied fields from create → 200, `LibrarySection` | `not_found`, `not_library`, `invalid`, `translation_required`, `content.language_invalid` |
