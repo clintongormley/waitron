@@ -187,7 +187,16 @@ reviews: the [menus design](superpowers/specs/2026-09-20-menus-categories-and-ho
 with its [plan](superpowers/plans/2026-09-25-sales-classification.md) (Revision 2, Tasks 1–3).
 **Order, one lane:** classification Tasks 1–2 first (so sale-line history starts building), then
 menus Tasks 1–6, 7a, 7b, 7c, 7, 8, 9, then classification Task 3 — fifteen pull requests, one per
-task. The lane is not yet armed; the drafts are in `~/waitron-campaign-c`. The owner lifted the
+task. Lane C runs it (`~/waitron-campaign-c`). **Classification Task 1 — LANDED #645
+(2026-09-25):** one main reporting category per product in a strict tree, flat labels
+(`labels`, `product_labels`, a Labels tab on the Categories screen), `product_categories` dropped,
+and a category delete that says where its products and subcategories go. A seeded venue built by the
+previous `main` upgraded cleanly (measured), so no reset is needed for it. Left open for the owner:
+confirm the deletion defaults (spec §2.1: products and subcategories go to the parent; for a
+top-level category, products become Uncategorised and subcategories top-level); whether label names
+should ignore capitals (today "Alcoholic" and "alcoholic" can both exist — a small migration if so);
+`Product.categoryId` and `primaryCategoryId` now always hold the same value; and the per-product
+label routes and `?descendants=1` on a category's products have no dashboard caller yet. The owner lifted the
 wait: the dependency upgrades are finished, and the work does not wait for SQLite slice 2. The
 menus plan's decisions D1–D23 settle the spec's open integration points; D6, D9, D10, D11, D12,
 D13 and D22 are the ones flagged for the owner. Menus Task 3 wipes existing venues (it rebuilds
