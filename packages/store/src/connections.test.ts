@@ -252,6 +252,7 @@ describe("the side file's mark", () => {
     const heard: Date[] = [];
     connections.onCommit((at) => heard.push(at));
     connections.committed();
+    connections.sideFileReset();
     connections.committed();
     expect(heard).toHaveLength(2);
     write.close();

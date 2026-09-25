@@ -1723,6 +1723,38 @@ describe("freshness", () => {
     expect(h.logs.some((line) => line.event === "stream.bucket_unusable")).toBe(false);
   });
 
+  // A read given up on at the deadline answers with what the bucket held when it was asked, after
+  // a newer read has already seen more.
+  it("does not let a read given up on overwrite a newer read's answer", async () => {
+    const h = await streaming();
+    h.clock.advance(5_000);
+    h.store.upload(l0(h.generation, 2));
+    const u2 = h.clock.trueNow().toISOString();
+    await h.clock.next();
+    await vi.waitFor(() => expect(h.supervisor.status().lastConfirmedUploadAt).toBe(u2));
+    const list = h.store.list.bind(h.store);
+    let release!: () => void;
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    let hold = true;
+    h.store.list = async (prefix) => {
+      if (!prefix.endsWith("/0000/") || !hold) return list(prefix);
+      hold = false;
+      const snapshot = await list(prefix);
+      await answered;
+      return snapshot;
+    };
+    await h.clock.next();
+    await vi.waitFor(() => expect(hold).toBe(false));
+    h.store.upload(l0(h.generation, 3));
+    const u3 = h.clock.trueNow().toISOString();
+    for (let tick = 0; tick < 5; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(h.supervisor.status().lastConfirmedUploadAt).toBe(u3));
+    expect(u3).not.toBe(u2);
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(h.supervisor.status().lastConfirmedUploadAt).toBe(u3);
+  });
+
   it("starts a new read once one has waited five minutes without an answer", async () => {
     const h = await streaming();
     const list = h.store.list.bind(h.store);

@@ -960,6 +960,29 @@ describe("onCommit", () => {
     expect(heard).toHaveLength(1);
   });
 
+  // The fold-back changes the side file without a commit; compared with the file as it was at the
+  // last report, a same-value update right after it would read as a change.
+  it("does not tell listeners about a same-value update right after the side file was folded back", async () => {
+    const { store, heard } = await setUp();
+    store.venue.run(sql`insert into sales (id, total) values (1, 5)`);
+    store.venue.run(sql`update sales set total = 5 where id = 1`);
+    expect(heard).toHaveLength(1);
+    expect(await store.venue.checkpointTruncate()).toEqual({ reclaimed: true });
+    store.venue.run(sql`update sales set total = 5 where id = 1`);
+    expect(heard).toHaveLength(1);
+    store.venue.run(sql`update sales set total = 6 where id = 1`);
+    expect(heard).toHaveLength(2);
+  });
+
+  // Stated at `committed` in ./connections.ts: the side file is only looked at once rows have moved.
+  it("still tells listeners about a same-value update right after a commit that changed only the schema", async () => {
+    const { store, heard } = await setUp();
+    store.venue.run(sql`insert into sales (id, total) values (1, 5)`);
+    store.venue.run(sql`create table other (id integer primary key)`);
+    store.venue.run(sql`update sales set total = 5 where id = 1`);
+    expect(heard).toHaveLength(2);
+  });
+
   it("tells listeners about the first commit after the side file was folded back to nothing", async () => {
     const { store, heard } = await setUp();
     store.venue.run(sql`insert into sales (total) values (1)`);

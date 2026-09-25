@@ -117,9 +117,15 @@ export interface Connections {
    * modification-time tick as the one before is not reported. On macOS APFS, 45,000 commits made
    * back to back just after such a restart never matched the one before (fix-round-1 report of
    * task 7B, 2026-09-25); the box's filesystem was not measured. A commit that changes the side
-   * file but no row (DDL) is not reported and does not move the comparison either.
+   * file but no row (DDL) is not reported and does not move the comparison either, so a
+   * same-value update right after one IS reported.
    */
   committed: () => void;
+  /**
+   * Takes the side file as it is now as the comparison point: for the store's own checkpoint,
+   * which changes the file without a commit.
+   */
+  sideFileReset: () => void;
 }
 
 /**
@@ -190,6 +196,9 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
       };
     },
     listening: () => listeners.size > 0,
+    sideFileReset: () => {
+      if (walPath !== null) lastWal = walMark(walPath);
+    },
     committed: () => {
       if (listeners.size === 0) return;
       if (walPath !== null) {

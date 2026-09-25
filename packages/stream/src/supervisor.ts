@@ -558,7 +558,7 @@ export class StreamSupervisor {
       if (reading !== undefined) this.#noteUnreadable("timeout");
       const mine = { since: now };
       reading = mine;
-      void this.#readBucket(generation, signal).finally(() => {
+      void this.#readBucket(generation, signal, () => reading === mine).finally(() => {
         if (reading === mine) reading = undefined;
       });
     };
@@ -574,11 +574,16 @@ export class StreamSupervisor {
   /**
    * Reads the live generation's newest file (spec §7) and forgets the commits it covers, then
    * checks the bucket when that is due: after a failed read, or with a problem named, at most every
-   * ten minutes; otherwise daily. Nothing is changed or checked once the run has stopped.
+   * ten minutes; otherwise daily. Nothing is changed or checked once the run has stopped, or once a
+   * newer read has replaced this one: its answer may be older than the newer read's.
    */
-  async #readBucket(generation: string, signal: AbortSignal): Promise<void> {
+  async #readBucket(
+    generation: string,
+    signal: AbortSignal,
+    isCurrent: () => boolean,
+  ): Promise<void> {
     const read = await this.#newestUpload(generation);
-    if (signal.aborted) return;
+    if (signal.aborted || !isCurrent()) return;
     if (read.ok) {
       this.#unreadableLoggedAt = null;
       this.#newestUploadAt = read.newest;
