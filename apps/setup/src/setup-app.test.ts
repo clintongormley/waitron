@@ -2181,6 +2181,38 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     },
   );
 
+  const cloudNewerSoftware =
+    "This snapshot was made by newer Waitron software than this server has. Update this server, then try again.";
+  const cloudUnopenable =
+    "This snapshot could not be opened. It is damaged, or the recovery key Waitron Cloud holds for it does not open it.";
+  it.each([
+    ["restore.schema_too_new", 409, cloudNewerSoftware],
+    ["provisioning.database_ahead", 409, cloudNewerSoftware],
+    ["recovery.passphrase_invalid", 422, cloudUnopenable],
+    ["backup.artifact_invalid", 422, cloudUnopenable],
+    ["backup.archive_invalid", 422, cloudUnopenable],
+    [
+      "restore.environment_mismatch",
+      409,
+      "This snapshot is not from a preparation or demo venue, and Cloud recovery restores only those.",
+    ],
+  ])(
+    "says why a Cloud restore refused with %s cannot work by trying again",
+    async (code, status, sentence) => {
+      const el = await approvedCloudApp({
+        restoreFromCloud: vi.fn().mockRejectedValue({ code, params: {}, status }),
+      });
+      cloudRecoveryAction(el, "restore", pointId, false);
+      await flush(el);
+      const screen = await cloudScreen(el);
+      expect(screen.errorMessage).toBe(sentence);
+      expect({ liveSince: screen.liveSince, liveUnknown: screen.liveUnknown }).toEqual({
+        liveSince: undefined,
+        liveUnknown: false,
+      });
+    },
+  );
+
   it("shows only the latest old-server refusal on the Cloud path", async () => {
     const restoreFromCloud = vi
       .fn()

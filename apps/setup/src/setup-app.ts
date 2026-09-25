@@ -166,6 +166,27 @@ const BUCKET_ERROR_MESSAGES: Record<string, string> = {
     "The server rejected the details. Check the kit and the environment, then try again.",
 };
 
+const CLOUD_NEWER_SOFTWARE =
+  "This snapshot was made by newer Waitron software than this server has. Update this server, then try again.";
+const CLOUD_UNOPENABLE =
+  "This snapshot could not be opened. It is damaged, or the recovery key Waitron Cloud holds for it does not open it.";
+
+/**
+ * Cloud restore refusals that pressing Restore again cannot fix. The recovery key comes from the
+ * Cloud grant, not from the owner, and the environment is always preproduction
+ * (`createCloudRecoveryClient`, apps/server/src/cloud-recovery.ts), so the owner can correct
+ * neither here.
+ */
+const CLOUD_ERROR_MESSAGES: Record<string, string> = {
+  "restore.schema_too_new": CLOUD_NEWER_SOFTWARE,
+  "provisioning.database_ahead": CLOUD_NEWER_SOFTWARE,
+  "recovery.passphrase_invalid": CLOUD_UNOPENABLE,
+  "backup.artifact_invalid": CLOUD_UNOPENABLE,
+  "backup.archive_invalid": CLOUD_UNOPENABLE,
+  "restore.environment_mismatch":
+    "This snapshot is not from a preparation or demo venue, and Cloud recovery restores only those.",
+};
+
 /** The sentence for a bucket refusal the screen does not answer with a question of its own. */
 function describeBucketRefusal(code: unknown, params: Record<string, unknown> | undefined): string {
   if (typeof code !== "string")
@@ -698,6 +719,7 @@ export class SetupApp extends LitElement {
           this.cloudLiveUnknown = true;
         } else {
           this.cloudRecoveryError =
+            (typeof code === "string" ? CLOUD_ERROR_MESSAGES[code] : undefined) ??
             "Cloud recovery is unavailable. Check the connection or request expiry, then try again.";
         }
         this.screen = "cloud-restore";
