@@ -2,6 +2,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { hasCode, isAppError } from "@waitron/shared";
+import { bucketClockOffset, newestOf, newestUpload } from "./bucket-times.js";
 import { isPreconditionFailure } from "./conditional.js";
 import "./errors.js";
 import { CommitLog, computeLag } from "./freshness.js";
@@ -208,13 +209,6 @@ const codeOf = (error: unknown): string => (isAppError(error) ? error.code : "un
  * clock drift" (`doc/api/process.md`, v26.x).
  */
 export const steadyMs = (): number => Number(process.hrtime.bigint()) / 1e6;
-
-const newestOf = (objects: readonly ListedObject[], floor: Date | null): Date | null =>
-  objects.reduce<Date | null>(
-    (newest, object) =>
-      newest === null || object.lastModified > newest ? object.lastModified : newest,
-    floor,
-  );
 
 /** A sleep that ends early, and quietly, when `signal` aborts. */
 export async function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -642,10 +636,13 @@ export class StreamSupervisor {
     generation: string,
   ): Promise<{ ok: true; newest: Date | null } | { ok: false; errorCode: string }> {
     try {
-      const prefix = generationPrefix(this.#deps.venueId, generation);
-      let newest = newestOf(await this.#store.list(`${prefix}0000/`), this.#newestUploadAt);
+      const { venueId } = this.#deps;
+      let newest = await newestUpload(this.#store, venueId, generation, {
+        level: 0,
+        floor: this.#newestUploadAt,
+      });
       if (this.#lagWith(newest).lagMs > L0_RETENTION_MS) {
-        newest = newestOf(await this.#store.list(`${prefix}0001/`), newest);
+        newest = await newestUpload(this.#store, venueId, generation, { level: 1, floor: newest });
       }
       return { ok: true, newest };
     } catch (error) {
@@ -689,8 +686,8 @@ export class StreamSupervisor {
     this.#skewMs = (started.wall + ended.wall) / 2 - steady;
     const key = markerKey(this.#deps.venueId, generation);
     try {
-      const marker = (await this.#store.list(key)).find((object) => object.key === key);
-      if (marker !== undefined) this.#skewMs = marker.lastModified.getTime() - steady;
+      const offset = await bucketClockOffset(this.#store, key, started.steady, ended.steady);
+      if (offset !== null) this.#skewMs = offset;
     } catch (error) {
       this.#deps.log("warn", "stream.freshness_unreadable", { errorCode: codeOf(error) });
     }

@@ -20,6 +20,7 @@ export {
 } from "./pointer.js";
 export type { SignedPointer, StreamPointer } from "./pointer.js";
 export { claimGeneration, generationPrefix, markerKey, pruneGenerations } from "./generations.js";
+export { bucketClockOffset, newestUpload } from "./bucket-times.js";
 export { PROBE_PREFIX, probeBucket } from "./probe.js";
 export type { ProbeFailure, ProbeResult } from "./probe.js";
 export {

@@ -9,8 +9,9 @@ import { assertNotAhead } from "@waitron/provisioning";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import {
   PROBE_PREFIX,
+  bucketClockOffset,
   createS3ObjectStore,
-  generationPrefix,
+  newestUpload,
   readPointer,
   restoreGeneration,
   verifyPointer,
@@ -93,18 +94,6 @@ export async function checkIntegrity(directory: string): Promise<string[]> {
   }
 }
 
-async function newestChange(
-  store: ObjectStore,
-  venueId: string,
-  generation: string,
-): Promise<Date | null> {
-  let newest: Date | null = null;
-  for (const object of await store.list(generationPrefix(venueId, generation))) {
-    if (newest === null || object.lastModified > newest) newest = object.lastModified;
-  }
-  return newest;
-}
-
 /**
  * The bucket's clock minus this box's, in milliseconds, from the `LastModified` of a probe object
  * written and listed back; null when that cannot be done. A probe whose delete is refused is left
@@ -118,9 +107,7 @@ export async function measureBucketSkew(
   try {
     const started = now().getTime();
     await store.put(key, new Uint8Array([1]), { ifNoneMatch: "*" });
-    const ended = now().getTime();
-    const listed = (await store.list(key)).find((object) => object.key === key);
-    return listed === undefined ? null : listed.lastModified.getTime() - (started + ended) / 2;
+    return await bucketClockOffset(store, key, started, now().getTime());
   } catch {
     return null;
   } finally {
@@ -141,7 +128,10 @@ export async function refuseIfSourceLive(args: {
   oldBoxGone: boolean;
 }): Promise<void> {
   if (args.oldBoxGone) return;
-  const newest = await newestChange(args.store, args.venueId, args.generation);
+  // Every level, not only the two the supervisor reads: compaction to higher levels and the daily
+  // full copy run on their own schedules (spec §4.4), and nothing here has established that a live
+  // generation's newest file is always at level 0 or 1.
+  const newest = await newestUpload(args.store, args.venueId, args.generation);
   if (newest === null) return;
   const skewMs = await measureBucketSkew(args.store, args.now);
   if (skewMs === null) throw new AppError("restore.stream_source_unchecked", { reason: "clock" });
