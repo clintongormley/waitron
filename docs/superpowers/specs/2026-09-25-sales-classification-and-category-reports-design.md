@@ -1,9 +1,10 @@
 # Sales classification and category reports
 
-**Status:** owner decisions of 2026-09-25, after outside review; not built. It sits beside
+**Status:** owner decisions of 2026-09-25, after outside review; revised the same day after a
+second review (§3's timing table and §5's two report details); not built. It sits beside
 [the menus spec](2026-09-20-menus-categories-and-home-layouts-design.md). §10 of that spec
 separates reporting categories, menu sections and labels, and this document specifies the reporting
-side.
+side; its §11.4 states the same issuance rule for VAT.
 
 Facts about the code are from reading `main` on 2026-09-25. They are not measurements. Each fact
 names its file, so it can be re-checked before building.
@@ -92,8 +93,26 @@ From this change on, **every sale line also records:**
   - the leaf of the chain is the product's main reporting category.
 - **What a snapshot never contains:** menu sections, a menu's top-level list and home layouts. Those
   are menu arrangement (menus spec §10.1).
-- **Timing:** the snapshot is taken when the sale line is recorded, which is when its sale is filed.
-  A held order's lines are classified at payment, not when they were added.
+- **Timing: the snapshot is taken when the invoice record is issued**, in the same pricing pass
+  that produces the filed figures and resolves each line's VAT rate (menus spec §11.4). A held
+  order's lines are classified then, not when they were added. "Issued" is a different moment on
+  each filing path (read on `main` at `9e7beee9d`; `apps/server/src/till-sale.ts` and
+  `working-order.ts`):
+
+  | Path | The record is issued | So the snapshot is taken |
+  | --- | --- | --- |
+  | Cash or manual card, walk-up, held order, tab or split check (`POST /api/sales`) | At payment (`payWorkingOrder` → `fileImmediateSale`) | In that pass. |
+  | Integrated card (`POST /api/pay`) | Priced BEFORE the provider is contacted (P1) and filed from that pricing after capture (P3) | In P1, carried to P3 unchanged. Nothing is re-read after the provider answers. |
+  | Card recovery (a captured payment with no sale) | A fresh pricing pass at recovery (`finalizeRecovery`) | In that pass; it is the issuance. |
+  | Invoice-first (`POST /api/working-orders/:id/place`) | At PLACING, before payment (`placeOrder`) | At placing. Collecting the payment later reads the issued sale and never re-classifies. |
+  | Ticket-then-pay collect (`POST /api/working-orders/:id/collect`) | At collect | In that pass. |
+
+  - Changing `readLockedLines` alone does not give every path the rule: the walk-up path prices
+    through `priceOrderLines` in the same request, and the card path files from an in-memory P1
+    result. The rule is stated per path above, and each path's test files a sale after a category
+    move and asserts the snapshot matches the classification at issuance, not at add time.
+  - **Collection and replay of an issued sale retain its recorded facts.** A reprint rebuilds
+    receipt lines from the stored order lines (`readSettledTicket`), never from a re-classification.
 - **Storage:** JSON is the first-release storage. Measure the real report queries before adding
   rows indexed by category or a cache.
 - **Extras lines** are classified, in the snapshot, by their OWN product's reporting chain and
@@ -147,8 +166,16 @@ Every category report is labelled with its mode.
   - intentionally changes when the classification changes;
   - puts lines recorded before this change (no `product_id`) under **Not recorded**.
   - Lines recorded before this change also have no `line_gross`. The report shows their net amount
-    and marks the gross total for a period that includes them as incomplete. It never estimates a
-    gross it cannot reconcile.
+    and marks the gross total for a period that includes them as incomplete, through the
+    completeness indicator below. It never estimates a gross it cannot reconcile.
+- **A parent with its own products:** a product may have a parent category as its main category
+  ("Drinks" directly, not "Drinks › Softs"). A parent's total is its direct sales PLUS its
+  children's totals. The report shows the direct part as an explicit **"Directly in Drinks"**
+  subtotal row under the parent, before the children, so the parent's figure visibly adds up.
+- **Completeness:** the report contract carries a completeness indicator — whether every line in
+  the period has a recorded gross, and how many do not — and the screen and the printed page show
+  "Gross total incomplete: N lines recorded before classification began" whenever it is not
+  complete. A total is never shown as complete when it is not.
 - **Amounts:**
   - each report shows gross (`line_gross`) and net (`line_total`);
   - on the till's sale paths, gross totals reconcile exactly to `sales.total`, because there the
@@ -192,6 +219,15 @@ same business day, with an option to print it alongside the close.
    current mode, and under the free-text category (or "Not recorded") in the historical mode.
 8. **Labels overlap:** a Negroni labelled "Happy hour drinks" and "Alcoholic" counts in both label
    totals, and the report marks label totals as overlapping.
+9. **A parent with direct products:** Water's main category is Drinks itself; Cola's is Softs, a
+   child of Drinks. The report shows Drinks = "Directly in Drinks" (Water) + Softs (Cola).
+10. **Classified at issuance on every path:** Cocktails moves from "Alcoholic drinks" to "Spirits"
+    while a tab, an invoice-first order and a card payment are each open. The tab paid afterwards,
+    the invoice-first order placed afterwards, and the card sale whose pricing pass ran afterwards
+    all record Spirits; an invoice-first order PLACED before the move records Alcoholic drinks
+    even though it is collected after it.
+11. **A period with old lines:** a month containing lines recorded before this change reports its
+    gross as incomplete, with the count of such lines, in both modes.
 
 ## 8. Out of scope for the first release
 

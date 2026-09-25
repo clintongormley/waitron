@@ -27,7 +27,9 @@ columns (Task 2). **Order (owner, 2026-09-25): one lane.** This plan's Tasks 1 a
 the history starts building. Then the menus plan's tasks run. This plan's Task 3 runs last.
 
 **Revision history.** First written 2026-09-25 from reads of `main` (facts named with their files
-below; reads, not measurements).
+below; reads, not measurements). **Revision 2, the same day, after the second outside review:**
+Task 2 names every filing path and takes its snapshot in the issuance pass (spec §3's table), and
+Task 3's contract gains the direct-products subtotal and the completeness indicator (spec §5).
 
 ## Global Constraints
 
@@ -48,7 +50,8 @@ screens rules, and the backlog. In addition:
   COLUMN` lines only, never a rebuild. If drizzle emits a rebuild, STOP.
 - **Owner-facing choices to confirm before the task that builds each:**
   - extras classified by their OWN product, not the dish (spec §3; Task 2);
-  - the snapshot taken at filing, not when the line was added (spec §3; Task 2);
+  - the snapshot taken when the record is issued, not when the line was added — and for a card
+    payment that is the pricing pass BEFORE the provider is contacted (spec §3; Task 2);
   - the deletion defaults (spec §2.1; Task 1).
 
 ## Review Focus
@@ -150,9 +153,21 @@ Spec §3 and §4. **Fiscal-adjacent.**
     to its parent's main category and takes its parent's labels.
   - `validateSnapshot(s)` checks existing ids, non-empty names, no repeat in the chain, and that the
     leaf is the main category.
-- Modify: `apps/server/src/working-order.ts` (`readLockedLines` / the filing path attaches
-  `product_id` from `working_order_lines.product_id`, the parent product, `line_gross` and the
-  snapshot, loading the classification ONCE per sale, never per line), and `till-sale.ts`.
+- Modify: `apps/server/src/working-order.ts` and `till-sale.ts`: **the issuance pass** — the one
+  pricing pass whose figures are filed — attaches `product_id` from `working_order_lines.product_id`,
+  the parent product, `line_gross` and the snapshot, loading the classification ONCE per sale,
+  never per line. Changing `readLockedLines` alone does not reach every path (spec §3's table):
+  - `POST /api/sales` walk-up prices through `priceOrderLines` in the same request, and a held
+    order, tab or split check through `priceStoredOrder` (`till-sale.ts:352-364`);
+  - `POST /api/pay` prices in P1 (`till-sale.ts:700-709`) and files P1's result in P3 (`:748-757`):
+    the snapshot is taken in P1 and carried in `PricedLines` to `recordSale`; nothing is re-read
+    after the provider answers;
+  - card recovery re-prices at `finalizeRecovery` (`:900`): that pass takes the snapshot;
+  - invoice-first files at placing (`placeOrder`, `working-order.ts:2530`): the snapshot is taken
+    then, and `collectOrder` reads the issued sale and classifies nothing;
+  - ticket-then-pay files at collect (`collectOrder`, `till-sale.ts:1282`).
+  Put the attachment in ONE function the five paths call (the menus plan's Task 7a puts VAT
+  resolution in the same pass; whichever lands second reuses the seam).
 - **Menu provenance:** `menu_id` comes from the line's `working_line_contexts.menu_id` today.
   `menu_version_id` stays null until the menus plan's Task 7 (sell from the published version) fills
   it. Whichever of the two tasks lands SECOND wires `menu_version_id`; the first leaves a
@@ -176,6 +191,13 @@ Spec §3 and §4. **Fiscal-adjacent.**
   - **Uncategorised:** `reporting: []`.
   - **The snapshot is frozen:** renaming or moving the category after filing leaves the stored
     snapshot unchanged. The append-only trigger refuses an update (assert the refusal).
+  - **Issuance on every path** (spec §7 example 10): Cocktails moves while each of a tab, an
+    invoice-first order and a card payment is open. The tab paid after the move, the invoice-first
+    order placed after it, and the card sale whose P1 ran after it record Spirits; an invoice-first
+    order placed BEFORE the move and collected after it records Alcoholic drinks; a card payment
+    whose P1 ran before the move and whose P3 ran after it records Alcoholic drinks (a stub
+    provider that moves the category between P1 and P3); a recovery run after the move records
+    Spirits. A reprint of any of them changes nothing.
   - **One read per sale:** a basket of five lines across three categories loads the classification
     once. Count prepared queries, as `packages/venue-service/src/operations.test.ts`'s "resolves a
     menu item once" case does.
@@ -200,9 +222,19 @@ Spec §5 and §6.
 **Interfaces:**
 ```ts
 export type CategoryReportMode = "at_time_of_sale" | "current";
-export interface CategoryTotal { id: string | "uncategorised" | "not_recorded"; name: string; depth: number; gross: string; net: string; children: CategoryTotal[] }
+export interface CategoryTotal {
+  id: string | "uncategorised" | "not_recorded"; name: string; depth: number;
+  gross: string; net: string;               // this category INCLUDING its children
+  direct: { gross: string; net: string };   // products whose main category is this one (spec §5: the "Directly in Drinks" row)
+  children: CategoryTotal[];
+}
 export interface LabelTotal { id: string; name: string; gross: string; net: string } // overlapping by nature
-export async function categorySales(tx, cfg, period: { from: Date; to: Date }, mode: CategoryReportMode, opts?: { extrasIntoDish?: boolean }): Promise<{ tree: CategoryTotal[]; labels: LabelTotal[]; gross: string; net: string }>;
+export interface CategoryReport {
+  tree: CategoryTotal[]; labels: LabelTotal[]; gross: string; net: string;
+  grossComplete: boolean;                   // false when any line in the period has no line_gross
+  linesWithoutGross: number;                // how many, for the "Gross total incomplete" note
+}
+export async function categorySales(tx, cfg, period: { from: Date; to: Date }, mode: CategoryReportMode, opts?: { extrasIntoDish?: boolean }): Promise<CategoryReport>;
 ```
 
 - [ ] **Step 1: Write the failing tests:** Review Focus 1–4 in full.
@@ -210,8 +242,14 @@ export async function categorySales(tx, cfg, period: { from: Date; to: Date }, m
     (`packages/reporting/src/business-day.ts`): issued in the period, substitutes excluded, voids
     subtracted on the day of the void under the voided line's own snapshot, corrections netted.
   - **Current mode:** it puts pre-feature lines under "Not recorded".
-  - **Pre-feature gross:** those lines have no `line_gross`; their net is shown, and a period that
-    includes them marks its gross as incomplete (spec §5).
+  - **Pre-feature gross:** those lines have no `line_gross`; their net is shown, `grossComplete` is
+    false with `linesWithoutGross` = their count, and the screen and the printed page say "Gross
+    total incomplete: N lines recorded before classification began" (spec §5). A period without
+    such lines reports `grossComplete: true` and shows no note (the control).
+  - **A parent with direct products** (spec §7 example 9): Water's main category is Drinks, Cola's
+    is Softs under Drinks. Drinks' `gross` = Water + Cola, `direct` = Water alone, and the screen
+    renders a "Directly in Drinks" row before Softs. A category with no direct sales renders no such
+    row.
   - **Labels:** the label list is marked as overlapping.
   - **Screen:** the mode is always shown in the heading ("Categories at time of sale" / "Current
     categories"). LOOK in both themes and at 390px.

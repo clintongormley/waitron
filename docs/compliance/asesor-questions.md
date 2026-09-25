@@ -10,7 +10,8 @@ Question numbers are **stable identifiers**, not reading order — sections are 
 priority. Q9 is referenced from other documents; do not renumber it.
 
 Last revised **2026-09-25** — Q26 (a VAT change while an order is open: we apply the rate in force
-at payment — is that right?) added beside Q25. Before that, **2026-09-24** — Q25 (a void made on a later day: which VAT period the annulment lands
+when the invoice is issued — is that right?) added beside Q25, and later the same day reworded from
+"at payment" to "when the invoice is issued", naming the invoice-first case. Before that, **2026-09-24** — Q25 (a void made on a later day: which VAT period the annulment lands
 in) added beside the filing questions. Before that, **2026-09-23** — Q21 (when a table's invoice
 is issued: pre-bill first, or the invoice when the bill is presented) added beside Q14; Q22 (printing the ticket only on request, or never) and
 Q23 (backup copies held abroad or by us) added; the preparation-environment question numbered Q24.
@@ -1203,11 +1204,14 @@ correct treatment for the venue's particular product.
 
 ---
 
-### Q26. A VAT change while an order is still open — we apply the rate in force at payment; is that right? (added 2026-09-25)
+### Q26. A VAT change while an order is still open — we apply the rate in force when the invoice is issued; is that right? (added 2026-09-25)
 
 **Why it matters.** An order can stay open for hours: a table's tab, or an order held for
-collection. The owner decided on 2026-09-25 that every line's VAT is taken **at payment**, from the
-product's current VAT class, whenever the line was added (menus spec §10.4). The customer pays the
+collection. The owner decided on 2026-09-25 that every line's VAT is taken **when the invoice
+record is issued**, from the product's current VAT class, whenever the line was added (menus spec
+§10.4 and §11.4). On most paths that is the moment of payment; for an order the venue invoices
+first and collects later, it is the moment the order is placed, before any payment; for a card
+payment it is the pricing done just before the card terminal is contacted. The customer pays the
 same gross price either way, so only the VAT split changes. Today a held order's lines are filed at
 the rate stored when each line was added (`priceStoredOrder`, `apps/server/src/working-order.ts`;
 read, not run), so this is a change we are about to make, and we want it confirmed before
@@ -1224,8 +1228,9 @@ confirmed before production, not after.
 
 > En nuestro TPV, el precio (IVA incluido) de cada línea de un pedido abierto (una mesa, o un pedido
 > pendiente de recoger) queda fijado cuando se añade. El tipo de IVA, en cambio, lo determinamos al
-> cobrar, según el tipo vigente del producto en ese momento, y la factura simplificada se emite con
-> ese tipo.
+> emitir la factura simplificada, según el tipo vigente del producto en ese momento. Normalmente la
+> emisión coincide con el cobro; en los pedidos que se facturan al hacerlos y se cobran al recoger,
+> la emisión es anterior al cobro.
 >
 > **(a)** Si durante el servicio se corrige una configuración errónea (por ejemplo, una bebida dada
 > de alta al 10 % que debía estar al 21 %), ¿es correcto facturar al tipo corregido las líneas ya
@@ -1237,7 +1242,8 @@ confirmed before production, not after.
 > consumición el vigente cuando se sirvió (devengo)?
 >
 > **(c)** ¿Cambia algo si el cobro se hace días después (por ejemplo, un pedido de grupo facturado
-> más tarde)?
+> más tarde)? ¿Y si la factura se emite al hacer el pedido y se cobra después: manda el tipo vigente
+> al emitir, aunque el cobro sea posterior?
 
 This records a question; no enquiry has been sent.
 

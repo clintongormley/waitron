@@ -177,15 +177,23 @@ What staff and the operator touch: `apps/till`, `apps/dashboard`, `apps/setup`, 
 `apps/server`, `packages/printing`'s dashboard side, `packages/payments*`. Numbered in priority
 order; the small items at the end of each area live in Track C.
 
-**Planned, handed to lane C (owner, 2026-09-25): menus, reusable categories and home layouts.**
-[Design](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) (§9 holds the
-owner's 2026-09-25 answers), [plan](superpowers/plans/2026-09-25-menus-categories-home-layouts.md):
-nine pull requests, one per task, run in order by campaign lane C. The owner lifted the wait: the
-dependency upgrades are finished, and the work does not wait for SQLite slice 2. The plan's
-decisions D1–D21 settle the spec's open integration points; D6, D9, D10, D12, D13, D14, D21, D3 and
-D20 are flagged for the owner in its self-review notes. Tasks 1, 3 and 6 cannot upgrade an existing
-venue: every dev venue needs `wa-wt reset demo <name>`, and the owner's box should be wiped once
-after Task 7.
+**Planned for one campaign lane (owner, 2026-09-25): sales classification, then menus, reusable
+sections and home layouts.** Two specs and two plans, revised twice the same day after outside
+reviews: the [menus design](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md)
+(§11 wins over §10, which wins over §1–§9; "category" in §1–§7 means SECTION) with its
+[plan](superpowers/plans/2026-09-25-menus-categories-home-layouts.md) (Revision 3, Tasks 1–9 with
+7a, 7b and 7c before 7), and the
+[sales classification design](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md)
+with its [plan](superpowers/plans/2026-09-25-sales-classification.md) (Revision 2, Tasks 1–3).
+**Order, one lane:** classification Tasks 1–2 first (so sale-line history starts building), then
+menus Tasks 1–6, 7a, 7b, 7c, 7, 8, 9, then classification Task 3 — fifteen pull requests, one per
+task. The lane is not yet armed; the drafts are in `~/waitron-campaign-c`. The owner lifted the
+wait: the dependency upgrades are finished, and the work does not wait for SQLite slice 2. The
+menus plan's decisions D1–D23 settle the spec's open integration points; D6, D9, D10, D11, D12,
+D13 and D22 are the ones flagged for the owner. Menus Task 3 wipes existing venues (it rebuilds
+`menu_items`); every other migrating task adds tables or columns only and measures its own upgrade.
+Every dev venue then needs `wa-wt reset demo <name>`, and the owner's box should be wiped once
+after menus Task 7 lands.
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
 shared look, and the rules for it live in [design-system.md](developers/design-system.md). That

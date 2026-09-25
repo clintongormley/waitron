@@ -1,7 +1,7 @@
 # Menus, reusable categories and service home layouts
 
 **Status:** product decisions agreed with the owner on 2026-09-20; implementation deferred.
-Further owner decisions, 2026-09-25, are in §9 and §10; §10 (after outside review) wins where they differ.
+Further owner decisions, 2026-09-25, are in §9, §10 and §11; a later section wins over an earlier one where they differ (§11, after the second outside review, wins over all).
 **2026-09-25:** the owner lifted the wait on SQLite slice 2 and the dependency upgrades (the latter
 are finished); the implementation plan is
 [2026-09-25-menus-categories-home-layouts.md](../plans/2026-09-25-menus-categories-home-layouts.md).
@@ -306,7 +306,7 @@ There is no per-menu availability in this work. Today this is the product's own 
 (`packages/db/src/schema/catalogue.ts`); the plan keeps that as the live field beside the
 published snapshot.
 
-**Publishing never changes what is already in a basket or a held order.** A line already in an open
+**Publishing never changes what is already in a basket or a held order.** *(2026-09-25, §11.2: for an UNSAVED basket this is reversed — the basket follows the live menu with a confirmation; a saved order keeps its facts.)* A line already in an open
 basket, or in a held order sent to the kitchen but not yet paid, keeps the name, price and choices
 it was added with when a new version is published. A line added after the device has picked up the
 new version comes from the new version. The same rule covers baskets and held orders.
@@ -392,6 +392,8 @@ lines to a newly published price, with a warning — was considered and **withdr
 
 - **A line keeps the price and names it was given when it was added to an order**, whether the
   order is a till's unsaved basket, a held order or a tab, and whether or not the kitchen has it.
+  *(2026-09-25, §11.2: an UNSAVED basket no longer keeps them — it is refreshed against a newly
+  published version, with confirmation; the rule stands for every saved order.)*
   Publishing a new version never changes a line already in an order, and nothing re-prices it later.
   VAT is different: see §10.4.
 - **Editing prices only what the edit adds.**
@@ -414,7 +416,9 @@ lines to a newly published price, with a warning — was considered and **withdr
   - **A paper-only kitchen** never reports "started", so edits stay possible, always with the slip.
     Checking with the kitchen is up to the staff.
   - **The venue setting "Allow changes to items already sent to the kitchen"** is on by default. When
-    it is off, an item already sent can only be voided (with its VOID notice) and re-added.
+    it is off, an item already sent can only be voided (with its VOID notice) and re-added. *(§11.5:
+    recalling the item does not reopen it for editing while the setting is off, and the till offers
+    Cancel on a sent line so that the void has a button.)*
   - Extras lines follow their dish.
 - **Printing a pre-bill** (the bill before payment) never sends anything to the kitchen and never
   fires held food. There is no pre-bill in the product today (asesor Q21 and Q14 are open); this is
@@ -423,7 +427,8 @@ lines to a newly published price, with a warning — was considered and **withdr
   for. Staff remove it, or replace it with something available. A sent line stays collectible
   however its product's availability changes, because the work is committed. Where the venue splits
   a bill, staff can pay the eligible lines and resolve the rest.
-- **A basket older than the menu's grace window:** a till's unsaved basket names the menu version
+- *(2026-09-25: the grace window is withdrawn by §11.2 — there is no window and no expiry; a basket
+  is refreshed whenever its menu is published again.)* **A basket older than the menu's grace window:** a till's unsaved basket names the menu version
   it was built from. If that version was replaced more than the grace window ago (the plan sets 12
   hours), the till reloads the menu, shows which lines changed price, and staff confirm before paying.
   That is the one case where a line's price changes, and it is shown, never silent.
@@ -438,14 +443,14 @@ No single "frozen" rule covers everything:
 | --- | --- |
 | Gross price (dish, variant, extras) | Fixed when the line is added (§10.3). |
 | Names on the line (staff, customer, kitchen) | Fixed when the line is added, as they are recorded today. |
-| VAT | **Taken at payment** (owner, 2026-09-25), from each product's current VAT class, for every line — walk-up, held order or tab. The customer pays the same gross price either way; only the VAT split, and so what is owed to the tax agency, follows the rate in force when the invoice is issued. Today a held order's lines are filed at the VAT stored when they were added (`priceStoredOrder`, `apps/server/src/working-order.ts`), so this is a change to the filing path. |
-| Allergens and diet | Always current wherever they are shown: on the till, on the kitchen screen, on printed allergen information and on a retrieved held order. |
-| Availability | Always current. It governs whether an unsent line can be sent or paid for (§10.3). |
+| VAT | **Taken when the invoice record is issued** (§11.4 sharpens the 2026-09-25 "at payment" wording: issuance is at payment on most paths, at placing for invoice-first, and in the pricing pass before the provider is contacted for a card payment), from each product's current VAT class, for every line — walk-up, held order or tab. The customer pays the same gross price either way; only the VAT split, and so what is owed to the tax agency, follows the rate in force when the invoice is issued. Today a held order's lines are filed at the VAT stored when they were added (`priceStoredOrder`, `apps/server/src/working-order.ts`), so this is a change to the filing path. |
+| Allergens and diet | *(Superseded 2026-09-25 by §11.1: they are part of the published snapshot, and a line records the published values it was added with.)* ~~Always current wherever they are shown~~. |
+| Availability | Always current, refreshed by the till on its own (§11.1). It governs whether an unsent line can be sent or paid for (§10.3, §11.3). |
 | Preparation destination | Decided by routing and recorded when the line is sent, as today (the ticket item's station). |
 
 Asesor question Q26 (`docs/compliance/asesor-questions.md`) asks the venue's tax adviser to confirm
-that the rate in force at payment is the right one, including across a legal rate change while a
-table is open.
+that the rate in force when the invoice is issued is the right one, including across a legal rate
+change while a table is open (§11.4 states the issuance moment per path).
 
 ### 10.5 Kitchen routing becomes ordered rules — a later spec
 
@@ -480,13 +485,13 @@ and it gets its own spec. What that spec must contain:
 
 These add to §7.
 
-1. **A basket across a publish:** a Lemonade is added at €3.00, the menu is republished at €2.50,
-   and a second Lemonade is added. The sale files €3.00 + €2.50.
+1. *(Superseded by §11.2: the basket is refreshed and confirmed, and the sale files €2.50 + €2.50.)* **A basket across a publish:** a Lemonade is added at €3.00, the menu is republished at €2.50,
+   and a second Lemonade is added. ~~The sale files €3.00 + €2.50.~~
 2. **Concurrent changes to one order:** two tills open the same held order, and each changes it and
    saves. The second save, made from a copy the first save has since changed, is refused as out of
    date, and that till reloads the order. Nothing is lost or re-priced silently, and no line either
    till did not touch is deleted or re-inserted.
-3. **An edit to work the kitchen has:** a burger already sent is changed to "no onions" before the
+3. **An edit to work the kitchen has** (done from the till's own Change action, §11.6)**:** a burger already sent is changed to "no onions" before the
    kitchen starts it. The kitchen gets a recall and a new ticket, and the price is unchanged. Once a
    kitchen screen marks it started, the edit is refused and staff must void and re-add. With the
    venue setting off, it is refused from the start.
@@ -496,3 +501,179 @@ These add to §7.
    other lines are paid, and the unavailable line must be removed before its part can be paid.
 6. **VAT at payment:** a held order's drink was added at 10%, and its VAT class is corrected to 21%
    before payment. The invoice files it at 21%, and the customer pays the same gross price.
+
+## 11. Owner decisions after the second outside review, 2026-09-25
+
+The revision-2 plan was put to outside review again, and the owner confirmed the decisions below.
+**Where this section disagrees with §1–§10, this section wins.** The "today" facts come from
+reading `main` at `9e7beee9d` on 2026-09-25 with each file named; they are reads, not
+measurements, and the plan re-checks the ones it builds on.
+
+### 11.1 A published menu snapshot, plus live availability
+
+- **The snapshot holds everything a till shows and charges:** prices, names, structure, images,
+  variants, extras and options, and the **allergens and diet** declared for each of them. A change
+  to any of those reaches a till only when someone publishes that menu. This retires §10.4's row
+  "Allergens and diet: always current wherever they are shown", and D6's list of live fields
+  shrinks to availability alone. The owner manages the distinction between a recipe change and a
+  correction to allergen information; the product builds no special handling for it.
+- **A menu with changes not yet published shows "Unpublished changes"**, and its comparison page
+  lists what publishing would change, **including changes inherited from a shared product or
+  section** (a product's allergens or price, a section another menu also uses). The comparison
+  names the source of each change, so an owner can see that a product edit is what flagged three
+  menus.
+- **Availability is live and independent of publication.** Marking a product sold out reaches
+  every till without a publish and flags no menu. **A till refreshes availability even when the
+  published version has not changed.** Today a till loads offers at login, on a counter zone
+  change and when a table is opened, and never again (`apps/till/src/till-app.ts:632, 902, 1481`);
+  the plan adds the refresh (D11).
+- **VAT and reporting classification are not menu content.** Neither is in the snapshot, neither is
+  read from it, and a change to either flags no menu. VAT is resolved when the invoice record is
+  issued (§11.4) and the classification is recorded at the same moment (the sales classification
+  spec §3).
+
+### 11.2 An unsaved basket follows the live menu; a saved order keeps its facts
+
+**Repricing applies only to a browser-only, unsaved basket.** This replaces §10.3's first bullet
+for baskets, and §9's "publishing never changes what is already in a basket", and it removes the
+grace window (§10.3's "a basket older than the menu's grace window") entirely: there is no
+12-hour window, no expiry and no `menu.version_expired`.
+
+When a menu the basket was built from is published again:
+
+- the till refreshes the basket against the new version;
+- it shows every line whose price changed ("Lemonade €3.00 → €2.50") and requires confirmation
+  before staff go on;
+- a line whose product, variant or extras pick is no longer offered, or is now unavailable, must be
+  resolved (removed or replaced) before the basket can be paid;
+- **when nothing relevant to the basket changed, staff are not interrupted**: the till adopts the
+  new version silently.
+
+The server prices an unsaved basket from the live version only. The till tells the server which
+version it priced against, and a mismatch is refused, never silently re-priced (D9 in the plan).
+
+**A saved order — a held order, a parked counter order, a tab — keeps its recorded prices, names,
+allergens and diet, whether or not its lines have been sent.** Publishing never changes them.
+Editing prices only what the edit adds: a new line, or an extra added to a line. Changing a line's
+product or variant makes it a new item, priced from the version the till is showing. This keeps
+§10.3's rules for saved orders.
+
+**Acceptance example §10.7(1) is superseded:** a Lemonade added at €3.00, the menu republished at
+€2.50, and a second Lemonade added. The till shows "Lemonade €3.00 → €2.50" for the first line and
+asks for confirmation; after it, the sale files €2.50 + €2.50. It never files €3.00 + €2.50.
+
+### 11.3 Availability governs fulfilment, and "sent" is recorded on the line
+
+- An unsent line whose product became unavailable **cannot be sent or paid for**. Staff remove it
+  or replace it. The server enforces this at send and at pay, not only the till.
+- A sent line **stays payable** however its product's availability changes: the work, or the
+  drink, is committed.
+- **"Sent" is a fact recorded on the order line itself**, not derived from the kitchen ticket.
+  Today nothing on `working_order_lines` says a line was sent: only the ticket row's `fired_at`
+  does (`packages/db/src/schema/ticket-items.ts:50-51`), a line with a "no preparation" route gets
+  no ticket row at all (`apps/server/src/working-order.ts:883, 911`), and a partial bill split
+  creates a new line row with no ticket (`carveOffLines`, `working-order.ts:1848-1873`). So a
+  split-off portion of a sent, now-unavailable dish would be unpayable, and a served bottle with
+  no route would look unsent. The rule:
+  - a line is marked sent when it is fired to a station, and a line with a "no preparation" route is
+    marked sent at the same moment its order's other lines would be fired — when a tab round is
+    sent, an order is placed, or an order is sent to preparation. A parked counter order marks
+    nothing;
+  - a split or transfer copies the mark to the new row, and copies the line's course, note and
+    served state with it; a partial split of a line the kitchen has STARTED is refused, because the
+    split-off row would have no kitchen work of its own to guard it;
+  - a line with no preparation route under a held course is marked sent when that course fires,
+    not before;
+  - "sent" governs payment; whether a line can be SENT reads the kitchen state, so a recalled line
+    whose product has gone unavailable is refused when staff send it again;
+  - a sent line with no preparation route is payable, and it is also freely editable (no kitchen
+    work exists to correct); the two properties are separate.
+
+### 11.4 VAT and classification are taken when the invoice record is issued
+
+§10.4 said "at payment". The precise rule is **when the invoice record is issued**, which is the
+pricing pass that produces the filed figures. That pass resolves each line's VAT rate from its
+product's current VAT class and records the reporting classification, once per sale. The paths
+today (`apps/server/src/till-sale.ts`, `working-order.ts`):
+
+| Path | When the record is issued | What the rule means there |
+| --- | --- | --- |
+| Cash or manual card (`POST /api/sales`) | At payment | Resolve at payment. |
+| Held order, tab or split check paid the same way | At payment | Resolve at payment, for every line however old. |
+| Integrated card (`POST /api/pay`) | The order is priced BEFORE the provider is contacted (P1, `till-sale.ts:700-709`) and filed from that pricing after capture (P3, `:748-757`) | Resolve in P1; P3 files P1's figures unchanged. The amount charged is the gross total, which VAT does not change. |
+| Card recovery (a captured payment with no sale) | A fresh pricing pass at recovery (`finalizeRecovery`, `:900`) | That pass is the issuance: resolve then. |
+| Invoice-first (`POST /api/working-orders/:id/place`) | At PLACING, before payment (`placeOrder`, `working-order.ts:2529-2547`) | Resolve at placing. Collecting the payment later reads the issued sale's total and never re-prices (`collectOrder`, `till-sale.ts:1225-1279`). |
+| Ticket-then-pay collect (`POST /api/working-orders/:id/collect`) | At collect | Resolve at collect. |
+
+- **The resolved rate is written back onto the stored line before the record is filed.** A reprint
+  or replay rebuilds receipt lines from the stored lines, not from `sale_lines`
+  (`readSettledTicket`, `till-sale.ts:434-436`), so a rate resolved only in memory would print a
+  receipt that disagrees with the filed sale.
+- **Collection and replay of an issued sale retain its recorded facts.** Nothing re-resolves VAT or
+  classification after issuance.
+- **Lines are not edited while a card payment is in flight.** Between P1 and P3 nothing today stops
+  an edit or a new round on the same order (no in-flight guard was found in `working-order.ts`),
+  so P3 could file P1's figures for lines that no longer exist. The plan marks the ORDER in P1's own
+  transaction and refuses edits while the mark is set (D22); it does not rely on the payment
+  provider's own rows, which the simulator never writes and which Stripe and SumUp write only after
+  P1 has committed.
+- Asesor question Q26 asks the adviser to confirm the rule, and its wording now says "when the
+  invoice is issued" and names the invoice-first case.
+
+### 11.5 Kitchen screens receive corrections, not only printers
+
+Today a recall or a void produces a printed slip only where the station has an active printer
+(`enqueueCorrectionSlips`, `apps/server/src/kitchen-print.ts:354-356, 380-381`), and it writes
+nothing a kitchen screen can read. A void deletes the line and its ticket row
+(`voidTabLine`, `working-order.ts:1211-1218`), so on a kitchen screen the item simply vanishes at
+its next reload, whether or not the cook had started it. The kitchen screen is the till app on a
+device enrolled as `kds` (`apps/till/src/screens/till-station-screen.ts`), and it reloads only when
+opened or after its own actions.
+
+- **Every correction is recorded as a kitchen notice in the same transaction**, whether or not a
+  printer exists: RECALLED, VOID, or CHANGED (an edit to a sent, not-started line), with the line as
+  it was, the quantity affected and the station. A printer, where mapped, prints the slip as today.
+- **A kitchen screen shows its station's notices until a cook acknowledges each one.** A VOID of an
+  item already started stays on the screen as a notice marked "started", so the waste is visible.
+- **Partial quantities are corrections too:** dropping 2 to 1 is a VOID of 1, and the notice says so.
+- **The kitchen screen refreshes on its own** (a poll, D11's interval), so a notice appears without
+  a cook touching the screen.
+
+### 11.6 Staff edit a sent line from the till, not through an API call
+
+The table order screen offers Send, Recall and Cancel per line and nothing that changes a sent
+line (`till-table-order-screen.ts:568-609`). §10.7's example 3 ("a burger already sent is changed to
+'no onions'") therefore needs a staff-facing interaction, and the plan adds one: a **Change** action
+on a sent, not-started line that opens the line's note, options and extras for editing and saves
+through a per-line route applying §10.3's rules. The acceptance example is met by a browser test
+of that interaction, not by a direct API call.
+
+### 11.7 Acceptance examples added after the second review
+
+These add to §7 and §10.7; §10.7(1) is replaced by §11.2's version.
+
+1. **Nothing relevant changed:** Lunch is republished with a Dinner-only section renamed. A till
+   with two Lunch lines in its basket adopts the new version with no dialog.
+2. **A sold-out dish reaches the tills without a publish:** Burger is marked unavailable on the
+   dashboard. Within the refresh interval every signed-in till greys it, and Lunch still shows
+   "Published" with no unpublished changes. The server refuses a new line for it meanwhile.
+3. **An allergen change waits for publication:** sulphites are added to Lemonade after Lunch was
+   published. The till keeps showing the published allergens; Lunch shows "Unpublished changes",
+   and its comparison page says "Lemonade: allergens (shared product)". After publishing, the till
+   shows sulphites.
+4. **A split portion of a sent, sold-out dish is payable:** a tab has two fired Burgers; Burger
+   is then marked unavailable; one Burger is split to a new check. Both checks pay.
+5. **A served bottle with no route:** a tab round with a bottled beer is sent; the beer is marked
+   unavailable; the tab pays, beer included.
+6. **A void on a kitchen screen:** a cook has started a Burger; the waiter cancels it. The kitchen
+   screen shows "VOID — Burger ×1 — started" until the cook acknowledges it; where the station has a
+   printer, a VOID slip prints too.
+7. **The same extra from two lists:** Extra cheese is offered by "Toppings" at €1.00 and "Premium
+   toppings" at €1.50. A tab line took it from Premium toppings. A later edit that changes the note
+   keeps the cheese at €1.50. If Premium toppings then stops offering cheese, the line still keeps
+   €1.50, and only a NEW pick prices from the list it is picked from.
+8. **Duplicate and use the copy here keeps the menu's prices:** Lunch reaches Lemonade only through
+   Drinks, with a Lunch price override. "Duplicate Drinks and use the copy here" leaves the override
+   in place.
+9. **An edit during a card payment is refused:** while a card payment for a tab is in flight, a
+   new round for that tab is refused, and succeeds once the payment settles or fails.

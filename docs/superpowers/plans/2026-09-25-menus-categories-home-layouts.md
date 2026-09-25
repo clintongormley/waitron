@@ -5,7 +5,8 @@
 **Goal:** Let a venue build menus out of shared, ordered, nestable menu sections. Each menu gets its
 own price overrides and a published version that the tills sell from, until the owner publishes the
 menu again. Handhelds and tills get a home page: search, a shortcut grid chosen per device, and the
-full menu below. A line added to an order keeps its price from then on.
+full menu below. A line added to a saved order keeps its price from then on; an unsaved basket
+follows the live menu, with staff confirming any change that touches it.
 
 **Architecture:**
 - **One ordered membership table** (`section_members`) holds every menu list: a section's members,
@@ -15,8 +16,10 @@ full menu below. A line added to an order keeps its price from then on.
   are a separate strict tree that this plan leaves alone; the sales classification plan changes
   them.
 - **Publishing** freezes one self-contained JSON document per menu version.
-- **Tills** read that document, with a short fixed list of fields (availability, allergens, diet,
-  VAT class and a few others) read from the current rows instead.
+- **Tills** read that document, with ONE live overlay read from the current rows: availability.
+  Allergens, diet, names and prices are in the document (spec §11.1). VAT class and reporting
+  classification are not menu content at all: they are resolved when the invoice record is issued
+  (Task 7a, the classification plan).
 - **Change detection:** a menu is flagged as changed by comparing a hash of the document it would
   publish now with the live version's hash.
 **Tech Stack:** TypeScript, Drizzle ORM on SQLite (`drizzle-orm/sqlite-core`, `node:sqlite`), Hono
@@ -24,8 +27,8 @@ routes, Lit web components (dashboard, venue-service dashboard, till), Vitest (`
 SQLite databases; real Chromium for the front-ends).
 
 **Spec:** `docs/superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md`. **Read
-§10 first** (the owner's decisions after outside review, 2026-09-25): it wins over everything
-earlier. Then read §9, then §1–§8, **reading "category" in §1–§7 as "section"** (§10.1). The sales
+§11 first** (the owner's decisions after the second outside review, 2026-09-25): it wins over
+everything earlier. Then §10, then §9, then §1–§8, **reading "category" in §1–§7 as "section"** (§10.1). The sales
 classification spec (`2026-09-25-sales-classification-and-category-reports-design.md`) is the other
 half of §10's split, with its own plan; this plan only records the menu and version provenance it
 needs (Task 7). The
@@ -52,6 +55,20 @@ measurement. Task 1 re-checks the ones it depends on before building.
 - The first review's measured findings are kept wherever they still apply. Task 1's category
   migration recipe and its upgrade failure are GONE, because Task 1 no longer changes
   `category_details`.
+**Revision 3, 2026-09-25, after the second outside review (spec §11):**
+- allergens and diet move INTO the published document; the live overlay is availability alone
+  (D6);
+- an UNSAVED basket follows the live version, refreshed with a confirmation, and the 12-hour grace
+  window and `menu.version_expired` are gone (D9, Task 7); saved orders keep their facts (D10);
+- the till refreshes availability on its own, independently of the version (D11, Task 7);
+- a child extras line records the list it came from (D10, Task 7b);
+- "sent" is recorded on the line and survives a split (D10, Task 7b);
+- corrections reach kitchen screens as notices, not only printers (D10, Tasks 7b and 7c);
+- staff change a sent line from the till's own Change action (new Task 7c);
+- "Duplicate and use the copy here" is one transaction (D23, Tasks 1 and 4);
+- VAT is resolved when the record is issued, on every filing path, and written back to the line
+  (Task 7a);
+- edits are refused while a card payment is in flight on the order (D22, Task 7b).
 Reviewed the same day by a fresh-context seat that ran experiments in a throwaway checkout at
 `9c8bcfa90`: it generated Task 1's and Task 3's migrations, applied them to fresh and to
 `main`-migrated databases, tried the new CHECK and unique indexes on `node:sqlite`, and counted the
@@ -128,6 +145,58 @@ D6, D9, D10, D11, D14 and D21, Task 1 Step 4, and Tasks 3, 6, 7, 8 and 9.
     with several different offers; the existing spy test cannot see it because the call is internal
     to the package.
   - The fiscal record takes the total and VAT breakdown only (`packages/core/src/record-sale.ts:269-283`).
+  - **Five paths file a sale**, and every one files the VAT rate stored on the line at add time
+    (`working_order_lines.vat_rate`, read by `readLockedLines`, `working-order.ts:476`): cash or
+    manual card (`POST /api/sales` → `payWorkingOrder` → `fileImmediateSale`, `till-sale.ts:313-522`);
+    integrated card (`POST /api/pay` → `payWorkingOrderIntegrated`: priced in P1 at `till-sale.ts:700-709`,
+    provider called in P2, filed from P1's pricing in P3 at `:748-757`); card recovery
+    (`finalizeRecovery`, `:878-938`, which re-prices from the stored lines at `:900`); invoice-first
+    (`POST /api/working-orders/:id/place` → `placeOrder`, `working-order.ts:2529-2547`, filed at
+    placing with deferred settlement; `collectOrder` later reads `sales.total` and never re-prices);
+    and ticket-then-pay collect (`collectOrder` → `fileImmediateSale`, `till-sale.ts:1282`). A
+    reprint rebuilds its lines by re-running `priceStoredOrder` on the stored lines
+    (`readSettledTicket`, `:434-436`). Nothing stops an edit or a new round between P1 and P3
+    (no in-flight guard was found in `working-order.ts`).
+- **Order lines, extras and the kitchen:**
+  - A child extras line records the picked product and its price but NOT the list it came from
+    (`packages/db/src/schema/orders.ts:125-127`; `apps/server/src/modifier-selection.ts:146-147`
+    says why that is a gap). The wire shape does carry it: `ExtraSelection { listId, picks }`
+    (`packages/shared/src/extra-selection.ts:8-11`). `matchExtraChildren`
+    (`modifier-selection.ts:150-176`) refuses the pairing when two active lists offer the product,
+    which sends the order down the delete-and-re-insert path. The till re-derives a list for a
+    retrieved pick from the dish's first offered list that carries it (`apps/till/src/state/held-extras.ts:15-26`).
+  - Nothing on `working_order_lines` records that a line was sent: only `ticket_items.fired_at`
+    does (`packages/db/src/schema/ticket-items.ts:50-51`; states are `queued`, `preparing`, `ready`,
+    `:12`; `preparing` is "started"). A `no_preparation` line gets no ticket row (`fireLines`,
+    `working-order.ts:883, 911`), and neither does a child line (`:769`). `served_at` IS on the line
+    (`orders.ts:146`).
+  - A partial split (`carveOffLines`, `working-order.ts:1856-1880`) inserts a new line row with no
+    ticket item and without the source's course, note or served state; a whole-line move keeps the
+    row and repoints its ticket (`:1396-1412`). A partial split of a dish with extras is refused
+    (`tab.transfer_modifier_line`, `:1820-1824`). `ticket_items` has no quantity of its own: the
+    kitchen screen reads the line's CURRENT quantity (`listStationQueue`, `:2966`).
+  - `voidTabLine` (`:1183-1219`) prints a VOID slip only where the station has an active printer,
+    then deletes the line, its children and (by cascade) its ticket row; it checks no state, so a
+    started item vanishes from the kitchen screen at its next reload. `recallLines` (`:1021-1074`)
+    refuses if any item has started and un-fires the queued ones. `enqueueCorrectionSlips`
+    (`kitchen-print.ts:345-400`) writes only print jobs, nothing a screen can read, and returns
+    silently with no printer (`:354-356, 380-381`).
+  - **The kitchen screen is the till app on a `kds` device** (`apps/till/src/screens/till-station-screen.ts`,
+    `widgets/station-queue.ts`; routes `GET /api/stations/:id/queue`, `POST /api/ticket-items/:id/advance`
+    and the device-cookie twins in `device-api.ts`). It reloads only when opened and after its own
+    advance actions (`till-station-screen.ts:157-163, 242-249`); the till app has no `EventSource`,
+    `WebSocket` or offers timer.
+  - **The till's table screen** offers per line: Send (held), Recall (fired, queued), Cancel (started,
+    behind a confirm) and Serve; nothing changes a sent line's note, options, extras or quantity
+    (`till-table-order-screen.ts:568-609`). New lines go in as a round (`addTabRound`). The counter
+    basket saves a held order through `PUT /api/working-orders/:id` just before pay, place or park
+    (`till-app.ts:1029-1036`).
+  - Only the dashboard writes `products.available` (`PATCH /management-api/products/:id`,
+    `catalogue-api.ts:1133-1137`, and the product editor); the till cannot. The dashboard's live
+    channel is SSE on `/management-api/events` (`apps/server/src/live-api.ts:95`), which accepts the
+    MANAGEMENT cookie only (`:97-104`), and the change feed already announces `products`,
+    `option_labels` and `menu_item_extra_items` rows. `catalogues.version` exists and nothing bumps
+    it (`packages/catalogue/src/operations.ts:85-86`).
 - **Routing and reporting:**
   - Kitchen routing is by preparation route (zone + product, zone + category, venue + product,
     venue + category), falling back to product or category `station_id`
@@ -164,7 +233,8 @@ with no delete rule that holds rows. A media trigger naming the rebuilt table al
 
 So Task 3 **measures its own upgrade** on a scratch venue that `main` has migrated and seeded, and
 states the result in its PR and in a `docs/backlog.md` line: what is emptied, and what fails. Tasks
-1, 6, 7, 7b and 8 only ADD tables, columns and triggers; each still applies its migrations to a `main`-migrated,
+1, 6, 7, 7b and 8 only ADD tables, columns and triggers (7b adds three core columns and one
+venue-service table); each still applies its migrations to a `main`-migrated,
 seeded scratch venue, and states that it upgraded cleanly (a claim, so measured, never assumed). Every dev venue then needs `wa-wt reset demo <name>`. This sits within CLAUDE.md §3's "no
 data-migration code until production" rule. **Advice for the owner's box: do not upgrade it
 mid-plan; wipe it once after Task 7 lands.** (Revision 1's Task 1 wiped every venue; Revision 2's
@@ -175,8 +245,8 @@ Task 1 does not touch `category_details`.)
 ## The decisions this plan makes
 
 The spec left integration details to the plan (§8 and §9's "stays with the plan"). The planner made
-these; the owner can overturn any of them before the task that builds it starts. **D6, D9, D10, D12 and
-D13 are the ones most worth the owner's eye.**
+these; the owner can overturn any of them before the task that builds it starts. **D6, D9, D10, D11,
+D12, D13 and D22 are the ones most worth the owner's eye.**
 
 - **D1. One ordered membership table for menu lists.** `section_members` holds every list. A member
   is exactly one of a product or a section, and it has a `position` in that list. A unique index per
@@ -232,26 +302,31 @@ D13 are the ones most worth the owner's eye.**
   - Every extras item and every option label is included, available or not, so live availability
     can bring back one that was unavailable at publish. Today `OfferedOptionsList.labels` holds only
     the available ones.
-  - **Live fields, never frozen, read from the current rows whenever a document is served or
-    priced:**
+  - **The ONE live overlay, read from the current rows whenever a document is served or priced,
+    is availability** (spec §11.1, owner 2026-09-25):
     - the product's and each variant's `products.active` and `products.available`. NOT the per-menu
       switch `menu_items.active`, which is a menu setting and frozen;
-    - an extra item's product `active` and `available`, and an option label's `available`;
-    - on the dish, each variant AND each extras item: `vatClass`, `allergens` / `addAllergens`,
-      `diet`, `dietDerivation`, `dietOverride`, `dietaryDeclarations` / `suitableFor`
-      (`menu-types.ts:158-171` for the extras item's names);
-    - on the dish and each variant: `courseId`, and the reporting `category` label.
-  - Why these: an allergen declaration is a legal duty (EU 1169/2011), and a wrong VAT on a filed
-    invoice cannot be repaired (CLAUDE.md §5). Neither may wait for somebody to remember to
-    republish, whether it sits on a dish or on an extra. Availability is live by the spec (§4);
-    course and category are routing and reporting, which the spec keeps out of the menu (§2).
-  - **VAT's lifetime (spec §10.4, owner 2026-09-25): taken at payment**, for every line, from each
-    product's current VAT class. The served offer's VAT is what the till displays; the filing path
-    re-reads the VAT class when the invoice is issued (Task 7a). The customer's gross price never
-    changes; only the VAT split does. Asesor question Q26 asks the tax adviser to confirm the rule.
+    - an extra item's product `active` and `available`, its per-offer `menu_item_extra_items.available`,
+      and an option label's `available`.
+  - **Allergens and diet are IN the document** — on the dish, each variant and each extras item
+    (`allergens` / `addAllergens`, `diet`, `dietDerivation`, `dietOverride`, `dietaryDeclarations` /
+    `suitableFor`, `menu-types.ts:158-171` for the extras item's names). A change to them flags the
+    menu and reaches a till when the owner publishes. Revision 2 kept them live because a declaration
+    is a legal duty; the owner decided (spec §11.1) that they manage that with a publish, and that
+    the product builds no distinction between a recipe change and a correction. A line added to an
+    order records the published values it was added with, as `working_line_contexts` does today.
+  - **Not menu content, so neither in the document nor in the overlay:** the VAT class, the
+    reporting classification and the kitchen route. VAT is resolved when the invoice record is
+    issued (Task 7a; spec §11.4; asesor Q26), classification is recorded at the same moment (the
+    classification plan), and the route is decided when the line is sent, as today. A change to any
+    of them flags no menu. The served offer still carries `vatClass`, `courseId` and the reporting
+    `category` label read from the current rows, because `recordWorkingLineContexts` and the till's
+    held-order view read them off the offer today (`packages/venue-service/src/operations.ts:749`);
+    they are informational there, and filing never reads them.
   - Everything else the till shows or charges is frozen: names, descriptions, images, prices
     (dish, variant and extras item), units, variants offered, extras lists offered with their picks
-    rules, option lists offered with their labels' text, structure, order, and layouts.
+    rules, option lists offered with their labels' text, allergens, diet, structure, order, and
+    layouts.
 - **D7. Change detection by hash; the diff is structural.**
   - `buildMenuDocument` produces the document the working state would publish, with live fields
     excluded.
@@ -261,59 +336,121 @@ D13 are the ones most worth the owner's eye.**
     document, and a
     product-price edit under an override leaves the effective price the same.
   - `diffMenuDocuments(live, proposed)` returns typed changes, which the Preview tab words as
-    "Lemonade added under Drinks".
+    "Lemonade added under Drinks". **Each change names its source** (spec §11.1): `this_menu` for a
+    change made on this menu's own lists or prices, `shared_product` for a product field (price,
+    allergens, names, image, variants, extras, options) and `shared_section` for a section another
+    menu also uses, so the comparison page can say "Lemonade: allergens (shared product)" and
+    "Drinks renamed (shared section, also on Dinner Menu)".
 - **D8. Publish is one write transaction that rebuilds the document inside it.**
   - The request carries the hash the preview showed. If the rebuilt document hashes differently, it
     refuses with `menu.changed_since_preview` (409) and writes nothing, and the screen re-previews.
   - A failure anywhere rolls the whole transaction back, so the previous version stays live
     (spec §4). Writes are serialised (`withTransaction` IS `withWriteLock`, CLAUDE.md §3).
-- **D9. A line's price is fixed when it is added; a basket line names the version it came from.**
-  - Spec §10.3: a line keeps the price and names it was given when it was added, whether or not the
-    kitchen has it, and publishing never changes them. VAT is separate: it is taken at payment (D6,
-    Task 7a).
-  - Held orders and tabs already store their prices (`priceStoredOrder`). A till's unsaved basket
-    exists only on the till until it is paid, so the till sends `menuVersionId` with each line, and
-    the server prices that line — dish, variant, extras, options — from that version's document, with
-    live fields applied (D6). Today's live-row extras pricing (`resolveBasketModifiers`,
-    `working-order.ts:142-190`) moves onto the document.
-  - The server accepts the version only if it belongs to a menu the zone serves AND it is live or
-    was superseded less than `SUPERSEDED_VERSION_GRACE_MS` = **12 hours** ago. Otherwise it refuses
-    with `menu.version_expired` (409).
-  - **After `menu.version_expired`, the till never re-prices silently** (spec §10.3, owner
-    2026-09-25). It reloads the menu, shows each basket line whose price changed ("Lemonade €3.00 →
-    €2.50"), and pays only after staff confirm. A line whose product left the menu must be removed.
-  - **An absent `menuVersionId` means the menu's live version**, so existing request bodies stay
-    valid.
-  - **Every line records its version** where it is stored: `working_line_contexts` gains
-    `menu_version_id` (Task 7), so a held or tab line filed hours later still knows its version (for
-    `sale_lines.menu_version_id`, the classification plan).
-  - **Owner decision flagged:** the grace window lets a signed-in till name any version superseded
-    in the last 12 hours, and so its older prices. The server still never takes a price from the
-    browser.
-- **D10. Editing an open order** (spec §10.3; built in Task 7b).
+- **D9. An unsaved basket follows the live version, with confirmation; the server prices it from
+  the live version only** (spec §11.2, owner 2026-09-25; this replaces revision 2's per-line
+  version and its 12-hour grace window, which are gone).
+  - A till's unsaved basket exists only on the till until it is paid. The till prices what it shows
+    from the version it loaded, and it sends that version id with each line as **an assertion of
+    what staff saw**, not as a request for that version's prices. An absent `menuVersionId` means
+    the live version, so existing request bodies stay valid.
+  - The server prices every unsaved line — dish, variant, extras, options — from the menu's LIVE
+    document, with the availability overlay applied (D6). Today's live-row extras pricing
+    (`resolveBasketModifiers`, `working-order.ts:142-190`) moves onto the document. If any line's
+    asserted version is not the live version, the request is refused with `menu.version_changed`
+    (409), carrying each affected menu's live version id, and nothing is priced or written. There is
+    no grace window and no `menu.version_expired`.
+  - **The till's refresh flow**, run when the poll (D11) reports a new version and on
+    `menu.version_changed`: reload that menu's offers; for each basket line from it, compare the
+    line's price (dish, variant, each extra) and whether its product, variant, extras picks and
+    option labels are still offered and available. If nothing relevant changed, adopt the version
+    silently and, on a refusal, retry the request once. Otherwise show one dialog listing each
+    changed line ("Lemonade €3.00 → €2.50") and each line that must be resolved (removed or
+    replaced: "Burger is no longer on this menu", "Extra cheese is not available"), and go on only
+    after staff confirm. The dialog never re-prices silently and never lets a blocked line through.
+  - **Every SAVED line still records its version** where it is stored: `working_line_contexts` gains
+    `menu_version_id` (Task 7), so a held or tab line filed hours later knows its provenance (for
+    `sale_lines.menu_version_id`, the classification plan). Saved lines are never re-priced (D10).
+  - **Owner decision flagged:** a basket is interrupted only when something IN IT changed; a Lunch
+    republish that touched only lines the basket does not hold shows nothing.
+- **D10. Editing a saved order** (spec §10.3, §11.2, §11.3, §11.5, §11.6; the server side is Task 7b,
+  the till and kitchen-screen side Task 7c).
+  - **A saved order keeps its facts.** Its lines are never re-priced by a publish or an edit, and
+    their names, allergens and diet stay what the line was added with (`working_line_contexts`).
   - **What an edit prices:**
-    - a line whose menu item or variant changes is a NEW item, priced from the version the till sent;
-    - an extra added to a line is priced from that version;
-    - extras already on the line keep their stored price, matched by value (list, product, quantity
-      — CLAUDE.md §3's which-list rule);
+    - a line whose menu item or variant changes is a NEW item, priced from the live version;
+    - an extra added to a line is priced from the live version;
+    - extras already on the line keep their stored price, matched by value — **list, product and
+      quantity** (CLAUDE.md §3's which-list rule). Today a child line does not record its list, so
+      `working_order_lines` gains `extra_list_id` (a plain id, nullable, set on child lines only;
+      no key, because a list may be deleted while orders that took from it are open — the column
+      says so). `buildLineExtras` writes it from the pick's `listId`; `carveOffLines` copies it;
+      `matchExtraChildren` matches on it and no longer refuses a product two lists offer; the till's
+      `HeldExtra` carries `listId` and `held-extras.ts` stops guessing;
     - notes and options carry no price.
     - A line that is re-inserted by the edit path copies its stored gross price, names, descriptions,
-      category text and line context. Its VAT is re-read at payment anyway (D6).
+      category text, line context, `extra_list_id`, `sent_at` and served state.
+  - **"Sent" is recorded on the line: `working_order_lines.sent_at`** (spec §11.3).
+    - It is stamped when the line is fired to a station (`fireLines` with a fired item, `sendLines`,
+      `fireCourse`), and, for a line whose route is `no_preparation`, in the same `fireLines` call
+      that skips it — a tab round, a placing, a send-to-prep. `parkOrder` and `createOpenOrder`
+      stamp nothing; a held course (`hold: true`) is not sent until it fires; a recalled line stays
+      stamped (it was sent, and its recall notice says so).
+    - `carveOffLines` copies `sent_at`, `served_at`, `course_id` and `note` to the split row. The
+      ticket row stays with the source line; **`ticket_items` gains `quantity`, the quantity fired**,
+      so the kitchen screen keeps showing what it was asked to make after a split reduces the
+      source line's quantity (`listStationQueue` reads the line's current quantity today).
+    - **A no-route line under a HELD course** is not stamped when `fireLines` skips it, because its
+      course has not fired. `fireCourse` and `sendLines` today act on `ticket_items` alone
+      (`working-order.ts:942-1020`), so they gain a lookup of the course's no-route LINES and stamp
+      those when the course fires. A no-route line with no course, or in a round with nothing held,
+      is stamped at the round.
+    - `sent_at` decides collectibility, and TWO different checks read two different facts:
+      - **at pay**, a line with `sent_at` set is payable whatever its availability, and an unsent
+        unavailable line blocks;
+      - **at send** (`sendLines`, `placeOrder`, the round path), the check reads the KITCHEN state:
+        a line with no fired ticket row — never fired, held, or recalled — is refused
+        `product.unavailable` when its product is unavailable, even if `sent_at` is set from an
+        earlier send. A recalled sold-out dish is never sent again.
+    - Kitchen editability reads the ticket row: no ticket (no route) or `fired_at` null → free;
+      fired and `queued` → allowed, never silent; `preparing` or `ready` → refused.
+    - **A partial split of a STARTED line is refused** (`ticket.already_started`): the split row
+      has no ticket row of its own, so it would read as freely editable while the cook has the
+      work. `carveOffLines` reads the source's ticket state before splitting; a whole-line move
+      keeps the row and its ticket and is unaffected.
+    - **With the venue setting off**, a line that was ever sent to a station (`sent_at` set AND a
+      ticket row exists, fired or recalled) is refused `ticket.already_fired` on every edit,
+      including after a Recall — otherwise Recall → edit → Send is exactly the changed-line path the
+      setting forbids. Recall itself stays allowed (it is how a course is held back). Task 7c hides
+      Change in that state and offers Cancel on a queued line, so "can only be voided" has a
+      button. **Owner decision flagged.**
   - **What the kitchen sees** — the kitchen state comes from `ticket_items` (`fired_at`, and `state`:
-    queued, started, ready):
+    queued, preparing, ready):
     - **Not sent** means no ticket item, or one whose `fired_at` is null (a held course, or a line
       recalled by `recallLines`). A line with no preparation route never has kitchen work. The edit
       is free.
     - **Sent, not started** (fired, `state = 'queued'`): the edit is allowed and never silent. The
-      old ticket item is recalled with the existing RECALLED slip (`enqueueCorrectionSlips`,
-      `apps/server/src/kitchen-print.ts:345`), and the changed line fires as a new ticket item.
-    - **Started** (`state` past queued): refused with the existing `ticket.already_started`. Staff
-      void the line — `voidTabLine`'s VOID slip path — and add a new one.
-    - A quantity RISE on a sent line adds a new line for the difference, priced from the till's
+      old ticket item is recalled, a **RECALLED kitchen notice** is recorded and the existing slip
+      printed where a printer is mapped (`enqueueCorrectionSlips`, `kitchen-print.ts:345`), and the
+      changed line fires as a new ticket item.
+    - **Started** (`preparing` or `ready`): refused with the existing `ticket.already_started`.
+      Staff void the line — `voidTabLine`'s path, which now records a **VOID notice marked
+      started** before the delete — and add a new one.
+    - A quantity RISE on a sent line adds a new line for the difference, priced from the live
       version, with its extras picks copied and priced from that version. It fires only where the
       order has already fired work: `updateHeldOrder` fires nothing today, and `addTabRound` does.
-    - A quantity DROP on a sent line is a partial void: a VOID slip for the removed quantity.
+    - A quantity DROP on a sent line is a partial void: a VOID notice and slip for the removed
+      quantity, and `ticket_items.quantity` reduced with it.
     - Extras lines follow their dish.
+  - **Kitchen notices** (spec §11.5) live in a new venue-service table `kitchen_notices`
+    (`state`): `id`, `station_id`, `working_order_id`, `order_label`, `kind` (`recalled`, `void`,
+    `changed`), `line_name`, `quantity`, `note`, `was_started` (flag), `created_at`,
+    `acknowledged_at`. `recordKitchenNotices(tx, cfg, orderId, items, kind)` is called beside
+    `enqueueCorrectionSlips` by every path that corrects sent work — `recallLines`, `voidTabLine`,
+    the edit path and the partial void — in the same transaction, whether or not a printer exists.
+    A station's queue route returns its unacknowledged notices — the newest fifty, and none older
+    than the venue's business day, so a station with neither screen nor printer never accumulates
+    months of them; `POST /api/kitchen-notices/:id/acknowledge` (and its device-cookie twin) clears
+    one. Task 7c shows them.
   - **The venue setting** "Allow changes to items already sent to the kitchen" (on by default) lives
     in a new one-row `service_settings` table in venue-service, following `content_languages`'
     one-row pattern. When it is off, a sent line can only be voided and re-added (`ticket.already_fired`,
@@ -322,34 +459,50 @@ D13 are the ones most worth the owner's eye.**
     as `addTabRound` does (`working-order.ts:1150-1156`). `priceRows` numbering from 1 would collide
     with kept lines on `working_order_lines_line_no_key`.
   - **Out-of-date saves:** `working_orders` gains a `revision` counter. Every write to an order
-    increments it, and `PUT /api/working-orders/:id` carries the revision its copy came from. A
-    mismatch is refused (409, a code named for the concept — grep the working-order codes first),
-    and the till reloads the order (spec §10.7 example 2). No revision exists today.
+    increments it, and `PUT /api/working-orders/:id` and the per-line route carry the revision their
+    copy came from. A mismatch is refused (409, a code named for the concept — grep the
+    working-order codes first), and the till reloads the order (spec §10.7 example 2). No revision
+    exists today.
+  - **A per-line edit route for sent lines:** `PUT /api/working-orders/:id/lines/:lineNo`
+    `{quantity, note, options, extras, revision}` applies the rules above to ONE line, so the till's
+    Change action (Task 7c) never sends the whole order. `PUT /api/working-orders/:id` (the counter
+    basket's save) keeps serving unsent lines, and it must never again delete a sent line's ticket:
+    a sent line it does not preserve goes through the same recall-or-refuse rules.
   - **Unavailable:** an unsent line whose product became unavailable cannot be sent or paid
-    (`product.unavailable`); the till offers remove or replace. A sent line stays payable. Split
-    bills (`splitOffCheck`) let staff pay the rest.
-  - **Allergens on a retrieved held order are current:** `getHeldOrder` (`working-order.ts:2202`)
-    today builds the till's product from the add-time `context.allergens`; it reads the product's
-    current allergens instead (spec §10.4).
-  - **The till edits tabs through rounds and voids, not `PUT /api/working-orders/:id`**
-    (`till-app.ts:1543-1546` skips the save for tabs). The server path is still guarded, and its
-    tests exercise it directly.
+    (`product.unavailable`), checked on the SERVER at send (`sendLines`, `placeOrder`, `addTabRound`
+    when it fires) and at pay (every path in Task 7a's table); the till offers remove or replace.
+    A line with `sent_at` stays payable. Split bills (`splitOffCheck`) let staff pay the rest.
+  - **Allergens on a retrieved held order are what the line was added with** (spec §11.1):
+    `getHeldOrder` (`working-order.ts:2202`) keeps building the till's product from the add-time
+    `context.allergens`. Revision 2's change to read the current row is withdrawn.
   - **Pre-bills do not exist yet** (asesor Q21 and Q14). The rule for when they are built: printing a
     pre-bill never fires held food and never marks a line sent. A `docs/backlog.md` note goes beside
     Q21.
   - This answers the owner's question on PR #623's finding: an edit can no longer silently delete a
     fired line's ticket item.
-- **D11. Tills adopt a new version by polling.**
+- **D11. Tills adopt a new version, and refresh availability, by polling** (spec §11.1).
   - `GET /api/menu-state?zoneId=` is session-gated like the offers routes. It returns
-    `{ menus: [{ menuId, versionId }] }`, and Task 9 adds the layout fields (D14).
-  - The till polls it every 60 s while an operator is signed in, stops on sign-out, and treats
-    `session.required` like any other signed-out answer.
+    `{ menus: [{ menuId, versionId }], unavailable: { products: string[], optionLabels: string[],
+    extraItems: { menuItemId, productId }[] } }` — the ids of every product or variant that is
+    inactive or unavailable, every option label that is unavailable, and every per-offer extras item
+    switched off, across the zone's menus. Task 9 adds the layout fields (D14).
+  - **Why the list and not a counter or a push:** nothing in the tree bumps on an availability
+    write (`catalogues.version` is never incremented; `change_log` rows are deleted in the writing
+    transaction), and the dashboard's SSE route accepts the management cookie only. The
+    unavailable set is small (what is sold out right now), one query per table, and the till can
+    apply it to its loaded offers without reloading them. A till-session branch on the SSE route is
+    a later refinement, recorded in `docs/backlog.md` by Task 7.
+  - The till polls **every 15 seconds** while an operator is signed in, stops on sign-out, and
+    treats `session.required` like any other signed-out answer. It applies the unavailable set at
+    once (greying tiles, D12, and blocking the basket's affected lines per D9's refresh flow), and
+    a changed `versionId` runs D9's refresh flow for that menu.
   - A poll cannot keep a till signed in: inactivity is measured in the browser from pointer and key
-    presses (`apps/till/src/till-app.ts:218, 236-237`), and `requireSession`
+    presses (`apps/till/src/till-app.ts:255-276`), and `requireSession`
     (`apps/server/src/till-session.ts:56-71`) reads a session without extending it (the plan
     review read both).
-  - It also checks at every offers load. A changed version reloads that menu's offers at once, and
-    lines already in the basket keep their own version (D9).
+  - It also checks at every offers load.
+  - **The kitchen screen polls too:** `till-station-screen` reloads its station's queue and notices
+    on the same 15-second interval (Task 7c), so a notice appears without a cook touching the screen.
 - **D12. An unavailable product stays where it is, greyed out and not orderable.** That applies in
   search, home tiles and section views. Spec §5 wants buttons in predictable positions during
   service. Today the server filters unavailable products out; from Task 7 it serves them marked.
@@ -410,6 +563,29 @@ D13 are the ones most worth the owner's eye.**
   - An imported venue arrives with every menu unpublished and reports `zone.menu_unpublished` until
     the owner publishes. Every other new table IS declared, and is checked against the transfer
     tests.
+- **D22. No edit while a card payment is in flight** (spec §11.4). Between pricing (P1) and filing
+  (P3) of an integrated card payment nothing today refuses an edit or a new round on the same order,
+  so P3 could file P1's figures for lines that no longer match. **The in-flight fact is recorded on
+  the ORDER, in P1's own transaction:** `working_orders.payment_attempt_at` (nullable timestamp) is
+  set in P1, cleared in P3, on a failed attempt, and by the SumUp sweep that resolves a stale
+  attempt. Every line write on an order (`updateHeldOrder`, the per-line route, `addTabRound`,
+  `voidTabLine`, `recallLines`, `sendLines`, the split and transfer paths) refuses with
+  `order.payment_in_flight` (409) while it is set. It is NOT read from the payments store: the
+  plan review found that the simulator writes no `attempting` row at all
+  (`packages/payments/src/simulator.ts:38-39`), Stripe and SumUp write theirs in the provider's own
+  transaction AFTER P1 has committed (`packages/payments-stripe/src/provider.ts:58-82`), and the
+  integrated suite's canned provider writes no payment rows, so a guard on that row would be
+  proven only against a fixture made to satisfy it. A server that dies between P1 and P3 leaves the
+  mark set: the recovery branch of `POST /api/pay` clears it when it files or fails, and boot's
+  reconcile clears any mark older than the provider timeout. Built in Task 7b; flagged for the
+  owner because it can hold an order for as long as a terminal takes to answer.
+- **D23. "Duplicate and use the copy here" is one transaction** (spec §11.7 example 8). Two requests
+  — remove Drinks, then add the copy — leave a moment in which Lunch reaches Lemonade through
+  nothing, and D5's sync then resets its price and deletes its overrides. Task 1 adds
+  `replaceMember(tx, sectionId, memberId, ref)`, which swaps the member at the same position and
+  runs `syncMenuOffers` once against the FINAL structure, and `POST …/members/:memberId/replace`.
+  `duplicateSection` takes an optional `replaceIn: { sectionId, memberId }` so duplicate-and-replace
+  is one route and one transaction. Task 4's screen calls that.
 - **D20. Out of scope:** the service spec's public, staff-only and not-sold-separately setting;
   guest ordering; popularity ranking, inventory, scheduled publication and a rollback interface
   (spec §8); a legacy location's menus (`locations.catalogue_id`, `location_catalogues`) and
@@ -477,9 +653,10 @@ Every task's requirements implicitly include this section.
 - **Error codes name the domain concept and are never renamed** (CLAUDE.md §3). New ones in this
   plan: `menu_section.member_cycle`, `menu_section.member_duplicate`, `menu_section.not_library`,
   `menu_section.invalid` (with `params.field`), `menu_section.membership_invalid`,
-  `menu.changed_since_preview`, `menu.version_expired`, `menu.shortcut_unreachable`,
-  `menu.default_layout_required`, `menu.layout_not_found`, and the readiness code
-  `zone.menu_unpublished`.
+  `menu.changed_since_preview`, `menu.version_changed`, `menu.shortcut_unreachable`,
+  `menu.default_layout_required`, `menu.layout_not_found`, `order.payment_in_flight`,
+  `kitchen_notice.not_found`, and the readiness code `zone.menu_unpublished`. (Revision 2's
+  `menu.version_expired` was never shipped and is not minted.)
   - Reuse the shipped siblings instead of minting duplicates (the plan review grepped the
     registries): a missing menu is `catalogue.not_found` (thrown today at `operations.ts:314` and
     `venue-service/src/operations.ts:395`), and a missing section is the already-registered
@@ -526,27 +703,37 @@ Every task's requirements implicitly include this section.
 These are the inputs and conditions most likely to bite a person that the spec implies but does not
 test. Each has its test in the named task.
 
-1. **A safety or tax fact changed after publishing reaches the till without a republish, and does
-   not flag the menu.**
-   - Publish Lunch, then change Lemonade's allergens (add `sulphites`) and its VAT class
-     (`reduced` → `general`), and the same two facts on the extra "Extra lemon" that Lemonade's extras
-     list offers.
-   - Without republishing: the till's served offer shows sulphites on the dish AND the extra, a sale
-     of Lemonade with Extra lemon files BOTH at 21%, and Lunch is still *published and current*.
-   - (Task 6 for the document excluding live fields; Task 7 for the served offer and the filed sale.)
-2. **A basket that spans a publish keeps both prices.**
+1. **Each fact reaches the till at its own moment: availability at once, allergens at publish, VAT
+   at issuance — and only the allergen change flags the menu.**
+   - Publish Lunch, then: mark Lemonade unavailable; add `sulphites` to Lemonade's allergens and to
+     the extra "Extra lemon" that its extras list offers; change both VAT classes `reduced` →
+     `general`.
+   - Without republishing: within one poll the till greys Lemonade and the server refuses a new
+     line for it; the till still shows the PUBLISHED allergens on the dish and the extra; a sale of
+     a Lemonade line already in a tab files BOTH at 21% (Task 7a); and Lunch shows "Unpublished
+     changes" whose comparison lists "Lemonade: allergens (shared product)" and "Extra lemon:
+     allergens (shared product)" and nothing about VAT or availability.
+   - After republishing: the till shows sulphites on both.
+   - (Task 6 for the document and the diff; Task 7 for the served offer and the poll; Task 7a for
+     the filed VAT.)
+2. **A basket that spans a publish is refreshed and confirmed, never silently re-priced and never
+   interrupted for nothing.**
    - Lemonade €3.00 on Lunch v1. The till adds one Lemonade, the owner publishes v2 at €2.50, the
-     till polls and adopts v2, and adds a second Lemonade.
-   - Paying files 3.00 + 2.50 = 5.50 in one sale.
-   - With the clock moved 13 hours past v1's supersession, the first line is refused
-     `menu.version_expired`.
+     till polls and runs the refresh flow: it shows "Lemonade €3.00 → €2.50" and waits. After
+     confirmation a second Lemonade is added and paying files 2.50 + 2.50 = 5.00 in one sale.
+   - A pay request sent with v1 asserted after v2 is live is refused `menu.version_changed` and
+     nothing is written; the till then runs the same flow.
+   - Publishing v3 that changes only a section the basket holds nothing from shows no dialog, and
+     the next pay request succeeds with v3 asserted.
+   - Publishing v4 that removes Lemonade from Lunch blocks payment until the line is removed.
    - (Task 7.)
 3. **Shared edits flag exactly the menus they change.**
    - Fixture: section Drinks in Lunch and Dinner; section Beer nested in Drinks; Burger only in a
      section Dinner alone uses; Lemonade with a Lunch override.
    - Rename Beer: both flagged. Publish Lunch: Lunch current, Dinner still flagged.
-   - Change Lemonade's REPORTING category (a live field, D6): neither flagged. Change Lemonade's product price: Dinner flagged, Lunch
-     not. Change Burger's price: only Dinner.
+   - Change Lemonade's REPORTING category or VAT class (not menu content, D6): neither flagged.
+     Change Lemonade's product price: Dinner flagged, Lunch not. Change Burger's price: only Dinner.
+   - Change Lemonade's allergens: BOTH flagged, each naming the shared product as the source.
    - Mark Lemonade unavailable: neither flagged.
    - (Task 6.)
 4. **"Starts fresh" holds whichever way a product leaves a menu.**
@@ -567,6 +754,20 @@ test. Each has its test in the named task.
    - Search lists it once, greyed. Its section view shows it greyed in order.
    - The server refuses a line for it with `product.unavailable`.
    - (Task 7 for the server; Task 9 for the till.)
+6. **A sent line is payable however availability changes, through a split and with no route; an
+   unsent one is not.**
+   - A tab has two fired Burgers and an unsent (held-course) Burger; Burger goes unavailable. One
+     fired Burger is split to a new check. Both checks pay their fired Burgers; the held one blocks
+     its check until removed. The kitchen screen still shows the original ticket as 2 Burgers.
+   - A bottled beer with a `no_preparation` route sent in a round, then marked unavailable, pays.
+   - A partial split of a Burger the cook has started is refused; a whole-line move of it keeps
+     its ticket. A recalled Burger whose product went unavailable cannot be sent again.
+   - (Task 7b.)
+7. **Every correction reaches the kitchen screen, printer or not.**
+   - A station with no printer: a recall, a void of a started item and a change to a queued line
+     each put a notice on that station's screen within one poll, and the void's notice reads
+     "started". Acknowledging clears it. With a printer mapped, the slip prints too.
+   - (Tasks 7b and 7c.)
 
 ---
 
@@ -583,7 +784,7 @@ test. Each has its test in the named task.
 - `packages/catalogue/src/menu-document.ts` + test: `MenuDocument` types, `buildMenuDocument`,
   `menuDocumentHash`, `applyLiveFields`, `diffMenuDocuments`.
 - `packages/catalogue/src/menu-publication.ts` + test: `publishMenu`, `menuStatus`,
-  `previewMenu`, `readLiveDocuments`, `resolveLineVersion`.
+  `previewMenu`, `readLiveDocuments`, `assertLiveVersions`.
 - `packages/catalogue/src/home-layouts.ts` + test: layout CRUD, shortcut validation, device
   selections.
 - Schema: new `schema/sections.ts`; additions in `schema/menu.ts`; new `schema/publication.ts`
@@ -598,8 +799,9 @@ by the sections library, the Structure tab and the Home page tab); `screens/sect
 with a `.test.ts` and an `.a11y.test.ts`.
 
 **New (till):** `apps/till/src/widgets/menu-browser.ts` (search, shortcut grid, structure,
-section drill-in with a breadcrumb), `apps/till/src/state/menu-state-poll.ts`, each with a test and
-an a11y test.
+section drill-in with a breadcrumb), `apps/till/src/state/menu-state-poll.ts`,
+`apps/till/src/widgets/basket-refresh-dialog.ts` (D9's confirmation), each with a test and an a11y
+test. **New (venue-service):** `packages/venue-service/src/kitchen-notices.ts` and its schema (D10).
 
 **Modified, by task:** listed in each task's **Files** block.
 
@@ -672,7 +874,8 @@ that plan left them. There are no menu changes yet; menus still use the old per-
   export async function addProducts(tx, sectionId: string, productIds: string[]): Promise<{ added: number }>; // multi-select add, spec §10.2
   export async function removeMember(tx, sectionId: string, memberId: string): Promise<void>;
   export async function moveMember(tx, sectionId: string, memberId: string, to: number): Promise<SectionMember[]>;
-  export async function duplicateSection(tx, sourceId: string, input: { internalName: string; memberIds: string[] }): Promise<LibrarySection>;
+  export async function replaceMember(tx, sectionId: string, memberId: string, ref: MemberRef): Promise<SectionMember>; // same position; ONE sync against the final structure (D23)
+  export async function duplicateSection(tx, sourceId: string, input: { internalName: string; memberIds: string[]; replaceIn?: { sectionId: string; memberId: string } }): Promise<LibrarySection>; // with replaceIn: duplicate AND replace in one transaction (D23)
   export async function sectionUsages(tx, sectionId: string): Promise<SectionUsages>;
   ```
 - A **structure-change hook**: every member write calls `onStructureChanged(tx, menuIds)`. It is a
@@ -717,6 +920,12 @@ that plan left them. There are no menu changes yet; menus still use the old per-
     while `en` is enabled as a gap.
   - **Duplicate:** it copies details and the chosen immediate members, in order, under the new
     internal name. Nested sections stay shared references, and no product is created.
+  - **Replace (D23):** `replaceMember` puts the new ref at the old member's position, refuses a
+    cycle and a duplicate with the same codes as `addMember`, and calls `onStructureChanged` ONCE
+    with the menus computed from the final structure. `duplicateSection` with `replaceIn` does the
+    copy and the replace in the caller's one transaction; a failure in either leaves both undone.
+    The overrides test that proves it atomic is Task 3's (Review Focus 4's sibling there), because
+    `syncMenuOffers` does not exist yet; here assert only that one call to the hook is made.
   - **Delete:** deleting Drinks removes it from every list containing it, and its child sections
     still exist. `sectionUsages` before the delete names every list. **No reporting category, route
     or product changes** (assert `products.category_id` and `preparation_routes` unchanged).
@@ -786,7 +995,8 @@ that plan left them. There are no menu changes yet; menus still use the old per-
   - list, create, read, update and delete;
   - `GET/POST /:id/members`, `POST /:id/members/products {productIds}`, `DELETE /:id/members/:memberId`,
     and `PUT /:id/members/:memberId/position {to}`;
-  - `POST /:id/duplicate {internalName, memberIds}` and `GET /:id/usages`.
+  - `POST /:id/duplicate {internalName, memberIds, replaceIn?}`, `POST /:id/members/:memberId/replace {ref}`
+    and `GET /:id/usages`.
   - Each route is one `withTransaction`, behind the same `person.manage` gate as the catalogue
     routes. Add the live-query source names (`scripts/live-subscriptions.test.ts`).
 
@@ -946,6 +1156,11 @@ this task changes WHAT the offers are, not when they are captured.
     half).
   - **Review Focus 4, all five paths**, including deleting a section and removing a nested one.
     Also assert that the row's id is the SAME after a reset: `working_line_contexts` points at it.
+  - **D23, the other direction:** Lunch reaches Lemonade only through Drinks, with a price override
+    and a variant override. `duplicateSection(Drinks, { replaceIn: { sectionId: lunchRoot, memberId } })`
+    leaves both overrides in place and Lunch reaching Lemonade through the copy at the same
+    position. **Control:** `removeMember` then `addMember` as two transactions resets them, which
+    is the hole D23 closes.
   - **The per-menu switch:** `menu_items.active = false` hides a reachable product on that menu only
     (D5).
   - **Readiness:** a zone whose menu's root is empty reports `zone.menu_empty`, and a nested product
@@ -1028,9 +1243,10 @@ strip holds Structure only, and Task 5 adds its neighbours.
     rename one.
   - **Structure tree:** it shows the root's members; expanding Drinks shows its members inline.
   - **Shared editing:** editing inside Drinks shows "Shared: also in Dinner Menu, Favourites" and
-    offers "Duplicate and use the copy here". That calls `duplicate`, then replaces Drinks in THIS
-    list at the same position (remove plus add at the position, one request each — no batch route is
-    needed).
+    offers "Duplicate and use the copy here". That is ONE request, `POST …/duplicate` with
+    `replaceIn` naming this list and the Drinks member (D23), and the tree shows the copy at the
+    same position afterwards. Never two requests: a remove followed by an add resets the menu's
+    prices for everything reached only through Drinks.
   - **Creating a section** without leaving the editor adds it where it was created.
   - **Remove:** "Remove from this list" names the list it removes from, and a section delete is not
     offered here (spec §3).
@@ -1153,19 +1369,22 @@ sale-path change in one reviewable task.
     | { kind: "section"; sectionId: string; internalName: string; names: Record<string, string>; image: string | null; color: string | null; members: DocumentMember[] };
   export interface DocumentList { members: DocumentMember[] }
   export interface DocumentLayout { id: string; name: string; tiles: ({ kind: "product"; productId: string } | { kind: "section"; sectionId: string })[] }
-  export type LiveOfferField = "available" | "allergens" | "diet" | "dietDerivation" | "dietOverride" | "dietaryDeclarations" | "vatClass" | "courseId" | "category";
-  export type LiveExtraItemField = "available" | "vatClass" | "addAllergens" | "suitableFor"; // names at menu-types.ts:158-170; `OfferedExtraItem` has NO `available` today — the document adds it
-  // offeredModifiers keeps every extras item and option label, with their live fields stripped:
-  export type FrozenOffer = Omit<MenuOffer, LiveOfferField | "placements" | "offeredModifiers"> & {
-    variants: Omit<MenuOfferVariant, LiveOfferField>[];
+  // Stripped from the document (D6): availability, and the three fields that are not menu content.
+  export type OverlayOfferField = "available" | "vatClass" | "courseId" | "category";
+  export type OverlayExtraItemField = "available" | "vatClass"; // `OfferedExtraItem` has NO `available` today — the served offer adds it
+  // Allergens and diet are IN the document, on the dish, each variant and each extras item.
+  // offeredModifiers keeps every extras item and option label, with the overlay fields stripped:
+  export type FrozenOffer = Omit<MenuOffer, OverlayOfferField | "placements" | "offeredModifiers"> & {
+    variants: Omit<MenuOfferVariant, OverlayOfferField>[];
     placements: string[][];
-    offeredModifiers: FrozenOfferedModifier[]; // extras items without LiveExtraItemField; option labels without `available`
+    offeredModifiers: FrozenOfferedModifier[]; // extras items without OverlayExtraItemField; option labels without `available`
   };
-  export interface LiveOffer extends MenuOffer { available: boolean }
+  export interface LiveOffer extends MenuOffer { available: boolean } // document + overlay
   export async function buildMenuDocument(tx: Transaction, menuId: string): Promise<{ document: MenuDocument; omittedShortcuts: { layoutId: string; ref: MemberRef }[] }>;
   export function menuDocumentHash(document: MenuDocument): string;   // sha256 hex of canonical JSON
   export async function applyLiveFields(tx: Transaction, documents: readonly MenuDocument[]): Promise<Map<string, LiveOffer[]>>; // ONE query per live table for all documents
-  export type MenuChange =
+  export type ChangeSource = "this_menu" | "shared_product" | "shared_section"; // spec §11.1: the comparison names where a change came from
+  export type MenuChange = { source: ChangeSource; alsoOn?: string[] } & (   // alsoOn: other menus a shared change flags
     | { kind: "product_added" | "product_removed"; productId: string; name: string; under: string[] }  // internal names of the path
     | { kind: "product_moved"; productId: string; name: string; from: string[][]; to: string[][] }
     | { kind: "price_changed"; productId: string; name: string; from: string; to: string }
@@ -1174,8 +1393,9 @@ sale-path change in one reviewable task.
     | { kind: "section_changed"; sectionId: string; name: string; fields: string[] }
     | { kind: "order_changed"; list: string[] }
     | { kind: "layout_changed"; layoutId: string; name: string }
-    | { kind: "default_layout_changed"; from: string; to: string };
+    | { kind: "default_layout_changed"; from: string; to: string });
   export function diffMenuDocuments(live: MenuDocument | null, proposed: MenuDocument): MenuChange[];
+  // `product_changed.fields` includes "allergens" and "diet" now that they are in the document.
   // menu-publication.ts
   export type MenuStatus = { state: "unpublished" } | { state: "current" | "changed"; version: number; publishedAt: string; hash: string };
   export async function menuStatus(tx: Transaction, menuIds: readonly string[]): Promise<Map<string, MenuStatus>>; // builds every menu's document in ONE pass: one graph load and one offers read for all menuIds, not one per menu — the list re-reads on every live change
@@ -1190,8 +1410,7 @@ sale-path change in one reviewable task.
       require it. Say so at the column.
     - `menu_publications`: `menu_id` (primary key), `version_id`, `published_at`.
     - `menu_version_images`: `(version_id, filename)` primary key.
-  - `superseded_at` is not stored; it is the next version's `published_at`, which D9 reads in
-    Task 7.
+  - `superseded_at` is not stored: nothing reads it since the grace window went (D9).
 
 - [ ] **Step 1: Write the failing tests** (`menu-document.test.ts`, `menu-publication.test.ts`):
   - **Canonical hash:** the same working state built twice hashes identically, and a hash computed
@@ -1199,12 +1418,15 @@ sale-path change in one reviewable task.
   - **Review Focus 3**, in full.
   - **Every extras item and option label is in the document**, available or not: a label unavailable
     at publish and made available afterwards is offered without a republish.
-  - **Review Focus 1's document half:** changing allergens, VAT class, availability, course or
-    reporting category leaves the hash unchanged, while a name, price, image, variant-offered or
-    extras-price change moves it.
-  - **Diff:** Lemonade added under Drinks gives `product_added` with `under: ["Drinks"]`; Burger
-    €12 → €13 gives `price_changed`; reordering Lunch's root gives `order_changed`; a new menu diffed
-    against `null` lists everything as added.
+  - **Review Focus 1's document half:** changing VAT class, availability, course or reporting
+    category leaves the hash unchanged, while a name, price, image, **allergens, diet**,
+    variant-offered or extras-price change moves it — on the dish, a variant AND an extras item.
+  - **Diff:** Lemonade added under Drinks gives `product_added` with `under: ["Drinks"]` and
+    `source: "this_menu"`; Burger €12 → €13 gives `price_changed` with `source: "shared_product"`
+    and `alsoOn: ["Dinner Menu"]`; sulphites added to Lemonade gives `product_changed` with
+    `fields: ["allergens"]` and `source: "shared_product"`; renaming Drinks gives `section_changed`
+    with `source: "shared_section"`; reordering Lunch's root gives `order_changed`; a new menu
+    diffed against `null` lists everything as added.
   - **Publish:**
     - it writes version 1 and points the publication at it;
     - a second publish writes version 2;
@@ -1222,7 +1444,8 @@ sale-path change in one reviewable task.
     layout and listed in `previewMenu`'s warnings. It never blocks the publish.
   - **Screen:**
     - the list shows Unpublished, Published or "Unpublished changes" with version and time;
-    - Preview lists the changes in words and a "Publish Lunch Menu" button (naming the single menu,
+    - Preview lists the changes in words, each with its source ("Lemonade: allergens — shared
+      product, also on Dinner Menu"), and a "Publish Lunch Menu" button (naming the single menu,
       spec §6);
     - a 409 re-previews and says the menu changed;
     - an error keeps "saved" distinct from "published" (spec §6).
@@ -1230,8 +1453,8 @@ sale-path change in one reviewable task.
 
 - [ ] **Step 2: Implement.**
   - `buildMenuDocument` reuses `listMenuOffers(…, {includeUnavailable: true})` and the extras and
-    options readers with every item included, then strips the live fields. Availability must not
-    change the document.
+    options readers with every item included, then strips the overlay fields. Availability must not
+    change the document; allergens and diet must.
   - Build the tree from `readMenuStructure`.
   - Canonical JSON is a small recursive serialiser that sorts object keys; do not rely on insertion
     order.
@@ -1247,68 +1470,137 @@ sale-path change in one reviewable task.
 
 ---
 
-## Task 7a: VAT is taken at payment — slug `vat-at-payment`
+## Task 7a: VAT is resolved when the invoice record is issued — slug `vat-at-issuance`
 
-Spec §10.4 (owner, 2026-09-25) and D6. **Fiscal-adjacent: it changes the VAT rate filed for a held
-order or tab. The golden huella and `inmutabilidad` pass unedited.** It does not depend on
-Tasks 1–6 and could land at any point before Task 7.
+Spec §11.4 (which sharpens §10.4's "at payment") and D6. **Fiscal-adjacent: it changes the VAT rate
+filed for a held order, a tab, an invoice-first order and a card payment. The golden huella and
+`inmutabilidad` pass unedited.** It does not depend on Tasks 1–6 and could land at any point before
+Task 7. The classification plan's Task 2 takes its snapshot in the SAME pass this task defines, so
+whichever lands second reuses the other's seam.
+
+**The rule, per filing path** (from "What the code is today"; re-check each line before building):
+
+| Path | Where the rate is resolved | Test |
+| --- | --- | --- |
+| `POST /api/sales`, walk-up | `createOpenOrder` → `priceOrderLines` in the paying request: already current | Control only: files exactly as before. |
+| `POST /api/sales`, held order / tab / split check | `priceStoredOrder` in `payWorkingOrder` (`till-sale.ts:364`) | Spec §10.7(6): added at 10%, corrected to 21%, files at 21%, gross unchanged. |
+| `POST /api/pay`, P1 | `priceStoredOrder` / `createOpenOrder` at `till-sale.ts:700-709`; P3 files P1's result | The class changes between P1 and P3 (a stub provider): the sale files P1's rate, and the receipt's lines match the sale. |
+| `POST /api/pay`, recovery | `priceStoredOrder` in `finalizeRecovery` (`:900`) | A captured payment with no sale, the class changed since: recovery files the CURRENT rate; the gross equals the captured amount less the tip. |
+| `POST /api/working-orders/:id/place` (invoice-first) | `priceStoredOrder` in `placeOrder` (`working-order.ts:2530`) | Placed at 10%, class corrected, collected: the sale keeps 10%, and `collectOrder` reads `sales.total` and re-prices nothing. |
+| `POST /api/working-orders/:id/collect` (ticket-then-pay) | `priceStoredOrder` in `collectOrder` (`till-sale.ts:1282`) | Added at 10%, corrected before collect, files at 21%. |
 
 **Files:**
 - Modify: `apps/server/src/working-order.ts` (`priceStoredOrder` / `readLockedLines`, around
-  `:465-523`; each line's VAT class is resolved from its product's CURRENT effective VAT class —
-  variant fallback included, extras by their own product — once per sale, never per line), and
-  `packages/catalogue/src/pricing.ts` (`priceLockedLines`, `:215`).
+  `:465-523`): the pass resolves each line's VAT class from its product's CURRENT effective VAT
+  class — variant fallback included, extras by their own product — once per sale, never per line,
+  **and writes the resolved rate back onto `working_order_lines.vat_rate` in the same transaction
+  before the record is filed**, so `readSettledTicket`'s reprint (`till-sale.ts:434-436`), which
+  re-runs `priceStoredOrder`, prints the rate that was filed. After filing, the order is settled or
+  placed, and no path prices it again. `packages/catalogue/src/pricing.ts` (`priceLockedLines`,
+  `:215`) takes the resolved rates.
   - The stored `unit_price_gross` stays the price.
-  - The stored `vat_rate` on `working_order_lines` becomes what the till displayed before payment.
-    Say so at the column (`packages/db/src/schema/orders.ts`).
+  - The stored `vat_rate` on `working_order_lines` is what the till displayed before issuance, and
+    the issued rate after it. Say so at the column (`packages/db/src/schema/orders.ts`).
 - Modify: `docs/developers/products.md` or the pricing doc that states when VAT is fixed (grep
   "vat_rate"), and `docs/backlog.md` (asesor Q26 is the open check).
-- Test: `working-order.pay-and-dispatch.test.ts`, `tabs.test.ts`, `till-sale.test.ts`, and the golden
-  and `inmutabilidad` suites (unedited).
+- Test: `working-order.pay-and-dispatch.test.ts`, `tabs.test.ts`, `till-sale.test.ts`, the
+  invoice-first and collect suites (grep `placeOrder\|collectOrder` under `apps/server/src/*.test.ts`),
+  the integrated-payment suite with the stub provider, and the golden and `inmutabilidad` suites
+  (unedited).
 
-- [ ] **Step 1: Write the failing tests:**
-  - Spec §10.7 example 6: a held order's drink added at `reduced` (10%) has its VAT class corrected
-    to `general` before payment. The filed sale's `vatBreakdown` shows it at 21%, and `sales.total`
-    (the gross) is unchanged.
-  - The same for a tab line and for an extras child line whose own product's VAT class changed.
-  - A variant with no VAT class of its own follows its parent's CURRENT class.
-  - **Control:** a line whose VAT class did not change files exactly as before (compare the rows).
-  - **One read per sale:** count prepared queries for a five-line order; the number does not grow
-    with the lines.
-  - **Existing tests that pinned add-time VAT on stored orders:** find them
-    (`grep -rn "vat" apps/server/src/*pay-and-dispatch*.test.ts apps/server/src/tabs.test.ts`). Each
-    one is an owner-decided behaviour change, so change it and name it in the PR (Global Constraints).
+- [ ] **Step 1: Write the failing tests:** the table's six cases, plus:
+  - the same for a tab line and for an extras child line whose own product's VAT class changed;
+  - a variant with no VAT class of its own follows its parent's CURRENT class;
+  - **write-back:** after filing, `working_order_lines.vat_rate` equals the filed rate, and the
+    reprint's lines equal the receipt's;
+  - **one read per sale:** count prepared queries for a five-line order; the number does not grow
+    with the lines;
+  - **no existing test changes a VAT class between add and pay** (the plan review ran
+    `grep -rn "vat_rate\|vatRate"` over `pay-and-dispatch` and `tabs` suites: no hits; the ten
+    case-insensitive `vat` hits are fixture fields and breakdown assertions whose class never
+    changes). What those suites pin is the add-time PRICE, which stays: leave them unedited and
+    write the new cases. If a suite does turn out to pin add-time VAT, it is an owner-decided
+    change — name it in the PR (Global Constraints).
   - Run them: they FAIL.
 - [ ] **Step 2: Implement. Step 3: Run the focused tests, `apps/server`'s `test:coverage`, and the
   golden and `inmutabilidad` suites unedited. Commit.**
 
 ---
 
-## Task 7b: Editing an open order — slug `order-edits`
+## Task 7b: Editing a saved order — the server rules — slug `order-edits`
 
-Spec §10.3, §10.7 examples 2, 3 and 5, and D10. **It touches the order path and the kitchen, so it
-takes the full review wave.** It needs no published menus: until Task 7, an edit prices new and
-changed lines from the current offers, as today, and Task 7 switches that to the version the till
-sent.
+Spec §10.3, §11.3, §11.4 (D22), §11.5, §10.7 examples 2, 3 and 5, §11.7 examples 4, 5, 7 and 9, and
+D10. **It touches the order path, the kitchen and the payment path, so it takes the full review
+wave.** It needs no published menus: until Task 7, an edit prices new and changed lines from the
+current offers, as today, and Task 7 switches that to the live document. The staff-facing Change
+action and the kitchen screen's notices are Task 7c; this task delivers the routes and rules they
+call, and its tests drive them directly.
 
 **Files:**
+- Modify: `packages/db/src/schema/orders.ts` — `working_orders.revision` (default 0),
+  `working_orders.payment_attempt_at` (nullable timestamp, D22), `working_order_lines.sent_at`
+  (nullable timestamp) and `working_order_lines.extra_list_id` (a
+  plain id, nullable, child lines only, NO key: say at the column that a list can be deleted while
+  an order that took from it is open, and that `validateExtraSelections` is what established the
+  list existed); `packages/db/src/schema/ticket-items.ts` — `ticket_items.quantity` (the quantity
+  fired). One generated core migration. Measure it on a seeded scratch venue: it must be
+  `ADD COLUMN` only, and if it is a rebuild, STOP and record it. (The plan review generated
+  `sent_at` and `ticket_items.quantity` in a throwaway checkout at `9e7beee9d` and got two plain
+  `ALTER TABLE … ADD` statements; the other two columns are the same shape, so a rebuild would be
+  news.)
+- Create: `packages/venue-service/src/schema/settings.ts` (`service_settings`: one row, `id` pinned to
+  1 by a check like `content_languages_singleton_ck`, and `edit_sent_lines` a flag defaulting to on)
+  and `packages/venue-service/src/schema/kitchen-notices.ts` (`kitchen_notices`, D10's columns),
+  with one generated venue-service migration, classification entries (both `state`) and
+  configuration transfer for `service_settings` (notices are operational rows, NOT transferred —
+  say so in the transfer test).
+- Create: `packages/venue-service/src/kitchen-notices.ts` + test (`recordKitchenNotices`,
+  `listStationNotices`, `acknowledgeKitchenNotice`).
 - Modify:
   - `apps/server/src/working-order.ts`: `updateHeldOrder` gets the pricing rules, the kitchen-state
-    rules, line numbering after the highest `line_no`, the revision check and the unavailable
-    refusal; `getHeldOrder` reads current allergens.
-  - `apps/server/src/kitchen-print.ts` (it reuses `enqueueCorrectionSlips` for RECALLED and VOID).
-- Modify: `packages/db/src/schema/orders.ts` (`working_orders.revision`, default 0) with a generated
-  core migration. Measure it on a seeded scratch venue: it must be `ADD COLUMN` only, and if it is a
-  rebuild, STOP and record it.
-- Create: `packages/venue-service/src/schema/settings.ts` (`service_settings`: one row, `id` pinned to
-  1 by a check like `content_languages_singleton_ck`, and `edit_sent_lines` a flag defaulting to on),
-  with a generated venue-service migration, a classification entry (`state`), and configuration
-  transfer.
-- Modify: the venue-service dashboard (a switch "Allow changes to items already sent to the kitchen"
-  on the venue settings, with EN and ES strings); `apps/till/src/api/client.ts` and `till-app.ts`
-  (send the revision; on the out-of-date refusal, reload the order and say so); the i18n codes.
-- Test: `working-order.test.ts`, `tabs.test.ts`, `kitchen-print.test.ts`, the till app tests, and the
-  venue-service dashboard tests.
+    rules, line numbering after the highest `line_no`, the revision check, the unavailable refusal
+    and the in-flight refusal (D22); a new `updateOrderLine` for the per-line route; `fireLines`,
+    `sendLines` and `fireCourse` stamp `sent_at` (no-route lines included) and write
+    `ticket_items.quantity`; `carveOffLines` copies `sent_at`, `served_at`, `course_id`, `note` and
+    `extra_list_id` and refuses a partial split of a started line; `fireCourse` and `sendLines`
+    stamp a course's no-route lines; `voidTabLine` gains a quantity and records the notice (started
+    or not) before the delete; `recallLines` records notices; the send path refuses an unavailable
+    line with no fired ticket and the pay path refuses an unavailable line without `sent_at`; every
+    line write checks D22's mark, and P1, P3, the failure path and the recovery branch of
+    `payWorkingOrderIntegrated` (`till-sale.ts`) set and clear it.
+  - `apps/server/src/modifier-selection.ts` (`ExtraChild` and `matchExtraChildren` carry and match
+    `listId`), `apps/server/src/kitchen-print.ts` (its correction path calls the notice recorder
+    beside the slips), `apps/server/src/till-api.ts` (the per-line route, the quantity on the void
+    route, the notice routes, and the station queue route returning notices), `device-api.ts` (the
+    device-cookie twins), `apps/server/src/live-resources.ts`.
+  - The venue-service dashboard (a switch "Allow changes to items already sent to the kitchen" on
+    the venue settings, with EN and ES strings); `apps/till/src/api/client.ts` (`HeldExtra.listId`,
+    the revision on `updateWorkingOrder`, `updateOrderLine`, `voidLine(quantity)`, the notice
+    calls), `apps/till/src/state/held-extras.ts` (reads `listId` instead of guessing) and
+    `till-app.ts` (send the revision; on the out-of-date refusal, reload the order and say so); the
+    i18n codes.
+- Test: `working-order.test.ts`, `tabs.test.ts`, `kitchen-print.test.ts`, `modifier-selection.test.ts`,
+  the split and transfer suites, the integrated-payment suite (D22 with the stub provider), the
+  till app tests, and the venue-service dashboard tests.
+
+**Interfaces:**
+- Produces:
+  ```ts
+  // working-order.ts
+  export async function updateOrderLine(tx, cfg, orderId: string, lineNo: number, patch: { quantity?: number; note?: string | null; options?: OptionSelection[]; extras?: ExtraSelection[] }, revision: number): Promise<void>;
+  export async function voidTabLine(tx, cfg, tabId: string, lineNo: number, quantity?: number): Promise<void>; // absent = the whole line
+  // kitchen-notices.ts
+  export type KitchenNoticeKind = "recalled" | "void" | "changed";
+  export interface KitchenNotice { id: string; stationId: string; workingOrderId: string; orderLabel: string; kind: KitchenNoticeKind; lineName: string; quantity: number; note: string | null; wasStarted: boolean; createdAt: string }
+  export async function recordKitchenNotices(tx, cfg, orderId: string, items: { workingOrderLineId: string; stationId: string; quantity: number; wasStarted: boolean }[], kind: KitchenNoticeKind): Promise<void>;
+  export async function listStationNotices(tx, cfg, stationId: string): Promise<KitchenNotice[]>; // unacknowledged, oldest first
+  export async function acknowledgeKitchenNotice(tx, cfg, id: string): Promise<void>; // kitchen_notice.not_found
+  // wire
+  // PUT /api/working-orders/:id/lines/:lineNo  { quantity?, note?, options?, extras?, revision }
+  // DELETE /api/working-orders/:id/lines/:lineNo?quantity=1
+  // GET /api/stations/:id/queue → { items, notices: KitchenNotice[] }; POST /api/kitchen-notices/:id/acknowledge; device twins under /api/device/…
+  // HeldExtra gains listId: string
+  ```
 
 - [ ] **Step 1: Write the failing tests:**
   - **Pricing:**
@@ -1319,34 +1611,69 @@ sent.
     - an edit changes Water's NOTE, adds Bacon to the Burger and adds a Coffee;
     - L1 stays €3.00, L2 stays €2.00, the Burger stays €12.00 with its cheese at €1.00, and the new
       Bacon (€1.50) and Coffee are priced now;
-    - every re-inserted line keeps its stored names, descriptions and category text, and new lines
-      are numbered after the highest `line_no`.
+    - every re-inserted line keeps its stored names, descriptions, category text, `extra_list_id`,
+      `sent_at` and served state, and new lines are numbered after the highest `line_no`.
     - Changing L1 to its "Large" variant makes it a new item at the current price.
-    - A pick that differs only in which extras LIST it came from is a new pick.
+    - **Extras-list identity** (spec §11.7 example 7): Extra cheese offered by "Toppings" at €1.00
+      and "Premium toppings" at €1.50; a line took it from Premium toppings; a note edit keeps
+      €1.50 and `extra_list_id` = Premium toppings. Premium toppings' price rises to €1.80: the
+      line still keeps €1.50. Premium toppings stops offering cheese: the line keeps €1.50, and a
+      NEW cheese pick prices from Toppings. A pick that differs only in which list it came from is
+      a new pick. **Control:** before this task, `matchExtraChildren` refused the two-list case and
+      the whole order was re-priced — watch that fail first.
     - The existing quantity-only guard case stays unchanged.
+  - **`sent_at`:**
+    - a tab round with a Burger (routed) and a bottled beer (`no_preparation`): both lines get
+      `sent_at`; the Burger has a ticket with `quantity = 1`, the beer has none;
+    - a held-course line (`hold: true`) has no `sent_at` until it fires — a ROUTED one and a
+      no-route bottle under the same held course; when the course fires, both are stamped;
+    - a parked counter order stamps nothing; placing it stamps every line;
+    - a recalled line keeps its `sent_at`.
+  - **Splits** (Review Focus 6): a partial split of a fired line copies `sent_at`, `served_at`,
+    `course_id` and `note` to the new row; the ticket stays on the source with `quantity`
+    unchanged, and `listStationQueue` still reports the fired quantity; both checks pay after the
+    product goes unavailable. The refusal of a partial split of a dish with extras stays, and a
+    partial split of a `preparing` line is refused `ticket.already_started` while a whole-line move
+    of it succeeds and keeps its ticket.
   - **Kitchen, sent and not started:**
     - a fired tab line (`state = 'queued'`) changed to "no onions" through
-      `PUT /api/working-orders/:id` gets a RECALLED slip for the old ticket item and a new ticket item
-      for the changed line (the till does not edit tabs this way — the test drives the server path
-      directly);
+      `PUT /api/working-orders/:id/lines/:lineNo` gets a RECALLED notice AND slip for the old ticket
+      item and a new ticket item for the changed line; the price is unchanged;
+    - the same through `PUT /api/working-orders/:id` (the counter basket's save) — never a silent
+      cascade delete (the regression from #623's finding);
     - a quantity rise from 1 to 2 leaves the fired item at 1 and adds a new line of 1, fired as new
       work where the order has fired work;
-    - a drop from 2 to 1 sends a VOID slip for 1.
+    - a drop from 2 to 1 records a VOID notice and slip for 1, and the ticket's `quantity` reads 1.
   - **Kitchen, started and setting off:**
     - a started item is refused with `ticket.already_started`, and nothing changes;
+    - voiding a started item records a VOID notice with `wasStarted: true` before the delete;
+    - `voidTabLine` with `quantity` less than the line's voids that part only;
     - with `service_settings.edit_sent_lines` off, a fired, queued item is refused with
-      `ticket.already_fired`;
+      `ticket.already_fired`, and so is the same line after a Recall (the setting cannot be walked
+      around); with the setting on, the recalled line edits freely;
+    - **recall, sold out, send again:** a queued line is recalled, its product goes unavailable,
+      and Send is refused `product.unavailable`; the same line pays if it had `sent_at` and was
+      not recalled;
     - the no-route line, the held-course line (`fired_at` null) and the recalled line stay freely
       editable in every case.
+  - **Notices without a printer** (Review Focus 7): a station with no `station_printers` row: a
+    recall, a void and a change each leave a notice `listStationNotices` returns, and
+    `enqueuePrintJob` is never called. With a printer: notice AND slip. Acknowledging removes it;
+    an unknown id is `kitchen_notice.not_found`.
   - **Revision:** two edits made from the same revision — the first lands and the second is refused
     as out of date, with nothing changed. The till reloads the order and shows a message (spec §10.7
     example 2).
+  - **D22:** with the SIMULATOR provider paused in P2 (it writes no `attempting` row, so this is
+    the control that the guard does not read the payments store), a new round, a line edit and a
+    void on that order are each refused `order.payment_in_flight`; after the attempt settles, and
+    separately after it fails, each succeeds, and `payment_attempt_at` is null again. A different
+    order is never blocked. A mark left by a crash is cleared by the recovery branch.
   - **Unavailable:** an unsent line whose product became unavailable is refused at send and at pay
-    with `product.unavailable`. After it is removed, the order pays. A fired line of an unavailable
-    product still pays. A split (`splitOffCheck`) pays the eligible lines (spec §10.7 example 5).
-  - **Allergens:** a retrieved held order shows the product's CURRENT allergens after a change.
-  - **The regression from #623's finding:** a non-quantity edit never deletes a fired line's ticket
-    item without a slip.
+    with `product.unavailable`. After it is removed, the order pays. A line with `sent_at` of an
+    unavailable product still pays, with and without a route. A split (`splitOffCheck`) pays the
+    eligible lines (spec §10.7 example 5).
+  - **Allergens:** a retrieved held order shows the allergens the line was added with, not the
+    product's current ones (spec §11.1; revision 2's test read the other way).
   - Run them: they FAIL.
 - [ ] **Step 2: Implement. Step 3: Run the focused tests and `apps/server`'s and `apps/till`'s
   `test:coverage` locally. LOOK at the till's reload message and the settings switch, in both themes.
@@ -1354,28 +1681,80 @@ sent.
 
 ---
 
+## Task 7c: Changing a sent line from the till, and notices on the kitchen screen — slug `order-edits-ui`
+
+Spec §11.5, §11.6 and §10.7 example 3, the staff-facing half of D10 and D11's kitchen-screen poll.
+Browser tests in real Chromium. It depends on Task 7b's routes and needs no published menus.
+
+**Files:**
+- Modify: `apps/till/src/screens/till-table-order-screen.ts` (a **Change** action on a sent,
+  not-started line beside Recall, and on a no-route line; it opens the line's note, options and
+  extras in the existing modifier and note editors, prefilled from the held line, and saves through
+  `updateOrderLine` with the order's revision; a started line keeps Cancel only, and Cancel now asks
+  "Cancel 1 of 2?" for a multi-quantity line), `till-app.ts` (the handlers, the out-of-date reload
+  message, the `ticket.already_started` and `ticket.already_fired` messages), `widgets/basket.ts`
+  if the editors live there, `i18n/strings.ts` and `i18n/codes.ts`.
+- Modify: `apps/till/src/screens/till-station-screen.ts` and `widgets/station-queue.ts` (a notices
+  strip above the queue: kind, line, quantity, order label, "started" where set, and an Acknowledge
+  button; the screen polls its queue and notices every 15 seconds, D11), `api/client.ts`.
+- Test: `till-table-order-screen.test.ts`, `till-station-screen.test.ts`, `station-queue.test.ts`,
+  their a11y tests, and `till-app.test.ts`.
+
+- [ ] **Step 1: Write the failing tests** (real Chromium):
+  - **Change on a queued line** (spec §10.7 example 3, the acceptance example itself): a table with
+    a fired Burger; tapping Change opens the note editor; typing "no onions" and saving calls
+    `PUT /api/working-orders/:id/lines/:lineNo` with the note and the revision; the line shows the
+    note and the same price afterwards. A stubbed `ticket.already_started` answer shows the
+    localised message and offers Cancel. A stubbed out-of-date answer reloads the order and says
+    so.
+  - **Change is offered for:** a queued fired line, a recalled line and a no-route line; **not
+    for:** a preparing or ready line (Cancel only), an extras child row, or any line that was ever
+    sent when the venue setting is off (the screen reads the setting from the order payload; the
+    server still refuses). **Cancel is now offered on a queued line too**, beside Recall, so that
+    with the setting off "can only be voided" has a button.
+  - **Partial cancel:** a fired line of 2 offers "Cancel 1" and "Cancel all"; "Cancel 1" calls the
+    void route with `quantity=1`.
+  - **Kitchen screen notices:** a stubbed queue answer with two notices renders them above the
+    items in order, the void of a started item reads "started", text and an icon distinguish the
+    three kinds (never colour alone), Acknowledge calls the route and removes the row, and the
+    screen re-fetches on the 15-second timer (fake timers, advanced past an awaited frame per
+    CLAUDE.md §4).
+  - **The a11y tests** cover the Change editor, the partial-cancel dialog, and the notices strip
+    with each kind, in both themes.
+  - Run them: they FAIL.
+- [ ] **Step 2: Implement. Step 3: Run `apps/till`'s `test:coverage` locally. LOOK at the table
+  screen and the kitchen screen at till and phone widths, in both themes and both languages.
+  Commit.**
+
+---
+
 ## Task 7: Tills sell from the published version — slug `sell-published`
 
-Spec §4's "published rendering and pricing must use that captured content", plus §9's baskets and
-held orders, D9, D11, D12's server half and D17 (the order-editing rules of D10 are Task 7b; VAT at
-payment is Task 7a). **This is the sale path. It is fiscal-adjacent: the golden huella and
-`inmutabilidad` pass unedited.**
+Spec §4's "published rendering and pricing must use that captured content", §11.1's live
+availability, §11.2's basket refresh, D9, D11, D12's server half and D17 (the order-editing rules of
+D10 are Tasks 7b and 7c; VAT at issuance is Task 7a). **This is the sale path. It is fiscal-adjacent:
+the golden huella and `inmutabilidad` pass unedited.**
 
 **Files:**
 - Modify:
   - `packages/venue-service/src/operations.ts`: `listZoneOffers` serves live documents through
-    `applyLiveFields`; `recordWorkingLineContexts` takes the already-resolved offers and makes no
-    per-line read; readiness gains `zone.menu_unpublished`.
-  - `packages/catalogue/src/menu-publication.ts` (`resolveLineVersion`, `SUPERSEDED_VERSION_GRACE_MS`).
-- Modify: `apps/server/src/working-order.ts` (`priceOrderLines` prices each line — dish, variant,
-  extras, options — from its version, replacing `resolveBasketModifiers`' live-row extras pricing
-  at `:142-190`; Task 7b's edit path prices new and changed lines from the version the till sent),
-  `till-sale.ts`, `till-api.ts` (`GET /api/menu-state`, session-gated; the offers responses carry
-  `versionId` per menu).
-- Modify: `apps/till/src/api/client.ts` (each line sends `menuVersionId`), `till-app.ts` (adopt on
-  poll), `state/order-line.ts`, `state/working-order.ts`; create `apps/till/src/state/menu-state-poll.ts`.
-  Unavailable offers arrive marked; grey them in the existing `widgets/product-grid.ts` for now
-  (Task 9 replaces the grid).
+    `applyLiveFields` (the availability overlay, D6); `recordWorkingLineContexts` takes the
+    already-resolved offers and makes no per-line read; readiness gains `zone.menu_unpublished`;
+    a new `unavailableSet(tx, zoneId)` behind `/api/menu-state`.
+  - `packages/catalogue/src/menu-publication.ts` (`assertLiveVersions`).
+- Modify: `apps/server/src/working-order.ts` (`priceOrderLines` prices each unsaved line — dish,
+  variant, extras, options — from the LIVE document, replacing `resolveBasketModifiers`' live-row
+  extras pricing at `:142-190`, after `assertLiveVersions` has checked every asserted version;
+  Task 7b's edit paths price new and changed lines the same way), `till-sale.ts`, `till-api.ts`
+  (`GET /api/menu-state`, session-gated; the offers responses carry `versionId` per menu).
+- Modify: `apps/till/src/api/client.ts` (each unsaved line sends the `menuVersionId` it was priced
+  against), `till-app.ts` (the refresh flow, D9 — note `#onCounterZoneSelected` DISCARDS an offers
+  reload when the basket has lines, `till-app.ts:903`; the refresh flow must not go through that
+  guard), `state/order-line.ts`, `state/working-order.ts`;
+  create `apps/till/src/state/menu-state-poll.ts` and `widgets/basket-refresh-dialog.ts` (+ test +
+  a11y test). Unavailable offers arrive marked; grey them in the existing `widgets/product-grid.ts`
+  for now (Task 9 replaces the grid), and apply the poll's unavailable set to loaded offers without
+  a reload.
 - Modify:
   - `packages/venue-service/src/schema/service.ts`: `working_line_contexts` gains
     `menu_version_id` (plain id, nullable for lines added before this task; a generated migration,
@@ -1393,44 +1772,51 @@ payment is Task 7a). **This is the sale path. It is fiscal-adjacent: the golden 
   - `packages/module/src/module.ts` (the `ZoneMenuOffer` wire shape gains `available` and the menu's
     `versionId`);
   - `sale_lines.menu_version_id`: the sales classification plan's Task 2 runs BEFORE this plan
-    (one lane, owner 2026-09-25) and leaves the column null. This task fills it at filing from
+    (one lane, owner 2026-09-25) and leaves the column null. This task fills it at issuance from
     `working_line_contexts.menu_version_id`;
   - `apps/server/src/till-api.ts:791`'s comment "the till re-prices on retrieve" is contradicted by
     `apps/till/src/till-app.ts:1025`; correct it while here;
-  - `apps/till/src/i18n/codes.ts` (`menu.version_expired`), and
+  - `apps/till/src/i18n/codes.ts` (`menu.version_changed`), and
     `packages/venue-service/src/dashboard/strings.ts` (the readiness wording for
     `zone.menu_unpublished`, in English and Spanish, beside `zone.menu_empty`'s);
-  - `docs/backlog.md`.
+  - `docs/backlog.md` (and a line there for the later till-session branch on the SSE route, D11).
 - Test: `working-order.test.ts`, `till-sale.test.ts`, `working-order.pay-and-dispatch.test.ts`,
   `tabs.test.ts`, `till-api.test.ts`, `packages/venue-service/src/operations.test.ts`, and the till's
-  client, state and app tests; the golden and `inmutabilidad` suites run unedited.
+  client, state, dialog and app tests; the golden and `inmutabilidad` suites run unedited.
 
 **Interfaces:**
 - Consumes: Task 6's `readLiveDocuments` and `applyLiveFields`.
 - Produces:
   ```ts
-  export const SUPERSEDED_VERSION_GRACE_MS = 12 * 60 * 60 * 1000;
-  export async function resolveLineVersion(tx: Transaction, allowedMenuIds: readonly string[], versionId: string, now: Date): Promise<{ versionId: string; document: MenuDocument }>; // throws menu.version_expired
-  // wire: every order line the till sends gains `menuVersionId?: string` — absent means the menu's live version (D9)
-  // GET /api/menu-state?zoneId= → { menus: { menuId: string; versionId: string }[] }
+  export async function assertLiveVersions(tx: Transaction, allowedMenuIds: readonly string[], asserted: readonly { menuId: string; versionId: string }[]): Promise<Map<string, { versionId: string; document: MenuDocument }>>; // throws menu.version_changed with params { menus: [{ menuId, liveVersionId }] }
+  // wire: every UNSAVED order line the till sends gains `menuVersionId?: string` — the version it was priced against; absent means the live version (D9)
+  // GET /api/menu-state?zoneId= → { menus: { menuId: string; versionId: string }[], unavailable: { products: string[]; optionLabels: string[]; extraItems: { menuItemId: string; productId: string }[] } }
+  // till: `basket-refresh-dialog` takes { changed: { lineNo, name, from, to }[], blocked: { lineNo, name, reason: "removed" | "unavailable" | "variant_removed" | "extra_removed" | "extra_unavailable" }[] } and emits wt-basket-refresh-confirmed / wt-basket-refresh-cancelled
   ```
 
 - [ ] **Step 1: Write the failing tests:**
-  - **Review Focus 2**, in full, through `POST /api/sales`. Use the server's clock seam for the
-    13-hour case; if there is none on this path, add one as a parameter, never a global patch.
-  - **Review Focus 1's till half:** the served offer carries the new allergens on the dish and the
-    extra, and a NEW sale's `vatBreakdown` shows both at 21% (Task 7a already made filing read the
-    current VAT class). The golden fingerprint is unaffected because its fixture changes nothing.
+  - **Review Focus 2**, in full, through `POST /api/sales` and the till.
+  - **Review Focus 1's till half:** after the allergen and VAT changes without a republish, the
+    served offer still carries the PUBLISHED allergens on the dish and the extra; after a republish
+    it carries the new ones. The filed VAT is Task 7a's. The golden fingerprint is unaffected because
+    its fixture changes nothing.
   - **Provenance:** a held line and a tab line record `working_line_contexts.menu_version_id` when
     added. Paying them hours later, after another publish, files `sale_lines.menu_version_id` = the
-    version each line came from, not the live one.
-  - **An expired basket:** after `menu.version_expired`, the till shows each changed line's old and
-    new price and pays only after confirmation. A line whose product left the menu blocks payment
-    until it is removed.
+    version each line came from, not the live one, and their prices are unchanged (D10).
+  - **The refresh flow's three outcomes** on the till, with stubbed answers: silent adoption when
+    only an unrelated section changed; the dialog with a price change ("Lemonade €3.00 → €2.50"),
+    confirmation, and the next request asserting the new version; and a blocked line (removed, or
+    its extra unavailable) that keeps Pay disabled until the line is removed or replaced. Cancelling
+    the dialog keeps the basket as it was and Pay disabled.
   - **Extras price from the document:** an extra whose list price changes after publish is charged
     at the PUBLISHED price, and an extras item made unavailable after publish is refused.
   - **Review Focus 5's server half:** an unavailable product is served with `available: false` in
     its place, and a line for it is refused `product.unavailable`.
+  - **The unavailable set** (spec §11.7 example 2): mark Burger unavailable on the dashboard; the
+    next `/api/menu-state` lists it, `versionId` is unchanged, and Lunch's status is still
+    `current`. The till greys Burger within one poll without reloading offers (count the offers
+    requests), and a Burger already in the basket is flagged as blocked. Making it available again
+    clears both. The same for an option label and a per-offer extras item.
   - **One snapshot per version:** a basket with three different offers from two versions reads each
     document once and makes no per-line catalogue read.
     - Count PREPARED QUERIES, as `packages/venue-service/src/operations.test.ts`'s "resolves a menu item once however many lines of the round share it" case (around line 1424) already does. A
@@ -1444,25 +1830,33 @@ payment is Task 7a). **This is the sale path. It is fiscal-adjacent: the golden 
   - **Park, tab round, pay:** unchanged behaviour for stored lines. The existing tests (for example
     `working-order.pay-and-dispatch.test.ts:724`) stay unedited.
   - **The till:**
-    - `menu-state-poll` fires every 60 s only while signed in, stops on sign-out, and treats
+    - `menu-state-poll` fires every 15 s only while signed in, stops on sign-out, and treats
       `session.required` as signed out;
     - `/api/menu-state` refuses a request without a till session;
-    - a changed `versionId` reloads offers while keeping the basket's lines and their versions;
-    - `menu.version_expired` on pay shows the localised message and reloads.
+    - a changed `versionId` runs the refresh flow while keeping the basket's lines;
+    - `menu.version_changed` on pay runs the refresh flow, and a silent adoption retries the pay
+      once.
   - Run them: they FAIL.
 
 - [ ] **Step 2: Implement.**
-  - In `priceOrderLines`, collect the distinct `menuVersionId`s (an absent one is the live version),
-    resolve each ONCE before the loop, apply live fields once, and price each line, extras and
-    options included, from its version's offer.
-  - A line whose `menuItemId` is not in its version is refused `service_zone.offer_not_allowed`, the
-    existing code.
+  - In `priceOrderLines`, collect the asserted versions per menu, call `assertLiveVersions` ONCE
+    before the loop, apply the overlay once, and price each line, extras and options included, from
+    the live document.
+  - A line whose `menuItemId` is not in the live document is refused `service_zone.offer_not_allowed`,
+    the existing code.
   - Keep "ignores a browser-sent price".
   - Walk-up, park and tab rounds all go through it. `priceStoredOrder` is unchanged.
+  - The unavailable set is one query per table (products, option labels, per-offer extras items),
+    restricted to the zone's live documents' ids.
+  - `/api/menu-state` is a READ polled by every till every 15 s. `requireSession` runs inside
+    `withTransaction`, which IS the write lock (`till-session.ts:62`; CLAUDE.md §3). Grep how the
+    other GET routes on `till-api.ts` read; if a read-only path exists, use it, and if none does,
+    say so in the PR and leave the interval at 15 s rather than inventing one here.
 
 - [ ] **Step 3: Run the focused tests, then `apps/server`'s and `apps/till`'s `test:coverage`
   locally** (this task changes values many suites assert), then the golden and `inmutabilidad`
-  suites unedited. **LOOK at the till** (greyed tile, adoption) **in both themes. Commit.**
+  suites unedited. **LOOK at the till** (greyed tile, the refresh dialog, adoption) **in both
+  themes. Commit.**
 
 ---
 
@@ -1614,9 +2008,16 @@ the task's own PR wherever the task makes it stale.
 ## Self-Review notes
 
 - **Spec coverage:**
+  - §11 (wins over all): the snapshot plus live availability (§11.1) → D6, D11, Tasks 6 and 7;
+    the basket refresh and saved orders (§11.2) → D9, D10, Tasks 7 and 7b; availability and the
+    recorded sent state (§11.3) → D10, Task 7b; VAT and classification at issuance (§11.4) → Task
+    7a, D22 and the classification plan; kitchen notices (§11.5) → D10, Tasks 7b and 7c; the till's
+    Change action (§11.6) → Task 7c; §11.7's examples → 1, 2, 3 (Tasks 6, 7), 4, 5, 7, 9 (Task 7b),
+    6 (Tasks 7b, 7c), 8 (Tasks 1, 3, 4; D23).
   - §10: the split and sections → Tasks 1–4 (D1–D4); the add-products flow and "Add to menus…" →
-    Tasks 2 and 4; open orders (§10.3) → D9, D10 and Task 7; field lifetimes (§10.4) → D6 and D9;
-    routing (§10.5) and category reports (§10.6) → out of scope here (D20).
+    Tasks 2 and 4; open orders (§10.3) → D9, D10 and Tasks 7, 7b; field lifetimes (§10.4, as §11.1
+    and §11.4 amend it) → D6, Task 7a; routing (§10.5) and category reports (§10.6) → out of scope
+    here (D20).
   - §1 → Tasks 1, 3 and 6. §2 (read as sections): ordered members, cycles and duplicates → Task 1;
     usages, duplicate and copy → Tasks 1–2; groups are dropped (§10.1).
   - §3: menus and structure → Tasks 3–4; prices → Task 5.
@@ -1635,14 +2036,20 @@ the task's own PR wherever the task makes it stale.
   - `MenuOffer.placements` (Task 3) is carried by `FrozenOffer` (Task 6).
   - `MenuDocument` (Task 6) is served by Task 7 and rendered by Task 9.
   - `menuVersionId` on the wire comes in Task 7 and is emitted by `till-menu-browser` in Task 9.
+  - `extra_list_id`, `sent_at` and `ticket_items.quantity` (Task 7b) are read by Task 7c's screens
+    and by the classification plan's Task 2 (`extra_list_id` is not recorded on `sale_lines`; the
+    sale line's `product_id` and `parent_line_id` are enough for the reports).
+  - `KitchenNotice` (Task 7b) is rendered by Task 7c.
+  - `assertLiveVersions` (Task 7) replaces revision 2's `resolveLineVersion`; nothing else named it.
   - `homeLayoutId` joins `/api/menu-state` in Task 9.
 - **Owner-facing choices to confirm before the task that builds each:**
-  - D6's live-field list (Task 6);
-  - D9's 12-hour grace, which lets a till choose a recent older price, and the confirm-on-expiry
-    step (Task 7);
-  - D10's edit rules and the "Allow changes to items already sent" setting defaulting to ON
-    (Task 7b);
-  - VAT at payment, pending asesor Q26 (Task 7a);
+  - D6's overlay being availability alone, with allergens waiting for a publish (Task 6);
+  - D9's basket refresh: interrupted only when something in the basket changed (Task 7);
+  - D10's edit rules, the "Allow changes to items already sent" setting defaulting to ON, and
+    the kitchen notices table (Task 7b);
+  - D11's 15-second poll and the unavailable set (Task 7);
+  - D22's refusal of edits while a card payment is in flight (Task 7b);
+  - VAT at issuance, pending asesor Q26 (Task 7a);
   - D17: a freshly provisioned or imported venue sells nothing until someone publishes a menu
     (Task 7);
   - D12's greyed tiles (Tasks 7 and 9);
