@@ -5121,7 +5121,7 @@ bench rig keeps its own Litestream download script (its version is pinned beside
 table through `scripts/setup-litestream.test.mjs`, which injects the download and the platform; the
 full box image was not built locally, only its `litestream` stage.
 Task 7, how current the bucket copy is and the alerts about it, is done on
-`feat/sqlite-slice2-stream-freshness` (this PR). The store reports each commit that changed rows
+`feat/sqlite-slice2-stream-freshness` (#619). The store reports each commit that changed rows
 and the side file; the supervisor reads the newest file in the bucket about once a minute and
 reports how long the oldest change not yet there has waited. `/health`, the box status and the
 backup status show the bucket copy, and `/health` never fails because of it. The dashboard gains
