@@ -111,7 +111,7 @@ export interface SupervisorDeps {
   /** Reads a PID's command line; default {@link readCommandLine}. */
   readCommandLine?: (pid: number) => Promise<string | null>;
   /** Subscribes to the venue database's commits; returns the unsubscribe. */
-  onCommit(listener: (committedAt: Date) => void): () => void;
+  onCommit(listener: () => void): () => void;
 }
 
 /** How often, while streaming, the side file is measured. */
@@ -205,14 +205,12 @@ const codeOf = (error: unknown): string => (isAppError(error) ? error.code : "un
  */
 export const steadyMs = (): number => Number(process.hrtime.bigint()) / 1e6;
 
-const newestOf = (objects: readonly ListedObject[]): Date | null =>
+const newestOf = (objects: readonly ListedObject[], floor: Date | null): Date | null =>
   objects.reduce<Date | null>(
     (newest, object) =>
       newest === null || object.lastModified > newest ? object.lastModified : newest,
-    null,
+    floor,
   );
-const later = (a: Date | null, b: Date | null): Date | null =>
-  a === null ? b : b === null || a > b ? a : b;
 
 /** A sleep that ends early, and quietly, when `signal` aborts. */
 export async function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -271,6 +269,8 @@ export class StreamSupervisor {
   #skewMs = 0;
   #lastProbeAt = 0;
   #lastClassifyAt = Number.NEGATIVE_INFINITY;
+  /** Numbers each bucket check the stream starts, so a late answer can tell a newer one began. */
+  #checkSeq = 0;
   /** When a bucket that cannot be read was last logged; null while reads succeed. */
   #unreadableLoggedAt: number | null = null;
 
@@ -302,7 +302,7 @@ export class StreamSupervisor {
   async start(): Promise<void> {
     if (this.#controller !== undefined) return;
     // The store calls this as soon as the commit is made, so the steady clock's reading here is the
-    // commit's time on that clock; the wall-clock time handed in could since have been corrected.
+    // commit's time.
     this.#unsubscribe = this.#deps.onCommit(() => this.#commits.record(this.#monotonic()));
     const controller = new AbortController();
     this.#controller = controller;
@@ -502,7 +502,7 @@ export class StreamSupervisor {
       }
       signal.throwIfAborted();
       if (listed.some((object) => FULL_COPY.test(object.key.slice(prefix.length)))) {
-        this.#newestUploadAt = later(this.#newestUploadAt, newestOf(listed));
+        this.#newestUploadAt = newestOf(listed, this.#newestUploadAt);
         return;
       }
       await this.#unlessStopped(signal, this.#sleep(OPEN_POLL_MS, signal));
@@ -587,8 +587,9 @@ export class StreamSupervisor {
   /**
    * Reads the live generation's newest file (spec §7) and forgets the commits it covers, then
    * checks the bucket when that is due: after a failed read, or with a problem named, at most every
-   * ten minutes; otherwise daily. Nothing is changed or checked once the run has stopped, or once a
-   * newer read has replaced this one: its answer may be older than the newer read's.
+   * ten minutes; otherwise daily. A listing answered once the run has stopped, or once a newer read
+   * has replaced this one, changes nothing and starts no check: it may be older than the newer
+   * read's.
    */
   async #readBucket(
     generation: string,
@@ -622,9 +623,9 @@ export class StreamSupervisor {
   ): Promise<{ ok: true; newest: Date | null } | { ok: false; errorCode: string }> {
     try {
       const prefix = generationPrefix(this.#deps.venueId, generation);
-      let newest = later(this.#newestUploadAt, newestOf(await this.#store.list(`${prefix}0000/`)));
+      let newest = newestOf(await this.#store.list(`${prefix}0000/`), this.#newestUploadAt);
       if (this.#lagWith(newest).lagMs > L0_RETENTION_MS) {
-        newest = later(newest, newestOf(await this.#store.list(`${prefix}0001/`)));
+        newest = newestOf(await this.#store.list(`${prefix}0001/`), newest);
       }
       return { ok: true, newest };
     } catch (error) {
@@ -677,17 +678,22 @@ export class StreamSupervisor {
 
   /**
    * A bucket that answers with a refusal is unusable (its key, or its safe write); one that gives no
-   * answer at all is unreachable, which the lag already shows.
+   * answer at all is unreachable, which the lag already shows. An answer arriving after stop, or
+   * after a newer check has started, is dropped, leaving the newer check to answer. A newer READ does
+   * not drop it, since the read that replaces this one usually starts no check of its own.
    */
   async #classifyBucket(force: boolean, signal: AbortSignal): Promise<void> {
     const now = this.#monotonic();
     if (!force && now - this.#lastClassifyAt < CLASSIFY_EVERY_MS) return;
     this.#lastClassifyAt = now;
+    const mine = ++this.#checkSeq;
+    const wanted = () => !signal.aborted && mine === this.#checkSeq;
     try {
       const probe = await probeBucket(this.#store);
-      if (signal.aborted) return;
+      if (!wanted()) return;
       this.#noteBucketProblem(probe.ok ? null : probe.reason);
     } catch (error) {
+      if (!wanted()) return;
       this.#deps.log("warn", "stream.bucket_unreachable", { errorCode: codeOf(error) });
     }
   }

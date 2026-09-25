@@ -31,15 +31,16 @@ export const settle = <T>(result: T, onOk: () => void, onFail: () => void): T =>
   ) as T;
 };
 
-/** Told the time of each commit on a file's write connection that changed at least one row. */
-export type CommitListener = (committedAt: Date) => void;
+/** Called on each commit on a file's write connection that the store reports. */
+export type CommitListener = () => void;
 
 /**
  * How many rows `connection` has inserted, updated or deleted since it opened. Prepared once per
- * connection, because it runs beside every statement issued outside a transaction.
+ * connection, because while a listener is registered it runs up to twice for each transaction the
+ * store opens and each statement issued outside one.
  */
 const changeCounters = new WeakMap<DatabaseSync, StatementSync>();
-export const totalChanges = (connection: DatabaseSync): number => {
+const totalChanges = (connection: DatabaseSync): number => {
   let counter = changeCounters.get(connection);
   if (counter === undefined) {
     counter = connection.prepare("select total_changes() as n");
@@ -100,27 +101,35 @@ export interface Connections {
   forStatement: () => DatabaseSync;
   /**
    * Registers `listener` for the commits the store reports; returns the unsubscribe. See
-   * `StoreHandle.onCommit` in `./index.ts` for which commits those are.
+   * `StoreHandle.onCommit` in `./index.ts` for which commits those are. The first listener
+   * registered while none is takes the side file as it is now as the comparison point.
    */
   onCommit: (listener: CommitListener) => () => void;
-  /** Whether any listener is registered. */
-  listening: () => boolean;
   /**
-   * Tells every listener a commit that changed rows has just happened, unless the file's side file
-   * is unchanged since the last one reported: such a commit (an UPDATE to the value a row already
+   * The writer's count of changed rows, taken before a transaction or a statement outside one;
+   * null when no listener is registered, so a node nobody listens on runs no extra query. The first
+   * listener, registered after a null mark, does not hear of that commit.
+   */
+  changeMark: () => number | null;
+  /**
+   * Call once the work `mark` was taken before has committed, and not after a rollback: the count
+   * does not go back down when rows are rolled back. `commit` and `release` do not move it (both
+   * measured on `node:sqlite`, Node v26.7.0, 2026-09-25).
+   *
+   * Tells every listener, if the count moved since `mark`, unless the file's side file is
+   * unchanged since the last commit reported: such a commit (an UPDATE to the value a row already
    * holds) wrote nothing a copy of the file could show. The commit is already durable, so a
    * listener that throws, or returns a promise that rejects, is skipped rather than allowed to
    * reach the caller, who would otherwise be told a committed write failed.
    *
    * The side file is compared by size and modification time. After a checkpoint a commit rewrites
    * it from its beginning, at an unchanged size while it fits, so a commit landing in the same
-   * modification-time tick as the one before is not reported. On macOS APFS, 45,000 commits made
-   * back to back just after such a restart never matched the one before (fix-round-1 report of
-   * task 7B, 2026-09-25); the box's filesystem was not measured. A commit that changes the side
+   * modification-time tick as the one before is not reported. Measured on macOS APFS only, not on
+   * the box's filesystem; the receipt is in commit b62ada502. A commit that changes the side
    * file but no row (DDL) is not reported and does not move the comparison either, so a
    * same-value update right after one IS reported.
    */
-  committed: () => void;
+  reportIfChanged: (mark: number | null) => void;
   /**
    * Takes the side file as it is now as the comparison point: for the store's own checkpoint,
    * which changes the file without a commit.
@@ -195,24 +204,23 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
         listeners.delete(listener);
       };
     },
-    listening: () => listeners.size > 0,
+    changeMark: () => (listeners.size === 0 ? null : totalChanges(write)),
     sideFileReset: () => {
       if (walPath !== null) lastWal = walMark(walPath);
     },
-    committed: () => {
-      if (listeners.size === 0) return;
+    reportIfChanged: (mark) => {
+      if (mark === null || totalChanges(write) === mark) return;
       if (walPath !== null) {
         const wal = walMark(walPath);
         if (sameWal(wal, lastWal)) return;
         lastWal = wal;
       }
-      const at = new Date();
       for (const listener of listeners) {
         try {
-          const returned: unknown = listener(at);
+          const returned: unknown = listener();
           if (isPending(returned)) returned.then(undefined, () => {});
         } catch {
-          // See `committed` on the interface.
+          // See `reportIfChanged` on the interface.
         }
       }
     },

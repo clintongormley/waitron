@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { connectionPair, isReadOnlyRefusal, sameWal, settle, walMark } from "./connections.js";
 
 /**
@@ -248,13 +248,37 @@ describe("the side file's mark", () => {
 
   it("tells listeners on a pair with no file behind it without looking for a side file", () => {
     const write = new DatabaseSync(":memory:");
+    write.exec("create table t (id integer primary key)");
     const connections = connectionPair(write, write);
-    const heard: Date[] = [];
-    connections.onCommit((at) => heard.push(at));
-    connections.committed();
+    let heard = 0;
+    connections.onCommit(() => {
+      heard += 1;
+    });
+    let mark = connections.changeMark();
+    write.exec("insert into t default values");
+    connections.reportIfChanged(mark);
     connections.sideFileReset();
-    connections.committed();
-    expect(heard).toHaveLength(2);
+    mark = connections.changeMark();
+    write.exec("insert into t default values");
+    connections.reportIfChanged(mark);
+    expect(heard).toBe(2);
+    write.close();
+  });
+
+  it("reads no count of changed rows while nobody listens", () => {
+    const write = new DatabaseSync(":memory:");
+    write.exec("create table t (id integer primary key)");
+    const connections = connectionPair(write, write);
+    const prepare = vi.spyOn(write, "prepare");
+    const mark = connections.changeMark();
+    write.exec("insert into t default values");
+    connections.reportIfChanged(mark);
+    expect(mark).toBeNull();
+    expect(prepare).not.toHaveBeenCalled();
+    // The control: with a listener the count is read, through the same spied method.
+    connections.onCommit(() => {});
+    expect(connections.changeMark()).toBe(1);
+    expect(prepare).toHaveBeenCalledOnce();
     write.close();
   });
 });

@@ -796,19 +796,24 @@ describe("onCommit", () => {
   const setUp = async () => {
     const { store, directory } = await open();
     store.venue.run(sql`create table sales (id integer primary key, total integer)`);
-    const heard: Date[] = [];
-    const stop = store.venue.onCommit((at) => heard.push(at));
+    const heard: true[] = [];
+    const stop = store.venue.onCommit(() => heard.push(true));
     return { store, directory, heard, stop };
   };
 
   it("tells listeners once a write transaction has committed, and not when it rolled back", async () => {
-    const { store, heard } = await setUp();
-    const before = Date.now();
+    const { store, directory, heard } = await setUp();
+    const outside = new DatabaseSync(join(directory, "venue.db"), { readOnly: true });
+    const seenFromOutside: number[] = [];
+    store.venue.onCommit(() => {
+      const row = outside.prepare("select count(*) as n from sales").get() as { n: number };
+      seenFromOutside.push(row.n);
+    });
     await store.venue.withWriteLock(async () => {
       store.venue.run(sql`insert into sales (total) values (1)`);
     });
     expect(heard).toHaveLength(1);
-    expect(heard[0]!.getTime()).toBeGreaterThanOrEqual(before);
+    expect(seenFromOutside).toEqual([1]);
     await expect(
       store.venue.withWriteLock(async () => {
         store.venue.run(sql`insert into sales (total) values (2)`);
@@ -816,6 +821,7 @@ describe("onCommit", () => {
       }),
     ).rejects.toThrow("deliberate");
     expect(heard).toHaveLength(1);
+    outside.close();
   });
 
   // A transaction that only reads writes nothing to the side file, so there is nothing for a copy
@@ -861,8 +867,8 @@ describe("onCommit", () => {
     store.venue.onCommit(() => {
       throw new Error("listener broke");
     });
-    const later: Date[] = [];
-    store.venue.onCommit((at) => later.push(at));
+    const later: true[] = [];
+    store.venue.onCommit(() => later.push(true));
     await expect(
       store.venue.withWriteLock(async () => {
         store.venue.run(sql`insert into sales (total) values (1)`);
@@ -912,8 +918,8 @@ describe("onCommit", () => {
     expect(heard).toHaveLength(1);
   });
 
-  // Measured (fix-round-1 report): an UPDATE setting a value the row already holds moves
-  // `total_changes()` and writes nothing to the side file, so a copy of the file never shows it.
+  // An UPDATE setting a value the row already holds moves `total_changes()` and writes nothing to
+  // the side file, so a copy of the file never shows it (measured in commit b62ada502).
   it("does not tell listeners about an update that sets a value the row already holds, on any path", async () => {
     const { store, heard } = await setUp();
     store.venue.run(sql`insert into sales (id, total) values (1, 5)`);
@@ -940,8 +946,8 @@ describe("onCommit", () => {
     const { store } = await open();
     store.venue.run(sql`create table sales (id integer primary key, total integer)`);
     store.venue.run(sql`insert into sales (id, total) values (1, 5)`);
-    const heard: Date[] = [];
-    store.venue.onCommit((at) => heard.push(at));
+    const heard: true[] = [];
+    store.venue.onCommit(() => heard.push(true));
     store.venue.run(sql`update sales set total = 5 where id = 1`);
     expect(heard).toHaveLength(0);
   });
@@ -974,7 +980,7 @@ describe("onCommit", () => {
     expect(heard).toHaveLength(2);
   });
 
-  // Stated at `committed` in ./connections.ts: the side file is only looked at once rows have moved.
+  // Stated at `reportIfChanged` in ./connections.ts: the side file is only looked at once rows have moved.
   it("still tells listeners about a same-value update right after a commit that changed only the schema", async () => {
     const { store, heard } = await setUp();
     store.venue.run(sql`insert into sales (id, total) values (1, 5)`);

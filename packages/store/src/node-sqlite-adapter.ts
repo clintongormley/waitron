@@ -4,7 +4,7 @@ import type {
   StatementResultingChanges,
   StatementSync,
 } from "node:sqlite";
-import { type Connections, isReadOnlyRefusal, settle, totalChanges } from "./connections.js";
+import { type Connections, isReadOnlyRefusal, settle } from "./connections.js";
 import { createTableRelationsHelpers, extractTablesRelationalConfig } from "drizzle-orm";
 import { BetterSQLiteSession } from "drizzle-orm/better-sqlite3/session";
 import { BaseSQLiteDatabase } from "drizzle-orm/sqlite-core/db";
@@ -49,8 +49,9 @@ export function adaptNodeSqlite(connections: Connections) {
      * while some other transaction body is running. Re-run there, it joins that transaction if it
      * is still open, and commits or rolls back with it; in the moment after the queue's `commit`
      * and before the body has ended, none is open and the write commits by itself. Either way it
-     * does not meet a refusal no caller in this tree is written to expect. It is safe to re-run because the refusal arrives before any work — see
-     * `SQLITE_READONLY` in `./connections.ts`. Nothing else is retried.
+     * does not meet a refusal no caller in this tree is written to expect. It is safe to re-run
+     * because the refusal arrives before any work — see `SQLITE_READONLY` in `./connections.ts`.
+     * Nothing else is retried.
      */
     prepare(query: string) {
       let asArrays = false;
@@ -66,12 +67,9 @@ export function adaptNodeSqlite(connections: Connections) {
        */
       const onWriter = <T>(use: (stmt: StatementSync) => T): T => {
         const write = connections.write;
-        const alone = !write.isTransaction && connections.listening();
-        const before = alone ? totalChanges(write) : 0;
+        const mark = write.isTransaction ? null : connections.changeMark();
         const result = use(compile(write));
-        if (alone && !write.isTransaction && totalChanges(write) !== before) {
-          connections.committed();
-        }
+        if (!write.isTransaction) connections.reportIfChanged(mark);
         return result;
       };
       const issue = <T>(use: (stmt: StatementSync) => T): T => {
@@ -137,7 +135,7 @@ export function adaptNodeSqlite(connections: Connections) {
             const write = connections.write;
             const savepoint = write.isTransaction ? nextSavepoint() : undefined;
             write.exec(savepoint === undefined ? `begin ${behaviour}` : `savepoint ${savepoint}`);
-            let before = 0;
+            let mark: number | null = null;
             /**
              * Finish the transaction — and undo it if FINISHING is what fails. A refused `commit`
              * (a foreign key deferred with `pragma defer_foreign_keys` is checked AT COMMIT) leaves
@@ -145,9 +143,7 @@ export function adaptNodeSqlite(connections: Connections) {
              * The compensating rollback's own failure is discarded so the original error is thrown.
              */
             const keep = () => {
-              let changed: boolean;
               try {
-                changed = savepoint === undefined && totalChanges(write) !== before;
                 write.exec(savepoint === undefined ? "commit" : `release ${savepoint}`);
               } catch (error) {
                 try {
@@ -157,7 +153,7 @@ export function adaptNodeSqlite(connections: Connections) {
                 }
                 throw error;
               }
-              if (changed) connections.committed();
+              connections.reportIfChanged(mark);
             };
             const undo = () => {
               if (savepoint === undefined) write.exec("rollback");
@@ -168,7 +164,7 @@ export function adaptNodeSqlite(connections: Connections) {
             };
             let result: R;
             try {
-              if (savepoint === undefined) before = totalChanges(write);
+              if (savepoint === undefined) mark = connections.changeMark();
               result = fn(...args);
             } catch (error) {
               undo();

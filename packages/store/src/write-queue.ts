@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { type Connections, totalChanges } from "./connections.js";
+import type { Connections } from "./connections.js";
 
 /**
  * One write transaction at a time.
@@ -52,17 +52,16 @@ export function createWriteQueue(connections: Connections) {
         connections.asTransactionBody(async () => {
           connections.write.exec("begin immediate");
           let result: T;
-          let changed: boolean;
+          let mark: number | null;
           try {
-            const before = totalChanges(connections.write);
+            mark = connections.changeMark();
             result = await body();
-            changed = totalChanges(connections.write) !== before;
             connections.write.exec("commit");
           } catch (error) {
             connections.write.exec("rollback");
             throw error;
           }
-          if (changed) connections.committed();
+          connections.reportIfChanged(mark);
           return result;
         }),
       );

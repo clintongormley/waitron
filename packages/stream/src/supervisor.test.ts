@@ -184,7 +184,7 @@ async function harness(options: HarnessOptions = {}) {
     if (key.startsWith(PROBE_PREFIX)) probeWrites += 1;
     return put(key, body, cond);
   };
-  let listener: ((at: Date) => void) | undefined;
+  let listener: (() => void) | undefined;
   const litestream = new FakeLitestream(events);
   if (options.version !== undefined) litestream.version = options.version;
   if (options.versionExitCode !== undefined) litestream.versionExitCode = options.versionExitCode;
@@ -277,8 +277,8 @@ async function harness(options: HarnessOptions = {}) {
     failWal: (fails = true) => {
       walFails = fails;
     },
-    /** The venue database committing now, by this box's clock. */
-    commit: () => listener?.(clock.now()),
+    /** The venue database committing now. */
+    commit: () => listener?.(),
     listening: () => listener !== undefined,
     listed,
     probeWrites: () => probeWrites,
@@ -1753,6 +1753,91 @@ describe("freshness", () => {
     release();
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(h.supervisor.status().lastConfirmedUploadAt).toBe(u3);
+  });
+
+  it.each([
+    { late: "a refusal", fail: "denied", event: "stream.bucket_unusable" },
+    { late: "no answer", fail: "down", event: "stream.bucket_unreachable" },
+  ] as const)(
+    "does not let a bucket check from a read given up on, answering $late, overwrite a newer check's answer",
+    async ({ fail, event }) => {
+      const h = await streaming();
+      const list = h.store.list.bind(h.store);
+      h.store.list = async (prefix) => {
+        if (prefix.endsWith("/0000/")) throw new Error("the listing was refused");
+        return list(prefix);
+      };
+      const put = h.store.put.bind(h.store);
+      let release!: () => void;
+      const answered = new Promise<void>((resolve) => (release = resolve));
+      let settle!: () => void;
+      const settled = new Promise<void>((resolve) => (settle = resolve));
+      let held = false;
+      h.store.put = async (key, body, cond) => {
+        if (!key.startsWith(PROBE_PREFIX) || held) return put(key, body, cond);
+        held = true;
+        try {
+          await answered;
+          return await put(key, body, cond);
+        } finally {
+          settle();
+        }
+      };
+      await h.clock.next();
+      await vi.waitFor(() => expect(held).toBe(true));
+      const writes = h.probeWrites();
+      // Replaced at five minutes; the replacing reads may check the bucket again from ten.
+      for (let tick = 0; tick < 12; tick += 1) await h.clock.next();
+      await vi.waitFor(() => expect(h.probeWrites()).toBeGreaterThan(writes));
+      expect(h.supervisor.status().bucketProblem).toBeNull();
+      h.store[fail] = true;
+      release();
+      await settled;
+      // The rest of the late check runs on promises alone, so it has finished by the next turn.
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(h.supervisor.status().bucketProblem).toBeNull();
+      expect(h.logs.some((line) => line.event === event)).toBe(false);
+    },
+  );
+
+  // The read that replaces a daily check's read starts no check of its own: its listing succeeds,
+  // no problem is named, and the day is counted from the check given up on.
+  it("names a bucket problem from a check whose read was given up on, when no newer check has started", async () => {
+    const h = await streaming();
+    const put = h.store.put.bind(h.store);
+    let release!: () => void;
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    let settle!: () => void;
+    const settled = new Promise<void>((resolve) => (settle = resolve));
+    let held = false;
+    h.store.put = async (key, body, cond) => {
+      if (!key.startsWith(PROBE_PREFIX) || held) return put(key, body, cond);
+      held = true;
+      try {
+        await answered;
+        return await put(key, body, cond);
+      } finally {
+        settle();
+      }
+    };
+    h.clock.advance(24 * 60 * MINUTE);
+    await h.clock.next();
+    await vi.waitFor(() => expect(held).toBe(true));
+    const writes = h.probeWrites();
+    const listings = listingsOf(h, "0000");
+    for (let tick = 0; tick < 7; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBeGreaterThan(listings));
+    expect(h.logs).toContainEqual({
+      level: "warn",
+      event: "stream.freshness_unreadable",
+      fields: { errorCode: "timeout" },
+    });
+    expect(h.probeWrites()).toBe(writes);
+    h.store.denied = true;
+    release();
+    await settled;
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(h.supervisor.status().bucketProblem).toMatchObject({ reason: "access_denied" });
   });
 
   it("starts a new read once one has waited five minutes without an answer", async () => {
