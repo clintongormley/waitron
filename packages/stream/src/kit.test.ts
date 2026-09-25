@@ -37,7 +37,8 @@ describe("the recovery kit", () => {
   });
 
   it("round-trips a bucket with no endpoint (an Amazon bucket)", () => {
-    const { endpoint: _dropped, ...amazon } = KIT.bucket;
+    const amazon = { ...KIT.bucket };
+    delete amazon.endpoint;
     const kit: RecoveryKit = { ...KIT, bucket: amazon };
     expect(parseRecoveryKit(encodeRecoveryKit(kit))).toEqual(kit);
   });
@@ -62,7 +63,8 @@ describe("the recovery kit", () => {
   });
 
   it("refuses a kit missing a field, and never echoes what it was given", () => {
-    const { recoveryKey: _dropped, ...partial } = KIT;
+    const partial: Partial<RecoveryKit> = { ...KIT };
+    delete partial.recoveryKey;
     const text = `${KIT_PREFIX}${Buffer.from(JSON.stringify(partial)).toString("base64url")}`;
     const r = refusal(text);
     expect(r).toEqual({ code: "backup.stream_kit_invalid", params: { reason: "shape" } });
@@ -72,6 +74,18 @@ describe("the recovery kit", () => {
   it("refuses a field carrying a control character, which would break the Litestream config it is written into", () => {
     const kit = { ...KIT, bucket: { ...KIT.bucket, bucket: "venue\ncopy" } };
     const text = `${KIT_PREFIX}${Buffer.from(JSON.stringify(kit)).toString("base64url")}`;
+    expect(refusal(text)).toEqual({
+      code: "backup.stream_kit_invalid",
+      params: { reason: "shape" },
+    });
+  });
+
+  it.each([
+    ["a bare number", 42],
+    ["null", null],
+    ["a kit whose bucket is not an object", { ...KIT, bucket: null }],
+  ])("refuses a kit that decodes to %s", (_what, value) => {
+    const text = `${KIT_PREFIX}${Buffer.from(JSON.stringify(value)).toString("base64url")}`;
     expect(refusal(text)).toEqual({
       code: "backup.stream_kit_invalid",
       params: { reason: "shape" },
