@@ -2,6 +2,9 @@
 
 **Status:** product decisions agreed with the owner on 2026-09-20; implementation deferred.
 Further owner decisions, 2026-09-25, are in §9.
+**2026-09-25:** the owner lifted the wait on SQLite slice 2 and the dependency upgrades (the latter
+are finished); the implementation plan is
+[2026-09-25-menus-categories-home-layouts.md](../plans/2026-09-25-menus-categories-home-layouts.md).
 
 **Related decisions, 2026-09-20:** the [service workflow spec](2026-09-20-service-ordering-and-billing-design.md)
 adds a public/staff-only/not sold separately setting for standalone ordering. Menu membership

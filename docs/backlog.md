@@ -169,20 +169,15 @@ What staff and the operator touch: `apps/till`, `apps/dashboard`, `apps/setup`, 
 `apps/server`, `packages/printing`'s dashboard side, `packages/payments*`. Numbered in priority
 order; the small items at the end of each area live in Track C.
 
-**Specified, implementation deferred (owner, 2026-09-20): menus, reusable categories and home
-layouts.** [Design](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md):
-ordered categories containing products and other shared categories, optional organisational groups,
-menu price overrides, immutable menu publication, and menu-owned home layouts for handhelds and
-tills. Shared edits flag affected menus; each live menu changes only when republished, apart from
-live availability. **Do not start implementation until the PostgreSQL-to-SQLite work, dependency
-upgrades, and variants/extras-as-products changes have all landed.** The variants/extras-as-products
-part of that is met: extras and options landed on 2026-09-21 (branch 1, ending #480), and variants
-with branch 2 (Task 9, #556). This entry does not record the other two parts as
-done; check them before starting. The owner settled six of the spec's open points on
-2026-09-25 (availability, open baskets and held orders, re-adding a product, missing shortcuts,
-deleted home layouts, and keeping today's per-menu overrides), recorded in the spec's §9. Then
-reconcile the rest with the landed code before planning. Further specifications can be written
-during the wait.
+**Planned, handed to lane C (owner, 2026-09-25): menus, reusable categories and home layouts.**
+[Design](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) (§9 holds the
+owner's 2026-09-25 answers), [plan](superpowers/plans/2026-09-25-menus-categories-home-layouts.md):
+nine pull requests, one per task, run in order by campaign lane C. The owner lifted the wait: the
+dependency upgrades are finished, and the work does not wait for SQLite slice 2. The plan's
+decisions D1–D21 settle the spec's open integration points; D6, D9, D10, D12, D13, D14, D21, D3 and
+D20 are flagged for the owner in its self-review notes. Tasks 1, 3 and 6 cannot upgrade an existing
+venue: every dev venue needs `wa-wt reset demo <name>`, and the owner's box should be wiped once
+after Task 7.
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
 shared look, and the rules for it live in [design-system.md](developers/design-system.md). That
