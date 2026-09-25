@@ -5523,7 +5523,7 @@ document carries this node's stored endorsement, so a peer that trusts only the 
 primary that adopted this node) accepts it when the stored endorsement is valid for this node's
 key. Every signer carries the signing node's stored endorsement, because the shared signing
 function `mintNextMembershipDocument` (`apps/server/src/membership-mint.ts`) reads it itself and no
-caller passes one (before, each caller had to pass it; #643 fixed the three that needed it and did
+caller passes one (#655; before, each caller had to pass it; #643 fixed the three that needed it and did
 not):
 this first start, both promotions (`apps/server/src/promote.ts`), `retireSelf`
 (`apps/server/src/retire.ts`), the chart append in `apps/server/src/mirror-bundle-api.ts`, which
@@ -5547,6 +5547,12 @@ does. The chart
 append reads the endorsement again on each retry round: "signs a retried chart write with the
 endorsement stored when that round reads, not the first round's"
 (`apps/server/src/mirror-bundle-api.test.ts`). Left open:
+- Two comments claim more than the code keeps: `retireSelf`'s header (`apps/server/src/retire.ts`)
+  says a signing failure "leaves the node exactly as it was", and `promoteMirrorToPrimary`'s
+  (`apps/server/src/promote.ts`) says a failure before the commit "leaves the mirror as it was". #655's
+  Codex seat measured that signing empties pending `change_log` rows (on #655's base too), so they
+  are not strictly untouched; ordinary writes delete their own rows, so no case losing a real one is
+  known. Neither file is in a queued pruning part; narrow both the next time either file is edited.
 - A restored box whose cloud peer does not answer during its first start signs the next term and
   removes the marker; a fencing document the peer serves later at that same term reads as not
   newer, so the box is never fenced. This task's review reproduced it with a temporary two-boot case in
