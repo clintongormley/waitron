@@ -42,6 +42,11 @@ export interface RestoredVenue {
   locationName: string;
 }
 
+/** A copy that names no tax id can never be confirmed, whatever the operator typed. */
+export function confirmsVenue(venue: RestoredVenue, confirmedTaxId: string | null | undefined) {
+  return venue.taxId !== "" && confirmedTaxId === venue.taxId;
+}
+
 /**
  * Scratch folders are made fresh per run, inside the state folder so a later move stays on one
  * filesystem; a fixed name would let two runs remove each other's copy.

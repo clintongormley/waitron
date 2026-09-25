@@ -36,6 +36,17 @@ import type { FiscalContribution } from "@waitron/fiscal";
 import type { FiscalReadinessResult } from "./fiscal-readiness.js";
 import "./errors.js";
 
+/** What the owner sends to rebuild this box from their bucket. */
+export interface BucketRestoreInput {
+  /** The recovery kit's text, as downloaded or pasted. */
+  kit: string;
+  environment: DeploymentEnvironment;
+  /** The owner says the old server is switched off for good. */
+  oldBoxGone: boolean;
+  /** The tax id of the restored copy the owner confirmed; null until they have seen one. */
+  venueConfirmed: string | null;
+}
+
 /**
  * Everything setup mode needs to report on — and to PROVISION — an unprovisioned box. The
  * `environment` alone is enough for the read-only `/setup-api/status` surface (slice 1b): no `db`, no
@@ -106,8 +117,16 @@ export interface SetupDeps {
   setupAppDir?: string;
   /** Persistent first-boot serialization and progress, shared by provision, adoption and recovery. */
   operations?: SetupOperationStore;
-  /** Stages an encrypted cold-recovery artifact for the entrypoint to restore after restart. */
-  stageRestore?: (request: ArchiveRestoreRequest) => Promise<void>;
+  /** Stages an encrypted cold-recovery artifact for the entrypoint to restore after restart.
+   * `oldBoxGone` is the operator's answer to whether the server the backup came from is switched
+   * off for good; it is checked while staging and is not part of the staged request. */
+  stageRestore?: (
+    request: ArchiveRestoreRequest,
+    options: { oldBoxGone: boolean },
+  ) => Promise<void>;
+  /** Checks the owner's bucket and stages a rebuild from it for the entrypoint to write after
+   * restart. Rejects with the refusal, having staged nothing. */
+  stageBucketRestore?: (input: BucketRestoreInput) => Promise<void>;
   /** Fresh replacement's private Cloud snapshot recovery client. */
   cloudRecovery?: Omit<
     ReturnType<typeof createCloudRecoveryClient>,
@@ -253,7 +272,43 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
 // `"setup.adopt_failed"` is the LOG TAG for the unexpected-crash branch, not a wire code (as with
 // `runProvision` above): a non-`AppError` reaching the boundary is answered `server.internal`.
 const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
-const runRestore = createErrorBoundary(PROVISION_STATUS, "setup.restore_failed");
+/** An archive with bucket settings may be a copy of a server still selling (slice-2 plan N23). */
+const ARCHIVE_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
+  ...PROVISION_STATUS,
+  "restore.stream_source_live": 409,
+  "restore.stream_source_unchecked": 409,
+};
+
+/** A kit is short text; this refuses a mistaken paste of something else before it is parsed. */
+const MAX_KIT_BYTES = 64 * 1024;
+
+/**
+ * The bucket rebuild's refusals. The bucket or Litestream failing is this box's upstream failing
+ * (502, as `mirror.bundle_fetch_failed` is for adopt); a pointer, copy or key the kit cannot open
+ * is 422; a live old server, an unconfirmed venue, or an environment or schema conflict is 409.
+ */
+const BUCKET_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
+  ...ARCHIVE_RESTORE_STATUS,
+  "backup.stream_kit_invalid": 400,
+  "restore.stream_pointer_missing": 422,
+  "restore.stream_pointer_unverified": 422,
+  "backup.stream_pointer_invalid": 422,
+  "restore.stream_integrity_failed": 422,
+  "restore.stream_state_missing": 422,
+  "recovery.passphrase_invalid": 422,
+  "backup.artifact_invalid": 422,
+  "backup.archive_invalid": 422,
+  "restore.stream_venue_unconfirmed": 409,
+  "restore.environment_mismatch": 409,
+  "restore.schema_too_new": 409,
+  "provisioning.database_ahead": 409,
+  "backup.stream_request_failed": 502,
+  "backup.stream_restore_failed": 502,
+  "restore.stream_disk_full": 507,
+};
+
+const runRestore = createErrorBoundary(ARCHIVE_RESTORE_STATUS, "setup.restore_failed");
+const runBucketRestore = createErrorBoundary(BUCKET_RESTORE_STATUS, "setup.restore_failed");
 const runConfiguration = createErrorBoundary(PROVISION_STATUS, "setup.configuration_import_failed");
 
 /** Throw the request-shape refusal for `field`, naming it but NEVER echoing its value (a PIN,
@@ -901,7 +956,10 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const binding = await deps.cloudRecovery!.binding();
         if (binding.pointId !== pointId) throw new AppError("setup.operation_conflict", {});
         const execute = async () => {
-          await deps.cloudRecovery!.restore((request) => deps.stageRestore!(request), pointId);
+          await deps.cloudRecovery!.restore(
+            (request) => deps.stageRestore!(request, { oldBoxGone: false }),
+            pointId,
+          );
           const response = c.json({ restoreStaged: true, restarting: true }, 202);
           setTimeout(() => deps.requestRestart!(), 0);
           return response;
@@ -954,25 +1012,94 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (rawEnvironment !== "production" && rawEnvironment !== "preproduction") {
           invalidRequest("environment");
         }
+        const oldBoxGone = c.req.header("x-waitron-old-box-gone") === "1";
         const artifact = new Uint8Array(await c.req.arrayBuffer());
         if (artifact.byteLength === 0 || artifact.byteLength > MAX_RESTORE_UPLOAD_BYTES) {
           invalidRequest("artifact");
         }
         const requestHash = createHash("sha256")
           .update(rawEnvironment)
-          .update("\0")
+          .update(oldBoxGone ? "\0confirmed\0" : "\0")
           .update(recoveryKey)
           .update("\0")
           .update(artifact)
           .digest("hex");
         const execute = async (): Promise<Response> => {
-          await stageRestore({ artifact, recoveryKey, environment: rawEnvironment });
+          await stageRestore(
+            { artifact, recoveryKey, environment: rawEnvironment },
+            { oldBoxGone },
+          );
           const response = c.json({ restoreStaged: true, restarting: true }, 202);
           setTimeout(() => requestRestart(), 0);
           return response;
         };
-        if (deps.operations === undefined) return execute();
-        return deps.operations.run("restore", requestHash, async (operation) => {
+        // Awaited, so a refused staging reaches the catch below and releases the latch.
+        if (deps.operations === undefined) return await execute();
+        return await deps.operations.run("restore", requestHash, async (operation) => {
+          if (operation.phase === "complete") {
+            return c.json({ restoreStaged: true, restarting: true }, 202);
+          }
+          const response = await execute();
+          await operation.complete({ restoreStaged: true, restarting: true });
+          return response;
+        });
+      } catch (error) {
+        provisioning = false;
+        throw error;
+      }
+    });
+  });
+
+  app.post("/setup-api/restore-bucket", async (c) => {
+    const stage = deps.stageBucketRestore;
+    const requestRestart = deps.requestRestart;
+    if (stage === undefined || requestRestart === undefined) {
+      return directError(c, log, "setup.not_ready", 503);
+    }
+    if (provisioning || fiscalTesting || configurationStaging) {
+      return directError(c, log, "setup.already_provisioning", 409);
+    }
+    provisioning = true;
+
+    return runBucketRestore(c, log, async () => {
+      try {
+        const body = await readJsonBody<{
+          kit?: unknown;
+          environment?: unknown;
+          oldBoxGone?: unknown;
+          venueConfirmed?: unknown;
+        }>(c);
+        const kit = asString(body.kit, "kit");
+        if (Buffer.byteLength(kit) > MAX_KIT_BYTES) invalidRequest("kit");
+        const environment = body.environment;
+        if (environment !== "production" && environment !== "preproduction") {
+          invalidRequest("environment");
+        }
+        if (body.oldBoxGone !== undefined && typeof body.oldBoxGone !== "boolean") {
+          invalidRequest("oldBoxGone");
+        }
+        if (body.venueConfirmed !== undefined && typeof body.venueConfirmed !== "string") {
+          invalidRequest("venueConfirmed");
+        }
+        const input: BucketRestoreInput = {
+          kit,
+          environment,
+          oldBoxGone: body.oldBoxGone === true,
+          venueConfirmed: typeof body.venueConfirmed === "string" ? body.venueConfirmed : null,
+        };
+        const requestHash = createHash("sha256")
+          .update(
+            JSON.stringify(["bucket", environment, input.oldBoxGone, input.venueConfirmed, kit]),
+          )
+          .digest("hex");
+        const execute = async (): Promise<Response> => {
+          await stage(input);
+          const response = c.json({ restoreStaged: true, restarting: true }, 202);
+          setTimeout(() => requestRestart(), 0);
+          return response;
+        };
+        if (deps.operations === undefined) return await execute();
+        return await deps.operations.run("restore", requestHash, async (operation) => {
           if (operation.phase === "complete") {
             return c.json({ restoreStaged: true, restarting: true }, 202);
           }
