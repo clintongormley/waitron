@@ -61,7 +61,7 @@ export interface PrepareStreamDeps {
   log: Logger;
   openStore?: (bucket: BucketConfig) => ObjectStore;
   restoreGeneration?: typeof restoreGeneration;
-  checkIntegrity?: (directory: string) => Promise<string[]>;
+  checkIntegrity?: (store: VenueDatabase) => Promise<string[]>;
 }
 
 export interface PreparedStream {
@@ -77,21 +77,22 @@ export interface PreparedStream {
 }
 
 /**
- * SQLite's `integrity_check` over `<directory>/venue.db`: `[]` when healthy, else its lines. A
- * failure to open or read the file is reported as a problem rather than thrown.
+ * SQLite's `integrity_check` over an open venue database: `[]` when healthy, else its lines. A
+ * failure to read the file is reported as a problem rather than thrown.
  */
-export async function checkIntegrity(directory: string): Promise<string[]> {
-  let store: VenueDatabase | undefined;
+export async function checkIntegrity(store: VenueDatabase): Promise<string[]> {
   try {
-    store = await openVenueDatabase(directory);
     const result = await store.venue.execute<Record<string, unknown>>(sql`pragma integrity_check`);
     const lines = result.rows.map((row) => String(Object.values(row)[0]));
     return lines.length === 1 && lines[0] === "ok" ? [] : lines;
   } catch {
     return [UNREADABLE];
-  } finally {
-    await store?.close();
   }
+}
+
+function integrityFailed(log: Logger, problems: readonly string[]): never {
+  log("warn", "restore.stream_integrity_failed", { problems: problems.length });
+  throw new AppError("restore.stream_integrity_failed", {});
 }
 
 /**
@@ -217,17 +218,27 @@ async function readRestoredVenue(store: VenueDatabase, venueId: string): Promise
   };
 }
 
-/** From the restored copy alone: refuse a schema ahead of this software, then read the node's
- * locked row and whose copy it is. */
-async function readRestoredCopy(
-  directory: string,
-  nodeId: string,
-  venueId: string,
-  migrationsRoot: string | null,
-): Promise<{ sealed: Uint8Array; venue: RestoredVenue }> {
-  const store = await openVenueDatabase(directory);
+/** From the restored copy alone, opened once: refuse a damaged file, then a schema ahead of this
+ * software, then read the node's locked row and whose copy it is. */
+async function readRestoredCopy(args: {
+  directory: string;
+  nodeId: string;
+  venueId: string;
+  migrationsRoot: string | null;
+  checkIntegrity: (store: VenueDatabase) => Promise<string[]>;
+  log: Logger;
+}): Promise<{ sealed: Uint8Array; venue: RestoredVenue }> {
+  const { nodeId, venueId } = args;
+  let store: VenueDatabase;
   try {
-    await assertNotAhead(store.venue, manifestSets(), migrationsRoot);
+    store = await openVenueDatabase(args.directory);
+  } catch {
+    integrityFailed(args.log, [UNREADABLE]);
+  }
+  try {
+    const problems = await args.checkIntegrity(store);
+    if (problems.length > 0) integrityFailed(args.log, problems);
+    await assertNotAhead(store.venue, manifestSets(), args.migrationsRoot);
     const table = await store.venue.execute<{ name: string }>(
       sql`select name from sqlite_master where type = 'table' and name = ${"node_sealed_state"}`,
     );
@@ -302,17 +313,14 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
       }
       throw error;
     }
-    const problems = await (deps.checkIntegrity ?? checkIntegrity)(scratch);
-    if (problems.length > 0) {
-      deps.log("warn", "restore.stream_integrity_failed", { problems: problems.length });
-      throw new AppError("restore.stream_integrity_failed", {});
-    }
-    const { sealed, venue } = await readRestoredCopy(
-      scratch,
+    const { sealed, venue } = await readRestoredCopy({
+      directory: scratch,
       nodeId,
-      kit.venueId,
-      deps.migrationsRoot,
-    );
+      venueId: kit.venueId,
+      migrationsRoot: deps.migrationsRoot,
+      checkIntegrity: deps.checkIntegrity ?? checkIntegrity,
+      log: deps.log,
+    });
     const entries = unsealNodeState(sealed, kit.recoveryKey);
     deps.log("info", "restore.stream_prepared", { generation });
     return { databasePath, entries, nodeId, generation, venue, discard };

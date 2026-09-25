@@ -768,17 +768,46 @@ describe("refuseIfArchiveSourceLive", () => {
   });
 });
 
+/** `checkIntegrity` over `<dir>/venue.db`, opened for the call. */
+async function integrityOf(dir: string): Promise<string[]> {
+  const store = await openVenueDatabase(dir);
+  try {
+    return await checkIntegrity(store);
+  } finally {
+    await store.close();
+  }
+}
+
 describe("checkIntegrity", () => {
   it("passes a healthy venue file", async () => {
     const dir = await mkdtemp(join(tmpdir(), "waitron-integrity-"));
     await copyFile(fixtureDb, join(dir, "venue.db"));
-    expect(await checkIntegrity(dir)).toEqual([]);
+    expect(await integrityOf(dir)).toEqual([]);
   });
 
-  it("fails a file that is not a database, without throwing", async () => {
+  it("fails a download that is not a database as a damaged copy, without a raw error", async () => {
+    const problems: unknown[] = [];
+    const deps = await prepareDeps(await bucket(), {
+      restoreGeneration: async (args) => {
+        await writeFile(args.outPath, Buffer.alloc(8192, 0x5a));
+      },
+      log: (_level, event, fields) => {
+        if (event === "restore.stream_integrity_failed") problems.push(fields);
+      },
+    });
+    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.stream_integrity_failed",
+    });
+    expect(problems).toEqual([{ problems: 1 }]);
+    await expectStateUntouched(deps.stateDir);
+  });
+
+  it("reports a copy it cannot read, without throwing", async () => {
     const dir = await mkdtemp(join(tmpdir(), "waitron-integrity-"));
-    await writeFile(join(dir, "venue.db"), Buffer.alloc(8192, 0x5a));
-    expect(await checkIntegrity(dir)).toEqual([
+    await copyFile(fixtureDb, join(dir, "venue.db"));
+    const store = await openVenueDatabase(dir);
+    await store.close();
+    expect(await checkIntegrity(store)).toEqual([
       "the file could not be opened or read as a database",
     ]);
   });
@@ -809,7 +838,7 @@ describe("checkIntegrity", () => {
     const bytes = await readFile(file);
     bytes.fill(0x5a, (root - 1) * pageSize + 8, root * pageSize);
     await writeFile(file, bytes);
-    const problems = await checkIntegrity(dir);
+    const problems = await integrityOf(dir);
     expect(problems.some((line) => /missing from index damaged_a/.test(line))).toBe(true);
   });
 });
