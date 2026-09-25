@@ -1000,8 +1000,9 @@ constraint lost its tenant column on 2026-09-14, so the name was already stale b
 changed). What SQLite raises in its place is not recorded here, because nobody has re-run it — and
 the command itself now carries a pointless `TESTCONTAINERS_RYUK_DISABLED`, since this package starts
 no container. None of that touches the rule: a constraint failure satisfies `toBeInstanceOf(Error)`
-whichever database raises it, so assert the domain code. The test named above still exists
-(`packages/catalogue/src/categories.test.ts`).
+whichever database raises it, so assert the domain code. The test named above, and
+`replaceProductCategories` itself, were removed on 2026-09-25 when a product stopped having several
+categories; the rule stands without them.
 Note the test name — an earlier version of this paragraph named a test that no longer exists, and
 because a `-t` filter matching nothing skips every test and still exits 0, following it produced a
 green run that looked like a passing control.

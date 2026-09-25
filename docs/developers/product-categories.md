@@ -1,72 +1,76 @@
-# Product categories
+# Product categories and labels
 
-You can organize a product under several categories without counting its sales twice. One assigned
-category may be marked primary. When one is set, its name becomes the reporting label on new order
-lines, and its existing preparation route remains the category route used by the kitchen — see
-below for what a product with no primary records instead. Other memberships and parent categories
-do not add destinations or inherit routes. Product and service-zone route precedence still applies.
+A sales report has to add every sale up exactly once. If a product could sit in several reporting
+categories, a report by category would either count its sales twice or have to pick one of them by
+some rule nobody can see. So Waitron gives each product two separate ways to be classified:
 
-You manage categories at `/manage/categories`. The page lists categories as a tree or as a flat
-list with a Parent column and a Parent filter; the browser remembers the choice. Open a category to
-see its directly assigned products. A child's products do not count towards its parent. Create and
-edit forms let you translate the name, pick a colour, choose an image from the shared library, and
-choose or clear a parent. You cannot choose the category itself or any of its descendants.
+- **One main reporting category**, in a strict tree. This is what the sales reports add up by.
+- **Any number of labels**, which are flat tags such as "Alcoholic" or "Happy hour drinks". A label
+  total can cut across categories and overlap other labels, and the reports say so.
 
-A primary category is optional in the data model and on the write path every current UI flow uses:
-a product may hold memberships with no reporting category at all.
-`dashboard-category-membership-picker`'s reporting-category dropdown offers an explicit "None"
-option, and the product editor reaches that same picker (see the end of this file), so both the
-Categories screen and the editor submit with `primaryCategoryId: null` through
-`replaceProductCategories`, whose only remaining check is that a primary, if set, must be one of the
-currently selected categories. Removing the last membership clears primary.
+The two are independent. A label never implies a category, and a category never implies a label.
+The design is in
+[the sales classification spec](../superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md)
+§2.
 
-One older write path is the exception, and the API is not uniform because of it. Sending
-`categoryId: null` in a product patch (`updateProduct`, the `PATCH` product route) still refuses with
-`category.primary_required` when the product has more than one membership, and when it is allowed it
-clears every membership along with the reporting category. That is the coupling the picker no longer
-has. It stays because nothing first-party sends `categoryId` in a product patch any more.
+You manage categories at `/manage/categories`.
 
-Deleting a category is confirmed and then goes ahead; it is not refused when something refers to
-it. The delete removes the product memberships, clears the reporting category from any product
-using it, moves direct children up to the deleted category's own parent, drops its preparation
-routes, and then removes the category. Because it cascades instead of refusing, a delete can take
-more with it than the category itself, so the confirmation dialog ("Delete <name>?") fetches the
-dependants preview (`GET .../dependants`) and keeps Delete disabled until it arrives. The preview
-opens with a single red warning at the top that names every consequence in one sentence — that the
-delete cannot be undone, how many products lose the category, and where the child categories move —
-and below it shows the affected products in a searchable table and lists the child categories that
-will move, each as a link to that category. It does not list the preparation routes, although the
-delete still drops them. If the preview cannot be fetched, the dialog says so and Delete stays
-disabled. Previously recorded labels on past orders stay readable
-and are untouched.
+## The reporting tree
 
-Opening a category's name shows its directly assigned products in a modal: a searchable table with a
-Reporting category filter, showing each product's reporting category and up to three other
-memberships as coloured lozenges. Four or more other memberships become a localized count, while
-search still matches every underlying category name. Each row's actions are "Edit product
-categories", which opens the full membership picker, and "Remove from this category", which opens
-the picker with this category already taken out (so clearing a reporting category is still a
-confirmed choice, not an immediate write). A Close button dismisses the modal, and is disabled while
-a save is running. Its "Add products" view uses the same columns over products not yet in the
-category, with a checkbox per row and a header checkbox that selects every row the search and filter
-leave visible. A product stays picked when a later search hides it, and "Add N products" sends the
-whole selection to the bulk-add route in one write.
-Every table on the page remembers its sort and filter choices for the browser tab; none remembers
-typed search text. The category list keeps one remembered view for both modes, so a Parent filter
-chosen in the flat list hides nothing in the tree, which has no Parent column, and applies again in
-the flat list — also after leaving the page and coming back in the same tab. When a filter stops
-offering the chosen category but still offers others (a parent whose only child was deleted, say),
-the choice is forgotten and the filter goes back to "All parents" or "All reporting categories". If
-it offers no categories at all, the filter also reads "All" and hides nothing, but the choice is kept
-and applies again if that category is offered later.
+A category has at most one parent, stored in `category_details.parent_id`. A category cannot become
+its own ancestor: a save that would make one is refused with `category.parent_cycle`, however deep
+the loop would be.
 
-## API and Products integration
+A product's main reporting category is `products.category_id`. It may name any category in the
+tree, at any depth, and no other link between the product and the category is needed. When it is
+null the product is **Uncategorised**. Uncategorised is a fixed bucket in the reports rather than a
+category row, so nobody can rename, move or delete it.
+
+A variant's main category is its own when it has one, and its parent's otherwise. That is the same
+fallback a variant uses for its other inherited fields (`effectiveProductColumns` in
+`packages/catalogue/src/variant-fallback.ts`).
+
+The main category is also what a new order line records as its category name, and the category
+whose preparation route and station the kitchen uses. A category's parent is never consulted for
+routing: for a product in "Cocktails" under "Drinks", a route set on Drinks does not apply.
+
+## Labels
+
+A label is a name, and nothing else. Names are staff-facing plain text and are not translated. Two
+labels cannot share a name; the check is on the exact name after trimming the spaces around it, so
+"Alcoholic" and "alcoholic" are two different labels.
+
+A variant carries no labels of its own. It reads its parent's, and an attempt to give it some is
+refused with `product.variant_invalid` naming the field `labelIds`.
+
+## Moving and deleting
+
+Moving a category to a new parent, or a product to a new main category, is always allowed. It
+changes what the current reports show. Sale lines already recorded keep the category name they were
+written with.
+
+Deleting a category never strands a product or a subcategory, so the delete asks where they go:
+
+- `productsTo` receives every product whose own main category is the deleted one, variants
+  included.
+- `childrenTo` becomes the parent of each of its direct subcategories.
+
+Leave either out and it defaults to the deleted category's parent. For a top-level category that
+means its products become Uncategorised and its subcategories move to the top level. The delete
+also drops the category's preparation routes.
+
+A target that is the deleted category itself is refused with `category.reassign_invalid`, and so is
+a `childrenTo` that sits anywhere below it, because the subcategories would then hang from one of
+their own descendants. A target that does not exist is `category.not_found`. Every check runs
+before anything is written, so a refused delete changes nothing.
+
+## API
 
 All routes require a manager session holding the catalogue write permission
 (`CATALOGUE_WRITE_PERMISSION` in `apps/server/src/catalogue-api.ts`, `person.manage` today). Reads
-return arrays
-directly, following the existing catalogue client convention. Create returns status 201; update
-returns the canonical saved object; delete returns an empty 204.
+return arrays directly, following the existing catalogue client convention. Create returns status
+201, update returns the saved object, and delete returns an empty 204. A body of the wrong shape is
+refused with `management.request_invalid`, naming the field.
 
 | Route | Input or response |
 | --- | --- |
@@ -74,99 +78,81 @@ returns the canonical saved object; delete returns an empty 204.
 | `POST /management-api/categories` | `{ name, image?, color?, parentId? }` → `Category` |
 | `GET /management-api/categories/:id` | `Category` |
 | `PATCH /management-api/categories/:id` | Any supplied fields from create → `Category` |
-| `DELETE /management-api/categories/:id` | Cascades, then 204 |
+| `DELETE /management-api/categories/:id` | Optional `{ productsTo?, childrenTo? }` → 204 |
 | `GET /management-api/categories/:id/dependants` | What the delete would touch → `CategoryDependants` |
-| `GET /management-api/categories/:id/products` | Direct products with their staff name, active state and full membership |
-| `POST /management-api/categories/:id/products` | `{ productIds }` adds them all in one write → 204 |
-| `GET /management-api/products` | Every product, including inactive products, each once |
-| `GET /management-api/products/:id/categories` | `{ categoryIds, primaryCategoryId }` |
-| `PUT /management-api/products/:id/categories` | Complete `{ categoryIds, primaryCategoryId? }` → saved membership |
+| `GET /management-api/categories/:id/products` | Products whose main category is this one; add `?descendants=1` to include the categories below it |
+| `POST /management-api/categories/:id/products` | `{ productIds }` makes this the main category of each → 204 |
+| `PUT /management-api/products/:id/categories` | `{ primaryCategoryId }` (an id or null) → `{ primaryCategoryId }` |
+| `GET /management-api/labels` | Labels ordered by name, each `{ id, name, productCount }` |
+| `POST /management-api/labels` | `{ name }` → `Label` |
+| `PATCH /management-api/labels/:id` | `{ name }` → `Label` |
+| `DELETE /management-api/labels/:id` | Removes it from every product → 204 |
+| `GET /management-api/products/:id/labels` | `{ labelIds }` |
+| `PUT /management-api/products/:id/labels` | `{ labelIds }` replaces the product's labels → `{ labelIds }` |
 
 `Category` is
 `{ id, name: Record<string, string>, image: string | null, color: string | null, parentId: string | null }`.
 A colour is lower-case `#rrggbb` or null; anything else is refused as `category.color_invalid` (400).
+Category names require text in your default content language, and they take part in the
+translation-gap check. Keep disabled translations in an edit payload: changing the enabled languages
+does not delete them.
 
-`CategoryDependants` is `{ products, children, parentId, routes }`, where `products` carries
-`{ id, name, reporting }` per direct member — `name` here is the product's plain staff-facing name,
-a `string`, not a language map, since a product's name is no longer translated
-([Product names, variants and the product editor](products.md)) — and `reporting` marks the ones this
-category is the reporting category for. `children` carries `{ id, name }` per direct child, where
-`name` IS a language map because a category name still is one. `routes` carries
-`{ id, station, zone }` per preparation route. `routes` is always empty when the venue-service
-module is not installed, since that is the module owning the table.
+`Label` is `{ id, name }`. A blank name is refused with `label.invalid` (400), a name another label
+already has with `label.duplicate` (409), and an unknown label id with `label.not_found` (404).
 
-The bulk add assigns a whole selection to one category in a single write. A product that has no
-reporting category yet takes this one; a product that already has one keeps it. Resubmitting a
-product that is already a member is safe: it never fails and it does not add the membership twice.
-It is not, however, entirely without effect — the reporting category is decided from what the
-product currently has, not from whether the membership is new, so an existing member with no
-reporting category is given this one. Only an existing member that already has a reporting category
-comes out unchanged. An empty list is accepted and does nothing. The whole selection is checked before anything is written: an unknown,
-foreign or repeated id rejects the entire request with `category.membership_invalid`, and nothing
-is added.
+`CategoryDependants` is `{ products, children, parentId, routes }`. `products` lists `{ id, name }`
+for every product, variants included, whose own main category is this one; `name` is the plain
+staff-facing product name. `children` lists `{ id, name }` for each direct subcategory, where `name`
+is a language map. `routes` lists `{ id, station, zone }` per preparation route, and is always empty
+when the venue-service module, which owns that table, is not installed.
 
-Names require nonblank text in your default content language. Keep disabled translations in your
-edit payload: the form preserves them, and changing enabled languages does not delete them.
-Category names participate in the default-language translation-gap check.
+The category product list returns `{ id, name, active, primaryCategoryId, labelIds }` for each
+product. It lists top-level products only: a variant appears under its parent in the product list,
+never on its own.
 
-For example, send the complete membership set when you add Breakfast to a Sandwiches product:
+For example, to move three products into Cocktails in one write:
 
 ```json
+POST /management-api/categories/4a9d2c1e-6f3b-4c8a-9e21-7b5d0f3c8a12/products
 {
-  "categoryIds": [
+  "productIds": [
+    "11111111-1111-4111-8111-111111111111",
     "22222222-2222-4222-8222-222222222222",
-    "11111111-1111-4111-8111-111111111111"
-  ],
-  "primaryCategoryId": "11111111-1111-4111-8111-111111111111"
+    "33333333-3333-4333-8333-333333333333"
+  ]
 }
 ```
 
-The response returns IDs in stable UUID order. That order has no routing meaning. Omit primary
-when adding the first membership to select the first submitted ID, or when retaining an existing
-primary that remains in the set. If you omit it and the previous primary is no longer in the set,
-the product is left with no reporting category rather than the save being refused. Sending
-`primaryCategoryId: null` alongside a non-empty set does the same thing explicitly. Duplicate IDs,
-missing or foreign IDs, and primary IDs outside the set are rejected, as is a primary sent with an
-empty set. The complete replacement runs in the caller's single transaction through
-`replaceProductCategories`.
+Each listed product leaves whatever main category it had. The whole selection is checked before
+anything is written: an unknown, repeated or variant's id refuses the entire request with
+`category.membership_invalid`, and nothing moves. An empty list is accepted and does nothing.
 
-Products can compose `dashboard-category-form` from `apps/dashboard/src/widgets/category-form.ts`.
-Pass `open`, `busy`, `languages` (a `ContentLanguages`; the form draws a name field for each listed
-language and requires the first, so list the default first), `value` (category or null),
-`fieldErrors`, `categories` (for parent choices, labelled by path in the reader's language), and
-`api` (the image library request). The form emits `wt-submit` with
-`{ value: CategoryInput }` and `wt-cancel` with `{}`. The host owns the API write, closes on success,
-and selects the returned identity in its product draft. Field-error keys are `name-<language>`,
-`parent`, `image`, `color`, or `save` for an error that does not belong to one field. Creating a category is a durable independent
-write; cancelling the product afterwards leaves that category available.
+A variant's id answers as an unknown product (`product.not_found`, 404) on the product category and
+label routes, as it does on every product-by-id route except the product editor's. The editor is
+where a variant's own main category is set, and where its parent's labels are shown, under
+`inherited.labelIds`.
 
-`dashboard-category-membership-picker` receives `categories`, `languages` (a `ContentLanguages`),
-`busy` and `value: { categoryIds, primaryCategoryId }`. It emits the same submit/cancel contract. It
-renders a multi-select dropdown of categories (field name `category-membership`), labelled by path
-in the reader's language; the chosen categories as coloured lozenges; and a reporting-category
-dropdown (field name `primary-category`) offering "None" and the chosen categories, disabled until a
-category is chosen. The first category chosen into an empty set becomes the reporting category, and
-removing the reporting category from the set clears it. The Categories screen uses it for
-category-side assignment and removal. The product editor
-(`apps/dashboard/src/widgets/product-editor.ts`) now uses it too, rather than the membership controls
-and reporting-category select it used to carry: the editor draws the chosen categories as lozenges,
-the reporting one ringed, and clicking any of them opens this picker inside a `wt-modal`. Submitting
-it updates the product draft only; the write still happens through the product editor route, which
-calls `replaceProductCategories`.
+The product editor body carries `primaryCategoryId` and `labelIds` in place of the old membership
+list. A body that still sends `categoryIds` is refused with `product.invalid` rather than having the
+list silently ignored, so a caller still on the old contract finds out at once.
 
 ## Storage and migration
 
-`categories.name` is the only stored category name and now holds JSON translations. Existing core
-category IDs, station references and `products.category_id` remain. The latter means primary only;
-category writes in product operations call the shared membership replacement operation.
-`category_details` owns parent and image references, and `product_categories` owns membership.
-Both new tables belong to catalogue, have foreign keys onto the core product and category rows, and
-state classification.
+`categories` (core) holds the translated name. `category_details` (catalogue) holds the parent, image
+and colour. `labels` holds each label, with the unique index `labels_name_uq` on its name, and
+`product_labels` joins products to labels; both cascade when a product or a label is deleted. All
+the catalogue tables are classified `state` and travel in the configuration transfer, `labels`
+before `product_labels`.
 
-Hierarchy edits, membership replacements and category deletion take no lock. On PostgreSQL the
-three shared one advisory lock taken as each one's first statement, and deletion additionally locked
-the core category row so a concurrent preparation-route insert could not slip between its steps.
-Neither survives the storage switch, and neither is needed: `withTransaction`
+The product-to-category membership table, `product_categories`, is gone. It was created by
+`packages/catalogue/drizzle/0000_baseline.sql` and is dropped by
+`packages/catalogue/drizzle/0006_drop_product_categories.sql`. The labels tables are created by the
+generation before it, `0005_labels.sql`; the two are kept apart so that no single migration both
+creates and drops. A product's extra memberships are not carried anywhere, because there is no data
+migration before Waitron is in production (`CLAUDE.md` §3). Its main category was already
+`products.category_id` and is kept.
+
+Hierarchy edits, main-category changes and category deletion take no lock. `withTransaction`
 (`packages/db/src/tenancy.ts`) runs its body inside the venue file's write queue, which admits one
 write transaction on the file at a time (`packages/store/src/write-queue.ts`), so two of these paths
 cannot overlap however they are started. `packages/catalogue/src/categories.ts` states this above
@@ -174,30 +160,13 @@ cannot overlap however they are started. `packages/catalogue/src/categories.ts` 
 `packages/catalogue/test/fixtures.ts`, which carries the measurement and a control, used by the
 three `serializes …` cases in `packages/catalogue/src/categories.db.test.ts`.
 
-The media set still protects `category_details.image`, under the same name
-(`category_details_media_image_fk`) but by a different mechanism: it is now four triggers rather
-than a foreign key, created in `packages/media/drizzle/0001_image_references.sql`, whose header
-explains why a real key could not be regenerated. The refusal arrives as errcode 1811, not 787, and
-`pragma foreign_key_list('category_details')` does not list the rule. Attaching an image does not
-lock the image's row — `validateImage` reads it and relies on there being no concurrent writer, and
-says so at the read.
+The media set protects `category_details.image` with four triggers named
+`category_details_media_image_fk_*`, created in `packages/media/drizzle/0001_image_references.sql`,
+whose header explains why a real foreign key could not be used. The refusal arrives as errcode 1811,
+not 787, and `pragma foreign_key_list('category_details')` does not list the rule. Attaching an image
+does not lock the image's row: `validateImage` reads it and relies on there being no concurrent
+writer, and says so at the read.
 
-Configuration transfer places media rows before category image references and preserves membership
-and primary choice. Category parent references target existing core identities, so metadata rows can
-be restored in any order after those identities.
-
-The storage switch regenerated every module's PostgreSQL chain into one SQLite baseline per set, so
-all three files this paragraph used to name are gone and so is core's `0020_category_names` —
-`grep -rn 0020_category_names` over `packages/` and `apps/` matched nothing on 2026-09-23. The
-category tables are created by the baselines: `packages/catalogue/drizzle/0000_baseline.sql` for
-`category_details` and `product_categories`, and `packages/db/drizzle/0000_baseline.sql` for
-`categories` itself and `products.category_id`; the media set adds the category image triggers in
-`packages/media/drizzle/0001_image_references.sql`. Core's `0002` to `0004` change `products` for
-variants — `0003_variant_inherited_nullable.sql` rebuilds the table and carries `category_id` and
-its key to `categories` across — and none of core's later migrations touches category membership.
-
-The operational advice that hung off the old migration still holds, and it is a house rule rather
-than a property of any one file: schema changes drop and recreate, with no translation and no
-backfill (`CLAUDE.md` §3). Follow the existing preproduction reset workflow for a populated
-database. Do not apply it to a populated shared development database as an incidental part of
-running tests. No shared development database was reset for this build.
+Schema changes drop and recreate, with no translation and no backfill (`CLAUDE.md` §3). Follow the
+existing preproduction reset workflow for a populated database, and do not reset a populated shared
+development database as an incidental part of running tests.

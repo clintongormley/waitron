@@ -189,10 +189,9 @@ registered and nothing throws it.
 tax rate, station, course, description, image, pricing unit and allergen and dietary declarations
 are its parent's while its own column is blank and its own once it sets them
 (`effectiveProductColumns`, whose keys are `INHERITED_KEYS`,
-`packages/catalogue/src/variant-fallback.ts`). Its unit, and its categories with
-the reporting category among them, are its parent's while it stores none of its own
-(`unitOwnerJoin`, `categoryOwnerJoin`, same file). Its extras and options lists are always its
-parent's. Its Name, customer-facing name and kitchen name are never inherited: a blank customer or
+`packages/catalogue/src/variant-fallback.ts`), and so is its main reporting category. Its unit is
+its parent's while it stores none of its own (`unitOwnerJoin`, same file). Its labels, and its
+extras and options lists, are always its parent's (`labelOwnerJoin`, same file, for the labels). Its Name, customer-facing name and kitchen name are never inherited: a blank customer or
 kitchen name falls back to the variant's own staff name (_The three names_, above).
 
 A variant's published allergens stay blank, and so read as its parent's, until it sets allergens of
@@ -286,8 +285,7 @@ variant's effective values above, and freezes the parent's names beside the vari
 `sale_lines` row carries no catalogue id. In the kitchen it takes its parent's product-level
 preparation routes (a route can name only a top-level product, so a variant has none of its own)
 and the category routes of its effective category; its station, course, category, allergens and
-dietary labels are its effective values (`effectiveProductColumns`; for category, the
-`categoryOwnerJoin` rule above; `resolvePreparationRouteOutcomes`,
+dietary labels are its effective values (`effectiveProductColumns`; `resolvePreparationRouteOutcomes`,
 `packages/venue-service/src/operations.ts`; `priceOrderLines`, `fireLines` and `readQueueSubItems`,
 `apps/server/src/working-order.ts`). The till splits a tab line by the unit precision the line
 froze (`TabLine.unitPrecision`), since a variant is not one of the till's products.
@@ -388,8 +386,8 @@ product can be routed as you create it. The `wt-set-product-station` and `wt-set
 events are gone.
 
 The product write body carries `name` (required, plain text), `customerName` (a language map or
-`null`), `description`, `kitchenName`, `image`, the price and tax fields, `categoryIds`,
-`primaryCategoryId`, `modifiers` (the ordered attachment list, each entry a `kind` of `extras` or
+`null`), `description`, `kitchenName`, `image`, the price and tax fields, `primaryCategoryId` (the
+main reporting category), `labelIds`, `modifiers` (the ordered attachment list, each entry a `kind` of `extras` or
 `options` and a list id — it replaced the flat `modifierIds` on 2026-09-19), the allergen and
 dietary declarations, the two required state flags `active` and `available` (below), and `variants`
 — each variant carrying `name`, `customerName`, `kitchenName`, `image`, `unitPrice`, `available` and

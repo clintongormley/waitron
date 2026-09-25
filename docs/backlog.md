@@ -352,7 +352,10 @@ its sales being double-counted; at most one membership is primary and names the 
 kitchen route. Categories get their own page at `/manage/categories` with translation, a picture, a
 parent, and a delete that previews what will change and then proceeds rather than refusing. Labels on
 past orders stay readable. [Design](superpowers/specs/2026-09-12-product-categories-design.md),
-[API and integration guide](developers/product-categories.md).
+[API and integration guide](developers/product-categories.md). _2026-09-25: the several-categories
+membership is gone. Sales classification Task 1 gives each product one main reporting category in a
+strict tree, plus any number of flat labels, and drops `product_categories`; the guide above is
+rewritten for it._
 
 What it left open:
 
@@ -370,25 +373,18 @@ What it left open:
   what that line can claim are in [the workflow guide](developers/workflow-guide.md). The underlying
   trap is unchanged: **a populated development database still has to be reset by hand.**
 - **Category authoring serialises across the whole database, and nobody has measured what that
-  costs.** Hierarchy edits, membership replacement and category deletion take no lock of their own
+  costs.** Hierarchy edits, main-category changes and category deletion take no lock of their own
   since the storage switch: `withTransaction` admits one write transaction per venue file, which is
   what makes the races safe (`packages/catalogue/src/categories.ts`, above `listCategories`). The review confirmed the specific
   races are handled but reported no throughput measurement, so there is no evidence either way about
   how this behaves with several managers editing the catalogue at once. **Next action:** measure it
   before anyone widens category authoring to more concurrent editors, rather than assuming it is fine.
-- **Routing from category memberships is still not designed** — that item is unchanged and sits under
-  A9 below. This merge kept the existing single-route behaviour on purpose; choosing the primary
-  category as the reporting label does not decide anything about the later routing design.
+- **Routing to several destinations is still not designed** — that item sits under A9 below. The
+  memberships it was first written about are gone (2026-09-25); labels are to be the conditions for
+  kitchen routing rules instead (menus spec §10.5).
 - **A category's colour is stored but shown nowhere outside the categories screen.** Nothing on the
   till, in menus or in reports reads it yet. The colour is data a future consumer can follow; nobody
   has decided whether or how one should.
-- **One legacy write path still ties the reporting category to membership.** Sending
-  `categoryId: null` in a product patch (`updateProduct` in `packages/catalogue/src/operations.ts`)
-  refuses with `category.primary_required` when the product has more than one membership, and
-  otherwise clears every membership along with the reporting category — the coupling
-  `replaceProductCategories` dropped. Left alone on purpose: nothing first-party sends `categoryId` in
-  a product patch any more. **Next action:** remove the coupling if and when a real client needs the
-  relaxed behaviour on that route, rather than pre-emptively changing a legacy contract.
 - **No "category dependants" seat exists on the module contract.** The delete-preview route
   (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
   dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.
@@ -2379,8 +2375,9 @@ ongoing overhaul listed at the top of Track A.
   languages are a separate setting and already follow the province.
 - **Category-driven routing to multiple printers/destinations** (owner, 2026-09-12): deferred from
   the [Products overhaul](superpowers/specs/2026-09-12-products-overhaul-design.md). Decide how a
-  product's category memberships select one or more preparation/printing destinations, how matching
-  rules combine and how duplicate output is prevented. Keep reporting attribution separate so one
+  product's labels (menus spec §10.5; category memberships are gone since 2026-09-25) select one or
+  more preparation/printing destinations, how matching rules combine and how duplicate output is
+  prevented. Keep reporting attribution separate so one
   sale is counted once. The overhaul retains the current routing path; its reporting-category
   choice does not settle this later routing design.
 - **Departments and menus** (#297) remaining: remove the legacy price and fixed-station compatibility
