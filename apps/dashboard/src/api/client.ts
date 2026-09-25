@@ -32,6 +32,23 @@ import type {
   OptionListDependants,
   OptionListInput,
 } from "@waitron/catalogue/src/modifier-list-types.js";
+import type {
+  LibrarySection,
+  MemberRef,
+  SectionMember,
+  SectionUsages,
+} from "@waitron/catalogue/src/section-types.js";
+export type { LibrarySection, MemberRef, SectionMember, SectionUsages };
+
+/** A section's details as `createSection`/`updateSection` take them
+ * (`SectionInput`, packages/catalogue/src/sections.ts). */
+export interface SectionInput {
+  internalName: string;
+  names?: Record<string, string>;
+  image?: string | null;
+  color?: string | null;
+}
+
 export type {
   ExtraList,
   ExtraListDependants,
@@ -1568,6 +1585,55 @@ export class DashboardApi {
         "GET",
       )
     ).dependants;
+  }
+
+  // ── Sections library (`/management-api/sections`) ─────────────────────────────────────────────
+
+  listSections(): Promise<LibrarySection[]> {
+    return this.#request("/management-api/sections", "GET");
+  }
+  /** Every library section's usages, keyed by section id. */
+  listSectionUsages(): Promise<Record<string, SectionUsages>> {
+    return this.#request("/management-api/sections/usages", "GET");
+  }
+  createSection(input: SectionInput): Promise<LibrarySection> {
+    return this.#request("/management-api/sections", "POST", input);
+  }
+  updateSection(id: string, patch: Partial<SectionInput>): Promise<LibrarySection> {
+    return this.#request(`/management-api/sections/${id}`, "PATCH", patch);
+  }
+  deleteSection(id: string): Promise<void> {
+    return this.#request(`/management-api/sections/${id}`, "DELETE");
+  }
+  listSectionMembers(id: string): Promise<SectionMember[]> {
+    return this.#request(`/management-api/sections/${id}/members`, "GET");
+  }
+  addSectionMember(id: string, ref: MemberRef): Promise<SectionMember> {
+    return this.#request(`/management-api/sections/${id}/members`, "POST", { ref });
+  }
+  /** Appends each product the section does not already hold. */
+  addSectionProducts(id: string, productIds: string[]): Promise<{ added: number }> {
+    return this.#request(`/management-api/sections/${id}/members/products`, "POST", {
+      productIds,
+    });
+  }
+  removeSectionMember(id: string, memberId: string): Promise<void> {
+    return this.#request(`/management-api/sections/${id}/members/${memberId}`, "DELETE");
+  }
+  /** Answers the whole list in its new order. */
+  moveSectionMember(id: string, memberId: string, to: number): Promise<SectionMember[]> {
+    return this.#request(`/management-api/sections/${id}/members/${memberId}/position`, "PUT", {
+      to,
+    });
+  }
+  duplicateSection(
+    id: string,
+    input: { internalName: string; memberIds: string[] },
+  ): Promise<LibrarySection> {
+    return this.#request(`/management-api/sections/${id}/duplicate`, "POST", input);
+  }
+  getSectionUsages(id: string): Promise<SectionUsages> {
+    return this.#request(`/management-api/sections/${id}/usages`, "GET");
   }
 
   get imageLibraryRequest(): DashboardRequest {

@@ -64,6 +64,9 @@ export const QUERY_DEPENDENCIES = {
   getCategory: ["categories", "category_details"],
   listCategoryProducts: ["categories", "category_details", "products", "product_labels"],
   listLibraryProducts: ["products", "product_labels"],
+  listSections: ["sections", "section_members"],
+  // The usages name each menu from `catalogues` (`librarySectionUsages`, sections.ts).
+  listSectionUsages: ["sections", "section_members", "catalogues"],
   listLabels: ["labels", "product_labels"],
   getProductLabels: ["products", "product_labels"],
   listUnits: ["units"],
