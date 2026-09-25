@@ -27,7 +27,8 @@ import {
   createProduct,
   listAvailableProducts,
   priceBasket,
-  replaceProductCategories,
+  createLabel,
+  setProductLabels,
   setMenuVariants,
   setProductVariants,
   units,
@@ -2614,7 +2615,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     });
   });
 
-  it("routes a multi-category product by its primary category and freezes that label on its line", async () => {
+  it("routes a product by its main category whatever labels it carries, and freezes the category on its line", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
@@ -2624,10 +2625,9 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await setCategoryStation(tx, cfg, drinks.id, bar.id);
       await setCategoryStation(tx, cfg, food.id, kitchen.id);
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
-      await replaceProductCategories(tx, product, {
-        categoryIds: [food.id, drinks.id],
-        primaryCategoryId: drinks.id,
-      });
+      // A label named like the other category implies nothing about routing or reporting.
+      const label = await createLabel(tx, "Food");
+      await setProductLabels(tx, product, [label.id]);
 
       // The station comes from the context-less chain; the frozen label from a sale, which a
       // context-less order cannot carry.
@@ -6281,9 +6281,6 @@ async function seedWine(tx: Transaction, cfg: TillConfig, catalogueId: string) {
       dietaryDeclarations: ["halal"],
     })
     .where(eq(products.id, wine175!.id));
-  await tx
-    .insert(catalogue.productCategories)
-    .values({ productId: wine175!.id, categoryId: copas.id });
   return {
     parentId: parent.id,
     offerId: offer.id,
