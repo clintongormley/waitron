@@ -2822,12 +2822,22 @@ image constraints under *Detail → Box image*.
   corrected claims in `till-app.ts`, `api/client.ts` and three screens; text inside `css` templates
   left) and `apps/server`'s join, node, membership, enrol, trust, setup, box, provision and device
   files, part f1 (#617, about 2,360 to about 1,110, parse-tree walk, tests included; the 13 part-f
-  files the SQLite slice-2 plan will change are held back as f2).
+  files the SQLite slice-2 plan will change are held back as f2) and `apps/till`'s `src/api`,
+  `src/state` and `src/i18n`, part c of four (#618, about 2,420 to about 1,130, parse-tree walk,
+  tests included).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616 and #617 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617 and #618 and left for the package that owns each, all
   still OPEN:
+  - Found by #618 (`apps/till` `src/api` + `src/state` + `src/i18n`), not fixable in a
+    comments-only change. Test titles repeat claims the branch corrected:
+    `apps/till/src/state/working-order.test.ts` "previews the total via priceBasket" (the preview
+    sums line totals) and `apps/till/src/api/client.test.ts` "getExpoQueue GETs this node's
+    cross-station pass queue" (the queue is venue-wide and includes placed orders);
+    `apps/server/src/working-order.ts` still calls the expo queue's orders "open" (the comments
+    above `ExpoOrder` and `listExpoQueue`, lines 4339 and 4357 on `e11e3b84`), leaving out placed
+    ones, for its own part.
   - Found by #617 (`apps/server` part f1), not fixable in a comments-only change.
     **`fetchPeerMembershipDocument` throws on a 200 whose body is JSON `null`**
     (`apps/server/src/membership-reconcile.ts`, the final `body.document ?? null` reads a property
@@ -2857,10 +2867,7 @@ image constraints under *Detail → Box image*.
     held line with no course, and several `station-queue`, `tender-pay` and `modifier-picker` test
     titles carry task numbers. `css` comments in `apps/till/src/widgets/station-queue.ts` and
     `screens/till-expo-screen.ts` still call the courseless group "auto-fired", as does
-    `apps/server/src/working-order.ts` (around line 4488, for its own part). For the till's
-    `api`/`state` part: `apps/till/src/state/working-order.ts`'s header says the preview total comes
-    from `priceBasket`, and `api/client.ts`'s expo-queue notes say "this node's OPEN orders" for a
-    queue that is venue-wide and includes placed orders. `apps/till/README.md` says the held list is
+    `apps/server/src/working-order.ts` (around line 4488, for its own part). `apps/till/README.md` says the held list is
     shared across the registers "on a node". Read, not run: a courseless section the server held
     shows its lines greyed with no fire button (`#fireAction` in `station-queue.ts`, from #131);
     `GET /api/till` never sends `stripe_on_device`, so the offline-consent toggle cannot appear;
@@ -2960,8 +2967,8 @@ image constraints under *Detail → Box image*.
     `aria-expanded` on the `wt-button` host, and `wt-button` does not pass them to its inner
     button, so a screen reader probably never hears them (read, not run). `reorder.test.ts`'s test
     names say an out-of-range move "clamps"; `reorder()` ignores it. #616 fixed the till's copies of
-    "a `wt-button` forwards only `disabled`/`aria-label`"; "a runtime shape error a view test
-    catches" is still in `apps/till/src/api/client.ts:16`, for its own pruning pull request.
+    "a `wt-button` forwards only `disabled`/`aria-label`", and #618 the till's "a runtime shape
+    error a view test catches".
   - Found by #607 (`apps/dashboard/src/screens`), outside the screens folder; #610 fixed the
     dashboard's copies and #614 the till's "never send a personId". Still open: the fire-control modes are listed as
     `waiter`/`kitchen` only, leaving out `expo` (`fireControlMode`,
