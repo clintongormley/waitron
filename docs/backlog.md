@@ -3665,7 +3665,7 @@ image constraints under *Detail → Box image*.
   hovering a button, so the same flake is waiting there.
 - **A sixth: a CI shard exits 1 with every one of its tests passing (2026-09-18, PR #414,
   `test-server (3)`, job 105632564989) — the exit-1 path CLOSED by the Vitest 4.1.11 upgrade
-  (#437), measured 2026-09-25; why the call went unanswered still open.** The shard printed
+  (#437), measured 2026-09-25 and the trap deleted from `CLAUDE.md` §2 by #626; why the call went unanswered still open.** The shard printed
   `Tests 1313 passed (1313)` and one unhandled error: vitest's worker-to-main reporting call
   (`onTaskUpdate`) had timed out on birpc's 60-second default under vitest 3.2.7, failing the shard
   on its own and taking the aggregate `ci` job with it. **On Vitest 4.1.11 that timeout is gone,
