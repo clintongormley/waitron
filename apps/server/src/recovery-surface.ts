@@ -164,8 +164,9 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     action: "Press Retry. If it keeps failing, ask whoever installed this box to look at it.",
   },
   "restore.placement_failed": {
-    // Which database was kept is in the params, which reach the installer's channel
-    // (`node-entry.ts` → `failureDetail`) and not this page.
+    // Shown only if this is the last failure when the box reaches recovery; a failed setup restore
+    // is not retried, so one failed placement does not get here. Which database was kept is in the
+    // params, which reach the server's own output (`node-entry.ts` → `failureDetail`), not this page.
     title: "A restore could not put the restored database in place.",
     action:
       "Ask whoever installed this box to look at it before anything else. The server's own output says whether the box's previous database is unchanged or was left in a folder inside its venue folder, which must be moved back before the box is used.",
