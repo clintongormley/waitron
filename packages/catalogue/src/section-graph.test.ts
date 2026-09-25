@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSectionGraph,
   menusContaining,
-  placements,
+  placementsByProduct,
   reachableProducts,
   wouldCreateCycle,
   type MemberRow,
@@ -104,17 +104,19 @@ describe("reachableProducts", () => {
 
 describe("placements", () => {
   it("names every path from the root to a list holding the product", () => {
-    expect(placements(lunch(), "lunch", "lemonade")).toEqual([
+    expect(placementsByProduct(lunch(), "lunch").get("lemonade") ?? []).toEqual([
       ["lunch", "favourites"],
       ["lunch", "drinks"],
     ]);
-    expect(placements(lunch(), "lunch", "lager")).toEqual([["lunch", "drinks", "beer"]]);
+    expect(placementsByProduct(lunch(), "lunch").get("lager") ?? []).toEqual([
+      ["lunch", "drinks", "beer"],
+    ]);
   });
 
   it("names the root alone for a product it holds directly, and nothing for one it cannot reach", () => {
     const graph = buildSectionGraph([root("lunch", "menu-lunch")], list("lunch", ["p:bread"]));
-    expect(placements(graph, "lunch", "bread")).toEqual([["lunch"]]);
-    expect(placements(lunch(), "lunch", "bread")).toEqual([]);
+    expect(placementsByProduct(graph, "lunch").get("bread") ?? []).toEqual([["lunch"]]);
+    expect(placementsByProduct(lunch(), "lunch").get("bread") ?? []).toEqual([]);
   });
 });
 
@@ -160,7 +162,7 @@ describe("a section reached along two paths", () => {
     expect(menusContaining(graph, "beer")).toEqual(["menu-lunch"]);
     expect(wouldCreateCycle(graph, "beer", "lunch")).toBe(true);
     expect(wouldCreateCycle(graph, "favourites", "drinks")).toBe(false);
-    expect(placements(graph, "lunch", "lager")).toEqual([
+    expect(placementsByProduct(graph, "lunch").get("lager") ?? []).toEqual([
       ["lunch", "drinks", "beer"],
       ["lunch", "favourites", "beer"],
     ]);
@@ -173,7 +175,7 @@ describe("a section reached along two paths", () => {
       [...list("lunch", ["s:a"]), ...list("a", ["s:b", "p:tea"]), ...list("b", ["s:a"])],
     );
     expect(reachableProducts(graph, "lunch")).toEqual(["tea"]);
-    expect(placements(graph, "lunch", "tea")).toEqual([["lunch", "a"]]);
+    expect(placementsByProduct(graph, "lunch").get("tea") ?? []).toEqual([["lunch", "a"]]);
     expect(menusContaining(graph, "b")).toEqual(["menu-lunch"]);
   });
 });

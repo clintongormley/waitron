@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
-import { createCatalogue, createMenuItem, createMenuSection, createProduct } from "./operations.js";
+import { createCatalogue, addProductToMenu, createProduct } from "./operations.js";
 import { createExtraList, getExtraList, setMenuItemExtraLists, updateExtraList } from "./extras.js";
 import { readMenuExtras } from "./extra-projection.js";
 import { writeProductModifiers } from "./product-modifiers.js";
@@ -53,11 +53,9 @@ beforeEach(async () => {
         vatClass: "reduced",
       })
     ).id;
-    const section = await createMenuSection(tx, { menuId: catalogue.id, name: { en: "Mains" } });
-    const menuItem = await createMenuItem(tx, {
+    const menuItem = await addProductToMenu(tx, {
       menuId: catalogue.id,
       productId: dish,
-      sectionId: section.id,
       grossPrice: "7.00",
     });
     offer = menuItem.id;

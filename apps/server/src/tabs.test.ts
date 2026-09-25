@@ -20,8 +20,7 @@ import {
   createCatalogue,
   createCategory,
   createExtraList,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   createProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
@@ -126,20 +125,14 @@ async function setupVenue(): Promise<Seeded> {
         vatClass: "general",
       });
       await assignCatalogueToLocation(tx, locationId, cat.id);
-      const section = await createMenuSection(tx, {
-        menuId: cat.id,
-        name: { [LOCALE]: "Bebidas" },
-      });
-      const cafeMenuItem = await createMenuItem(tx, {
+      const cafeMenuItem = await addProductToMenu(tx, {
         menuId: cat.id,
         productId: cafe.id,
-        sectionId: section.id,
         grossPrice: "1.50",
       });
-      const aguaMenuItem = await createMenuItem(tx, {
+      const aguaMenuItem = await addProductToMenu(tx, {
         menuId: cat.id,
         productId: agua.id,
-        sectionId: section.id,
         grossPrice: "2.00",
       });
       const offers = await offerProducts(tx, cfg, { zone: "tables" });

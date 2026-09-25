@@ -16,8 +16,7 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   createProduct,
   createExtraList,
   createOptionList,
@@ -187,20 +186,14 @@ async function setupVenue(): Promise<{
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    const section = await createMenuSection(tx, {
-      menuId: cat.id,
-      name: { es: "Carta" },
-    });
-    const jamonItem = await createMenuItem(tx, {
+    const jamonItem = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: jamon.id,
-      sectionId: section.id,
       grossPrice: "24.90",
     });
-    const aguaItem = await createMenuItem(tx, {
+    const aguaItem = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: agua.id,
-      sectionId: section.id,
       grossPrice: "1.50",
     });
     await tx.execute(sql`

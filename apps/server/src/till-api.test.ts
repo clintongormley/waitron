@@ -34,13 +34,13 @@ import {
   createCatalogue,
   createCategory,
   createExtraList,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   createOptionList,
   createProduct,
   readContentLanguages,
   updateOptionList,
   setMenuItemExtraLists,
+  updateMenuItem,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import {
@@ -199,14 +199,9 @@ const suite = useVenueDb({
         values (${zone!.id}, ${cat.id})`);
         await tx.execute(sql`
         update zone_service_policies set default_menu_id = ${cat.id} where zone_id = ${zone!.id}`);
-        const section = await createMenuSection(tx, {
-          menuId: cat.id,
-          name: { es: "Bebidas" },
-        });
-        const offer = await createMenuItem(tx, {
+        const offer = await addProductToMenu(tx, {
           menuId: cat.id,
           productId: p.id,
-          sectionId: section.id,
           grossPrice: "1.75",
         });
         await tx.insert(preparationRoutes).values({
@@ -216,14 +211,9 @@ const suite = useVenueDb({
         });
 
         const hiddenMenu = await createCatalogue(tx, { name: "Staff" });
-        const hiddenSection = await createMenuSection(tx, {
-          menuId: hiddenMenu.id,
-          name: { es: "Staff" },
-        });
-        const hiddenOffer = await createMenuItem(tx, {
+        const hiddenOffer = await addProductToMenu(tx, {
           menuId: hiddenMenu.id,
           productId: p.id,
-          sectionId: hiddenSection.id,
           grossPrice: "0.50",
         });
 
@@ -1480,6 +1470,32 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       menus: [{ id: aguaProduct.catalogueId, name: "Carta", isDefault: true }],
       offers: [{ id: aguaOfferId, productId: aguaProduct.id, grossPrice: "1.75" }],
     });
+  });
+
+  it("leaves out a product switched off on its menu, and lists it again once switched back on", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const token = await openSession(suite.db);
+    const offerIds = async (): Promise<string[]> => {
+      const res = await app.request(`/api/service-zones/${counterZoneId}/offers`, {
+        headers: { cookie: `${SESSION_COOKIE}=${token}` },
+      });
+      expect(res.status).toBe(200);
+      return ((await res.json()) as { offers: { id: string }[] }).offers.map((offer) => offer.id);
+    };
+    // The same write `PATCH /management-api/catalogues/:id/items/:itemId` makes.
+    const switchTo = (active: boolean) =>
+      withTransaction(suite.db, (tx) =>
+        updateMenuItem(tx, aguaProduct.catalogueId, aguaOfferId, { active }),
+      );
+
+    try {
+      await switchTo(false);
+      expect(await offerIds()).not.toContain(aguaOfferId);
+    } finally {
+      await switchTo(true);
+    }
+    expect(await offerIds()).toContain(aguaOfferId);
   });
 
   it("REJECTS (401 session.required) when no cookie is present — proves the requireSession guard", async () => {
@@ -3152,13 +3168,8 @@ async function modifierOfferFixture() {
       // INSERT … SELECT cannot go through the table definition, so the id is bound into the select.
       sql`insert into preparation_routes (id,location_id,product_id,station_id) select ${randomUUID()},location_id,${product.id},station_id from preparation_routes where product_id=${aguaProduct.id}`,
     );
-    const section = await createMenuSection(tx, {
+    const offer = await addProductToMenu(tx, {
       menuId: aguaProduct.catalogueId,
-      name: { es: "Pruebas" },
-    });
-    const offer = await createMenuItem(tx, {
-      menuId: aguaProduct.catalogueId,
-      sectionId: section.id,
       productId: product.id,
       grossPrice: "1.75",
     });

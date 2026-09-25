@@ -1,11 +1,10 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   catalogues,
   count,
   flag,
   id,
-  json,
   label,
   labelList,
   money,
@@ -13,6 +12,7 @@ import {
   products,
   table,
 } from "@waitron/db";
+import { sections } from "./sections.js";
 
 /** The one content-language policy shared by the reusable catalogue and media: at most one row,
  * `id` pinned to 1. */
@@ -38,39 +38,45 @@ export const contentLanguages = table(
   ],
 );
 
-/** A presentation heading within one menu. Product categories remain the reporting taxonomy. */
-export const menuSections = table(
-  "menu_sections",
+/** A menu's top-level list and its default home layout: two sections the menu owns. */
+export const menuDetails = table(
+  "menu_details",
   {
-    id: id("id").primaryKey().$defaultFn(newId),
-    menuId: id("menu_id").notNull(),
-    name: json<Record<string, string>>("name").notNull(),
-    displayOrder: count("display_order").notNull().default(0),
-    active: flag("active").notNull().default(true),
+    menuId: id("menu_id").primaryKey(),
+    rootSectionId: id("root_section_id").notNull(),
+    defaultHomeLayoutId: id("default_home_layout_id").notNull(),
   },
   (t) => [
-    // The target of menu_items_section_fk: an offer's section belongs to the offer's own menu.
-    unique("menu_sections_menu_id_key").on(t.menuId, t.id),
     foreignKey({
       columns: [t.menuId],
       foreignColumns: [catalogues.id],
-      name: "menu_sections_menu_fk",
-    }).onDelete("cascade"),
-    index("menu_sections_menu_order_idx").on(t.menuId, t.displayOrder),
+      name: "menu_details_menu_fk",
+    }),
+    foreignKey({
+      columns: [t.rootSectionId],
+      foreignColumns: [sections.id],
+      name: "menu_details_root_fk",
+    }),
+    foreignKey({
+      columns: [t.defaultHomeLayoutId],
+      foreignColumns: [sections.id],
+      name: "menu_details_default_layout_fk",
+    }),
+    uniqueIndex("menu_details_root_uq").on(t.rootSectionId),
   ],
 );
 
-/** A product offered on one menu, and its presentation order. A blank `gross_price` means the
- * product's own price (`resolveOfferPrice`, `offer-price.ts`). */
+/**
+ * A menu's settings for one product: its price and its own switch. A blank `gross_price` means the
+ * product's own price (`resolveOfferPrice`, `offer-price.ts`).
+ */
 export const menuItems = table(
   "menu_items",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     menuId: id("menu_id").notNull(),
     productId: id("product_id").notNull(),
-    sectionId: id("section_id").notNull(),
     grossPrice: money("gross_price"),
-    displayOrder: count("display_order").notNull().default(0),
     active: flag("active").notNull().default(true),
   },
   (t) => [
@@ -87,12 +93,6 @@ export const menuItems = table(
       foreignColumns: [products.id],
       name: "menu_items_product_fk",
     }).onDelete("restrict"),
-    foreignKey({
-      columns: [t.menuId, t.sectionId],
-      foreignColumns: [menuSections.menuId, menuSections.id],
-      name: "menu_items_section_fk",
-    }).onDelete("restrict"),
     check("menu_items_gross_price_ck", sql`${t.grossPrice} >= 0`),
-    index("menu_items_menu_order_idx").on(t.menuId, t.displayOrder),
   ],
 );

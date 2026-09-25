@@ -19,10 +19,9 @@ export interface MenuItem {
   id: string;
   menuId: string;
   productId: string;
-  sectionId: string;
   /** The price this menu sets, or null when it sets none and the product's own price applies. */
   grossPrice: string | null;
-  displayOrder: number;
+  /** This menu's own switch for the product. */
   active: boolean;
 }
 
@@ -32,7 +31,9 @@ export interface MenuOffer extends MenuItem {
    * (`offer-price.ts`): `grossPrice` when set, else the product's own price. Never null. */
   unitPrice: string;
   menuName: string;
-  sectionName: Record<string, string>;
+  /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top
+   * level. */
+  placements: string[][];
   name: string;
   customerName: Record<string, string> | null;
   kitchenName: string | null;
@@ -51,6 +52,13 @@ export interface MenuOffer extends MenuItem {
   /** The product's ACTIVE variants in the one variant order (spec §15.5); an Inactive one is left
    * out. A variant is only ever listed here, under its parent's offer, never as an offer itself. */
   variants: MenuOfferVariant[];
+}
+
+/** A menu offer as the dashboard's menu editor reads it (`listMenuOffersWithTopLevel`). */
+export interface EditableMenuOffer extends MenuOffer {
+  /** The product's membership of the menu's top level, when it has one: what taking it off the
+   * top level removes. */
+  topLevelMember: { sectionId: string; memberId: string } | null;
 }
 
 /**

@@ -47,9 +47,9 @@ refused with `product.variant_invalid` naming the field `labelIds`.
 ## Categories are not sections
 
 **Sections** are ordered lists of products and other sections that can be reused across menus and
-nested (`sections` and `section_members`, written by `packages/catalogue/src/sections.ts`). The
-menus plan's Task 3 builds each menu's structure from them; until it lands, menus keep their own
-`menu_sections` headings. A section only arranges products. Adding a product
+nested (`sections` and `section_members`, written by `packages/catalogue/src/sections.ts`). Each
+menu's structure is built from them, starting at the top-level list the menu owns
+(`menu_details.root_section_id`). A section only arranges products. Adding a product
 to a section, moving it, removing it or deleting the section changes neither the product's main
 reporting category nor the kitchen route it follows (the sections case in
 `apps/server/src/catalogue-api.full-manifest.test.ts`), and a product may sit in any number of
@@ -94,6 +94,31 @@ colour that is not lower-case `#rrggbb`, an image the library does not hold, or 
 `productIds` entry that is not a top-level product, a repeated `productIds` entry, or a `memberIds`
 entry that is repeated or not a member of the source. `member_duplicate` (409) is a `ref` the list
 already holds, and `member_cycle` (409) one that would make a section contain itself.
+
+A menu's own structure is read with `GET /management-api/catalogues/:id/structure` → 200,
+`{ rootSectionId, nodes }`, where each node is `{ memberId, ref }` and a section's node also carries
+its `children`; an unknown menu is `catalogue.not_found` (404). The top level is written with the
+member routes above on `rootSectionId`, and `POST /management-api/catalogues/:id/items`
+(`{ productId, grossPrice }`) puts a product on it with the menu's price in one request. Besides
+a malformed id (`shared.invalid_id`, 400) or body (`management.request_invalid`, 400), that route
+refuses an unknown menu with `catalogue.not_found` (404), an unknown product with
+`product.not_found` (404), a variant with `menu_item.variant_not_allowed` (400), a product already
+on the top level with `menu_section.member_duplicate` (409), a `grossPrice` that is not a
+non-negative decimal or null with `management.request_invalid` (400) or `shared.invalid_decimal`
+(400), and one too wide for the money scale with `shared.decimal_overflow` (400).
+
+`PATCH /management-api/catalogues/:id/items/:itemId` → 204 sets the menu's settings for one
+product its structure reaches: `grossPrice` (a price, or null for the product's own) and `active`,
+the menu's own switch for the product (a boolean, else `management.request_invalid` naming
+`active`). Either may be left out. `DELETE` on the same path switches the product off, and leaves
+it where the structure put it. An item whose product the structure no longer reaches is
+`menu_item.not_found` (404). `GET /management-api/catalogues/:id/offers` lists the Active
+products the structure reaches that are not variants, sold-out ones included, or nothing while the
+menu is inactive; switched-off ones are included with `active: false`, and the till's offers leave
+them out. Each of its offers also carries `topLevelMember`: `{ sectionId, memberId }`, the
+product's membership of the menu's top level (what
+`DELETE /management-api/sections/:id/members/:memberId` removes), or null when only a
+section holds it. The till's offers carry no such field.
 
 ## Moving and deleting
 

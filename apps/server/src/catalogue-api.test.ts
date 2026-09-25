@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, catalogues, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
-import { CATALOGUE_MIGRATIONS, contentLanguages, menuSections } from "@waitron/catalogue";
+import { CATALOGUE_MIGRATIONS, menuDetails } from "@waitron/catalogue";
 import type { ExtraList, OptionList } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
@@ -908,16 +908,8 @@ describe("mountCatalogueApi — products", () => {
     const productId = ((await createdProduct.json()) as { id: string }).id;
 
     const createOffer = async (menuId: string, grossPrice: string): Promise<string> => {
-      const sectionResponse = await send(
-        app,
-        "POST",
-        `/management-api/catalogues/${menuId}/sections`,
-        { body: { name: { en: "Cocktails", es: "Cócteles" }, displayOrder: 0 } },
-      );
-      expect(sectionResponse.status).toBe(201);
-      const sectionId = ((await sectionResponse.json()) as { id: string }).id;
       const response = await send(app, "POST", `/management-api/catalogues/${menuId}/items`, {
-        body: { productId, sectionId, grossPrice, displayOrder: 0 },
+        body: { productId, grossPrice },
       });
       expect(response.status).toBe(201);
       return ((await response.json()) as { id: string }).id;
@@ -960,7 +952,8 @@ describe("mountCatalogueApi — products", () => {
     const updated = await send(app, "GET", `/management-api/catalogues/${upstairsMenuId}/offers`);
     const removed = await send(app, "GET", `/management-api/catalogues/${downstairsMenuId}/offers`);
     expect(((await updated.json()) as { grossPrice: string }[])[0]!.grossPrice).toBe("12.50");
-    expect(await removed.json()).toEqual([]);
+    // The dashboard still lists it, switched off, so it can be switched back on.
+    expect(await removed.json()).toMatchObject([{ id: downstairsItemId, active: false }]);
   });
 
   it("GET /management-api/catalogues/:id/products with a non-uuid id → shared.invalid_id 400", async () => {
@@ -1095,12 +1088,8 @@ describe("mountCatalogueApi — products", () => {
     const read = await send(app, "GET", `/management-api/products/${saved.id}/editor`);
     expect(read.status).toBe(200);
     expect(await read.json()).toEqual(saved);
-    const section = await send(app, "POST", `/management-api/catalogues/${catalogueId}/sections`, {
-      body: { name: { es: "Cafés" }, displayOrder: 0 },
-    });
-    const sectionId = ((await section.json()) as { id: string }).id;
     const offer = await send(app, "POST", `/management-api/catalogues/${catalogueId}/items`, {
-      body: { productId: saved.id, sectionId, grossPrice: "2.40", displayOrder: 0 },
+      body: { productId: saved.id, grossPrice: "2.40" },
     });
     const offerId = ((await offer.json()) as { id: string }).id;
     const published = await send(
@@ -1135,7 +1124,7 @@ describe("mountCatalogueApi — products", () => {
       "POST",
       `/management-api/catalogues/${catalogueId}/items`,
       {
-        body: { productId: saved.variants[0]!.id, sectionId, grossPrice: "4.00", displayOrder: 1 },
+        body: { productId: saved.variants[0]!.id, grossPrice: "4.00" },
       },
     );
     expect(variantOffer.status).toBe(400);
@@ -1833,12 +1822,8 @@ describe("mountCatalogueApi — products", () => {
       { body: await editorBody(app) },
     );
     const productId = ((await created.json()) as { id: string }).id;
-    const section = await send(app, "POST", `/management-api/catalogues/${catalogueId}/sections`, {
-      body: { name: { en: "Tapas", es: "Tapas" }, displayOrder: 0 },
-    });
-    const sectionId = ((await section.json()) as { id: string }).id;
     const offer = await send(app, "POST", `/management-api/catalogues/${catalogueId}/items`, {
-      body: { productId, sectionId, grossPrice: "4.50", displayOrder: 0 },
+      body: { productId, grossPrice: "4.50" },
     });
     expect(offer.status).toBe(201);
     const offerId = ((await offer.json()) as { id: string }).id;
@@ -3461,100 +3446,118 @@ describe("menu name edits", () => {
   });
 });
 
-describe("menu-section translations", () => {
-  it("updates translations with default-language validation and rejects unknown section ids", async () => {
-    const app = mountApp("en-GB");
-    const seedSection = async () => {
-      // Through the table definitions: both ids are `$defaultFn` generators, and `name` is a JSON
-      // column whose own write mapping encodes the object.
-      const [menu] = await suite.db
-        .insert(catalogues)
-        .values({ name: "Section edit" })
-        .returning({ id: catalogues.id });
-      const [section] = await suite.db
-        .insert(menuSections)
-        .values({ menuId: menu!.id, name: { en: "Cocktails", de: "Getränke" } })
-        .returning({ id: menuSections.id });
-      return section!.id;
-    };
-    const sectionId = await seedSection();
-    // `content_languages` is a singleton keyed on id = 1 (`content_languages_singleton_ck`), so the
-    // upsert targets that primary key.
-    await suite.db
-      .insert(contentLanguages)
-      .values({ defaultLanguage: "en", languages: ["en", "fr"] })
-      .onConflictDoUpdate({
-        target: contentLanguages.id,
-        set: { defaultLanguage: "en", languages: ["en", "fr"] },
-      });
-    try {
-      const path = `/management-api/menu-sections/${sectionId}`;
-      const input = { name: { en: "Drinks", fr: "Boissons", de: "Getränke" } };
-      expect((await send(app, "PATCH", path, { body: input, cookie: null })).status).toBe(401);
-      expect((await send(app, "PATCH", path, { body: input, cookie: staffCookie })).status).toBe(
-        403,
-      );
-      for (const body of [
-        {},
-        { name: [] },
-        { name: "Drinks" },
-        { name: { en: 42 } },
-        { name: { fr: "Boissons" } },
-      ]) {
-        expect((await send(app, "PATCH", path, { body })).status).toBe(400);
-      }
-      expect(
-        (await send(app, "PATCH", "/management-api/menu-sections/bad-id", { body: input })).status,
-      ).toBe(400);
-      expect(
-        (
-          await send(app, "PATCH", `/management-api/menu-sections/${crypto.randomUUID()}`, {
-            body: input,
-          })
-        ).status,
-      ).toBe(404);
-      expect((await send(app, "PATCH", path, { body: input })).status).toBe(204);
-      // Read back through the table definition: a raw `select name` hands back the stored JSON
-      // text, and only the column's own read mapping parses it.
-      const own = await suite.db
-        .select({ name: menuSections.name })
-        .from(menuSections)
-        .where(eq(menuSections.id, sectionId));
-      expect(own).toEqual([input]);
-    } finally {
-      await suite.db.delete(contentLanguages);
-    }
-  });
-});
-
-describe("menu-section list", () => {
-  it("lists empty sections in display order", async () => {
+describe("a menu's structure", () => {
+  it("creates a menu with its top level, and reads what the top level holds", async () => {
     const app = mountApp();
-    const menuId = await createCatalogueVia(app, "Empty sections");
-    await suite.db.insert(menuSections).values([
-      { menuId, name: { es: "Postres" }, displayOrder: 2 },
-      { menuId, name: { es: "Bebidas" }, displayOrder: 1 },
-    ]);
-    const path = `/management-api/catalogues/${menuId}/sections`;
+    const menuId = await createCatalogueVia(app, "Structured menu");
+    const path = `/management-api/catalogues/${menuId}/structure`;
     expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
     expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
-    const response = await send(app, "GET", path);
-    expect(response.status).toBe(200);
-    const rows = (await response.json()) as {
-      id: string;
-      menuId: string;
-      name: Record<string, string>;
-      displayOrder: number;
-      active: boolean;
-    }[];
-    expect(rows.map(({ id, ...row }) => ({ ...row, hasId: typeof id === "string" }))).toEqual([
-      { menuId, name: { es: "Bebidas" }, displayOrder: 1, active: true, hasId: true },
-      { menuId, name: { es: "Postres" }, displayOrder: 2, active: true, hasId: true },
+    const empty = await send(app, "GET", path);
+    expect(empty.status).toBe(200);
+    const { rootSectionId, nodes } = (await empty.json()) as {
+      rootSectionId: string;
+      nodes: unknown[];
+    };
+    expect(nodes).toEqual([]);
+    const [shell] = await suite.db.select().from(menuDetails).where(eq(menuDetails.menuId, menuId));
+    expect(shell).toMatchObject({ menuId, rootSectionId });
+
+    const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
+    const drinks = (await (
+      await send(app, "POST", "/management-api/sections", {
+        body: { internalName: `Drinks ${crypto.randomUUID()}` },
+      })
+    ).json()) as { id: string };
+    const members = `/management-api/sections/${rootSectionId}/members`;
+    const onRoot = await send(app, "POST", members, {
+      body: { ref: { kind: "section", sectionId: drinks.id } },
+    });
+    expect(onRoot.status).toBe(201);
+    const item = await send(app, "POST", `/management-api/catalogues/${menuId}/items`, {
+      body: { productId, grossPrice: null },
+    });
+    expect(item.status).toBe(201);
+    expect(((await (await send(app, "GET", path)).json()) as { nodes: unknown[] }).nodes).toEqual([
+      {
+        memberId: ((await onRoot.json()) as { id: string }).id,
+        ref: { kind: "section", sectionId: drinks.id },
+        children: [],
+      },
+      { memberId: expect.any(String), ref: { kind: "product", productId } },
     ]);
+
     expect(
-      (await send(app, "GET", `/management-api/catalogues/${crypto.randomUUID()}/sections`)).status,
+      (await send(app, "GET", `/management-api/catalogues/${crypto.randomUUID()}/structure`))
+        .status,
     ).toBe(404);
-    expect((await send(app, "GET", "/management-api/catalogues/bad-id/sections")).status).toBe(400);
+    expect((await send(app, "GET", "/management-api/catalogues/bad-id/structure")).status).toBe(
+      400,
+    );
+  });
+
+  it("switches a product back on for a menu after it was switched off there", async () => {
+    const app = mountApp();
+    const menuId = await createCatalogueVia(app, "Switched menu");
+    const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
+    const items = `/management-api/catalogues/${menuId}/items`;
+    const created = await send(app, "POST", items, { body: { productId, grossPrice: "2.00" } });
+    const itemId = ((await created.json()) as { id: string }).id;
+    const offered = async () =>
+      (
+        (await (await send(app, "GET", `/management-api/catalogues/${menuId}/offers`)).json()) as {
+          id: string;
+          grossPrice: string | null;
+          active: boolean;
+        }[]
+      ).map(({ id, grossPrice, active }) => ({ id, grossPrice, active }));
+    expect((await send(app, "DELETE", `${items}/${itemId}`)).status).toBe(204);
+    expect(await offered()).toEqual([{ id: itemId, grossPrice: "2.00", active: false }]);
+    // Still on the menu's top level, so adding it again is refused rather than duplicated.
+    const again = await send(app, "POST", items, { body: { productId, grossPrice: null } });
+    expect(again.status).toBe(409);
+    expect(await again.json()).toMatchObject({ error: { code: "menu_section.member_duplicate" } });
+    const bad = await send(app, "PATCH", `${items}/${itemId}`, { body: { active: "yes" } });
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "active" } },
+    });
+    expect(
+      (await send(app, "PATCH", `${items}/${itemId}`, { body: { active: true } })).status,
+    ).toBe(204);
+    expect(await offered()).toEqual([{ id: itemId, grossPrice: "2.00", active: true }]);
+  });
+
+  it("takes a product off a menu's top level, and then adds it again on the same row", async () => {
+    const app = mountApp();
+    const menuId = await createCatalogueVia(app, "Removed menu");
+    const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
+    const items = `/management-api/catalogues/${menuId}/items`;
+    const created = await send(app, "POST", items, { body: { productId, grossPrice: "2.00" } });
+    const itemId = ((await created.json()) as { id: string }).id;
+    const structure = (await (
+      await send(app, "GET", `/management-api/catalogues/${menuId}/structure`)
+    ).json()) as { rootSectionId: string; nodes: { memberId: string }[] };
+    const offers = `/management-api/catalogues/${menuId}/offers`;
+    // The offer names the membership to take off, so the dashboard need not read the structure.
+    expect(await (await send(app, "GET", offers)).json()).toMatchObject([
+      {
+        id: itemId,
+        topLevelMember: {
+          sectionId: structure.rootSectionId,
+          memberId: structure.nodes[0]!.memberId,
+        },
+      },
+    ]);
+    const member = `/management-api/sections/${structure.rootSectionId}/members/${structure.nodes[0]!.memberId}`;
+    expect((await send(app, "DELETE", member)).status).toBe(204);
+    expect(await (await send(app, "GET", offers)).json()).toEqual([]);
+    const again = await send(app, "POST", items, { body: { productId, grossPrice: null } });
+    expect(again.status).toBe(201);
+    expect(await again.json()).toMatchObject({ id: itemId });
+    expect(await (await send(app, "GET", offers)).json()).toMatchObject([
+      { id: itemId, grossPrice: null, active: true },
+    ]);
   });
 });
 
@@ -3693,14 +3696,10 @@ describe("a negative price is refused at the catalogue request boundary", () => 
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Negative menu catalogue");
     const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
-    const section = await send(app, "POST", `/management-api/catalogues/${catalogueId}/sections`, {
-      body: { name: { es: "Sección" }, displayOrder: 0 },
-    });
-    const sectionId = ((await section.json()) as { id: string }).id;
     const items = `/management-api/catalogues/${catalogueId}/items`;
 
     const badCreate = await send(app, "POST", items, {
-      body: { productId, sectionId, grossPrice: "-1.00", displayOrder: 0 },
+      body: { productId, grossPrice: "-1.00" },
     });
     expect(badCreate.status).toBe(400);
     expect(await badCreate.json()).toMatchObject({
@@ -3709,7 +3708,7 @@ describe("a negative price is refused at the catalogue request boundary", () => 
 
     // The zero control, which also supplies the item the patch below acts on.
     const good = await send(app, "POST", items, {
-      body: { productId, sectionId, grossPrice: "0.00", displayOrder: 0 },
+      body: { productId, grossPrice: "0.00" },
     });
     expect(good.status).toBe(201);
     const itemId = ((await good.json()) as { id: string }).id;
@@ -3731,10 +3730,6 @@ describe("a negative price is refused at the catalogue request boundary", () => 
     const catalogueId = await createCatalogueVia(app, "Blank menu price catalogue");
     // The product's own price is 1.00, so a blank menu price must charge exactly that.
     const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
-    const section = await send(app, "POST", `/management-api/catalogues/${catalogueId}/sections`, {
-      body: { name: { es: "Sección" }, displayOrder: 0 },
-    });
-    const sectionId = ((await section.json()) as { id: string }).id;
     const items = `/management-api/catalogues/${catalogueId}/items`;
     const offer = async () =>
       (
@@ -3744,7 +3739,7 @@ describe("a negative price is refused at the catalogue request boundary", () => 
       )[0]!;
 
     const created = await send(app, "POST", items, {
-      body: { productId, sectionId, grossPrice: null, displayOrder: 0 },
+      body: { productId, grossPrice: null },
     });
     expect(created.status).toBe(201);
     expect(await created.json()).toMatchObject({ grossPrice: null });
@@ -3769,7 +3764,7 @@ describe("a negative price is refused at the catalogue request boundary", () => 
       error: { code: "management.request_invalid", params: { field: "grossPrice" } },
     });
     const wrongCreate = await send(app, "POST", items, {
-      body: { productId, sectionId, grossPrice: 2.5, displayOrder: 0 },
+      body: { productId, grossPrice: 2.5 },
     });
     expect(wrongCreate.status).toBe(400);
     expect(await wrongCreate.json()).toMatchObject({
@@ -3781,7 +3776,7 @@ describe("a negative price is refused at the catalogue request boundary", () => 
     // no offer. A product not yet on the menu, so nothing but the missing field can refuse it.
     const otherProductId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
     const absentCreate = await send(app, "POST", items, {
-      body: { productId: otherProductId, sectionId, displayOrder: 1 },
+      body: { productId: otherProductId },
     });
     expect(absentCreate.status).toBe(400);
     expect(await absentCreate.json()).toMatchObject({
@@ -3896,17 +3891,10 @@ describe("catalogue routes that already refused a negative price", () => {
       error: { code: "product.invalid", params: { field: "unitPrice" } },
     });
 
-    const sectionId = (
-      (await (
-        await send(app, "POST", `/management-api/catalogues/${catalogueId}/sections`, {
-          body: { name: { es: "Sección" }, displayOrder: 0 },
-        })
-      ).json()) as { id: string }
-    ).id;
     const itemId = (
       (await (
         await send(app, "POST", `/management-api/catalogues/${catalogueId}/items`, {
-          body: { productId: saved.id, sectionId, grossPrice: "1.00", displayOrder: 0 },
+          body: { productId: saved.id, grossPrice: "1.00" },
         })
       ).json()) as { id: string }
     ).id;
@@ -3999,13 +3987,14 @@ describe("mountCatalogueApi — sections", () => {
       201,
     );
   }
-  /** A menu's own list, written directly: no route creates one. */
+  /** The top-level list the menu was created with. */
   async function menuRoot(menuId: string): Promise<string> {
-    const id = crypto.randomUUID();
-    await suite.db.execute(sql`
-      insert into sections (id, internal_name, names, role, owner_menu_id)
-      values (${id}, 'Root', '{}', 'menu_root', ${menuId})`);
-    return id;
+    const structure = await send(
+      mountApp(),
+      "GET",
+      `/management-api/catalogues/${menuId}/structure`,
+    );
+    return ((await structure.json()) as { rootSectionId: string }).rootSectionId;
   }
   const product = (productId: string) => ({ kind: "product", productId });
   const section = (sectionId: string) => ({ kind: "section", sectionId });

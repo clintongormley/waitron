@@ -32,6 +32,8 @@ const CATALOGUE_FILES = [
   "packages/catalogue/src/section-graph.ts",
   "packages/catalogue/src/section-structure.ts",
   "packages/catalogue/src/sections.ts",
+  "packages/catalogue/src/menu-structure.ts",
+  "packages/catalogue/src/schema/menu.ts",
   "packages/catalogue/src/options.ts",
   "packages/catalogue/src/extras.ts",
   "packages/catalogue/src/labels.ts",

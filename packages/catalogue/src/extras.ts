@@ -3,6 +3,7 @@ import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, stringToCents } from "@waitron/shared";
 import { menuItems } from "./schema/menu.js";
+import { reachableMenuItem } from "./menu-structure.js";
 import {
   extraListItems,
   extraLists,
@@ -408,10 +409,7 @@ export async function setMenuItemExtraLists(
   lists: unknown,
 ): Promise<void> {
   const offerId = menuItemId.toLowerCase();
-  const [offer] = await tx
-    .select({ id: menuItems.id, productId: menuItems.productId })
-    .from(menuItems)
-    .where(eq(menuItems.id, offerId));
+  const offer = await reachableMenuItem(tx, offerId);
   if (offer === undefined) throw new AppError("menu_item.not_found", { menuItemId });
   const publications = parseMenuExtraPublications(lists);
   await assertPublishedListsExist(tx, publications);

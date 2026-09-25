@@ -4,6 +4,7 @@ import type { ModuleProvisioning } from "@waitron/module";
 import { COUNTRY_PACKS, resolveInstalledCountryLocale } from "@waitron/country-packs";
 import { contentLanguageCode, FALLBACK_LOCALE } from "@waitron/shared";
 import { contentLanguages } from "./schema/menu.js";
+import { createMenuShell } from "./menu-structure.js";
 import { unitSeedStates, units } from "./schema/units.js";
 
 const geographicLocales = [
@@ -123,8 +124,9 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         const [created] = await tx
           .insert(catalogues)
           .values({ name: "Menu" })
-          .returning({ id: catalogues.id });
+          .returning({ id: catalogues.id, name: catalogues.name });
         catalogueId = created!.id;
+        await createMenuShell(tx, catalogueId, created!.name);
         await tx.execute(sql`
           update locations set catalogue_id = ${catalogueId}
           where id = ${node.locationId}`);

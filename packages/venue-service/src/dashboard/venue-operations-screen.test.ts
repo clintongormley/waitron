@@ -98,18 +98,18 @@ const model: VenueServiceView = {
       ],
     },
   ],
-  sections: [],
   offers: [
     {
       id: "i1",
       menuId: "m1",
       productId: "p1",
-      sectionId: "sec1",
-      sectionName: { en: "Cocktails" },
       name: "Negroni",
       customerName: { en: "House Aperitivo" },
       grossPrice: "11.00",
       unitPrice: "11.00",
+      active: true,
+      placements: [[]],
+      topLevelMember: { sectionId: "root-m1", memberId: "member-p1" },
       variants: [
         {
           id: "v1",
@@ -322,8 +322,7 @@ describe("venue operations screen", () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),
       createMenu: vi.fn().mockResolvedValue({ id: "m3" }),
-      createMenuSection: vi.fn().mockResolvedValue({ id: "sec2" }),
-      createMenuItem: vi.fn().mockResolvedValue({ id: "i2" }),
+      addProductToMenu: vi.fn().mockResolvedValue({ id: "i2" }),
       setMenuVariants: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
@@ -333,84 +332,16 @@ describe("venue operations screen", () => {
     await action(el, "save-editor");
     expect(api.createMenu).toHaveBeenCalledWith("Upstairs cocktails");
     await action(el, "new-offer-m2");
-    field(el, "offer-section-m2").value = "Cocktails";
     field(el, "offer-price-m2").value = "9.00";
     await action(el, "save-editor");
-    expect(api.createMenuSection).toHaveBeenCalledWith("m2", {
-      name: { en: "Cocktails" },
-      displayOrder: 0,
-    });
-    expect(api.createMenuItem).toHaveBeenCalledWith("m2", {
+    expect(api.addProductToMenu).toHaveBeenCalledWith("m2", {
       productId: "p1",
-      sectionId: "sec2",
       grossPrice: "9.00",
-      displayOrder: 0,
     });
     // A new offer overrides nothing: every variant follows the product onto the menu.
     expect(api.setMenuVariants).toHaveBeenCalledWith("m2", "i2", [
       { variantId: "v1", price: null, offered: true },
     ]);
-  });
-
-  it("requires the configured default for a new section and allows optional translations", async () => {
-    setContentLanguages({ defaultLanguage: "fr", languages: ["fr", "de"] });
-    const api = {
-      load: vi.fn().mockResolvedValue(model),
-      createMenuSection: vi.fn().mockResolvedValue({ id: "sec2" }),
-      createMenuItem: vi.fn().mockResolvedValue({ id: "i2" }),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "menus");
-    await action(el, "new-offer-m2");
-    expect(field(el, "offer-section-m2").hasAttribute("required")).toBe(true);
-    expect(field(el, "offer-section-m2-de").hasAttribute("required")).toBe(false);
-    field(el, "offer-section-m2-de").value = "Getränke";
-    field(el, "offer-price-m2").value = "9.00";
-    await action(el, "save-editor");
-    expect(api.createMenuSection).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector('[data-field-error="offer-section-m2"]')).not.toBeNull();
-    field(el, "offer-section-m2").value = "Boissons";
-    await action(el, "save-editor");
-    expect(api.createMenuSection).toHaveBeenCalledWith("m2", {
-      name: { fr: "Boissons", de: "Getränke" },
-      displayOrder: 0,
-    });
-  });
-
-  // Section names are still a language map, so they are what these two cases exercise. A product's
-  // name is not: it is the one plain staff string, shown unchanged whatever the content languages are.
-  it("uses the configured fallback and repaints when content languages change", async () => {
-    setContentLanguages({ defaultLanguage: "fr", languages: ["fr", "de"] });
-    const api = {
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        offers: [{ ...model.offers[0], sectionName: { de: "Wasser", fr: "Eau" } }],
-      }),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "menus");
-    expect(tableText(el, "menu-offers-m1")).toContain("Eau");
-    await action(el, "new-offer-m2");
-    field(el, "offer-section-m2").value = "Draft";
-    setContentLanguages({ defaultLanguage: "de", languages: ["de", "fr"] });
-    await el.updateComplete;
-    expect(tableText(el, "menu-offers-m1")).toContain("Wasser");
-    expect(field(el, "offer-section-m2").value).toBe("Draft");
-    expect(field(el, "offer-section-m2").closest("label")!.textContent).toContain("French");
-  });
-
-  it("ignores a retained translation in a disabled interface language", async () => {
-    setContentLanguages({ defaultLanguage: "fr", languages: ["fr"] });
-    const api = {
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        offers: [{ ...model.offers[0], sectionName: { en: "Water", fr: "Eau" } }],
-      }),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "menus");
-    expect(tableText(el, "menu-offers-m1")).toContain("Eau");
-    expect(tableText(el, "menu-offers-m1")).not.toContain("Water");
   });
 
   it("shows the staff name, never the customer-facing one, on every product surface", async () => {
@@ -431,193 +362,6 @@ describe("venue operations screen", () => {
     await action(el, "new-route");
     expect(field(el, "route-subject").textContent).toContain("Negroni");
     expect(field(el, "route-subject").textContent).not.toContain("House Aperitivo");
-  });
-
-  it("reuses the default-language section name even when the interface displays another translation", async () => {
-    setContentLanguages({ defaultLanguage: "fr", languages: ["fr", "en"] });
-    const sectionModel: VenueServiceView = {
-      ...model,
-      products: [
-        ...model.products,
-        {
-          id: "p2",
-          name: "Olives",
-          customerName: { en: "Manzanilla Olives" },
-          pricingUnit: "each",
-          unitPrice: "3.00",
-          active: true,
-        },
-      ],
-      offers: [
-        ...model.offers,
-        {
-          id: "i2",
-          menuId: "m2",
-          productId: "p2",
-          sectionId: "sec2",
-          sectionName: { en: "Snacks", fr: "Collations" },
-          name: "Olives",
-          customerName: { en: "Manzanilla Olives" },
-          grossPrice: "4.00",
-          unitPrice: "4.00",
-        },
-      ],
-    };
-    const api = {
-      load: vi.fn().mockResolvedValue(sectionModel),
-      createMenuSection: vi.fn(),
-      createMenuItem: vi.fn().mockResolvedValue({ id: "i3" }),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "menus");
-    await action(el, "new-offer-m2");
-    field(el, "offer-section-m2").value = "Collations";
-    field(el, "offer-price-m2").value = "5.00";
-    await action(el, "save-editor");
-    expect(api.createMenuSection).not.toHaveBeenCalled();
-    expect(api.createMenuItem).toHaveBeenCalledWith("m2", {
-      productId: "p1",
-      sectionId: "sec2",
-      grossPrice: "5.00",
-      displayOrder: 0,
-    });
-  });
-
-  it("lists and edits a section with no offers so its translations can be completed", async () => {
-    setContentLanguages({ defaultLanguage: "en", languages: ["en", "fr"] });
-    const api = {
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        offers: [],
-        sections: [
-          {
-            id: "empty",
-            menuId: "m1",
-            name: { en: "Desserts", de: "Nachspeisen" },
-            displayOrder: 0,
-            active: true,
-          },
-        ],
-      }),
-      updateMenuSection: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "menus");
-    await action(el, "sections-m1");
-    expect(tableText(el, "menu-sections-m1")).toContain("Desserts");
-    await action(el, "edit-section-empty");
-    expect(field(el, "section-name-en").value).toBe("Desserts");
-    field(el, "section-name-en").value = "";
-    field(el, "section-name-fr").value = "Desserts français";
-    await action(el, "save-editor");
-    expect(api.updateMenuSection).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector('[data-field-error="section-name-en"]')).not.toBeNull();
-    field(el, "section-name-en").value = "Desserts";
-    await action(el, "save-editor");
-    expect(api.updateMenuSection).toHaveBeenCalledWith("empty", {
-      name: { en: "Desserts", de: "Nachspeisen", fr: "Desserts français" },
-    });
-  });
-
-  it("edits section translations, requires the default, and preserves disabled translations", async () => {
-    setContentLanguages({ defaultLanguage: "en", languages: ["en", "fr"] });
-    const api = {
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        offers: [{ ...model.offers[0], sectionName: { en: "Cocktails", de: "Getränke" } }],
-      }),
-      updateMenuSection: vi.fn().mockResolvedValue(undefined),
-      updateMenuItem: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "menus");
-    await action(el, "edit-offer-i1");
-    expect(field(el, "offer-section-m1").value).toBe("Cocktails");
-    expect(el.shadowRoot!.querySelector('[name="offer-section-m1-de"]')).toBeNull();
-    field(el, "offer-section-m1").value = "";
-    field(el, "offer-section-m1-fr").value = "Boissons";
-    await action(el, "save-editor");
-    expect(api.updateMenuSection).not.toHaveBeenCalled();
-    expect(api.updateMenuItem).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector('[data-field-error="offer-section-m1"]')).not.toBeNull();
-    field(el, "offer-section-m1").value = "Drinks";
-    await action(el, "save-editor");
-    expect(api.updateMenuSection).toHaveBeenCalledWith("sec1", {
-      name: { en: "Drinks", de: "Getränke", fr: "Boissons" },
-    });
-    expect(api.updateMenuItem).toHaveBeenCalledWith("m1", "i1", { grossPrice: "11.00" });
-  });
-
-  it("clears an enabled optional section translation and retains the draft after a failed save", async () => {
-    setContentLanguages({ defaultLanguage: "en", languages: ["en", "fr"] });
-    const api = {
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        offers: [
-          {
-            ...model.offers[0],
-            sectionName: { en: "Cocktails", fr: "Boissons", de: "Getränke" },
-          },
-        ],
-      }),
-      updateMenuSection: vi.fn().mockRejectedValue(new Error("write failed")),
-      updateMenuItem: vi.fn(),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "menus");
-    await action(el, "edit-offer-i1");
-    field(el, "offer-section-m1-fr").value = "";
-    await action(el, "save-editor");
-    expect(api.updateMenuSection).toHaveBeenCalledWith("sec1", {
-      name: { en: "Cocktails", de: "Getränke" },
-    });
-    expect(api.updateMenuItem).not.toHaveBeenCalled();
-    expect(field(el, "offer-section-m1-fr").value).toBe("");
-    expect(summary(el)).toContain("could not be saved");
-  });
-
-  it("persists new translations when reusing a section for another product", async () => {
-    setContentLanguages({ defaultLanguage: "en", languages: ["en", "fr"] });
-    const api = {
-      load: vi.fn().mockResolvedValue({
-        ...model,
-        products: [
-          ...model.products,
-          {
-            id: "p2",
-            name: "Olives",
-            customerName: { en: "Manzanilla Olives" },
-            pricingUnit: "each",
-            active: true,
-          },
-        ],
-        offers: [{ ...model.offers[0], sectionName: { en: "Cocktails", de: "Getränke" } }],
-      }),
-      updateMenuSection: vi.fn().mockResolvedValue(undefined),
-      createMenuSection: vi.fn(),
-      createMenuItem: vi.fn().mockResolvedValue({ id: "i2" }),
-      setMenuVariants: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "menus");
-    await action(el, "new-offer-m1");
-    field(el, "offer-section-m1").value = "Cocktails";
-    field(el, "offer-section-m1-fr").value = "Boissons";
-    field(el, "offer-price-m1").value = "5.00";
-    await action(el, "save-editor");
-    expect(api.createMenuSection).not.toHaveBeenCalled();
-    expect(api.updateMenuSection).toHaveBeenCalledWith("sec1", {
-      name: { en: "Cocktails", de: "Getränke", fr: "Boissons" },
-    });
-    expect(api.createMenuItem).toHaveBeenCalledWith("m1", {
-      productId: "p2",
-      sectionId: "sec1",
-      grossPrice: "5.00",
-      displayOrder: 0,
-    });
-    // Olives has no variants of its own, so the menu overrides nothing — least of all for the
-    // Negroni variant the same model carries.
-    expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i2", []);
   });
 
   // Two products whose staff name, customer-facing name and variant set all differ, so an assertion
@@ -676,12 +420,13 @@ describe("venue operations screen", () => {
         id: "i-bravas",
         menuId: "m1",
         productId: "p-bravas",
-        sectionId: "sec1",
-        sectionName: { en: "Tapas" },
         name: "Bravas",
         customerName: { en: "Patatas bravas" },
         grossPrice: "5.00",
         unitPrice: "5.00",
+        active: true,
+        placements: [[]],
+        topLevelMember: { sectionId: "root-m1", memberId: "member-bravas" },
         variants: [],
       },
     ],
@@ -690,8 +435,7 @@ describe("venue operations screen", () => {
   it("offers every variant of the product a new offer is saved for, dropdown untouched", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(twoProductModel),
-      createMenuSection: vi.fn().mockResolvedValue({ id: "sec2" }),
-      createMenuItem: vi.fn().mockResolvedValue({ id: "i-lentils" }),
+      addProductToMenu: vi.fn().mockResolvedValue({ id: "i-lentils" }),
       setMenuVariants: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
@@ -706,14 +450,11 @@ describe("venue operations screen", () => {
     expect((field(el, "offer-variant-offered-v-bowl") as HTMLInputElement).checked).toBe(true);
     expect(el.shadowRoot!.querySelector('[name="offer-variant-price-v-half"]')).toBeNull();
     expect(el.shadowRoot!.querySelector('[name="offer-variant-price-v-full"]')).toBeNull();
-    field(el, "offer-section-m1").value = "Guisos";
     field(el, "offer-price-m1").value = "8.00";
     await action(el, "save-editor");
-    expect(api.createMenuItem).toHaveBeenCalledWith("m1", {
+    expect(api.addProductToMenu).toHaveBeenCalledWith("m1", {
       productId: "p-lentils",
-      sectionId: "sec2",
       grossPrice: "8.00",
-      displayOrder: 0,
     });
     expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i-lentils", [
       { variantId: "v-bowl", price: null, offered: true },
@@ -723,8 +464,7 @@ describe("venue operations screen", () => {
   it("creates an offer with no menu price, hinting the picked product's own price", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(twoProductModel),
-      createMenuSection: vi.fn().mockResolvedValue({ id: "sec3" }),
-      createMenuItem: vi.fn().mockResolvedValue({ id: "i-new" }),
+      addProductToMenu: vi.fn().mockResolvedValue({ id: "i-new" }),
       setMenuVariants: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
@@ -737,21 +477,17 @@ describe("venue operations screen", () => {
     select.dispatchEvent(new Event("change"));
     await settle(el);
     expect(input(el, "offer-price-m2").placeholder).toBe("6.00");
-    field(el, "offer-section-m2").value = "Guisos";
     await action(el, "save-editor");
-    expect(api.createMenuItem).toHaveBeenCalledWith("m2", {
+    expect(api.addProductToMenu).toHaveBeenCalledWith("m2", {
       productId: "p-lentils",
-      sectionId: "sec3",
       grossPrice: null,
-      displayOrder: 0,
     });
   });
 
   it("follows the dropdown to the picked product's variants", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(twoProductModel),
-      createMenuSection: vi.fn().mockResolvedValue({ id: "sec3" }),
-      createMenuItem: vi.fn().mockResolvedValue({ id: "i-new" }),
+      addProductToMenu: vi.fn().mockResolvedValue({ id: "i-new" }),
       setMenuVariants: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
@@ -765,14 +501,11 @@ describe("venue operations screen", () => {
     await settle(el);
     expect(input(el, "offer-variant-price-v-bowl").placeholder).toBe("6.50");
     expect(el.shadowRoot!.querySelector('[name="offer-variant-price-v-half"]')).toBeNull();
-    field(el, "offer-section-m2").value = "Guisos";
     field(el, "offer-price-m2").value = "8.00";
     await action(el, "save-editor");
-    expect(api.createMenuItem).toHaveBeenCalledWith("m2", {
+    expect(api.addProductToMenu).toHaveBeenCalledWith("m2", {
       productId: "p-lentils",
-      sectionId: "sec3",
       grossPrice: "8.00",
-      displayOrder: 0,
     });
     expect(api.setMenuVariants).toHaveBeenCalledWith("m2", "i-new", [
       { variantId: "v-bowl", price: null, offered: true },
@@ -782,8 +515,7 @@ describe("venue operations screen", () => {
   it("shows a refused variant override on the form, not only in the console", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(twoProductModel),
-      createMenuSection: vi.fn().mockResolvedValue({ id: "sec2" }),
-      createMenuItem: vi.fn().mockResolvedValue({ id: "i-lentils" }),
+      addProductToMenu: vi.fn().mockResolvedValue({ id: "i-lentils" }),
       setMenuVariants: vi
         .fn()
         .mockRejectedValue({ code: "product.variant_not_found", status: 400 }),
@@ -791,7 +523,6 @@ describe("venue operations screen", () => {
     const el = await mount(api);
     await selectTab(el, "menus");
     await action(el, "new-offer-m1");
-    field(el, "offer-section-m1").value = "Guisos";
     field(el, "offer-price-m1").value = "8.00";
     await action(el, "save-editor");
     expect(api.setMenuVariants).toHaveBeenCalledTimes(1);
@@ -805,8 +536,7 @@ describe("venue operations screen", () => {
         ...twoProductModel,
         products: [twoProductModel.products[0]!],
       }),
-      createMenuSection: vi.fn(),
-      createMenuItem: vi.fn(),
+      addProductToMenu: vi.fn(),
       setMenuVariants: vi.fn(),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
@@ -814,10 +544,9 @@ describe("venue operations screen", () => {
     await action(el, "new-offer-m1");
     expect(field(el, "offer-product-m1").value).toBe("");
     expect(el.shadowRoot!.querySelector('[name="offer-variant-price-v-half"]')).toBeNull();
-    field(el, "offer-section-m1").value = "Guisos";
     field(el, "offer-price-m1").value = "8.00";
     await action(el, "save-editor");
-    expect(api.createMenuItem).not.toHaveBeenCalled();
+    expect(api.addProductToMenu).not.toHaveBeenCalled();
     expect(api.setMenuVariants).not.toHaveBeenCalled();
     expect(summary(el)).toContain("Product");
     expect(el.shadowRoot!.querySelector('[data-field-error="offer-product-m1"]')).not.toBeNull();
@@ -980,12 +709,12 @@ describe("venue operations screen", () => {
     ).not.toBeNull();
   });
 
-  it("edits and removes an offer from the shared data table", async () => {
+  it("edits an offer and removes it from the menu's top level", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),
       updateMenuItem: vi.fn().mockResolvedValue(undefined),
       setMenuVariants: vi.fn().mockResolvedValue(undefined),
-      deactivateMenuItem: vi.fn().mockResolvedValue(undefined),
+      removeMenuMember: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "menus");
@@ -1002,10 +731,195 @@ describe("venue operations screen", () => {
       { variantId: "v1", price: "16.50", offered: true },
     ]);
     expect(api.updateMenuItem).toHaveBeenCalledWith("m1", "i1", { grossPrice: "12.50" });
+    expect(find(el, '[data-test="switch-offer-i1"]')).toBeNull();
     await action(el, "remove-offer-i1");
-    expect(api.deactivateMenuItem).not.toHaveBeenCalled();
+    expect(api.removeMenuMember).not.toHaveBeenCalled();
+    // Only the top level holds it, so taking it off clears what this menu set for it.
+    expect(modal(el)!.textContent).toContain("Its menu price and variant settings are cleared.");
     await action(el, "save-editor");
-    expect(api.deactivateMenuItem).toHaveBeenCalledWith("m1", "i1");
+    expect(api.removeMenuMember).toHaveBeenCalledWith("root-m1", "member-p1");
+    expect(api.updateMenuItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("adds a product again after it was removed from the menu's top level", async () => {
+    const removed: VenueServiceView = { ...model, offers: [] };
+    const api = {
+      load: vi.fn().mockResolvedValueOnce(model).mockResolvedValue(removed),
+      removeMenuMember: vi.fn().mockResolvedValue(undefined),
+      addProductToMenu: vi.fn().mockResolvedValue({ id: "i1" }),
+      setMenuVariants: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "remove-offer-i1");
+    await action(el, "save-editor");
+    expect(api.removeMenuMember).toHaveBeenCalledWith("root-m1", "member-p1");
+    await settle(el);
+    expect(table(el, "menu-offers-m1").shadowRoot!.textContent).not.toContain("Negroni");
+    expect(table(el, "menu-offers-m1").shadowRoot!.textContent).toContain("No entries yet.");
+    await action(el, "new-offer-m1");
+    expect(field(el, "offer-product-m1").value).toBe("p1");
+    await action(el, "save-editor");
+    expect(api.addProductToMenu).toHaveBeenCalledWith("m1", { productId: "p1", grossPrice: null });
+    expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i1", [
+      { variantId: "v1", price: null, offered: true },
+    ]);
+    expect(modal(el)).toBeNull();
+  });
+
+  // Negroni sits on the top level AND in Cocktails; Olives only in Cocktails, switched off here.
+  const nestedModel: VenueServiceView = {
+    ...model,
+    products: [
+      ...model.products,
+      {
+        id: "p2",
+        name: "Olives",
+        customerName: { en: "Manzanilla Olives" },
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        active: true,
+      },
+    ],
+    offers: [
+      { ...model.offers[0]!, placements: [[], ["sec-cocktails"]] },
+      {
+        id: "i2",
+        menuId: "m1",
+        productId: "p2",
+        name: "Olives",
+        customerName: { en: "Manzanilla Olives" },
+        grossPrice: null,
+        unitPrice: "3.00",
+        active: false,
+        placements: [["sec-cocktails"]],
+        topLevelMember: null,
+        variants: [],
+      },
+    ],
+  };
+
+  it("says where each product sits, and whether it is switched off on this menu", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(nestedModel),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "menus");
+    const rows = [...table(el, "menu-offers-m1").shadowRoot!.querySelectorAll("tbody tr")].map(
+      (row) => [...row.querySelectorAll("td")].map((cell) => cell.textContent!.trim()),
+    );
+    expect(rows.map((cells) => cells.slice(0, 1).concat(cells.slice(2, 4)))).toEqual([
+      ["Negroni", "Top level and in a section", "On"],
+      ["Olives", "In a section", "Switched off"],
+    ]);
+  });
+
+  it("switches a product reached through a section off and on, and never removes it", async () => {
+    const on: VenueServiceView = {
+      ...nestedModel,
+      offers: [nestedModel.offers[0]!, { ...nestedModel.offers[1]!, active: true }],
+    };
+    const api = {
+      load: vi.fn().mockResolvedValueOnce(on).mockResolvedValue(nestedModel),
+      updateMenuItem: vi.fn().mockResolvedValue(undefined),
+      removeMenuMember: vi.fn(),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    expect(find(el, '[data-test="remove-offer-i2"]')).toBeNull();
+    expect(find(el, '[data-test="switch-offer-i2"]')!.textContent).toContain(
+      "Switch off on this menu",
+    );
+    await action(el, "switch-offer-i2");
+    expect(api.updateMenuItem).toHaveBeenCalledWith("m1", "i2", { active: false });
+    await settle(el);
+    expect(find(el, '[data-test="switch-offer-i2"]')!.textContent).toContain(
+      "Switch back on for this menu",
+    );
+    await action(el, "switch-offer-i2");
+    expect(api.updateMenuItem).toHaveBeenLastCalledWith("m1", "i2", { active: true });
+    expect(api.removeMenuMember).not.toHaveBeenCalled();
+  });
+
+  // A real click lets the screen re-render between its own click handler and the menu's: the
+  // save it starts disables every action, which the menu must not read as a disabled click.
+  it.each([
+    ["menus", "switch-offer-i2"],
+    ["zones", "default-assignment-m2"],
+  ])("closes the row menu when a %s action saves straight away", async (tab, key) => {
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...nestedModel,
+        zoneMenus: [
+          ...model.zoneMenus,
+          { zoneId: "z1", menuId: "m2", displayOrder: 1, isDefault: false },
+        ],
+      }),
+      // Still in flight, as a real request is while the menu decides whether to close.
+      updateMenuItem: vi.fn(() => new Promise(() => {})),
+      allowMenu: vi.fn(() => new Promise(() => {})),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, tab);
+    if (tab === "zones") await action(el, "zone-menus-z1");
+    const button = find(el, `[data-test="${key}"]`)!;
+    const menu = button.closest("wt-row-actions")!;
+    const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    expect(popup.matches(":popover-open")).toBe(true);
+    await userEvent.click(button);
+    await settle(el);
+    expect(
+      vi.mocked(api.updateMenuItem).mock.calls.length + vi.mocked(api.allowMenu).mock.calls.length,
+    ).toBe(1);
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
+  it("says a product removed from the top level stays on the menu through its section", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue(nestedModel),
+      removeMenuMember: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "remove-offer-i1");
+    expect(modal(el)!.textContent).toContain("It stays on this menu through its section.");
+    expect(modal(el)!.textContent).not.toContain("cleared");
+    await action(el, "save-editor");
+    expect(api.removeMenuMember).toHaveBeenCalledWith("root-m1", "member-p1");
+  });
+
+  it("adds a product with no variants without carrying another product's variants", async () => {
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        products: [
+          ...model.products,
+          {
+            id: "p2",
+            name: "Olives",
+            customerName: { en: "Manzanilla Olives" },
+            pricingUnit: "each",
+            unitPrice: "3.00",
+            active: true,
+          },
+        ],
+      }),
+      addProductToMenu: vi.fn().mockResolvedValue({ id: "i2" }),
+      setMenuVariants: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "menus");
+    await action(el, "new-offer-m1");
+    expect(field(el, "offer-product-m1").value).toBe("p2");
+    field(el, "offer-price-m1").value = "5.00";
+    await action(el, "save-editor");
+    expect(api.addProductToMenu).toHaveBeenCalledWith("m1", {
+      productId: "p2",
+      grossPrice: "5.00",
+    });
+    // Olives has no variants of its own, so the menu overrides nothing — least of all for the
+    // Negroni variant the same model carries.
+    expect(api.setMenuVariants).toHaveBeenCalledWith("m1", "i2", []);
   });
 
   it("routes a product exception for one zone", async () => {
@@ -1505,7 +1419,7 @@ describe("the menu offers list's price cell", () => {
     offers.shadowRoot!.querySelector<HTMLButtonElement>('[data-sort="price"]')!.click();
     await offers.updateComplete;
     const names = [...offers.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
-      row.querySelectorAll("td")[1]!.textContent!.trim(),
+      row.querySelectorAll("td")[0]!.textContent!.trim(),
     );
     // Charged 9.00 against 11.00; by the struck-out prices (20.00 against 10.00) it would reverse.
     expect(names).toEqual(["Spritz", "Negroni"]);
@@ -1531,10 +1445,9 @@ function modal(el: VenueOperationsScreen) {
 
 describe("the venue lists", () => {
   // Every sort below starts from an order other than its result, so a column that stopped sorting
-  // would leave the rows where they were. The offers' products and sections sort in OPPOSITE
-  // orders, so the product column sorting by section, or the section column by product, fails.
-  // Department, zone and section ids sort against their names, so a column sorting by id fails
-  // too; menu ids happen to sort WITH their names, so the menus sort does not catch that.
+  // would leave the rows where they were. Department and zone ids sort against their names, so a
+  // column sorting by id fails too; menu ids happen to sort WITH their names, so the menus sort
+  // does not catch that.
   const unsorted: VenueServiceView = {
     ...model,
     menus: [
@@ -1546,8 +1459,6 @@ describe("the venue lists", () => {
         ...model.offers[0]!,
         id: "i1",
         menuId: "m2",
-        sectionId: "sec-z",
-        sectionName: { en: "Cocktails" },
       },
       {
         ...model.offers[0]!,
@@ -1555,13 +1466,7 @@ describe("the venue lists", () => {
         menuId: "m2",
         productId: "p2",
         name: "Bravas",
-        sectionId: "sec-a",
-        sectionName: { en: "Tapas" },
       },
-    ],
-    sections: [
-      { id: "sec-a", menuId: "m2", name: { en: "Tapas" }, displayOrder: 0, active: true },
-      { id: "sec-z", menuId: "m2", name: { en: "Cocktails" }, displayOrder: 1, active: true },
     ],
   };
 
@@ -1578,15 +1483,9 @@ describe("the venue lists", () => {
     expect(column(el, "menus", 0)).toEqual(["Deli takeaway", "Casa Delgado"]);
     await sortBy(el, "menus", "name");
     expect(column(el, "menus", 0)).toEqual(["Casa Delgado", "Deli takeaway"]);
-    expect(column(el, "menu-offers-m2", 1)).toEqual(["Negroni", "Bravas"]);
+    expect(column(el, "menu-offers-m2", 0)).toEqual(["Negroni", "Bravas"]);
     await sortBy(el, "menu-offers-m2", "product");
-    expect(column(el, "menu-offers-m2", 1)).toEqual(["Bravas", "Negroni"]);
-    expect(column(el, "menu-offers-m2", 0)).toEqual(["Tapas", "Cocktails"]);
-    await sortBy(el, "menu-offers-m2", "section");
-    expect(column(el, "menu-offers-m2", 0)).toEqual(["Cocktails", "Tapas"]);
-    expect(column(el, "menu-sections-m2", 0)).toEqual(["Tapas", "Cocktails"]);
-    await sortBy(el, "menu-sections-m2", "name");
-    expect(column(el, "menu-sections-m2", 0)).toEqual(["Cocktails", "Tapas"]);
+    expect(column(el, "menu-offers-m2", 0)).toEqual(["Bravas", "Negroni"]);
 
     await selectTab(el, "zones");
     expect(column(el, "zones", 0)).toEqual(["Dining room", "Deli counter"]);
@@ -1794,32 +1693,6 @@ describe("the venue editors refuse an incomplete form", () => {
     expect(fieldError(el, "route-target")).toBeUndefined();
     expect(api.createRoute).not.toHaveBeenCalled();
   });
-});
-
-it("drops a section translation cleared in the editor", async () => {
-  setContentLanguages({ defaultLanguage: "en", languages: ["en", "fr"] });
-  const api = {
-    load: vi.fn().mockResolvedValue({
-      ...model,
-      sections: [
-        {
-          id: "sec-d",
-          menuId: "m1",
-          name: { en: "Desserts", fr: "Desserts maison" },
-          displayOrder: 0,
-          active: true,
-        },
-      ],
-    }),
-    updateMenuSection: vi.fn().mockResolvedValue(undefined),
-  } as unknown as VenueServiceApi;
-  const el = await mount(api);
-  await selectTab(el, "menus");
-  await action(el, "edit-section-sec-d");
-  expect(field(el, "section-name-fr").value).toBe("Desserts maison");
-  field(el, "section-name-fr").value = "  ";
-  await action(el, "save-editor");
-  expect(api.updateMenuSection).toHaveBeenCalledWith("sec-d", { name: { en: "Desserts" } });
 });
 
 it("opens a product route that needs no preparation on that product and on no station", async () => {

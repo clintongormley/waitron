@@ -3,7 +3,7 @@ import { now, products, type Transaction } from "@waitron/db";
 import { AppError, decimal, decimalToCents, toScale } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { validateContentTranslations } from "./content-languages.js";
-import { menuItems } from "./schema/menu.js";
+import { reachableMenuItem } from "./menu-structure.js";
 import { extraListItems, extraLists } from "./schema/extras.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { isProductPrice } from "./modifier-limits.js";
@@ -233,21 +233,14 @@ export async function setProductVariants(
   return listProductVariants(tx, productId);
 }
 
-/** The offer's product, checked to be on `menuId` when one is given. */
+/** The offer's product, checked to be on `menuId` when one is given, and to be reached by its
+ * menu's structure. */
 async function offerProduct(
   tx: Transaction,
   menuItemId: string,
   menuId: string | undefined,
 ): Promise<string> {
-  const [offer] = await tx
-    .select({ productId: menuItems.productId })
-    .from(menuItems)
-    .where(
-      and(
-        eq(menuItems.id, menuItemId),
-        ...(menuId === undefined ? [] : [eq(menuItems.menuId, menuId)]),
-      ),
-    );
+  const offer = await reachableMenuItem(tx, menuItemId, menuId);
   if (!offer) throw new AppError("menu_item.not_found", { menuItemId });
   return offer.productId;
 }
@@ -262,7 +255,14 @@ export async function listMenuVariants(
   menuItemId: string,
   menuId?: string,
 ): Promise<MenuVariant[]> {
-  const productId = await offerProduct(tx, menuItemId, menuId);
+  return menuVariantsOf(tx, menuItemId, await offerProduct(tx, menuItemId, menuId));
+}
+
+async function menuVariantsOf(
+  tx: Transaction,
+  menuItemId: string,
+  productId: string,
+): Promise<MenuVariant[]> {
   const overrides = new Map(
     (
       await tx
@@ -337,7 +337,7 @@ export async function setMenuVariants(
         set: { price: row.price, offered: row.offered },
       });
   }
-  return listMenuVariants(tx, menuItemId);
+  return menuVariantsOf(tx, menuItemId, productId);
 }
 
 /**

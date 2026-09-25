@@ -2,7 +2,7 @@
 
 You can add French text to a Spanish menu without changing the language of the dashboard
 or your receipts. Start by choosing the languages your content supports, then add translations as
-you need them. The image library uses the same choices as your products, menu sections and
+you need them. The image library uses the same choices as your products, sections and
 [modifiers](modifiers.md). An options list, each of its labels, and an extras list all participate
 in the default-language translation check. An entry on an extras list does not: it has no name of
 its own, and takes the product's.
@@ -23,9 +23,8 @@ remain visible where the translation is still missing.
 
 Required fields need text in the default language. Other translations can wait. To change the
 default to English, first complete the required English translations and image names.
-If the change is refused, check your products, modifiers, menu sections and image metadata for
-missing translations. You can edit sections with no products through **Venue operations**,
-**Menus**, **Sections**.
+If the change is refused, check your products, modifiers, sections and image metadata for
+missing translations. Sections are edited in **Products and recipes**, **Sections**.
 
 A product's and a variant's customer-facing name is the exception, because it is optional: leave it
 empty in every language and Waitron falls back to the staff name, so it never blocks the change. Fill
@@ -33,8 +32,7 @@ it in for Spanish and leave English blank, though, and that *is* a missing trans
 meant to translate it — so it does hold the change up until you finish it or clear it. A reusable
 section's customer names work the same way: none at all never blocks the change, but a section with
 some names and none in the new default language does. Edit a reusable section's customer names in
-**Products and recipes**, **Sections**; **Venue operations**, **Menus**, **Sections** edits a menu's
-own section headings, not these.
+**Products and recipes**, **Sections**.
 
 Removing an additional language hides its ordinary translation fields but keeps the saved text.
 Add the language again to resume using those translations. You cannot remove the default language

@@ -2,11 +2,12 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { catalogues, categories, floorZones, kitchenStations, products } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
+  addProducts,
   createCatalogue,
-  createMenuItem,
-  createMenuSection,
-  listMenuSections,
+  menuItemExtraLists,
+  menuItems,
   readProductModifiers,
+  requireMenuRoot,
   resolveAccessibleCatalogueIds,
   setMenuItemExtraLists,
 } from "@waitron/catalogue";
@@ -55,8 +56,8 @@ const TABLES_ZONE = "Test tables";
 
 /**
  * Offer products in a service zone from a menu of this helper's own, so a test can sell them on the
- * zoned path. The menu is never one the suite made: `createMenuItem` upserts on (menu, product), so
- * reusing a suite's menu would overwrite its prices. Each offer's price is null, so it sells at the
+ * zoned path. The menu is never one the suite made, so the prices this writes never overwrite the
+ * suite's own. Each product sits on the menu's top level with no menu price, so it sells at the
  * product's own price. Idempotent: call it again after adding products or changing stations.
  */
 export async function offerProducts(
@@ -75,24 +76,29 @@ export async function offerProducts(
     .where(eq(zoneServicePolicies.zoneId, zoneId));
   await allowMenuInZone(tx, cfg, zoneId, menuId, { makeDefault: policy!.defaultMenuId === null });
 
-  const productIds = options.productIds ?? (await topLevelProducts(tx, cfg));
-  const sections = await listMenuSections(tx, menuId);
-  const sectionId =
-    sections[0]?.id ?? (await createMenuSection(tx, { menuId, name: { en: MENU_NAME } })).id;
-  const offerByProduct = new Map<string, string>();
-  const modifiers = await readProductModifiers(tx, [...productIds]);
+  const productIds = [...new Set(options.productIds ?? (await topLevelProducts(tx, cfg)))];
+  const offerByProduct = await placeOnTopLevel(tx, menuId, productIds);
+  const modifiers = await readProductModifiers(tx, productIds);
+  const withoutExtras: string[] = [];
   for (const productId of productIds) {
-    const item = await createMenuItem(tx, { menuId, productId, sectionId, grossPrice: null });
-    offerByProduct.set(productId, item.id);
     const extras = (modifiers.get(productId.toLowerCase()) ?? []).filter(
       (ref) => ref.kind === "extras",
     );
-    await setMenuItemExtraLists(
-      tx,
-      item.id,
-      extras.map((ref) => ({ listId: ref.id, items: [] })),
-    );
+    const offerId = offerByProduct.get(productId)!;
+    if (extras.length === 0) withoutExtras.push(offerId);
+    else
+      await setMenuItemExtraLists(
+        tx,
+        offerId,
+        extras.map((ref) => ({ listId: ref.id, items: [] })),
+      );
   }
+  // What `setMenuItemExtraLists` writes for an offer publishing no list, in one statement: its
+  // reachability check, a whole-graph read per call, is settled by `placeOnTopLevel` above.
+  if (withoutExtras.length > 0)
+    await tx
+      .delete(menuItemExtraLists)
+      .where(inArray(menuItemExtraLists.menuItemId, withoutExtras));
 
   if ((options.routes ?? "mirror-legacy") === "mirror-legacy") {
     await mirrorLegacyRoutes(tx, cfg, productIds);
@@ -170,6 +176,27 @@ async function department(tx: Transaction, cfg: Cfg, serviceMode: ServiceMode): 
   return (
     await createDepartment(tx, cfg, { name: "Test department", defaultServiceMode: serviceMode })
   ).id;
+}
+
+/**
+ * Puts every product on the menu's top level at its own price and switched on, and returns each
+ * one's menu-item id. A product already there keeps its membership and has its row reset, as a
+ * repeat call expects.
+ */
+async function placeOnTopLevel(
+  tx: Transaction,
+  menuId: string,
+  productIds: string[],
+): Promise<Map<string, string>> {
+  if (productIds.length === 0) return new Map();
+  await addProducts(tx, await requireMenuRoot(tx, menuId), productIds);
+  const ofMenu = and(eq(menuItems.menuId, menuId), inArray(menuItems.productId, productIds));
+  await tx.update(menuItems).set({ grossPrice: null, active: true }).where(ofMenu);
+  const rows = await tx
+    .select({ id: menuItems.id, productId: menuItems.productId })
+    .from(menuItems)
+    .where(ofMenu);
+  return new Map(rows.map((row) => [row.productId, row.id]));
 }
 
 async function ownMenu(tx: Transaction): Promise<string> {

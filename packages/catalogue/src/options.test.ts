@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { menuItems } from "./schema/menu.js";
-import { createCatalogue, createMenuItem, createMenuSection, createProduct } from "./operations.js";
+import { createCatalogue, addProductToMenu, createProduct } from "./operations.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { CATALOGUE_CLASSIFICATION } from "./classification.js";
 import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
@@ -300,7 +300,6 @@ describe("option list CRUD", () => {
     await seedTenant(fx.db);
     const dishes = await run(async (tx) => {
       const catalogue = await createCatalogue(tx, { name: "Deli" });
-      const section = await createMenuSection(tx, { menuId: catalogue.id, name: { en: "Mains" } });
       const made: Record<string, string> = {};
       for (const name of ["steak", "burger", "chips"]) {
         const product = await createProduct(tx, {
@@ -320,10 +319,9 @@ describe("option list CRUD", () => {
       // every offer, or every carrying product, gets a different answer from the one below.
       for (const name of ["steak", "chips"])
         made[`${name}Offer`] = (
-          await createMenuItem(tx, {
+          await addProductToMenu(tx, {
             menuId: catalogue.id,
             productId: made[name]!,
-            sectionId: section.id,
             grossPrice: "12.00",
           })
         ).id;
@@ -561,7 +559,6 @@ describe("the menus a list's delete preview names", () => {
     };
     await run(async (tx) => {
       const catalogue = await createCatalogue(tx, { name: "Deli" });
-      const section = await createMenuSection(tx, { menuId: catalogue.id, name: { en: "Mains" } });
       for (const [name, offerId] of Object.entries(offerIds)) {
         const product = await createProduct(tx, {
           catalogueId: catalogue.id,
@@ -576,7 +573,6 @@ describe("the menus a list's delete preview names", () => {
           id: offerId,
           menuId: catalogue.id,
           productId: product.id,
-          sectionId: section.id,
           grossPrice: 1200,
         });
       }

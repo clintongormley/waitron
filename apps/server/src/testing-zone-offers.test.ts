@@ -18,8 +18,7 @@ import {
   createCatalogue,
   createCategory,
   createExtraList,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   createProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
@@ -158,14 +157,9 @@ describe("offerProducts", () => {
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
     // A menu the suite already has, offering the café dearer in the same zone.
     await withTransaction(suite.db, async (tx) => {
-      const section = await createMenuSection(tx, {
-        menuId: venue.catalogueId,
-        name: { "es-ES": "Bebidas" },
-      });
-      await createMenuItem(tx, {
+      await addProductToMenu(tx, {
         menuId: venue.catalogueId,
         productId: venue.cafe,
-        sectionId: section.id,
         grossPrice: "2.50",
       });
       await allowMenuInZone(tx, venue.cfg, offers.zoneId, venue.catalogueId);
@@ -301,6 +295,15 @@ describe("offerProducts", () => {
       lines: third.toOfferLines([{ productId: pan.id, quantity: "1" }]),
     });
     expect(await soldLines(suite.db, id)).toEqual([{ productId: pan.id, unitPriceGross: 80 }]);
+  });
+
+  it("takes an extras list off the offer once the product stops carrying it", async () => {
+    const venue = await seedVenue(suite.db);
+    await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    expect((await counts(suite.db)).extras).toBe(1);
+    await withTransaction(suite.db, (tx) => writeProductModifiers(tx, venue.cafe, []));
+    await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    expect((await counts(suite.db)).extras).toBe(0);
   });
 
   it("names the product when asked for one it does not offer", async () => {

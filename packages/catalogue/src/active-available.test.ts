@@ -4,8 +4,7 @@ import type { Transaction } from "@waitron/db";
 import {
   assignCatalogueToLocation,
   createCatalogue,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   listAvailableProducts,
   listMenuOffers,
   listProducts,
@@ -55,11 +54,9 @@ beforeEach(async () => {
       dietaryDeclarations: [],
     };
     productId = (await saveProductEditor(tx, null, menu.id, body, "en")).id;
-    const section = await createMenuSection(tx, { menuId: menu.id, name: { en: "Tapas" } });
-    await createMenuItem(tx, {
+    await addProductToMenu(tx, {
       menuId: menu.id,
       productId,
-      sectionId: section.id,
       grossPrice: "5.00",
     });
     await assignCatalogueToLocation(tx, locationId, menu.id);

@@ -87,15 +87,15 @@ export interface ZoneMenuOffer {
   readonly id: string;
   readonly menuId: string;
   readonly productId: string;
-  readonly sectionId: string;
   /** The STORED menu price, null when the menu sets none; `unitPrice` is the one charged. */
   readonly grossPrice: string | null;
   /** The price this offer charges, resolved along the catalogue's menu price chain. */
   readonly unitPrice: string;
-  readonly displayOrder: number;
   readonly active: boolean;
   readonly menuName: string;
-  readonly sectionName: Readonly<Record<string, string>>;
+  /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top
+   * level. */
+  readonly placements: readonly (readonly string[])[];
   /** The product's staff-facing name (`products.name`) — plain text, not per-language. */
   readonly name: string;
   /** The product's customer-facing text, locale -> text; `null` or blank falls back to `name`. */

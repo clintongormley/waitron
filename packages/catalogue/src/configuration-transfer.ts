@@ -8,7 +8,6 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     { name: "unit_seed_states" },
     { name: "units" },
     { name: "product_units" },
-    { name: "menu_sections" },
     { name: "menu_items" },
     { name: "menu_item_variant_overrides" },
     { name: "option_lists" },
@@ -20,5 +19,6 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     { name: "product_modifiers" },
     { name: "sections" },
     { name: "section_members" },
+    { name: "menu_details" },
   ],
 } as const;

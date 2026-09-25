@@ -170,7 +170,7 @@ name reaches no order or receipt surface at all — a pick becomes its own line 
 PRODUCT's names, and nothing copies the list's name onto it. A library section's customer names
 (`sections.names`, kind `library_section`) are optional too, and only a partly filled map is
 reported. Only library sections are read: a menu's own lists in `sections` are left out. The other
-kinds the query reports — `category`, `unit` and `section`, which is a `menu_sections` heading —
+kinds the query reports — `category` and `unit` —
 have no optional customer-facing name to fall back from and stay required. An options list contributes two of the report's kinds and not one, both
 of them in the optional group: the list's own name (`option_list`) and each of its labels
 (`option_label`), each with its own table. An extras list contributes one kind, `extra_list`, and no
@@ -220,7 +220,8 @@ variant's own page (`parseProductEditorInput`, `packages/catalogue/src/product-e
 and `setProductVariants` (`packages/catalogue/src/variants.ts`) stores it blank.
 
 A variant follows its parent onto every menu the parent is on; it never gets a `menu_items` row of
-its own (`createMenuItem` refuses one with `menu_item.variant_not_allowed`). A menu stores something
+its own (`addProductToMenu` refuses one with `menu_item.variant_not_allowed`, and a section refuses
+one as a member with `menu_section.membership_invalid`). A menu stores something
 for a variant only to override its price or switch it off there: a `menu_item_variant_overrides`
 row exists only while it does one of those, keyed by the parent's menu row and the variant
 (`setMenuVariants`, `packages/catalogue/src/variants.ts`).

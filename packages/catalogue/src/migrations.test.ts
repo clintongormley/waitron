@@ -16,7 +16,8 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
-import { contentLanguages, menuItems, menuSections } from "./schema/menu.js";
+import { contentLanguages, menuDetails, menuItems } from "./schema/menu.js";
+import { sections } from "./schema/sections.js";
 import { categoryDetails } from "./schema/categories.js";
 import {
   extraListItems,
@@ -43,7 +44,7 @@ beforeAll(() => {
 
 const TABLES = [
   "content_languages",
-  "menu_sections",
+  "menu_details",
   "menu_items",
   "category_details",
   "labels",
@@ -149,7 +150,7 @@ describe("the catalogue migration set carries no tenant column", () => {
 
     expect(primaryKeys).toEqual({
       content_languages: "id",
-      menu_sections: "id",
+      menu_details: "menu_id",
       menu_items: "id",
       category_details: "category_id",
       labels: "id",
@@ -183,10 +184,11 @@ describe("the catalogue migration set carries no tenant column", () => {
         "menu_items(id, product_id) on delete cascade",
       "menu_item_variant_overrides(product_id, variant_id)":
         "products(parent_id, id) on delete restrict",
+      "menu_details(default_home_layout_id)": "sections(id) on delete no action",
+      "menu_details(menu_id)": "catalogues(id) on delete no action",
+      "menu_details(root_section_id)": "sections(id) on delete no action",
       "menu_items(menu_id)": "catalogues(id) on delete cascade",
-      "menu_items(menu_id, section_id)": "menu_sections(menu_id, id) on delete restrict",
       "menu_items(product_id)": "products(id) on delete restrict",
-      "menu_sections(menu_id)": "catalogues(id) on delete cascade",
       "option_labels(list_id)": "option_lists(id) on delete cascade",
       "product_labels(label_id)": "labels(id) on delete cascade",
       "product_labels(product_id)": "products(id) on delete cascade",
@@ -259,11 +261,9 @@ describe("the catalogue migration set carries no tenant column", () => {
       extra_list_items_list_sort_idx: { unique: false, columns: "list_id, sort" },
       menu_item_extra_items_list_product_idx: { unique: false, columns: "list_id, product_id" },
       menu_item_extra_lists_list_idx: { unique: false, columns: "list_id" },
+      menu_details_root_uq: { unique: true, columns: "root_section_id" },
       menu_items_id_product_key: { unique: true, columns: "id, product_id" },
-      menu_items_menu_order_idx: { unique: false, columns: "menu_id, display_order" },
       menu_items_menu_product_key: { unique: true, columns: "menu_id, product_id" },
-      menu_sections_menu_id_key: { unique: true, columns: "menu_id, id" },
-      menu_sections_menu_order_idx: { unique: false, columns: "menu_id, display_order" },
       labels_name_uq: { unique: true, columns: "name" },
       option_labels_list_sort_idx: { unique: false, columns: "list_id, sort" },
       product_labels_label_idx: { unique: false, columns: "label_id" },
@@ -287,6 +287,17 @@ describe("the catalogue set keeps no category membership table", () => {
     const left = (
       await db.execute<{ name: string }>(
         sql`select name from sqlite_master where type = 'table' and name = 'product_categories'`,
+      )
+    ).rows;
+    expect(left).toEqual([]);
+  });
+});
+
+describe("the catalogue set keeps no per-menu section table", () => {
+  it("leaves no menu_sections behind: a menu's structure is sections the menu owns", async () => {
+    const left = (
+      await db.execute<{ name: string }>(
+        sql`select name from sqlite_master where type = 'table' and name = 'menu_sections'`,
       )
     ).rows;
     expect(left).toEqual([]);
@@ -374,19 +385,19 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
         })
         .returning({ id: units.id })
     )[0]!.id;
-    const section = async (menu: string, name: string) =>
+    const ownedList = async (menu: string, role: "menu_root" | "home_layout") =>
       (
         await db
-          .insert(menuSections)
-          .values({ menuId: menu, name: { en: name } })
-          .returning({ id: menuSections.id })
+          .insert(sections)
+          .values({ internalName: role, role, ownerMenuId: menu })
+          .returning({ id: sections.id })
       )[0]!.id;
-    const sectionId = await section(menuId, "Starters");
-    const otherSectionId = await section(otherMenuId, "Mains");
+    const rootId = await ownedList(menuId, "menu_root");
+    const layoutId = await ownedList(menuId, "home_layout");
     const menuItemId = (
       await db
         .insert(menuItems)
-        .values({ menuId, productId, sectionId, grossPrice: 3 })
+        .values({ menuId, productId, grossPrice: 3 })
         .returning({ id: menuItems.id })
     )[0]!.id;
     // A variant as a `products` row under its parent, which is what an override names.
@@ -406,8 +417,8 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       otherProductId,
       categoryId,
       unitId,
-      sectionId,
-      otherSectionId,
+      rootId,
+      layoutId,
       menuItemId,
       soupBowlId,
       breadLoafId,
@@ -434,18 +445,13 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION), key).toBe(true);
   }
 
-  it("refuses a menu section or offer whose menu, product or section does not exist", async () => {
+  it("refuses an offer whose menu or product does not exist", async () => {
     const c = await catalogue();
-    await refusal(
-      () => db.insert(menuSections).values({ menuId: missing, name: { en: "X" } }),
-      "menu_sections_menu_fk",
-    );
     await refusal(
       () =>
         db.insert(menuItems).values({
           menuId: missing,
           productId: c.otherProductId,
-          sectionId: c.sectionId,
           grossPrice: 1,
         }),
       "menu_items_menu_fk",
@@ -455,26 +461,15 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
         db.insert(menuItems).values({
           menuId: c.menuId,
           productId: missing,
-          sectionId: c.sectionId,
           grossPrice: 1,
         }),
       "menu_items_product_fk",
-    );
-    await refusal(
-      () =>
-        db.insert(menuItems).values({
-          menuId: c.menuId,
-          productId: c.otherProductId,
-          sectionId: missing,
-          grossPrice: 1,
-        }),
-      "menu_items_section_fk",
     );
   });
 
   it("accepts an offer with a blank price, and still refuses a negative one", async () => {
     const c = await catalogue();
-    const row = { menuId: c.menuId, productId: c.otherProductId, sectionId: c.sectionId };
+    const row = { menuId: c.menuId, productId: c.otherProductId };
     const error = await captureError(() => db.insert(menuItems).values({ ...row, grossPrice: -1 }));
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toContain("menu_items_gross_price_ck");
@@ -485,18 +480,27 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     expect(blank).toEqual({ grossPrice: null });
   });
 
-  it("refuses an offer placed in another menu's section", async () => {
+  it("refuses menu details whose menu, root or layout does not exist, and a root two menus share", async () => {
     const c = await catalogue();
+    const details = { menuId: c.menuId, rootSectionId: c.rootId, defaultHomeLayoutId: c.layoutId };
     await refusal(
-      () =>
-        db.insert(menuItems).values({
-          menuId: c.menuId,
-          productId: c.otherProductId,
-          sectionId: c.otherSectionId,
-          grossPrice: 1,
-        }),
-      "menu_items_section_fk",
+      () => db.insert(menuDetails).values({ ...details, menuId: missing }),
+      "menu_details_menu_fk",
     );
+    await refusal(
+      () => db.insert(menuDetails).values({ ...details, rootSectionId: missing }),
+      "menu_details_root_fk",
+    );
+    await refusal(
+      () => db.insert(menuDetails).values({ ...details, defaultHomeLayoutId: missing }),
+      "menu_details_default_layout_fk",
+    );
+    // The accepting control, then a second menu naming the same root.
+    await db.insert(menuDetails).values(details);
+    const shared = await captureError(() =>
+      db.insert(menuDetails).values({ ...details, menuId: c.otherMenuId }),
+    );
+    expect(isRefusal(shared, UNIQUE_VIOLATION)).toBe(true);
   });
 
   it("refuses category details whose category or parent does not exist", async () => {

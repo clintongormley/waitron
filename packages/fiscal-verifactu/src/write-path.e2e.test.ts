@@ -17,9 +17,8 @@ import {
   type Transaction,
 } from "@waitron/db";
 import {
+  addProductToMenu,
   createCatalogue,
-  createMenuItem,
-  createMenuSection,
   createProduct,
   customerPresentationText,
   listMenuOffers,
@@ -729,7 +728,6 @@ describe("a variant line is filed at its own effective VAT rate", () => {
   // variant — its names, price and effective selling values.
   async function wineOffer(tx: Transaction) {
     const menu = await createCatalogue(tx, { name: "Barra" });
-    const section = await createMenuSection(tx, { menuId: menu.id, name: { "es-ES": "Vinos" } });
     const parent = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
@@ -764,12 +762,7 @@ describe("a variant line is filed at its own effective VAT rate", () => {
       "es-ES",
     );
     await tx.update(products).set({ vatClass: "general" }).where(eq(products.id, wine175!.id));
-    await createMenuItem(tx, {
-      menuId: menu.id,
-      sectionId: section.id,
-      productId: parent.id,
-      grossPrice: null,
-    });
+    await addProductToMenu(tx, { menuId: menu.id, productId: parent.id, grossPrice: null });
     const [offer] = await listMenuOffers(tx, [menu.id]);
     return { offer: offer!, wine125: wine125!.id, wine175: wine175!.id };
   }

@@ -28,6 +28,9 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "floor_zones",
       "location_catalogues",
       "locations",
+      // Before the menus: `menu_details`' keys and `sections_owner_menu_fk` have no delete rule.
+      "menu_details",
+      "sections",
       "catalogues",
       "content_languages",
       "product_units",

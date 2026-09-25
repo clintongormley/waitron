@@ -118,14 +118,17 @@ export function reachableProducts(graph: SectionGraph, rootId: string): string[]
   return [...products];
 }
 
-/** Each path of section ids, from the root, ending at a list that holds the product directly. */
-export function placements(graph: SectionGraph, rootId: string, productId: string): string[][] {
-  const found: string[][] = [];
+/** For every product the root reaches, each path of section ids from the root to a list holding it
+ * directly. */
+export function placementsByProduct(graph: SectionGraph, rootId: string): Map<string, string[][]> {
+  const found = new Map<string, string[][]>();
   const walk = (path: string[]): void => {
     const sectionId = path[path.length - 1]!;
     for (const { ref } of graph.children(sectionId)) {
       if (ref.kind === "product") {
-        if (ref.productId === productId) found.push(path);
+        const paths = found.get(ref.productId) ?? [];
+        paths.push(path);
+        found.set(ref.productId, paths);
       } else if (!path.includes(ref.sectionId)) walk([...path, ref.sectionId]);
     }
   };

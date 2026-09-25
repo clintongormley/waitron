@@ -14,7 +14,10 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import {
   listAccessibleCatalogues,
   listAvailableProducts,
+  listMenuOffers,
+  listSections,
   readContentLanguages,
+  readMenuStructure,
 } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
 
@@ -72,6 +75,65 @@ async function provisionVenue(): Promise<{ locationId: string }> {
 }
 
 describe("seedCatalogues", () => {
+  it("builds each menu's top level from library sections named after its categories", async () => {
+    const { locationId } = await provisionVenue();
+    const read = await withTransaction(suite.db, async (tx) => {
+      const { menuIds, productsByImage } = await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const sections = await listSections(tx);
+      const library = new Map(sections.map((row) => [row.id, row.internalName]));
+      const topLevel = async (menuId: string) =>
+        (await readMenuStructure(tx, menuId)).nodes.map(({ ref }) =>
+          ref.kind === "section" ? library.get(ref.sectionId) : ref.productId,
+        );
+      const negroni = productsByImage.get("negroni.png")!;
+      const lunchNegroni = (await listMenuOffers(tx, [menuIds.lunch])).find(
+        (offer) => offer.productId === negroni,
+      );
+      return {
+        negroni,
+        internalNames: sections.map((row) => row.internalName),
+        lunchNames: sections
+          .filter((row) => row.internalName.startsWith("Menú del Día"))
+          .map((row) => [row.internalName, row.names]),
+        restaurant: await topLevel(menuIds.restaurant),
+        lunch: await topLevel(menuIds.lunch),
+        deli: await topLevel(menuIds.deli),
+        lunchNegroni,
+      };
+    });
+    expect(read.restaurant).toEqual(["Tapas", "Sharing plates", "Mains", "Desserts", "Drinks"]);
+    expect(read.lunch).toEqual(["Menú del Día starters", "Menú del Día mains", read.negroni]);
+    // Two lists both named "Mains" would read as one in the sections library; a diner still sees
+    // the short names.
+    expect(new Set(read.internalNames).size).toBe(read.internalNames.length);
+    expect(read.lunchNames).toEqual([
+      ["Menú del Día mains", { en: "Mains", es: "Segundos" }],
+      ["Menú del Día starters", { en: "Starters", es: "Primeros" }],
+    ]);
+    expect(read.deli).toEqual(["Charcuterie", "Cheeses", "Conserves"]);
+    expect(read.lunchNegroni).toMatchObject({ grossPrice: "9.00", placements: [[]] });
+  });
+
+  it("names each menu's top level after the menu, the provisioned one included", async () => {
+    const { locationId } = await provisionVenue();
+    const named = await withTransaction(suite.db, async (tx) => {
+      const { menuIds } = await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const { rows } = await tx.execute<{ menu: string; root: string }>(sql`
+        select c.name as menu, s.internal_name as root
+        from menu_details d
+        join catalogues c on c.id = d.menu_id
+        join sections s on s.id = d.root_section_id
+        where d.menu_id in (${menuIds.restaurant}, ${menuIds.lunch}, ${menuIds.deli})
+        order by c.name`);
+      return rows;
+    });
+    expect(named).toEqual([
+      { menu: "Casa Delgado", root: "Casa Delgado" },
+      { menu: "Deli takeaway", root: "Deli takeaway" },
+      { menu: "Menú del Día", root: "Menú del Día" },
+    ]);
+  });
+
   it("creates restaurant, lunch and deli menus and routes each category to its preparation station", async () => {
     const { locationId } = await provisionVenue();
 

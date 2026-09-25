@@ -12,7 +12,8 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_PROVISIONING } from "./provisioning.js";
-import { contentLanguages } from "./schema/menu.js";
+import { contentLanguages, menuDetails } from "./schema/menu.js";
+import { sections } from "./schema/sections.js";
 import { units } from "./schema/units.js";
 import { getSeededUnit } from "./units.js";
 
@@ -100,6 +101,20 @@ describe("catalogue provisioning", () => {
     expect(await storedLanguages()).toEqual([{ default_language: "fr", languages: ["fr", "de"] }]);
     const menus = await suite.db.select({ count: sql<number>`count(*)` }).from(locationCatalogues);
     expect(menus).toEqual([{ count: 1 }]);
+    // The initial menu got its root and default layout once, not once per seed.
+    const [menu] = await suite.db
+      .select({ catalogueId: locations.catalogueId })
+      .from(locations)
+      .where(eq(locations.id, node.locationId));
+    const owned = await suite.db
+      .select({ role: sections.role })
+      .from(sections)
+      .where(eq(sections.ownerMenuId, menu!.catalogueId!))
+      .orderBy(asc(sections.role));
+    expect(owned).toEqual([{ role: "home_layout" }, { role: "menu_root" }]);
+    expect(await suite.db.select().from(menuDetails)).toEqual([
+      expect.objectContaining({ menuId: menu!.catalogueId }),
+    ]);
   });
 
   it("seeds the five units once and preserves edits and intentional deletion on another node", async () => {

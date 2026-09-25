@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { menuItems } from "./schema/menu.js";
+import { readMenuStructure } from "./menu-structure.js";
 import { setMenuVariants, setProductVariants } from "./variants.js";
 import { products, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -34,8 +35,7 @@ import {
   catalogueExists,
   createCatalogue,
   createCategory,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   createProduct,
   deactivateCatalogue,
   deactivateMenuItem,
@@ -106,24 +106,14 @@ describe("catalogue operations", () => {
         unitPrice: "0.00",
         vatClass: "general",
       });
-      const upstairsSection = await createMenuSection(tx, {
-        menuId: upstairs.id,
-        name: { en: "Cocktails" },
-      });
-      const downstairsSection = await createMenuSection(tx, {
-        menuId: downstairs.id,
-        name: { en: "Drinks" },
-      });
-      const nine = await createMenuItem(tx, {
+      const nine = await addProductToMenu(tx, {
         menuId: upstairs.id,
         productId: product.id,
-        sectionId: upstairsSection.id,
         grossPrice: "9.00",
       });
-      const eleven = await createMenuItem(tx, {
+      const eleven = await addProductToMenu(tx, {
         menuId: downstairs.id,
         productId: product.id,
-        sectionId: downstairsSection.id,
         grossPrice: "11.00",
       });
       const offers = await listMenuOffers(tx, [upstairs.id, downstairs.id]);
@@ -138,32 +128,27 @@ describe("catalogue operations", () => {
       expect((await listMenuOffers(tx, [downstairs.id]))[0]!.grossPrice).toBe("12.50");
       await deactivateMenuItem(tx, downstairs.id, eleven.id);
       await expect(listMenuOffers(tx, [downstairs.id])).resolves.toEqual([]);
-      const restored = await createMenuItem(tx, {
-        menuId: downstairs.id,
-        productId: product.id,
-        sectionId: downstairsSection.id,
-        grossPrice: "13.00",
-      });
+      // Switched back on, on the same row.
+      await updateMenuItem(tx, downstairs.id, eleven.id, { active: true, grossPrice: "13.00" });
+      const [restored] = await listMenuOffers(tx, [downstairs.id]);
       expect(restored).toMatchObject({ id: eleven.id, active: true, grossPrice: "13.00" });
       await expect(
         updateMenuItem(tx, downstairs.id, crypto.randomUUID(), { grossPrice: "8.00" }),
       ).rejects.toMatchObject({ code: "menu_item.not_found" });
       await expect(
-        createMenuItem(tx, {
+        addProductToMenu(tx, {
           menuId: downstairs.id,
           productId: crypto.randomUUID(),
-          sectionId: downstairsSection.id,
           grossPrice: "8.00",
         }),
       ).rejects.toMatchObject({ code: "product.not_found" });
       await expect(
-        createMenuItem(tx, {
-          menuId: downstairs.id,
+        addProductToMenu(tx, {
+          menuId: crypto.randomUUID(),
           productId: product.id,
-          sectionId: crypto.randomUUID(),
           grossPrice: "8.00",
         }),
-      ).rejects.toMatchObject({ code: "menu_section.not_found" });
+      ).rejects.toMatchObject({ code: "catalogue.not_found" });
     });
   });
 
@@ -178,14 +163,9 @@ describe("catalogue operations", () => {
         unitPrice: "1.00",
         vatClass: "general",
       });
-      const section = await createMenuSection(tx, {
-        menuId: menu.id,
-        name: { en: "Drinks" },
-      });
-      const item = await createMenuItem(tx, {
+      const item = await addProductToMenu(tx, {
         menuId: menu.id,
         productId: product.id,
-        sectionId: section.id,
         grossPrice: "1.50",
       });
 
@@ -1528,7 +1508,7 @@ describe("catalogue operations", () => {
  * on this menu (4.50) differ, so a variant priced from the wrong step of the chain fails.
  */
 describe("menu offers nest a product's variants", () => {
-  let f: { menuId: string; sectionId: string; parentId: string; offerId: string };
+  let f: { menuId: string; parentId: string; offerId: string };
   const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(fx.db, fn);
   const wine = (name: string, unitPrice: string | null, available = true) => ({
     name,
@@ -1551,14 +1531,12 @@ describe("menu offers nest a product's variants", () => {
         unitPrice: "4.00",
         vatClass: "reduced",
       });
-      const section = await createMenuSection(tx, { menuId: menu.id, name: { en: "Wine" } });
-      const offer = await createMenuItem(tx, {
+      const offer = await addProductToMenu(tx, {
         menuId: menu.id,
         productId: parent.id,
-        sectionId: section.id,
         grossPrice: "4.50",
       });
-      return { menuId: menu.id, sectionId: section.id, parentId: parent.id, offerId: offer.id };
+      return { menuId: menu.id, parentId: parent.id, offerId: offer.id };
     });
   });
 
@@ -1591,12 +1569,10 @@ describe("menu offers nest a product's variants", () => {
         unitPrice: "3.00",
         vatClass: "general",
       });
-      await createMenuItem(tx, {
+      await addProductToMenu(tx, {
         menuId: f.menuId,
         productId: product.id,
-        sectionId: f.sectionId,
         grossPrice: "3.75",
-        displayOrder: 1,
       });
       return product.id;
     });
@@ -1621,7 +1597,7 @@ describe("menu offers nest a product's variants", () => {
     ]);
   });
 
-  it("creates an offer with a blank price, and blanks a re-activated offer's old one", async () => {
+  it("creates an offer with a blank price, and switches an offer back on with a blank price", async () => {
     const created = await run(async (tx) => {
       const product = await createProduct(tx, {
         catalogueId: f.menuId,
@@ -1631,23 +1607,16 @@ describe("menu offers nest a product's variants", () => {
         unitPrice: "3.00",
         vatClass: "general",
       });
-      return createMenuItem(tx, {
+      return addProductToMenu(tx, {
         menuId: f.menuId,
         productId: product.id,
-        sectionId: f.sectionId,
         grossPrice: null,
       });
     });
     expect(created).toMatchObject({ grossPrice: null, active: true });
     await run((tx) => deactivateMenuItem(tx, f.menuId, f.offerId));
-    const restored = await run((tx) =>
-      createMenuItem(tx, {
-        menuId: f.menuId,
-        productId: f.parentId,
-        sectionId: f.sectionId,
-        grossPrice: null,
-      }),
-    );
+    await run((tx) => updateMenuItem(tx, f.menuId, f.offerId, { active: true, grossPrice: null }));
+    const restored = (await offers()).find((offer) => offer.id === f.offerId);
     expect(restored).toMatchObject({ id: f.offerId, active: true, grossPrice: null });
     expect((await offers()).find((offer) => offer.id === f.offerId)).toMatchObject({
       grossPrice: null,
@@ -1682,10 +1651,15 @@ describe("menu offers nest a product's variants", () => {
     const [w125] = await run((tx) =>
       setProductVariants(tx, f.parentId, [wine("Wine 125", null)], "en"),
     );
-    // Written straight into the table: `createMenuItem` refuses a variant.
+    // Written straight into the tables, as a member of the menu's root and a row of its own:
+    // `addProductToMenu` and the member writes both refuse a variant.
+    const { rootSectionId } = await run((tx) => readMenuStructure(tx, f.menuId));
+    await fx.db.execute(sql`
+      insert into section_members (id, section_id, position, product_id)
+      values (${crypto.randomUUID()}, ${rootSectionId}, 1, ${w125!.id})`);
     await fx.db
       .insert(menuItems)
-      .values({ menuId: f.menuId, productId: w125!.id, sectionId: f.sectionId, grossPrice: 900 });
+      .values({ menuId: f.menuId, productId: w125!.id, grossPrice: 900 });
     expect((await offers()).map((offer) => offer.productId)).toEqual([f.parentId]);
   });
 

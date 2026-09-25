@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
-import { createCatalogue, createMenuItem, createMenuSection, createProduct } from "./operations.js";
+import { createCatalogue, addProductToMenu, createProduct } from "./operations.js";
 import {
   createExtraList,
   deleteExtraList,
@@ -54,7 +54,6 @@ beforeEach(async () => {
   await seedTenant(fx.db);
   await run(async (tx) => {
     const menu = await createCatalogue(tx, { name: "Deli" });
-    const section = await createMenuSection(tx, { menuId: menu.id, name: { en: "Mains" } });
     for (const [key, unitPrice] of Object.entries(unitPrices)) {
       const product = await createProduct(tx, {
         catalogueId: menu.id,
@@ -67,10 +66,9 @@ beforeEach(async () => {
       ids[key as keyof typeof ids] = product.id;
     }
     for (const dish of ["burger", "pizza"] as const) {
-      const offer = await createMenuItem(tx, {
+      const offer = await addProductToMenu(tx, {
         menuId: menu.id,
         productId: ids[dish],
-        sectionId: section.id,
         grossPrice: unitPrices[dish],
       });
       offers[dish] = offer.id;

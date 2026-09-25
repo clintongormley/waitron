@@ -8,7 +8,7 @@ import { productLabels } from "./schema/labels.js";
 import { productUnits } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { racePair } from "../test/fixtures.js";
-import { createCatalogue, createProduct, createMenuSection, createMenuItem } from "./operations.js";
+import { createCatalogue, createProduct, addProductToMenu } from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
 import {
   listMenuVariants,
@@ -75,21 +75,14 @@ async function fixture() {
       unitPrice: "3.00",
       vatClass: "general",
     });
-    const section = await createMenuSection(tx, { menuId: menu.id, name: { en: "Drinks" } });
-    const terraceSection = await createMenuSection(tx, {
-      menuId: terrace.id,
-      name: { en: "Drinks" },
-    });
-    const offer = await createMenuItem(tx, {
+    const offer = await addProductToMenu(tx, {
       menuId: menu.id,
-      sectionId: section.id,
       productId: parent.id,
       grossPrice: "4.50",
     });
     return {
       catalogueId: menu.id,
       terraceId: terrace.id,
-      terraceSectionId: terraceSection.id,
       parentId: parent.id,
       otherId: other.id,
       offerId: offer.id,
@@ -488,7 +481,7 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
   });
 });
 
-describe("createMenuItem", () => {
+describe("addProductToMenu", () => {
   it("refuses a variant, which follows its parent onto a menu instead, and accepts the parent", async () => {
     const f = await fixture();
     const [w125] = await app((tx) =>
@@ -496,9 +489,8 @@ describe("createMenuItem", () => {
     );
     await expect(
       app((tx) =>
-        createMenuItem(tx, {
+        addProductToMenu(tx, {
           menuId: f.terraceId,
-          sectionId: f.terraceSectionId,
           productId: w125!.id,
           grossPrice: "5.00",
         }),
@@ -509,9 +501,8 @@ describe("createMenuItem", () => {
     });
     await expect(
       app((tx) =>
-        createMenuItem(tx, {
+        addProductToMenu(tx, {
           menuId: f.terraceId,
-          sectionId: f.terraceSectionId,
           productId: f.parentId,
           grossPrice: "5.00",
         }),

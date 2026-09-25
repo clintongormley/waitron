@@ -17,8 +17,7 @@ import {
   createCatalogue,
   createCategory,
   createExtraList,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   createOptionList,
   createProduct,
   listAvailableProducts,
@@ -187,14 +186,9 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       select zone_id as id from zone_service_policies
       where location_id = ${cfg.locationId}
         and is_counter_default`);
-    const section = await createMenuSection(tx, {
-      menuId: cat.id,
-      name: { [LOCALE]: "Bebidas" },
-    });
-    const offer = await createMenuItem(tx, {
+    const offer = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: water.id,
-      sectionId: section.id,
       grossPrice: "2.25",
     });
     let variantIds: { double: string; unavailable: string } | undefined;
