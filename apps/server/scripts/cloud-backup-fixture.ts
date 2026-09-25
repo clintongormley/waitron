@@ -40,19 +40,22 @@ const request = JSON.parse(input) as {
   sourceNodeId?: string;
   modules?: Record<string, number>;
   expectedVenue?: string;
+  stateSubdir?: "state";
 };
 assert(/^[A-Za-z0-9_-]{43}$/.test(request.recoveryKey));
+assert(request.stateSubdir === undefined || request.stateSubdir === "state");
+const stateDir = request.stateSubdir === "state" ? join(root, "state") : root;
 const validation = {
   recoveryKey: request.recoveryKey,
-  stateDir: root,
-  stagingDir: join(root, "backup-staging"),
+  stateDir,
+  stagingDir: join(stateDir, "backup-staging"),
   modules: ALL_MODULES,
   migrationsRoot: null,
   environment: "preproduction" as const,
 };
-const exists = async (name: string) => {
+const exists = async (name: string, directory = root) => {
   try {
-    await stat(join(root, name));
+    await stat(join(directory, name));
     return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -86,7 +89,7 @@ if (request.command === "capture") {
       modules: ALL_MODULES,
       environment: "preproduction",
       resolvers: {},
-      stateDir: root,
+      stateDir,
       recoveryKey: request.recoveryKey,
       stagingDir: validation.stagingDir,
       retain: 100,
@@ -174,14 +177,14 @@ if (request.command === "capture") {
   } finally {
     await store.close();
   }
-  assert.equal(await exists("backup.env"), false);
+  assert.equal(await exists("backup.env", stateDir), false);
   console.log(
     JSON.stringify({
       networkDenied,
       integrityOk: true,
       hooks,
-      cloudCredentialPresent: await exists("cloud-connection.json"),
-      staffKeyPresent: await exists("cloud-staff.key"),
+      cloudCredentialPresent: await exists("cloud-connection.json", stateDir),
+      staffKeyPresent: await exists("cloud-staff.key", stateDir),
     }),
   );
 } else {

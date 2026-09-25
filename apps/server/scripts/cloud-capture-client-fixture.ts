@@ -19,10 +19,20 @@ for await (const chunk of process.stdin) {
   input += String(chunk);
   assert(input.length < 65536);
 }
-const request = JSON.parse(input);
-const saved = JSON.parse(await readFile(join(root, "cloud-connection.json"), "utf8"));
+const request = JSON.parse(input) as {
+  command: "reserve" | "publish" | "upload" | "schedule";
+  stateSubdir?: "state";
+  id: string;
+  metadata: Parameters<ReturnType<typeof createCloudConnection>["publishCapture"]>[1];
+  grant: Parameters<typeof uploadCloudCapture>[0];
+  ca?: string;
+  crashAfterUpload?: boolean;
+};
+assert(request.stateSubdir === undefined || request.stateSubdir === "state");
+const stateDir = request.stateSubdir === "state" ? join(root, "state") : root;
+const saved = JSON.parse(await readFile(join(stateDir, "cloud-connection.json"), "utf8"));
 const client = createCloudConnection({
-  stateDir: root,
+  stateDir,
   origin: saved.origin,
   localVenueId: saved.localVenueId,
   environment: saved.environment,
@@ -41,11 +51,11 @@ else if (request.command === "schedule") {
   const store = await openVenueDatabase(join(root, "venue"));
   try {
     await client.refresh();
-    const identity = parseEnvFile(await readFile(join(root, "trading.env"), "utf8"));
+    const identity = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
     let created = 0;
     let point: CloudCapturePoint | undefined;
     const scheduler = createCloudSnapshotWorker({
-      stateDir: root,
+      stateDir,
       sourceNodeId: identity.WAITRON_TILL_NODE_ID!,
       connection: {
         ...client,
@@ -59,7 +69,7 @@ else if (request.command === "schedule") {
       createArchive: async (grant, at, signal) => {
         created++;
         return createCloudSnapshotArchive(
-          { db: store.venue, modules: ALL_MODULES, environment: "preproduction", stateDir: root },
+          { db: store.venue, modules: ALL_MODULES, environment: "preproduction", stateDir },
           grant.recoveryKey,
           at,
           signal,
