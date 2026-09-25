@@ -2873,21 +2873,21 @@ image constraints under *Detail → Box image*.
   about 4,120 to about 1,750, parse-tree walk, tests included) and `apps/server`'s working-order,
   tabs and tables files, part b (#623, about 4,040 to about 1,920, parse-tree walk, tests included;
   `working-order.ts` alone 1,854 to 471) and `apps/server`'s boot, health, SPA and dev-hint
-  files, part c1 (#624, about 1,455 to about 400, parse-tree walk, tests included; `boot.ts`,
-  `boot.test.ts` and `config.ts` are held back as c2 because the SQLite slice-2 plan's Tasks 8–10
-  change them) and `apps/server`'s adopt, backup, break-glass, mirror, primary-url, promote,
+  files, part c1 (#624, about 1,455 to about 400, parse-tree walk, tests included) and `apps/server`'s adopt, backup, break-glass, mirror, primary-url, promote,
   recovery, rejoin, restore-entry-guard, restore-gate and retire files, part e1 (#625, about 3,090 to
   about 760 over the 64 files, parse-tree walk, tests included; the 14 part-e files the SQLite
   slice-2 plan's Tasks 8a–10 name are held back as e2). #625 also deleted the false "the verb is the
   whole guard" note from `tables.ts`, `management-api.ts` (five copies) and `till-api.ts`. Then
   `apps/server`'s `box-status.ts` and `awaiting-fiscal-cert.test.ts`, two held-back files the
   SQLite slice-2 plan's remaining tasks no longer name, part x (#629, 91 to 16 comment lines).
-  (2026-09-25: slice 2's last task has landed, so c2, e2, f2 and h2 no longer wait on it; they
+  Then `apps/server`'s `boot.ts`, `boot.test.ts` and `config.ts`, part c2 (#653, 2,536 to 820
+  comment lines, parse-tree walk, tests included).
+  (2026-09-25: slice 2's last task has landed, so e2, f2 and h2 no longer wait on it; they
   are still to do.)
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621, #622, #623, #624, #625 and #629 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621, #622, #623, #624, #625, #629 and #653 and left for the package that owns each, all
   still OPEN:
   - Found by the retroactive Codex reviews of #621–#626 and #629 (C3.18.12r, 2026-09-25; fixes
     landed as #632, #633, #635, #637 and #639; #626 and #629 came back clean), outside the files
@@ -2909,17 +2909,30 @@ image constraints under *Detail → Box image*.
     `packages/bookings/src/schema/bookings.test.ts` (near line 60) and
     `packages/catalogue/src/migrations.test.ts` (near line 304) is wider than the reset, which
     leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
-  - Found by #629 (`apps/server` part x), for `boot.ts`'s own prune (c2, held back while the SQLite
-    slice-2 plan changes it): the comment near line 1491 says a promoted primary has no
-    `fiscal.aeat` cert "until the cert-distribution slice lands", which is plan history; the one
-    near lines 2188–2190 carries a "(B3)" history tag and refers to "the N/A placeholder
-    box-status" reports — a term only the `BoxStatus` comment #629 deleted defined.
+  - Found by #653 (`apps/server` part c2: `boot.ts`, `boot.test.ts`, `config.ts`), outside its
+    files or not fixable in a comments-only change. `apps/server/README.md` (near line 230, the
+    `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp can round a value "past" a bound, which it
+    cannot (`sleepMsFor` in `loop.ts` is `Math.min(max, Math.max(min, wait))`, and config refuses
+    `minTickMs > maxTickMs`; #653 corrected the same claim in `config.ts`); `config.test.ts`'s
+    test title (near line 572) says "round back down past the floor" where it means "to the
+    floor". `packages/db/src/node-membership.ts`'s header says the caller of `readNodeMembership`
+    re-runs `verifyMembershipDocument` / `acceptMembershipDocument` on what it reads; none of the
+    nine non-test files that call it does (grepped 2026-09-25; `boot.ts` calls
+    `acceptMembershipDocument` only on a peer's incoming document). #653 restored the note at
+    boot's read. Two notes #653's prune deleted and nothing else recorded: nobody knows why the
+    5-second busy timeout did not absorb a `database is locked` in the pending-payment sweep; and
+    nothing proves `startServer` itself survives a backup duty that cannot start — only
+    `backup-supervisor.test.ts` covers that, at the supervisor. Read, not run: on the trading path
+    `boot.ts` leaves the venue store open when a step after the long-lived open throws
+    (`readOrderFlow`/`readFilingModule`, `fiscalSlot`, `readVenueLocale`, `readVenueTimeZone`,
+    `makeFiscalBackend`, `backupSupervisor.reload()`, `sealedState.refresh()`,
+    `streamHost.start()`). Test titles #653 could not touch in `boot.test.ts` carry the history
+    tags "(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
   - Found by #625 (`apps/server` part e1), outside its files or not fixable in a comments-only
     change. Comments in files the SQLite slice-2 plan still changes (fix them in e2, c2 or h2):
     `db-wipe.ts` (near its top) says the empty node-file fact is recorded where
     `rejoin-command.ts` and `break-glass-command.ts` open their handles, and #625 deleted it from
-    both; `boot.test.ts` (held back as c2) lists `promote-endpoint-e2e.test.ts` among suites whose
-    header records the drain half, and that header is gone; `restore.ts` and `errors.ts` call
+    both; `restore.ts` and `errors.ts` call
     backup "the cold-recovery path CLAUDE.md §5 says has to work", which §5 does not say, and
     `backup-supervisor.ts`'s "must never brick the till (§5)" stretches §5's "nothing EXTERNAL may
     block a sale". Docs: `docs/developers/conventions-ui.md` (the recovery page section) says a
@@ -2955,9 +2968,7 @@ image constraints under *Detail → Box image*.
     version (PostgreSQL 18, `23P01` on the list, `classifyBootFailure` dropping `22P02`, "the two
     share no SQLSTATE table", remedies that are opposites); the two lists are now SQLite result
     codes, `boot-failure.ts`'s codes lead to "retry or restart", and `dev-migration-hint.ts` still
-    names that section as its receipt. `boot.test.ts` (held back) implies a
-    `mockClear`/`mockReset` contrast that is false on Vitest 4 (both keep the implementation; #624's
-    review ran it). Tests, not comments: `boot-failure.test.ts`'s "names every pinned result code
+    names that section as its receipt. Tests, not comments: `boot-failure.test.ts`'s "names every pinned result code
     as an unreachable database" cannot fail when a code is added (the review added 26 and the suite
     passed), and two `health.test.ts` cases, "stays 200 when reconcile has failed runs but nothing
     parked" and "does not flip health for a failed-only run (parked stays 0)", feed a clean pass, so
@@ -3401,10 +3412,6 @@ image constraints under *Detail → Box image*.
     - The frozen `write-path.e2e.test.ts` points at `test/fixtures.ts:249-256` and
       `test/write-path-fixtures.ts:37-44`, which have moved; the receipt they cite is back in
       `test/fixtures.ts`. Correct them only in a change allowed to touch that file.
-  - The same false comments #562 removed from `fiscal-verifactu` survive elsewhere (#598 removed
-    `packages/core`'s, #613 `till-sale.ts`'s chain-head lock):
-    `boot.ts` named as the owner of the AEAT certificate resolver in `apps/server/src/boot.test.ts`
-    (`packages/fiscal-verifactu/src/slot.ts` builds and closes it). Prune with those packages.
   - `apps/setup` code, found by #567 and not changed: `#onGoto` in `setup-app.ts` does not clear
     `fiscalTestError`, so the routed-back fiscal-test banner survives navigating away and back;
     `deployment.already_stamped` is labelled "Reload to open the till" on the provision path and
@@ -3469,8 +3476,8 @@ image constraints under *Detail → Box image*.
     making them static imports is a small code follow-up.
   - Found by #589 (`packages/db` outside `src/schema`), not changed. Line pointers from other
     packages into `packages/db/src/schema`, most of them made wrong by #585 and some pointing past
-    the end of their file: `apps/server/src/boot.test.ts:2761` (#625 removed `retire.test.ts`'s)
-    (the `scripts/catalogue-engine-neutral.test.ts` pointers were removed by #602,
+    the end of their file — all now removed (`apps/server/src/boot.test.ts`'s by #653,
+    `retire.test.ts`'s by #625, the `scripts/catalogue-engine-neutral.test.ts` pointers by #602,
     `packages/venue-service/src/operations.ts`'s by #611, the `till-*` ones by #613, `join-requests.test.ts`'s by #617, and `kitchen-print.test.ts`'s and
     `sale-till-source.receipt.test.ts`'s by #622)
     — name the file and the column instead, with each package's pruning. In
