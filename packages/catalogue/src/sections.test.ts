@@ -14,6 +14,7 @@ import {
   deleteSection,
   duplicateSection,
   listMembers,
+  librarySectionUsages,
   listSections,
   moveMember,
   readSection,
@@ -912,6 +913,55 @@ describe("delete and usages", () => {
     // The nested section and the products survive, and the product keeps its category.
     expect(refs((await app((tx) => readSection(tx, beer.id))).members)).toEqual([product(f.lager)]);
     expect(await category()).toBe(f.category);
+  });
+});
+
+describe("every library section's usages at once", () => {
+  it("answers each library section as sectionUsages does, a menu's own lists left out", async () => {
+    const f = await fixture();
+    const lunchRoot = await menuOwned("menu_root", f.lunchMenu);
+    const dinnerRoot = await menuOwned("menu_root", f.dinnerMenu);
+    const layout = await menuOwned("home_layout", f.dinnerMenu);
+    const drinks = await create("Drinks");
+    const favourites = await create("Favourites");
+    const beer = await create("Beer");
+    const unused = await create("Unused");
+    const alsoHolds = await create("Also holds beer");
+    await app((tx) => addMember(tx, drinks.id, section(beer.id)));
+    await app((tx) => addMember(tx, alsoHolds.id, section(beer.id)));
+    await app((tx) => addMember(tx, favourites.id, section(drinks.id)));
+    await app((tx) => addMember(tx, lunchRoot, section(drinks.id)));
+    await app((tx) => addMember(tx, dinnerRoot, section(favourites.id)));
+    await rawMember(layout, section(unused.id), 0);
+    await app((tx) => createSection(tx, { internalName: "Empty" }));
+
+    const all = await app((tx) => librarySectionUsages(tx));
+    const library = await app((tx) => listSections(tx));
+    expect(Object.keys(all).sort()).toEqual(library.map((row) => row.id).sort());
+    for (const row of library)
+      expect(all[row.id], row.internalName).toEqual(await app((tx) => sectionUsages(tx, row.id)));
+    // Beer is reached by both menus through nesting, and held by two library sections.
+    expect(all[beer.id]).toEqual({
+      menus: [
+        { id: f.dinnerMenu, name: "Dinner menu" },
+        { id: f.lunchMenu, name: "Lunch menu" },
+      ],
+      sections: [
+        { id: alsoHolds.id, internalName: "Also holds beer" },
+        { id: drinks.id, internalName: "Drinks" },
+      ],
+    });
+    // A home layout holding a section names its menu.
+    expect(all[unused.id]).toEqual({
+      menus: [{ id: f.dinnerMenu, name: "Dinner menu" }],
+      sections: [],
+    });
+    expect(all[lunchRoot]).toBeUndefined();
+  });
+
+  it("answers an empty map when the library is empty", async () => {
+    await fixture();
+    expect(await app((tx) => librarySectionUsages(tx))).toEqual({});
   });
 });
 

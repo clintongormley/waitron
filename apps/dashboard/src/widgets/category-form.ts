@@ -1,7 +1,7 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, submitOnEnter, CATEGORY_PALETTE } from "@waitron/ui";
+import { baseStyles, submitOnEnter } from "@waitron/ui";
 import { resolveEnabledContentText, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -10,15 +10,10 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "./image-upload.js";
+import { colorField, colorFieldStyles } from "./color-field.js";
 import type { ImageUploader } from "./image-upload.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
 import { t, currentLocale } from "../i18n/t.js";
-
-const CATEGORY_PALETTE_GROUP_SIZE = CATEGORY_PALETTE.length / 2;
-const CATEGORY_PALETTE_GROUPS = [
-  CATEGORY_PALETTE.slice(0, CATEGORY_PALETTE_GROUP_SIZE),
-  CATEGORY_PALETTE.slice(CATEGORY_PALETTE_GROUP_SIZE),
-];
 
 export function categoryPath(
   category: CategorySummary,
@@ -69,6 +64,7 @@ export class CategoryForm extends LitElement {
 
   static override styles = [
     baseStyles,
+    colorFieldStyles,
     css`
       .fields {
         display: grid;
@@ -80,69 +76,6 @@ export class CategoryForm extends LitElement {
       label {
         display: grid;
         gap: var(--wt-space-2);
-      }
-      fieldset.color {
-        display: grid;
-        gap: var(--wt-space-2);
-        border: none;
-        margin: 0;
-        padding: 0;
-      }
-      fieldset.color legend {
-        padding: 0;
-        font: inherit;
-      }
-      .color-options {
-        display: grid;
-        justify-items: start;
-        gap: var(--wt-space-2);
-      }
-      .swatches {
-        /* Each half holds four complete hues. They sit together as an 8 × 3 matrix when there is
-           room, then wrap as two 4 × 3 blocks without splitting any hue's three tones. */
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-      }
-      .swatch-group {
-        display: grid;
-        grid-template-rows: repeat(3, var(--wt-space-6));
-        grid-auto-flow: column;
-        grid-auto-columns: var(--wt-space-6);
-        gap: var(--wt-space-2);
-      }
-      .swatch {
-        width: var(--wt-space-6);
-        height: var(--wt-space-6);
-        padding: 0;
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-        cursor: pointer;
-      }
-      .swatch.on {
-        outline: var(--wt-selected-ring);
-        outline-offset: var(--wt-selected-ring-offset);
-      }
-      .swatch.none {
-        width: auto;
-        padding: 0 var(--wt-space-2);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text);
-        font-size: var(--wt-font-size-sm);
-      }
-      .custom {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-        font-size: var(--wt-font-size-sm);
-      }
-      .custom input[type="color"] {
-        width: var(--wt-space-6);
-        height: var(--wt-space-6);
-        padding: 0;
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-        cursor: pointer;
       }
     `,
   ];
@@ -207,22 +140,6 @@ export class CategoryForm extends LitElement {
     const excluded = categoryWithDescendants(this.value.id, this.categories);
     return this.categories.filter((category) => !excluded.has(category.id));
   }
-  #colorSwatch(color: string) {
-    return html`<button
-      type="button"
-      class="swatch ${this.color === color ? "on" : ""}"
-      style=${`background:${color}`}
-      role="radio"
-      aria-checked=${this.color === color}
-      aria-label=${color}
-      data-color=${color}
-      .disabled=${this.busy}
-      @click=${(event: Event) => {
-        event.stopPropagation();
-        this.color = color;
-      }}
-    ></button>`;
-  }
   override render() {
     const errors = { ...this.fieldErrors, ...this.validation };
     return html`<wt-modal
@@ -283,48 +200,16 @@ export class CategoryForm extends LitElement {
             this.parentId = event.detail.value || null;
           }}
         ></wt-combobox>
-        <fieldset class="color">
-          <legend>${t("categories.color")}</legend>
-          <div class="color-options" role="radiogroup" aria-label=${t("categories.color")}>
-            <button
-              type="button"
-              class="swatch none ${this.color === null ? "on" : ""}"
-              role="radio"
-              aria-checked=${this.color === null}
-              data-color=""
-              .disabled=${this.busy}
-              @click=${(event: Event) => {
-                event.stopPropagation();
-                this.color = null;
-              }}
-            >
-              ${t("categories.color_none")}
-            </button>
-            <div class="swatches">
-              ${CATEGORY_PALETTE_GROUPS.map(
-                (group) =>
-                  html`<div class="swatch-group">
-                    ${group.map((color) => this.#colorSwatch(color))}
-                  </div>`,
-              )}
-            </div>
-          </div>
-          <label class="custom"
-            >${t("categories.color_custom")}
-            <input
-              type="color"
-              name="category-color"
-              aria-invalid=${errors.color ? "true" : "false"}
-              aria-describedby="category-color-error"
-              .value=${this.color ?? "#000000"}
-              .disabled=${this.busy}
-              @input=${(event: Event) => {
-                event.stopPropagation();
-                this.color = (event.target as HTMLInputElement).value;
-              }}
-          /></label>
-          <span class="field-error" id="category-color-error">${errors.color ?? nothing}</span>
-        </fieldset>
+        ${colorField({
+          color: this.color,
+          busy: this.busy,
+          error: errors.color ?? "",
+          name: "category-color",
+          errorId: "category-color-error",
+          change: (color) => {
+            this.color = color;
+          },
+        })}
         <dashboard-image-upload
           aria-describedby="category-image-error"
           .api=${this.api}

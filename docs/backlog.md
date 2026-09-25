@@ -209,15 +209,12 @@ place, duplicate — optionally replacing in the same request — and usages), a
 guarding a section's image. Menus do not use them yet; Task 3 does. Measured: a venue built and
 demo-seeded by `main` at `f19d556d4`, upgraded by this task through `applyMigrations`, applied one
 catalogue and one media migration and changed no row count in the fourteen tables compared, and the
-upgraded file refused a section naming a missing image — so this task needs no venue reset. Left for
-Task 2 (the sections library screen): the image library names a section using a photo without a
-link, because no sections screen exists yet; `docs/content-and-images.md` tells readers the
-dashboard cannot edit a reusable section's names or remove its photo, and must point them at the
-sections screen once it exists; and `packages/catalogue/src/section-types.ts` holds a runtime
-constant (`SECTION_ROLES`), so it cannot join the type-only list in
-`scripts/dashboard-browser-purity.test.ts` as its siblings `menu-types.ts` and
-`modifier-list-types.ts` do — before the dashboard imports it, split the constant out or give the
-guard a way to admit it. A follow-up that is not Task 2's: each table that can hold a photo is
+upgraded file refused a section naming a missing image — so this task needs no venue reset. The
+three things it left for Task 2 are done on Task 2's branch (`feat/menus-section-library`): the
+image library links a section to its editor (`/manage/sections?section=<id>`),
+`docs/content-and-images.md` points at the new screen, and `SECTION_ROLES` moved into
+`packages/catalogue/src/schema/sections.ts` so `section-types.ts` joined the type-only list in
+`scripts/dashboard-browser-purity.test.ts`. A follow-up that is not Task 2's: each table that can hold a photo is
 named by hand in several places in `packages/media` (the triggers, `listImageUsages`,
 `countUsages`, the live-query dependencies, the `before` lists in `module.ts`, the `ImageUsage`
 unions), and only a comment keeps `countUsages` and `listImageUsages` in step; one list of
@@ -225,13 +222,26 @@ photo-holding tables that those derive from, checked against the triggers, would
 such table one edit. Two notes for Task 3 (menu structure): `sections_owner_menu_fk` has no
 delete rule, so deleting a menu that owns a section will be refused until Task 3 chooses one; and
 media's triggers name `sections`, so a later drizzle rebuild of that table meets the same trap
-`docs/developers/conventions-data.md` records for rebuilds. Next in the lane: menus Task 2. The owner lifted the
-wait: the dependency upgrades are finished, and the work does not wait for SQLite slice 2. The
-menus plan's decisions D1–D23 settle the spec's open integration points; D6, D9, D10, D11, D12,
-D13 and D22 are the ones flagged for the owner. Menus Task 3 wipes existing venues (it rebuilds
-`menu_items`); every other migrating task adds tables or columns only and measures its own upgrade.
-Every dev venue then needs `wa-wt reset demo <name>`, and the owner's box should be wiped once
-after menus Task 7 lands.
+`docs/developers/conventions-data.md` records for rebuilds. **Menus Task 2 (the sections library
+screen)** is on `feat/menus-section-library`, not yet landed: **Products and recipes**,
+**Sections** lists every library section with where it is used (one batch read,
+`GET /management-api/sections/usages`), shows each place a section is nested, and edits, duplicates
+and deletes sections and their members. Until Task 3 drops the old per-menu headings, the dashboard
+has two things called Sections: this library, and **Venue operations**, **Menus**, **Sections**.
+Next in the lane after Task 2: menus Task 3. The owner lifted the wait: the dependency upgrades are
+finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
+the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
+owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
+adds tables or columns only and measures its own upgrade. Every dev venue then needs
+`wa-wt reset demo <name>`, and the owner's box should be wiped once after menus Task 7 lands.
+A note Task 2 leaves for Task 3: the image library links every `section` use of a photo to
+`/manage/sections?section=<id>`, but that use can also be a list a menu owns, which the sections
+screen does not list and so does nothing for. The writes of `sections` that
+`git grep -nP "(insert|update)\((schema\.)?sections\b|into sections|update sections|INTO sections" -- apps packages scripts deploy bench ':!*.test.ts' ':!*.md'`
+finds are three, all in `packages/catalogue/src/sections.ts` (lines 208, 230 and 406), and none of
+them puts a photo on a menu's own list: the two inserts create library sections and the update
+refuses any other. So when Task 3 lets a menu's list carry a photo, link it to the menu editor or
+narrow the link to library sections.
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
 shared look, and the rules for it live in [design-system.md](developers/design-system.md). That

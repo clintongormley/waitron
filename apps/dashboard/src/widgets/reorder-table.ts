@@ -17,8 +17,10 @@ export interface ReorderModel {
    * order — the invariant the pointer geometry relies on. */
   order(): readonly string[];
   /** `to` may be out of range (the pointer-drag path can pass -1); an implementation must ignore
-   * it, as `reorder()` does. */
-  move(id: string, to: number): void;
+   * it, as `reorder()` does. `via` says whether a key press or a pointer drag asked. */
+  move(id: string, to: number, via: "key" | "pointer"): void;
+  /** Called once when a pointer drag of `id` ends, whether released or cancelled. */
+  drop?(id: string): void;
   label(id: string): string;
   busy(): boolean;
   readonly reorderLabel: string;
@@ -155,7 +157,7 @@ export class ReorderController implements ReactiveController {
     const to = from + delta;
     // At an end there is nothing to move, announce or refocus — but the scroll is still suppressed.
     if (from < 0 || to < 0 || to >= order.length) return;
-    this.#model.move(id, to);
+    this.#model.move(id, to, "key");
     this.#announce(id);
     // The move re-inserts the handle's DOM node, which drops focus; restore it after the update so
     // repeated presses keep moving the same row.
@@ -188,14 +190,17 @@ export class ReorderController implements ReactiveController {
     if (drag === null || event.pointerId !== drag.pointerId) return;
     const over = this.#rowAt(event.clientY);
     if (over === null || over === drag.id) return;
-    this.#model.move(drag.id, this.#model.order().indexOf(over));
+    this.#model.move(drag.id, this.#model.order().indexOf(over), "pointer");
   };
 
-  /** A cancelled pointer (the OS interrupting a touch) needs no separate handler: each crossed row
-   * has already been committed, so there is nothing to commit here. */
+  /** A cancelled pointer (the OS interrupting a touch) ends the drag like a release: each crossed
+   * row has already moved on screen. */
   readonly #onPointerEnd = (event: PointerEvent): void => {
-    if (this.#drag !== null && event.pointerId !== this.#drag.pointerId) return;
+    // Listening only between #startDrag and #endDrag, so a drag is always in progress here.
+    const drag = this.#drag!;
+    if (event.pointerId !== drag.pointerId) return;
     this.#endDrag();
+    this.#model.drop?.(drag.id);
   };
 
   #endDrag(): void {

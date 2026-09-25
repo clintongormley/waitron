@@ -402,4 +402,68 @@ describe("DashboardApi routes", () => {
     );
     expect(headers).toEqual(["1", null]);
   });
+  it("sends every sections-library request to its route and returns the answers", async () => {
+    const section = {
+      id: "s1",
+      internalName: "Drinks",
+      names: { es: "Bebidas" },
+      image: null,
+      color: null,
+      members: [],
+    };
+    const member = { id: "m1", position: 0, ref: { kind: "product", productId: "p1" } };
+    const usages = { menus: [{ id: "c1", name: "Lunch" }], sections: [] };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([section]))
+      .mockResolvedValueOnce(jsonResponse({ s1: usages }))
+      .mockResolvedValueOnce(jsonResponse(section))
+      .mockResolvedValueOnce(jsonResponse(section))
+      .mockResolvedValueOnce(emptyResponse())
+      .mockResolvedValueOnce(jsonResponse([member]))
+      .mockResolvedValueOnce(jsonResponse(member))
+      .mockResolvedValueOnce(jsonResponse({ added: 2 }))
+      .mockResolvedValueOnce(emptyResponse())
+      .mockResolvedValueOnce(jsonResponse([member]))
+      .mockResolvedValueOnce(jsonResponse(section))
+      .mockResolvedValueOnce(jsonResponse(usages));
+    const api = new DashboardApi("", fetchImpl);
+    const ref = { kind: "section" as const, sectionId: "s2" };
+
+    await expect(api.listSections()).resolves.toEqual([section]);
+    await expect(api.listSectionUsages()).resolves.toEqual({ s1: usages });
+    await expect(api.createSection({ internalName: "Drinks", names: {} })).resolves.toEqual(
+      section,
+    );
+    await expect(api.updateSection("s1", { color: "#aabbcc" })).resolves.toEqual(section);
+    await expect(api.deleteSection("s1")).resolves.toBeUndefined();
+    await expect(api.listSectionMembers("s1")).resolves.toEqual([member]);
+    await expect(api.addSectionMember("s1", ref)).resolves.toEqual(member);
+    await expect(api.addSectionProducts("s1", ["p1", "p2"])).resolves.toEqual({ added: 2 });
+    await expect(api.removeSectionMember("s1", "m1")).resolves.toBeUndefined();
+    await expect(api.moveSectionMember("s1", "m1", 2)).resolves.toEqual([member]);
+    await expect(
+      api.duplicateSection("s1", { internalName: "Drinks (copy)", memberIds: ["m1"] }),
+    ).resolves.toEqual(section);
+    await expect(api.getSectionUsages("s1")).resolves.toEqual(usages);
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/sections", "GET", undefined],
+      ["/management-api/sections/usages", "GET", undefined],
+      ["/management-api/sections", "POST", { internalName: "Drinks", names: {} }],
+      ["/management-api/sections/s1", "PATCH", { color: "#aabbcc" }],
+      ["/management-api/sections/s1", "DELETE", undefined],
+      ["/management-api/sections/s1/members", "GET", undefined],
+      ["/management-api/sections/s1/members", "POST", { ref }],
+      ["/management-api/sections/s1/members/products", "POST", { productIds: ["p1", "p2"] }],
+      ["/management-api/sections/s1/members/m1", "DELETE", undefined],
+      ["/management-api/sections/s1/members/m1/position", "PUT", { to: 2 }],
+      [
+        "/management-api/sections/s1/duplicate",
+        "POST",
+        { internalName: "Drinks (copy)", memberIds: ["m1"] },
+      ],
+      ["/management-api/sections/s1/usages", "GET", undefined],
+    ]);
+  });
 });

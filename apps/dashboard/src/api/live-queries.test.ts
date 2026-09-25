@@ -63,6 +63,10 @@ it.each([
   ["listLabels", [], ["labels", "product_labels"]],
   ["getProductLabels", ["p1"], ["products", "product_labels"]],
   ["listLibraryProducts", [], ["products", "product_labels"]],
+  // `listSections` and `librarySectionUsages` (packages/catalogue/src/sections.ts); the usages
+  // also name each menu from `catalogues`.
+  ["listSections", [], ["sections", "section_members"]],
+  ["listSectionUsages", [], ["sections", "section_members", "catalogues"]],
   // "Below it too" walks `category_details`' parent links (`listCategoryProducts`, categories.ts).
   [
     "listCategoryProducts",

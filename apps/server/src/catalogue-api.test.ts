@@ -4142,6 +4142,34 @@ describe("mountCatalogueApi — sections", () => {
     expect(plainCopy.members).toEqual([]);
   });
 
+  it("answers every library section's usages in one read, keyed by section id", async () => {
+    const app = mountApp();
+    const menuName = `Carta ${crypto.randomUUID()}`;
+    const menuId = await createCatalogueVia(app, menuName);
+    const root = await menuRoot(menuId);
+    const drinks = await createSectionVia(app, `Bebidas ${crypto.randomUUID()}`);
+    const beer = await createSectionVia(app, `Cervezas ${crypto.randomUUID()}`);
+    const unused = await createSectionVia(app, `Sin uso ${crypto.randomUUID()}`);
+    const members = (id: string) => `/management-api/sections/${id}/members`;
+    await json(
+      await send(app, "POST", members(drinks.id), { body: { ref: section(beer.id) } }),
+      201,
+    );
+    await json(await send(app, "POST", members(root), { body: { ref: section(drinks.id) } }), 201);
+
+    const all = await json<Record<string, unknown>>(
+      await send(app, "GET", "/management-api/sections/usages"),
+      200,
+    );
+    expect(all[beer.id]).toEqual({
+      menus: [{ id: menuId, name: menuName }],
+      sections: [{ id: drinks.id, internalName: drinks.internalName }],
+    });
+    expect(all[drinks.id]).toEqual({ menus: [{ id: menuId, name: menuName }], sections: [] });
+    expect(all[unused.id]).toEqual({ menus: [], sections: [] });
+    expect(all[root]).toBeUndefined();
+  });
+
   it("answers a refused member write with its code and status", async () => {
     const app = mountApp();
     const menuId = await createCatalogueVia(app, `Carta ${crypto.randomUUID()}`);
@@ -4349,6 +4377,7 @@ describe("mountCatalogueApi — sections", () => {
       body?: unknown,
     ][] = [
       ["GET", "/management-api/sections"],
+      ["GET", "/management-api/sections/usages"],
       ["POST", "/management-api/sections", { internalName: "X" }],
       ["GET", `/management-api/sections/${id}`],
       ["PATCH", `/management-api/sections/${id}`, { internalName: "X" }],

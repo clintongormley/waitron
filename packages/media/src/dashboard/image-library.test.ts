@@ -655,7 +655,7 @@ it("links category-only image usage to its category without an inactive-product 
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
 });
 
-it("names a section using the image by its internal name, and blocks the delete", async () => {
+it("links a section using the image by its internal name to its editor, and blocks the delete", async () => {
   const client = api();
   client.getImage.mockResolvedValue({
     image,
@@ -666,8 +666,9 @@ it("names a section using the image by its internal name, and blocks the delete"
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe("Drinks (internal)"),
   );
-  // No screen shows a single section, so there is nothing to link to.
-  expect(el.shadowRoot!.querySelector("wt-modal li a")).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
+    "/manage/sections?section=drinks",
+  );
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
 });
 
