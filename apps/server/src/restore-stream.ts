@@ -35,7 +35,7 @@ import "./errors.js";
 /** A change newer than this, on the bucket's clock, means the old box may still be selling. */
 export const LIVE_WINDOW_MS = 10 * 60_000;
 
-/** What the operator must recognise before a restored copy is staged. */
+/** What the operator must recognise before a restored copy is placed. */
 export interface RestoredVenue {
   legalName: string;
   taxId: string;
@@ -273,10 +273,10 @@ async function readVerifiedPointer(store: ObjectStore, kit: RecoveryKit) {
 }
 
 /**
- * Everything a bucket rebuild decides before it changes anything on the box: the pointer, verified
- * with the kit's key; the old-box check; the download into a scratch folder; its integrity and
- * schema; the node's locked row, unlocked with the kit's recovery key; and whose copy it is. The
- * scratch folder is removed on every failure.
+ * Everything a bucket rebuild decides before it changes the venue folder, the box's identity or its
+ * secrets: the pointer, verified with the kit's key; the old-box check; the download into a scratch
+ * folder; its integrity and schema; the node's locked row, unlocked with the kit's recovery key; and
+ * whose copy it is. The scratch folder is removed on every failure.
  */
 export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<PreparedStream> {
   const { kit } = deps;
@@ -347,8 +347,8 @@ export async function writeStreamRestore(args: WriteStreamArgs): Promise<void> {
 }
 
 /**
- * Prepare, show the operator whose copy it is, then write, in one process. Nothing on the box
- * changes unless `confirmVenue` accepts the restored venue.
+ * Prepare, show the operator whose copy it is, then write, in one process. The venue folder, the
+ * box's identity and its secrets are left unchanged unless `confirmVenue` accepts the restored venue.
  */
 export async function restoreFromStream(
   deps: PrepareStreamDeps &

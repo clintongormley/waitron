@@ -59,8 +59,7 @@ const SIDECARS = ["", "-wal", "-shm"] as const;
  * rows this node originated reached the carrier before the wipe, so the caller wipes without that
  * confirmation.
  *
- * Litestream's own folder beside `venue.db` goes too: it records what was uploaded from the
- * database this removes (slice-2 plan, Reconciliation L3).
+ * Litestream's folder beside `venue.db`: slice-2 plan, Reconciliation L3.
  */
 export async function wipeVenueDatabases(venueDir: string): Promise<void> {
   for (const file of VENUE_FILES) {

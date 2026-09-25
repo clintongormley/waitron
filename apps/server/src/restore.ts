@@ -95,8 +95,8 @@ export interface RestoreDeps extends ValidationDeps {
   readonly lockVenue?: (directory: string) => Promise<VenueLock>;
   /** Recorded in the first-start marker. Default `"archive"`. */
   readonly rebuildSource?: RebuildSource;
-  /** Runs after validation and before anything is written, when the archive's identity is taken
-   * on. Refusing stops the restore. */
+  /** Runs after validation and before the restore changes the venue folder, the box's identity or
+   * its secrets; not run with `skipSecrets`. Refusing stops the restore. */
   readonly checkSourceLive?: (validated: ValidatedArtifact) => Promise<void>;
   readonly log: Logger;
 }
@@ -299,9 +299,8 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
 /**
  * Writes a validated artifact ({@link placeValidated}) holding the venue folder, so a restore
  * started while another process holds the folder is refused `provisioning.database_in_use` before
- * any database, identity or secret file is written, moved or removed. (`validateArtifact`, which
- * runs first, has already created `stagingDir` and `stateDir` if they were absent.) The hook's own
- * open and the migrate inside share the hold.
+ * it changes the venue folder, the box's identity or its secrets. The hook's own open and the
+ * migrate inside share the hold.
  */
 export async function writeValidated(
   validated: ValidatedArtifact,

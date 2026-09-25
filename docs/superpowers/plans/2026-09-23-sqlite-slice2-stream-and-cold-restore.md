@@ -20175,8 +20175,18 @@ archive request unchanged, and waitron-restore gains --from-bucket."
 > `oldBoxGone` field. Bucket calls made inside the server must be bounded as the command line's are:
 > wrap the store with `boundObjectStore` (`apps/server/src/bounded-store.ts`, 60 seconds a call).
 > `prepareStreamRestore` refuses a copy made by newer software (`provisioning.database_ahead`); an
-> empty tax id must never count as confirmed. Every bucket failure in `refuseIfArchiveSourceLive`
-> becomes `restore.stream_source_unchecked { reason: "bucket" }`.
+> empty tax id must never count as confirmed. In `refuseIfArchiveSourceLive`, a failure opening the
+> bucket, reading the pointer or listing the generation becomes `restore.stream_source_unchecked
+> { reason: "bucket" }`; a failure writing or listing the clock probe comes out as
+> `{ reason: "clock" }` (`measureBucketSkew`, `apps/server/src/restore-stream.ts`). Each run's
+> scratch folder is made fresh (`mkdtemp`: `<stateDir>/stream-restore-XXXXXX/`,
+> `<stateDir>/archive-source-check-XXXXXX/`) and removed when the run ends. `restoreFromStream`
+> requires `stagingDir`, and `checkIntegrity` takes an open database rather than a folder. The
+> command line refuses an unknown flag, any flag given twice, `--confirm-venue` without a value or
+> on the archive form, and an archive file given with `--from-bucket` (usage line, exit 2). The
+> first start's pointer read keeps its own 15-second bound (`readBucketPointerTerm`,
+> `apps/server/src/rebuild-first-start.ts`) and is not wrapped with `boundObjectStore`; the bucket
+> calls this task's routes make must be wrapped, as above.
 
 **Branch:** `feat/sqlite-slice2-restore-bucket-wizard` (one pull request)
 

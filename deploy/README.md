@@ -236,14 +236,18 @@ command against it treat that entrypoint differently:
   unless `--confirm-venue` names that tax id. If the old box wrote to the bucket in the last ten
   minutes, or that cannot be checked, it stops and says so; add `--confirm-old-box-gone` only when
   the old box is switched off for good. A backup file whose box was copying to a bucket gets the
-  same check.
+  same check. Each form takes only its own flags, each once: `--confirm-venue` belongs to the
+  bucket form alone, and a backup file given together with `--from-bucket` is refused. Anything
+  else prints the usage line and exits 2.
 
   Restore and rejoin are refused while another process, usually the running server, is using the
   venue folder (`provisioning.database_in_use`): rejoin before it reads or wipes anything, restore
   before it changes the venue folder, the box's identity or its secrets. A restore's earlier steps
   run in temporary folders under the state folder, and the bucket form downloads the whole copy
   there first, then is refused only when it comes to place it — so stop the server before either
-  form. Break-glass is the exception by design: it runs beside the
+  form. Each run makes its own folder (`stream-restore-` or `archive-source-check-` and six random
+  characters) and removes it when it ends; a run that is killed leaves it, holding a full copy of
+  the venue's database, and the next run does not remove it. Break-glass is the exception by design: it runs beside the
   server and takes no lock. Whatever holds the folder keeps a small file beside it,
   `venue.holder.json`, naming what kind of program it is and rewriting a heartbeat time every five
   seconds. A server start refused while that heartbeat is under 30 seconds old — a second copy of

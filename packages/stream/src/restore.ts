@@ -47,11 +47,9 @@ async function sizeOf(path: string): Promise<number> {
  * The configuration's database path is a name only and never exists: the bench rig measured on
  * 0.5.17 that restoring with the source absent returns every row (`bench/sqlite-failover/src/litestream.ts`).
  *
- * Progress is the size of `outPath` or `<outPath>.tmp`, whichever is larger: 0.5.17 writes into
- * `<outPath>.tmp` and renames it at the end. Measured 2026-09-23 on darwin/arm64 from a FILE replica,
- * a 420 MB restore showed 78 distinct sizes in 81 samples 20 ms apart; from an S3 bucket it is not
- * measured. Time is read from the monotonic clock, so a system clock set mid-restore moves neither
- * bound.
+ * Progress is the size of `outPath` or `<outPath>.tmp`, whichever is larger: Litestream 0.5.17
+ * writes into `<outPath>.tmp` and renames it at the end. Time is read from the monotonic clock, so a
+ * system clock set mid-restore moves neither bound.
  */
 export async function restoreGeneration(args: RestoreGenerationArgs): Promise<void> {
   const configDir = args.configDir ?? join(dirname(args.outPath), ".litestream-restore");

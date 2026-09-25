@@ -404,6 +404,12 @@ last screen says so.
 uses one source, the stream or an archive file, never both — or one event would mint two installation
 numbers (topology §7.5).
 
+> 2026-09-25, as built (Task 9b): the command is `waitron-restore restore --from-bucket <kit-file>
+> --confirm-venue <tax id> [--confirm-old-box-gone]`. The command line places the copy in the same
+> process rather than staging it for the next start, and asks for the copy's tax id before it does;
+> an archive file given together with `--from-bucket` is a usage error. See `docs/backlog.md`'s
+> Task 9b entry.
+
 ### 5.3 Going live is never blocked
 
 Cash sales start as soon as the box is up. Filing and card payments need the credentials, which step 5

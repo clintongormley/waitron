@@ -1357,7 +1357,7 @@ false` wrongly, or a new command that changes the folder's files without `lockVe
 by nothing.
 
 **Every caller, and what it does** (from `grep -rln "openVenueStore\|openVenueDatabase"` over `apps`,
-`packages`, `scripts` and `bench`, non-test files, 2026-09-24):
+`packages`, `scripts` and `bench`, non-test files, 2026-09-25):
 
 | Caller | Runs | Decision |
 | --- | --- | --- |
@@ -1365,6 +1365,7 @@ by nothing.
 | `apps/server/src/backup-supervisor.ts` (`reload`) | inside the server | shares the server's hold |
 | `apps/server/src/node-entry.ts` (`assertNotAhead`) and the staged restore it runs | the container entrypoint, the same process as the server | locks, one after the other, before the server opens |
 | `apps/server/src/restore.ts` (`writeValidated`) | `waitron-restore` (server stopped) and the staged restore | takes the lock before its first change and holds it to the end; its migrate and hook open share it. Refused while another process holds the folder |
+| `apps/server/src/restore-stream.ts` (`refuseIfArchiveSourceLive`, and `readRestoredCopy` inside `prepareStreamRestore`) | `waitron-restore`, before `writeValidated` | each locks (default) its own scratch folder under the state folder, made fresh per run (`archive-source-check-XXXXXX` for the archive's copy, `stream-restore-XXXXXX` for the download, which is opened once), never the venue folder; no contention |
 | `apps/server/src/rejoin-command.ts` | `waitron-rejoin` (server stopped) | takes the lock before its first read and holds it through the wipe and re-migrate. Refused while another process holds the folder |
 | `packages/migrations/src/apply.ts` | boot, restore, rejoin, dev scripts | locks (default), inside its own `migrations.lock` |
 | `packages/provisioning/src/bin.ts` (`waitron-provision venue`) | once per venue | locks; refused while another process holds the folder, printed as `provisioning.database_in_use {"database":…}` |
@@ -1376,6 +1377,7 @@ by nothing.
 | `apps/server/scripts/record-one-sale.ts`, `settle-invoice-first.ts` | write sales for a running server to drain | `exclusive: false` |
 | `apps/server/scripts/cloud-backup-fixture.ts` `capture` | the Cloud repository's local-backups runner (`test-local-backups.mjs` in its scripts folder), while the fixture server on the same folder is still running (it stops the servers only after every capture: read, not run) | `exclusive: false` |
 | `apps/server/scripts/cloud-backup-fixture.ts` `restore` | the same runner, on a fresh folder with no server (read, not run) | locks (default), through `writeValidated`, then its own open |
+| `apps/server/scripts/cloud-capture-client-fixture.ts` (`schedule`), `cloud-recovery-client-fixture.ts` (`restore`, `prepareReplacement`, `statusReplacement`) | Cloud's integration runners, on a folder under the system's temporary directory; whether a server holds the same folder at that moment was not checked | locks (default); the recovery fixture's `restore` also locks through `runStagedRestore` first |
 | `apps/server/scripts/cloud-integration-fixture.ts` | Cloud's runners start it as the server; a restart waits for the old process to exit before relaunching on the same folder (`stop` awaits the child's `exit` before `launch`: Cloud's runner scripts, read, not run) | locks (default); its first open runs before `startServer` in the same process |
 | `apps/server/src/fiscal-readiness-runner.ts` | its own directory | locks; no contention |
 | `*-demo.ts` scripts, `apps/server/scripts/testing/venue.ts`, `useVenueDb` | their own temporary directories | locks; no contention |
@@ -1518,11 +1520,12 @@ directory pass it, are stated at `runEntry` in `apps/server/src/node-entry.ts`.
 
 The GAP, stated so nobody assumes coverage: BOOT and the bucket rebuild are the only migrating paths
 carrying the check, and every other caller of `applyMigrations` runs without one. Re-grepped
-2026-09-22, those callers are the cold restore from an archive taken from the `waitron-restore` CLI
-(`apps/server/src/restore-command.ts`, which calls `apps/server/src/restore.ts`),
-`apps/server/src/rejoin-command.ts`,
-`apps/server/src/fiscal-readiness-runner.ts`, and seven scripts under `apps/server/scripts` —
-`dev-setup.ts`, `dev-onboard.ts` and the five demo scripts. An ahead database reached through any of
+2026-09-25 (`grep -rn applyMigrations apps packages`, non-test files, leaving out the test helper
+`packages/db/src/testing/venue-db.ts`), those callers are the cold restore from an archive taken
+from the `waitron-restore` CLI (`apps/server/src/restore-command.ts`, which calls
+`apps/server/src/restore.ts`), `apps/server/src/rejoin-command.ts`,
+`apps/server/src/fiscal-readiness-runner.ts`, and eight scripts under `apps/server/scripts` —
+`dev-setup.ts`, `dev-onboard.ts`, `cloud-integration-fixture.ts` and the five demo scripts. An ahead database reached through any of
 them is still undetected. A restore staged
 at BOOT is the one case that IS covered, because the check runs after it. The `instance` command
 headed this list until 2026-09-22 and no longer exists. Cost: without the check, an ahead database
