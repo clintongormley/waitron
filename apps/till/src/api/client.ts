@@ -239,7 +239,7 @@ export interface StaffMember {
  * capability (`roleHasPermission(role, "venue.configure")`, resolved server-side from the session's
  * role). The till reads it to gate manager-only affordances (FP-2's on-till "Editar plano") without
  * mirroring the role→permission map on the client, where it would silently drift from `permissions.ts`.
- * Convenience only — the on-till placement route re-checks `venue.configure` server-side
+ * Convenience only — the on-till placement routes re-check `venue.configure` server-side
  * (`apps/server/src/till-api.ts`), so a tampered client value grants nothing.
  */
 export interface SessionResult {
@@ -922,8 +922,8 @@ export interface StationQueueGroup {
  * `POST /api/device/join` success (device-join-and-accept §2) — what a knock learns: the pending
  * REQUEST's id and the two-digit number an admin picks out of three in the dashboard to approve it.
  * Nothing about the venue rides this response — no profiles, no stations, no registers — because the
- * profile and the binding are chosen in the dashboard's accept dialog, so an unapproved device learns
- * nothing. The device TOKEN is absent too: it leaves the server ONLY in the httpOnly `Set-Cookie`.
+ * profile and the binding are chosen in the dashboard's accept dialog. The device TOKEN is absent too:
+ * it leaves the server ONLY in the httpOnly `Set-Cookie`.
  * `joinId` IS the id the device will have once accepted — `acceptDeviceJoinRequest` carries the
  * request's id onto the `devices` row (`apps/server/src/join-requests.ts`), which is why the join
  * response alone is enough for the screen to announce its own `deviceId`.
