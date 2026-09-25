@@ -3909,8 +3909,9 @@ it` still passes, so it is a smoke test rather than a control, and it says so at
 transaction opened by RUNNING `begin` as an ordinary statement is not one the store is told about —
 Drizzle's own migrator opens one that way — so a read concurrent with it still lands on the writer.
 A write issued from outside a running body while one is open is re-run on the writer, where it joins
-that transaction and commits or rolls back with it, which is what one connection did; nothing
-refuses it. And `readOnly: true` refuses a write to the database FILE, not every write: measured
+that transaction if it is still open and commits or rolls back with it, which is what one connection
+did; in the moment after the queue's `commit` and before the body has ended, none is open and the
+write commits by itself. Nothing refuses it. And `readOnly: true` refuses a write to the database FILE, not every write: measured
 2026-09-23 on Node v26.7.0, `create temp table` SUCCEEDS on such a connection, so a temporary table
 written from outside a running body would land on the reader and stay there — and the same holds
 for an `ATTACH` of a file that exists (one of a missing file is refused, errcode 14 — measured by
@@ -5018,7 +5019,7 @@ and encrypts it exactly as the archive is; the backup sweep and the row build th
 refused requests included. Left open by #560, both since decided by the owner: (1) a failed refresh
 was only logged (`backup.sealed_state_failed`); Task 7 now raises it as a dashboard alert too;
 (2) every node writes its own row at every start, standby and mirror nodes included, while the
-backup job runs only on the primary — kept, so any node can be rebuilt. Nothing outside the backup routes
+backup job runs only on the primary — kept by design (owner, 2026-09-24). Nothing outside the backup routes
 rewrites a sealed file while the server keeps running (#560's per-task review traced each writer:
 promotion rewrites `trading.env` and then restarts; `modules.json`, `secrets.env` and the TLS files
 are written in setup or by the command line, before a restart); Tasks 8a and 9a must call the one
@@ -5126,25 +5127,25 @@ reports how long the oldest change not yet there has waited. `/health`, the box 
 backup status show the bucket copy, and `/health` never fails because of it. The dashboard gains
 alerts for a copy that is behind by fifteen minutes, paused, stopped by another box, refused by its
 bucket, unable to use its settings, or stopped by itself, and for a failed refresh of the sealed
-state row; "backups are not set up" now fires only when there is neither a scheduled backup nor a
+state row; the `backup.disabled` alert now fires only when there is neither a scheduled backup nor a
 bucket copy that is on and current. Left open:
 - A bucket read given up after five minutes is not cancelled, because the bucket client's list
   takes no way to stop it; the same root as #590's item (1), no request timeout on bucket calls.
-- A write that changes no row (a delete that matches nothing) or a schema change can still reach
-  the side file unreported, so the lag can read low.
+- A commit that changes no row but writes to the side file, such as a schema change or a pragma
+  such as `user_version`, is not reported, so the lag can read low.
 - An update that writes the same value, straight after a schema-only commit, is still reported,
   although it adds nothing for the bucket (a test pins it).
 - The check that the side file changed was measured on the Mac's filesystem only, not the box's
   Linux one; a commit landing in the same file-time tick after a side-file restart is missed.
+- A sale whose write transaction began before the supervisor first subscribed after boot (no
+  listener registered when it began) is not counted, so the lag reads low for it.
 - Whether Litestream uploads anything while the side file is unchanged is not measured; Task 10's
   loop test is the natural place.
-- The store's commit-listener comment does not say that subscribing resets the comparison point,
-  and one line of the adapter's prepare comment is over 100 characters.
 - The alerts send the owner to the Backups page for the bucket's settings, which Task 8b adds; the
   status gained a third shape, a copy set up but not started, which Task 8b's panel must show.
 - Of the four places boot hands the copy's state to, three are held by the compiler, which refuses
-  a boot call that leaves the key out (though not one that passes `undefined`), and `/health` by a
-  boot test. A boot test also pins the sealed-state alert's registration.
+  a boot call that leaves the key out, and `/health` by a boot test. A boot test also pins the
+  sealed-state alert's registration.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence
