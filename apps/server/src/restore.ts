@@ -101,6 +101,9 @@ export interface RestoreDeps extends ValidationDeps {
   readonly log: Logger;
 }
 
+/** What writing an already validated artifact reads. */
+export type PlacementDeps = Omit<RestoreDeps, "artifact" | "recoveryKey">;
+
 /**
  * What {@link validateArtifact} reads, and nothing else.
  *
@@ -109,9 +112,6 @@ export interface RestoreDeps extends ValidationDeps {
  * neither the venue directory nor a {@link Logger} belongs in its parameter — a caller that had to
  * supply one would be supplying a value the function cannot use.
  */
-/** What writing an already validated artifact reads. */
-export type PlacementDeps = Omit<RestoreDeps, "artifact" | "recoveryKey">;
-
 export interface ValidationDeps {
   readonly artifact: Uint8Array;
   readonly recoveryKey: string;

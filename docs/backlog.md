@@ -5456,7 +5456,8 @@ open:
   request is cleared, so every start fails the same way. I believe this predates the branch: the
   archive request's reads sat outside the `try` before it (from the diff, not a run).
 - A copy with no `tenants` row reads an empty tax id, which the command line never accepts as
-  confirmed, so it cannot be restored; no code names that case.
+  confirmed, so it cannot be restored. The command line prints its own message for it, but no
+  dedicated error code names that case.
 - An interrupted bucket rebuild or archive check leaves its scratch folder, a full copy of the
   venue database, under the state folder; the next run makes a new one and does not remove it.
 - The placement step can lose the old database. `restoreDatabase` (`apps/server/src/restore.ts`)
