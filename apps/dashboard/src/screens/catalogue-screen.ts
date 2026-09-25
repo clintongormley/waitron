@@ -13,6 +13,7 @@ import type {
   DashboardApi,
   ExtraList,
   ExtraListInput,
+  LabelSummary,
   OptionList,
   OptionListInput,
   Product,
@@ -89,6 +90,7 @@ export class CatalogueScreen extends LitElement {
   @state() private contentLanguages: ContentLanguages | null = null;
   @state() private catalogues: CatalogueSummary[] = [];
   @state() private categories: CategorySummary[] = [];
+  @state() private labels: LabelSummary[] = [];
   @state() private units: Unit[] = [];
   @state() private extraLists: ExtraList[] = [];
   @state() private optionLists: OptionList[] = [];
@@ -165,6 +167,9 @@ export class CatalogueScreen extends LitElement {
         }),
         this.#queries.watch("listCategories", [], (value) => {
           this.categories = value;
+        }),
+        this.#queries.watch("listLabels", [], (value) => {
+          this.labels = value;
         }),
         this.#queries.watch("listUnits", [], (value) => {
           this.units = value;
@@ -502,6 +507,7 @@ export class CatalogueScreen extends LitElement {
           ? html`<dashboard-product-list
               .products=${this.products}
               .categories=${this.categories}
+              .labels=${this.labels}
               .extraLists=${this.extraLists}
               .optionLists=${this.optionLists}
               @edit-product=${(event: CustomEvent<{ productId: string }>) => {
@@ -533,6 +539,7 @@ export class CatalogueScreen extends LitElement {
         .fieldErrors=${this.editorFieldErrors}
         .units=${this.units}
         .categories=${this.categories}
+        .labels=${this.labels}
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
         .stations=${this.stations}

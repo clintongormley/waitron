@@ -7,12 +7,13 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
 import { categoryPath } from "./category-form.js";
+import { labelNames } from "./classification-fields.js";
 import {
   modifierListName,
   modifierListNames,
   type ModifierListChoice,
 } from "./product-editor-model.js";
-import type { CategorySummary, Product } from "../api/client.js";
+import type { CategorySummary, Label, Product } from "../api/client.js";
 
 interface ProductRow {
   key: string;
@@ -75,6 +76,7 @@ export class ProductList extends LitElement {
 
   @property({ attribute: false }) products: Product[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
+  @property({ attribute: false }) labels: Label[] = [];
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
 
@@ -120,20 +122,18 @@ export class ProductList extends LitElement {
       : t("editor.missing_choice");
   }
 
-  /** A variant's row reads the values it is reported under, which the server resolves. */
+  /** A variant's row reads the values it is reported under, which the server resolves: its own
+   * main category or its parent's, and always its parent's labels. */
   #values({ product, variant }: ProductRow): {
     primaryCategoryId: string | null;
-    categoryIds: string[];
+    labelIds: string[];
   } {
     return variant?.effective ?? product;
   }
 
-  #otherCategories(row: ProductRow): string {
-    const { categoryIds, primaryCategoryId } = this.#values(row);
-    return categoryIds
-      .filter((id) => id !== primaryCategoryId)
-      .map((id) => this.#category(id))
-      .filter(Boolean)
+  #labels(row: ProductRow): string {
+    return labelNames(this.#values(row).labelIds, this.labels, t("editor.missing_choice"))
+      .sort((a, b) => a.localeCompare(b))
       .join(", ");
   }
 
@@ -186,15 +186,15 @@ export class ProductList extends LitElement {
       },
       {
         key: "reporting-category",
-        label: t("product.reporting_category"),
+        label: t("editor.main_category"),
         cell: (row) => this.#category(this.#values(row).primaryCategoryId),
         searchValue: (row) => this.#category(this.#values(row).primaryCategoryId),
       },
       {
-        key: "other-categories",
-        label: t("product.other_categories"),
-        cell: (row) => this.#otherCategories(row),
-        searchValue: (row) => this.#otherCategories(row),
+        key: "labels",
+        label: t("labels.field"),
+        cell: (row) => this.#labels(row),
+        searchValue: (row) => this.#labels(row),
       },
       {
         key: "price",

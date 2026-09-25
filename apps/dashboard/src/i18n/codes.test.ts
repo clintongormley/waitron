@@ -233,3 +233,15 @@ it("has English and Spanish copy for every code in the bucket-copy routes' statu
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
   }
 });
+
+it("has a sentence for each label code and the category reassignment refusal", () => {
+  for (const code of [
+    "label.invalid",
+    "label.duplicate",
+    "label.not_found",
+    "category.reassign_invalid",
+  ]) {
+    expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
+    expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
+  }
+});

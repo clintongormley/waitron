@@ -38,7 +38,7 @@ function product(overrides: Partial<Product> = {}): Product {
     modifiers: [],
     catalogueId: "cat-1",
     categoryId: "category-1",
-    categoryIds: ["category-1"],
+    labelIds: [],
     primaryCategoryId: "category-1",
     name: "White bread",
     customerName: { es: "Pan blanco" },

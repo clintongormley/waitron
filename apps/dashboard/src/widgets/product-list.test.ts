@@ -68,7 +68,7 @@ function product(
     modifiers: [],
     catalogueId: "cat-1",
     categoryId: "category-1",
-    categoryIds: ["category-1"],
+    labelIds: [],
     primaryCategoryId: "category-1",
     name: "Croquetas de jamón",
     customerName: { es: "Croquetas caseras de jamón ibérico" },
@@ -97,7 +97,7 @@ function product(
         unitPrice: variant.unitPrice ?? base.unitPrice,
         vatClass: base.vatClass,
         primaryCategoryId: base.primaryCategoryId,
-        categoryIds: base.categoryIds,
+        labelIds: base.labelIds,
       },
     })),
   };
@@ -201,12 +201,13 @@ describe("product-list", () => {
   // options list this product does NOT hold, so a column printing the loaded set instead of the
   // attachments names it; and the cell is asserted whole with `toBe`, so resolving the `extras` ref
   // against the options lists — which also reaches "Punto" — loses "Salsas".
-  it("shows reporting and other categories, attached modifier list names, and no VAT column", async () => {
+  it("shows the main category, the labels by name, attached modifier list names, and no VAT column", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
           primaryCategoryId: "reporting",
-          categoryIds: ["reporting", "seasonal", "terrace"],
+          // Sorted by id, as the server sends them; the cell lists them by name.
+          labelIds: ["l-a", "l-b"],
           modifiers: [
             { kind: "extras", id: "ex-1" },
             { kind: "options", id: "opt-1" },
@@ -216,7 +217,10 @@ describe("product-list", () => {
       categories: [
         { id: "reporting", name: { es: "Comida" }, image: null, color: null, parentId: null },
         { id: "seasonal", name: { es: "Temporada" }, image: null, color: null, parentId: null },
-        { id: "terrace", name: { es: "Terraza" }, image: null, color: null, parentId: null },
+      ],
+      labels: [
+        { id: "l-b", name: "Temporada" },
+        { id: "l-a", name: "Terraza" },
       ],
       extraLists: [{ id: "ex-1", name: "Salsas" }],
       optionLists: [
@@ -227,13 +231,14 @@ describe("product-list", () => {
     const root = await tableRoot(el);
     const headers = [...root.querySelectorAll("thead th")].map((cell) => cell.textContent!.trim());
     expect(headers.some((header) => header.startsWith(t("product.name")))).toBe(true);
-    expect(headers).toContain(t("product.reporting_category"));
-    expect(headers).toContain(t("product.other_categories"));
+    expect(headers).toContain(t("editor.main_category"));
+    expect(headers).toContain(t("labels.field"));
     expect(headers).toContain(t("editor.modifiers"));
     expect(headers).not.toContain(t("product.vat"));
-    const text = root.querySelector("tbody tr")!.textContent!;
-    expect(text).toContain("Comida");
-    expect(text).toContain("Temporada, Terraza");
+    expect(cellUnder(root, "prod-1", t("editor.main_category")).textContent!.trim()).toBe("Comida");
+    expect(cellUnder(root, "prod-1", t("labels.field")).textContent!.trim()).toBe(
+      "Temporada, Terraza",
+    );
     expect(cellUnder(root, "prod-1", t("editor.modifiers")).textContent!.trim()).toBe(
       "Salsas, Punto de la carne",
     );
@@ -261,16 +266,17 @@ describe("product-list", () => {
     expect(cell.textContent).not.toContain("Punto");
   });
 
-  it("shows a visible placeholder instead of blank cells for unresolved category and modifier ids", async () => {
+  it("shows a visible placeholder instead of blank cells for unresolved category, label and modifier ids", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
           primaryCategoryId: "missing-category",
-          categoryIds: ["missing-category", "missing-secondary"],
+          labelIds: ["missing-label"],
           modifiers: [{ kind: "options", id: "missing-list" }],
         }),
       ],
       categories: [],
+      labels: [],
       extraLists: [],
       optionLists: [],
     });
@@ -590,7 +596,7 @@ describe("product-list", () => {
 
   // Every field differs between Wine 175 and its product, and its three names differ from one
   // another, so a row reading the product's values or the wrong name fails.
-  it("shows a variant's own name and its effective price and categories", async () => {
+  it("shows a variant's own name, its effective price and main category, and its parent's labels", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
@@ -599,7 +605,7 @@ describe("product-list", () => {
           unitPrice: "4.00",
           vatClass: "reduced",
           primaryCategoryId: "food",
-          categoryIds: ["food", "terrace"],
+          labelIds: ["l-ter"],
           variants: [
             {
               ...bunVariant,
@@ -612,7 +618,7 @@ describe("product-list", () => {
                 unitPrice: "4.75",
                 vatClass: "general",
                 primaryCategoryId: "drinks",
-                categoryIds: ["drinks", "bar"],
+                labelIds: ["l-ter"],
               },
             },
           ],
@@ -620,10 +626,9 @@ describe("product-list", () => {
       ],
       categories: [
         { id: "food", name: { es: "Comida" }, image: null, color: null, parentId: null },
-        { id: "terrace", name: { es: "Terraza" }, image: null, color: null, parentId: null },
         { id: "drinks", name: { es: "Bebidas" }, image: null, color: null, parentId: null },
-        { id: "bar", name: { es: "Barra" }, image: null, color: null, parentId: null },
       ],
+      labels: [{ id: "l-ter", name: "Terraza" }],
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
@@ -634,11 +639,10 @@ describe("product-list", () => {
     expect(cell(t("product.price")).querySelector('[data-test="price"]')!.textContent!.trim()).toBe(
       "4.75",
     );
-    expect(cell(t("product.reporting_category")).textContent!.trim()).toBe("Bebidas");
-    expect(cell(t("product.other_categories")).textContent!.trim()).toBe("Barra");
-    expect(cellUnder(root, "wine", t("product.other_categories")).textContent!.trim()).toBe(
-      "Terraza",
-    );
+    expect(cell(t("editor.main_category")).textContent!.trim()).toBe("Bebidas");
+    expect(cellUnder(root, "wine", t("editor.main_category")).textContent!.trim()).toBe("Comida");
+    expect(cell(t("labels.field")).textContent!.trim()).toBe("Terraza");
+    expect(cellUnder(root, "wine", t("labels.field")).textContent!.trim()).toBe("Terraza");
   });
 
   it("notes a variant's VAT under its price only where it differs from its product's", async () => {
@@ -660,7 +664,7 @@ describe("product-list", () => {
                 unitPrice: "4.75",
                 vatClass: "general",
                 primaryCategoryId: "category-1",
-                categoryIds: ["category-1"],
+                labelIds: [],
               },
             },
             {

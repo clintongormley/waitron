@@ -64,8 +64,24 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Elige una Categoría de informes de reemplazo.",
   },
   "category.membership_invalid": {
-    en: "Choose distinct categories and a Reporting Category from those selected.",
-    es: "Elige categorías distintas y una Categoría de informes entre las seleccionadas.",
+    en: "Some of the chosen products cannot be moved here. Refresh the list and try again.",
+    es: "Algunos de los productos elegidos no se pueden mover aquí. Actualiza la lista e inténtalo de nuevo.",
+  },
+  "category.reassign_invalid": {
+    en: "Choose a place outside this category and its subcategories.",
+    es: "Elige un destino fuera de esta categoría y de sus subcategorías.",
+  },
+  "label.invalid": {
+    en: "Enter a label name, and choose each label only once.",
+    es: "Introduce un nombre de etiqueta y elige cada etiqueta una sola vez.",
+  },
+  "label.duplicate": {
+    en: "Another label already has this name.",
+    es: "Ya hay otra etiqueta con este nombre.",
+  },
+  "label.not_found": {
+    en: "This label no longer exists. Refresh the list.",
+    es: "Esta etiqueta ya no existe. Actualiza la lista.",
   },
   "category.image_not_found": {
     en: "Choose an image from your image library.",
