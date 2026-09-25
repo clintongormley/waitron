@@ -32,9 +32,8 @@ const immediate = (_ms: number, fn: () => void) => {
 
 describe("closeListener", () => {
   it("force-closes all connections after the grace so a keep-alive socket cannot hang close()", async () => {
-    // The bug: a browser keep-alive (the setup 'waiting for the box' poll) keeps a socket open, and
-    // Node's close() never resolves until every connection ends. This fake resolves ONLY when
-    // closeAllConnections runs — so if closeListener did not force them, this would hang forever.
+    // This fake resolves ONLY when closeAllConnections runs, so a closeListener that did not force
+    // keep-alive connections closed would hang here.
     const s = fakeServer({ resolveOnAllClosed: true });
     await closeListener(s, { graceMs: 5, setTimer: immediate });
     expect(s.calls.idle).toBe(1);

@@ -7,10 +7,8 @@ import { DEV_DEVICE_HEADER } from "./device-session.js";
  * hono/cors emit no Allow-Origin header, so the browser blocks a stranger; an allowed origin is echoed
  * exactly (never `*` — credentials ride these requests).
  *
- * A same-origin request carries no `Origin` header: it is passed straight through and hono/cors is
- * never entered, so the allow-list is not read (no DB cost, no failure dependency) and no Vary /
- * Allow-Credentials headers are added — "leaves a same-origin request untouched" (§3.4). Only a
- * request that DOES carry an Origin runs the CORS middleware.
+ * A same-origin request carries no `Origin` header: it is passed straight through, so the
+ * allow-list is not read and no Vary / Allow-Credentials headers are added.
  */
 export function corsForVenue(allow: (origin: string) => Promise<boolean>): MiddlewareHandler {
   const middleware = cors({

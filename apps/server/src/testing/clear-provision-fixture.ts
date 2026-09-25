@@ -8,10 +8,8 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "department_hours",
       "preparation_routes",
       "device_zone_defaults",
-      // The policy goes BEFORE the menus it names. `zone_service_policies_default_allowed_fk`
-      // points (zone_id, default_menu_id) at `zone_menus`, and the DEFERRABLE INITIALLY DEFERRED
-      // it carried on PostgreSQL does not survive sqlite-core, so the check lands at the statement
-      // rather than at commit (`packages/venue-service/src/schema/service.ts`).
+      // The policy goes BEFORE the menus it names: `zone_service_policies_default_allowed_fk`
+      // points (zone_id, default_menu_id) at `zone_menus`.
       "zone_service_policies",
       "zone_menus",
       "departments",

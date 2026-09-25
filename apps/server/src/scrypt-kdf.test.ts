@@ -26,11 +26,8 @@ describe("deriveKey", () => {
     const withDefault = deriveKey("pw", salt);
     const withExplicitLighterCost = deriveKey("pw", salt, lighter);
     const withExplicitDefaultCost = deriveKey("pw", salt, SCRYPT_PARAMS);
-    // A different cost changes the derived key (scrypt mixes N/r/p into the derivation, not just
-    // salt+passphrase), so this only passes if the third argument is actually used.
+    // Passes only if the third argument is actually used.
     expect(withExplicitLighterCost.equals(withDefault)).toBe(false);
-    // Passing the default explicitly must reproduce calling with no third argument at all — proves
-    // the parameter, not just its presence, drives the default.
     expect(withExplicitDefaultCost.equals(withDefault)).toBe(true);
   });
 

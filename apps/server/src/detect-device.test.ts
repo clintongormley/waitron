@@ -1,13 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { detectTrustDevice, trustDeviceForRequest } from "./detect-device.js";
 
-// Real, current user-agent strings. Sources, read 2026-09-13:
-//   github.com/jnrbsn/user-agents (user-agents.json, refreshed daily) — the macOS, Windows and
-//   Linux desktop rows;
-//   whatismybrowser.com/guides/the-latest-user-agent/safari — the iPhone and iPad rows;
-//   the Chrome-OS, Android-Chrome, Android-Firefox and Samsung-Internet rows are the published
-//   current examples on user-agents.net / deviceatlas / MDN's Firefox UA reference.
-// Nothing here is hand-written: a UA nobody's browser sends proves nothing about ordering.
+// Real published user-agent strings, not hand-written: a UA nobody's browser sends proves nothing
+// about ordering.
 const UA = {
   macosSafari:
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27 Safari/605.1.15",
@@ -38,9 +33,7 @@ const UA = {
 } as const;
 
 describe("detectTrustDevice — the sec-ch-ua-platform hint", () => {
-  // The whole documented value set, quoted the way Chromium sends it. MDN's Sec-CH-UA-Platform
-  // page lists exactly: "Android", "Chrome OS", "Chromium OS", "iOS", "Linux", "macOS",
-  // "Windows", "Unknown" (read 2026-09-13).
+  // MDN's documented Sec-CH-UA-Platform value set, quoted the way Chromium sends it.
   it.each([
     ['"macOS"', "macos"],
     ['"Windows"', "windows"],
@@ -200,11 +193,8 @@ describe("detectTrustDevice — absent, empty and unrecognised input", () => {
 
 describe("detectTrustDevice — the iPadOS limit, pinned rather than worked around", () => {
   it("reads a default-mode iPadOS Safari user-agent as macos, because it is a Mac string", () => {
-    // iPadOS 13 and later request the desktop site by default. whatismybrowser.com's Safari guide
-    // (read 2026-09-13) puts it this way: Safari on iOS 13 and later "no longer includes fragments
-    // to indicate that Safari's running on iOS ... instead the user agent is indistinguishable from
-    // the desktop version of macOS". I have not tested a physical iPad; this test pins what the
-    // function does with the string, not what device sent it.
+    // iPadOS 13 and later send the desktop macOS user-agent by default. This pins what the function
+    // does with the string, not what device sent it.
     const ipadInDesktopMode = UA.macosSafari;
     expect(detectTrustDevice({ userAgent: ipadInDesktopMode })).toBe("macos");
     // An iPad that is NOT in desktop mode still resolves to ios, and the iOS platform hint, when a
@@ -232,10 +222,8 @@ describe("trustDeviceForRequest — the two headers are named in one place", () 
   });
 
   it("asks for those two headers and no others", () => {
-    // The security boundary this file documents is that only these two headers are read. What this
-    // pins is THIS function: give it a third header to read and the assertion goes red. It says
-    // nothing about the route handlers — they are never called here, so a handler that reached for a
-    // cookie itself would not show up.
+    // Pins that THIS function reads only the two headers; it says nothing about the route handlers,
+    // which could still read a cookie themselves.
     const asked: string[] = [];
     trustDeviceForRequest({
       header: (name: string) => {

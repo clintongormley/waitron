@@ -15,7 +15,7 @@ export interface StripeAccountDeps {
    * `stripeSecretKeyFrom`. */
   environment: DeploymentEnvironment;
   /** Injected so a test never constructs a real SDK client, and so the KEY this host passes is
-   * observable — which is the whole of the tenant scoping on this path. */
+   * observable. */
   makeStripe: (secretKey: string) => Stripe;
 }
 
@@ -38,25 +38,16 @@ export function defaultMakeStripe(secretKey: string): Stripe {
 }
 
 /**
- * Validates the decrypted payload at the READ site — the same convention `aeat-transport.ts`'s
- * `certMaterialFrom` establishes, and exported as a pure function for the same reason: a stale
- * payload (sealed before a field was required, or written by something other than `putCredential`)
- * can be driven directly, rather than forged through the vault's own write path, which
- * `validatePayload` (packages/credentials/src/purposes.ts) makes impossible for any REQUIRED,
- * empty-string field — `secretKey` among them, so this checks only `undefined`, not `""`.
+ * Validates the decrypted payload at the READ site, because reads do not validate: a row sealed
+ * under an older field list decrypts to a payload missing a field, and `undefined` passed into the
+ * Stripe SDK would fail far away with nothing naming the field. Exported so a stale payload can be
+ * driven directly. `validatePayload` (`packages/credentials/src/purposes.ts`) refuses an empty
+ * required field at write, so this checks only `undefined`, not `""`.
  *
- * Reads do not validate, so a row sealed under an older field list decrypts to a payload missing a
- * field. Unlike `certKind` (added later, so older rows can lack it), `secretKey` has been declared
- * since the purpose existed, so a stale row lacking it is far less likely — but if this host passed
- * `undefined` into the Stripe SDK, it would fail somewhere far away with nothing naming the tenant
- * or the field.
- *
- * Also checks the key's ENVIRONMENT against `environment`, this host's own deployment environment —
- * the same read-site placement, for the same reason: a test key sealed on a production deployment
- * (or vice versa) would otherwise fail somewhere far away — every card payment silently never
- * settling, or `reconcile` sweeping a test-mode account against live rows — with nothing naming the
- * tenant or explaining why. See `keyEnvironmentOf` for why an unclassifiable key passes through
- * rather than being refused.
+ * Also checks the key's ENVIRONMENT against this host's own: a test key sealed on a production
+ * deployment (or vice versa) would otherwise fail far away — card payments never settling, or
+ * `reconcile` sweeping a test-mode account against live rows. See `keyEnvironmentOf` for why an
+ * unclassifiable key passes through.
  */
 export function stripeSecretKeyFrom(
   payload: Record<string, string | undefined>,
@@ -80,10 +71,7 @@ export function stripeSecretKeyFrom(
 /**
  * The shared `readCredential` → `stripeSecretKeyFrom` sequence every resolver below runs: read this
  * tenant's `payments.stripe` credential from the vault and validate/decrypt it into a usable secret
- * key. The environment-prefix guard (`sk_live_`/`sk_test_` vs this host) lives inside
- * `stripeSecretKeyFrom` and is preserved unchanged here — this only extracts the steps common to all
- * three callers, never the wrap around the returned key (each caller's own `makeStripe` + client
- * wrapper differs, so that stays with the caller).
+ * key. The environment-prefix guard lives inside `stripeSecretKeyFrom`.
  */
 async function resolveStripeSecretKey(deps: StripeAccountDeps): Promise<string> {
   const payload = await readCredential(deps.db, deps.ring, "payments.stripe");

@@ -33,12 +33,8 @@ describe("writeTradingEnv", () => {
 
   it("writes the onboarding intent separately from the fiscal environment", async () => {
     const d = await newDir();
-    // Exact-equality on the whole file is the strongest check: it pins the names, their values, the
-    // order the supervisor sources them in, and the trailing LF, all at once. The four
-    // WAITRON_TILL_*_ID + WAITRON_ENV are what the next boot reads to enter TRADING mode. Nothing
-    // here names a database: the venue directory is derived from the state root the supervisor sets
-    // for both modes (`config.ts`'s `venueDir`), so it is not a value setup has to hand forward —
-    // and the exact-equality below pins that absence.
+    // Exact equality pins the names, values, order and trailing LF, and that no database is named:
+    // the venue directory is derived from the state root, not handed forward by setup.
     const env = await readFile(await writeTradingEnv(d, cfg), "utf8");
     expect(env).toBe(
       "WAITRON_TILL_TILL_ID=till-2\n" +
@@ -88,8 +84,7 @@ describe("writeTradingEnv", () => {
   it("writes the file 0600 (owner-only)", async () => {
     const d = await newDir();
     await writeTradingEnv(d, cfg);
-    // 0o600 is not masked by any sane umask (022/002/077 leave the owner bits alone), so assert it
-    // exactly — same guarantee as secrets.env, the sibling this file lives beside.
+    // No common umask masks owner bits, so assert 0o600 exactly.
     const mode = (await stat(join(d, "trading.env"))).mode & 0o777;
     expect(mode).toBe(0o600);
   });
@@ -97,8 +92,7 @@ describe("writeTradingEnv", () => {
   it("leaves no *.tmp behind (temp-then-rename completed)", async () => {
     const d = await newDir();
     await writeTradingEnv(d, cfg);
-    // A lingering trading.env.tmp would mean the rename was skipped — i.e. a reader could observe a
-    // torn file, which is the whole point of the atomic write. A successful run leaves only the file.
+    // A lingering trading.env.tmp would mean the rename was skipped.
     const names = await readdir(d);
     expect(names).toEqual(["trading.env"]);
   });

@@ -1,15 +1,11 @@
-// Walks the invoice-first + correction + settle loop end to end, then exits. Issues an invoice-first
-// (deferred) sale, prints it as outstanding, corrects it with a rectificativa, prints the reduced
-// amount outstanding, settles at the net, prints an empty outstanding list. There is no till app yet
-// — this is the only way to see the deferred/settle path run against the real backend.
+// Walks the invoice-first + correction + settle loop against the real backend, then exits: issues a
+// deferred sale, corrects it with a rectificativa, settles at the net, printing what is outstanding
+// after each step.
 //
-// Prerequisites, same as record-one-sale.ts plus a rectificative series: the taxpayer row, the till,
-// the node, the standard series and the rectificative series must already exist, and the node's SIF
-// be registered.
-//
-// The venue is a DIRECTORY of two SQLite files, not a connection string, and which directory is not
-// an argument — see `record-one-sale.ts`'s header and `scripts/venue-dir.ts`. `WAITRON_ENV` is
-// REQUIRED for the reason that header gives: it stamps the unrecoverable `entorno` onto the chain.
+// Prerequisites: the taxpayer row, the till, the node, the standard and rectificative series must
+// exist, and the node's SIF be registered. The venue directory is resolved as the server resolves it
+// (`scripts/venue-dir.ts`). `WAITRON_ENV` is required: it stamps the unrecoverable `entorno` onto
+// the chain.
 //
 // Usage — build first (this repo's .js-suffixed relative imports resolve through esbuild's bundler,
 // not plain `node <file>.ts`):
@@ -50,8 +46,6 @@ function usageError(message: string): never {
   process.exit(1);
 }
 
-// Same one-shot host clock as record-one-sale.ts (anchor/currentAnchor are never called by these
-// write paths).
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -71,7 +65,6 @@ function systemClock(): TrustedClock {
   };
 }
 
-/** The four positional arguments, as the operator typed them: branded inside. */
 export interface SettleInvoiceFirstArgs {
   tillId: string;
   nodeId: string;
@@ -79,15 +72,7 @@ export interface SettleInvoiceFirstArgs {
   rectificativeSeriesId: string;
 }
 
-/**
- * Open the venue directory `env` names, walk the whole invoice-first loop against it, and close
- * both files. Exported so a test can run it — the argv shim below adds nothing but the arity check,
- * the `WAITRON_ENV` guard and stdout.
- *
- * Every step reports through `log` rather than `console.log`, so a caller can read the narration
- * back: the six lines ARE the thing this script produces, and a test that could not see them would
- * only be asserting that nothing threw (CLAUDE.md §4).
- */
+/** Reports each step through `log`, so a test can assert the narration the script produces. */
 export async function settleInvoiceFirst(
   args: SettleInvoiceFirstArgs,
   env: NodeJS.ProcessEnv,
@@ -128,7 +113,6 @@ export async function settleInvoiceFirst(
         Promise.reject(new Error("settle-invoice-first: resolveClient must never be called")),
     });
 
-    // 1. Issue invoice-first (deferred): the invoice is chained + filed, unpaid.
     const saleInput: RecordSaleInput = {
       tillId: till,
       nodeId: node,
@@ -155,14 +139,10 @@ export async function settleInvoiceFirst(
       `1. issued invoice-first sale ${sale.saleId} (total ${saleTotal}), fiscal ${sale.fiscal.recordId}`,
     );
 
-    // 2. Outstanding: the full total.
     const before = await withTransaction(db, (tx) => listOutstandingSales(tx));
     log(`2. outstanding: ${formatOutstanding(before)}`);
 
-    // Seed a supervisor (holds `sale.rectify`) and open a shift session — the authorizer
-    // recordCorrection's gate now requires (Task 10). Task 13's venue-seed comes later, so this
-    // runbook creates its own. Written as its own transaction so the session is committed and
-    // visible to the correction's own transaction below.
+    // recordCorrection's gate needs a supervisor session (`sale.rectify`).
     const authorizerSession = await withTransaction(db, async (tx) => {
       const [person] = await tx
         .insert(persons)
@@ -180,7 +160,6 @@ export async function settleInvoiceFirst(
       });
     });
 
-    // 3. Correct it down by 11.00 (net 110.00 → 99.00) via a rectificativa on the rectificative series.
     const corrInput: RecordCorrectionInput = {
       tillId: till,
       nodeId: node,
@@ -206,11 +185,9 @@ export async function settleInvoiceFirst(
       `3. issued rectificativa ${corr.saleId} (total ${corrTotal}), fiscal ${corr.fiscal.recordId}`,
     );
 
-    // 4. Outstanding: now the net.
     const afterCorrection = await withTransaction(db, (tx) => listOutstandingSales(tx));
     log(`4. outstanding: ${formatOutstanding(afterCorrection)}`);
 
-    // 5. Settle at the net.
     await withTransaction(db, (tx) =>
       settleSale(tx, {
         saleId: sale.saleId,
@@ -221,11 +198,9 @@ export async function settleInvoiceFirst(
     );
     log(`5. settled ${sale.saleId} at ${net}`);
 
-    // 6. Outstanding: empty.
     const afterSettle = await withTransaction(db, (tx) => listOutstandingSales(tx));
     log(`6. outstanding: ${formatOutstanding(afterSettle)}`);
   } finally {
-    // Two open SQLite files; leaking them keeps the process alive after `main` returns.
     await store.close();
   }
 }
@@ -254,9 +229,8 @@ async function main(): Promise<void> {
   );
 }
 
-// Run only when invoked directly, never when imported by a test — `settleInvoiceFirst` above
-// writes append-only fiscal records and consumes two invoice numbers (CLAUDE.md §5), so an import
-// that ran it would be destructive and unrepairable.
+// Run only when invoked directly: `settleInvoiceFirst` writes append-only fiscal records and
+// consumes two invoice numbers (CLAUDE.md §5).
 if (
   process.argv[1] !== undefined &&
   realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))

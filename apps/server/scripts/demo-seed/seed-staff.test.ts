@@ -1,9 +1,4 @@
-/**
- * The staff seed, end to end, on the engine the box now runs.
- *
- * SQLite has no roles, and every call below runs on the one handle. Nothing now checks who
- * may write `persons`.
- */
+/** The staff seed, end to end. */
 
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
@@ -23,16 +18,13 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// One NIF per provisioned venue. Each test starts on an empty database — `useVenueDb`'s per-test
-// reset empties every data table — so the counter no longer keeps two tests apart; it keeps the two
-// `provisionVenue` calls WITHIN a test apart, should a test ever make them.
+// One NIF per provisioned venue.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(70_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** Provision a fresh chained venue (as the owner) for the seed to run against. */
 async function provisionVenue(): Promise<void> {
   await applyVenue(
     planVenue(
@@ -87,7 +79,6 @@ describe("seedStaff", () => {
     // The provisioning admin plus this seed's five people.
     expect(persons.length).toBe(6);
 
-    // At least 5 persons beyond the provisioned admin.
     const nonAdminCount = persons.filter((p) => p.role !== "admin").length;
     expect(nonAdminCount).toBeGreaterThanOrEqual(5);
 
@@ -95,7 +86,6 @@ describe("seedStaff", () => {
     const roles = new Set(persons.map((p) => p.role));
     expect(roles).toEqual(new Set(["staff", "supervisor", "manager", "admin"]));
 
-    // Every SEEDED (non-admin) person's PIN hash verifies against the shared demo PIN.
     for (const person of persons.filter((p) => p.role !== "admin")) {
       expect(verifyPin(DEMO_PIN, person.pin_hash)).toBe(true);
     }
@@ -121,22 +111,17 @@ describe("seedStaff", () => {
       return rows;
     });
 
-    // The provisioned admin ("Administradora") is a dashboard-login person: seedStaff gives it a login
-    // email, and it keeps the password it was provisioned with.
     const admin = rows.find((p) => p.role === "admin");
     expect(admin?.email).toBe(DEMO_ADMIN_EMAIL);
     expect(admin?.email).toMatch(/@/);
     expect(admin?.password_hash).not.toBeNull();
 
-    // The seeded manager (Marta Ruiz) is a functional dashboard login: a DISTINCT email + a password.
     const manager = rows.find((p) => p.role === "manager");
     expect(manager?.email).toBe("manager@demo.waitron.local");
     expect(manager?.email).toMatch(/@/);
     expect(manager?.email).not.toBe(admin?.email);
     expect(manager?.password_hash).not.toBeNull();
 
-    // Every other staff member has a proper account email. Their password remains unset until they
-    // follow an invitation or reset link.
     for (const person of rows.filter((p) => p.role === "supervisor" || p.role === "staff")) {
       expect(person.email).toBe(
         DEMO_STAFF.find((seeded) => seeded.displayName === person.display_name)!.email,

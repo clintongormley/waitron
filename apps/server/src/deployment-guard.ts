@@ -7,10 +7,9 @@ import "./errors.js";
 /**
  * Refuses to proceed when this database belongs to a different environment than this host.
  *
- * Runs BEFORE `applyMigrations`, which is the whole point: a staging host pointed at the production
- * database must die before it writes anything, not after a duty pass. An UNSTAMPED database passes
- * — every database that exists today predates the stamp, and the record-level `entorno` guard in
- * `drain` still covers those.
+ * Runs BEFORE `applyMigrations`: a staging host pointed at the production database must die before it
+ * writes anything. An UNSTAMPED database passes; the record-level `entorno` guard in `drain` still
+ * covers it.
  */
 export async function assertDeploymentMatches(
   db: Database,

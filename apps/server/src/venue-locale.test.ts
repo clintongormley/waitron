@@ -6,10 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { readVenueLocale } from "./venue-locale.js";
 
-// `readVenueLocale` is a plain two-row read (tenant country + location province) feeding the
-// installed country-pack locale chain. It reads under `withTransaction` exactly as production does.
-// CORE_MIGRATIONS alone: both `tenants.country` and `locations.province` live in core, so
-// no identity/workforce schema is needed.
+// CORE_MIGRATIONS alone: both `tenants.country` and `locations.province` live in core.
 let locationId: string;
 
 const suite = useVenueDb({
@@ -21,12 +18,8 @@ const suite = useVenueDb({
     await seedTenant(db);
     // Barcelona prefers Catalan in the Spain pack. This server build ships no Catalan UI catalogue,
     // so locale resolution falls through to the country default.
-    //
-    // Inserted through the table definition, as `apps/server/src/testing/fiscal-fixtures.ts` is:
-    // `locations.id` is a `$defaultFn(newId)` generator on this engine and a raw insert reaches
-    // none of them (the column is `text PRIMARY KEY NOT NULL`,
-    // `packages/db/drizzle/0000_baseline.sql:2`), and `invoice_locales` is a JSON array in a text
-    // column, so the `array[...]` constructor that used to fill it is syntax this engine refuses.
+    // Through the table definition: `locations.id` is a NOT NULL `$defaultFn` generator a raw insert
+    // never reaches.
     const [loc] = await db
       .insert(locations)
       .values({
@@ -60,11 +53,9 @@ describe("readVenueLocale", () => {
   });
 
   it("falls to the English floor when there is no taxpayer row to read a country from", async () => {
-    // With the taxpayer row deleted BOTH reads come back empty, so `country` and `province` are
-    // null and the installed-country resolver reaches its `en-GB` floor. Not a production shape
-    // (provisioning writes the taxpayer before a till ever boots), but the graceful `?? null` path
-    // exists rather than a throw — this pins it. Restored afterwards so the suite stays
-    // order-independent.
+    // With the taxpayer row deleted `country` and `province` are null and the resolver reaches its
+    // `en-GB` floor. Not a production shape, but the `?? null` path exists rather than a throw.
+    // Restored afterwards so the suite stays order-independent.
     await suite.db.execute(sql`delete from tenants`);
     try {
       const got = await readVenueLocale(suite.db, {

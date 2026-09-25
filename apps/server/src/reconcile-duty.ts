@@ -4,13 +4,8 @@ import type { DutyOutcome, PeriodDuty, RunPeriod } from "@waitron/scheduler";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * The adapter that converts a `PaymentReconciler` into a `PeriodDuty` for the recurring scheduler.
- * This is the only place it can live: `packages/scheduler` must not import `@waitron/payments`
- * from any non-test file (eslint restricted-paths), and `packages/payments` must not own cadence
- * (per §7 of the spec) — so the host, which owns both payments and scheduling, implements the
- * adapter here. The import of `PaymentReconciler` and `PeriodDuty` together on the runtime path
- * is the compile-time proof that the seam fits (replacing the proof-file that existed before the
- * host did).
+ * Adapts a `PaymentReconciler` into a scheduler `PeriodDuty`. It lives in the host because
+ * `packages/scheduler` may not import `@waitron/payments` and `packages/payments` does not own cadence.
  */
 export function reconcilerAsDuty(reconciler: PaymentReconciler): PeriodDuty {
   return {
@@ -20,11 +15,9 @@ export function reconcilerAsDuty(reconciler: PaymentReconciler): PeriodDuty {
       const result = await reconciler.reconcile(period, now);
       return {
         summary: summaryOf(result),
-        // A paymentRef in BOTH lists is an orphan whose amount also drifted. This is a SUPERSET of
-        // the strictly-gated set — the gates are ordered, so a drifting orphan on a non-abandoned
-        // working order reports `workingOrderNotAbandoned` yet still appears in both — and that is
-        // deliberate: `remediation` never reaches the result (only the incident's params), so
-        // exactness would mean widening a money-path package for one extra harmless re-sweep.
+        // A paymentRef in BOTH lists is an orphan whose amount also drifted. Deliberately a SUPERSET of
+        // the strictly-gated set: exactness would mean widening a money-path package for one extra
+        // harmless re-sweep.
         ...(gatedDriftOrphan(result) ? { resweepAfter: new Date(now.getTime() + DAY_MS) } : {}),
       };
     },

@@ -48,12 +48,8 @@ const EVERYTHING = new Set(["fiscal.view", "payments.manage", "diagnostics.view"
 
 async function seedVenue(): Promise<{ tillId: TillId }> {
   await seedTenant(db);
-  // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
-  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
-  // engine and a raw insert reaches none of them (all three columns are NOT NULL —
-  // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
-  // a text column, which is what refused the `array[...]` constructor that used to fill it
-  // (`near "['es-ES']": syntax error`).
+  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are NOT NULL
+  // `$defaultFn` generators a raw insert never reaches.
   const [location] = await db
     .insert(locations)
     .values({
@@ -438,9 +434,7 @@ describe("readHandledAlerts", () => {
   it("lists handled events from the last 30 days with who handled them", async () => {
     const v = await seedVenue();
     const person = await asApp(async (tx) => {
-      // Through the table definition for the same reason as `seedVenue` above: `persons.id` and
-      // `persons.created_at` are `$defaultFn` generators and both columns are NOT NULL, so the raw
-      // insert stopped at `NOT NULL constraint failed: persons.id`.
+      // Through the table definition for the same reason as `seedVenue` above.
       const [p] = await tx
         .insert(persons)
         .values({ displayName: "Ada", pinHash: hashPin("1234"), role: "manager" })

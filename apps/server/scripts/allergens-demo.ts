@@ -1,38 +1,10 @@
-// Self-contained, human-checkable demonstration of the allergens seam: EU 1169/2011 Annex II
-// declarations authored on catalogue products and read back for the till, end-to-end and
-// headless. Modelled on `daily-close-demo.ts` (a throwaway venue directory, self-migrating,
-// tsx-run) rather than on the real-database demo it sat beside — this demo never writes a fiscal
-// record, so it needs no fiscal backend, no AEAT and no SIF registration. Two migration sets
-// carry everything it touches — `core` the `tenants` and `locations` rows it seeds, `catalogue`
-// the catalogue tables and the `products.allergens` column it reads back.
+// Authors EU 1169/2011 Annex II allergen declarations on catalogue products in a throwaway venue
+// directory, reads them back as the till does, and prints an allergen matrix and a single-dish lookup.
 //
-// SQLite has no roles and no grants: nothing below demonstrates who may write. What this demo
-// does show is the allergen seam itself, which is what its name says.
+// A reviewed product with no allergens (`{}`) is allergen-free; `allergens = null` is PENDING — never
+// reviewed, and never to be shown as safe (design D4).
 //
-// It:
-// 1. makes a throwaway venue directory under the OS temp dir, applies the `core` and `catalogue`
-//    migration sets to it through `applyMigrations` (the entry point `dev-setup.ts` also uses),
-//    and removes the directory when it finishes;
-// 2. seeds a tenant + location with plain drizzle inserts;
-// 3. seeds ONE catalogue with four products carrying VARIED allergen states, then assigns the
-//    catalogue to the location:
-//    - "Empanada de trigo" → contains gluten (source: wheat) + eggs — a `contains` with a SOURCE
-//    - "Tarta de la casa" → contains milk, MAY contain nuts — a `may_contain`
-//    - "Ensalada de la huerta"→ {} — reviewed, no declarable allergens — the empty-but-reviewed
-//      case
-//    - "Sopa del día" → allergens unset (null) — NOT yet reviewed → PENDING
-// 4. reads the sellable products back with `listAvailableProducts`, and
-//    prints (a) an allergen matrix (product × allergen) and (b) a single-product
-//    operator-lookup view.
-//
-// The load-bearing distinction (design D4): a reviewed product with no allergens ({}) is allergen-FREE,
-// while a product with `allergens = null` is PENDING — never yet reviewed, and must NEVER be shown as
-// safe. Both the matrix and the lookup render `null` distinctly as PENDING, and `{}` distinctly as
-// "reviewed: none".
-//
-// Run it:
-//   pnpm --filter @waitron/server demo:allergens
-//   # or: pnpm --filter @waitron/server exec tsx scripts/allergens-demo.ts
+// Run it: pnpm --filter @waitron/server demo:allergens
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,8 +21,6 @@ import {
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
 
-/** The migration sets this demo applies, in manifest order — core carries `tenants`/`locations`,
- * catalogue the products and their allergen columns. */
 const SETS = ["core", "catalogue"];
 
 interface Venue {
@@ -58,13 +28,8 @@ interface Venue {
 }
 
 /**
- * Seeds tenant → location. Only these two rows are needed: this demo rings no sale, so no till /
- * node / series.
- *
- * Drizzle inserts rather than the raw SQL that was here: `locations.id` no longer carries a SQL
- * DEFAULT — the value comes from `$defaultFn(newId)`, which drizzle's insert builder runs and raw
- * SQL does not (`packages/db/src/schema/columns.ts`) — and `invoice_locales` is a JSON array in a
- * text column, not the PostgreSQL `array['es-ES']` this used to write.
+ * Drizzle inserts, not raw SQL: `locations.id` comes from `$defaultFn`, which raw SQL does not run
+ * (`packages/db/src/schema/columns.ts`).
  */
 async function seedVenue(db: Database): Promise<Venue> {
   await db
@@ -81,21 +46,17 @@ async function seedVenue(db: Database): Promise<Venue> {
   return { locationId: loc!.id };
 }
 
-/** The product's staff-facing name, or a stable fallback when it is blank. `apps/*` is out of the
- * english-only guard's scope, so the Spanish menu names are fine here. */
+/** `apps/*` is out of the english-only guard's scope, so the Spanish menu names are fine here. */
 function label(p: AvailableProduct): string {
   return p.name || `product ${p.id}`;
 }
 
-/** Three review states, kept distinct — the whole point of the demo (design D4). */
 function reviewState(p: AvailableProduct): "pending" | "none" | "declared" {
   if (p.allergens === null) return "pending";
   return Object.keys(p.allergens).length === 0 ? "none" : "declared";
 }
 
-/** One matrix cell: `?` for a PENDING (unreviewed) product, `-` for a reviewed-absent allergen,
- * `YES`/`YES*` for `contains` (a `*` flags a specific source, spelled out in the lookup below), and
- * `may` for `may_contain`. `?` and `-` are deliberately different glyphs: unknown vs confirmed-absent. */
+/** `?` (unreviewed) and `-` (confirmed absent) are deliberately different glyphs. `*` flags a source. */
 function cell(p: AvailableProduct, code: string): string {
   if (p.allergens === null) return "?";
   const decl = p.allergens[code] as { presence: string; source?: string } | undefined;
@@ -108,10 +69,7 @@ function pad(s: string, width: number): string {
   return s.padEnd(width);
 }
 
-/** (a) The allergen matrix: products down the side, the allergens ANY product declares across the top,
- * plus a trailing review-status column so PENDING and reviewed-none can never be confused. */
 function printMatrix(products: AvailableProduct[]): void {
-  // Columns are the Annex-II codes some product actually declares, in the taxonomy's canonical order.
   const columns = ALLERGEN_CODES.filter((code) =>
     products.some((p) => p.allergens !== null && p.allergens[code] !== undefined),
   );
@@ -147,8 +105,6 @@ function printMatrix(products: AvailableProduct[]): void {
   console.log("A `?` row is PENDING review — never treat it as allergen-free.");
 }
 
-/** (b) The single-product operator lookup — what a till shows when staff tap one dish. Renders the
- * PENDING state distinctly, so an unreviewed product is a warning, never an "all clear". */
 function printOperatorLookup(p: AvailableProduct): void {
   console.log(`Operator allergen lookup — "${label(p)}"`);
 
@@ -184,9 +140,6 @@ function printOperatorLookup(p: AvailableProduct): void {
 }
 
 async function main(): Promise<void> {
-  // A throwaway venue directory: the two SQLite files plus their write-ahead sidecars, removed at
-  // the end. The migrate goes through `applyMigrations`, which takes the DIRECTORY and opens it
-  // itself; `openVenueDatabase` then hands back the venue handle every write below takes.
   const venueDir = await mkdtemp(join(tmpdir(), "allergens-demo-"));
   const sets = manifestSets().filter((set) => SETS.includes(set.name));
   await applyMigrations(venueDir, migrationOptionsFor(sets, null));
@@ -195,13 +148,11 @@ async function main(): Promise<void> {
   try {
     const venue = await seedVenue(db);
 
-    // Author the catalogue in one transaction, exactly as the running POS does.
     await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
       const comida = await createCategory(tx, { name: { en: "Comida" } });
       const postres = await createCategory(tx, { name: { en: "Postres" } });
 
-      // 1. `contains` WITH a source — the richest declaration.
       await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
@@ -215,7 +166,6 @@ async function main(): Promise<void> {
         },
       });
 
-      // 2. a `may_contain` (cross-contamination) alongside a plain `contains`.
       await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: postres.id,
@@ -229,7 +179,7 @@ async function main(): Promise<void> {
         },
       });
 
-      // 3. reviewed, but no declarable allergens — the empty map. NOT the same as pending.
+      // Reviewed, no declarable allergens: not the same as pending.
       await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
@@ -240,7 +190,7 @@ async function main(): Promise<void> {
         allergens: {},
       });
 
-      // 4. allergens left UNSET (null) — never reviewed → PENDING.
+      // Allergens unset: never reviewed, so PENDING.
       await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: comida.id,
@@ -253,10 +203,6 @@ async function main(): Promise<void> {
       await assignCatalogueToLocation(tx, venue.locationId, cat.id);
     });
 
-    // The read the till performs: sellable products at the location, with their allergens.
-    // `listAvailableProducts` orders by (catalogue.name, created_at, id); all four share both a
-    // catalogue and a created_at, so the print order falls to the random-uuid id tiebreak, not
-    // seed order. Order is immaterial here — the matrix labels each row's review state explicitly.
     const products = await withTransaction(db, async (tx) => {
       return (await listAvailableProducts(tx, venue.locationId)).products;
     });
@@ -269,8 +215,7 @@ async function main(): Promise<void> {
     console.log("");
     console.log("(b) Operator lookup for a single dish");
     console.log("");
-    // The richest product (a `contains` with a specific source) — proves the source survives the
-    // db round-trip. The matrix above already shows the PENDING product distinctly.
+    // The product whose `contains` carries a source, which the lookup spells out.
     const lookup = products.find((p) => label(p) === "Empanada de trigo") ?? products[0];
     if (lookup !== undefined) printOperatorLookup(lookup);
   } finally {

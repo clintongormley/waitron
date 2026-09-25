@@ -45,9 +45,8 @@ describe("stripeAccountResolver", () => {
     });
 
     const account = await resolve();
-    // The KEY is the tenant scoping: a Stripe account is standalone (one per merchant, no Connect),
-    // so building the client from the wrong tenant's key settles real money against the wrong
-    // merchant with no error anywhere.
+    // A Stripe account is standalone (one per merchant, no Connect), so a client built from the wrong
+    // key settles real money against the wrong merchant with no error anywhere.
     expect(keys).toEqual(["sk_test_tenant_one"]);
     expect(typeof account.report.listSettlements).toBe("function");
     expect(typeof account.refund.refund).toBe("function");
@@ -69,10 +68,8 @@ describe("stripeAccountResolver", () => {
 describe("stripeSecretKeyFrom", () => {
   const REF = { purpose: "payments.stripe" };
 
-  // Driven directly rather than through a forged database row, the same reasoning as
-  // aeat-transport.test.ts's certMaterialFrom cases: `putCredential` validates every required field
-  // is a non-empty string, so a payload missing `secretKey` cannot be written through the vault's
-  // own API. The pure function IS the read-side guard, so testing it directly tests the thing.
+  // Driven directly rather than through a forged database row: `putCredential` refuses a payload
+  // missing `secretKey`, and the pure function IS the read-side guard.
   it("fails loudly on a payload sealed without a secretKey, rather than passing undefined to Stripe", () => {
     expect(() => stripeSecretKeyFrom({ webhookSecret: "whsec_x" }, REF, "production")).toThrow(
       /server.credential_unusable/,

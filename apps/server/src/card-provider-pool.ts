@@ -9,23 +9,18 @@ import {
 import type { DeploymentEnvironment } from "./config.js";
 
 /**
- * One live `PaymentProvider` per `providerId`, built from the tenant's sealed vault credential on
- * first use and dropped on `evict` so a dashboard credential change takes effect without a
- * restart — `get` after an eviction rebuilds from whatever is sealed now, never the stale instance.
+ * One live `PaymentProvider` per `providerId`, built from the sealed credential on first use and
+ * dropped on `evict`, so a credential change takes effect without a restart.
  *
- * The provider carries NO reader: which reader a sale charges is a per-collect input
- * (`CollectParams.readerRef`), so one cached provider serves every reader on the same vendor. That
- * is why `get` takes only a `providerId` — a cache hit must not discard a caller's reader, because
- * there is no reader to discard.
+ * The provider carries NO reader: the reader is a per-collect input (`CollectParams.readerRef`), so
+ * one cached provider serves every reader on the same vendor.
  */
 export interface CardProviderPool {
   get(providerId: string): Promise<PaymentProvider>;
   evict(providerId: string): void;
 }
 
-/** Builds a `CardProviderPool` scoped to one tenant/node. `deps.providers` is the composition list
- * (`CARD_PROVIDERS`, Task 9) — the pool reaches a seat only through `cardProviderById`, never by
- * importing a provider package itself. */
+/** The pool reaches a seat only through `cardProviderById`, never by importing a provider package. */
 export function createCardProviderPool(deps: {
   providers: readonly CardProviderContribution[];
   db: Database;
@@ -42,9 +37,7 @@ export function createCardProviderPool(deps: {
       if (cached !== undefined) return cached;
 
       const contribution = cardProviderById(deps.providers, providerId);
-      // `build` is synchronous (a seat's own credential read is deferred to its first real call —
-      // see @waitron/payments-sumup's `deferredClient`), so a thrown error here surfaces before
-      // anything is cached; the `Map` is only written to on success.
+      // `build` is synchronous, so a throw here surfaces before anything is cached.
       const provider = contribution.build({
         db: deps.db,
         ring: deps.ring,

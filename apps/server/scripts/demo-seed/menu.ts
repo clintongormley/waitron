@@ -1,52 +1,22 @@
-// Demo menu content for the three-menu Casa Delgado seed. This is DEV/DEMO data — it
-// stands up a plausible Spanish deli + restaurant for the multi-menu till demo and the sales
-// generator, NOT a real venue's catalogue. Plausibility, not fiscal/culinary accuracy, is the bar.
-//
-// Three catalogues (menus):
-//   - CASA_DELGADO — the restaurant menu: tapas, mains and desserts prepared in the kitchen.
-//   - MENU_DEL_DIA — the fixed-price lunch menu: a handful of each-priced courses, all kitchen.
-//   - DELI_TAKEAWAY — weight-priced charcuterie, cheeses and conservas for the deli counter.
-//
-// Content is authored under the BARE language tag (`en`/`es`) — the "author bare, file full-tag"
-// model of feature B. Every product carries BOTH bare locales (`en` + `es`) so `seedCatalogues` can
-// pick either; the fiscal/display config locale (the venue's `invoice_locales`, `WAITRON_TILL_LOCALE`)
-// is the FULL tag its bare content files under — see `SEED_INVOICE_LOCALE`. Spanish
-// i18n VALUES are fine here — `apps/*` is out of the english-only guard's scope (CLAUDE.md §3); only
-// code IDENTIFIERS stay English. Each `image` is the committed PNG basename Task 9's media step
-// creates — this module only names them, and the names are UNIQUE across the catalogues so
-// `seedCatalogues`' image→productId map has no collisions.
-//
-// VAT (Spanish IVA, GROSS/VAT-inclusive `unitPrice`): prepared/deli food is `reduced` (10%), basic
-// bread is `super_reduced` (4%), and every drink — alcohol, soft drinks and coffee — is `general`
-// (21%) EXCEPT bottled water, which is `reduced` (10%). The spread is deliberate: the demo wants a
-// mix of rates in one basket so the desglose (per-rate VAT breakdown) is non-trivial.
+// Demo menu content for the Casa Delgado seed: plausibility, not fiscal or culinary accuracy, is
+// the bar. Each `image` basename is unique across the catalogues, because `seedCatalogues` maps
+// image to product id. The VAT classes are mixed on purpose, so one basket's per-rate breakdown is
+// non-trivial.
 
 import type { DietaryLabel, PricingUnit, VatClass } from "@waitron/catalogue";
 
-/** The two BARE content locales every demo menu string carries (feature B "author bare"). */
 export type SeedLocale = "en" | "es";
 
-/**
- * The FULL BCP-47 tag each bare content locale files under — the venue's fiscal `invoice_locales`
- * and the till/dashboard display locale (a `SUPPORTED_LOCALES` code). Content is authored bare (`es`)
- * and filed/displayed full-tag (`es-ES`); this map bridges the two for the seed's config, exactly as
- * `toInvoiceLineDescriptions` bridges them on the live sale path.
- */
+/** Content is authored under the bare tag; the venue's `invoice_locales` and display locale take
+ *  the full tag. */
 export const SEED_INVOICE_LOCALE: Record<SeedLocale, string> = {
   en: "en-GB",
   es: "es-ES",
 };
 
-/** A demo product: its both-locale customer-facing name, its pricing/VAT, and the PNG basename Task 9
- * supplies.
- *
- * `staffName` is the short label staff use — the till button and the dashboard row. It is a single
- * plain string, not a map, because a staff name carries no translations. Where it is given it is
- * DELIBERATELY different from the customer-facing name, so a walk through the demo can tell a screen
- * showing the right name from one showing the wrong one. Omitted, it falls back to the seeded
- * locale's customer-facing entry (seed-catalogue.ts), which is fine for a product whose two names
- * would be the same word anyway. `kitchenName` is the third name, the one the kitchen ticket and the
- * kitchen display carry. */
+/** Where `staffName` is given it DELIBERATELY differs from the customer-facing name, so a screen
+ * showing the wrong one of the three names is visible; omitted, `seedCatalogues` falls back to the
+ * seeded locale's customer-facing name. */
 export interface SeedProduct {
   customerName: Record<SeedLocale, string>;
   staffName?: string;
@@ -71,47 +41,32 @@ export interface SeedProduct {
    * `createProduct` converts it to a count of whole cents at the row. */
   unitPrice: string;
   vatClass: VatClass;
-  /** The committed PNG basename (e.g. `"jamon-iberico.png"`), unique across both catalogues. */
+  /** The committed PNG basename under `media/`. */
   image: string;
 }
 
-/** A demo category: both-locale name, its KDS routing target, and its products. `station` is the
- * logical route — `"kitchen"` → the seeded "Cocina" station, `"bar"` → the seeded "Barra" station,
- * `null` → no route (falls back to the location default at fire time). */
 export interface SeedCategory {
   name: Record<SeedLocale, string>;
   station: "kitchen" | "bar" | "deli" | null;
   products: SeedProduct[];
 }
 
-/** A demo catalogue (menu): both-locale name and its categories. */
 export interface SeedCatalogue {
   name: Record<SeedLocale, string>;
   categories: SeedCategory[];
 }
 
-// ── Options lists ────────────────────────────────────────────────────────────────────────────────
-// A reusable list of labels the diner picks exactly one of. It is what a venue uses to ask "how do
-// you want it cooked?" now that the product model carries no built-in doneness field. A list owns
-// no price, VAT or allergens (`OptionList`, option-contract.ts), so there is no `priceDelta` or
-// `vatClass` here. Seeded by `seed-option-lists.ts`.
-//
-// Staff `name`, `customerName` and `kitchenName` are DIFFERENT text on the list and on every label,
-// so a surface reading the wrong one of the three shows the wrong words rather than the right ones
-// by coincidence (CLAUDE.md §3).
+// Staff `name`, `customerName` and `kitchenName` are DIFFERENT text on every list and label, so a
+// surface reading the wrong one of the three shows the wrong words (CLAUDE.md §3).
 
-/** One label of a demo options list. */
 export interface SeedOptionLabel {
-  /** The staff name: the button a waiter presses. Plain text and the only required name. */
   name: string;
   customerName: Record<SeedLocale, string>;
-  /** Upper-case shorthand, like `SeedProduct.kitchenName` — this is what prints on the ticket. */
   kitchenName: string;
   /** Preselected when the list is asked; at most one label of a list carries it. */
   preselected?: boolean;
 }
 
-/** A demo options list: the three names and its labels, in the order they are offered. */
 export interface SeedOptionList {
   name: string;
   customerName: Record<SeedLocale, string>;
@@ -119,9 +74,6 @@ export interface SeedOptionList {
   labels: SeedOptionLabel[];
 }
 
-/** One product's attached options lists, keyed by the same unique `image` basename every product in
- * this file carries — `seedOptionLists` resolves it through `seedCatalogues`'s `productsByImage`
- * map, the same join key `seedMedia` uses. */
 export interface SeedProductOptionLists {
   productImage: string;
   lists: SeedOptionList[];
@@ -161,7 +113,6 @@ export const PRODUCT_OPTION_LISTS: SeedProductOptionLists[] = [
 const COMBINED_CASA_DELGADO: SeedCatalogue = {
   name: { en: "Casa Delgado", es: "Casa Delgado" },
   categories: [
-    // ── Deli counter (weight-priced, routed to the kitchen) ──────────────────────────────────────
     {
       name: { en: "Charcuterie", es: "Charcutería" },
       station: "kitchen",
@@ -312,7 +263,6 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
         },
       ],
     },
-    // ── Restaurant (each-priced) ─────────────────────────────────────────────────────────────────
     {
       name: { en: "Tapas", es: "Tapas" },
       station: "kitchen",
@@ -476,7 +426,6 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
         },
       ],
     },
-    // ── Drinks (each-priced, routed to the bar) ──────────────────────────────────────────────────
     {
       name: { en: "Drinks", es: "Bebidas" },
       station: "bar",
@@ -561,8 +510,6 @@ const COMBINED_CASA_DELGADO: SeedCatalogue = {
   ],
 };
 
-/** The restaurant/bar menu and deli menu share one product catalogue in the demo source, then become
- * separate sellable menus. This makes the department split visible without duplicating product copy. */
 export const CASA_DELGADO: SeedCatalogue = {
   name: { en: "Casa Delgado", es: "Casa Delgado" },
   categories: COMBINED_CASA_DELGADO.categories.slice(3),

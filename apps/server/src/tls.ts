@@ -5,15 +5,7 @@ import { readFileSync, statSync } from "node:fs";
 import { createServer as createHttpsServer, Server as HttpsServer } from "node:https";
 import { serve } from "@hono/node-server";
 
-/**
- * The exact options object `@hono/node-server`'s `serve` accepts as its first argument —
- * `Parameters<typeof serve>[0]`, derived from the installed version rather than re-declared, so an
- * upgrade that made the keys this file sets incompatible would surface here as a `tsc` error
- * instead of a runtime surprise. How much that is worth is still untested: the 1.19.15 -> 2.1.1
- * upgrade left this type alone but for one added optional key (`websocket`), so it asked nothing
- * of the guarantee. `serve` also takes an optional `listeningListener` second argument, untouched
- * here.
- */
+/** Derived from the installed `serve` so an incompatible upgrade should fail `tsc`; never yet exercised. */
 export type ServeOptions = Parameters<typeof serve>[0];
 
 /** The two PEM file paths that make the host serve HTTPS — `config.tls`'s exact shape. */
@@ -23,24 +15,11 @@ export interface TlsFiles {
 }
 
 /**
- * Turn the plain-HTTP `serve` options into HTTPS ones when — and only when — TLS is configured.
+ * Turn the plain-HTTP `serve` options into HTTPS ones when — and only when — TLS is configured, by
+ * passing `node:https`'s `createServer` plus `{ key, cert }` as `serverOptions`. With no `tls`, the
+ * base options are returned UNCHANGED.
  *
- * Confirmed against `@hono/node-server@2.1.1`'s installed `serve` signature
- * (`node_modules/@hono/node-server/dist/index.d.mts` and its `createAdaptorServer` in
- * `dist/index.mjs`): `Options` is `{ fetch, port?, hostname?, … } & ServerOptions`, where
- * `ServerOptions` is a union of four per-transport shapes and the `node:https` one carries exactly
- * two keys — `createServer` (defaulting to `node:http`'s `createServer`, so plain HTTP unless
- * overridden) and `serverOptions` (a `node:https.ServerOptions`). Passing `node:https`'s
- * `createServer` plus `{ key, cert }` is therefore what flips the SAME `serve` call from HTTP to
- * HTTPS — the adaptor does `options.createServer(options.serverOptions || {}, …)`.
- *
- * With no `tls`, the base options are returned UNCHANGED (referentially — no file is read and no
- * `createServer` is added), which is the plain-HTTP loopback-dev path. Certificate reload is handled by `watchTlsFiles`; this function only builds the initial context.
- *
- * `readFileSync`, not async: `boot.ts` builds these options synchronously right before its single
- * `serve` call, and a missing or unreadable file must fail the boot loudly and immediately (spec §8
- * — a host that cannot read its own certificate has no business coming up half-configured), exactly
- * as every other boot-time misconfiguration in `config.ts` does.
+ * `readFileSync`, not async: a missing or unreadable certificate must fail the boot immediately.
  */
 export function buildServeOptions(base: ServeOptions, tls: TlsFiles | undefined): ServeOptions {
   if (tls === undefined) return base;

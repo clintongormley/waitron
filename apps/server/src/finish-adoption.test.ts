@@ -126,7 +126,7 @@ describe("runFinishAdoption", () => {
 
   it("KEEPS the file when the viewer step throws after a successful establish", async () => {
     // The order matters: establish, then the viewer, then the unlink. A viewer failure must leave the
-    // latch in place — deleting the unlink's position and clearing the file first would fail this.
+    // latch in place.
     const dir = await tempDir();
     await writePendingAdoption(dir, PENDING);
     const events: string[] = [];

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PAIRING_WINDOW_MS, REFUSED_WINDOW_MS, createPairingMode } from "./pairing-mode.js";
 
-/** A controllable clock — no sleeping, the shape `enrol-rate-limit.test.ts` uses. */
+/** A controllable clock — no sleeping. */
 function atClock() {
   let t = 1_000;
   return { now: () => t, advance: (ms: number) => (t += ms) };

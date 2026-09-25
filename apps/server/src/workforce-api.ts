@@ -1,8 +1,4 @@
-// Side-effect: loads this host's errors.ts augmentation for `management.request_invalid`, thrown by
-// the body/query screens below (the "every file that throws imports ./errors.js" convention). The
-// workforce codes (roster.*, shift.*, convenio.not_found) are declared in @waitron/workforce /
-// @waitron/workforce-es and load transitively via the value imports below; shared.invalid_id loads
-// via the AppError value import.
+// Loads the host registry for `management.request_invalid`, thrown by the screens below.
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -30,16 +26,13 @@ import type { Logger } from "./logger.js";
 
 export interface WorkforceApiDeps {
   db: Database;
-  // `nodeId` is this node's origin id — the chain a clock event or correction would be appended
-  // under (spec §3.3). No clock-in HTTP route exists yet (only tests call `clockIn`/`clockOut`), so
-  // it is plumbed here ahead of that route rather than read by any handler below.
+  // The chain a clock event or correction would be appended under. No handler below reads it yet:
+  // it is plumbed ahead of a clock-in route.
   cfg: { nodeId: string };
 }
 
-/** The permissions gating the workforce routes — referenced through these constants, never an inline
- * literal (the catalogue-api CATALOGUE_WRITE_PERMISSION pattern). `schedule.manage` gates the roster
- * read/write group and planned-vs-actual; `swap.approve` / `absence.decide` gate the two approval
- * queues added in roster slice 2. */
+/** `schedule.manage` gates the roster read/write group and planned-vs-actual; `swap.approve` /
+ * `absence.decide` gate the two approval queues. */
 const SCHEDULE_PERMISSION: Permission = "schedule.manage";
 const SWAP_APPROVE_PERMISSION: Permission = "swap.approve";
 const ABSENCE_DECIDE_PERMISSION: Permission = "absence.decide";
@@ -84,8 +77,8 @@ function requireTimestamp(v: unknown, field: string): string {
   return v;
 }
 /** Screen a body offset as an integer inside the `±MAX_OFFSET_MINUTES` wall-offset domain. A bare
- * integer check admits an out-of-domain value, which then violates `shifts_*_offset_ck` and surfaces
- * as a 500; range-checked here to a 400 `management.request_invalid` naming the field. */
+ * integer check admits an out-of-domain value, which then violates `shifts_*_offset_ck`; range-checked
+ * here to a 400 `management.request_invalid` naming the field. */
 function requireOffsetMinutes(v: unknown, field: string): number {
   if (
     typeof v !== "number" ||
@@ -98,7 +91,7 @@ function requireOffsetMinutes(v: unknown, field: string): number {
 }
 /** Screen a body `decision` as exactly "approved" or "rejected" — any other value (a valid-looking
  * status like "requested"/"accepted" included) is a 400 `management.request_invalid` naming the field,
- * never a downstream enum 500. The `requireNullableString` pattern, narrowed to two literals. */
+ * never a downstream enum 500. */
 function requireDecision(v: unknown): "approved" | "rejected" {
   if (v !== "approved" && v !== "rejected")
     throw new AppError("management.request_invalid", { field: "decision" });
@@ -116,7 +109,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       return fn(tx);
     });
 
-  // The tenant's centros de trabajo, for the roster screen's location picker (design §3d gap-fill).
+  // The tenant's centros de trabajo, for the roster screen's location picker.
   app.get("/management-api/locations", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -221,8 +214,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const versionId = requireUuidParam(c.req.param("versionId"), "RosterVersionId");
       // Composed inline rather than via `gated`, because it needs authorizeManager's returned
-      // `authorizedBy` for `publishedByPersonId` — the same reason management-api.ts's GET
-      // /management-api/receipt composes authorizeManager inline.
+      // `authorizedBy` for `publishedByPersonId`.
       const breaches = await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: sessionId,

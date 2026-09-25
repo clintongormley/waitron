@@ -8,16 +8,13 @@ import { requireManagementSession } from "@waitron/server-kit";
 import type { LogLevel, Logger } from "./logger.js";
 import type { LogReader } from "./log-file.js";
 import type { VerbosityController } from "./verbosity.js";
-// This file THROWS `diagnostics.invalid_verbosity`, so it imports the host error registry directly,
-// the "every file that throws one of these imports ./errors.js" convention errors.ts states.
+// This file THROWS `diagnostics.invalid_verbosity`, so it imports the host error registry.
 import "./errors.js";
 
 /**
- * Everything the dashboard's diagnostics HTTP routes need. Like `ManagementApiDeps`, the surface reads
- * and writes only this box's own records, so it wires no fiscal backend or clock. `db` is what the
- * `withTransaction` authorize gate below runs on.
- * `reader` reads back the box's rotating log files; `verbosity` is the in-memory controller `boot.ts`
- * built and the logger reads its `current()` at each call (which also owns its own default level).
+ * Everything the dashboard's diagnostics HTTP routes need. The surface reads and writes only this
+ * box's own records, so it wires no fiscal backend. `reader` reads back the box's rotating log files;
+ * `verbosity` is the in-memory controller the logger reads `current()` from at each call.
  */
 export interface DiagnosticsApiDeps {
   db: Database;
@@ -26,8 +23,8 @@ export interface DiagnosticsApiDeps {
 }
 
 /**
- * Every AppError CODE the diagnostics API answers, and the HTTP status it maps to — the diagnostics
- * parallel of management-api.ts's `STATUS`. `management_session.required` (401, an absent/forged
+ * Every AppError CODE the diagnostics API answers, and the HTTP status it maps to.
+ * `management_session.required` (401, an absent/forged
  * cookie) and `authorization.not_permitted` (403, a session that holds no `diagnostics.view`) come
  * from the shared authorize gate; `diagnostics.invalid_verbosity` (400) is this surface's own
  * request-shape fault. A registered code absent here would default to 400 in the boundary.
@@ -54,17 +51,15 @@ const DEFAULT_LIMIT = 200;
  * Mounts the dashboard's diagnostics routes on an existing Hono app: read the recent log tail,
  * read the current verbosity, and raise verbosity for a bounded window. All three are gated
  * behind `diagnostics.view` — `requireManagementSession` first (401 before any DB work), then
- * `authorizeManager` under `withTransaction` in the database holding this dashboard's
- * tenant, mirroring `mountManagementApi`'s layout-`GET` shape. Each handler is wrapped in the
- * shared `run` boundary so the whole surface maps errors identically.
+ * `authorizeManager` under `withTransaction`. Each handler is wrapped in the shared `run` boundary
+ * so the whole surface maps errors identically.
  */
 export function mountDiagnosticsApi(app: Hono, deps: DiagnosticsApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "diagnostics.failed");
 
   // The one authorize gate every route runs its request through: refuse an unauthenticated/forged
   // session (401) first, then open a transaction and confirm the session carries
-  // `diagnostics.view` (403 otherwise). Extracted so the gate is applied identically
-  // in exactly one place — the `withVenueAuth` seam management-api.ts uses.
+  // `diagnostics.view` (403 otherwise).
   const authorize = async (c: Context): Promise<void> => {
     const sessionId = requireManagementSession(c);
     await withTransaction(deps.db, async (tx) => {

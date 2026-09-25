@@ -32,8 +32,7 @@ import "./errors.js";
 // bind a `fakeCore`. Here the generic mount receives the EXACT `core` closure boot builds
 // (`{ openTab: (tx, req) => openTab(tx, till, req) }`, boot.ts), and the seat route drives it end to end:
 // the real verb opens a real `working_orders` row and the booking is marked seated with that tab id.
-// What this pins is the wiring edge itself, never a grant: `@waitron/bookings`'s own
-// `routes.test.ts:28` records that its GRANT half went with the roles.
+// What this pins is the wiring edge itself, never a grant.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -43,7 +42,7 @@ beforeAll(() => {
   db = suite.db;
 });
 
-// booking.manage is not in identity's static catalog (SP1 t4): a manager holds it only once the module's
+// booking.manage is not in identity's static catalog: a manager holds it only once the module's
 // permissions seat is folded into the ladder, which boot does via registerModulePermissions.
 registerModulePermissions(BOOKINGS_PERMISSIONS);
 
@@ -58,12 +57,8 @@ interface Venue {
 
 async function setupVenue(): Promise<Venue> {
   await seedTenant(db);
-  // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
-  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
-  // engine and a raw insert reaches none of them (all three columns are NOT NULL —
-  // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
-  // a text column, which is what refused the `array[...]` constructor that used to fill it
-  // (`near "['es-ES']": syntax error`).
+  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are NOT NULL
+  // `$defaultFn` generators a raw insert never reaches.
   const [location] = await db
     .insert(locations)
     .values({
@@ -89,9 +84,7 @@ async function setupVenue(): Promise<Venue> {
     orderFlow: "prepay",
   };
   const managerSid = await withTransaction(db, async (tx) => {
-    // Through the table definition for the same reason as the venue rows above: `persons.id` and
-    // `persons.created_at` are `$defaultFn` generators and both columns are NOT NULL
-    // (`packages/identity/drizzle/0000_baseline.sql:46` and `:62`).
+    // Through the table definition for the same reason as the venue rows above.
     const [p] = await tx
       .insert(persons)
       .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -149,8 +142,7 @@ describe("bookings seat route → real openTab", () => {
     const { tabId } = (await res.json()) as { tabId: string };
     expect(tabId).toMatch(/^[0-9a-f-]{36}$/);
 
-    // The booking is seated with the REAL tab id, and that id names a real OPEN working_orders row —
-    // proving the real openTab (not a fake) ran through the seat.
+    // The booking is seated with the REAL tab id, and that id names a real OPEN working_orders row.
     await withTransaction(db, async (tx) => {
       const booking = await tx.execute<{ status: string; tab_id: string | null }>(
         sql`select status, tab_id from bookings where id = ${bookingId}`,

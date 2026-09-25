@@ -1,49 +1,11 @@
-// Self-contained, human-checkable demonstration of `@waitron/reporting`'s two date-range roll-ups
-// over the filed VAT desglose: `computeVatSummaryForPeriod` (a business-day range summary, scope 3)
-// and `computeVatReturn` (the modelo 303 output-VAT / *IVA devengado* aggregate for one month,
-// scope 4). Modelled on `daily-close-demo.ts`: it makes a throwaway venue directory under the OS
-// temp dir, applies the `core` and `identity` migration sets to it through `applyMigrations` (the
-// entry point `dev-setup.ts` also uses), rings up a whole MONTH of trade through the REAL write
-// path (`recordSale` / `recordCorrection` from `@waitron/core`) against the fake `FiscalBackend`
-// from `@waitron/fiscal` — no AEAT and no SIF registration — and removes the directory when it
-// finishes. Both roll-ups read only `sales.vat_breakdown` (a queryable copy of the filed desglose),
-// which the `core` set creates along with the received-invoice tables; the fiscal chain is never
-// read. The `identity` set is here for the supervisor whose session authorises the rectificativa.
+// Demonstrates `@waitron/reporting`'s VAT roll-ups and the DR303 "por fichero" file over a month of
+// sales rung up through the real write path against the fake `FiscalBackend`, in a throwaway venue
+// directory. Each figure is checked against an expectation summed independently from the seeded
+// constants; a mismatch throws.
 //
-// SQLite has no roles and no grants: nothing below demonstrates who may write.
+// apps/* is exempt from the english-only guard, so the printed labels use the fiscal vocabulary.
 //
-// It then produces the SUBMITTABLE output end-to-end: `mapModelo303` maps the reconciled aggregate
-// onto the modelo 303 casillas and `toDr303Record` serializes it to the AEAT sede "por fichero"
-// fixed-layout file, whose bytes the demo SELF-VALIDATES (length 2944, a known box at its documented
-// offset, and — this month is a net credit — the 'N' sign prefix on the negative resultado).
-//
-// apps/* is exempt from the english-only guard, so the printed labels use the fiscal vocabulary
-// (IVA devengado, base imponible, cuota, tipo).
-//
-// Run it:
-//   pnpm --filter @waitron/server exec tsx scripts/modelo-303-demo.ts
-//   # or, via the package script:
-//   pnpm --filter @waitron/server demo:modelo-303
-//
-// What it rings up — a month of August 2026 sales across TWO nodes and TWO VAT rates, plus one
-// rectificativa. Every sale is issued at 12:00 Europe/Madrid (10:00Z, +02:00 CEST), so its
-// operational business day (05:00 cutover) and its filed civil date are the same calendar day — the
-// two roll-ups therefore see the identical set here:
-//   Nodo 1:  03 Aug  base 100.00 @ 21%   cuota 21.00
-//            10 Aug  base  50.00 @ 10%   cuota  5.00
-//            17 Aug  base 200.00 @ 21%   cuota 42.00
-//   Nodo 2:  05 Aug  base  80.00 @ 10%   cuota  8.00
-//            12 Aug  base  40.00 @ 21%   cuota  8.40
-//            24 Aug  base  30.00 @ 10%   cuota  3.00
-//   Rectificativa (Nodo 1, corrects the 03 Aug sale): 18 Aug  base -5.00 @ 21%  cuota -1.05
-//
-// So the monthly *IVA devengado*, corrections netted, should read (both roll-ups aggregate across
-// the two nodes):
-//   21%: base imponible 335.00 (100 + 200 + 40 − 5),  cuota 70.35 (21 + 42 + 8.40 − 1.05)
-//   10%: base imponible 160.00 (50 + 80 + 30),        cuota 16.00 (5 + 8 + 3)
-//   base imponible total 495.00 ; cuota (IVA devengado) total 86.35
-// The script recomputes that 86.35 independently from the seeded figures (`addDecimal`, not a JS
-// number) and asserts it equals `computeVatReturn`'s summed cuota — printing OK or throwing.
+// Run it: pnpm --filter @waitron/server demo:modelo-303
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -95,19 +57,17 @@ import {
 import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { InputVatRateLine } from "@waitron/reporting";
 
-/** The migration sets this demo applies, in manifest order — core carries `sales` and the
- * received-invoice tables, identity the supervisor who authorises the rectificativa. */
+/** identity holds the supervisor who authorises the rectificativa. */
 const SETS = ["core", "identity"];
 
 const LOCALE = "es-ES";
 const TIME_ZONE = "Europe/Madrid";
 const CUTOVER = "05:00";
 const YEAR = 2026;
-const MONTH = 8; // August
+const MONTH = 8;
 
-// One row per ordinary sale. `node` indexes `venue.nodes`. `base`/`tax` are the FILED per-rate
-// figures — passed to `recordSale` as an explicit `vatBreakdown` so what is filed equals what is
-// seeded, and summed here (below) to form the independent expectation. `total` is always base + tax.
+// `node` indexes `venue.nodes`. `base`/`tax` are filed verbatim as the sale's `vatBreakdown`, so
+// what is filed equals what the expectation sums.
 interface SeedSale {
   node: 0 | 1;
   /** Civil calendar date "YYYY-MM-DD" in August 2026. */
@@ -169,9 +129,7 @@ const ORDINARY_SALES: readonly SeedSale[] = [
   },
 ];
 
-// The rectificativa nets the first Nodo-1 sale down by 5.00 base @ 21%. `recordCorrection` derives
-// its desglose from the line (base −5.00 @ 21% → cuota −1.05 via `percentOf`), so those are the
-// filed figures the expectation below folds in.
+// `recordCorrection` derives its desglose from the line, so these are the figures it files.
 const RECTIFICATIVA = {
   correctsIndex: 0,
   day: "2026-08-18",
@@ -181,17 +139,13 @@ const RECTIFICATIVA = {
   description: "Rectificación menú del día",
 } as const;
 
-// Received supplier invoices (facturas recibidas) — the IVA DEDUCIBLE / soportado side. `base`/`tax`
-// are the FILED per-rate figures (the supplier's own cuota, which may round by the difference method).
-// `regime` general is deductible and on the 303; recargo de equivalencia is NON-deductible and off the
-// 303, so it must NOT appear in the deducible aggregate. `kind` corriente (ordinary) → casilla 28/29,
-// bienes de inversión (capital) → casilla 30/31.
+// The IVA deducible side. `base`/`tax` are the supplier's own filed figures. Recargo de equivalencia
+// is non-deductible and off the 303. `kind` ordinary → casilla 28/29, capital → casilla 30/31.
 interface SeedPurchase {
   supplierName: string;
   supplierTaxId: string;
   number: string;
-  /** The supplier's *fecha de expedición* ("YYYY-MM-DD") — distinct from `receivedOn`: an invoice is
-   * expedida by the supplier some days before we receive it. It does NOT drive the deduction period. */
+  /** The supplier's *fecha de expedición* ("YYYY-MM-DD"); it does not drive the deduction period. */
   issuedOn: string;
   /** Civil date "YYYY-MM-DD" the invoice was received — the deduction period. */
   receivedOn: string;
@@ -258,11 +212,6 @@ const PURCHASE_INVOICES: readonly SeedPurchase[] = [
   },
 ];
 
-/**
- * A `TrustedClock` fixed at `instant`/`offsetMinutes`. `recordSale`/`recordCorrection` read `now()`
- * exactly once (for `issued_at` + the offset snapshot) and never touch `anchor`/`currentAnchor`, so
- * both are stubs — the identical shape `daily-close-demo.ts`'s `fixedClock` documents.
- */
 function clockAt(instant: Date, offsetMinutes: number): TrustedClock {
   return {
     now: () => ({
@@ -279,8 +228,8 @@ function clockAt(instant: Date, offsetMinutes: number): TrustedClock {
   };
 }
 
-// 12:00 Europe/Madrid = 10:00Z in August (CEST, +02:00). Issuing at midday keeps every sale's
-// business day (05:00 cutover) and its filed civil date on the same calendar day `day`.
+// 12:00 Europe/Madrid in August. Midday keeps a sale's business day (05:00 cutover) and its filed
+// civil date on the same day, so both roll-ups see the same set.
 function issuanceAt(day: string): { instant: Date; offsetMinutes: number } {
   return { instant: new Date(`${day}T10:00:00Z`), offsetMinutes: 120 };
 }
@@ -293,18 +242,12 @@ interface SeededNode {
 interface Venue {
   tillId: TillId;
   nodes: SeededNode[];
-  // The supervisor (holds `sale.rectify`) whose session authorises the rectificativa.
   authorizerId: string;
 }
 
 /**
- * Seeds tenant → location → till → supervisor → TWO nodes, each with a standard and a
- * rectificative series, exactly as `daily-close-demo.ts` does.
- *
- * Drizzle inserts rather than the raw SQL that was here: these `id` columns no longer carry a SQL
- * DEFAULT — the value comes from `$defaultFn(newId)`, which drizzle's insert builder runs and raw
- * SQL does not (`packages/db/src/schema/columns.ts`) — and `invoice_locales` is a JSON array in a
- * text column, not the PostgreSQL `array['es-ES']` this used to write.
+ * Drizzle inserts, not raw SQL: the `id` values come from `$defaultFn`, which raw SQL does not run
+ * (`packages/db/src/schema/columns.ts`).
  */
 async function seedVenue(db: Database): Promise<Venue> {
   await db
@@ -348,8 +291,6 @@ async function seedVenue(db: Database): Promise<Venue> {
     });
   }
 
-  // A supervisor (holds `sale.rectify`), PIN "1234" — the authorizer the rectificativa's gate
-  // requires.
   const [person] = await db
     .insert(persons)
     .values({
@@ -364,9 +305,7 @@ async function seedVenue(db: Database): Promise<Venue> {
   return { tillId, nodes: seeded, authorizerId };
 }
 
-/** The expected *IVA devengado* per rate, summed independently from the seeded figures (corrections
- * netted). This is the check's left-hand side: pure `addDecimal` over the constants above, never a
- * read-back of the DB the roll-ups query. Sorted numerically, matching the roll-ups' `byRate` order. */
+/** Summed from the constants above, never read back from the database the roll-ups query. */
 function expectedByRate(): VatRateLine[] {
   const byRate = new Map<Decimal, { base: Decimal; tax: Decimal }>();
   const add = (rate: string, base: string, tax: string): void => {
@@ -407,15 +346,9 @@ function printPeriodSummary(label: string, summary: VatSummary): void {
   console.log("");
 }
 
-/**
- * Seeds the received supplier invoices directly, exactly as seedVenue seeds the tenant — a received
- * invoice is a plain accounting record, no fiscal write path.
- */
+/** A received invoice is a plain accounting record with no fiscal write path. */
 async function seedPurchaseInvoices(db: Database): Promise<void> {
-  // These go straight into `purchase_invoices` and `purchase_invoice_vat`, whose `total`, `base`
-  // and `tax` columns store a count of whole cents — so the constants above, which are the amounts
-  // this script's own expectations are summed from, are converted at the row. `rate` is a whole
-  // number too, at its OWN scale: a count of basis points, where 2100 is 21%.
+  // Amount columns store whole cents; `rate` stores basis points (2100 is 21%).
   for (const p of PURCHASE_INVOICES) {
     const total = addDecimal(decimal(p.base), decimal(p.tax));
     const [inv] = await db
@@ -440,9 +373,7 @@ async function seedPurchaseInvoices(db: Database): Promise<void> {
   }
 }
 
-/** The expected IVA deducible per (rate, kind), summed independently from the seeded figures — general
- * invoices only (recargo de equivalencia excluded), sorted rate asc then corriente before inversión,
- * matching computeInputVat. This is the check's left-hand side: pure addDecimal, not a DB read-back. */
+/** General-regime invoices only, summed from the constants, never read back from the database. */
 function expectedDeducibleByRate(): InputVatRateLine[] {
   const kindOrder = { ordinary: 0, capital: 1 } as const;
   const byKey = new Map<string, InputVatRateLine>();
@@ -478,8 +409,7 @@ function printDeducibleTable(lines: readonly InputVatRateLine[]): void {
   }
 }
 
-/** Throws with a diff if the deducible aggregate's per-(rate,kind) figures or totals differ from the
- * independently-summed expectation. Checks `kind` too — the casilla 28/29-vs-30/31 split. */
+/** Checks `kind` too — the casilla 28/29-vs-30/31 split. */
 function reconcileDeducible(
   actual: { byRate: readonly InputVatRateLine[]; baseTotal: Decimal; taxTotal: Decimal },
   expected: readonly InputVatRateLine[],
@@ -521,9 +451,6 @@ function reconcileDeducible(
 }
 
 async function main(): Promise<void> {
-  // A throwaway venue directory: the two SQLite files plus their write-ahead sidecars, removed at
-  // the end. `applyMigrations` takes the DIRECTORY and opens it itself; the filter below keeps
-  // manifest order, core before identity.
   const venueDir = await mkdtemp(join(tmpdir(), "modelo-303-demo-"));
   const sets = manifestSets().filter((set) => SETS.includes(set.name));
   await applyMigrations(venueDir, migrationOptionsFor(sets, null));
@@ -534,17 +461,14 @@ async function main(): Promise<void> {
     const venue = await seedVenue(db);
     const backend = new FakeFiscalBackend(db);
 
-    // Register both nodes once (a one-time admin action recordSale itself never performs), each in
-    // its own committed transaction so the later write transactions see them.
+    // A one-time admin action recordSale never performs.
     for (const node of venue.nodes) {
       await withTransaction(db, async (tx) => {
         await backend.registerNode(tx, node.nodeId);
       });
     }
 
-    // Ring up the month. Each ordinary sale is filed with an explicit `vatBreakdown` (its seeded
-    // per-rate figures), so `sales.vat_breakdown` holds exactly those cuotas. Deferred (invoice-only)
-    // — the roll-ups read the filed desglose, never the settlement.
+    // Deferred (invoice-only): the roll-ups read the filed desglose, never the settlement.
     const saleIds: SaleId[] = [];
     for (const s of ORDINARY_SALES) {
       const node = venue.nodes[s.node]!;
@@ -578,8 +502,7 @@ async function main(): Promise<void> {
       saleIds.push(saleId);
     }
 
-    // Open the supervisor's shift session — the authorizer the rectificativa's `sale.rectify` gate
-    // requires — exactly as a till would at the start of a shift.
+    // The rectificativa's `sale.rectify` gate needs a supervisor session.
     const authorizerSession = await withTransaction(db, async (tx) => {
       return loginWithPin(tx, {
         tillId: venue.tillId,
@@ -615,11 +538,8 @@ async function main(): Promise<void> {
       await recordCorrection(tx, backend, correctionInput);
     });
 
-    // The IVA DEDUCIBLE side: received supplier invoices (facturas recibidas). A plain accounting
-    // record — no fiscal write path — so seeded directly like the tenant itself.
     await seedPurchaseInvoices(db);
 
-    // The reads, exactly as a report consumer would call them.
     const monthLabel = `${YEAR}-${String(MONTH).padStart(2, "0")}`;
     const period = { fromBusinessDay: `${monthLabel}-01`, toBusinessDay: `${monthLabel}-31` };
     const { periodAll, periodNode1, periodNode2, weekOne, vatReturn } = await withTransaction(
@@ -654,10 +574,8 @@ async function main(): Promise<void> {
       },
     );
 
-    // The fiscal periods beyond the single month: the quarter (trimestre) that CONTAINS `MONTH`, its
-    // three constituent civil months, and the whole civil year — read exactly as a report consumer
-    // would. Only August carries trade in this demo, so the quarter/year equal the
-    // month; the reconciliation below still exercises the wider civil-date bounds.
+    // Only August carries trade, so the quarter and year equal the month; the reconciliation still
+    // exercises the wider civil-date bounds.
     const quarter = qOf(MONTH);
     const [qm1, qm2, qm3] = monthsOfQuarter(quarter);
     const { monthlyReturns, quarterReturn, annualReturn } = await withTransaction(
@@ -720,16 +638,11 @@ async function main(): Promise<void> {
     );
     console.log("");
 
-    // The check: the printed cuota total (`computeVatReturn`, read from the DB) must equal the cuota
-    // summed independently from the seeded figures. Value comparison via `compareDecimal`.
     const expected = expectedByRate();
     reconcile("modelo 303 monthly IVA devengado", vatReturn, expected);
-    // The month-covering period roll-up sees the same set here, so it must reconcile too — a second
-    // witness that the two functions agree over this month.
     reconcile("period roll-up over the whole month", periodAll, expected);
 
-    // The deducible side and the net result reconcile end-to-end: Σ filed deducible cuotas
-    // (general only), and result = devengado − deducible (casilla 46 = 27 − 45).
+    // Casilla 46 = 27 − 45.
     const expectedDeducible = expectedDeducibleByRate();
     reconcileDeducible(vatReturn.deductible, expectedDeducible);
     const expectedResult = subtractDecimal(sumTax(expected), sumTax(expectedDeducible));
@@ -744,11 +657,7 @@ async function main(): Promise<void> {
     );
     console.log("");
 
-    // ── Beyond the month: the quarter (trimestre) is the exact addDecimal-sum of its three constituent
-    //    months — devengado per-rate, deducible cuota, and the net resultado — because it is a WIDER
-    //    civil-date range over the SAME filed rows and decimal addition is associative. Never a
-    //    re-rounded round(Σ base × rate) (exactness inherited from the monthly aggregates). The annual
-    //    aggregate is printed too; there is NO modelo 303 annual FILE (that is modelo 390 — see below).
+    // The quarter is the exact sum of its three months, never a re-rounded round(Σ base × rate).
     reconcileQuarterEqualsMonths(
       `modelo 303 quarter ${quarter}T equals the sum of months ${qm1}/${qm2}/${qm3}`,
       quarterReturn,
@@ -773,11 +682,8 @@ async function main(): Promise<void> {
     );
     console.log("");
 
-    // ── The submittable output: the DR303 fixed-layout file the sede "por fichero" path uploads. Map
-    //    the reconciled aggregate onto the modelo 303 casillas, serialize to the AEAT record, and
-    //    SELF-VALIDATE the produced bytes (this month's resultado is a NET CREDIT, so box 46/71 must
-    //    carry the 'N' sign). The `tipo de declaración` is an operator/asesor input, not computed —
-    //    "C" (a compensar) is illustrative here for the net-credit month.
+    // The `tipo de declaración` is an operator/asesor input, not computed; "C" (a compensar) is
+    // illustrative for this net-credit month.
     const modelo = mapModelo303(vatReturn);
     const dr303Options: Dr303Options = {
       taxId: "50000000K",
@@ -802,11 +708,7 @@ async function main(): Promise<void> {
     );
     console.log("");
 
-    // ── The QUARTERLY DR303 file: the SAME serializer, driven off the quarter's aggregate and its
-    //    "{n}T" período token. A deli files monthly, but AEAT accepts trimestral, and the writer threads
-    //    the trimestre through the envelope; self-validate the produced bytes carry it (común field 5)
-    //    at the fixed 2944-byte length. An ANNUAL aggregate has NO modelo 303 file — `toDr303Record`
-    //    refuses {kind:"year"} (the annual VAT resumen is a separate form, modelo 390), so none is made.
+    // No annual file: `toDr303Record` refuses {kind:"year"} (the annual resumen is modelo 390).
     const quarterToken = `${quarter}T`;
     const quarterModelo = mapModelo303(quarterReturn);
     const quarterRecord = toDr303Record(quarterModelo, {
@@ -831,23 +733,15 @@ async function main(): Promise<void> {
   }
 }
 
-// Fixed 0-based byte offsets of the fields this demo reads back out of the produced record: the two
-// 17-char money casillas (27/46) on página 1, plus the envelope período (común field 5, "PP"). These
-// are the SAME offsets the serializer's own test pins (packages/reporting/src/dr303.test.ts's OFFSET
-// table: box 27 at 1023, box 46 at 1346), where they are derived from the layout and asserted to
-// match — a layout shift turns that test red. Hardcoding them keeps the demo on the public
-// @waitron/reporting barrel, with no deep import into the internal dr303-layout.ts.
+// 0-based offsets, hardcoded to keep the demo on the public barrel; the serializer's own test pins
+// the same ones (`OFFSET` in packages/reporting/src/dr303.test.ts).
 const DR303_BOX_OFFSETS: Readonly<Record<string, { offset: number; len: number }>> = {
   "27": { offset: 1023, len: 17 },
   "46": { offset: 1346, len: 17 },
-  // The envelope open reads "<T3030" + EEEE + PP + "0000>", so PP (pos 11 1-based → offset 10, len 2)
-  // starts at byte 10 (dr303-layout.ts's DR303_COMUN field n=5; dr303-layout.test.ts pins the layout
-  // contiguous, so a shift turns it red). Not a casilla, but read back the same fixed way.
+  // The envelope opens "<T3030" + EEEE + PP + "0000>".
   período: { offset: 10, len: 2 },
 };
 
-/** Reads a field's raw bytes back out of the record at its FIXED offset (see DR303_BOX_OFFSETS) — a
- * casilla ("27"/"46") or the envelope período. */
 function boxAt(record: Buffer, casilla: string): { offset: number; len: number; bytes: string } {
   const box = DR303_BOX_OFFSETS[casilla];
   if (box === undefined) {
@@ -860,19 +754,14 @@ function boxAt(record: Buffer, casilla: string): { offset: number; len: number; 
   };
 }
 
-/** Independently packs a Decimal into an AEAT fixed-width numeric field — the demo's OWN witness, NOT
- * the serializer's `formatNumericField`: magnitude in cents, right-aligned and zero-filled, a negative
- * value taking an 'N' in position 1 (manual_uso.txt). Used only to cross-check `toDr303Record`'s bytes. */
+/** An encoder independent of the serializer's own, so a bug there cannot mask itself: cents,
+ * right-aligned and zero-filled, a negative value taking an 'N' in position 1. */
 function packAeatNumeric(value: Decimal, width: number): string {
   const negative = value.startsWith("-");
   const magnitude = (negative ? value.slice(1) : value).replace(".", "");
   return negative ? "N" + magnitude.padStart(width - 1, "0") : magnitude.padStart(width, "0");
 }
 
-/** Throws unless the produced DR303 file self-validates: total length 2944, box 27 (a positive money
- * box) landing at its documented offset with the expected bytes, and box 46 (this month's NEGATIVE
- * resultado) carrying the 'N' sign prefix. Expected bytes come from `packAeatNumeric` — a second,
- * independent encoder — so a bug in the serializer's own formatter cannot mask itself. */
 function validateDr303Record(record: Buffer, modelo: Modelo303): void {
   const problems: string[] = [];
   if (record.length !== 2944) {
@@ -906,9 +795,6 @@ function validateDr303Record(record: Buffer, modelo: Modelo303): void {
   }
 }
 
-/** Throws unless the quarterly DR303 file self-validates: total length 2944, its aggregate carries a
- * quarter period, and the envelope período (común field 5) is the expected trimestre token "{n}T" — a
- * second witness that the writer threaded the quarter's OWN período, not a fabricated one. */
 function validateDr303QuarterPeriod(record: Buffer, modelo: Modelo303, token: string): void {
   const problems: string[] = [];
   if (record.length !== 2944) {
@@ -930,7 +816,6 @@ function validateDr303QuarterPeriod(record: Buffer, modelo: Modelo303, token: st
   }
 }
 
-/** Throws with a diff if `actual`'s per-rate figures and cuota/base totals differ from `expected`. */
 function reconcile(
   label: string,
   actual: { byRate: readonly VatRateLine[]; baseTotal: Decimal; taxTotal: Decimal },
@@ -967,20 +852,15 @@ function reconcile(
   }
 }
 
-/** The quarter (1..4) that contains a 1..12 civil month: Q1 = Jan–Mar … Q4 = Oct–Dec. */
 function qOf(month: number): number {
   return Math.ceil(month / 3);
 }
 
-/** The three civil months (1..12) of a trimestre 1..4, ascending — Q1 → [1,2,3] … Q4 → [10,11,12]. */
 function monthsOfQuarter(quarter: number): [number, number, number] {
   const first = 3 * (quarter - 1) + 1;
   return [first, first + 1, first + 2];
 }
 
-/** Merges the devengado `byRate` of several VatReturns into one rate-sorted `VatRateLine[]` — the
- * addDecimal sum per rate (matching the roll-ups' `byRate` order). This is the check's left-hand side
- * for the quarter reconciliation: pure addDecimal over the monthly aggregates, never re-rounded. */
 function mergeDevengado(returns: readonly VatReturn[]): VatRateLine[] {
   const byRate = new Map<Decimal, { base: Decimal; tax: Decimal }>();
   for (const r of returns) {
@@ -994,9 +874,6 @@ function mergeDevengado(returns: readonly VatReturn[]): VatRateLine[] {
     .sort((a, b) => compareDecimal(a.rate, b.rate));
 }
 
-/** Asserts a quarter's `VatReturn` equals the exact addDecimal-sum of its three monthly `VatReturn`s —
- * devengado per-rate (through the shared `reconcile`), the deducible cuota total, and the net
- * resultado. Never re-rounds; a single mis-summed month throws with a diff (exactness inherited). */
 function reconcileQuarterEqualsMonths(
   label: string,
   quarter: VatReturn,

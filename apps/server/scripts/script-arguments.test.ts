@@ -2,13 +2,9 @@ import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-// Three one-shot operator scripts read their positional arguments by destructuring `process.argv`,
-// and TypeScript cannot see the arity of that: `const [a, b] = args` compiles against an array of any
-// length, so removing an argument from the destructure while leaving the `args.length` guard and the
-// printed usage counting it is a silent, invisible shift. It happened on this branch, to all three at
-// once, when the leading tenant id was dropped — an operator following the printed usage would have
-// fed the taxpayer id into the node id, the till id and the till id respectively, and one of those
-// scripts closes a fiscal chain (CLAUDE.md §5).
+// TypeScript cannot see the arity of a destructured `process.argv`, so an argument dropped from the
+// destructure but still counted by the `args.length` guard and the usage text shifts every argument
+// after it — and one of these scripts closes a fiscal chain (CLAUDE.md §5).
 //
 // WHAT THIS GUARD READS, AND THE GAP: it reads the SOURCE TEXT of each script and checks three
 // numbers agree — the counts `args.length` accepts, the names destructured out of `args`, and the
@@ -31,7 +27,7 @@ function placeholders(region: string, script: string): { required: number; optio
   };
 }
 
-/** The leading `//` comment block at the top of the file — where each script prints its usage. */
+/** The leading `//` comment block, where each script documents its usage. */
 function headerComment(source: string): string {
   const lines: string[] = [];
   for (const line of source.split("\n")) {
@@ -71,11 +67,8 @@ describe.each(SCRIPTS)(
       const header = placeholders(headerComment(source), script);
       const printed = placeholders(usageErrorText(source), script);
 
-      // Both usage texts spell the same argument list.
       expect(header).toEqual(printed);
-      // Every destructured name has a placeholder, and vice versa.
       expect(names).toHaveLength(printed.required + printed.optional);
-      // The arity check accepts exactly the counts the placeholders describe.
       expect(accepted).toEqual(
         printed.optional === 0
           ? [printed.required]

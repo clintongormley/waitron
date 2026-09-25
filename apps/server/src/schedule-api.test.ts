@@ -17,14 +17,8 @@ import { mountScheduleApi } from "./schedule-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 
-// The schedule routes are LOGIC (session → verb → JSON) over mutable planning rows: the route
-// mechanics, the request-shape 400s and the not-logged-in 401.
-//
-// The "requester is the SESSION's personId, never the body's" identity property is proven HERE, by
-// deletion: making `schedule-api.ts`'s swap compose prefer `body.requestedByPersonId` reddens
-// exactly one case, `expected 403 to be 201` (run 2026-09-22 on node:sqlite). It used to be argued
-// that this needed a non-superuser role and so lived in a second real-Postgres suite; there are no
-// roles on this engine, that suite is gone, and the property was never a privilege decision.
+// The schedule routes: mechanics, the request-shape 400s, the not-logged-in 401, and the property
+// that the requester is the SESSION's personId, never the body's.
 
 const noopLog: Logger = () => {};
 let tillId: string;
@@ -38,11 +32,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    // Seeded through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
-    // took: every `id` here (and `tills.created_at`, `persons.created_at`) is a `$defaultFn`
-    // generator on this engine which a raw insert never reaches while the column is NOT NULL, and
-    // `invoice_locales` is a JSON array in a text column, so the `array[...]` constructor that
-    // filled it was refused with `near "['es-ES']": syntax error`.
+    // Seeded through the table definitions so each column's `$defaultFn` runs.
     const [loc] = await db
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
@@ -72,8 +62,7 @@ function mountApp(): Hono {
   return app;
 }
 
-/** Open a real shift session for `personId` (through the production `loginWithPin` path, on the app
- * role) and return the cookie header that carries it — the credential every schedule route gates on. */
+/** Open a real shift session for `personId` through `loginWithPin` and return its cookie header. */
 async function cookieFor(personId: string, pin: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
     return loginWithPin(tx, { tillId, personId, pin });
@@ -207,9 +196,7 @@ describe("mountScheduleApi — swaps", () => {
     const myShift = await insertShift(me, "2026-05-07T09:00:00Z", "2026-05-07T17:00:00Z");
     const res = await send(mountApp(), "POST", "/api/schedule/swaps", {
       cookie: await cookieFor(me, "1111"),
-      // A hostile `requestedByPersonId` in the body is IGNORED — identity comes from the session only
-      // (`me-api.cross-person.test.ts` proves it by deletion for the sibling DASHBOARD route; here
-      // we assert the filed row is `me`).
+      // A hostile `requestedByPersonId` in the body is IGNORED — identity comes from the session only.
       body: {
         fromShiftId: myShift,
         toPersonId: colleague,
@@ -256,9 +243,8 @@ describe("mountScheduleApi — swaps", () => {
   });
 
   it("400s a POST /swaps with a MALFORMED body (management.request_invalid, never a 500)", async () => {
-    // `c.req.json()` throws on a malformed body; `readJsonBody` coerces that throw to `{}` → the same
-    // field-screen 400 as the null-body test above, not an opaque 500. Sent raw, since `send` would
-    // JSON.stringify a valid body.
+    // `readJsonBody` coerces a malformed body to `{}` → the same field-screen 400 as the null-body
+    // test above. Sent raw, since `send` would JSON.stringify a valid body.
     const res = await mountApp().request("/api/schedule/swaps", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: await cookieFor(me, "1111") },
@@ -459,9 +445,8 @@ describe("mountScheduleApi — absences", () => {
   it("400s an INVERTED date range (absence.invalid), never a 23514 500", async () => {
     // The CROSS-field case the impossible-day test above does not reach: startsOn (10 May) and endsOn
     // (1 May) are each a real calendar day, so requirePeriod passes BOTH in isolation — only the PAIR
-    // is malformed. createAbsence's ordering guard turns this into a structured 400 `absence.invalid`;
-    // without it the insert violates `absences_range_ck` → PG 23514 → a non-AppError → an opaque
-    // server.internal 500, the very outcome the screening layer promises never to produce.
+    // is malformed. createAbsence's ordering guard turns this into a structured 400 `absence.invalid`
+    // rather than a check-constraint failure.
     const res = await send(mountApp(), "POST", "/api/schedule/absences", {
       cookie: await cookieFor(me, "1111"),
       body: { kind: "holiday", startsOn: "2026-05-10", endsOn: "2026-05-01", note: null },

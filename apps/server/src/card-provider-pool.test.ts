@@ -8,12 +8,8 @@ import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
 import { SumUpCloudProvider } from "@waitron/payments-sumup";
 import { createCardProviderPool } from "./card-provider-pool.js";
 
-// The pool's own contract (build-once, cache, evict-to-rebuild, unknown-id, propagate-a-build-
-// failure) is provider-agnostic, so most cases here use a FAKE CardProviderContribution with a spy
-// `build` — deterministic call counting with no vault I/O. One case builds the real SumUp seat
-// through the pool and checks it is returned and cached; the deps the pool passes are not
-// exercised, because that seat reads its credential only on first use (`deferredClient` in
-// `packages/payments-sumup/src/card-provider.ts`), so the case seals none.
+// The pool's contract is provider-agnostic, so most cases use a FAKE contribution with a spy `build`.
+// The real-SumUp case seals no credential: that seat reads it only on first use.
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 3).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -114,8 +110,7 @@ describe("createCardProviderPool", () => {
     });
 
     const first = await pool.get("sumup");
-    // Negative control: a second get with NO evict in between must still be the cached instance —
-    // if this failed too, the later rebuild would prove nothing about evict specifically.
+    // Negative control: with NO evict in between, the instance is still the cached one.
     const stillCached = await pool.get("sumup");
     expect(stillCached).toBe(first);
     expect(build).toHaveBeenCalledTimes(1);

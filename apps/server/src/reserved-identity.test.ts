@@ -38,10 +38,8 @@ describe("establishReservedStandbyIdentity", () => {
   // NIF via seedTenant's counter.
   beforeEach(async () => {
     await seedTenant(suite.db);
-    // Inserted through the table definition, the same change `packages/db/src/testing/seed.ts`
-    // took: `locations.id` is a `$defaultFn(newId)` value on this engine rather than a SQL
-    // DEFAULT, so a raw insert omitting it returns nothing to brand — and `array['es-ES']` is
-    // PostgreSQL array syntax the engine refuses at prepare (`near "['es-ES']": syntax error`).
+    // Through the table definition: `locations.id` is a `$defaultFn(newId)` value, not a SQL DEFAULT,
+    // so a raw insert omitting it returns nothing to brand.
     const [loc] = await suite.db
       .insert(locations)
       .values({

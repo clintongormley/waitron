@@ -83,11 +83,8 @@ export async function submitFiscalReadiness(args: {
   // real preproduction sale on a real chain, so it must not share a file with the box's own venue
   // and must survive a restart.
   const directory = join(args.stateDir, `fiscal-readiness-db-${testIdentity}`);
-  // Through the product's own migrating path rather than set-by-set on this function's own handle,
-  // which is what it did before: `applyMigrations` is the one place that installs the append-only
-  // refusal triggers, and the sample here is a real preproduction sale on a real chain — so without
-  // it a filed record in this database could be rewritten while the box refuses it (CLAUDE.md §5).
-  // It takes the migration lock and opens its own handle, so it runs BEFORE this one is opened.
+  // `applyMigrations` is the one place that installs the append-only refusal triggers. It takes the
+  // migration lock and opens its own handle, so it runs BEFORE this one is opened.
   await applyMigrations(
     directory,
     migrationOptionsFor(orderedMigrationSets(args.modules), args.migrationsRoot ?? null),

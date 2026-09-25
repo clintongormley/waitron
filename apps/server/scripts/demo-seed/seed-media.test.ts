@@ -1,8 +1,5 @@
 /**
  * The demo's media step: committed tiles in the library, content-addressed references on products.
- *
- * SQLite has no roles, and every call below runs on the one handle. Nothing now checks who
- * may write the image library.
  */
 
 import { readFile } from "node:fs/promises";
@@ -19,7 +16,7 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import { seedCatalogues } from "./seed-catalogue.js";
 import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage, readImageBytes } from "@waitron/media";
 import { seedMedia } from "./seed-media.js";
-// The exact regex the public `GET /media/:filename` route accepts — the produced names MUST pass it.
+// The regex the public `GET /media/:filename` route accepts.
 import { MEDIA_FILENAME } from "@waitron/media";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
@@ -32,15 +29,13 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// One NIF per provisioned venue. `useVenueDb`'s per-test reset empties every data table, so the
-// counter no longer keeps two tests apart; it keeps two `provisionVenue` calls within a test apart.
+// One NIF per provisioned venue.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(51_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** Provision a fresh chained venue (as the owner) and return the ids the seed needs. */
 async function provisionVenue(): Promise<{ locationId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -88,7 +83,6 @@ describe("seedMedia", () => {
         locale: LOCALE,
       });
       await seedMedia(tx, { productsByImage });
-      // Read every product's stored image back, keyed by product id.
       const { rows } = await tx.execute<{ id: string; image: string | null }>(
         sql`select id, image from products `,
       );

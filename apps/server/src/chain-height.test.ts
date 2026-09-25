@@ -9,8 +9,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import { readChainHeight } from "./chain-height.js";
 import { ALL_MODULES } from "./modules.js";
 
-// The full manifest, because `applyVenue` provisions every module's tables. The cases check the
-// node-id lookup and the absent-row fallback; the deployment holds one tenant per database.
+// The full manifest, because `applyVenue` provisions every module's tables.
 const LOCALE = "es-ES";
 
 const suite = useVenueDb({
@@ -69,12 +68,8 @@ describe("readChainHeight", () => {
   });
 
   it("returns 0 / null for a node with no cadenas row", async () => {
-    // Provisioning seeds this venue's own chain head at `secuencia = 0`, so the "absent row"
-    // branch is NOT reached by a freshly provisioned node — it is reached by a node_id that has no
-    // chain row. A random uuid is exactly that: the `node_id` predicate matches nothing, and the
-    // reader falls back to `{ height: 0, lastAt: null }`. Re-measured on this engine 2026-09-22 by
-    // selecting `cadenas` here: one row, the provisioned node id, `secuencia` 0, a non-null
-    // `actualizado_en`.
+    // Provisioning seeds this venue's own chain head at `secuencia = 0`, so the "absent row" branch is
+    // reached only by a node_id with no chain row, such as a random uuid.
     const result = await withTransaction(suite.db, async (tx) => {
       return readChainHeight(tx, randomUUID());
     });
@@ -82,9 +77,7 @@ describe("readChainHeight", () => {
   });
 
   it("returns the cadenas secuencia + actualizado_en once a chain row exists", async () => {
-    // A fixture write, never a path the product takes: the app advances the head through
-    // `registerSif`'s locked upsert and never sets an arbitrary `secuencia`. What is under test is
-    // the READ below.
+    // A fixture write, never a path the product takes. What is under test is the READ below.
     await suite.db.execute(sql`
       insert into cadenas (node_id, secuencia, actualizado_en)
       values (${nodeId}, 7, '2026-08-29T10:00:00Z')

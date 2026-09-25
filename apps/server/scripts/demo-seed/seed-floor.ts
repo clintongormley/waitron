@@ -1,5 +1,3 @@
-// Seed the floor plan and service statuses in the caller's transaction.
-// toTableCfg brands the supplied venue ids for the table operations.
 // Statuses are inserted directly because the management helper requires a session.
 
 import { randomUUID } from "node:crypto";
@@ -35,24 +33,14 @@ export interface SeedFloorInput {
   menuIds?: { restaurant: string; lunch: string; deli: string };
 }
 
-/**
- * Bridge the plain-string venue ids `applyVenue` returns into the branded `TillConfig` shape
- * `createZone`/`createTable`/`setTablePlacement` are typed to take. Only `locationId` is
- * ever READ by those three (confirmed by inspection of `apps/server/src/tables.ts`: `createZone`/
- * `createTable` insert `cfg.locationId` as a literal column value, and
- * `setTablePlacement` reads `cfg.locationId` alone to scope its lookups) — every other field here is
- * a placeholder that satisfies the type and is never touched, the same shape `tables.test.ts`'s own
- * `setupVenue` fixture uses for its unrelated `seriesId` (a random uuid, no real series row).
- */
+/** `createZone`, `createTable` and `setTablePlacement` read only `locationId`; every other field is
+ *  a placeholder that satisfies the type. */
 function toTableCfg(locationId: string, locale: SeedLocale): TillConfig {
   return {
     tillId: brandTillId(randomUUID()),
     nodeId: brandNodeId(randomUUID()),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
-    // `locale` is the BARE content key; the fiscal/display fields take the FULL tag it files under.
-    // Both are placeholders here (only locationId is read — see this function's doc), kept
-    // full-tag so the throwaway cfg is a VALID `TillConfig` shape rather than a bare-locale one.
     locale: SEED_INVOICE_LOCALE[locale],
     invoiceLocales: [SEED_INVOICE_LOCALE[locale]],
     tipsEnabled: false,
@@ -60,13 +48,8 @@ function toTableCfg(locationId: string, locale: SeedLocale): TillConfig {
   };
 }
 
-/**
- * Seed the floor plan onto `locationId` in the caller's transaction: five service zones,
- * ~16 placed tables, and the four service statuses. Zones are created
- * before any table (a table's `zoneId` must name a LIVE zone of this location — `setTablePlacement`
- * enforces it, `zone.not_found` otherwise), and each table is placed (`setTablePlacement`)
- * immediately after it is created.
- */
+/** Zones are created before any table: `setTablePlacement` refuses a `zoneId` that is not a live
+ *  zone of this location. */
 export async function seedFloor(
   tx: Transaction,
   { locationId, locale, menuIds }: SeedFloorInput,

@@ -208,8 +208,7 @@ describe("runLoop", () => {
     });
     expect(events.map((e) => e.event)).toContain("onPass.threw");
     expect(events.map((e) => e.event)).not.toContain("pass.threw");
-    // 600_000ms — the pass's real 10-minute nextDueAt, clamped as normal. An implementation that
-    // conflated the two failures would instead report `startedAt` (due now) and sleep MIN.
+    // 600_000ms — the pass's real 10-minute nextDueAt, clamped as normal, not a due-now retry.
     expect(slept).toEqual([600_000]);
   });
 
@@ -239,9 +238,7 @@ describe("runLoop", () => {
       maxTickMs: MAX,
       log: (level, event, fields) => events.push({ level, event, fields }),
     });
-    // The loop survived the rejection and passed again — not just "didn't crash": a version that
-    // let the rejection propagate would never reach the second pass, and `await runLoop(...)` would
-    // itself reject, failing this test outright before any assertion below ran.
+    // The loop survived the rejection and passed again.
     expect(calls).toBe(2);
     const threw = events.filter((e) => e.event === "sleep.threw");
     // Exactly one line, naming the failure with a code — never the raw message, same reason as
@@ -264,14 +261,10 @@ describe("realSleep", () => {
     controller.abort();
     const startedAt = Date.now();
     await realSleep(5_000, controller.signal);
-    // A version that swallowed the abort by waiting out the full duration would take ~5000ms here;
-    // a broken test that didn't measure elapsed time would pass either way.
+    // Waiting out the full duration instead of honouring the abort would take ~5000ms here.
     expect(Date.now() - startedAt).toBeLessThan(500);
   });
 
-  // realSleep's non-abort rethrow has no reachable trigger through this repo's own call sites (see
-  // its /* v8 ignore start */ / stop block) — a cast-driven "malformed signal" test would only
-  // prove a shape no real caller can produce. runLoop's own "keeps looping when sleep itself
-  // rejects" test, above, exercises the actual contract this rethrow exists to serve: an injected
-  // `sleep` that rejects for a reason other than the abort must not go unnoticed or end the loop.
+  // realSleep's non-abort rethrow has no reachable trigger through this repo's own call sites; the
+  // "keeps looping when sleep itself rejects" test above covers the contract it serves.
 });

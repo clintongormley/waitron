@@ -38,12 +38,8 @@ interface Seeded {
 
 async function setupVenue(): Promise<Seeded> {
   await seedTenant(db);
-  // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
-  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
-  // engine and a raw insert reaches none of them (all three columns are NOT NULL —
-  // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
-  // a text column, which is what refused the `array[...]` constructor that used to fill it
-  // (`near "['es-ES']": syntax error`).
+  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are NOT NULL
+  // `$defaultFn` generators a raw insert never reaches.
   const [location] = await db
     .insert(locations)
     .values({
@@ -70,9 +66,7 @@ async function setupVenue(): Promise<Seeded> {
   };
   const seeded = await withTransaction(db, async (tx) => {
     const { id: tableId } = await createTable(tx, cfg, { label: "T1" });
-    // Through the table definition for the same reason as the venue rows above:
-    // `table_service_statuses.id` and `.created_at` are `$defaultFn` generators and both columns are
-    // NOT NULL (`packages/db/drizzle/0000_baseline.sql:517` and `:522`).
+    // Through the table definition for the same reason as the venue rows above.
     const [active] = await tx
       .insert(tableServiceStatuses)
       .values({ label: "Bill requested", color: "#ef4444" })
@@ -182,7 +176,7 @@ describe("listTablesWithState folds in the manual status", () => {
     );
     // Nothing clears `status_id` on deactivation (the editor can reactivate a deactivated status), so the
     // table still carries it and the read reflects the STORED status regardless of its current `active`
-    // flag — the join keys on id only (brief Step 3), it has no `active` predicate.
+    // flag — the join keys on id only, with no `active` predicate.
     const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(rows.find((t) => t.id === tableId)).toMatchObject({
       state: "free",
@@ -197,7 +191,7 @@ describe("openTab clears a stale status (design §3b(2))", () => {
     await asApp(cfg, (tx) => setTableStatus(tx, cfg, tableId, activeStatusId));
     expect(await statusOf(tableId)).toBe(activeStatusId);
     // Opening an EMPTY tab (no initial round) needs no product — it just anchors the tab to the table
-    // and (TS-2's Step 3 edit) clears any stale manual status.
+    // and clears any stale manual status.
     await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     expect(await statusOf(tableId)).toBeNull();
   });

@@ -10,9 +10,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { createStatus, deactivateStatus, listStatuses, updateStatus } from "./tables.js";
 import "./errors.js";
 
-// Core plus identity, because the CRUD both authorizes (`authorizeManager` reads `persons` and
-// `management_sessions`) and writes `table_service_statuses`. `resetPerTest: false`: the manager
-// session seeded once in `beforeAll` is read by every case below.
+// `resetPerTest: false`: the manager session seeded once in `beforeAll` is read by every case below.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   resetPerTest: false,
@@ -27,9 +25,7 @@ function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 /** Seed a person of `role` and an open management session; returns the session id. */
 async function seedSession(role: PersonRoleValue): Promise<string> {
-  // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
-  // `$defaultFn` generators (`packages/identity/src/schema/persons.ts:26,:67`) that an insert
-  // statement never reaches, and both columns are NOT NULL.
+  // Through the table definition so each column's `$defaultFn` runs.
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName: `${role} operator`, pinHash: "seed-pin-hash", role })
@@ -109,9 +105,7 @@ describe("service-status config CRUD (venue.configure)", () => {
       ),
     ).toBe("status.label_taken");
 
-    // ...and on update: a second status renamed onto the taken label trips the same unique, so
-    // updateStatus maps its 23505 to status.label_taken too (the catch branch the create case cannot
-    // reach). The test's title promises both directions; this is the update half.
+    // ...and on update: a second status renamed onto the taken label maps to status.label_taken too.
     const { id } = await asApp((tx) =>
       createStatus(tx, {
         managementSessionId: managerSession,

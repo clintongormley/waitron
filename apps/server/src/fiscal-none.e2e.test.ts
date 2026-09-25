@@ -22,7 +22,7 @@ import { venueModuleConfig } from "./provision.js";
 import "./errors.js";
 
 /**
- * The payoff proof of the fiscal-none branch: a GB (`GB-vat`) venue selects the `fiscal-none` slot
+ * A GB (`GB-vat`) venue selects the `fiscal-none` slot
  * member end to end — the territory resolves to filing `none`, `venueModuleConfig` enables
  * `fiscal-none` and disables `fiscal-verifactu`, and the slot hands back a `NoneBackend` that
  * records NOTHING. Ringing a sale, a void, a correction and a substitution through the real core
@@ -34,10 +34,6 @@ import "./errors.js";
  */
 const LOCALE = "en-GB";
 
-// This counter was here because tenants accumulated for the life of the shared PostgreSQL
-// container. They do not now: the suite gets its own database file and the per-test reset empties
-// `tenants` (`packages/db/src/testing/venue-db.ts`). It is kept because a distinct tax id per call
-// costs nothing and no assertion here reads its value.
 let taxIdCounter = 0;
 function nextTaxId(): string {
   taxIdCounter += 1;
@@ -165,8 +161,7 @@ async function setupGbVenue(): Promise<GbVenue> {
   };
 }
 
-/** Run `fn` in one trading write transaction. The role this used to assume is gone; see the file
- *  header for what that costs. */
+/** Run `fn` in one trading write transaction. */
 async function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, async (tx) => {
     return fn(tx);
@@ -234,7 +229,7 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
   it("rings a sale + void + correction + substitution and files ZERO fiscal rows", async () => {
     const venue = await setupGbVenue();
 
-    // 1. A sale — the one whose fiscal_backend the brief pins to "none".
+    // 1. A sale.
     const sale = await ringSale(venue);
     expect(sale.backendId).toBe("none");
 

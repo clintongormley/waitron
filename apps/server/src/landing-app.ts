@@ -31,10 +31,8 @@ export function buildLandingApp(deps: LandingDeps): Hono {
   const caPath = caCertPath(deps.stateDir);
   const app = new Hono();
 
-  // Does the box have its own CA to serve? A page view is not a deliberate download, so this collapses
-  // ENOENT and any other read failure alike to `false` — the page just shows "no
-  // box CA" rather than logging. The `/ca.crt` route below is the deliberate action, so it
-  // distinguishes the two error classes. Same split as `discovery-api.ts`.
+  // A page view is not a deliberate download, so any read failure is `false` and nothing is logged;
+  // the `/ca.crt` route below is the deliberate action and distinguishes ENOENT from other failures.
   const caExists = (): Promise<boolean> =>
     access(caPath).then(
       () => true,
@@ -61,9 +59,7 @@ export function buildLandingApp(deps: LandingDeps): Hono {
       // Missing files need no operator log. Other read failures are logged without exposing paths.
       const code = (error as NodeJS.ErrnoException).code;
       if (code !== "ENOENT") {
-        // `code` is optional on the error TYPE, but every fs read failure this route can hit sets it,
-        // so the `?? "unknown"` fallback is type-required but unreachable — same shape as
-        // `discovery-api.ts`'s own `code ?? "unknown"`.
+        // `code` is optional on the error TYPE, but every fs read failure this route can hit sets it.
         /* v8 ignore start */
         deps.log("error", "landing.ca_read_failed", { code: code ?? "unknown" });
         /* v8 ignore stop */

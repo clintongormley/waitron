@@ -1,15 +1,9 @@
 /**
- * Pairing mode — the venue-wide window during which anything may ask to join (design §1.1).
+ * Pairing mode — the venue-wide window during which anything may ask to join.
  *
- * IN MEMORY, ON THE PRIMARY, DELIBERATELY. It is not a table: a window is a thing an admin is doing
- * right now, not a fact about the venue, and holding it here makes it fail closed on both the events
- * that should close it — a restart, and a promotion (a node that has just taken over must not inherit
- * an open door). It also costs no migration, no classification and no grant.
- *
- * ONE holder serves BOTH surfaces (owner decision 2026-09-08): `boot.ts` builds it once and passes it
- * to the device mount and the shared join mount (`mountDeviceApi` and `mountJoinApi`; the print mount
- * is not wired to it this slice), so "venue-wide" is a property of the wiring rather than a rule
- * anyone has to remember.
+ * IN MEMORY, ON THE PRIMARY, DELIBERATELY, not a table: it fails closed on both events that should
+ * close it — a restart, and a promotion (a node that has just taken over must not inherit an open
+ * door). `boot.ts` builds ONE holder and passes it to the device, join and print mounts.
  */
 
 export const PAIRING_WINDOW_MS = 15 * 60 * 1000;
@@ -26,7 +20,7 @@ export interface PairingMode {
   /** The ISO instant the window lapses, or `null` when shut. */
   openUntil(): string | null;
   /** Record a knock refused because the window was shut. Deliberately NOT a row: persisting refused
-   * knocks would hand an attacker the row creation the window exists to deny (design §12). */
+   * knocks would hand an attacker the row creation the window exists to deny. */
   noteRefused(): void;
   refusedRecently(): number;
 }

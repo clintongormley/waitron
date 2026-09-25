@@ -12,16 +12,12 @@ export interface RotatingFileSinkOptions {
 /**
  * Best-effort synchronous file sink. The box process is the single sequential writer, so rotation
  * needs no cross-process locking. On ANY IO failure it reports once (via `onError`) and becomes a
- * no-op — the sale-safety invariant: logging never throws into a request path. The paired `tee`
- * still writes stdout, so a degraded file sink loses the file, not the line.
+ * no-op: logging never throws into a request path.
  *
- * Every line goes through `redactSecrets` FIRST. This file is what the unauthenticated recovery page
- * serves the tail of (`recovery-surface.ts` → `tailLog`), and the box has one logger tee'd to stdout
- * and to here (`boot.ts`), so any module logging a caught error's own words — `mdns.ts` logs
- * `err.message`, `me-api.ts` logs `error.message` — can put a connection string on that page. The
- * mask belongs to the FILE, not to those call sites: a module written next year is covered without
- * knowing the page exists. `redactSecrets` names what it does and does not cover; a `"` terminates
- * its scan, which is exactly a JSON line's own string delimiter.
+ * Every line goes through `redactSecrets` FIRST, because the unauthenticated recovery page serves this
+ * file's tail (`recovery-surface.ts` → `tailLog`) and any module may log a caught error's own words.
+ * The mask belongs to the FILE, not to the call sites, so a new module is covered without knowing the
+ * page exists.
  */
 export function createRotatingFileSink(
   opts: RotatingFileSinkOptions,
@@ -31,9 +27,7 @@ export function createRotatingFileSink(
   const current = join(opts.dir, fileName);
   let degraded = false;
   let dirEnsured = false;
-  // The live byte size of the current file, tracked in memory so the hot write path costs no
-  // `statSync` per line. Seeded lazily from disk on the first write (a file may survive a restart),
-  // grown by each append, and reset by `rotate`. `-1` means "not yet seeded".
+  // Tracked in memory so the write path costs no `statSync` per line. `-1` means "not yet seeded".
   let currentSize = -1;
   const sizeOf = (p: string): number => {
     try {
@@ -63,8 +57,7 @@ export function createRotatingFileSink(
         dirEnsured = true;
       }
       if (currentSize < 0) currentSize = sizeOf(current);
-      // Measured on the REDACTED line, which is what is appended — the in-memory size must track
-      // the bytes on disk or rotation drifts from `maxBytes`.
+      // Measured on the REDACTED line, which is what is appended.
       const bytes = Buffer.byteLength(line);
       if (currentSize > 0 && currentSize + bytes > opts.maxBytes) {
         rotate();
@@ -102,10 +95,8 @@ export interface LogReader {
 }
 
 /**
- * Reads back what {@link createRotatingFileSink} wrote. Mirrors the sink's rotation naming — `.N` is
- * the oldest rotated file, `.1` the most recent, and the bare fileName the current one — so reading
- * `.maxFiles → … → .1 → current` yields events in chronological order. Never throws: a missing file
- * is skipped and a torn/garbage line is dropped, so a diagnostics read can never take down a caller.
+ * Reads back what {@link createRotatingFileSink} wrote, in chronological order. Never throws: a missing
+ * file is skipped and a torn/garbage line is dropped.
  */
 export function createLogReader(opts: {
   dir: string;
@@ -141,9 +132,7 @@ export function createLogReader(opts: {
     return out;
   };
   return {
-    // Tail-bounded: walks files newest-first and parses only from the end of each until `limit`
-    // events are gathered, so a poll returns the last N lines without reading or JSON-parsing every
-    // rotated file (the common case touches only the current file). Result is chronological.
+    // Walks files newest-first and parses only from the end of each until `limit` events are gathered.
     recent(o) {
       const limit = o?.limit ?? 500;
       const collected: LogEvent[] = []; // newest-first while gathering

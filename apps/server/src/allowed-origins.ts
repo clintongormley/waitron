@@ -10,8 +10,7 @@ export interface AllowedOriginsDeps {
 
 const DEV_ORIGINS = ["http://localhost:5190", "http://localhost:5191", "http://localhost:5192"];
 
-/** A contactUrl's origin, or null when it does not parse — a malformed address allows nothing.
- * `URL.parse` is the repo's non-throwing idiom (`config.ts` `isBareOrigin`); `URL.parse("")` is null. */
+/** A contactUrl's origin, or null when it does not parse — a malformed address allows nothing. */
 function originOf(url: string): string | null {
   return URL.parse(url)?.origin ?? null;
 }

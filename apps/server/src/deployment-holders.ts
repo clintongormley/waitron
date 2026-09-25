@@ -6,11 +6,8 @@ import {
 } from "@waitron/db";
 
 /**
- * This node's two orthogonal role axes (`node_roles`) the running process gates on, each in a
- * one-field cell read live per request / per pass so a promotion is a genuine flag-flip with no
- * restart (promotion runbook design §3b). `mode` fronts the read-only gate + ambient viewer;
- * `singletonRole` gates the fiscal drain/reconcile pass (see `singletonPass`). Held together so the
- * promote action refreshes both in one call.
+ * This node's two role axes (`node_roles`), each in a cell read live per request / per pass so a
+ * promotion needs no restart.
  */
 export interface DeploymentHolders {
   readonly mode: { current: DeploymentMode };
@@ -26,13 +23,8 @@ export function createDeploymentHolders(
 }
 
 /**
- * Re-reads this node's two axes from the database into the holders. The promote action calls this
- * AFTER its write so the running gates and the fiscal pass observe the new state on their next tick
- * (promotion runbook design §3b).
- *
- * Both axes come from a SINGLE `readDeploymentAxes` read of one row, so the holders can never be
- * assigned a torn `(mode, singleton_role)` pair — e.g. `(mirror, primary)` — which
- * `node_roles_role_valid_ck` forbids from ever existing in a committed row.
+ * Re-reads this node's two axes into the holders. Both come from a SINGLE read of one row, so the
+ * holders can never hold a torn `(mode, singleton_role)` pair that `node_roles_role_valid_ck` forbids.
  */
 export async function refreshDeploymentHolders(
   db: Database,

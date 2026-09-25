@@ -6,14 +6,8 @@ const EACH_ABBR = { en: "ea", es: "ud", ca: "u", gl: "u", eu: "u" };
 const KG_NAMES = { en: "kg", es: "kg", ca: "kg", gl: "kg", eu: "kg" };
 
 /**
- * Seed the two legacy product choices with real unit identities.
- *
- * Inserted through the table definition rather than as raw SQL, so every column generator the
- * storage swap moved into JavaScript runs — `units.id` is one, and a raw insert reaches none of
- * them (`packages/db/src/testing/seed.ts` was converted for the same reason). The names and
- * abbreviations are handed over as objects because the column's own write mapping is what encodes
- * them; the `::jsonb` casts they used to carry are a syntax error on this engine
- * (`unrecognized token: ":"`).
+ * Seed the two legacy product choices with real unit identities, through the table definition so
+ * each column's `$defaultFn` runs and its write mapping encodes the names.
  */
 export async function seedLegacySellingUnits(db: Database): Promise<void> {
   await db.insert(units).values([

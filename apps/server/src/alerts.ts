@@ -103,17 +103,8 @@ export async function readOpenAlerts(
     if (!held.has(source.permission)) continue;
     try {
       // A savepoint per source, so a failed source's own writes go with it rather than sitting in
-      // the transaction every later source reads on. On PostgreSQL this was also what kept that
-      // transaction usable after a refusal; SQLite backs out the refused statement alone
-      // (`bench/sqlite-failover/README.md` → "What S5 measures, and the savepoint it does not
-      // need"), so only the first half of that is still this line's doing.
-      //
-      // The source reads on the OUTER handle, not on the one Drizzle hands a nested body. The
-      // savepoint is opened on the CONNECTION, and the store opens one write connection per file
-      // (`packages/store/src/index.ts`), so a statement issued on `tx` inside this bracket is
-      // inside the savepoint — measured, with the no-savepoint control alongside it. The nested
-      // handle also carries no `execute`: `node-sqlite-adapter.ts` adds that to the database
-      // handle alone, so a source writing raw SQL could not have used it.
+      // the transaction every later source reads on. The source reads on the OUTER `tx`: the savepoint
+      // is opened on the connection, so a statement issued on `tx` inside this bracket is inside it.
       const found = await tx.transaction(() => source.read({ tx, now: deps.now }));
       for (const alert of found) alerts.push({ ...alert, kind: "ongoing", area: source.area });
     } catch (error) {

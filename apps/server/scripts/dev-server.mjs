@@ -1,33 +1,13 @@
 // Dev launcher for apps/server (`pnpm --filter @waitron/server dev`, and via the root `pnpm dev`).
-// A generated `.env` must exist first — either `pnpm dev:setup` (migrates a local venue DIRECTORY,
-// provisions a preproduction venue into it, and writes a TRADING `.env`) or `pnpm dev:onboard`
-// (migrates the same directory but provisions no venue, writing a venue-less SETUP-MODE `.env` so
-// the box boots into the slice-1b/2b setup surface). A venue is SQLite files in that directory;
-// neither script needs a database server. Both root scripts begin
-// `docker compose up -d --wait mailpit`, which is the only reason Compose is in the loop and the
-// reason a bare `pnpm dev` leaves practice email with nowhere to land. This launcher only checks
-// the file EXISTS — either shape passes — then:
+// Needs the `.env` that `pnpm dev:setup` (trading mode) or `pnpm dev:onboard` (setup mode) writes.
 //
-//   1. refuses to start without a generated `.env` — a clearer failure than letting boot surface
-//      a raw `server.config_missing`;
-//   2. assembles every migration set under `dist/drizzle/<set>`. boot.ts migrates at startup and,
-//      run from SOURCE (tsx), resolves its default migrations root to `apps/server/src/drizzle`,
-//      which does not exist (the sets live in each package's own `drizzle/`, and only the build's
-//      copy-migrations step gathers them into one root). `WAITRON_MIGRATIONS_DIR` is config.ts's
-//      supported from-source override, so we run copy-migrations and point it at the result;
-//   3. boots the server under `tsx watch` against `.env`, plus `<stateDir>/secrets.env` and
-//      `<stateDir>/trading.env` WHEN THEY EXIST (onboarding slice 2b). A setup-mode box persists
-//      `trading.env` on `POST /setup-api/provision` (`trading-config.ts`) and then restarts itself
-//      (`requestRestart` in `boot.ts`); `tsx watch` picks the restart straight back up (or the
-//      operator re-runs `pnpm dev`), and sourcing the newly-written file is what carries the four
-//      `WAITRON_TILL_*_ID` + `WAITRON_ENV` into the next boot so `tryLoadTillConfig` sees all four
-//      ids and enters TRADING mode
-//      (`config.ts`/`till-config.ts`). Node's `--env-file` is ADDITIVE — a later file's keys override
-//      an earlier file's — and each flag REQUIRES its file to exist (a missing path is a hard error),
-//      which is why the two extra files are only added when `existsSync` finds them. The appliance
-//      equivalent is a systemd `EnvironmentFile=-<stateDir>/secrets.env` +
-//      `EnvironmentFile=-<stateDir>/trading.env` pair (the leading `-` marks each optional, the same
-//      "source it if present" shape as the `existsSync` guards below).
+// Run from source, boot's default migrations root does not exist (each set lives in its package's
+// own `drizzle/`), so this assembles them with copy-migrations and points `WAITRON_MIGRATIONS_DIR`
+// at the result.
+//
+// A setup-mode box writes `<stateDir>/trading.env` on provision and restarts; sourcing it is what
+// carries the `WAITRON_TILL_*_ID` into the next boot. `--env-file` errors on a missing path, so the
+// state-dir files are added only when they exist.
 import { existsSync, readFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -45,8 +25,6 @@ if (!existsSync(join(pkgRoot, ".env"))) {
   process.exit(1);
 }
 
-// Respect a WAITRON_MIGRATIONS_DIR a developer already exported (they own the migrations root then);
-// otherwise assemble the sets the from-source boot migration needs (see the header) and point at them.
 let migrationsDir = process.env.WAITRON_MIGRATIONS_DIR;
 if (!migrationsDir) {
   const copy = spawnSync(process.execPath, [join(here, "copy-migrations.mjs")], {
@@ -56,13 +34,8 @@ if (!migrationsDir) {
   migrationsDir = join(pkgRoot, "dist", "drizzle");
 }
 
-// Minimal `KEY=value` reader for OUR OWN generated `.env` — mirrors `dev-setup.ts`'s `parseEnvFile`
-// (split on the first `=`, skip blank/`#` lines). Node's `--env-file` owns the runtime parse for the
-// child process below; this is only so THIS process can read `WAITRON_STATE_DIR` back out of the
-// `.env` it is about to hand to the child, since `--env-file` never touches this process's own
-// `process.env`. `dev-setup.ts`'s copy is a `.ts` module and this launcher runs as plain `.mjs`
-// (`"dev": "node scripts/dev-server.mjs"`, no tsx), so it cannot be imported here without a build
-// step — small enough to duplicate rather than restructure the dev scripts' module boundary for it.
+// A copy of `src/env-file.ts`'s parser, which this plain-`.mjs` launcher cannot import without tsx.
+// Only this process's own read of `WAITRON_STATE_DIR`; `--env-file` parses for the child.
 function parseEnvFile(text) {
   const out = {};
   for (const raw of text.split("\n")) {
@@ -75,11 +48,8 @@ function parseEnvFile(text) {
   return out;
 }
 
-// The state dir the box persists secrets.env/trading.env under — resolved exactly as `config.ts`
-// resolves `stateDir`: an unset OR EMPTY `WAITRON_STATE_DIR` takes the default (`DEFAULT_STATE_ROOT`,
-// `apps/server/src/state` run from source, gitignored), a set one is resolved relative to the
-// spawned child's cwd (`pkgRoot`, matched here since `resolve()` below would otherwise use THIS
-// process's cwd, which need not be `pkgRoot` — `pnpm dev` from the repo root is the common case).
+// Resolved as `config.ts` resolves `stateDir`: unset or empty takes the default; a set value is
+// relative to the child's cwd (`pkgRoot`), not this process's.
 const envFileVars = parseEnvFile(readFileSync(join(pkgRoot, ".env"), "utf8"));
 const stateDirValue = envFileVars.WAITRON_STATE_DIR;
 const stateDir =
@@ -87,8 +57,7 @@ const stateDir =
     ? join(pkgRoot, "src", "state")
     : resolve(pkgRoot, stateDirValue);
 
-// Source `secrets.env` (slice 2a) and `trading.env` (slice 2b) WHEN PRESENT — see the header comment
-// for why (`--env-file` is additive/later-overrides, and errors on a missing path, hence the guards).
+// Later `--env-file` flags override earlier ones.
 const envFileFlags = ["--env-file=.env"];
 const secretsEnvFile = join(stateDir, "secrets.env");
 const tradingEnvFile = join(stateDir, "trading.env");

@@ -155,14 +155,10 @@ describe("fiscal readiness submission runner", () => {
   });
   /**
    * The retained sample database holds a REAL preproduction sale on a REAL chain, so the tables the
-   * modules declare append-only have to refuse a rewrite here exactly as they do on the box
-   * (CLAUDE.md §5). This runner migrates with `runMigrations` set by set rather than through
-   * `applyMigrations`, which is where the product installs the triggers — so nothing else in the
-   * tree covers this path.
+   * modules declare append-only have to refuse a rewrite here exactly as they do on the box.
    *
    * Read through a raw `node:sqlite` connection rather than the runner's own handle, which it
-   * closes: the triggers belong to the FILE, so reopening it is what proves they were persisted and
-   * not merely installed on a session.
+   * closes: reopening the FILE shows the triggers were persisted, not merely installed on a session.
    */
   it("leaves the retained sample database refusing to rewrite the sale it recorded", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-append-only-"));
@@ -210,11 +206,6 @@ describe("fiscal readiness submission runner", () => {
       // The row first: a `FOR EACH ROW` trigger on an EMPTY table refuses nothing, so without this
       // the case would pass with no trigger installed at all.
       expect(connection.prepare("select count(*) as n from sales").get()?.n).toBe(1);
-      // `locale` is written back as it stands, not changed: `sales_locale_member_ck` ties it to a
-      // member of `invoice_locales`, so any other value is refused by the CHECK before a trigger is
-      // reached (measured — `'xx-XX'` gives `CHECK constraint failed: sales_locale_member_ck`).
-      // `BEFORE UPDATE` fires on the statement whatever the value, which the control below says:
-      // with the install deleted this same statement succeeds and nothing throws.
       expect(() => connection.exec("update sales set locale = 'en-GB'")).toThrow(
         /sales is append-only/,
       );

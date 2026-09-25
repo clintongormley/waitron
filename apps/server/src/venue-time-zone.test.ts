@@ -6,16 +6,13 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { readVenueTimeZone } from "./venue-time-zone.js";
 
-// What this suite exercises: the read and its location predicate.
 let locationId: string;
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS],
   setup: async (db) => {
     await seedTenant(db);
-    // Inserted through the table definition, as `apps/server/src/testing/fiscal-fixtures.ts` is:
-    // `locations.id` is a `$defaultFn(newId)` generator that a raw insert never reaches, and
-    // `invoice_locales` is a JSON array in a text column rather than a PostgreSQL `text[]`.
+    // Through the table definition: `locations.id` is a `$defaultFn` generator a raw insert never reaches.
     const [location] = await db
       .insert(locations)
       .values({

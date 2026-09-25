@@ -97,8 +97,7 @@ export function mountLiveApi(
       const sessionId = requireManagementSession(c);
       const authenticate = async (): Promise<void> => {
         await withTransaction(deps.db, async (tx) => {
-          // Resolving the session validates it is live (throws when missing, expired or suspended);
-          // one tenant per database, so there is no tenant to compare against.
+          // Resolving the session validates it is live (throws when missing, expired or suspended).
           await resolveManagementSession(tx, sessionId, { touch: false });
         });
       };

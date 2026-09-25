@@ -47,8 +47,7 @@ describe("corsForVenue", () => {
     const res = await app().request("/api/till");
     expect(res.status).toBe(200);
     expect(res.headers.get("access-control-allow-origin")).toBeNull();
-    // No Origin header ⇒ the middleware adds NOTHING (§3.4 "untouched"): no Vary, no
-    // Allow-Credentials — hono/cors is never entered.
+    // No Origin header ⇒ the middleware adds NOTHING: no Vary, no Allow-Credentials.
     expect(res.headers.get("vary")).toBeNull();
     expect(res.headers.get("access-control-allow-credentials")).toBeNull();
   });

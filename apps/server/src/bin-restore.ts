@@ -10,11 +10,7 @@ runRestore({
   out: (line) => process.stdout.write(`${line}\n`),
 })
   .then((code) => process.exit(code))
-  // Backstop, not the fix: `runRestore` itself never rejects with a raw error (it catches every
-  // orchestrator failure and prints a sanitised message — restore-command.ts). This exists only so
-  // a bug THERE, or a throw before `runRestore` is even reached, can never let Node print an
-  // uncaught rejection's raw `.message` (which could carry the admin connection string/password)
-  // straight to stderr — never re-print `err`/`err.message` here either.
+  // Backstop for a throw `runRestore` does not catch: never print `err` or its message here.
   .catch(() => {
     process.stderr.write("restore failed\n");
     process.exit(1);

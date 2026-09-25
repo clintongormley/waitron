@@ -11,30 +11,12 @@ import {
 } from "@waitron/db";
 import { cadenas, envios, registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
 
-// Shared fiscal seeding for the fiscal-record suites. It lives under apps/server/src/testing/ because
-// its consumers do (boot.mirror's fidelity seeding). Coverage-excluded (this package's vitest.config.ts
-// `exclude`). Spanish fiscal column names are used verbatim because apps/* is english-only-exempt.
-//
-// Column shapes are the current migrated schema (the one taxpayer row keyed 1, vat_breakdown on
-// sales, node-keyed series/sif/registro).
-//
-// Every row here is written through its TABLE DEFINITION rather than as raw SQL, so each column's
-// own generator runs — `created_at`, `registrado_en`, `creado_en`, `actualizado_en` and
-// `proximo_intento_en` are `$defaultFn` values on this engine, which a raw insert never reaches, and
-// a raw insert stopped at `NOT NULL constraint failed: tenants.created_at`. It is also what encodes
-// the JSON and list columns, whose `::jsonb` casts and `array[...]` constructors were PostgreSQL
-// syntax this engine refuses (`unrecognized token: ":"`). Same change, and the same reason, as
-// `packages/db/src/testing/seed.ts`.
+// Every row is written through its table definition, never raw SQL, so each column's `$defaultFn`
+// runs and the JSON and list columns are encoded.
 
 /**
- * The sale's issue instant, carrying the `+01:00` that `issued_offset_minutes` (60) records.
- *
- * `sales.issued_at` is a `tsString` column, so it stores this spelling verbatim. The registro's
- * `fecha_hora_huso_gen_registro` is a `ts` column, so the same instant goes in as a `Date` and is
- * stored as the UTC `toISOString()` form — which is what PostgreSQL's `timestamptz` already did to
- * this literal, and the one timestamp spelling that compares correctly on this engine
- * (`packages/printing/src/runtime.ts` has the four-way measurement). The offset itself survives in
- * `offset_minutos`, which is why the huella can still be recomputed.
+ * The sale's issue instant, carrying the `+01:00` that `issued_offset_minutes` (60) records. The
+ * registro stores the same instant as a UTC `Date`; the offset survives in `offset_minutos`.
  */
 const ISSUED_AT = "2026-07-20T19:20:30+01:00";
 
@@ -59,11 +41,9 @@ export interface SeededFiscalRegistro extends FiscalIds {
   secuencia: number;
 }
 
-// registro_sif carries UNIQUE (nif, id_sistema_informatico, numero_instalacion). A suite gets ONE
-// database for the whole file, so each seed call must be collision-free against
-// every earlier one in the same file. A per-module counter gives each call a
-// distinct-but-deterministic tax_id / numero_instalacion; callers may override. The taxpayer row
-// itself is a singleton, so only the FIRST call in a database sets its tax id.
+// registro_sif carries UNIQUE (nif, id_sistema_informatico, numero_instalacion) and a suite shares
+// one database, so each seed call takes a distinct numero_instalacion. Only the FIRST call in a
+// database sets the taxpayer's tax id.
 let seedSeq = 0;
 
 /** Fresh random ids for one FK closure. Each test seeds its own so nothing collides on a fixed id. */
@@ -83,21 +63,13 @@ export interface SeedParentsOptions {
   ids?: Partial<FiscalIds>;
   /** registro_sif.numero_instalacion. Default: deterministic-unique per call. */
   numeroInstalacion?: number;
-  /**
-   * Skip the `sales` insert, leaving the rest of the closure. Used by the FK-order apply gate to seed a
-   * mirror that is missing exactly the `sale_id` parent, so a delivered registro parks on the
-   * foreign-key refusal until
-   * {@link insertFiscalSale} plants the sale (Task 8).
-   */
+  /** Skip the `sales` insert, leaving the rest of the closure; {@link insertFiscalSale} plants it later. */
   skipSale?: boolean;
   /** The supplied ids already name a tenant, venue, till, node and series in this database. */
   reuseExistingParents?: boolean;
 }
 
-/**
- * Inserts the single `sales` row of a FK closure through the admin connection. Split out of
- * {@link seedFiscalParents} so a test can plant the sale AFTER a registro has already parked on the absent `sale_id` FK, the parent-arrives half of the FK-defer gate (Task 8).
- */
+/** Inserts the single `sales` row of a FK closure. */
 export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<void> {
   await db.insert(sales).values({
     id: ids.saleId,
@@ -118,11 +90,7 @@ export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<vo
 
 /**
  * Seeds the FK closure `registros_facturacion` needs — tenant, location, till, node, invoice series,
- * sale, registro_sif — through `db`, and returns the ids. It stops SHORT of the registro itself so a
- * caller can insert that row itself, or seed the same parents on a mirror's target database without
- * also planting the ledger row there.
- *
- * Pass the clone's admin connection for these fixture inserts.
+ * sale, registro_sif — through `db`, and returns the ids. It stops SHORT of the registro itself.
  */
 export async function seedFiscalParents(
   db: Database,
@@ -134,8 +102,6 @@ export async function seedFiscalParents(
   const numeroInstalacion = opts.numeroInstalacion ?? n + 1;
 
   if (opts.reuseExistingParents !== true) {
-    // The taxpayer row is a singleton keyed 1, so repeated seeding in one database is a no-op
-    // rather than a second taxpayer.
     await db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId, legalName: "Waitron SL" })
@@ -171,12 +137,7 @@ export interface AnteriorPointer {
 }
 
 export interface RegistroOptions {
-  /**
-   * Explicit registros_facturacion.id. Default: a fresh random uuid. Set it to plant a registro on a
-   * mirror with the SAME id a delivered `cadenas.ultimo_registro_id` references — the parent-arrives
-   * half of the nullable-FK defer gate (Task 8), where the parent can only reach the mirror by direct
-   * insert (the ledger is append-only, so it cannot be re-captured under its own id).
-   */
+  /** Explicit registros_facturacion.id. Default: a fresh random uuid. */
   id?: string;
   /** deployment environment stamped on the row — stored verbatim, never hashed. Default "production". */
   entorno?: Entorno;
@@ -189,18 +150,16 @@ export interface RegistroOptions {
   /**
    * The predecessor pointer. Set → `primer_registro=false` and the four `anterior_*` columns carry
    * these values (the registros_encadenamiento_ck "all four set" branch). Unset → `primer_registro=true`
-   * and all four are NULL (the "all four null" branch). Either way the columns replicate verbatim.
+   * and all four are NULL (the "all four null" branch).
    */
   anterior?: AnteriorPointer;
 }
 
 /**
- * Inserts one `registros_facturacion` row through `conn` (a raw connection OR a transaction) against
- * the given parent `ids`, returning the row id + the values a verbatim-copy assertion pins. `secuencia`
- * / `numSerie` vary per row so two registros can share a tenant without tripping
- * registros_identidad_uq / registros_tenant_node_secuencia_uq.
+ * Inserts one `registros_facturacion` row against the given parent `ids`. Vary `secuencia` / `numSerie`
+ * per row so two registros do not trip registros_identidad_uq / registros_tenant_node_secuencia_uq.
  *
- * `entorno` is ALWAYS set: the fiscal invariant is that entorno is never HASHED, not that it is never
+ * `entorno` is ALWAYS set: the invariant is that entorno is never HASHED, not that it is never
  * stored — a mirror must carry it so `drain` on the far side can still refuse the wrong environment.
  */
 export async function insertFiscalRegistro(
@@ -250,19 +209,15 @@ export async function insertFiscalRegistro(
 }
 
 export interface SeedFiscalRegistroOptions extends SeedParentsOptions, RegistroOptions {
-  /** Also seed a `cadenas` chain-head row pointing at this registro (Tasks 7-9). */
+  /** Also seed a `cadenas` chain-head row pointing at this registro. */
   cadena?: boolean;
-  /** Also seed an `envios` sidecar row for this registro. `true` → estado 'pendiente' (Tasks 7-9). */
+  /** Also seed an `envios` sidecar row for this registro. `true` → estado 'pendiente'. */
   envio?: boolean | { estado?: string };
 }
 
 /**
- * The all-in-one: seed the FK closure AND the registro (optionally its `cadenas`/`envios` companions)
- * through `db`, returning the parent ids + the registro's id/huella/entorno/secuencia — a ready-made
- * fiscal chain for a fidelity seed. A caller that needs the same parents on two databases composes
- * {@link seedFiscalParents} + {@link insertFiscalRegistro} directly instead.
- *
- * The registro and its companion `cadenas`/`envios` FK children are inserted directly through `db`.
+ * Seeds the FK closure AND the registro (optionally its `cadenas`/`envios` companions). A caller that
+ * needs the same parents on two databases composes {@link seedFiscalParents} + {@link insertFiscalRegistro}.
  */
 export async function seedFiscalRegistro(
   db: Database,

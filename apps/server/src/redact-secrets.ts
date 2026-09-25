@@ -1,49 +1,31 @@
 /**
- * The password of a connection string, masked, in the two positions the installed parser
- * (`pg-connection-string@2.14.0`, which `pg@8.23.0` resolves) actually reads one from:
+ * The password of a URL, masked, in the two positions `pg`'s connection-string parser reads one
+ * from (measured with `pg-connection-string@2.14.0`):
  *
  *   `scheme://user:secret@host`              → `scheme://user:***@host`
  *   `scheme://user@host/db?password=secret`  → `?password=***`
  *
- * Each was fed to `parse()` and to `new Client({ connectionString })` and the marked value came back
- * as the password. The query one OVERRIDES the user-info one when both are present, which is why a
- * string carrying both has both masked.
+ * A string carrying both has both masked. The authority ends at the first `/`, `?`, `#`, newline or
+ * `"` and splits on the LAST `@`, so `postgres://u:p@ss@localhost/db` masks `p@ss`, and a space
+ * does not end a password. The user half is split off at the FIRST `:` of the user-info, so
+ * `postgres://user@server:secret@host/db` masks the secret and not the role name.
  *
- * WHAT IT COVERS. The user-info rule models what `parse` does rather than guessing at a character
- * class, because two shapes it reads as passwords do not look like one: the authority ends at the
- * first `/`, `?` or `#` and then splits on the LAST `@`, so `postgres://u:p@ss@localhost/db` has the
- * password `p@ss`; and `parse` percent-encodes spaces before handing the string to `new URL`, so
- * `postgres://u:se cret@localhost/db` has the password `se cret`. The earlier character classes
- * stopped at both and left `ss` and `se cret` in the log. The user half is split off at the FIRST
- * `:` of the user-info, so an Azure-shaped `postgres://user@server:secret@host/db` masks the secret
- * and not the role name.
+ * It is not a general secret scrubber and must not be described as one: a password outside a URL
+ * (a `keyword=value` string, an environment dump) and any other token, key or secret pass through.
+ * Two known blind spots inside its own scope: a password containing a double quote is not masked
+ * when the `@` falls after that quote (a log line is JSON, where an unescaped quote is structure,
+ * never password text), and `password` is matched case-sensitively.
  *
- * WHAT IT DOES NOT COVER, and this list is not exhaustive: a password outside a URL — a libpq
- * `keyword=value` string (`host=… password=…`, space-separated; the query rule is anchored on `?`
- * or `&`, so it does not fire there), a `PGPASSWORD` in an environment dump, a `.pgpass` line — and
- * any other token, key or secret in any other shape. It is not a general secret scrubber and must
- * not be described as one. Two known blind spots inside its own scope: a password containing a
- * double quote is not masked at all when the `@` falls after that quote (`"` terminates both rules,
- * because a log line is JSON and an unescaped quote there is structure, never password text — the
- * scan therefore stops before it ever sees the `@` that would mark a user-info), and `password` is matched
- * case-sensitively because the parser reads it that way — `?PASSWORD=x` yields the empty string
- * from `parse()` and `null` from a `Client`, so it is not a credential position (measured; see
- * `redact-secrets.test.ts`).
- *
- * Faithful to the parser also means masking whatever the parser WOULD read as a password, including
- * in prose: `https://host:8080 and mail me@x.com` parses to the password `8080 and mail me`
- * (measured), so it is masked. Over-masking a line is the side the trade-off falls on, because the
+ * It masks whatever falls in a password position, including in prose: `https://host:8080 and mail
+ * me@x.com` masks `8080 and mail me`. Over-masking is the side the trade-off falls on, because the
  * text it protects reaches an unauthenticated page.
  *
  * WHERE IT IS APPLIED. Every line written to the box's rotating `waitron.log`
  * (`createRotatingFileSink`, `log-file.ts`), because the recovery page serves that file's tail to
  * anyone on the venue's LAN with no login; and the entrypoint's own boot-failure report
- * (`node-entry.ts`). The box's stdout is deliberately NOT filtered — see `boot.ts`, where the one
- * logger is tee'd to both.
+ * (`node-entry.ts`). The box's stdout is deliberately NOT filtered — see `boot.ts`.
  *
- * The user-info half is left visible: a role name is already in the box's own configuration and
- * naming it is what makes the line diagnosable, while the secret half is what must never be read
- * off a page or a terminal someone is screen-sharing.
+ * The user-info half is left visible: naming the role is what makes the line diagnosable.
  */
 
 /** The authority of a URL: everything between `scheme://` and the first `/`, `?`, `#`, newline or

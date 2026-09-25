@@ -1,9 +1,6 @@
-// A self-signed fixture leaf shared by the cert-expiry unit test and the box-status route test, so the
-// PEM and its known expiry live in exactly one place. Generated once with
+// A self-signed fixture leaf whose notAfter is exactly FIXTURE_CERT_NOT_AFTER. Generated with
 //   openssl req -x509 -newkey rsa:2048 -keyout /dev/null -nodes \
 //     -subj "/CN=waitron.local" -days 3650 -out fixture.pem
-// Its notAfter (read back via `new X509Certificate(pem).validTo`) is exactly FIXTURE_CERT_NOT_AFTER,
-// so assertions against a fixed `now` are deterministic.
 
 export const FIXTURE_CERT_PEM = `-----BEGIN CERTIFICATE-----
 MIIDETCCAfmgAwIBAgIUXR2PZXVKgwQiVrnQ/Qci32bg/LcwDQYJKoZIhvcNAQEL

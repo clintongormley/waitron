@@ -1,25 +1,17 @@
-// No `import "./errors.js"`: this file throws no AppError code (it reads two rows and defers to the
-// country-pack locale resolver), so it is not in the throw graph the sibling route/config files load
-// the registry for.
+// No `import "./errors.js"`: this file throws no AppError code.
 import { eq } from "drizzle-orm";
 import { locations, readTenant, withTransaction, type Database } from "@waitron/db";
 import { resolveInstalledCountryLocale } from "@waitron/country-packs";
 import { FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, type SupportedLocale } from "@waitron/shared";
 
 /**
- * The venue's default UI locale, resolved ONCE at boot from geography + an optional env override.
- * Reads the tenant's country and the till location's province under `withTransaction`, then applies
- * the shared `override →
- * area → country → English` chain (the installed-country resolver returns an AVAILABLE
- * code, so nothing here post-processes its result).
+ * The venue's default UI locale, from geography and an optional override, through the shared
+ * `override → area → country → English` chain.
  *
- * This is a DISPLAY value — the UI language the apps default to. It is DELIBERATELY separate from the
- * fiscal `cfg.locale` / `cfg.invoiceLocales`, which feed the receipt/invoice rendering and are
- * computed straight off `WAITRON_TILL_LOCALE` in `till-config.ts` (fiscal decision 2), unchanged.
- * The `override` here is the RAW `WAITRON_TILL_LOCALE` (`cfg.localeOverride`), NOT the defaulted
- * `cfg.locale` — the latter defaults to `es-ES`, which would mask the geography derivation entirely.
- * Called ONCE at boot (`boot.ts`), not per request: the venue default is static for the process, the
- * same "resolve provisioning-time config once, off the hot path" shape `readOrderFlow` follows.
+ * This is a DISPLAY value, DELIBERATELY separate from the fiscal `cfg.locale` / `cfg.invoiceLocales`
+ * that feed receipt and invoice rendering. The `override` is the RAW `WAITRON_TILL_LOCALE`
+ * (`cfg.localeOverride`), NOT the defaulted `cfg.locale`, whose `es-ES` default would mask the
+ * geography derivation.
  */
 export async function readVenueLocale(
   db: Database,
