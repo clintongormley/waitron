@@ -1497,7 +1497,7 @@ failure. Pointer: `packages/migrations/src/apply-complete.test.ts`.
 
 **Provisioning and boot**
 
-## The box's BOOT path carries an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door
+## The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door
 
 `assertNotAhead` (`@waitron/provisioning`) compares the database's journal hashes against the image's
 files and throws `provisioning.database_ahead`; there is no backward migration, so installing an
@@ -1506,18 +1506,21 @@ older ref after a newer one has already migrated the database can fail to boot w
 `waitron.sh reset` wipes the database and is the clean way back to a working box; on a production box
 the script refuses to suggest that (a reset there would destroy the fiscal chain) and says to install
 a newer ref instead (`docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md` §3 step 6,
-§4.1). Its only caller anywhere is `apps/server/src/node-entry.ts` (`grep -rn assertNotAhead` before
-believing otherwise), and WHERE it sits changed with the storage switch. It used to run after
+§4.1). It has two callers (`grep -rn assertNotAhead` before believing otherwise): boot, in
+`apps/server/src/node-entry.ts`, and the bucket rebuild's preparation, `prepareStreamRestore` in
+`apps/server/src/restore-stream.ts`, which checks the downloaded copy before anything is placed
+(2026-09-25, slice 2 Task 9b). WHERE boot's call sits changed with the storage switch. It used to run after
 `ensureInstance`, which had already migrated a behind database forward; `ensureInstance` no longer
 exists. It now runs after `runStagedRestore` — the restore that replaces the venue files — and BEFORE
 `startServer`, so it reads a database nothing has migrated yet, because boot owns the migration now
 (`apps/server/src/boot.ts`). The ordering, and the one-direction comparison that lets a virgin venue
 directory pass it, are stated at `runEntry` in `apps/server/src/node-entry.ts`.
 
-The GAP, stated so nobody assumes coverage: BOOT is the only migrating path carrying the check, and
-every other caller of `applyMigrations` runs without one. Re-grepped 2026-09-22, those callers are
-the cold restore taken from the `waitron-restore` CLI (`apps/server/src/restore-command.ts`, which
-calls `apps/server/src/restore.ts`), `apps/server/src/rejoin-command.ts`,
+The GAP, stated so nobody assumes coverage: BOOT and the bucket rebuild are the only migrating paths
+carrying the check, and every other caller of `applyMigrations` runs without one. Re-grepped
+2026-09-22, those callers are the cold restore from an archive taken from the `waitron-restore` CLI
+(`apps/server/src/restore-command.ts`, which calls `apps/server/src/restore.ts`),
+`apps/server/src/rejoin-command.ts`,
 `apps/server/src/fiscal-readiness-runner.ts`, and seven scripts under `apps/server/scripts` —
 `dev-setup.ts`, `dev-onboard.ts` and the five demo scripts. An ahead database reached through any of
 them is still undetected. A restore staged

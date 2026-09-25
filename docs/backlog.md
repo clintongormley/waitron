@@ -5423,6 +5423,34 @@ this node) still accepts it. Left open:
   trusts only the endorser would refuse those documents. Found by reading during this branch's
   review; not reproduced.
 
+Task 9b, restore from the bucket (PR_A24). `waitron-restore restore --from-bucket <kit-file>
+--confirm-venue <tax id> [--confirm-old-box-gone]` reads the bucket the recovery kit names, checks
+the pointer against the kit's signing key and venue, refuses when the live generation changed in the
+last ten minutes on the bucket's own clock (or when that clock cannot be measured) unless the old
+box is confirmed gone, downloads the generation with `litestream restore` into
+`<stateDir>/stream-restore/` (abandoned after 2 minutes without progress, 6 hours at most), runs
+SQLite's `integrity_check`, the newer-software check and the locked secrets row's unlock, and then
+asks for the copy's tax id before placing it through the archive path's own `writeValidated`, which
+leaves the first-start marker (`apps/server/src/restore-stream.ts`). Every bucket call the command
+makes through the object store gives up after 60 seconds (`apps/server/src/bounded-store.ts`),
+without cancelling the request. An archive restore whose database holds bucket settings runs the
+same old-box check first. The staged restore request now carries either an archive or a bucket
+copy (`apps/server/src/restore-request.ts`); the command line places the copy itself, and nothing
+stages a bucket request yet — Task 9c's wizard will. The wipe and the archive placement also remove
+Litestream's own `.venue.db-litestream/` folder. Left open:
+- A copy over 2 GiB cannot be restored: `restoreFromStream` reads the downloaded file whole, and
+  Node refuses a file that size (`ERR_FS_FILE_TOO_LARGE`, measured on Node v26.7.0 during this
+  task's review). Archive creation has the same limit (`apps/server/src/backup-sweep.ts`).
+- `pragma integrity_check` is one blocking statement, and the venue watchdog kills a process after
+  120 seconds without a timer turn. The review measured 6.0 s on a 1.36 GB database on NVMe; box
+  storage has not been measured.
+- A staged request whose marker is invalid, or whose payload cannot be read, throws before the
+  request is cleared, so every start fails the same way. I believe this predates the branch: the
+  archive request's reads sat outside the `try` before it (from the diff, not a run).
+- A copy with no `tenants` row reads an empty tax id, which the command line never accepts as
+  confirmed, so it cannot be restored; no code names that case.
+- `restore <artifact> --from-bucket <kit>` runs the bucket rebuild and ignores the artifact.
+
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence
 notices; the server bundles (`scripts/bundle-node.mjs`, esbuild), the three SPAs (`vite build`,

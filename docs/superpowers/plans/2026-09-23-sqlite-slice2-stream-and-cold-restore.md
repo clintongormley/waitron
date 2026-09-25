@@ -20168,6 +20168,16 @@ archive request unchanged, and waitron-restore gains --from-bucket."
 
 ### Task 9c: "Restore from my bucket" in the setup wizard
 
+> 2026-09-25: as built by Task 9b, where the code departs from that task's text (see also
+> `docs/backlog.md`'s Task 9b entry). `StreamRestoreRequest` is `{ kind: "stream"; databasePath;
+> entries; environment }` and `stageRestoreRequest` is generic over the request kind; a bucket
+> request that also carries a managed Cloud binding is refused. The archive request carries no
+> `oldBoxGone` field. Bucket calls made inside the server must be bounded as the command line's are:
+> wrap the store with `boundObjectStore` (`apps/server/src/bounded-store.ts`, 60 seconds a call).
+> `prepareStreamRestore` refuses a copy made by newer software (`provisioning.database_ahead`); an
+> empty tax id must never count as confirmed. Every bucket failure in `refuseIfArchiveSourceLive`
+> becomes `restore.stream_source_unchecked { reason: "bucket" }`.
+
 **Branch:** `feat/sqlite-slice2-restore-bucket-wizard` (one pull request)
 
 **Files:**
