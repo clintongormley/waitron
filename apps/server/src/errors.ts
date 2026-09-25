@@ -351,8 +351,9 @@ declare module "@waitron/shared" {
     "station.no_default": { locationId: string };
     /**
      * A per-line kitchen ticket-item bump is not legal from the item's current state (a skip, a
-     * repeat, backwards, INTO `queued`, or an absent item). `advanceTicketItem`'s conditional UPDATE
-     * is the check: an illegal move matches no row.
+     * repeat, backwards, INTO `queued`, or an absent item). `advanceTicketItem` refuses a target the
+     * transition table does not hold (`queued`, or a non-string) before any write; otherwise its
+     * conditional UPDATE is the check: an illegal move matches no row.
      */
     "ticket.invalid_transition": { ticketItemId: string };
     /**
