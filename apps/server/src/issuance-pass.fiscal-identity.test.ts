@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { getTableColumns, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { withTransaction, type Database } from "@waitron/db";
+import { saleLines, withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -65,24 +65,22 @@ const fixedClock: TrustedClock = {
   currentAnchor: () => null,
 };
 
-/** Every column `sale_lines` had before the classification columns, `parent_line_id` aside. */
-const PRE_EXISTING_LINE_COLUMNS = [
-  "line_no",
-  "name",
-  "descriptions",
-  "variant_name",
-  "variant_descriptions",
-  "variant_kitchen_name",
-  "kitchen_name",
-  "option_snapshots",
-  "unit_name",
-  "unit_precision",
-  "quantity",
-  "unit_price",
-  "vat_rate",
-  "line_total",
-  "category",
+/** The sale-line classification columns (spec §4), left out of the comparison. */
+const CLASSIFICATION_COLUMNS = [
+  "product_id",
+  "parent_product_id",
+  "menu_id",
+  "menu_version_id",
+  "line_gross",
+  "classification",
 ];
+/** Ids minted per database, so they differ between the two runs; a parent line is compared by its
+ * `line_no` instead. */
+const MINTED_ID_COLUMNS = ["id", "sale_id", "parent_line_id"];
+/** Every other `sale_lines` column, so a column added later is compared too. */
+const PRE_EXISTING_LINE_COLUMNS = Object.values(getTableColumns(saleLines))
+  .map((column) => column.name)
+  .filter((name) => !CLASSIFICATION_COLUMNS.includes(name) && !MINTED_ID_COLUMNS.includes(name));
 
 /** The sale header's columns that name no row minted by provisioning. */
 const SALE_COLUMNS = [
