@@ -1,6 +1,9 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { connectionPair, isReadOnlyRefusal, settle } from "./connections.js";
+import { connectionPair, isReadOnlyRefusal, sameWal, settle, walMark } from "./connections.js";
 
 /**
  * Two `:memory:` handles are two separate databases, unlike production's pair over one file, so
@@ -211,5 +214,46 @@ describe("isReadOnlyRefusal", () => {
     expect(isReadOnlyRefusal(null)).toBe(false);
     expect(isReadOnlyRefusal("attempt to write a readonly database")).toBe(false);
     expect(isReadOnlyRefusal(undefined)).toBe(false);
+  });
+});
+
+describe("the side file's mark", () => {
+  const directory = () => mkdtempSync(join(tmpdir(), "waitron-wal-mark-"));
+
+  it("reads a missing side file as absent, and two absent readings as the same", () => {
+    const path = join(directory(), "venue.db-wal");
+    expect(walMark(path)).toBe("absent");
+    expect(sameWal(walMark(path), walMark(path))).toBe(true);
+  });
+
+  it("reads a side file that appeared, or changed size, as changed", () => {
+    const path = join(directory(), "venue.db-wal");
+    const absent = walMark(path);
+    writeFileSync(path, "a");
+    const first = walMark(path);
+    expect(sameWal(absent, first)).toBe(false);
+    expect(sameWal(first, absent)).toBe(false);
+    expect(sameWal(first, walMark(path))).toBe(true);
+    writeFileSync(path, "ab");
+    expect(sameWal(first, walMark(path))).toBe(false);
+  });
+
+  // A reading that failed says nothing, so the commit is reported rather than lost.
+  it("never reads a side file it could not examine as unchanged", () => {
+    // Longer than a file name may be, so the lookup is refused rather than answered "missing".
+    const path = join(directory(), `${"x".repeat(300)}-wal`);
+    expect(walMark(path)).toBe("unreadable");
+    expect(sameWal(walMark(path), walMark(path))).toBe(false);
+  });
+
+  it("tells listeners on a pair with no file behind it without looking for a side file", () => {
+    const write = new DatabaseSync(":memory:");
+    const connections = connectionPair(write, write);
+    const heard: Date[] = [];
+    connections.onCommit((at) => heard.push(at));
+    connections.committed();
+    connections.committed();
+    expect(heard).toHaveLength(2);
+    write.close();
   });
 });

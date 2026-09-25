@@ -794,11 +794,11 @@ describe("close", () => {
 
 describe("onCommit", () => {
   const setUp = async () => {
-    const { store } = await open();
+    const { store, directory } = await open();
     store.venue.run(sql`create table sales (id integer primary key, total integer)`);
     const heard: Date[] = [];
     const stop = store.venue.onCommit((at) => heard.push(at));
-    return { store, heard, stop };
+    return { store, directory, heard, stop };
   };
 
   it("tells listeners once a write transaction has committed, and not when it rolled back", async () => {
@@ -910,6 +910,62 @@ describe("onCommit", () => {
     }
     expect(unhandled).toEqual([]);
     expect(heard).toHaveLength(1);
+  });
+
+  // Measured (fix-round-1 report): an UPDATE setting a value the row already holds moves
+  // `total_changes()` and writes nothing to the side file, so a copy of the file never shows it.
+  it("does not tell listeners about an update that sets a value the row already holds, on any path", async () => {
+    const { store, heard } = await setUp();
+    store.venue.run(sql`insert into sales (id, total) values (1, 5)`);
+    expect(heard).toHaveLength(1);
+    store.venue.run(sql`update sales set total = 5 where id = 1`);
+    await store.venue.withWriteLock(async () => {
+      store.venue.run(sql`update sales set total = 5 where id = 1`);
+    });
+    store.venue.transaction((tx) => {
+      tx.run(sql`update sales set total = 5 where id = 1`);
+    });
+    expect(heard).toHaveLength(1);
+    store.venue.run(sql`update sales set total = 6 where id = 1`);
+    await store.venue.withWriteLock(async () => {
+      store.venue.run(sql`update sales set total = 7 where id = 1`);
+    });
+    store.venue.transaction((tx) => {
+      tx.run(sql`update sales set total = 8 where id = 1`);
+    });
+    expect(heard).toHaveLength(4);
+  });
+
+  it("compares against the side file as it was when the first listener subscribed", async () => {
+    const { store } = await open();
+    store.venue.run(sql`create table sales (id integer primary key, total integer)`);
+    store.venue.run(sql`insert into sales (id, total) values (1, 5)`);
+    const heard: Date[] = [];
+    store.venue.onCommit((at) => heard.push(at));
+    store.venue.run(sql`update sales set total = 5 where id = 1`);
+    expect(heard).toHaveLength(0);
+  });
+
+  // After a checkpoint the next commit writes the side file from its beginning, so while it fits
+  // in the old length the file's size does not change; only its modification time does.
+  it("tells listeners about a commit that rewrites the side file from its beginning at the same size", async () => {
+    const { store, directory, heard } = await setUp();
+    for (let i = 0; i < 20; i += 1) store.venue.run(sql`insert into sales (total) values (${i})`);
+    store.venue.all(sql`pragma wal_checkpoint(passive)`);
+    const wal = join(directory, "venue.db-wal");
+    const before = statSync(wal).size;
+    heard.length = 0;
+    store.venue.run(sql`insert into sales (total) values (99)`);
+    expect(statSync(wal).size).toBe(before);
+    expect(heard).toHaveLength(1);
+  });
+
+  it("tells listeners about the first commit after the side file was folded back to nothing", async () => {
+    const { store, heard } = await setUp();
+    store.venue.run(sql`insert into sales (total) values (1)`);
+    expect(await store.venue.checkpointTruncate()).toEqual({ reclaimed: true });
+    store.venue.run(sql`insert into sales (total) values (2)`);
+    expect(heard).toHaveLength(2);
   });
 
   it("stops telling a listener that unsubscribed", async () => {

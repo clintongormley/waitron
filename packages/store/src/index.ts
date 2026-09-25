@@ -71,9 +71,11 @@ export type StoreHandle<TSchema extends Record<string, unknown>> = NodeSqliteDat
    */
   checkpointTruncate: () => Promise<{ reclaimed: boolean }>;
   /**
-   * Registers `listener` for every commit on this file that changed at least one row; returns the
-   * unsubscribe. A commit that only changed the schema is not reported, and neither is one made by
-   * issuing `begin` and `commit` as statements, as Drizzle's migrator does.
+   * Registers `listener` for every commit on this file that changed at least one row and changed
+   * the write-ahead side file; returns the unsubscribe. A commit that only changed the schema is
+   * not reported, nor one that set rows to the values they held, nor one made by issuing `begin`
+   * and `commit` as statements, as Drizzle's migrator does. `Connections.committed` in
+   * `./connections.ts` has what the side-file comparison can miss.
    */
   onCommit: (listener: CommitListener) => () => void;
   /** Closes both of this file's connections. {@link VenueStore.close} closes both files. */

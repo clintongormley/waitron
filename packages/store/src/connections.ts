@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { statSync } from "node:fs";
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 
 /**
@@ -47,6 +48,25 @@ export const totalChanges = (connection: DatabaseSync): number => {
   return (counter.get() as { n: number }).n;
 };
 
+/** The write-ahead side file as last seen: its size and modification time, or why there is none. */
+export type WalMark = { size: bigint; mtimeNs: bigint } | "absent" | "unreadable";
+
+export const walMark = (path: string): WalMark => {
+  try {
+    const stat = statSync(path, { bigint: true, throwIfNoEntry: false });
+    return stat === undefined ? "absent" : { size: stat.size, mtimeNs: stat.mtimeNs };
+  } catch {
+    return "unreadable";
+  }
+};
+
+export const sameWal = (a: WalMark, b: WalMark): boolean =>
+  a === "unreadable" || b === "unreadable"
+    ? false
+    : a === "absent" || b === "absent"
+      ? a === b
+      : a.size === b.size && a.mtimeNs === b.mtimeNs;
+
 /**
  * The connections one database file is opened on, and the rule deciding where a statement goes.
  *
@@ -86,9 +106,18 @@ export interface Connections {
   /** Whether any listener is registered. */
   listening: () => boolean;
   /**
-   * Tells every listener a commit has just happened. The commit is already durable, so a listener
-   * that throws, or returns a promise that rejects, is skipped rather than allowed to reach the
-   * caller, who would otherwise be told a committed write failed.
+   * Tells every listener a commit that changed rows has just happened, unless the file's side file
+   * is unchanged since the last one reported: such a commit (an UPDATE to the value a row already
+   * holds) wrote nothing a copy of the file could show. The commit is already durable, so a
+   * listener that throws, or returns a promise that rejects, is skipped rather than allowed to
+   * reach the caller, who would otherwise be told a committed write failed.
+   *
+   * The side file is compared by size and modification time. After a checkpoint a commit rewrites
+   * it from its beginning, at an unchanged size while it fits, so a commit landing in the same
+   * modification-time tick as the one before is not reported. On macOS APFS, 45,000 commits made
+   * back to back just after such a restart never matched the one before (fix-round-1 report of
+   * task 7B, 2026-09-25); the box's filesystem was not measured. A commit that changes the side
+   * file but no row (DDL) is not reported and does not move the comparison either.
    */
   committed: () => void;
 }
@@ -127,6 +156,9 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
    */
   const running = new Set<symbol>();
   const listeners = new Set<CommitListener>();
+  const location = write.location();
+  const walPath = location === null ? null : `${location}-wal`;
+  let lastWal: WalMark = "unreadable";
   return {
     write,
     read,
@@ -151,6 +183,7 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
       return token !== undefined && running.has(token) ? write : read;
     },
     onCommit: (listener) => {
+      if (listeners.size === 0 && walPath !== null) lastWal = walMark(walPath);
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
@@ -159,6 +192,11 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
     listening: () => listeners.size > 0,
     committed: () => {
       if (listeners.size === 0) return;
+      if (walPath !== null) {
+        const wal = walMark(walPath);
+        if (sameWal(wal, lastWal)) return;
+        lastWal = wal;
+      }
       const at = new Date();
       for (const listener of listeners) {
         try {
