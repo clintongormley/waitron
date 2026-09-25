@@ -116,7 +116,7 @@ declare module "@waitron/shared" {
      * never removed. */
     "product.variant_count_invalid": { minimum: number };
     /** `memberId` names a member the section's list does not hold. */
-    "menu_section.not_found": { menuId?: string; sectionId: string; memberId?: string };
+    "menu_section.not_found": { sectionId: string; memberId?: string };
     /** A section write's value is malformed; `field` names it. */
     "menu_section.invalid": { field: string };
     /** A section's customer names have no text in the venue's default content language. */

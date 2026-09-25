@@ -99,16 +99,26 @@ A menu's own structure is read with `GET /management-api/catalogues/:id/structur
 `{ rootSectionId, nodes }`, where each node is `{ memberId, ref }` and a section's node also carries
 its `children`; an unknown menu is `catalogue.not_found` (404). The top level is written with the
 member routes above on `rootSectionId`, and `POST /management-api/catalogues/:id/items`
-(`{ productId, grossPrice }`) puts a product on it with the menu's price in one request.
+(`{ productId, grossPrice }`) puts a product on it with the menu's price in one request. Besides
+a malformed id (`shared.invalid_id`, 400) or body (`management.request_invalid`, 400), that route
+refuses an unknown menu with `catalogue.not_found` (404), an unknown product with
+`product.not_found` (404), a variant with `menu_item.variant_not_allowed` (400), a product already
+on the top level with `menu_section.member_duplicate` (409), a `grossPrice` that is not a
+non-negative decimal or null with `management.request_invalid` (400) or `shared.invalid_decimal`
+(400), and one too wide for the money scale with `shared.decimal_overflow` (400).
 
 `PATCH /management-api/catalogues/:id/items/:itemId` → 204 sets the menu's settings for one
 product its structure reaches: `grossPrice` (a price, or null for the product's own) and `active`,
 the menu's own switch for the product (a boolean, else `management.request_invalid` naming
 `active`). Either may be left out. `DELETE` on the same path switches the product off, and leaves
 it where the structure put it. An item whose product the structure no longer reaches is
-`menu_item.not_found` (404). `GET /management-api/catalogues/:id/offers` lists the active
-top-level products the structure reaches, or nothing while the menu is inactive; switched-off ones
-are included with `active: false`, and the till's offers leave them out.
+`menu_item.not_found` (404). `GET /management-api/catalogues/:id/offers` lists the Active
+products the structure reaches that are not variants, sold-out ones included, or nothing while the
+menu is inactive; switched-off ones are included with `active: false`, and the till's offers leave
+them out. Each of its offers also carries `topLevelMember`: `{ sectionId, memberId }`, the
+product's membership of the menu's top level (what
+`DELETE /management-api/sections/:id/members/:memberId` removes), or null when only a
+section holds it. The till's offers carry no such field.
 
 ## Moving and deleting
 

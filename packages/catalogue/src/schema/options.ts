@@ -14,9 +14,8 @@ export const optionLists = table("option_lists", {
   // a create would have to write one side null and come back to it. `parseOptionListInput`
   // (option-contract.ts) is what refuses an id naming no label of the list.
   defaultLabelId: id("default_label_id"),
-  // `sort`, not the `display_order` the rest of this package's schema uses: an options list and an
-  // extras list are ordered by the same column name, and `product_modifiers.sort` (schema/extras.ts)
-  // orders the two kinds together.
+  // An options list and an extras list are ordered by the same column name, and
+  // `product_modifiers.sort` (schema/extras.ts) orders the two kinds together.
   sort: count("sort").notNull().default(0),
   active: flag("active").notNull().default(true),
 });

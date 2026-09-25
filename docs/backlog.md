@@ -226,8 +226,7 @@ media's triggers name `sections`, so a later drizzle rebuild of that table meets
 screen), landed as #654 (2026-09-25):** **Products and recipes**,
 **Sections** lists every library section with where it is used (one batch read,
 `GET /management-api/sections/usages`), shows each place a section is nested, and edits, duplicates
-and deletes sections and their members. Until Task 3 drops the old per-menu headings, the dashboard
-has two things called Sections: this library, and **Venue operations**, **Menus**, **Sections**.
+and deletes sections and their members.
 Left by #654, none blocking: opening a nested section from the editor drops unsaved edits to the
 open one without a warning; the "Used in" filter's two choices (Used in a menu, Not used) leave a
 section held only by sections that are on no menu findable only under Any; the screen
@@ -243,13 +242,19 @@ the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the o
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
 adds tables or columns only and measures its own upgrade. Every dev venue then needs
 `wa-wt reset demo <name>`, and the owner's box should be wiped once after menus Task 7 lands.
+Menus Task 3's upgrade, measured on a venue seeded at `002b79f69`: with no open order it applies
+but silently empties `menu_item_variant_overrides`, `menu_item_extra_lists` and
+`menu_item_extra_items`, and leaves every menu with no top-level list, so no menu offers anything
+and `readMenuStructure` refuses with `catalogue.not_found`; with an open order line pointing at a
+menu item it is refused with `FOREIGN KEY constraint failed` and rolls back. Do not upgrade the
+owner's box mid-plan.
 A note Task 2 leaves for Task 3: the image library links every `section` use of a photo to
 `/manage/sections?section=<id>`, but that use can also be a list a menu owns, which the sections
 screen does not list and so does nothing for. The writes of `sections` that
 `git grep -nP "(insert|update)\((schema\.)?sections\b|into sections|update sections|INTO sections" -- apps packages scripts deploy bench ':!*.test.ts' ':!*.md'`
-finds are three, all in `packages/catalogue/src/sections.ts` (lines 208, 230 and 406), and none of
-them puts a photo on a menu's own list: the two inserts create library sections and the update
-refuses any other. So when Task 3 lets a menu's list carry a photo, link it to the menu editor or
+finds, none of them puts a photo on a menu's own list: in `packages/catalogue/src/sections.ts` the
+inserts create library sections and the update refuses any other, and none of the writes outside
+that file sets an image. So when Task 3 lets a menu's list carry a photo, link it to the menu editor or
 narrow the link to library sections.
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
@@ -633,10 +638,11 @@ both. Its migration adds a column and needs no reset of its own. What it left op
   dropped with `held.product_gone`. See the DONE entry
   under Task 9 below. Still open against option A: the first edit of the order removes such an
   extra, where option A refuses only a quantity increase.)
-- **Raising a held line's quantity does not check the line's variant, or whether its menu or menu
-  section has been switched off** — only its parent product and extras. Neither Task 3 nor Task 5
-  (#537) took it, so it remains open. **Next action:** on a quantity raise, check the line's own
-  product (the variant, since #537) for Active and Available, and its menu and menu section.
+- **Raising a held line's quantity does not check the line's variant, or whether its menu, or the
+  menu's own switch for the product (`menu_items.active`), has been switched off** — only its
+  parent product and extras. Neither Task 3 nor Task 5 (#537) took it, so it remains open. **Next
+  action:** on a quantity raise, check the line's own product (the variant, since #537) for Active
+  and Available, its menu, and the menu's switch for the product.
 - **The units screen's "Availability" column shows the Active flag.** `productsUsingUnit`
   (`packages/catalogue/src/units.ts`) returns `products.active` under the name `available`, and
   that name travels in the `unit.in_use` error's details, so renaming it changes an error's shape.

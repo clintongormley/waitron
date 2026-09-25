@@ -67,10 +67,8 @@ export const menuDetails = table(
 );
 
 /**
- * A menu's settings for one product: its price and its own switch. `syncMenuOffers`
- * (menu-structure.ts) adds a row when the menu's structure reaches the product and resets it when
- * the structure stops reaching it. A blank `gross_price` means the product's own price
- * (`resolveOfferPrice`, `offer-price.ts`).
+ * A menu's settings for one product: its price and its own switch. A blank `gross_price` means the
+ * product's own price (`resolveOfferPrice`, `offer-price.ts`).
  */
 export const menuItems = table(
   "menu_items",
