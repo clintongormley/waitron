@@ -417,12 +417,14 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
       has no ticket row of its own, so it would read as freely editable while the cook has the
       work. `carveOffLines` reads the source's ticket state before splitting; a whole-line move
       keeps the row and its ticket and is unaffected.
-    - **With the venue setting off**, a line that was ever sent to a station (`sent_at` set AND a
-      ticket row exists, fired or recalled) is refused `ticket.already_fired` on every edit,
-      including after a Recall — otherwise Recall → edit → Send is exactly the changed-line path the
-      setting forbids. Recall itself stays allowed (it is how a course is held back). Task 7c hides
-      Change in that state and offers Cancel on a queued line, so "can only be voided" has a
-      button. **Owner decision flagged.**
+    - **With the venue setting off** (owner, 2026-09-25: the setting is for a paper-only kitchen,
+      which never reports "started", so a recall slip cannot be trusted either), a line that was
+      ever sent to a station (`sent_at` set AND a ticket row exists) is refused `ticket.already_fired`
+      on every edit AND on `recallLines`. The only correction is a void: `voidTabLine` prints the
+      VOID slip, records the notice and removes the line from the bill at once. Task 7c hides both
+      Change and Recall in that state and offers Cancel on a queued line. A line the kitchen made
+      anyway is re-added by staff with a note (the new ticket slip carries it). Held courses on
+      such a kitchen are held by not sending them (`hold: true`), never by recalling.
   - **What the kitchen sees** — the kitchen state comes from `ticket_items` (`fired_at`, and `state`:
     queued, preparing, ready):
     - **Not sent** means no ticket item, or one whose `fired_at` is null (a held course, or a line
@@ -563,10 +565,13 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
   - An imported venue arrives with every menu unpublished and reports `zone.menu_unpublished` until
     the owner publishes. Every other new table IS declared, and is checked against the transfer
     tests.
-- **D22. No edit while a card payment is in flight** (spec §11.4). Between pricing (P1) and filing
-  (P3) of an integrated card payment nothing today refuses an edit or a new round on the same order,
-  so P3 could file P1's figures for lines that no longer match. **The in-flight fact is recorded on
-  the ORDER, in P1's own transaction:** `working_orders.payment_attempt_at` (nullable timestamp) is
+- **D22. A second device cannot change an order another device is paying** (spec §11.4; the owner
+  corrected an earlier draft that read as a table lock: prices are final from bill print, send,
+  place or Pay, and the paying till offers no edit, so there is no workflow overlap to lock
+  against). What remains is a guard for TWO devices: between pricing (P1) and filing (P3) of an
+  integrated card payment nothing today refuses a round from another till on the same order, so P3
+  could file P1's figures for lines that no longer match. **The in-flight fact is recorded on the
+  ORDER, in P1's own transaction:** `working_orders.payment_attempt_at` (nullable timestamp) is
   set in P1, cleared in P3, on a failed attempt, and by the SumUp sweep that resolves a stale
   attempt. Every line write on an order (`updateHeldOrder`, the per-line route, `addTabRound`,
   `voidTabLine`, `recallLines`, `sendLines`, the split and transfer paths) refuses with
@@ -577,8 +582,8 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
   integrated suite's canned provider writes no payment rows, so a guard on that row would be
   proven only against a fixture made to satisfy it. A server that dies between P1 and P3 leaves the
   mark set: the recovery branch of `POST /api/pay` clears it when it files or fails, and boot's
-  reconcile clears any mark older than the provider timeout. Built in Task 7b; flagged for the
-  owner because it can hold an order for as long as a terminal takes to answer.
+  reconcile clears any mark older than the provider timeout. It never outlives the payment
+  attempt, whose own timeout bounds it. Built in Task 7b.
 - **D23. "Duplicate and use the copy here" is one transaction** (spec §11.7 example 8). Two requests
   — remove Drinks, then add the copy — leave a moment in which Lunch reaches Lemonade through
   nothing, and D5's sync then resets its price and deletes its overrides. Task 1 adds
@@ -1649,8 +1654,9 @@ call, and its tests drive them directly.
     - voiding a started item records a VOID notice with `wasStarted: true` before the delete;
     - `voidTabLine` with `quantity` less than the line's voids that part only;
     - with `service_settings.edit_sent_lines` off, a fired, queued item is refused with
-      `ticket.already_fired`, and so is the same line after a Recall (the setting cannot be walked
-      around); with the setting on, the recalled line edits freely;
+      `ticket.already_fired` on edit AND on recall (`recallLines` refuses it too); voiding it
+      prints the VOID slip, records the notice and removes it from the bill; with the setting on,
+      a recalled line edits freely;
     - **recall, sold out, send again:** a queued line is recalled, its product goes unavailable,
       and Send is refused `product.unavailable`; the same line pays if it had `sent_at` and was
       not recalled;
@@ -1709,9 +1715,10 @@ Browser tests in real Chromium. It depends on Task 7b's routes and needs no publ
     so.
   - **Change is offered for:** a queued fired line, a recalled line and a no-route line; **not
     for:** a preparing or ready line (Cancel only), an extras child row, or any line that was ever
-    sent when the venue setting is off (the screen reads the setting from the order payload; the
-    server still refuses). **Cancel is now offered on a queued line too**, beside Recall, so that
-    with the setting off "can only be voided" has a button.
+    sent when the venue setting is off. **With the setting off, Recall is hidden too** (the screen
+    reads the setting from the order payload; the server refuses both anyway), so a sent line
+    shows Cancel alone. **Cancel is now offered on a queued line too**, beside Recall when the
+    setting is on, so that "can only be voided" always has a button.
   - **Partial cancel:** a fired line of 2 offers "Cancel 1" and "Cancel all"; "Cancel 1" calls the
     void route with `quantity=1`.
   - **Kitchen screen notices:** a stubbed queue answer with two notices renders them above the
@@ -2048,7 +2055,7 @@ the task's own PR wherever the task makes it stale.
   - D10's edit rules, the "Allow changes to items already sent" setting defaulting to ON, and
     the kitchen notices table (Task 7b);
   - D11's 15-second poll and the unavailable set (Task 7);
-  - D22's refusal of edits while a card payment is in flight (Task 7b);
+  - D22's guard against a second device changing an order being paid (Task 7b);
   - VAT at issuance, pending asesor Q26 (Task 7a);
   - D17: a freshly provisioned or imported venue sells nothing until someone publishes a menu
     (Task 7);

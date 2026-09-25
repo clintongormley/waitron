@@ -416,9 +416,12 @@ lines to a newly published price, with a warning — was considered and **withdr
   - **A paper-only kitchen** never reports "started", so edits stay possible, always with the slip.
     Checking with the kitchen is up to the staff.
   - **The venue setting "Allow changes to items already sent to the kitchen"** is on by default. When
-    it is off, an item already sent can only be voided (with its VOID notice) and re-added. *(§11.5:
-    recalling the item does not reopen it for editing while the setting is off, and the till offers
-    Cancel on a sent line so that the void has a button.)*
+    it is off, an item already sent can only be voided (with its VOID notice) and re-added. *(Owner,
+    2026-09-25, §11.5: the setting is for a PAPER-ONLY kitchen, which never reports "started", so a
+    recall slip cannot be trusted any more than a change can — with the setting off the till offers
+    neither Change nor Recall on a sent line, only Cancel. The void removes the price from the bill
+    at once and prints the VOID slip; staff tell the kitchen directly. A line the kitchen had
+    already made is added again, with a note, so it is billed.)*
   - Extras lines follow their dish.
 - **Printing a pre-bill** (the bill before payment) never sends anything to the kitchen and never
   fires held food. There is no pre-bill in the product today (asesor Q21 and Q14 are open); this is
@@ -611,12 +614,21 @@ today (`apps/server/src/till-sale.ts`, `working-order.ts`):
   receipt that disagrees with the filed sale.
 - **Collection and replay of an issued sale retain its recorded facts.** Nothing re-resolves VAT or
   classification after issuance.
-- **Lines are not edited while a card payment is in flight.** Between P1 and P3 nothing today stops
-  an edit or a new round on the same order (no in-flight guard was found in `working-order.ts`),
-  so P3 could file P1's figures for lines that no longer exist. The plan marks the ORDER in P1's own
-  transaction and refuses edits while the mark is set (D22); it does not rely on the payment
-  provider's own rows, which the simulator never writes and which Stripe and SumUp write only after
-  P1 has committed.
+- **Prices stop changing when the order is committed, and a payment never overlaps an edit**
+  (owner, 2026-09-25, correcting an earlier draft that described a lock): a line's price is locked
+  when the waiter adds it (§11.2, saved orders); an unsaved basket is refreshed against a newly
+  published version with a warning the waiter must acknowledge (§11.2); and **from the moment the
+  bill is printed, the order is sent or placed, or Pay is pressed, those prices no longer change**
+  — no refresh is offered after that point, and the till offers no edits on an order it is paying.
+  There is no table lock and nothing waits on a card terminal: pressing Pay starts a payment on
+  what the order holds at that moment. The one residual case is a publish landing in the seconds
+  between the waiter's last look and the Pay press: the server refuses the pay request before any
+  charge (`menu.version_changed`), and the till shows the change for acknowledgement, so the
+  amount charged is always one the waiter saw. The server keeps one guard so that a SECOND device
+  cannot change the order while the first is paying it — a line write on an order whose card
+  payment is between pricing and filing is refused (`order.payment_in_flight`, D22) — and the
+  payment's own outcome, settle or fail, releases it within the provider's own timeout. It
+  enforces "no overlap"; it is not a step in the workflow.
 - Asesor question Q26 asks the adviser to confirm the rule, and its wording now says "when the
   invoice is issued" and names the invoice-first case.
 
@@ -636,6 +648,10 @@ opened or after its own actions.
 - **A kitchen screen shows its station's notices until a cook acknowledges each one.** A VOID of an
   item already started stays on the screen as a notice marked "started", so the waste is visible.
 - **Partial quantities are corrections too:** dropping 2 to 1 is a VOID of 1, and the notice says so.
+- **With the venue setting off (a paper-only kitchen)** the only correction is a void, because
+  nothing reports whether the kitchen has started: no Change, no Recall. The void takes the line
+  off the bill immediately; a line the kitchen made anyway is re-added with a note to bill it.
+  Held courses on such a kitchen are held by not sending them, never by recalling.
 - **The kitchen screen refreshes on its own** (a poll, D11's interval), so a notice appears without
   a cook touching the screen.
 
@@ -675,5 +691,12 @@ These add to §7 and §10.7; §10.7(1) is replaced by §11.2's version.
 8. **Duplicate and use the copy here keeps the menu's prices:** Lunch reaches Lemonade only through
    Drinks, with a Lunch price override. "Duplicate Drinks and use the copy here" leaves the override
    in place.
-9. **An edit during a card payment is refused:** while a card payment for a tab is in flight, a
-   new round for that tab is refused, and succeeds once the payment settles or fails.
+9. **A second device cannot change an order another device is paying:** while a card payment for
+   a tab is between pricing and filing on one till, a new round for that tab from another till is
+   refused, and succeeds once the payment settles or fails. The paying till itself offers no edit.
+10. **Prices are final from Pay:** a basket's menu is republished after the waiter pressed Pay on a
+    cash sale; the sale files at the prices the waiter saw.
+11. **A paper-only kitchen (the setting off):** a sent Burger's line offers neither Change nor
+    Recall, only Cancel. Cancelling prints a VOID slip and removes the Burger from the bill at
+    once. If the kitchen says it was already made, the waiter adds a Burger again with the note
+    "already made", which bills it and prints a ticket marked so.
