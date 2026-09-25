@@ -407,6 +407,7 @@ describe("curated operator text", () => {
     const persistedByRunEntry = [
       "server.config_missing",
       "provisioning.database_ahead",
+      "restore.database_set_aside",
       "migrations.set_missing",
       "migrations.incomplete",
       "server.boot_incomplete",
@@ -582,5 +583,20 @@ describe("a restore whose database could not be put in place, if it is the last 
     expect(body).toContain(escapeHtml(text!["en-GB"].action));
     const spanish = await pageFor("restore.placement_failed", undefined, SPANISH);
     expect(spanish).toContain(escapeHtml(text!["es-ES"].action));
+  });
+});
+
+describe("a start refused because the only copy of the database may be in a set-aside folder", () => {
+  it("says the database was moved aside by a restore and sends the operator to whoever installed the box", async () => {
+    const text = OPERATOR_TEXT["restore.database_set_aside"];
+    expect(text).toBeDefined();
+    expect(text!["en-GB"].title).toMatch(/moved aside/i);
+    expect(text!["en-GB"].action).toMatch(/ask whoever installed this box/i);
+    expect(text!["es-ES"].title).toMatch(/apartada/i);
+    expect(text!["es-ES"].action).toMatch(/quien instaló este equipo/i);
+    const body = await pageFor("restore.database_set_aside");
+    expect(body).toContain(escapeHtml(text!["en-GB"].title));
+    const spanish = await pageFor("restore.database_set_aside", undefined, SPANISH);
+    expect(spanish).toContain(escapeHtml(text!["es-ES"].title));
   });
 });

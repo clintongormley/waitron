@@ -247,8 +247,12 @@ command against it treat that entrypoint differently:
   reports `restore.placement_failed` and says the previous database could not all be put back,
   move everything in the folder it names back into the venue folder before
   `docker compose start app`. If the restore succeeded but its output shows
-  `restore.db.aside_kept`, the folder that line names (`folder`) holds only the replaced database
-  and can be deleted.
+  `restore.db.aside_kept`, the folder that line names (`folder`) holds only the replaced database;
+  the next server start tries to delete it, logging `restore.db.aside_removed` when it does and
+  `restore.db.aside_kept` when it cannot. A server start that finds
+  such a folder holding files and no `venue.db` beside it deletes nothing and refuses to start with
+  `restore.database_set_aside`, naming the folder in its output: move everything in it back into
+  the venue folder, or run the restore again.
 
   Restore and rejoin are refused while another process, usually the running server, is using the
   venue folder (`provisioning.database_in_use`): rejoin before it reads or wipes anything, restore

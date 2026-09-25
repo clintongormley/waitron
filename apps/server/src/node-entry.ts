@@ -7,11 +7,13 @@ import { AppError, isAppError, MAX_CAUSE_DEPTH } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import {
   isVenueHolderFresh,
+  lockVenueDatabase,
   openVenueDatabase,
   readVenueHolder,
   resolveLogDir,
   setVenueHolderIdentity,
   type VenueHolder,
+  type VenueLock,
 } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
 import { assertNotAhead as assertDatabaseNotAhead } from "@waitron/provisioning";
@@ -51,6 +53,7 @@ import { buildServeOptions, type TlsFiles } from "./tls.js";
 import { mintedBoxLeaf } from "./box-secrets.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
+import { clearReplacedDatabases } from "./restore.js";
 import { loadCloudOrigin } from "./cloud-client.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { classifyBootFailure } from "./boot-failure.js";
@@ -177,6 +180,11 @@ export interface EntryDeps {
   /** Defaults to the real `assertNotAhead` below, never a no-op: it is a guard, and a no-op default
    *  is lost silently by any caller that forgets the dependency. */
   assertNotAhead?: (venueDir: string, migrationsRoot: string) => Promise<void>;
+  /** Defaults to the real `clearReplacedDatabases` (restore.ts), never a no-op, for the same reason. */
+  clearReplacedDatabases?: (venueDir: string, log: Logger) => Promise<void>;
+  /** Defaults to the real `lockVenueDatabase`, never a no-op: the clearing is safe only while the
+   *  folder is held. */
+  lockVenue?: (venueDir: string) => Promise<VenueLock>;
   /**
    * The installer's channel — the container's stdout (`docker logs`), never the `waitron.log` the
    * recovery page tails. It is the one place the caught error's own words may appear, and only
@@ -335,7 +343,7 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
  * One container start: decide the level, bring the venue directory into shape, hand the server its
  * environment, and start it — or serve the recovery page instead.
  *
- * Four orderings carry the design, and each is invisible in production if it is wrong:
+ * Five orderings carry the design, and each is invisible in production if it is wrong:
  *
  * 1. The level is read first, before anything opens the venue database: a database-side failure is
  *    exactly what puts a box in recovery.
@@ -347,6 +355,12 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
  * 4. The ahead check runs after `runStagedRestore`, which replaces the venue files, and before
  *    `startServer`, which migrates and then queries the schema. It judges a database nothing has
  *    migrated yet, which the one-directional comparison in `assertNotAhead` makes safe.
+ * 5. After the staged restore, the start holds the venue folder from clearing set-aside folders
+ *    until `startServer` settles or an earlier step throws, so another process's placement cannot
+ *    run in between: one that failed with the old database set aside would leave no `venue.db`,
+ *    this start's opens would create an empty one, and the next start would delete the folder
+ *    holding the only copy. The clearing runs before the ahead check because that check's open
+ *    creates a missing `venue.db`.
  *
  * `startServer` resolving is the signal rather than a healthy `/health`, because `/health` is 503
  * on a setup box by design, so a health-gated reset would drive every unprovisioned box into
@@ -426,15 +440,23 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       },
     });
 
-    // Unchecked, an ahead database would surface as an unclassified driver error in whatever query
-    // first touched the changed schema.
-    await (deps.assertNotAhead ?? assertNotAhead)(deps.venueDir, migrationsRoot);
+    // Ordering 5 in the doc comment above.
+    const hold = await (deps.lockVenue ?? lockVenueDatabase)(deps.venueDir);
+    try {
+      await (deps.clearReplacedDatabases ?? clearReplacedDatabases)(deps.venueDir, deps.log);
 
-    const env = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir);
-    // The raw base env goes alongside the merged `env`: boot re-reads the box-env files on every
-    // backup reload and needs the unmerged base to tell a file-sourced value from an env-sourced
-    // one.
-    server = await deps.startServer(env, deps.baseEnv);
+      // Unchecked, an ahead database would surface as an unclassified driver error in whatever
+      // query first touched the changed schema.
+      await (deps.assertNotAhead ?? assertNotAhead)(deps.venueDir, migrationsRoot);
+
+      const env = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir);
+      // The raw base env goes alongside the merged `env`: boot re-reads the box-env files on every
+      // backup reload and needs the unmerged base to tell a file-sourced value from an env-sourced
+      // one.
+      server = await deps.startServer(env, deps.baseEnv);
+    } finally {
+      hold.release();
+    }
     if (recoveryOrigin) {
       void createCloudRecoveryClient({
         stateDir: deps.stateDir,
