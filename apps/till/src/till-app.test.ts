@@ -7142,7 +7142,7 @@ describe("till-app follows a server move (till-reroute §4.3)", () => {
 
 it("sends a walk-up line's options answer without any local price preview", () => {});
 
-describe("a failed list refresh after a successful write (B12)", () => {
+describe("a failed list refresh after a successful write", () => {
   // Fake timers from mount on: the retry countdown is a chain of one-second timeouts.
   beforeEach(() => {
     vi.useFakeTimers();
@@ -7265,7 +7265,7 @@ describe("a failed list refresh after a successful write (B12)", () => {
     expect(region.textContent).not.toContain(secondsLeft(4));
   });
 
-  it("a second failure while a retry is pending joins that retry, keeping its countdown", async () => {
+  it("a second failure while a retry counts down joins that retry, keeping its countdown", async () => {
     const { el, c, listWorkingOrders } = await parkWithFailingRefresh();
     await tick(el, 2000);
     c.store.addProduct(cafe, "1");
@@ -7330,12 +7330,11 @@ describe("a failed list refresh after a successful write (B12)", () => {
     expect(listWorkingOrders).toHaveBeenCalledTimes(3);
   });
 
-  it("automatic retries do not count as operator activity", async () => {
+  it("automatic retries do not count as operator activity: the idle sign-out still falls due", async () => {
     const listWorkingOrders = failingAfterLogin<HeldOrderSummary[]>([]);
-    const sessionActivity = fakeSessionActivity();
-    const { el } = await mountWidget<TillApp>("till-app", {
-      api: stubApi({ listWorkingOrders }),
-      sessionActivity: sessionActivity as never,
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, inactivityTimeoutSeconds: 20 }),
+      listWorkingOrders,
     });
     const c = await toCounterFake(el);
     c.store.addProduct(cafe, "2");
@@ -7343,10 +7342,202 @@ describe("a failed list refresh after a successful write (B12)", () => {
     emit(c, "park-order", { label: "Mesa 4" });
     await settle(el);
 
-    await tick(el, 15_000);
-
+    await tick(el, 15_000); // retries at 5 s and 15 s, both failing
     expect(listWorkingOrders).toHaveBeenCalledTimes(4);
-    expect(sessionActivity.noteInteraction).not.toHaveBeenCalled();
+    expect(lock(el)).toBeNull();
+
+    await tick(el, 5000);
+    expect(lock(el)).not.toBeNull();
+    expect(currentApi.logout).toHaveBeenCalledOnce();
+    await tick(el, 60_000);
+    expect(listWorkingOrders).toHaveBeenCalledTimes(4);
+  });
+
+  it.each(["signing out", "a re-boot", "disconnecting"])(
+    "%s while the post-write refresh is still pending starts no retry when that refresh fails",
+    async (boundary) => {
+      let fail: (error: unknown) => void = () => undefined;
+      const listWorkingOrders = vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockImplementationOnce(() => new Promise((_resolve, reject) => (fail = reject)))
+        .mockRejectedValue(new TypeError("Failed to fetch"));
+      const router = new ServerRouter({
+        origin: BOX,
+        fetchImpl: probeFetch(),
+        storage: memoryStorage(),
+      });
+      const { el } = await mountWidget<TillApp>("till-app", {
+        api: stubApi({ listWorkingOrders }),
+        router,
+      });
+      const c = await toCounterFake(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "park-order", { label: "Mesa 4" });
+      await settle(el);
+      expect(listWorkingOrders).toHaveBeenCalledTimes(2);
+
+      if (boundary === "signing out") emit(c, "logout");
+      else if (boundary === "a re-boot")
+        router.dispatchEvent(
+          new CustomEvent("server-changed", { detail: { from: BOX, to: CLOUD } }),
+        );
+      else el.remove();
+      await settle(el);
+      fail(new TypeError("Failed to fetch"));
+      await tick(el, 60_000);
+
+      expect(listWorkingOrders).toHaveBeenCalledTimes(2);
+      expect(el.shadowRoot!.querySelector("[data-refresh-notice][data-active]")).toBeNull();
+    },
+  );
+
+  /** A park's retry left in flight across a sign-out, then a new session whose sale's refresh fails. */
+  async function retryInFlightAcrossSessions() {
+    const { el, listWorkingOrders } = await parkWithFailingRefresh();
+    let resolve: (rows: HeldOrderSummary[]) => void = () => undefined;
+    let reject: (error: unknown) => void = () => undefined;
+    listWorkingOrders.mockImplementationOnce(
+      () =>
+        new Promise((yes, no) => {
+          resolve = yes;
+          reject = no;
+        }),
+    );
+    tryNow(el, "held")!.click();
+    await settle(el);
+    emit(counter(el)!, "logout");
+    await settle(el);
+    listWorkingOrders.mockResolvedValueOnce([]);
+    const c = await toCounterFake(el);
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await settle(el);
+    expect(listWorkingOrders).toHaveBeenCalledTimes(5);
+    expect(message(el, "held")).toBe(t("refresh.held_after_sale"));
+    expect(countdown(el, "held")).toBe(secondsLeft(5));
+    return { el, listWorkingOrders, resolve, reject };
+  }
+
+  it("a retry from before a sign-out that succeeds late neither installs its rows nor clears the new session's notice", async () => {
+    const { el, listWorkingOrders, resolve } = await retryInFlightAcrossSessions();
+
+    resolve([heldSummary]);
+    await settle(el);
+
+    expect(counter(el)!.heldOrders).toEqual([]);
+    expect(message(el, "held")).toBe(t("refresh.held_after_sale"));
+    expect(countdown(el, "held")).toBe(secondsLeft(5));
+    await tick(el, 5000);
+    expect(listWorkingOrders).toHaveBeenCalledTimes(6);
+  });
+
+  it("a retry from before a sign-out that fails late changes neither the new session's message nor its countdown", async () => {
+    const { el, listWorkingOrders, reject } = await retryInFlightAcrossSessions();
+
+    reject(new TypeError("Failed to fetch"));
+    await settle(el);
+
+    expect(message(el, "held")).toBe(t("refresh.held_after_sale"));
+    expect(countdown(el, "held")).toBe(secondsLeft(5));
+    await tick(el, 5000);
+    expect(listWorkingOrders).toHaveBeenCalledTimes(6);
+  });
+
+  it("an older refresh failing after a newer refresh of the list succeeded does not bring the notice back", async () => {
+    const { el, c, listWorkingOrders } = await parkWithFailingRefresh();
+    let fail: (error: unknown) => void = () => undefined;
+    listWorkingOrders.mockImplementationOnce(
+      () => new Promise((_resolve, reject) => (fail = reject)),
+    );
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+    emit(c, "park-order", { label: "Mesa 5" });
+    await settle(el);
+    listWorkingOrders.mockResolvedValueOnce([heldSummary]);
+    tryNow(el, "held")!.click();
+    await settle(el);
+    expect(tryNow(el, "held")).toBeNull();
+
+    fail(new TypeError("Failed to fetch"));
+    await tick(el, 60_000);
+
+    expect(message(el, "held")).toBe("");
+    expect(tryNow(el, "held")).toBeNull();
+    expect(counter(el)!.heldOrders).toEqual([heldSummary]);
+    expect(listWorkingOrders).toHaveBeenCalledTimes(4);
+  });
+
+  it("a newer write's failed refresh takes over a retry still in flight, whose late answer is then ignored", async () => {
+    const { el, c, listWorkingOrders } = await parkWithFailingRefresh();
+    let resolve: (rows: HeldOrderSummary[]) => void = () => undefined;
+    listWorkingOrders.mockImplementationOnce(() => new Promise((yes) => (resolve = yes)));
+    tryNow(el, "held")!.click();
+    await settle(el);
+    expect(countdown(el, "held")).toBe(t("refresh.retrying"));
+
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+    emit(c, "park-order", { label: "Mesa 5" });
+    await settle(el);
+
+    expect(countdown(el, "held")).toBe(secondsLeft(10));
+    resolve([heldSummary]);
+    await settle(el);
+    expect(counter(el)!.heldOrders).toEqual([]);
+    expect(countdown(el, "held")).toBe(secondsLeft(10));
+    await tick(el, 10_000);
+    expect(listWorkingOrders).toHaveBeenCalledTimes(5);
+  });
+
+  it("a plain list refresh that fails starts no retry, leaves a countdown alone, and takes over a retry in flight", async () => {
+    const rejections: unknown[] = [];
+    const onRejection = (event: PromiseRejectionEvent): void => {
+      rejections.push(event.reason);
+      event.preventDefault(); // the discard handler does not catch its own refresh's failure
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    try {
+      const listWorkingOrders = failingAfterLogin<HeldOrderSummary[]>([]);
+      const { el } = await mountApp({ listWorkingOrders });
+      const c = await toCounterFake(el);
+
+      emit(c, "discard-order", { id: "wo-1" });
+      await settle(el);
+      expect(listWorkingOrders).toHaveBeenCalledTimes(2);
+      expect(el.shadowRoot!.querySelector("[data-refresh-notice][data-active]")).toBeNull();
+
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "park-order", { label: "Mesa 4" });
+      await settle(el);
+      await tick(el, 2000);
+      emit(c, "discard-order", { id: "wo-1" });
+      await settle(el);
+      expect(listWorkingOrders).toHaveBeenCalledTimes(4);
+      expect(message(el, "held")).toBe(t("refresh.held_after_park"));
+      expect(countdown(el, "held")).toBe(secondsLeft(3));
+
+      let resolve: (rows: HeldOrderSummary[]) => void = () => undefined;
+      listWorkingOrders.mockImplementationOnce(() => new Promise((yes) => (resolve = yes)));
+      tryNow(el, "held")!.click();
+      await settle(el);
+      emit(c, "discard-order", { id: "wo-1" });
+      await settle(el);
+      expect(listWorkingOrders).toHaveBeenCalledTimes(6);
+      expect(message(el, "held")).toBe(t("refresh.held_after_park"));
+      expect(countdown(el, "held")).toBe(secondsLeft(10));
+
+      resolve([heldSummary]);
+      await settle(el);
+      expect(countdown(el, "held")).toBe(secondsLeft(10));
+      expect(counter(el)!.heldOrders).toEqual([]);
+      expect(rejections).toHaveLength(3);
+    } finally {
+      window.removeEventListener("unhandledrejection", onRejection);
+    }
   });
 
   it("cash sale: the ticket stands and the refresh failure never shows sale.unconfirmed", async () => {
@@ -7404,5 +7595,97 @@ describe("a failed list refresh after a successful write (B12)", () => {
 
     expect(el.shadowRoot!.querySelector("[data-refresh-retry]")).toBeNull();
     expect(stationQueueWidget(el)!.groups).toEqual([stationGroup]);
+  });
+
+  /** An invoice-first counter whose zone list offers a prepay zone, `zone-deli`, to switch to. */
+  function mountWithPrepayZone(getStationQueue: ReturnType<typeof vi.fn>) {
+    const counterZone = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+    counterZone.context = {
+      zoneId: "zone-counter",
+      departmentId: "department-default",
+      serviceMode: "invoice_first",
+    };
+    counterZone.zones = [
+      {
+        id: "zone-counter",
+        name: "Counter",
+        departmentId: "department-default",
+        departmentName: "Restaurant",
+        serviceMode: "invoice_first",
+      },
+      {
+        id: "zone-deli",
+        name: "Deli",
+        departmentId: "department-deli",
+        departmentName: "Deli",
+        serviceMode: "prepay",
+      },
+    ];
+    const deli = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+    deli.context = { zoneId: "zone-deli", departmentId: "department-deli", serviceMode: "prepay" };
+    return mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      getStationQueue,
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(counterZone),
+      listZoneOffers: vi.fn().mockResolvedValue(deli),
+    });
+  }
+
+  it("a kitchen-queue refresh that answers after a switch to a prepay zone does not put its queue back", async () => {
+    let resolve: (groups: unknown[]) => void = () => undefined;
+    const getStationQueue = vi
+      .fn()
+      .mockResolvedValueOnce([stationGroup])
+      .mockImplementationOnce(() => new Promise((yes) => (resolve = yes)));
+    const { el } = await mountWithPrepayZone(getStationQueue);
+    const c = await toCounterFake(el);
+    expect(c.stationQueue).toEqual([stationGroup]);
+    emit(c, "advance-ticket-item", { itemId: "ti-1", to: "preparing" });
+    await settle(el);
+    expect(getStationQueue).toHaveBeenCalledTimes(2);
+
+    emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
+    await settle(el);
+    expect(c.orderFlow).toBe("prepay");
+    expect(c.stationQueue).toEqual([]);
+
+    resolve([stationGroup]);
+    await settle(el);
+
+    expect(c.stationQueue).toEqual([]);
+  });
+
+  it("a switch to a prepay zone ends a kitchen-queue retry, and that retry's late failure does not bring the notice back", async () => {
+    const getStationQueue = failingAfterLogin<unknown[]>([]);
+    const { el } = await mountWithPrepayZone(getStationQueue);
+    const c = await toCounterFake(el);
+    c.store.addProduct(cafe, "2");
+    await el.updateComplete;
+    emit(c, "place-order");
+    await settle(el);
+    expect(message(el, "station")).toBe(t("refresh.station_after_place"));
+    let fail: (error: unknown) => void = () => undefined;
+    getStationQueue.mockImplementationOnce(
+      () => new Promise((_resolve, reject) => (fail = reject)),
+    );
+    tryNow(el, "station")!.click();
+    await settle(el);
+    expect(countdown(el, "station")).toBe(t("refresh.retrying"));
+    emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
+    await settle(el);
+    emit(ticket(el)!, "new-sale");
+    await settle(el);
+
+    emit(counter(el)!, "counter-zone-selected", { zoneId: "zone-deli" });
+    await settle(el);
+    expect(counter(el)!.orderFlow).toBe("prepay");
+    expect(message(el, "station")).toBe("");
+
+    fail(new TypeError("Failed to fetch"));
+    await settle(el);
+
+    expect(message(el, "station")).toBe("");
+    expect(tryNow(el, "station")).toBeNull();
+    expect(getStationQueue).toHaveBeenCalledTimes(3);
   });
 });

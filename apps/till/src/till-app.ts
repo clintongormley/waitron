@@ -96,7 +96,6 @@ interface RefreshRetry {
   inFlight: boolean;
 }
 
-/** Seconds before each automatic retry: 5, then 10, then every 30. */
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 
 /** A whole-count unit's three-place server quantity reads "2", not "2.000". */
@@ -280,7 +279,7 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
-    this.#stopRefreshRetries();
+    this.#abandonListRefreshes();
     this.#contentLanguageGeneration++;
     clearTimeout(this.#contentLanguageTimer);
     this.#detach();
@@ -451,6 +450,7 @@ export class TillApp extends LitElement {
   /** A list whose refresh failed after a successful write, with its automatic retry's countdown. */
   @state() private refreshRetries: Partial<Record<RefreshList, RefreshRetry>> = {};
   #refreshTimers = new Map<RefreshList, ReturnType<typeof setTimeout>>();
+  #refreshGeneration: Record<RefreshList, number> = { held: 0, station: 0 };
 
   readonly #url = new UrlStateController(this, () => this.#onHistory(), tillPath);
 
@@ -528,7 +528,7 @@ export class TillApp extends LitElement {
   }
 
   async #boot(): Promise<void> {
-    this.#stopRefreshRetries();
+    this.#abandonListRefreshes();
     clearTimeout(this.#contentLanguageTimer);
     const contentGeneration = ++this.#contentLanguageGeneration;
     try {
@@ -677,56 +677,84 @@ export class TillApp extends LitElement {
     }
   }
 
-  async #refreshHeldOrders(): Promise<void> {
-    this.heldOrders = await this.api.listWorkingOrders();
-    this.#endRefreshRetry("held");
+  #refreshHeldOrders(): Promise<void> {
+    return this.#refreshList("held");
   }
 
-  async #refreshStationQueue(): Promise<void> {
-    await this.#loadStationQueue();
-    this.#endRefreshRetry("station");
-  }
-
-  async #loadStationQueue(): Promise<void> {
-    if (this.orderFlow === "prepay") return;
-    if (this.stations.length === 0) this.stations = await this.api.listStations();
-    const defaultStation = this.stations.find((station) => station.isDefault);
-    if (defaultStation === undefined) {
-      this.stationQueue = [];
-      return;
-    }
-    this.stationQueue = await this.api.getStationQueue(defaultStation.id);
+  #refreshStationQueue(): Promise<void> {
+    return this.#refreshList("station");
   }
 
   /**
    * For the refresh behind a write that has already succeeded: its failure is a load failure, so it
-   * never reaches the write's own error handling. It is reported beside the write's success and retried.
+   * never reaches the write's own error handling.
    */
-  async #refreshAfterWrite(list: RefreshList, messageKey: StringKey): Promise<void> {
+  #refreshAfterWrite(list: RefreshList, messageKey: StringKey): Promise<void> {
+    return this.#refreshList(list, messageKey);
+  }
+
+  /**
+   * Only the newest refresh of a list may install the list's rows (`heldOrders` or `stationQueue`) or
+   * start, change or end its retry, and {@link TillApp.#abandonListRefreshes} makes every earlier
+   * request stale. Without a `messageKey` a failure is also thrown to the caller.
+   */
+  async #refreshList(list: RefreshList, messageKey?: StringKey): Promise<void> {
+    const request = ++this.#refreshGeneration[list];
+    let install: () => void;
     try {
-      await this.#refreshList(list);
-    } catch {
-      this.#startRefreshRetry(list, messageKey);
-    }
-  }
-
-  #refreshList(list: RefreshList): Promise<void> {
-    return list === "held" ? this.#refreshHeldOrders() : this.#refreshStationQueue();
-  }
-
-  /** One loop per list: a failure while one is pending only updates what the message says succeeded. */
-  #startRefreshRetry(list: RefreshList, messageKey: StringKey): void {
-    const pending = this.refreshRetries[list];
-    if (pending !== undefined) {
-      this.#setRefreshRetry(list, { ...pending, messageKey });
+      install = await this.#loadList(list);
+    } catch (error) {
+      if (request === this.#refreshGeneration[list]) this.#onRefreshFailed(list, messageKey);
+      if (messageKey === undefined) throw error;
       return;
     }
-    this.#setRefreshRetry(list, {
-      messageKey,
-      failures: 0,
-      secondsLeft: REFRESH_RETRY_SECONDS[0],
-      inFlight: false,
-    });
+    if (request !== this.#refreshGeneration[list]) return;
+    install();
+    this.#endRefreshRetry(list);
+  }
+
+  async #loadList(list: RefreshList): Promise<() => void> {
+    if (list === "station") return this.#loadStationQueue();
+    const rows = await this.api.listWorkingOrders();
+    return () => (this.heldOrders = rows);
+  }
+
+  async #loadStationQueue(): Promise<() => void> {
+    if (this.orderFlow === "prepay") return () => (this.stationQueue = []);
+    if (this.stations.length === 0) this.stations = await this.api.listStations();
+    const defaultStation = this.stations.find((station) => station.isDefault);
+    const queue =
+      defaultStation === undefined ? [] : await this.api.getStationQueue(defaultStation.id);
+    return () => (this.stationQueue = queue);
+  }
+
+  /**
+   * One loop per list. A failure while it counts down at most updates what the message says
+   * succeeded. A failure while its attempt is in flight counts as that attempt's failure, whether it
+   * is the attempt's own or a newer request's, which supersedes the attempt.
+   */
+  #onRefreshFailed(list: RefreshList, messageKey: StringKey | undefined): void {
+    const pending = this.refreshRetries[list];
+    if (pending === undefined) {
+      if (messageKey === undefined) return;
+      this.#setRefreshRetry(list, {
+        messageKey,
+        failures: 0,
+        secondsLeft: REFRESH_RETRY_SECONDS[0],
+        inFlight: false,
+      });
+    } else if (!pending.inFlight) {
+      if (messageKey !== undefined) this.#setRefreshRetry(list, { ...pending, messageKey });
+      return;
+    } else {
+      const failures = pending.failures + 1;
+      this.#setRefreshRetry(list, {
+        messageKey: messageKey ?? pending.messageKey,
+        failures,
+        inFlight: false,
+        secondsLeft: REFRESH_RETRY_SECONDS[Math.min(failures, REFRESH_RETRY_SECONDS.length - 1)]!,
+      });
+    }
     this.#armRefreshTick(list);
   }
 
@@ -762,20 +790,7 @@ export class TillApp extends LitElement {
     if (retry === undefined || retry.inFlight) return;
     clearTimeout(this.#refreshTimers.get(list));
     this.#setRefreshRetry(list, { ...retry, inFlight: true });
-    try {
-      await this.#refreshList(list);
-    } catch {
-      const pending = this.refreshRetries[list];
-      if (pending === undefined) return;
-      const failures = pending.failures + 1;
-      this.#setRefreshRetry(list, {
-        ...pending,
-        failures,
-        inFlight: false,
-        secondsLeft: REFRESH_RETRY_SECONDS[Math.min(failures, REFRESH_RETRY_SECONDS.length - 1)]!,
-      });
-      this.#armRefreshTick(list);
-    }
+    await this.#refreshList(list, retry.messageKey);
   }
 
   #endRefreshRetry(list: RefreshList): void {
@@ -784,7 +799,9 @@ export class TillApp extends LitElement {
     if (this.refreshRetries[list] !== undefined) this.#setRefreshRetry(list, undefined);
   }
 
-  #stopRefreshRetries(): void {
+  #abandonListRefreshes(): void {
+    this.#refreshGeneration.held++;
+    this.#refreshGeneration.station++;
     for (const timer of this.#refreshTimers.values()) clearTimeout(timer);
     this.#refreshTimers.clear();
     this.refreshRetries = {};
@@ -890,8 +907,7 @@ export class TillApp extends LitElement {
       this.api.setServiceZone(context.zoneId);
       if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
       this.stage = "order";
-      if (this.orderFlow === "prepay") this.stationQueue = [];
-      else await this.#refreshStationQueue();
+      await this.#refreshStationQueue();
       this.#selectMenu(defaultMenuId ?? this.#defaultCatalogueId(menus));
       this.errorKey = undefined;
     } catch {
@@ -1831,7 +1847,7 @@ export class TillApp extends LitElement {
     this.#url.write({ "till-zone": null }, true);
     this.#floorLoaded = false;
     this.errorKey = undefined;
-    this.#stopRefreshRetries();
+    this.#abandonListRefreshes();
     this.#setScreen("lock");
     this.#configureSessionActivity();
     try {
