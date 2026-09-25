@@ -15764,6 +15764,24 @@ not as a refused setting."
 
 ### Task 8b: The bucket copy on the dashboard's Backups screen
 
+> 2026-09-25, as built, where the code departs from this task's: the local `StreamStatusView` has all
+> three of the server's shapes (a running supervisor's status, a copy set up but not started, plain
+> off) and `StreamSettingsView` carries `recoveryKeySet`. The state line says "Not running" for any
+> off state, keeps "another server is writing" for `pointer_changed` and `pointer_newer_term` only,
+> and says "the bucket settings cannot be used" for any other refusal; the lag and last-copy rows show
+> only for a running supervisor, a lag under a minute reads "Under a minute waiting", and a failing
+> bucket check gets its own row. A Test or Save refusal naming a bucket setting
+> (`backup.stream_config_unsafe` or `backup.request_invalid` with a `field`) goes beside that field
+> and focus moves there. An unknown probe reason shows the refusal's own wording, never the reason's
+> text. Each required field has its own sentence rather than one "Fill this in.". The secret's
+> show/hide button is an icon with its own label. The panel sets no width of its own (the Backups
+> screen wraps it in its card) and reads a new `--wt-font-family-mono` token for the kit. Two refusals
+> get panel wording: `backup.managed_by_environment` on Save and `backup.recovery_key_missing` on the
+> kit. `codes.ts` also gained `backup.stream_config_unsafe` and `backup.reload_in_progress`;
+> `backup.stream_failed` needs none, as it is a log tag and the wire answer is `server.internal`. The
+> kit is re-fetched from `willUpdate`, not `updated`, and the panel sits after the archive section's
+> error line, not before it.
+
 **Branch:** `feat/sqlite-slice2-stream-settings-screen` (one pull request)
 
 **Files:**
