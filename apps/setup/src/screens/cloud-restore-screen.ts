@@ -163,7 +163,7 @@ export class SetupCloudRestoreScreen extends LitElement {
                         <p class="warning">Later changes will not be in this restored venue.</p>
                         <label class="field"
                           ><input
-                            name="snapshot-accepted"
+                            name="no-running-server"
                             type="checkbox"
                             required
                             data-test="acknowledge"

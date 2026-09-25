@@ -179,7 +179,6 @@ const CLOUD_UNOPENABLE =
  */
 const CLOUD_ERROR_MESSAGES: Record<string, string> = {
   "restore.schema_too_new": CLOUD_NEWER_SOFTWARE,
-  "provisioning.database_ahead": CLOUD_NEWER_SOFTWARE,
   "recovery.passphrase_invalid": CLOUD_UNOPENABLE,
   "backup.artifact_invalid": CLOUD_UNOPENABLE,
   "backup.archive_invalid": CLOUD_UNOPENABLE,

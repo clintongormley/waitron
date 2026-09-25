@@ -333,7 +333,7 @@ describe("Cloud restore screen listing what is still unanswered", () => {
     });
     const acknowledge = q(el, "[data-test=acknowledge]") as HTMLInputElement;
     expect(acknowledge.required).toBe(true);
-    expect(acknowledge.name).toBe("snapshot-accepted");
+    expect(acknowledge.name).toBe("no-running-server");
     expect(acknowledge.getAttribute("aria-invalid")).toBe("false");
     expect(acknowledge.hasAttribute("aria-describedby")).toBe(false);
     q(el, "[data-test=restore]")!.click();

@@ -2187,7 +2187,6 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     "This snapshot could not be opened. It is damaged, or the recovery key Waitron Cloud holds for it does not open it.";
   it.each([
     ["restore.schema_too_new", 409, cloudNewerSoftware],
-    ["provisioning.database_ahead", 409, cloudNewerSoftware],
     ["recovery.passphrase_invalid", 422, cloudUnopenable],
     ["backup.artifact_invalid", 422, cloudUnopenable],
     ["backup.archive_invalid", 422, cloudUnopenable],

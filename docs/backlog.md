@@ -5527,10 +5527,15 @@ open:
 - Open question: the first start's pointer read and the bucket rebuild's calls (the command line's
   `--from-bucket` and the wizard's `/setup-api/restore-bucket`) use different limits (15 seconds
   and 60 seconds) and report different codes (`restore.pointer_unreadable` and
-  `backup.stream_request_failed`). Neither the code nor the plan says why they differ. The
-  backup-file restores (command line and wizard) and the Cloud restore make their bucket calls
-  inside `refuseIfArchiveSourceLive` (`apps/server/src/restore-stream.ts`), which reports a
-  timed-out call as `restore.stream_source_unchecked` with reason `bucket`.
+  `backup.stream_request_failed`). Neither the code nor the plan says why they differ. On the
+  bucket rebuild, only a timed-out pointer read or newest-upload listing reaches the caller as
+  `backup.stream_request_failed`. On every restore, a timed-out call in the clock check
+  (`measureBucketSkew`, `apps/server/src/restore-stream.ts`) is reported as
+  `restore.stream_source_unchecked` with reason `clock`. The backup-file restores (command line and
+  wizard) and the Cloud restore make their other calls to the venue's own bucket inside
+  `refuseIfArchiveSourceLive` (same file), which reports a timed-out one with reason `bucket`. The
+  Cloud restore's download of its snapshot from Waitron Cloud's storage is not one of these calls:
+  it has its own limit (`downloadArchive`, `apps/server/src/cloud-recovery.ts`).
 
 Task 9c, "Restore from my bucket" in the setup wizard. A third card on the wizard's "Join or
 recover an existing restaurant" screen takes the recovery kit (pasted or read from a file) and the
