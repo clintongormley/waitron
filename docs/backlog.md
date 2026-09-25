@@ -3903,7 +3903,7 @@ does when its tables change under it (re-pick the first, or close) and fix it te
 may make one or both of those branches reachable, or show they can go.
 
 **The till reports a failed list refresh after a SUCCESSFUL write as a failed write — DONE
-(2026-09-25, `fix/till-refresh-after-save`; found by the retroactive Codex review of #621, whose
+(2026-09-25, PR #641; found by the retroactive Codex review of #621, whose
 comment fixes landed as #632).** The park, cash-sale, card-sale and place handlers in
 `apps/till/src/till-app.ts` now hand the list refresh behind a successful write to
 `#refreshAfterWrite`, so its failure never reaches the write's own error (`held.park_error`,
@@ -3924,7 +3924,7 @@ in `till-app.a11y.test.ts`. The listStaff test title that #632 recorded as too w
 the first login".
 
 **Five till handlers still leave a failed list refresh unhandled, and one a11y file may not render
-its screen — OPEN (found 2026-09-25, review of `fix/till-refresh-after-save`).**
+its screen — OPEN (found 2026-09-25, review of PR #641).**
 - `#onLoggedIn` awaits `#refreshHeldOrders()` and then `#refreshStationQueue()` outside any `try`,
   and the `logged-in` listener in `render` calls it with `void`, so a failed held-list read at login
   is an unhandled promise rejection that also skips the queue, roster and floor loads (`git blame`:
