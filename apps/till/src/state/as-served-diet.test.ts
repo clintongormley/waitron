@@ -3,8 +3,6 @@ import { asServedDiet, asServedAllergens } from "./as-served.js";
 import type { OrderLine } from "./working-order.js";
 import type { DietDerivation, DietOverride, OfferedExtraItem, TillProduct } from "../api/client.js";
 
-/** One offered product. A pick no longer changes the line's diet/allergens — each dish shows its OWN
- *  figures — so the item carries only the fields the shape needs, with its three names DIFFERENT. */
 function item(productId: string): OfferedExtraItem {
   return {
     productId,
@@ -52,8 +50,7 @@ function product(
   };
 }
 
-/** Rung-up line: the product plus the products picked off its list. Picks no longer change the
- *  line's diet/allergens — each dish shows its OWN figures — so these tests pin exactly that. */
+/** A pick never changes the line's diet or allergens: each dish shows its OWN figures. */
 function line(prod: TillProduct, ...pickedProductIds: string[]): OrderLine {
   return {
     product: prod,
@@ -74,8 +71,7 @@ function line(prod: TillProduct, ...pickedProductIds: string[]): OrderLine {
 
 describe("asServedDiet — the dish's own diet, no modifier fold", () => {
   it("shows the dish's own direct declarations, ignoring a selected invalidating extra", () => {
-    // The dish declares vegan + halal; a selected bacon extra (which used to invalidate no_meat/halal)
-    // must NOT change the DISH's own declared claims — its own meat is shown separately (Task 4).
+    // A selected bacon extra must NOT change the DISH's own declared claims.
     const prod = product(null, []);
     prod.dietaryDeclarations = ["vegan", "halal"];
     prod.offeredModifiers = [
@@ -96,8 +92,7 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
   });
 
   it("shows the dish's own derived diet, ignoring a no-cheese extra", () => {
-    // Base plant + dairy, reviewed ⇒ vegetarian but NOT vegan. A no-cheese extra used to flip it vegan;
-    // now the dish shows its own diet and the extra changes nothing.
+    // Base plant + dairy, reviewed ⇒ vegetarian but NOT vegan; the extra changes nothing.
     const prod = product({ origins: ["plant", "dairy"], pending: false }, [item("no-cheese")]);
     expect(asServedDiet(line(prod)).vegan).toBe("no");
     expect(asServedDiet(line(prod, "no-cheese")).vegan).toBe("no");
@@ -137,8 +132,7 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
   });
 
   it("a forced-vegan dish reads its own vegan:'yes'; a selected add-meat extra does not change it", () => {
-    // The owner forces vegan:"yes" on the DISH. The extra's meat is shown separately (Task 4), so the
-    // dish's own diet stays vegan:"yes" — the fold that used to cap this is gone.
+    // The owner forces vegan:"yes" on the DISH; the extra's meat does not cap it.
     const prod = product({ origins: ["plant"], pending: false }, [item("add-bacon")]);
     prod.dietOverride = { vegan: "yes" };
     expect(asServedDiet(line(prod)).vegan).toBe("yes");
@@ -197,8 +191,7 @@ it("the dish's own allergens and diet ignore a canonical extras selection", () =
     },
   ];
   const selected = line(prod, "bacon");
-  // The dish is plant-only and reviewed-with-no-allergens; the selected bacon extra's meat and milk are
-  // shown separately (Task 4), never folded into the dish's own figures.
+  // The selected bacon extra's meat and milk are never folded into the dish's own figures.
   expect(asServedDiet(selected).vegan).toBe("yes");
   expect(asServedDiet(selected).contains).toEqual([]);
   expect(asServedAllergens(selected).allergens).toEqual({});
@@ -246,8 +239,7 @@ it.each(["answered here", "frozen by the server"] as const)(
             ],
           }),
     };
-    // The oat answer used to strip milk/dairy from the fold; now the dish keeps its OWN milk allergen
-    // and its OWN {plant,dairy} diet (vegetarian, not vegan), and the answer is shown on its own row.
+    // The oat answer does not strip the dish's OWN milk allergen or {plant,dairy} diet.
     expect(asServedAllergens(selected)).toEqual({
       allergens: { milk: { presence: "contains" } },
       pending: false,

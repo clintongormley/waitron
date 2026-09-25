@@ -1,9 +1,7 @@
 import { expect, it } from "vitest";
 import { currentLocale, t } from "./t.js";
 
-// Asserts the PRISTINE module startup default. Under Vitest's per-file isolation t.js is imported fresh
-// here; because this file NEVER calls setLocale, currentLocale() reads the shipped value unmasked by
-// sibling t.test.ts's afterEach reset. Keep this file mutation-free.
+// Asserts the module's startup default, so this file must never call setLocale.
 
 it("ships English (en-GB) as the module startup default locale", () => {
   expect(currentLocale()).toBe("en-GB");

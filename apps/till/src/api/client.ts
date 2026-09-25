@@ -3,41 +3,22 @@ import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 
 /**
  * The browser-side face of the till's HTTP API — one thin `fetch` wrapper per server route
- * (`apps/server/src/till-api.ts`). It exists so the Lit views built on top of it never touch
- * `fetch`, URLs, cookies or error-envelope shapes directly: they call a typed method and get back a
- * typed payload, or a rejected `{ code }`.
+ * (`apps/server/src/till-api.ts`), so the Lit views never touch `fetch`, URLs, cookies or
+ * error-envelope shapes: they call a typed method and get back a typed payload, or a rejected
+ * `{ code }`.
  *
- * Every request sends `credentials: "include"` so the httpOnly session cookie the login route set
- * rides along; without it the session-guarded routes (`GET /api/products`, `POST /api/sales`) 401.
+ * Most response interfaces below are LOCAL copies of the server's JSON shapes, because a RUNTIME
+ * import from a server package would drag its barrel — and through it `@waitron/db` — into the
+ * browser bundle. The cost is that a mismatch with the server is not a compile break.
  *
- * Most response interfaces below are LOCAL copies of the server's JSON shapes. A RUNTIME import from a
- * server package would drag its barrel — and through it `@waitron/db` and Node builtins — into the
- * browser bundle, so those copies keep the bundle free of server code; a mismatch with the server then
- * surfaces as a runtime shape error a view test catches, not a compile break. `TillSaleResult` mirrors
- * the server's `TillSaleResult` this way.
- *
- * The OFFER and MENU shapes are the exception: `TillMenuOffer` and `TillMenu` are `import type` ALIASES
- * of catalogue's authoritative `MenuOffer`/`AccessibleCatalogue`, taken from the browser-safe TYPE leaf
- * `@waitron/catalogue/src/menu-types.js` (see that import). A type-only import from a leaf that holds
- * only type definitions pulls ZERO runtime, so it keeps the decoupling while ending the hand-copied
- * drift these two once had: the till's DECLARED offer shape can no longer diverge from catalogue's
- * declared `MenuOffer`, and removing or retyping a field the till reads is now a compile break here
- * rather than a silent runtime shape error (an added field the till ignores is not — the shared type
- * checks the declared shape, not the server's exact serialized keys). `OfferedModifier` — the extras
- * and options lists a dish puts in front of a diner — is taken from that same type leaf for the same
- * reason: the picker draws exactly what the order path will accept an answer from. `TillProduct`
- * itself stays LOCAL: it is the till's own display model, built by {@link menuOfferToTillProduct}
- * from an offer and by `getHeldOrder` from a retrieved line, never received as one wire shape.
+ * The OFFER and MENU shapes are the exception: `TillMenuOffer`, `TillMenu` and `OfferedModifier` are
+ * `import type` aliases from catalogue's type-only leaf `@waitron/catalogue/src/menu-types.js`, which
+ * pulls in no runtime, so removing or retyping a field the till reads is a compile break here.
+ * `TillProduct` stays LOCAL: it is the till's own display model, built by
+ * {@link menuOfferToTillProduct} from an offer and by `getHeldOrder` from a retrieved line.
  */
 
-// The till's LOCAL canvas/receipt shapes (`../layout.ts`) — plain data, browser-safe, bundle-decoupled
-// exactly like every interface below. `GET /api/till` carries the device's layout canvas + the receipt
-// trim; importing these from `../layout.js` (never `@waitron/layouts`) keeps the decoupling.
 import type { CanvasDef, CapabilityFlag, ReceiptConfig } from "../layout.js";
-// `StationThresholds`/`TimingBand` are plain data shapes from the GENERIC `@waitron/shared` package
-// (not a server package), so importing their types here doesn't reintroduce the bundle-decoupling risk
-// the note above warns about — every till widget already depends on `@waitron/shared` for money/locale
-// primitives.
 import type {
   ExtraSelection,
   OptionSelection,
@@ -45,17 +26,14 @@ import type {
   StationThresholds,
   TimingBand,
 } from "@waitron/shared";
-// The offer/menu shapes, type-only from catalogue's browser-safe leaf — see the file header for why
-// this pulls no runtime. `MenuOffer` is the body `GET /api/service-zones/:zoneId/offers` returns.
 import type {
   AccessibleCatalogue,
   MenuOffer,
   OfferedModifier,
 } from "@waitron/catalogue/src/menu-types.js";
 
-/** The till's one door to the offered-list shapes, so a widget imports them where it imports every
- * other wire type. Re-exported, never re-declared — the picker draws exactly what the order path
- * accepts an answer from. */
+/** Re-exported, never re-declared, so a widget imports the offered-list shapes where it imports every
+ * other wire type. */
 export type {
   OfferedExtraItem,
   OfferedExtrasList,
@@ -72,41 +50,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Whether a rejected request got NO answer (till-reroute §4.3): `fetch` rejects with a TypeError when
- * the connection fails and with an AbortError on a timeout — either way the outcome is UNKNOWN, because
- * the request may or may not have reached or been processed by the server (a server can receive it and
- * then drop the connection). A server that DID answer rejects through `#request` as a `{ code }`. That
- * uncertainty is exactly why the caller shows `sale.unconfirmed` (a human must check before retrying)
- * rather than `sale.error` (the server refused; retry freely).
+ * Whether a rejected request got NO answer: `fetch` rejects with a TypeError when the connection fails
+ * and with an AbortError on a timeout. Either way the outcome is UNKNOWN — the server may have received
+ * and processed the request — which is why the caller shows `sale.unconfirmed` (check before retrying)
+ * rather than `sale.error` (the server refused; retry freely). A server that DID answer rejects through
+ * `#request` as a `{ code }`.
  */
 export function isNetworkFailure(err: unknown): boolean {
   return err instanceof TypeError || (err instanceof DOMException && err.name === "AbortError");
 }
 
 /**
- * `GET /api/till` — the public boot info the app reads before login. `orderFlow` (7c prepare &
- * collect) is the location's pay-timing mode — see {@link OrderFlow}'s own doc — needed BEFORE login
- * so the app can select which pay control (Place/Collect vs Pay) to render once the operator reaches
- * the counter. `cardProvider`/`tipsEnabled` (integrated card terminal, sub-project 7 Task 8) are the
- * till's card wiring — mirrors the server's `deps.cfg.cardProvider`/`deps.tipsEnabled`
- * (`apps/server/src/till-api.ts`), both always present (a till with no integrated reader still echoes
- * `cardProvider: "none"`) — needed so the counter can choose whether to render the integrated-card
- * pay control at all, and whether that control prompts for a tip.
- *
- * `receipt` (receipt editor) is the owner-authored receipt trim, or the built-in default when the tenant
- * has never opened the editor — the server always sends it (`getReceipt` returns `DEFAULT_RECEIPT` on
- * absence, `till-api.ts`). Like `orderFlow`/`venueName` it carries no secrets, only the footer text. The
- * app threads `receipt` to its ticket and renders the sale body from {@link canvas}.
+ * `GET /api/till` — the public boot info the app reads before login. `orderFlow` is needed before login
+ * so the app can choose which pay control to render; `cardProvider`/`tipsEnabled` decide whether the
+ * integrated-card pay control renders at all and whether it prompts for a tip (`cardProvider: "none"`
+ * for a till with no integrated reader). `receipt` is the owner-authored receipt trim, or the built-in
+ * default.
  */
 export interface TillInfo {
   locale: string;
   onboardingIntent?: "demo" | "prepare" | "live";
   /**
-   * The RECEIPT (fiscal document) locale — the language the printed legal ticket renders in. Sourced
-   * server-side from the fiscal `cfg.locale`, DELIBERATELY DISTINCT from the UI-driving {@link locale}
-   * above (the venue default derivation drops UI-unsupported codes, which must never reach the
-   * receipt — per-user-language spec, decision 2). The app threads it to `till-ticket-view.invoiceLocale`
-   * SEPARATELY from `setLocale(locale)`. A LOCAL mirror of the server's `GET /api/till` field.
+   * The RECEIPT (fiscal document) locale, DELIBERATELY DISTINCT from the UI {@link locale}: the venue
+   * default derivation drops UI-unsupported codes, which must never reach the receipt.
    */
   invoiceLocale: string;
   venueName: string;
@@ -115,85 +81,49 @@ export interface TillInfo {
   /** Whether issuance auto-enqueues the original receipt or leaves it for the completion prompt. */
   receiptPrintMode: "auto" | "on_request" | "never";
   /**
-   * The venue's KDS whole-ticket bump mode (KDS-1 §2e, `locations.bump_mode`): `line` (per-line bump
-   * only, the source of truth) or `ticket` (the display also offers a whole-ticket bump). Read once
-   * from `GET /api/till` on boot and threaded to the station-display screen so it can enable the
-   * whole-ticket affordance. A LOCAL mirror of the server's `bump_mode` enum, deliberately NOT
-   * imported — same bundle-decoupling rationale as every other type in this file.
+   * The KDS bump mode: `line` (per-line bump only, the source of truth) or `ticket` (the display also
+   * offers a whole-ticket bump).
    */
   bumpMode: "line" | "ticket";
   /**
-   * The venue's KDS fire-control mode (KDS-2/3 §2c, `locations.fire_control`): `waiter` (the tab surfaces
-   * the fire action), `kitchen` (the station display surfaces it) or `expo` (KDS-3 — the expo/pass display
-   * surfaces it). Read once from `GET /api/till` on boot and threaded to the station-display screen so it
-   * shows the per-course kitchen-fire action only for a `kitchen` venue. A LOCAL mirror of the server's
-   * `fire_control` enum, deliberately NOT imported — same bundle-decoupling rationale as `bumpMode` above
-   * and every other type in this file.
+   * Which surface offers the course fire action: `waiter` (the tab), `kitchen` (the station display) or
+   * `expo` (the pass).
    */
   fireControl: "waiter" | "kitchen" | "expo";
-  /**
-   * The venue's ACTIVE kitchen courses (KDS-2 §5b), by `display_order` — the options the tab-order
-   * screen's per-line course picker offers, and the id→name source its "Fire <course>" actions read.
-   * Read once from `GET /api/till` on boot and threaded to that screen. A LOCAL mirror of the trimmed
-   * course shape the boot route sends (`{ id, name, displayOrder }`; the server's `Course.active` is
-   * always true in an active-only list, so it is dropped), deliberately NOT imported — same
-   * bundle-decoupling rationale as every other type in this file. `[]` for a venue with no courses.
-   */
+  /** The venue's ACTIVE kitchen courses, by `displayOrder`; `[]` for a venue with none. */
   courses: TillCourse[];
   cardProvider: "none" | "stripe_terminal" | "stripe_on_device" | "sumup_cloud" | "simulator";
   /**
-   * The paying device's DEFAULT reader's own row id (Task 17), or absent when it has none (or a local
-   * simulator is in play — {@link cardProvider} `"simulator"` shadows any real reader). `cardProvider`
-   * alone only names a provider TYPE, and a venue can have more than one active reader on the same
-   * provider, so this is what lets the till look the default reader's NAME up in {@link activeReaders}
-   * rather than guessing from the provider string.
+   * The paying device's DEFAULT reader's row id, or absent when it has none. `cardProvider` only names a
+   * provider TYPE and a venue can have several readers on one provider, so this is what finds the
+   * default reader's NAME in {@link activeReaders}.
    */
   defaultReaderId?: string;
-  /**
-   * The venue's ACTIVE card readers (Task 12/17) — `[{ id, name, provider(mapped) }]`, `[]` when none
-   * are configured. Feeds the payment-time reader picker (`<till-reader-picker>`) so it needs no
-   * second fetch; a reader whose raw provider does not map to the till's union is dropped server-side
-   * rather than leaked here.
-   */
+  /** The venue's ACTIVE card readers, `[]` when none; feeds the payment-time reader picker. */
   activeReaders: TillActiveReader[];
   tipsEnabled: boolean;
   receipt: ReceiptConfig;
   /**
-   * The CALLING device's layout CANVAS (SP-A.2 §16.3) — the device's explicitly assigned canvas, or the
-   * form-factor DEFAULT the server falls back to when the device has none (a cookieless / pre-pairing
-   * request gets the `till` default). The server resolves one for EVERY boot, so this is REQUIRED (SP-B4
-   * dropped the old region-model `layout` it was additive to). A LOCAL mirror of the server's `CanvasDef`,
-   * never imported from `@waitron/layouts` — the bundle rule. The counter renders from this canvas's
-   * counter tab.
+   * The CALLING device's layout canvas — its assigned one, or the form-factor default the server falls
+   * back to (a cookieless request gets the `till` default).
    */
   canvas: CanvasDef;
-  /**
-   * The CALLING device's CAPABILITY set (device-profile design 2026-09-05 §5.3, Task 9). Relocated OFF
-   * the canvas onto the device profile, so it rides the payload as an explicit sibling rather than inside
-   * `canvas`. `profile.capabilities` for a device with a profile; `[]` for a no-profile or cookieless
-   * request. REQUIRED — the server resolves one for every boot.
-   */
+  /** The CALLING device's capability set from its profile; `[]` for a no-profile or cookieless request. */
   capabilities: CapabilityFlag[];
   /**
-   * The CALLING device's per-profile inactivity auto-logout, in seconds, or `null` for the app default
-   * (no idle logout). Resolved through the device profile like {@link capabilities}, so `null` for a
-   * no-profile or cookieless request. The till arms its idle-logout timer from this (session-activity
-   * controller, installable-till Task 9). A LOCAL mirror of the server's `GET /api/till` field.
+   * The CALLING device's per-profile inactivity auto-logout, in seconds, or `null` for no idle logout
+   * (also a no-profile or cookieless request).
    */
   inactivityTimeoutSeconds: number | null;
-  /** This node's id, so the app can tell which `servers` entry it is on (till-reroute §3.2). ALWAYS
-   * present — every boot resolves the node it answered on. */
+  /** This node's id, so the app can tell which `servers` entry it is on. */
   nodeId: string;
-  /** The venue's routable servers, primary first — the list the ServerRouter probes (§3.2). `[]` when
-   * no membership document is held. */
+  /** The venue's routable servers, primary first; `[]` when no membership document is held. */
   servers: TillServer[];
 }
 
 /**
- * One venue-routable server as the boot payload carries it (till-reroute §3.2) — a LOCAL mirror of
- * the server's `RoutableServer` shape (`packages/membership` `routableServers`), NOT imported (the
- * bundle rule). `evicted` nodes never reach the till (excluded server-side), so `standing` is the
- * three serving/sell states only.
+ * One venue-routable server as the boot payload carries it. `evicted` nodes are excluded server-side,
+ * so `standing` is the three serving/sell states only.
  */
 export interface TillServer {
   nodeId: string;
@@ -201,12 +131,7 @@ export interface TillServer {
   standing: "serving-primary" | "serving-secondary" | "sell-only";
 }
 
-/**
- * One ACTIVE kitchen course as the boot payload carries it (KDS-2 §5b) — its id (the
- * {@link TillApi.fireCourse} target + a round line's course override), display `name`, and the
- * `displayOrder` that sequences the picker + the waiter-fire actions. A LOCAL mirror of the server's
- * trimmed course shape, NOT imported (the bundle rule).
- */
+/** One ACTIVE kitchen course as the boot payload carries it. */
 export interface TillCourse {
   id: string;
   name: string;
@@ -214,12 +139,9 @@ export interface TillCourse {
 }
 
 /**
- * One ACTIVE card reader as the boot payload carries it (Task 12/17) — its row id (what `POST
- * /api/pay`'s `readerId` names), operator-facing `name`, and its provider mapped to the till's
- * closed union. A LOCAL mirror of the server's trimmed reader shape, NOT imported (the bundle rule).
- * `provider` is narrower than {@link TillInfo.cardProvider}'s own union — a reader is always a real
- * integrated terminal, never `"none"`/`"simulator"`/`"stripe_on_device"` (a device-local Tap-to-Pay
- * mode has no reader ROW to list).
+ * One ACTIVE card reader as the boot payload carries it; `id` is what `POST /api/pay`'s `readerId`
+ * names. `provider` is narrower than {@link TillInfo.cardProvider}: a device-local mode has no reader
+ * ROW to list.
  */
 export interface TillActiveReader {
   id: string;
@@ -227,29 +149,22 @@ export interface TillActiveReader {
   provider: "stripe_terminal" | "sumup_cloud";
 }
 
-/** One `GET /api/staff` roster entry — no PIN, role or status (the server strips them). */
+/** One `GET /api/staff` roster entry — no PIN, role or status. */
 export interface StaffMember {
   personId: string;
   displayName: string;
 }
 
 /**
- * `POST /api/session` success — who is now logged in, plus the SERVER-COMPUTED `canConfigureTill`
- * capability (`roleHasPermission(role, "venue.configure")`, resolved server-side from the session's
- * role). The till reads it to gate manager-only affordances (FP-2's on-till "Editar plano") without
- * mirroring the role→permission map on the client, where it would silently drift from `permissions.ts`.
- * Convenience only — the on-till placement routes re-check `venue.configure` server-side
- * (`apps/server/src/till-api.ts`), so a tampered client value grants nothing.
+ * `POST /api/session` success. `canConfigureTill` is computed server-side
+ * (`roleHasPermission(role, "venue.configure")`) so the client never mirrors the role→permission map.
+ * Convenience only — the on-till placement routes re-check `venue.configure`, so a tampered client
+ * value grants nothing.
  */
 export interface SessionResult {
   personId: string;
   canConfigureTill: boolean;
-  /**
-   * The signed-in operator's stored per-user UI locale (per-user-language-preference, Task 5), or
-   * `null` when they have never set one. The app feeds it to `resolveActiveLocale(personLocale,
-   * venueDefault)` on login to pick the language to switch the UI into; a `null` falls back to the
-   * venue default. A LOCAL mirror of the server's `POST /api/session` response field.
-   */
+  /** The operator's stored UI locale, or `null` when they have never set one (the venue default applies). */
   locale: string | null;
 }
 
@@ -261,28 +176,23 @@ export interface VatBreakdownEntry {
 }
 
 /**
- * The dietary shapes (dietary-classification, Task 6), LOCAL redefinitions of catalogue's `dietary.ts`
- * types — deliberately NOT imported from `@waitron/catalogue`, the same bundle-decoupling rationale as
- * every other type in this file (see the file header). They are structurally identical to the shared
- * shapes, so a value the deep-imported product-level derivation (`deriveDietProfile`/`overlayDietProfile`)
- * returns/accepts is assignable across the boundary. `DietaryOrigin` is the ingredient-origin taxonomy
- * (`plant`, `meat`, …); `ContainsTag` is
- * the meat/fish subset the "no-meat"/"no-fish" filters read; `DietLabel` is a cautious tri-state
- * (`"unknown"` when the base recipe is unreviewed — never a positive claim).
+ * LOCAL copies of catalogue's `dietary.ts` types, structurally identical so a value crosses the
+ * boundary. `DietLabel` is a cautious tri-state: `"unknown"` when the base recipe is unreviewed — never
+ * a positive claim.
  */
 export type DietaryOrigin =
   "plant" | "meat" | "fish" | "shellfish" | "dairy" | "egg" | "honey" | "other_animal";
 export type ContainsTag = "meat" | "fish";
 export type DietLabel = "yes" | "no" | "unknown";
 
-/** The recipe-derived diet basis (`products.dietDerivation`): the folded ingredient origins plus a
- * `pending` flag that is true while the recipe is unreviewed (holding vegan/vegetarian at "unknown"). */
+/** The recipe-derived diet basis: `pending` is true while the recipe is unreviewed (holding
+ * vegan/vegetarian at "unknown"). */
 export interface DietDerivation {
   origins: DietaryOrigin[];
   pending: boolean;
 }
-/** A staff diet OVERRIDE (`products.dietOverride`): explicit label wins over the derivation, plus
- * halal/kosher (which are never derived) and contains-tag add/remove. Absent fields don't override. */
+/** A staff diet OVERRIDE: an explicit label wins over the derivation; halal/kosher are never derived.
+ * Absent fields don't override. */
 export interface DietOverride {
   vegan?: "yes" | "no";
   vegetarian?: "yes" | "no";
@@ -291,8 +201,8 @@ export interface DietOverride {
   addContains?: ContainsTag[];
   removeContains?: ContainsTag[];
 }
-/** The PUBLISHED diet profile of a product (`products.diet`) — the derivation folded with the override.
- * `contains` lists the meat/fish tags present; halal/kosher appear only when the override set them. */
+/** The PUBLISHED diet profile — the derivation folded with the override. halal/kosher appear only when
+ * the override set them. */
 export interface DietProfile {
   vegan: DietLabel;
   vegetarian: DietLabel;
@@ -302,11 +212,9 @@ export interface DietProfile {
 }
 
 /**
- * One sellable product as the till's widgets consume it. It is built from exactly two payloads:
- * {@link menuOfferToTillProduct} adapts a zone offer (`GET /api/service-zones/:zoneId/offers`), and
- * `getHeldOrder` synthesises one per line of a retrieved order. It is NOT the shape of
- * `GET /api/products` — that route's `AvailableProduct` carries neither variants nor a kitchen name,
- * and {@link TillApi.listProducts} has no caller in the app.
+ * One sellable product as the till's widgets consume it, built from exactly two payloads:
+ * {@link menuOfferToTillProduct} adapts a zone offer, and `getHeldOrder` synthesises one per line of a
+ * retrieved order. It is NOT the shape of `GET /api/products`.
  */
 export interface TillProduct {
   id: string;
@@ -315,8 +223,7 @@ export interface TillProduct {
   /** The selling identity whose menu, price and offered modifiers were selected. */
   menuItemId?: string;
   variantId?: string;
-  /** The selected variant's staff-facing name — plain text; a line naming a variant is shown under
-   * it alone (spec §15.2). */
+  /** The selected variant's staff-facing name; a line naming a variant is shown under it alone. */
   variantName?: string;
   /** The selected variant's customer-facing text, locale -> text; null when it has none. */
   variantCustomerName?: Record<string, string> | null;
@@ -331,15 +238,14 @@ export interface TillProduct {
     kitchenName?: string | null;
     image?: string | null;
     unitPrice: string;
-    /** The variant's price minus its parent's on this menu, negative when cheaper, null when the
-     * two are equal — computed for the picker's "+€1.50" label; nothing stores it (spec §15.3). */
+    /** The variant's price minus its parent's on this menu, negative when cheaper, null when equal —
+     * for the picker's "+€1.50" label; nothing stores it. */
     unitPriceDifference: string | null;
     available: boolean;
   })[];
   /**
-   * The product's STAFF-facing name — plain text, not per-language. This is what the till's own
-   * buttons and basket render: an operator reads the name the venue uses internally, never a
-   * customer translation. A retrieved line carries the name frozen onto it at add time.
+   * The product's STAFF-facing name, not per-language — what the till's buttons and basket render. A
+   * retrieved line carries the name frozen onto it at add time.
    */
   name: string;
   /** The product's customer-facing text, locale -> text; null or blank falls back to {@link name}. */
@@ -355,60 +261,31 @@ export interface TillProduct {
   unitPrice: string;
   vatClass: "general" | "reduced" | "super_reduced" | "zero";
   category: string | null;
-  /**
-   * EU-14 allergen declaration; null = not reviewed. Keyed by allergen code (menu & allergens). A
-   * LOCAL redefinition of catalogue's `ProductAllergens` shape, deliberately NOT imported from
-   * `@waitron/catalogue` — same bundle-decoupling rationale as every other type in this file (see the
-   * file header). `presence` is the contains/may-contain strength; `source` names the specific
-   * substance ("wheat", "almendra") when known. Task 6 renders these on the allergen screen.
-   */
+  /** EU-14 allergen declaration keyed by allergen code; null = not reviewed. */
   allergens: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
-  /**
-   * The product's DEFAULT kitchen course (KDS-2 `products.course_id`), or null when it has none — the
-   * value the tab-order screen's per-line course picker PRE-SELECTS. Mirrors catalogue's
-   * `AvailableProduct.course_id`, which `GET /api/products` always sends; OPTIONAL here (unlike
-   * `category`) purely so the many pre-KDS-2 `TillProduct` fixtures that predate it need no update — an
-   * absent value reads as "no default course", the same as null. NOT imported (the bundle rule).
-   */
+  /** The product's DEFAULT kitchen course, which the per-line course picker pre-selects; absent or null
+   * means no default course. */
   courseId?: string | null;
-  /**
-   * The catalogue (menu) this product is sold from — its `catalogues.id`. A zone may offer several
-   * menus, so each product is tagged with which one it came from; the till's client-side menu filter
-   * shows only the selected menu's products.
-   * Mirrors catalogue's `AvailableProduct.catalogueId`, which `GET /api/products` always sends. OPTIONAL
-   * here (like {@link courseId}) purely so the many pre-multi-menu `TillProduct` fixtures need no update
-   * — an absent value simply never matches a selected menu. NOT imported (the bundle rule).
-   */
+  /** The menu this product is sold from; the till's menu filter shows only the selected menu's
+   * products, and an absent value never matches one. */
   catalogueId?: string;
-  /** The menu's display name (`catalogues.name`, localised at seed time). Mirrors `AvailableProduct`;
-   * carried for completeness — the switcher renders `TillMenu.name`, not this. OPTIONAL for the same
-   * fixture reason as {@link catalogueId}. */
+  /** The menu's display name; the switcher renders `TillMenu.name`, not this. */
   catalogueName?: string;
   /**
-   * The ordered extras and options lists this dish offers, in the product's own attachment order —
-   * catalogue's `OfferedModifier`, carried through from the zone offer unchanged. The picker walks
-   * it; the basket resolves a pick's own allergens and dietary labels off it BY PRODUCT ID.
+   * The ordered extras and options lists this dish offers, in the product's own attachment order. The
+   * basket resolves a pick's allergens and dietary labels off it BY PRODUCT ID.
    *
-   * Absent on a product the till synthesised rather than read from an offer — a retrieved held
-   * line's stored snapshot carries none, so a surface reading this treats absent as "offers
-   * nothing" rather than "not loaded yet".
+   * Absent on a product synthesised from a retrieved held line, so a surface reading this treats absent
+   * as "offers nothing" rather than "not loaded yet".
    */
   offeredModifiers?: OfferedModifier[];
-  /**
-   * The product's PUBLISHED diet profile (dietary-classification, Task 6) — catalogue's `products.diet`,
-   * the derivation folded with any staff override. The menu diet filter (`filterProductsByDiet`) reads
-   * it; the diet screen renders it. OPTIONAL/nullable for the same fixture reason as {@link courseId}: a
-   * `null`/absent value reads as an unreviewed dish (never vegan/vegetarian), so those filters exclude it.
-   * Mirrors catalogue's `AvailableProduct.diet`, which `GET /api/products` always sends. NOT imported.
-   */
+  /** The PUBLISHED diet profile. Null/absent reads as an unreviewed dish (never vegan/vegetarian), so
+   * the diet filters exclude it. */
   diet?: DietProfile | null;
-  /** The recipe-derived diet basis (`products.dietDerivation`) — origins + `pending`, carried so the
-   * basket can recompute the AS-SERVED diet client-side. Null/absent = no recipe (folds as pending).
-   * Mirrors `AvailableProduct.dietDerivation`; OPTIONAL for the fixture reason above. NOT imported. */
+  /** The recipe-derived diet basis, carried so the basket can recompute the AS-SERVED diet
+   * client-side. Null/absent = no recipe (folds as pending). */
   dietDerivation?: DietDerivation | null;
-  /** The staff diet OVERRIDE ALONE (`products.dietOverride`), re-applied over the as-served derivation.
-   * Null/absent = no override. Mirrors `AvailableProduct.dietOverride`; OPTIONAL for the fixture reason
-   * above. NOT imported. */
+  /** The staff diet OVERRIDE alone, re-applied over the as-served derivation. Null/absent = none. */
   dietOverride?: DietOverride | null;
   dietaryDeclarations?: string[];
 }
@@ -446,30 +323,19 @@ export function sellingValuesOf(source: TillSellingValues): TillSellingValues {
 }
 
 /**
- * One menu (catalogue). In a zone-offers body it is one of the zone's menus, in the zone's display
- * order, and `isDefault` flags the zone's default menu, which the till selects first. In
- * {@link ProductCatalogue.menus} (`GET /api/products`) it is one of the location's menus, default
- * first then by name, and `isDefault` flags the location's default. The shape is {@link AccessibleCatalogue}, imported from the browser-safe leaf rather than
- * re-declared.
+ * One menu. In a zone-offers body `isDefault` flags the zone's default menu, which the till selects
+ * first; in {@link ProductCatalogue.menus} it flags the location's default.
  */
 export type TillMenu = AccessibleCatalogue;
 
-/** The `GET /api/products` payload: the location's accessible menus + every sellable product across
- * them (each tagged with its {@link TillProduct.catalogueId}). The app builds its product grid from
- * zone offers ({@link menuOfferToTillProduct}), not this route — {@link TillApi.listProducts} has no
- * app caller — but the test harness uses it as its fixture seam, so it and this shape stay. */
+/** The `GET /api/products` payload. The app builds its product grid from zone offers, not this route;
+ * the test harness uses it as its fixture seam. */
 export interface ProductCatalogue {
   menus: TillMenu[];
   products: TillProduct[];
 }
 
-/**
- * A product's distinct selling identity on one menu — the `offers[]` entries
- * `GET /api/service-zones/:zoneId/offers` returns. This IS the catalogue's authoritative
- * {@link MenuOffer} (the server sends `MenuOffer[]` straight through — see `listZoneOffers` in
- * `@waitron/venue-service`), imported from the browser-safe leaf rather than mirrored by hand, so the
- * two can no longer drift. {@link menuOfferToTillProduct} adapts one into the till's display model.
- */
+/** A product's selling identity on one menu — the `offers[]` of `GET /api/service-zones/:zoneId/offers`. */
 export type TillMenuOffer = MenuOffer;
 
 export interface ZoneOfferCatalogue {
@@ -502,8 +368,8 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
     customerName: offer.customerName,
     kitchenName: offer.kitchenName,
     unit: offer.unit,
-    // No `pricingUnit`: an offer-derived product always carries its full `unit`, which is what the
-    // till weighs from; `productUnit()` consults `pricingUnit` only when `unit` is absent.
+    // No `pricingUnit`: `productUnit()` consults it only when `unit` is absent, and an offer always
+    // carries its `unit`.
     unitPrice: offer.unitPrice,
     vatClass: offer.vatClass,
     category: offer.category,
@@ -511,10 +377,8 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
     courseId: offer.courseId,
     catalogueId: offer.menuId,
     catalogueName: offer.menuName,
-    // `variants`, `offeredModifiers` and `dietaryDeclarations` are always present on a `MenuOffer`
-    // (the server sends them for every offer), so they are read directly rather than
-    // spread-when-present. The offered lists are passed through in the order they arrive: that is
-    // the product's own attachment order, which nothing on the till re-sorts.
+    // The offered lists pass through in the order they arrive — the product's own attachment order,
+    // which nothing on the till re-sorts.
     variants: offer.variants.map((variant) => {
       const difference = subtractDecimal(decimal(variant.unitPrice), decimal(offer.unitPrice));
       return {
@@ -541,22 +405,13 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
  * One basket line the till sends to `POST /api/sales`: never a price — the server re-prices.
  *
  * `options` answers the dish's options lists, one entry per list, naming the list and the chosen
- * label; `extras` answers its extras lists, one entry per list, naming the PRODUCTS picked off it
- * and how many of each this dish takes. Both are the shared wire shapes (`@waitron/shared`), and the
- * server resolves everything else: an options answer freezes six names onto the dish line and an
- * extras pick becomes a priced child line carrying the picked product's VAT class — its own, or its
- * parent's where a variant leaves it blank, never the dish's. Each key is ABSENT on a line that
- * answered nothing of that kind — never `[]`.
+ * label; `extras` answers its extras lists, one entry per list, naming the PRODUCTS picked off it and
+ * how many of each this dish takes. Each key is ABSENT on a line that answered nothing of that kind —
+ * never `[]`. Every ACTIVE options list a dish attaches must be answered, or the line is refused
+ * `options.label_required` (`validateOptionSelections`, `packages/catalogue/src/option-contract.ts`).
  *
- * Every ACTIVE options list a dish attaches must be answered, so a line that omits one is refused
- * `options.label_required` rather than ignored (`validateOptionSelections`,
- * `packages/catalogue/src/option-contract.ts`; probed 2026-09-21 against a one-list fixture: `[]`
- * threw that code while a `{ listId, labelId }` answer resolved).
- *
- * `note` (a free-text kitchen instruction, capped at 200 chars server-side) is the per-line
- * customisation (order-line customisation, spec §2/§3), NON-FISCAL: the server trims/validates it and
- * stores it on the working-order line only, never on the sale. It is ABSENT for a plain line — a
- * whitespace-only note is "not chosen" and omitted — so a no-note sale stays byte-identical to before.
+ * `note` is a NON-FISCAL free-text kitchen instruction, stored on the working-order line only, never on
+ * the sale. It is ABSENT for a plain line — a whitespace-only note is omitted.
  */
 export interface SaleLine {
   /** Stable server line identity on a retrieved order; omitted for a newly selected line. */
@@ -570,15 +425,9 @@ export interface SaleLine {
 }
 
 /**
- * One round line the tab-order screen sends to {@link TillApi.addTabRound} (KDS-2 §5b): a {@link SaleLine}
- * that MAY carry a `courseId` OVERRIDE the waiter picked. Absent (the picker left on the product default)
- * = the server resolves the product's default course (`<override> ?? product.course_id`). Only ever a real
- * course id — the picker offers no explicit "no course" option — so never `null`.
- *
- * It MAY also carry `hold: true` — the round bar's per-line hold toggle (coursing editing A3): insert the
- * line but do NOT fire it yet, regardless of its course (the server reads `hold` to hold `fired_at NULL`
- * even for a course that would otherwise fire on send). Absent (the toggle left OFF, its default) = the
- * line fires by the normal course rule; only ever `true` — an un-held line OMITS the field, never `false`.
+ * One round line sent to {@link TillApi.addTabRound}. `courseId` is the waiter's course OVERRIDE; absent,
+ * the server uses the product's default course. `hold: true` inserts the line without firing it,
+ * whatever its course; an un-held line OMITS the field.
  */
 export interface RoundLine extends SaleLine {
   courseId?: string;
@@ -592,10 +441,8 @@ export interface CashTender {
 }
 
 /**
- * A manual card tender — the counter charged the card on the standalone bank terminal (datáfono) and
- * records it here. `amount` is the sale total (a card is charged the exact total, never over-tendered,
- * so there is no change); `externalRef` is the terminal's optional operation number, absent when the
- * operator did not key one.
+ * A manual card tender, charged on the standalone bank terminal. `amount` is the sale total (never
+ * over-tendered, so no change); `externalRef` is the terminal's optional operation number.
  */
 export interface CardTender {
   method: "card";
@@ -607,10 +454,9 @@ export interface CardTender {
 export type Tender = CashTender | CardTender;
 
 /**
- * One line of the FILED composition the receipt identifies (RD 1619/2012 art. 7.1.e). Mirrors the
- * server's `TillSaleLine`: goods `descriptions` (locale → text, resolved in the invoice locale), the
- * display `quantity`, and the GROSS per-line total (Σ equals `total`). The receipt renders THESE, never
- * the mutable client basket, so the printed line list can never diverge from the invoice.
+ * One line of the FILED composition the receipt identifies (RD 1619/2012 art. 7.1.e): `descriptions`
+ * in the invoice locale, the display `quantity`, and the GROSS line total. The receipt renders THESE,
+ * never the client basket, so the printed line list cannot diverge from the invoice.
  */
 export interface TillSaleLine {
   /** The dish's frozen answers to its options lists; absent on a line that answered none and on
@@ -622,20 +468,15 @@ export interface TillSaleLine {
   unitPrecision?: number | null;
   quantity: string;
   gross: string;
-  /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line (ordering modifiers), else
-   *  `null`/absent for a top-level dish — mirrors the server's `TillSaleLine.parentLineNo`
-   *  (`apps/server/src/till-sale.ts`), carried through unchanged from the filed composition. PRESENTATION
-   *  metadata only (never hashed, never a fiscal figure): the settled-ticket view (Task 14) groups each
-   *  option under its dish by this field, the same grouping the printed receipt (`formatReceipt`) and
-   *  the on-screen basket already render. */
+  /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line, else null/absent.
+   *  Presentation only — never hashed, never a fiscal figure. */
   parentLineNo?: number | null;
 }
 
 /**
- * How a filed sale was paid, read back from the committed rows. Mirrors the server's `TenderBlock`
- * (`apps/server/src/till-sale.ts`): `unpaid` is an invoice issued before collection, `cash` carries
- * the change handed back, and `card` carries the whole charge (`charged` = total + tip), the `tip`
- * ("0.00" when none), and the operator `reference` (null for an integrated capture). Card-present
+ * How a filed sale was paid, read back from the committed rows: `unpaid` is an invoice issued before
+ * collection, `cash` carries the change, and `card` the whole charge (`charged` = total + tip), the
+ * `tip` ("0.00" when none) and the operator `reference` (null for an integrated capture). Card-present
  * identity belongs only to the separate payment slip.
  */
 export type TenderBlock =
@@ -659,20 +500,15 @@ export interface TillSaleResult {
   issuedAt: string;
   total: string;
   vatBreakdown: VatBreakdownEntry[];
-  /** The filed line list (goods identification), rendered by the receipt instead of the client basket. */
+  /** The filed line list, rendered by the receipt instead of the client basket. */
   lines: TillSaleLine[];
-  /** How the sale was paid, read back from the committed tender (+ payment) rows. See
-   * {@link TenderBlock}. */
   tender: TenderBlock;
   qr: string;
 }
 
 /**
- * One row of `GET /api/working-orders` — a parked order the counter can retrieve (park & retrieve,
- * sub-project 7b). Mirrors the server's `HeldOrderSummary` (`apps/server/src/working-order.ts`):
- * `total` is the GROSS (VAT-inclusive) draft total — equal to the basket total the operator saw, the
- * figure the held-orders widget shows with `formatMoney` — and `itemCount` the line count, both as the
- * server sends them; `label` is null when the order was parked without one.
+ * One row of `GET /api/working-orders` — a parked order the counter can retrieve. `total` is the GROSS
+ * (VAT-inclusive) draft total; `label` is null when the order was parked without one.
  */
 export interface HeldOrderSummary {
   id: string;
@@ -698,10 +534,9 @@ export interface HeldExtra {
 }
 
 /**
- * `GET /api/working-orders/:id` — a retrieved parked order: enough to name it in the UI plus the
- * stored inputs and commercial snapshots needed to rebuild its basket. Mirrors the server's
- * `HeldOrder`; contextual lines can be restored even when their live offer is no longer available.
- * The server sends `quantity` as a three-place decimal string ("2.000"), passed through here as sent.
+ * `GET /api/working-orders/:id` — a retrieved parked order: its stored inputs and commercial snapshots,
+ * enough to rebuild its basket even when a line's live offer is no longer available. `quantity` is a
+ * three-place decimal string ("2.000").
  */
 export interface HeldOrder {
   id: string;
@@ -710,11 +545,9 @@ export interface HeldOrder {
   lines: (Omit<SaleLine, "extras" | "options"> & {
     productId?: string;
     /**
-     * What each CHILD line of this dish froze: the picked product, its three names, the price it
-     * was sold at, and how many of it this dish takes (the child's stored quantity divided by the
-     * dish's). These are VALUES, not a re-sendable selection — a child holds no list id to name, so
-     * an edit re-derives one from the dish's live offer
-     * (`deriveExtraSelections`, `../state/held-extras.ts`).
+     * What each CHILD line of this dish froze, with `quantity` per dish. These are VALUES, not a
+     * re-sendable selection — a child holds no list id, so an edit re-derives one from the dish's live
+     * offer (`deriveExtraSelections`, `../state/held-extras.ts`).
      */
     extras?: HeldExtra[];
     product?: TillProduct;
@@ -722,50 +555,34 @@ export interface HeldOrder {
      * The dish's frozen answers to its options lists; absent on a line that answered none and on
      * every child line. The six names per answer are the server's, copied by value.
      *
-     * `options` is deliberately NOT here: the sendable answer names a list and a label by ID, and a
-     * frozen answer carries neither (spec §2.3). The till re-derives the two ids by matching these
-     * names against the dish's live offered lists (`deriveOptionSelections`,
-     * `../state/held-options.ts`), which is why an edit can be re-sent at all. The match is on the
-     * STAFF name alone, so a list or label whose staff wording has changed matches nothing and the
-     * operator is asked to answer it again.
+     * `options` is deliberately NOT here: a frozen answer carries no list or label id, so the till
+     * re-derives them by matching these names against the dish's live offered lists
+     * (`deriveOptionSelections`, `../state/held-options.ts`). The match is on the STAFF name alone, so
+     * a list or label whose staff wording changed matches nothing and the operator answers it again.
      */
     optionSnapshots?: OptionSnapshot[];
   })[];
 }
 
 /**
- * The per-location pay-timing / service mode (7c prepare & collect, design §3). Mirrors the server's
- * `OrderFlow` (`apps/server/src/till-config.ts`, derived from `@waitron/db`'s `order_flow` enum) as a
- * LOCAL copy — same decoupling rationale as every other type in this file. `prepay` (Mode P) pays at
- * order, today's walk-up flow; `invoice_first` (Mode I) and `ticket_then_pay` (Mode T) place the order
- * first and collect payment later.
+ * The per-location pay-timing mode. `prepay` pays at order; `invoice_first` and `ticket_then_pay`
+ * place the order first and collect payment later.
  */
 export type OrderFlow = "prepay" | "invoice_first" | "ticket_then_pay";
 
-/**
- * The kitchen state a ticket item advances through (KDS-1 §2d) — `queued → preparing → ready`. A LOCAL
- * copy of the server's `TicketState` (`apps/server/src/working-order.ts`, the `ticket_state` enum that
- * succeeds `order_prep`'s dropped `prep_state`), deliberately NOT imported — same bundle-decoupling
- * rationale as every other type in this file. `collected` is GONE from the kitchen states: a counter
- * order's handover is now an order-level `collected_at`, not a kitchen state (design §2d/§3e).
- */
+/** The kitchen state a ticket item advances through: `queued → preparing → ready`. */
 export type TicketState = "queued" | "preparing" | "ready";
 
 /**
- * A working order's own status (`open → placed → settled|abandoned`). A LOCAL copy of the server's
- * `WorkingOrderStatus` (`apps/server/src/working-order.ts`, derived from `@waitron/db`'s
- * `working_order_status` enum), NOT imported — same bundle-decoupling rationale as every other type in
- * this file. The station queue carries it so the display shows the Mode-P collect action only on a
- * COLLECTABLE order — a `settled` one awaiting its counter handover ({@link TillApi.markCollected}); an
- * `open` (tab) or `placed` (awaiting the fiscal {@link TillApi.collectOrder}) order is not collectable there.
+ * A working order's own status (`open → placed → settled|abandoned`). The station queue carries it so
+ * the display offers the collect action only on a `settled` order awaiting its counter handover
+ * ({@link TillApi.markCollected}).
  */
 export type WorkingOrderStatus = "open" | "placed" | "settled" | "abandoned";
 
 /**
- * `POST /api/working-orders/:id/place` success (7c). `open → placed`: Mode I files a deferred
- * invoice HERE and returns its number; Modes T and P (the latter never reaches this route) file
- * nothing at placing, so every field past `id`/`status` is present only for Mode I. Mirrors the
- * server's `PlaceOrderResult`.
+ * `POST /api/working-orders/:id/place` success. `invoice_first` files a deferred invoice at placing;
+ * the other modes file nothing then, so every field past `id`/`status` is present only for it.
  */
 export interface PlaceOrderResult {
   id: string;
@@ -778,12 +595,8 @@ export interface PlaceOrderResult {
 }
 
 /**
- * One configured kitchen station from `GET /api/stations` (KDS-1 §3f) — the slim shape the station
- * picker reads. A LOCAL mirror of the server's `Station` (`apps/server/src/kitchen.ts`), deliberately
- * NOT imported — same bundle-decoupling rationale as every other type in this file. The display only
- * READS stations to populate its picker; station CRUD is the management API's, so this carries no
- * create-side fields. `isDefault` names the venue's single fallback station (the counter/pass), the one
- * the counter's own default-station queue reads.
+ * One configured kitchen station from `GET /api/stations`. `isDefault` names the venue's single fallback
+ * station (the counter/pass).
  */
 export interface Station {
   id: string;
@@ -794,40 +607,30 @@ export interface Station {
 }
 
 /**
- * One selected option (ordering modifier) on a queue item — mirrors the server's `QueueModifier`
- * (`apps/server/src/working-order.ts`): the child modifier line's SNAPSHOTTED `descriptions` map,
- * which the KDS display localises client-side, per the never-store-formatted rule. A modifier is
- * never its own ticket item; it rides here as sub-text beneath its parent.
+ * One selected option on a queue item: the child modifier line's SNAPSHOTTED `descriptions`, which the
+ * display localises client-side. A modifier is never its own ticket item; it rides beneath its parent.
  */
 export interface QueueModifier {
   descriptions: Record<string, string>;
-  /** The extra's OWN allergens, shown beside the dish's own on the KDS/expo — never folded. Absent/null
-   *  for a plain text answer or an option that declares none. */
+  /** The extra's OWN allergens, shown beside the dish's own — never folded. Absent/null when it
+   *  declares none. */
   addAllergens?: Record<string, { presence: "contains" | "may_contain"; source?: string }> | null;
-  /** The extra's OWN positive dietary suitability (a subset of vegan/vegetarian/halal/kosher), shown
-   *  beside the dish's own. Absent/empty when it declares none. */
+  /** The extra's OWN positive dietary suitability, shown beside the dish's own. Absent/empty when it
+   *  declares none. */
   suitableFor?: string[] | null;
 }
 
 /**
- * The dish's OWN allergen profile of a queue/expo item — the parent product's published allergens, with
- * no modifier contribution, computed SERVER-side and attached to each read. `allergens` is keyed by
- * allergen code (`presence` = contains/may-contain strength, `source` names the specific substance when
- * known); `pending` is true when the dish's OWN allergens are unreviewed (a null base), so the KDS shows
- * the plate as unverified. Display-only — never a fiscal value. A LOCAL mirror of the server's
- * `asServed` shape, NOT imported — same bundle-decoupling rationale as every type in this file.
+ * The dish's OWN allergen profile on a queue/expo item, with no modifier contribution. `pending` is true
+ * when the dish's allergens are unreviewed, so the display shows the plate as unverified. Display-only —
+ * never a fiscal value.
  */
 export interface AsServedAllergens {
   allergens: Record<string, { presence: "contains" | "may_contain"; source?: string }>;
   pending: boolean;
 }
 
-/**
- * One ticket item on a station's queue (KDS-1 §3c) — its id (the per-line bump target for
- * {@link TillApi.advanceTicketItem}), the working-order line it was fired from, and its current kitchen
- * `state`. A LOCAL mirror of the server's `StationQueueItem` (`apps/server/src/working-order.ts`), NOT
- * imported — same bundle-decoupling rationale as every other type in this file.
- */
+/** One ticket item on a station's queue; `id` is the per-line bump target. */
 export interface StationQueueItem {
   /** The dish's frozen answers to its options lists; absent on a line that answered none and on
    *  every child line. The six names per answer are the server's, copied by value. */
@@ -835,54 +638,30 @@ export interface StationQueueItem {
   id: string;
   workingOrderLineId: string;
   state: TicketState;
-  /**
-   * The line's snapshotted KITCHEN name, resolved server-side — the kitchen name falling back to the
-   * staff name, the variant's own on a variant line, so the display reads the dish as "2× Paella"
-   * and reads it identically to the printed ticket.
-   */
+  /** The line's snapshotted KITCHEN name — the kitchen name falling back to the staff name, the
+   * variant's own on a variant line. */
   name: string;
-  /** The line's quantity, as a three-place decimal string, e.g. "2.000" — shown as "qty× dish"
-   * on the display. The column behind it counts whole thousandths; the wire does not. */
+  /** The line's quantity, as a three-place decimal string, e.g. "2.000". */
   quantity: string;
   /** Unit values frozen with the line. Absent/null only on older payloads. */
   unitName?: Record<string, string> | null;
   unitPrecision?: number | null;
-  /** The dish's selected options (ordering modifiers), in selection order — rendered as indented `+
-   *  <name>` sub-text beneath this item (KDS widgets, Task 14). Optional/absent on an older payload or a
-   *  plain-dish fixture, treated identically to an empty array — a modifier-free item renders exactly
-   *  as before. */
+  /** The dish's selected options, in selection order; absent reads as none. */
   modifiers?: QueueModifier[];
-  /** The dish's OWN allergen profile — the parent's published allergens, with no modifier contribution;
-   *  the KDS renders its codes as "contains" chips and shows a "not reviewed" note when
-   *  {@link AsServedAllergens.pending}. Optional/absent on an older payload or a plain-dish fixture,
-   *  treated as "no profile attached" (nothing rendered) — a plain dish reads exactly as before. */
+  /** The dish's OWN allergen profile; absent renders nothing. */
   asServed?: AsServedAllergens;
-  /** The dish's OWN diet profile — the diet twin of {@link asServed}: its recipe-derived declarations,
-   *  with no modifier contribution. The KDS renders vegan/vegetarian/halal/kosher badges + contains chips
-   *  beside the allergen chips, and a neutral "not reviewed" note while `vegan === "unknown"` (pending).
-   *  Optional/absent (⇒ nothing rendered) on an older payload or a pre-diet fixture. */
+  /** The dish's OWN diet profile, the diet twin of {@link asServed}; absent renders nothing. */
   asServedDiet?: DietProfile;
-  /** The item's course (KDS-2 §3d/§5a), or `null` for a line with no course — the display groups the
-   *  queue by this and renders a per-course header in `displayOrder`. A LOCAL mirror of the server's
-   *  `StationQueueCourse` (`apps/server/src/working-order.ts`), NOT imported (the bundle rule). */
+  /** The item's course, or `null` for a line with none — the display groups the queue by it. */
   course: StationQueueCourse | null;
-  /** `null` while the item's course is HELD — the display renders it GREYED and non-advanceable
-   *  (`advanceTicketItem` refuses it, `ticket.item_held`); a timestamp once fired (the auto-fired
-   *  earliest course, or released via {@link TillApi.fireCourse}). */
+  /** `null` while the item's course is HELD — not advanceable (`ticket.item_held`); a timestamp once
+   *  fired. */
   firedAt: string | null;
-  /** The per-line kitchen customisation (order-line customisation, spec §2/§3, NON-FISCAL) — the
-   *  SNAPSHOTTED `note` the server froze at fire (not the live line, so a later edit never changes what
-   *  the cook sees). The KDS renders it as sub-text beside the modifiers. Optional/`null`/absent
-   *  (⇒ nothing rendered) on an older payload or a plain line. */
+  /** The NON-FISCAL kitchen note as frozen at fire, so a later edit never changes what the cook sees. */
   note?: string | null;
 }
 
-/**
- * The course a queue item was fired for (KDS-2 §5a) — its id (the {@link TillApi.fireCourse} target), the
- * display `name`, and the `displayOrder` that sequences the coursing sections. A LOCAL mirror of the
- * server's `StationQueueCourse` (`apps/server/src/working-order.ts`), NOT imported — same bundle-decoupling
- * rationale as every other type in this file. `null` on the item when its line carried no course.
- */
+/** The course a queue item was fired for; `null` on the item when its line carried no course. */
 export interface StationQueueCourse {
   id: string;
   name: string;
@@ -890,44 +669,29 @@ export interface StationQueueCourse {
 }
 
 /**
- * One order's lines at a station, grouped for the per-station display (KDS-1 §3c) — the order's id and
- * operator `label`, the `queuedAt` of its OLDEST line at this station (the group's oldest-first
- * ordering key + the age-colouring anchor), and the lines themselves. A LOCAL mirror of the server's
- * `StationQueueGroup` (`apps/server/src/working-order.ts`), NOT imported — same bundle-decoupling
- * rationale as every other type in this file. The per-line/per-station successor to the removed
- * `PrepQueueEntry` (which was one row per order); the reworked `GET /api/stations/:id/queue` returns
- * these grouped by order, oldest first.
+ * One order's lines at a station. `queuedAt` is that of the order's OLDEST line at this station — the
+ * group's ordering key and the age-colouring anchor.
  */
 export interface StationQueueGroup {
   orderId: string;
   orderNumber: number;
   label: string | null;
   queuedAt: string;
-  /** The order's own status (KDS-1 collect fix). Every order on the queue is non-abandoned and not
-   *  yet collected (the server filters both), so the display reads COLLECTABLE off this alone: a
-   *  `settled` order is a Mode-P pickup awaiting its counter handover ({@link TillApi.markCollected}). */
+  /** The order's own status. Abandoned and collected orders are excluded server-side, so a `settled`
+   *  order here is a pickup awaiting its counter handover ({@link TillApi.markCollected}). */
   status: WorkingOrderStatus;
   items: StationQueueItem[];
-  /** This station's order-timing thresholds (KDS order-timing alerts, design §3/§6/§11) — every group
-   *  from one `getStationQueue` call shares the same station, hence the same thresholds, but they ride
-   *  per-group (not a separate fetch) so the widget's `TickingClock` can re-derive {@link queuedAt}'s
-   *  band locally between refreshes, via `classifyBand` (`@waitron/shared`). A LOCAL-mirror field like
-   *  every other one in this file — the server's `StationQueueGroup` (`apps/server/src/working-order.ts`)
-   *  is the source of truth. */
+  /** This station's order-timing thresholds. Every group from one call shares them; they ride
+   *  per-group so the widget can re-derive {@link queuedAt}'s band locally between refreshes
+   *  (`classifyBand`, `@waitron/shared`). */
   thresholds: StationThresholds;
 }
 
 /**
- * `POST /api/device/join` success (device-join-and-accept §2) — what a knock learns: the pending
- * REQUEST's id and the two-digit number an admin picks out of three in the dashboard to approve it.
- * Nothing about the venue rides this response — no profiles, no stations, no registers — because the
- * profile and the binding are chosen in the dashboard's accept dialog. The device TOKEN is absent too:
- * it leaves the server ONLY in the httpOnly `Set-Cookie`.
- * `joinId` IS the id the device will have once accepted — `acceptDeviceJoinRequest` carries the
- * request's id onto the `devices` row (`apps/server/src/join-requests.ts`), which is why the join
- * response alone is enough for the screen to announce its own `deviceId`.
- * A LOCAL mirror of the server's response, NOT imported — the same bundle-decoupling rationale as
- * every other type in this file.
+ * `POST /api/device/join` success: the pending REQUEST's id and the two-digit number an admin picks out
+ * of three in the dashboard to approve it. The device token leaves the server ONLY in the httpOnly
+ * `Set-Cookie`. `joinId` IS the id the device will have once accepted — `acceptDeviceJoinRequest`
+ * carries the request's id onto the `devices` row (`apps/server/src/join-requests.ts`).
  */
 export interface DeviceJoinResult {
   joinId: string;
@@ -935,65 +699,42 @@ export interface DeviceJoinResult {
 }
 
 /**
- * `GET /api/device/join/status` success (device-join-and-accept §2) — the three answers a waiting
- * joiner can get. `not_approved` folds denied, lapsed and never-existed together: the joiner's
- * recovery is to knock again in every one of those cases (`apps/server/src/device-api.ts`).
+ * `GET /api/device/join/status` success. `not_approved` folds denied, lapsed and never-existed
+ * together: the joiner's recovery is to knock again in every one of those cases.
  */
 export interface DeviceJoinStatus {
   status: "pending" | "approved" | "not_approved";
 }
 
 /**
- * `GET /api/device/me` success (device-identity §3b, handheld-tableside Task 4) — the enrolled device's
- * own NON-SECRET identity: its `deviceId`, its `formFactor` (`kds` for a kitchen display, `till` for a
- * counter till, `phone-portrait`/`tablet-landscape` for a waiter handheld), its `name` (the human
- * label shown on the login screen), and the `stationId` it is bound to (`null` for a form factor that
- * binds no station). Read once on boot ({@link TillApp}'s device probe) to decide which shell the till
- * boots into (via {@link kindOfFormFactor}). A LOCAL mirror of the server's response, NOT imported —
- * the bundle-decoupling rule. `formFactor` is a plain `string` (not a union): the client only branches
- * on the values it knows (treating any other as "not a special device"), so a server that adds a form
- * factor never breaks an older client.
- *
- * SP-A.2 §16 added the device's assigned TILL + static HARDWARE bindings to the response. They
- * are mirrored here as OPTIONAL — so an older payload without them is still valid, exactly the
- * graceful-widening rule the rest of this file follows. All non-secret config; the reader's credentials
- * never ride this response. (The canvas is no longer a device field — it resolves through the device
- * profile at `GET /api/till` since the Task 10 cutover — so it is not mirrored here.)
+ * `GET /api/device/me` success — the enrolled device's own NON-SECRET identity, read on boot to choose
+ * which shell the till boots into (via {@link kindOfFormFactor}). `formFactor` is a plain `string`, not
+ * a union: the client branches only on the values it knows, so a new server form factor never breaks
+ * an older client.
  */
 export interface DeviceIdentity {
   deviceId: string;
   formFactor: string;
   name: string;
   stationId: string | null;
-  /** The `tills` row a sale-capable device rings against (§16.4); `null` for a `kds_station`. */
+  /** The `tills` row a sale-capable device rings against; `null` for a `kds_station`. */
   tillId?: string | null;
-  /** The per-device receipt printer (§16.3); `null` when none. */
+  /** The per-device receipt printer; `null` when none. */
   receiptPrinterId?: string | null;
-  /** Whether this device has a cash drawer (§16.3). */
   hasCashDrawer?: boolean;
 }
 
 /**
- * `GET /api/device/station` success (device-identity-1 §5a) — the enrolled display's OWN bound station:
- * its `id` and current `queue` (grouped by order, the SAME {@link StationQueueGroup} shape the
- * session-gated `getStationQueue` returns). The station is fixed by enrolment, so there is no picker and
- * no id to pass — the device cookie names it server-side. A LOCAL mirror of the server's response, NOT
- * imported (the bundle rule).
+ * `GET /api/device/station` success — the enrolled display's OWN bound station and its queue. The
+ * device cookie names the station, so there is no id to pass.
  */
 export interface DeviceStation {
   station: { id: string; queue: StationQueueGroup[] };
 }
 
 /**
- * The SP-C dev per-tab device chooser's list (the dev-only `GET /api/dev/devices` route, honoured
- * server-side ONLY in devMode). {@link DevDeviceList} is what that route returns — this venue's ACTIVE
- * enrolled devices, each labelled and carrying its derived `kind` (the server maps the profile's form
- * factor through `kindOfFormFactor`) plus its `tillId`/`stationId` bindings. A LOCAL mirror of the
- * server's dev-route shape (`apps/server/src/device-api.ts`), deliberately NOT imported — the same
- * bundle-decoupling rationale as every other type in this file. `kind` stays a plain `string` (not a
- * union): the chooser only surfaces the values the server sends, so a new device kind never breaks it.
- * The mint-and-adopt round trip and the option-source lists it used to carry are GONE — a dev tab joins
- * through the real `POST /api/device/join` flow, so the chooser only reads and labels the list.
+ * The dev-only `GET /api/dev/devices` list: this venue's ACTIVE enrolled devices, each with its derived
+ * `kind`.
  */
 export interface DevDevice {
   id: string;
@@ -1008,13 +749,8 @@ export interface DevDeviceList {
 }
 
 /**
- * One item on the cross-station expo/pass board (KDS-3 §3a) — a fired-or-held ticket item carrying the
- * display fields the pass renders: the line's frozen kitchen `name` and its snapshotted `qty`, the
- * RESOLVED station name (the cross-station label {@link StationQueueItem} deliberately omits, so the
- * expediter sees the grill lagging the cold station), the kitchen `state`, and the `firedAt`/`awayAt`
- * lifecycle stamps. A LOCAL mirror of the server's `ExpoItem` (`apps/server/src/working-order.ts`), NOT
- * imported — same bundle-decoupling rationale as every other type in this file. `name` is the
- * server-resolved kitchen label, like {@link StationQueueItem.name}.
+ * One item on the cross-station expo/pass board. Unlike {@link StationQueueItem} it carries the RESOLVED
+ * `stationName`, so the expediter sees which station is lagging.
  */
 export interface ExpoItem {
   /** The dish's frozen answers to its options lists; absent on a line that answered none and on
@@ -1028,57 +764,34 @@ export interface ExpoItem {
   unitPrecision?: number | null;
   stationName: string;
   state: TicketState;
-  /** `null` while the item's course is HELD (the pass greys it); a timestamp once fired. */
+  /** `null` while the item's course is HELD; a timestamp once fired. */
   firedAt: string | null;
   /** `null` until the expediter dispatches it (`markCourseAway`); a timestamp once away to the floor. */
   awayAt: string | null;
-  /** The per-line kitchen customisation (order-line customisation, spec §2/§3) — the SNAPSHOTTED
-   *  `note` the server froze at fire, the same field {@link StationQueueItem.note} carries; the pass
-   *  renders it as sub-text. Optional/`null`/absent (⇒ nothing rendered) on an older payload or a
-   *  plain line. */
+  /** The kitchen note as frozen at fire, as {@link StationQueueItem.note}. */
   note?: string | null;
-  /** The dish's selected options (ordering modifiers), in selection order — rendered as indented `+
-   *  <name>` sub-text beneath this item (Task 14), the same {@link QueueModifier} shape the per-station
-   *  display renders. Optional/absent on an older payload or a plain-dish fixture, treated identically
-   *  to an empty array — a modifier-free item renders exactly as before. */
+  /** The dish's selected options, in selection order; absent reads as none. */
   modifiers?: QueueModifier[];
-  /** The dish's OWN allergen profile — the same product-own figure {@link StationQueueItem.asServed}
-   *  carries; the pass renders its codes as "contains" chips and a "not reviewed" note when
-   *  {@link AsServedAllergens.pending}. Optional/absent (⇒ nothing rendered) on an older payload or a
-   *  plain-dish fixture. */
+  /** The dish's OWN allergen profile; absent renders nothing. */
   asServed?: AsServedAllergens;
-  /** The dish's OWN diet profile — the same product-own figure {@link StationQueueItem.asServedDiet}
-   *  carries; the pass renders diet badges + contains chips and a neutral "not reviewed" note when
-   *  pending. Optional/absent (⇒ nothing rendered). */
+  /** The dish's OWN diet profile; absent renders nothing. */
   asServedDiet?: DietProfile;
   /**
-   * This item's own `ticket_items.queued_at` (KDS order-timing alerts, design §3/§6/§11), ISO —
-   * UNLIKE {@link StationQueueGroup.thresholds} this rides PER ITEM: a single expo order's items can
-   * span several stations, each with its own thresholds, so the pass classifies each item against ITS
-   * OWN station rather than a single order-wide clock. `till-expo-screen`'s `TickingClock` re-derives
-   * the live band from this plus {@link thresholds} between refreshes (`classifyBand`,
-   * `@waitron/shared`), the same re-tick shape `StationQueueGroup.queuedAt` already drives. A LOCAL
-   * mirror field like every other one in this file — the server's `ExpoItem`
-   * (`apps/server/src/working-order.ts`) is the source of truth.
+   * This item's own queued-at, ISO. Unlike {@link StationQueueGroup.thresholds} the timing rides PER
+   * ITEM: one expo order's items can span several stations, each with its own thresholds.
    */
   queuedAt: string;
-  /** This item's OWN station's order-timing thresholds — per item, not per order, because one order's
-   *  items can span several stations each with different thresholds (see {@link queuedAt}). */
+  /** This item's OWN station's order-timing thresholds (see {@link queuedAt}). */
   thresholds: StationThresholds;
-  /** This item's age band against its own station's thresholds, computed on the DB clock at fetch
-   *  time. Not read by `till-expo-screen`, which derives the band from {@link queuedAt} and
-   *  {@link thresholds}. */
+  /** This item's age band on the DB clock at fetch time. Not read by `till-expo-screen`, which derives
+   *  the band from {@link queuedAt} and {@link thresholds}. */
   band: TimingBand;
 }
 
 /**
- * One course section of an expo order (KDS-3 §3a) — the order's items for one course, ordered by
- * `displayOrder` (a null course has `courseId`/`courseName`/`displayOrder` null and sorts EARLIEST, the
- * same null-first coursing {@link StationQueueGroup} renders). Two roll-up flags drive the pass's
- * per-course lever: `fired` is true once EVERY item carries `firedAt` (so a held course reads `false` and
- * the pass offers Fire under `fire_control = 'expo'`); `away` is true once every item carries `awayAt`
- * (the drop-off signal the screen uses to retire the course). A LOCAL mirror of the server's `ExpoCourse`
- * (`apps/server/src/working-order.ts`), NOT imported — same bundle-decoupling rationale as every type here.
+ * One course section of an expo order; a null course has `courseId`/`courseName`/`displayOrder` null
+ * and sorts EARLIEST. `fired` is true once EVERY item carries `firedAt`; `away` once every item carries
+ * `awayAt`.
  */
 export interface ExpoCourse {
   courseId: string | null;
@@ -1090,14 +803,10 @@ export interface ExpoCourse {
 }
 
 /**
- * One open order on the cross-station expo/pass board (KDS-3 §3a) — its id, the human `orderNumber` and
- * optional dining-table label, how long it has been open (`openedMinutes`, the pass's urgency clock), and
- * its ticket items grouped BY COURSE in `displayOrder`. `tableLabel` is present only when the order maps
- * to a table (a tab back-pointer or a counter delivery); it is omitted for a bare walk-up (the `?`). A
- * LOCAL mirror of the server's `ExpoOrder` (`apps/server/src/working-order.ts`), NOT imported — same
- * bundle-decoupling rationale as every other type in this file. The server excludes abandoned/collected
- * and FULLY-away orders; a surviving order still carries all its items (away ones included), so the
- * SCREEN hides fully-away courses (via {@link ExpoCourse.away}), the read does not.
+ * One order on the cross-station expo/pass board, its items grouped BY COURSE. `tableLabel` is omitted
+ * when the order maps to no table. The server excludes abandoned, collected and FULLY-away orders; a
+ * surviving order still carries its away items, so the SCREEN hides fully-away courses (via
+ * {@link ExpoCourse.away}).
  */
 export interface ExpoOrder {
   orderId: string;
@@ -1105,27 +814,15 @@ export interface ExpoOrder {
   orderNumber: number;
   openedMinutes: number;
   courses: ExpoCourse[];
-  /**
-   * The worst age band across the order's UNSERVED lines, computed on the DB clock at fetch time
-   * (design §3 — a served line drops off the clock, so the reduction skips it; `"fresh"` when none
-   * are aging). A LOCAL mirror of the server's `ExpoOrder.worstBand`
-   * (`apps/server/src/working-order.ts`), NOT imported (the bundle rule). Not read by
-   * `till-expo-screen`, which derives the band from each item's `queuedAt` and thresholds.
-   */
+  /** The worst age band across the order's UNSERVED lines on the DB clock at fetch time. Not read by
+   *  `till-expo-screen`, which derives the band from each item's `queuedAt` and thresholds. */
   worstBand: TimingBand;
 }
 
 /**
- * `POST /api/pay` outcome (integrated card terminal, sub-project 7 Task 8). Mirrors the server's
- * `IntegratedPayOutcome` (`apps/server/src/till-sale.ts`) as a LOCAL copy — same decoupling rationale
- * as every other type in this file. A DELIBERATE divergence from {@link TillSaleResult}'s
- * throw-or-ticket shape: a decline/stall/offline-refusal is DATA, never a thrown `{ code }` — nothing
- * may block a sale on anything but the sale itself (CLAUDE.md §5) — so the caller branches on
- * `outcome` instead of catching. `timeout` now fires: the SumUp adapter reports a poll-window stall
- * as `attempting` (the row stays open for `resolvePending`), which {@link toPayOutcome} maps to
- * `timeout`; Stripe still collapses a stall into `declined`. The till renders `timeout` and
- * `declined` identically today (retry or take cash) — a deliberate single treatment, not a sign the
- * arm is dead.
+ * `POST /api/pay` outcome. Unlike {@link TillSaleResult}'s throw-or-ticket shape, a decline, stall or
+ * offline refusal is DATA, never a thrown `{ code }` — nothing may block a sale on anything but the
+ * sale itself (CLAUDE.md §5) — so the caller branches on `outcome` instead of catching.
  */
 export type PayOutcome =
   | { outcome: "captured"; ticket: TillSaleResult }
@@ -1133,14 +830,10 @@ export type PayOutcome =
   | { outcome: "timeout" }
   | { outcome: "network_unavailable" };
 
-/**
- * The four `absence_kind` enum members (`@waitron/workforce`'s `absenceKind`), a LOCAL union — never a
- * runtime import from the engine (the bundle rule, see the file header). The staff schedule screen's
- * kind picker offers these; the server re-validates against the real enum.
- */
+/** The `absence_kind` members; the server re-validates against the real enum. */
 export type AbsenceKind = "holiday" | "sick_leave" | "leave" | "unpaid";
 
-/** One of my upcoming shifts (`GET /api/schedule/shifts`; mirrors the server's `PersonShiftRow`). */
+/** One of my upcoming shifts (`GET /api/schedule/shifts`). */
 export interface MyShift {
   id: string;
   locationId: string;
@@ -1153,9 +846,8 @@ export interface MyShift {
 }
 
 /**
- * One swap I'm party to (`GET /api/schedule/swaps`; mirrors the server's `PersonSwapRow`). `direction`
- * says which side I'm on — `offered_to_me` (I can Accept it while `status === "requested"`) or
- * `requested_by_me` — and `status` its lifecycle stage.
+ * One swap I'm party to (`GET /api/schedule/swaps`). `direction` says which side I'm on:
+ * `offered_to_me` (I can accept it while `status === "requested"`) or `requested_by_me`.
  */
 export interface MySwap {
   id: string;
@@ -1168,7 +860,7 @@ export interface MySwap {
   direction: "offered_to_me" | "requested_by_me";
 }
 
-/** One of my absences, any status (`GET /api/schedule/absences`; mirrors the server's `PersonAbsenceRow`). */
+/** One of my absences, any status (`GET /api/schedule/absences`). */
 export interface MyAbsence {
   id: string;
   personId: string;
@@ -1180,12 +872,7 @@ export interface MyAbsence {
   createdAt: string;
 }
 
-/**
- * One active floor-plan zone from `GET /api/zones` (FP-1). A LOCAL mirror of the server's `FloorZone`
- * (`apps/server/src/tables.ts`), deliberately NOT imported — same bundle-decoupling rationale as every
- * other type in this file. The till only READS zones to render the live floor; zone CRUD is the
- * management API's, so this shape carries no create-side fields.
- */
+/** One active floor-plan zone from `GET /api/zones`. */
 export interface FloorZone {
   id: string;
   name: string;
@@ -1194,22 +881,13 @@ export interface FloorZone {
 }
 
 /**
- * One row of the live-floor occupancy read-model from `GET /api/tables/state` (FP-1, design §4). A LOCAL
- * mirror of the server's `TableState` (`apps/server/src/working-order.ts`'s `listTablesWithState` return),
- * NOT imported — same bundle-decoupling rationale as every other type in this file. The raw signals
- * (`hasOpenTab`, `pendingDeliveries`, `pendingToServe`, `readyToServe`) sit alongside the rolled-up
- * `state` so the floor plan can render a richer badge. `zoneId` is the `floor_zones` row this table sits
- * in, or null. The `tabId`/`tabLineCount`/`tabTotal` trio is present iff a tab is open (`hasOpenTab`);
- * `tabTotal` is the open tab's gross draft total as a two-place decimal string ("12.34") — the
- * `working_order_lines.line_total` column stores whole cents and the server converts the summed count
- * once, so the wire value is unchanged. `status` is the table's MANUAL
- * service status (a colour badge), independent of occupancy, or null. `pendingToServe` counts the open
- * tab's lines still to deliver (`served_at IS NULL`); `readyToServe` counts those the kitchen has bumped
- * `ready` but the waiter has not yet served (KDS-1 §3d, the floor's "N listos"); `enRoute` counts those
- * the pass has DISPATCHED (`away_at IS NOT NULL`) but the waiter has not yet acknowledged (KDS-3 §3c, the
- * floor's "en camino"). All three are DISTINCT from `pendingDeliveries` (uncollected counter deliveries).
- * The floor renders the MOST-ADVANCED hint per table — en camino (`enRoute`) over listos (`readyToServe`)
- * over por servir (`pendingToServe`).
+ * One row of the live-floor occupancy read-model from `GET /api/tables/state`. The
+ * `tabId`/`tabLineCount`/`tabTotal` trio is present iff a tab is open; `tabTotal` is the tab's gross
+ * draft total as a two-place decimal string. `status` is the table's MANUAL service status,
+ * independent of occupancy. `pendingToServe` counts the open tab's lines still to deliver,
+ * `readyToServe` those the kitchen has bumped `ready` but the waiter has not served, and `enRoute`
+ * those the pass has dispatched but the waiter has not acknowledged; all three are DISTINCT from
+ * `pendingDeliveries` (uncollected counter deliveries).
  */
 export interface TableState {
   id: string;
@@ -1226,37 +904,20 @@ export interface TableState {
   readyToServe: number;
   enRoute: number;
   /**
-   * The worst age band across the open tab's UNSERVED lines (KDS order-timing alerts, design §7.3) —
-   * `"fresh"` for a free table or one whose unserved lines are all still fresh. A LOCAL mirror of the
-   * server's `TableState.timingBand` (`apps/server/src/working-order.ts`'s `listTablesWithState`),
-   * NOT imported — same bundle-decoupling rationale as every other field in this file. UNLIKE
-   * {@link StationQueueGroup.thresholds}/{@link ExpoItem.thresholds}, the floor ships only the
-   * REDUCED worst band, not the raw per-line ages/thresholds `classifyBand` would need — so the live
-   * floor screen cannot re-derive a climbing band locally; the value is fixed until the next
-   * `getTablesState` fetch. Drives the floor's flash-red tile (`till-floor-screen`'s `#card`).
+   * The worst age band across the open tab's UNSERVED lines; `"fresh"` for a free table. Only the
+   * REDUCED band is sent, not the per-line ages and thresholds, so the floor cannot re-derive it
+   * locally: it is fixed until the next `getTablesState` fetch.
    */
   timingBand: TimingBand;
   status: { id: string; label: string; color: string } | null;
   /**
-   * The table's NEXT imminent `booked` reservation (Bookings-1 §4, reserved-on-floor) — its earliest
-   * reservation for the venue's TODAY at or after the grace floor (the venue's wall-clock rolled back a
-   * short window so a due/late guest's badge lingers), or `null`. The floor
-   * renders "Reserved HH:MM" from `time` (venue-local "HH:MM"). A LOCAL mirror of the server's
-   * `TableState.nextReservation` (`apps/server/src/working-order.ts`'s `listTablesWithState`), NOT
-   * imported — the same bundle-decoupling rationale as the siblings here. Non-optional `| null`,
-   * unconditionally present, matching `status`/`posX`. Data-minimisation: only `time` is projected —
-   * the floor badge renders "Reserved HH:MM" and nothing else, so the customer's party size / contact
-   * name are deliberately kept off every till device (server: `listTablesWithState`).
+   * The table's next imminent `booked` reservation today, or `null`. Only `time` (venue-local "HH:MM")
+   * is projected, so the party size and contact name are deliberately kept off every till device.
    */
   nextReservation: { time: string } | null;
   /**
-   * FP-2 spatial placement on the floor-plan canvas — canvas coordinates (0..1000 permille), the
-   * rendered `shape`, and `rotation` in degrees, or `null` for an unplaced table. A LOCAL mirror of the
-   * server's `TableState` placement fields (`apps/server/src/working-order.ts`'s `listTablesWithState`),
-   * NOT imported — same bundle-decoupling rationale as every other type in this file. Written by
-   * `setTablePlacement` / `clearPlacement`; the live-floor screen reads `posX != null` to decide whether
-   * a table is placed (map) or belongs in the unplaced tray. Non-optional `| null` (unconditionally
-   * present, `null` when unplaced), matching the `zoneId`/`capacity`/`status` siblings above.
+   * Placement on the floor-plan canvas — coordinates in 0..1000 permille, `rotation` in degrees — or
+   * `null` for an unplaced table.
    */
   posX: number | null;
   posY: number | null;
@@ -1264,21 +925,13 @@ export interface TableState {
   rotation: number | null;
 }
 
-/**
- * The rendered shape of a placed table (FP-2). A LOCAL union mirroring `@waitron/db`'s
- * `floorTableShape = enumType(["round", "square", "rect"])` and `@waitron/ui`'s `TableShape` —
- * deliberately NOT imported (the bundle-decoupling rule; a server round-trip re-validates against
- * the real vocabulary).
- */
+/** The rendered shape of a placed table; a server round-trip re-validates against the real vocabulary. */
 export type TableShape = "round" | "square" | "rect";
 
 /**
- * The body of a `PUT /api/tables/:id/placement` (FP-2, Task 4) — the four placement columns plus the
- * table's target zone. Mirrors the on-till route's parsed body (`apps/server/src/till-api.ts`); the
- * server re-validates every field (`placement.invalid` for an out-of-range coord / bad shape / bad
- * rotation, `zone.not_found` for a missing or inactive zone). `zoneId` is `| null` because the shared
- * canvas can emit a placement for a still-zoneless table — the server refuses it, so a `null` never
- * silently persists.
+ * The body of a `PUT /api/tables/:id/placement`; the server re-validates every field. `zoneId` is
+ * `| null` because the canvas can emit a placement for a still-zoneless table — the server refuses it,
+ * so a `null` never silently persists.
  */
 export interface TablePlacement {
   posX: number;
@@ -1288,104 +941,59 @@ export interface TablePlacement {
   zoneId: string | null;
 }
 
-/**
- * One pickable table service status (FP-1, TS-2) from `GET /api/statuses` — the ACTIVE-only
- * `{ id, label, color }` the table-order screen's Estado picker offers. A LOCAL mirror of the server's
- * `ServiceStatusOption` (`apps/server/src/tables.ts`), deliberately NOT imported — same bundle-decoupling
- * rationale as every other type in this file. Structurally identical to the inline `TableState.status`
- * shape, and re-exported by `till-table-order-screen` as its `.statuses` element type.
- */
+/** One ACTIVE table service status from `GET /api/statuses`, for the Estado picker. */
 export interface TableServiceStatus {
   id: string;
   label: string;
   color: string;
 }
 
-/**
- * `POST /api/tables/:id/tab` success (FP-1) — the newly opened tab's working-order id plus the per-node
- * order number the counter sees. Mirrors the server's `openTab` return (`apps/server/src/working-order.ts`).
- * `tabId` is the working-order id the live floor threads to `addTabRound`/`markLineServed`.
- */
+/** `POST /api/tables/:id/tab` success — the new tab's working-order id and its order number. */
 export interface TabResult {
   tabId: string;
   orderNumber: number;
 }
 
 /**
- * One line of an open tab from `GET /api/working-orders/:id/lines` (FP-1, design §3b) — what the
- * table-order screen renders per line. A LOCAL mirror of the server's `TabLine`
- * (`apps/server/src/working-order.ts`), deliberately NOT imported — same bundle-decoupling rationale as
- * every other type in this file. DISTINCT from {@link HeldOrder}'s `lines`, which mirror `SaleLine` in
- * full — not just `productId`/`quantity` — plus an optional `product`: the server's stored offer
- * snapshot for a contextual line, which the basket rebuild reuses verbatim; only a legacy line with no
- * snapshot falls back to a live catalogue match. A tab, by contrast, does NOT re-price at all:
- * `unitPriceGross` is the gross unit price LOCKED at add-time, carried back verbatim — never a
- * catalogue recompute. `servedAt` is the pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a
- * timestamp ⇒ "Servido"). The line's frozen
- * staff `name` comes back with it, and the screen's `#nameForLine` renders that name — the catalogue
- * prop is only the fallback for a payload that omits it. `quantity`/`unitPriceGross` are decimal
- * strings as the server sends them.
+ * One line of an open tab from `GET /api/working-orders/:id/lines`. A tab does NOT re-price:
+ * `unitPriceGross` is the gross unit price LOCKED at add-time. `servedAt` is the pre-fiscal served
+ * marker (`null` ⇒ still to serve).
  */
 export interface TabLine {
-  /** The line's frozen STAFF label — the variant's name on a variant line, else the product's,
-   * resolved server-side. A tab's line list is what a waiter reads, so it carries the same name the product
-   * buttons and the basket carry, never the customer-facing text a receipt prints. Absent only on a
-   * fixture that omits it, which falls back to the live catalogue name. */
+  /** The line's frozen STAFF label — the variant's name on a variant line, else the product's. Absent
+   * only on a fixture that omits it, which falls back to the live catalogue name. */
   name?: string;
   /** The dish's frozen answers to its options lists; absent on a line that answered none and on
    *  every child line. The six names per answer are the server's, copied by value. */
   optionSnapshots?: OptionSnapshot[];
   lineNo: number;
-  /** The line's product. `string | null` because the COLUMN is nullable
-   * (`working_order_lines.product_id`), NOT because a child line lacks a product: an extras child
-   * carries the PICKED product, which is what the kitchen cooks and the diner is charged for
-   * (spec §3.4, and the server's own note on `TabLine.productId`,
-   * `apps/server/src/working-order.ts`). Tell a child from a dish by {@link parentLineNo}, never by
-   * this field. */
+  /** The line's product. `string | null` because the COLUMN is nullable, NOT because a child line lacks
+   * a product: an extras child carries the PICKED product. Tell a child from a dish by
+   * {@link parentLineNo}, never by this field. */
   productId: string | null;
-  /** The `lineNo` of this row's PARENT dish when it is a CHILD extras line, else `null` on a
-   * top-level dish — the one field on this wire that tells the two apart, mirroring the server's
-   * `TabLine.parentLineNo` (`apps/server/src/working-order.ts`) and the same shape
-   * {@link TillSaleLine.parentLineNo} already uses on the settled-sale wire.
-   *
-   * OPTIONAL here, like `TillSaleLine`'s: the server sets it on every line of every tab it sends
-   * (`readTabLines` resolves it from the stored `parent_line_id`), so an absent value means a
-   * fixture that predates the field, and reads as a dish. */
+  /** The `lineNo` of this row's PARENT dish when it is a CHILD extras line, else `null` — the one field
+   * on this wire that tells the two apart. An absent value reads as a dish. */
   parentLineNo?: number | null;
   quantity: string;
-  /** How many decimal places the line's unit takes, frozen when it was rung (0 = sold by the unit),
-   * or null on an extras child. The split reads this, never the product: a line sold as a variant
-   * names the variant, which is not one of the till's products. Mirrors the server's
-   * `TabLine.unitPrecision`; OPTIONAL like {@link parentLineNo}, so a fixture that predates it reads
-   * as the storage limit of three places. */
+  /** How many decimal places the line's unit takes, frozen when it was rung (0 = sold by the unit), or
+   * null on an extras child. The split reads this, never the product: a line sold as a variant names
+   * the variant, which is not one of the till's products. Absent reads as three places. */
   unitPrecision?: number | null;
   unitPriceGross: string;
   servedAt: string | null;
-  /** The line's RESOLVED kitchen course (KDS-2), or null when it has none. The tab-order screen groups
-   * its waiter-fire actions by this (the course NAME comes from {@link TillInfo.courses}). Mirrors the
-   * server's `TabLine.courseId`, NOT imported (the bundle rule). */
+  /** The line's RESOLVED kitchen course, or null when it has none. */
   courseId: string | null;
-  /** When the line's kitchen ticket item FIRED, or null while its course is still HELD (KDS-2 §5b) — a
-   * course with any held line gets a "Fire <course>" action under `fire_control = 'waiter'`. Mirrors the
-   * server's `TabLine.firedAt`, NOT imported (the bundle rule). */
+  /** When the line's kitchen ticket item FIRED, or null while its course is still HELD. */
   firedAt: string | null;
-  /** The line's kitchen ticket item {@link TicketState}, or null when the line has no ticket item — the
-   * same LEFT-join edge {@link firedAt} documents. A child modifier line ALWAYS lacks one (the server
-   * never fires a modifier line to the kitchen). A parent line normally has one once fired/held, but can
-   * also lack one — e.g. a tab opened with an initial round (inserted without firing), or a line moved
-   * between tabs (merge/transfer re-inserts the line under a new id without re-firing it). Treat null as
-   * "no LIVE ticket item", not as impossible for a parent. Coursing corrections (C1): lets the till tell
-   * a RECALLABLE line (`firedAt` set, `state === "queued"`) from a CANCEL-only one (`state` "preparing"/
-   * "ready") — `firedAt === null` alone means held, not recallable. Mirrors the server's `TabLine.state`,
-   * NOT imported (the bundle rule). */
+  /** The line's kitchen ticket item state, or null when it has no LIVE ticket item. A child modifier
+   * line never has one; a parent line can lack one too, so null is not impossible for a parent. A
+   * RECALLABLE line has `firedAt` set and `state === "queued"`; "preparing"/"ready" is cancel-only. */
   state: TicketState | null;
 }
 
 /**
- * One entry in a TS-4 line transfer: which line to move and, for a PARTIAL move, how much of it. Omit
- * `quantity` (or pass the whole line quantity) for a whole-line move; a smaller decimal string splits the
- * line, the destination inheriting the same locked per-unit price. Mirrors the server's transfer entry
- * shape, NOT imported (the bundle rule).
+ * One entry in a line transfer. Omit `quantity` (or pass the whole line quantity) for a whole-line move;
+ * a smaller decimal string splits the line, the destination inheriting the same locked per-unit price.
  */
 export interface TabTransfer {
   lineNo: number;
@@ -1402,8 +1010,7 @@ export class TillApi {
   }>;
 
   /**
-   * @param baseUrl prefixed to every path (default `""`: same-origin, so the browser fetches
-   *   `/api/...` from the origin serving the app).
+   * @param baseUrl prefixed to every path (default `""`: same-origin).
    * @param fetchImpl the `fetch` to use (default the global; a test injects a stub).
    */
   constructor(baseUrl = "", fetchImpl: FetchLike = fetch) {
@@ -1419,15 +1026,9 @@ export class TillApi {
     return this.#request<ContentLanguages>("/api/content-languages", "GET");
   }
 
-  /**
-   * `GET /api/locales` — the venue's offered languages (per-user-language-preference, Task 4). PUBLIC
-   * (pre-login, like {@link getTill}): each `{ code, label }` is a `SUPPORTED_LOCALES` entry, and
-   * `venueDefault` the tenant's fallback locale. The language chooser reads the list; the app decides
-   * what to do with a pick, so the client only surfaces the shape.
-   */
+  /** `GET /api/locales` — the venue's offered languages and its fallback locale. Public (pre-login). */
   getLocales(): Promise<{ locales: Array<{ code: string; label: string }>; venueDefault: string }> {
-    // The list + venue default are immutable for this client's lifetime; fetch once and share.
-    // Cache the promise ONLY on success — clear it on rejection so a transient failure retries.
+    // Fetched once and shared; a rejection clears the cache so a transient failure retries.
     this.#localesPromise ??= this.#request<{
       locales: Array<{ code: string; label: string }>;
       venueDefault: string;
@@ -1451,22 +1052,14 @@ export class TillApi {
   }
 
   /**
-   * Persist the signed-in operator's OWN UI-language preference (per-user-language-preference) →
-   * `PUT /api/session/locale` with body `{ locale }`. Identity is the session's person server-side,
-   * so there is no id to pass; the route answers an empty 204, so this resolves void. An unsupported
-   * `code` rejects with `{ code: "locale.unsupported" }` (the server's one validation path). The app
-   * calls this ONLY while logged in — a pre-login pick is transient and never written.
+   * Persist the signed-in operator's OWN UI language → `PUT /api/session/locale`. The session names the
+   * person, so there is no id to pass. An unsupported `code` rejects with `locale.unsupported`.
    */
   async putLocale(code: string): Promise<void> {
     await this.#request<void>("/api/session/locale", "PUT", { locale: code });
   }
 
-  /**
-   * `GET /api/products` — the location's accessible menus + every sellable product across them (each
-   * tagged with its `catalogueId`). SESSION-guarded server-side. The app itself builds its grid from
-   * zone offers, not this route (see {@link ProductCatalogue}); it remains for the test harness's
-   * fixtures.
-   */
+  /** `GET /api/products` — see {@link ProductCatalogue}. */
   listProducts(): Promise<ProductCatalogue> {
     return this.#request<ProductCatalogue>("/api/products", "GET");
   }
@@ -1488,11 +1081,10 @@ export class TillApi {
   }
 
   /**
-   * Ring one sale over a persisted working order. `workingOrderId` is the pay-idempotency key: the
-   * till holds it stable across a lost-response retry, so a re-sent pay REPLAYS against the same
-   * `working_orders`/`sales` row rather than filing a second chained fiscal record (unrepairable — an
-   * invoice number is never reused). For a walk-up it is a fresh client-minted id; to pay a PARKED
-   * order the till sends that order's own id, so the settle lands on the retrieved order.
+   * Ring one sale over a persisted working order. `workingOrderId` is the pay-idempotency key: the till
+   * holds it stable across a lost-response retry, so a re-sent pay REPLAYS against the same row rather
+   * than filing a second chained fiscal record (unrepairable — an invoice number is never reused). To
+   * pay a PARKED order the till sends that order's own id.
    */
   recordSale(
     lines: SaleLine[],
@@ -1509,16 +1101,11 @@ export class TillApi {
   }
 
   /**
-   * Pay over the INTEGRATED card terminal (sub-project 7 Task 8) → `POST /api/pay`. Same
-   * pay-idempotency shape as {@link recordSale}: `id` is the till's stable working-order id, kept
-   * across a lost-response retry so a re-sent pay replays rather than filing a second chained fiscal
-   * record; `lines` is the walk-up basket to price and file, IGNORED server-side for a
-   * retrieved/placed order (it files its own stored locked lines). `tip` is the till-entered gross
-   * tip (clamped to none when the till has tips disabled); `allowOffline` is per-transaction staff
-   * consent to accept the card offline if the network is down. `readerId` (Task 17's picker) names
-   * the reader to collect on when the operator picked one other than the device default; omitted, the
-   * server falls back to the paying device's own default reader. Unlike `recordSale`, the outcome is
-   * always a 200 — see {@link PayOutcome}'s own doc for why a decline is data, not a throw.
+   * Pay over the INTEGRATED card terminal → `POST /api/pay`. `id` is the pay-idempotency key, as in
+   * {@link recordSale}; `lines` is ignored server-side for a retrieved or placed order, which files its
+   * own stored lines. `allowOffline` is per-transaction staff consent to accept the card offline.
+   * `readerId` names a reader other than the device default; omitted, the server uses the default. A
+   * decline is data, not a throw — see {@link PayOutcome}.
    */
   pay(req: {
     id: string;
@@ -1536,15 +1123,9 @@ export class TillApi {
   }
 
   /**
-   * Reprint a FILED sale's customer receipt (counter receipt/drawer §3d/§5) → `POST /api/sales/:id/reprint`
-   * with an empty body — the ticket screen's "Reprint" lever. `workingOrderId` is the till's own
-   * working-order id (the client-minted key it sent on `POST /api/sales`, the id `recordSale` returns
-   * against and the till still holds at the ticket stage); the server reads the ALREADY-FILED sale back by
-   * it and re-enqueues PAPER only, filing NOTHING (§4 — the fiscal record is untouched) and IGNORING the
-   * location's `receipt_print_mode` (a reprint is always available, §0). NON-FISCAL and idempotent: an id
-   * naming no filed sale, or a till with no active printer, is a 200 NO-OP. The server answers an empty 200
-   * (`c.body(null, 200)`), so this resolves void; the empty `{}` body mirrors the sibling
-   * {@link reprintOrder}/{@link markCollected} order-level verbs (the route parses none).
+   * Reprint a FILED sale's customer receipt → `POST /api/sales/:id/reprint`, by the till's own
+   * working-order id. Paper only: it files NOTHING and ignores the location's `receipt_print_mode`. An
+   * id naming no filed sale, or a till with no active printer, is a 200 no-op.
    */
   async reprint(workingOrderId: string): Promise<void> {
     await this.#request<void>(`/api/sales/${workingOrderId}/reprint`, "POST", {});
@@ -1561,42 +1142,30 @@ export class TillApi {
   }
 
   /**
-   * Manually open the cash drawer (counter receipt/drawer §3d/§5 + cash-drawer-authorization §5) →
-   * `POST /api/drawer/open` — the ticket screen's "Abrir cajón" lever, for a no-sale open (giving
-   * change, a cash count). SESSION-gated, AUTHORIZED and AUDITED server-side: it enqueues a kick-only
-   * outbox job to the till's receipt printer (the drawer IS that printer's kick) and records a
-   * `drawer_opens('manual')` row. It takes no id — the till's printer is resolved server-side from `cfg`.
+   * Open the cash drawer with no sale → `POST /api/drawer/open`. Authorized and audited server-side; the
+   * till's printer is resolved there, so it takes no id.
    *
-   * Under a `gated` drawer-open policy an operator whose role lacks `cash.drawer` is refused
-   * `{ code: "authorization.not_permitted" }` (403); the caller then fetches the eligible supervisors
-   * ({@link listDrawerAuthorizers}) and retries with an `override: { personId, pin }` — the authorizing
-   * supervisor's id and PIN. The `override` is sent in the body ONLY on this authenticated request (never
-   * a URL or query), and only when supplied — a permitted operator, and every `open`-policy open, sends
-   * none. A wrong PIN rejects `{ code: "pin.invalid" }` (401); a till with NO receipt printer rejects
-   * `{ code: "drawer.no_printer" }` (400). The server answers an empty 200 (`c.body(null, 200)`), so this
-   * resolves void; with no override the `{}` body mirrors the empty-200 POST siblings (the route parses
-   * an optional body).
+   * Under a `gated` policy an operator whose role lacks `cash.drawer` is refused
+   * `authorization.not_permitted` (403); the caller then fetches {@link listDrawerAuthorizers} and
+   * retries with `override: { personId, pin }` for the authorizing supervisor. The override travels
+   * ONLY in this request's body, never a URL, and only when supplied. A wrong PIN rejects `pin.invalid`
+   * (401); a till with no receipt printer `drawer.no_printer` (400).
    */
   async openDrawer(override?: { personId: string; pin: string }): Promise<void> {
     await this.#request<void>("/api/drawer/open", "POST", override ? { override } : {});
   }
 
   /**
-   * The eligible authorizers for a gated cash-drawer open (cash-drawer-authorization §5) →
-   * `GET /api/drawer/authorizers`. SESSION-gated (any logged-in operator may ask): the active persons
-   * whose role holds `cash.drawer`, as `{ personId, displayName }` only — the same no-secrets shape as
-   * {@link listStaff}. The caller shows them as a picker in the supervisor-override dialog; the chosen
-   * supervisor's PIN reaches only {@link openDrawer}'s authenticated request.
+   * The eligible authorizers for a gated drawer open → `GET /api/drawer/authorizers`: the active persons
+   * whose role holds `cash.drawer`, with no secrets.
    */
   listDrawerAuthorizers(): Promise<StaffMember[]> {
     return this.#request<StaffMember[]>("/api/drawer/authorizers", "GET");
   }
 
   /**
-   * Park a working order to pay later (park & retrieve, sub-project 7b) → `POST /api/working-orders`.
-   * `id` is client-minted (the till mints the working-order uuid) so a lost-response retry is
-   * idempotent against the primary key; `lines` carry no price — the server re-prices. Returns the
-   * persisted `{ id, orderNumber }` (the human order number the counter types back in to retrieve).
+   * Park a working order to pay later → `POST /api/working-orders`. `id` is client-minted so a
+   * lost-response retry is idempotent against the primary key; `lines` carry no price.
    */
   parkOrder(req: { id: string; lines: SaleLine[]; zoneId?: string; label?: string }): Promise<{
     id: string;
@@ -1614,89 +1183,74 @@ export class TillApi {
   }
 
   /**
-   * Retrieve one parked order to rebuild its basket → `GET /api/working-orders/:id`. An id naming no
-   * OPEN order rejects with `{ code: "working_order.not_found" }` (the server's 404).
+   * Retrieve one parked order → `GET /api/working-orders/:id`. An id naming no OPEN order rejects with
+   * `working_order.not_found`.
    */
   retrieveWorkingOrder(id: string): Promise<HeldOrder> {
     return this.#request<HeldOrder>(`/api/working-orders/${id}`, "GET");
   }
 
   /**
-   * Edit a parked order → `PUT /api/working-orders/:id`. A full REPLACEMENT: whatever `lines` +
-   * `label` are sent become the order's new state (`label` absent clears it). The server re-prices
-   * and answers an empty 200; only an `open` order may change (else `{ code: "working_order.not_open" }`).
+   * Edit a parked order → `PUT /api/working-orders/:id`. A full REPLACEMENT: the sent `lines` and
+   * `label` become the order's new state (`label` absent clears it). Only an `open` order may change
+   * (else `working_order.not_open`).
    */
   async updateWorkingOrder(id: string, req: { lines: SaleLine[]; label?: string }): Promise<void> {
     await this.#request<void>(`/api/working-orders/${id}`, "PUT", req);
   }
 
   /**
-   * Discard a parked order (`open → abandoned`) → `DELETE /api/working-orders/:id`. The server answers
-   * an empty 200; a non-open or unknown id rejects with `{ code: "working_order.not_open" }`.
+   * Discard a parked order (`open → abandoned`) → `DELETE /api/working-orders/:id`. A non-open or
+   * unknown id rejects with `working_order.not_open`.
    */
   async abandonWorkingOrder(id: string): Promise<void> {
     await this.#request<void>(`/api/working-orders/${id}`, "DELETE");
   }
 
   /**
-   * The deployment holds one tenant per database. Place a working order (7c, design §3) → `POST
-   * /api/working-orders/:id/place`. `open → placed`: freezes the order's composition and opens
-   * its amendment log; for Mode I also files a deferred (unpaid) chained invoice and returns its
-   * number, issue time, total, QR and VAT breakdown. A non-open id (already
-   * placed/settled/abandoned, or absent from this database) rejects with `{ code:
-   * "working_order.not_open" }`.
+   * Place a working order → `POST /api/working-orders/:id/place` (`open → placed`): freezes its
+   * composition and opens its amendment log; for `invoice_first` also files a deferred (unpaid) chained
+   * invoice. A non-open or absent id rejects with `working_order.not_open`.
    */
   placeOrder(id: string): Promise<PlaceOrderResult> {
     return this.#request<PlaceOrderResult>(`/api/working-orders/${id}/place`, "POST");
   }
 
   /**
-   * Collect and finalise a PLACED order (7c) → `POST /api/working-orders/:id/collect`. Mode I settles
-   * the already-issued deferred invoice with `tender`; Mode T files `recordSale` immediate from the
-   * order's stored (locked) lines — never a client basket. Returns the same ticket payload
-   * {@link recordSale} does. A non-placed id (still open, already settled and not idempotently
-   * replayable in a new way, or absent/foreign) rejects with `{ code: "working_order.not_placed" }`.
+   * Collect and finalise a PLACED order → `POST /api/working-orders/:id/collect`. `invoice_first`
+   * settles the already-issued invoice with `tender`; `ticket_then_pay` files from the order's stored
+   * lines — never a client basket. A still-open or absent id rejects with `working_order.not_placed`.
    */
   collectOrder(id: string, tender: Tender): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>(`/api/working-orders/${id}/collect`, "POST", { tender });
   }
 
-  /**
-   * The venue's ACTIVE kitchen stations (KDS-1, design §3f) → `GET /api/stations`. LIST-ONLY, by display
-   * order then name — the picker's catalogue for the station-display screen (session-gated; kitchen staff
-   * log in and pick a station). Station CRUD is the management API's, so this reads only.
-   */
+  /** The venue's ACTIVE kitchen stations → `GET /api/stations`, by display order then name. */
   listStations(): Promise<Station[]> {
     return this.#request<Station[]>("/api/stations", "GET");
   }
 
   /**
-   * One station's kitchen queue (KDS-1, design §3c) → `GET /api/stations/:id/queue`. This node's ticket
-   * items at that station, GROUPED BY ORDER (each group one order's lines at the station), oldest order
-   * first — what the display renders as kanban/rail. A malformed/unknown station id rejects with
-   * `{ code: "station.not_found" }`.
+   * One station's kitchen queue → `GET /api/stations/:id/queue`, grouped by order, oldest first. A
+   * malformed or unknown station id rejects with `station.not_found`.
    */
   getStationQueue(stationId: string): Promise<StationQueueGroup[]> {
     return this.#request<StationQueueGroup[]>(`/api/stations/${stationId}/queue`, "GET");
   }
 
   /**
-   * Advance ONE ticket item one kitchen step (KDS-1, design §3c) → `POST /api/ticket-items/:id/advance`
-   * with `{ to }` — the per-line bump that is the source of truth. `to` is the NEXT state
-   * (`queued → preparing → ready`); a skip/repeat/backwards move, or an absent/foreign item, rejects with
-   * `{ code: "ticket.invalid_transition" }`. The server answers an empty 200; re-read `getStationQueue`
-   * for the new state.
+   * Advance ONE ticket item one kitchen step → `POST /api/ticket-items/:id/advance`. `to` is the NEXT
+   * state; a skip, repeat or backwards move, or an unknown item, rejects with
+   * `ticket.invalid_transition`.
    */
   async advanceTicketItem(itemId: string, to: Exclude<TicketState, "queued">): Promise<void> {
     await this.#request<void>(`/api/ticket-items/${itemId}/advance`, "POST", { to });
   }
 
   /**
-   * Advance a WHOLE ticket (KDS-1, design §3c) → `POST /api/orders/:id/stations/:sid/advance` with
-   * `{ to }` — the convenience the `bump_mode = 'ticket'` venue setting drives, over the per-line truth.
-   * Advances every not-yet-`to` line of order `orderId` at station `stationId` to `to`. It NO-OPs on an
-   * empty match by design (bumping an already-advanced ticket is not an error), so unlike the per-line
-   * verb it never rejects on a transition; the server answers an empty 200. Re-read `getStationQueue`.
+   * Advance a WHOLE ticket → `POST /api/orders/:id/stations/:sid/advance`: every not-yet-`to` line of
+   * the order at the station. An empty match is a no-op, so unlike {@link advanceTicketItem} it never
+   * rejects on a transition.
    */
   async advanceTicket(
     orderId: string,
@@ -1708,263 +1262,197 @@ export class TillApi {
     });
   }
 
-  // --- Device mode (device-identity-1 §5a): the enrolled KDS station display + the join front door.
-  // These verbs need NO operator session — the httpOnly device cookie rides `credentials: "include"`
-  // (set by `join`'s Set-Cookie) exactly like the session cookie, so `#request`'s path is unchanged. ---
+  // --- Device mode: these verbs need NO operator session; the httpOnly device cookie rides
+  // `credentials: "include"` like the session cookie. ---
 
   /**
-   * Ask to join this venue (device-join-and-accept §2) → `POST /api/device/join` with `{ name }`.
-   * UNAUTHENTICATED and behind the enrol limiter. The server refuses with `device.pairing_closed`
-   * (403) unless an admin has pairing mode open, and otherwise sets an httpOnly cookie naming a
-   * pending REQUEST — inert until an admin matches the number this returns, because `requireDevice`
-   * finds no device row for that selector. A flood draws `device.join_rate_limited`; a venue already
-   * at its pending cap draws `device.join_full`.
+   * Ask to join this venue → `POST /api/device/join`. Unauthenticated. Refused `device.pairing_closed`
+   * (403) unless an admin has pairing mode open; otherwise sets an httpOnly cookie naming a pending
+   * REQUEST, inert until an admin approves it. A flood draws `device.join_rate_limited`; a venue at its
+   * pending cap `device.join_full`.
    */
   join(name: string): Promise<DeviceJoinResult> {
     return this.#request<DeviceJoinResult>("/api/device/join", "POST", { name });
   }
 
   /**
-   * Am I in yet? (device-join-and-accept §2) → `GET /api/device/join/status`, on the pending cookie the
-   * knock set. No new cookie follows an approval: accept carries the request's id onto the devices row,
-   * so the SAME cookie that named a request now names the device. A missing/malformed cookie rejects
-   * `{ code: "device.unauthorized" }` (401).
+   * Am I in yet? → `GET /api/device/join/status`. No new cookie follows an approval: the SAME cookie
+   * that named the request now names the device. A missing or malformed cookie rejects
+   * `device.unauthorized` (401).
    */
   joinStatus(): Promise<DeviceJoinStatus> {
     return this.#request<DeviceJoinStatus>("/api/device/join/status", "GET");
   }
 
   /**
-   * The enrolled display's OWN bound station + queue (device-identity-1 §5a) → `GET /api/device/station`.
-   * The device cookie names the station server-side (fixed at enrolment), so there is no id to pass. A
-   * missing/rejected/revoked cookie rejects `{ code: "device.unauthorized" }` (401) — the signal the
-   * station screen reads to re-boot through the join front door instead of rendering a queue.
+   * The enrolled display's OWN bound station and queue → `GET /api/device/station`. A missing, rejected
+   * or revoked cookie rejects `device.unauthorized` (401).
    */
   getDeviceStation(): Promise<DeviceStation> {
     return this.#request<DeviceStation>("/api/device/station", "GET");
   }
 
   /**
-   * This enrolled device's OWN identity (device-identity §3b, handheld-tableside Task 4) →
-   * `GET /api/device/me`. The device cookie names the device server-side, so there is no id to pass. The
-   * boot probe reads {@link DeviceIdentity.formFactor} (via `kindOfFormFactor`) to pick the till's
-   * shell (a handheld phone shell, a `kds` display, or a normal operator till). A missing/rejected/revoked cookie rejects
-   * `{ code: "device.unauthorized" }` (401) — the signal that this browser is not an enrolled device.
+   * This enrolled device's OWN identity → `GET /api/device/me`. A missing, rejected or revoked cookie
+   * rejects `device.unauthorized` (401) — the signal that this browser is not an enrolled device.
    */
   getDeviceIdentity(): Promise<DeviceIdentity> {
     return this.#request<DeviceIdentity>("/api/device/me", "GET");
   }
 
   /**
-   * Advance ONE of the bound station's ticket items one kitchen step (device-identity-1 §5a) → `POST
-   * /api/device/ticket-items/:id/advance` with `{ to }` — the device-scoped counterpart to
-   * {@link advanceTicketItem}, with NO session and NO station param (the cookie's own station is the only
-   * one it may touch). `to` is the next state (`preparing`/`ready`); the server answers an empty 204. An
-   * item at ANOTHER station rejects `{ code: "device.forbidden_station" }` (403); an illegal transition
-   * or unknown item `{ code: "ticket.invalid_transition" }`.
+   * Advance ONE of the bound station's ticket items → `POST /api/device/ticket-items/:id/advance`, the
+   * device-scoped {@link advanceTicketItem}: the cookie's own station is the only one it may touch. An
+   * item at ANOTHER station rejects `device.forbidden_station` (403); an illegal transition or unknown
+   * item `ticket.invalid_transition`.
    */
   async deviceAdvance(itemId: string, to: Exclude<TicketState, "queued">): Promise<void> {
     await this.#request<void>(`/api/device/ticket-items/${itemId}/advance`, "POST", { to });
   }
 
-  /** SP-C dev chooser: list this venue's ACTIVE enrolled devices (dev-only route, 404 outside devMode). */
+  /** Dev chooser: this venue's ACTIVE enrolled devices (dev-only route, 404 outside devMode). */
   getDevDevices(): Promise<DevDeviceList> {
     return this.#request<DevDeviceList>("/api/dev/devices", "GET");
   }
 
   /**
-   * FIRE a SETTLED order to the kitchen (KDS-1, design §3b) → `POST /api/working-orders/:id/prep` with no
-   * `to` — the Mode-P pickup for an order that pays at order and so never places (Modes I/T fire
-   * automatically when `placeOrder` runs). The server's reworked route no longer enqueues one order row;
-   * it fires the order's lines through `fireLines`, inserting one `ticket_items` row per line, each routed
-   * from its frozen service zone and snapshotted at fire time. A non-settled/absent/foreign
-   * id rejects `{ code: "working_order.not_settled" }`; a re-fire of an already-sent order
-   * `{ code: "ticket.already_fired" }`; incomplete routing `{ code: "route.missing" }`.
+   * FIRE a SETTLED order to the kitchen → `POST /api/working-orders/:id/prep` — for an order that pays
+   * at order and so never places. A non-settled or absent id rejects `working_order.not_settled`; a
+   * re-fire `ticket.already_fired`; incomplete routing `route.missing`.
    */
   async sendToPrep(id: string): Promise<void> {
     await this.#request<void>(`/api/working-orders/${id}/prep`, "POST", {});
   }
 
   /**
-   * Hand a SETTLED, fired order to the customer — Mode P's counter handover (KDS-1 §3e) →
-   * `POST /api/orders/:id/collect` with an empty body. NON-FISCAL: the server stamps the order-level
-   * `collected_at`, which drops the order off `getStationQueue` (the display shows an order until it is
-   * collected). It touches no sale/registro/tender — the order was paid + filed at settle — so this is
-   * DISTINCT from {@link collectOrder}, the placed → settled FISCAL collect on `/api/working-orders/:id/collect`.
-   * A non-settled/absent/foreign id rejects `{ code: "working_order.not_settled" }`, an already-collected
-   * order `{ code: "working_order.already_collected" }`, and one never fired `{ code: "ticket.not_fired" }`.
-   * The server answers an empty 200; re-read `getStationQueue` for the updated display.
+   * Hand a SETTLED, fired order to the customer → `POST /api/orders/:id/collect`. NON-FISCAL: it stamps
+   * `collected_at`, which drops the order off the station queue — DISTINCT from {@link collectOrder},
+   * the fiscal placed → settled collect. A non-settled or absent id rejects
+   * `working_order.not_settled`, an already-collected order `working_order.already_collected`, and one
+   * never fired `ticket.not_fired`.
    */
   async markCollected(id: string): Promise<void> {
     await this.#request<void>(`/api/orders/${id}/collect`, "POST", {});
   }
 
   /**
-   * Reprint an order's CURRENT kitchen tickets (KDS-4 §3d) → `POST /api/orders/:id/reprint` with an empty
-   * body — the "a jam ate the paper, print it again" lever on the station display + expo. A SESSION verb,
-   * NOT a device verb: the reprint route is `requireSession`-gated (`apps/server/src/till-api.ts`), so it
-   * rides the operator session cookie like {@link markCollected}/{@link fireCourse}, never the httpOnly
-   * device cookie — an enrolled KDS display (device mode) has no session and would 401, so the callers
-   * hide it there (there is no device reprint route). NON-FISCAL and STATE-LESS: the server re-queries the
-   * order's currently-fired `ticket_items` and re-enqueues the whole current ticket through the SAME
-   * never-block outbox a fire uses — it touches no sale/registro/tender and changes no order state, so
-   * there is nothing to re-read. IDEMPOTENT — an order with no fired items enqueues nothing and is a 200
-   * no-op (no new error code). A malformed/unknown id rejects `{ code: "working_order.not_found" }`. The
-   * server answers an empty 200 (`c.body(null, 200)`), so this resolves void. The empty `{}` body mirrors
-   * the sibling order-level KDS verbs ({@link markCollected}/{@link fireCourse}); the route parses none.
+   * Reprint an order's CURRENT kitchen tickets → `POST /api/orders/:id/reprint`. A SESSION verb: there
+   * is no device reprint route. NON-FISCAL and changes no order state; an order with no fired items is a
+   * 200 no-op. A malformed or unknown id rejects `working_order.not_found`.
    */
   async reprintOrder(orderId: string): Promise<void> {
     await this.#request<void>(`/api/orders/${orderId}/reprint`, "POST", {});
   }
 
   /**
-   * FIRE a HELD course of an order (KDS-2 §3c/§5a) → `POST /api/orders/:id/courses/:courseId/fire` with
-   * an empty body — the operator's "release this course" action. NON-FISCAL: the server stamps
-   * `fired_at = now()` on every held item of this order + course, so they stop being greyed on the
-   * display and become advanceable; it touches no sale/registro/tender. IDEMPOTENT — a course with
-   * nothing held is a 200 no-op. A malformed/unknown course id rejects `{ code: "course.not_found" }`;
-   * a malformed order id `{ code: "working_order.not_found" }`. The server answers an empty 200; re-read
-   * {@link getStationQueue} for the released (now fired) items.
+   * FIRE a HELD course of an order → `POST /api/orders/:id/courses/:courseId/fire`. NON-FISCAL;
+   * idempotent — a course with nothing held is a 200 no-op. A malformed or unknown course id rejects
+   * `course.not_found`; a malformed order id `working_order.not_found`.
    */
   async fireCourse(orderId: string, courseId: string): Promise<void> {
     await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/fire`, "POST", {});
   }
 
   /**
-   * The cross-station EXPO/PASS queue (KDS-3 §3a) → `GET /api/expo/queue`. This node's OPEN orders,
-   * aggregated into courses ACROSS all stations (each item labelled with its station), oldest order
-   * first — what the pass/expo display renders as a card per order. The server excludes abandoned,
-   * collected and FULLY-away orders; the display re-reads after each fire/ready/away. READ-ONLY, no
-   * fiscal touch, no path param (the pass is the whole node's, so there is nothing to screen).
+   * The cross-station expo/pass queue → `GET /api/expo/queue`: orders aggregated into courses ACROSS all
+   * stations, oldest first. See {@link ExpoOrder} for what the server excludes.
    */
   getExpoQueue(): Promise<ExpoOrder[]> {
     return this.#request<ExpoOrder[]>("/api/expo/queue", "GET");
   }
 
   /**
-   * Bump a WHOLE course to `ready` across every station (KDS-3 §3b) → `POST
-   * /api/orders/:id/courses/:courseId/ready` with an empty body — the expediter's "this course is all
-   * plated" lever on the pass. NON-FISCAL: the server advances every FIRED, not-yet-`ready` item of this
-   * order + course to `ready`; it touches no sale/registro/tender. It is `advanceTicket`'s
-   * no-throw-on-empty bulk shape, so a course with nothing left to bump is a 200 no-op (a malformed
-   * order id is `working_order.not_found`, a malformed course id `course.not_found`). The server answers
-   * an empty 200; re-read {@link getExpoQueue} for the bumped items.
+   * Bump a WHOLE course to `ready` across every station → `POST
+   * /api/orders/:id/courses/:courseId/ready`: every FIRED, not-yet-`ready` item of the order and course.
+   * NON-FISCAL. A course with nothing left to bump is a 200 no-op; a malformed order id rejects
+   * `working_order.not_found`, a malformed course id `course.not_found`.
    */
   async bumpCourseReady(orderId: string, courseId: string): Promise<void> {
     await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/ready`, "POST", {});
   }
 
   /**
-   * DISPATCH a plated course to the floor (KDS-3 §3b) → `POST /api/orders/:id/courses/:courseId/away`
-   * with an empty body — the expediter's "this course is away" lever, the pass counterpart to
-   * {@link bumpCourseReady}. NON-FISCAL: the server stamps `away_at = now()` on every `ready` item of
-   * this order + course (idempotent — already-away items are skipped), which retires the course from the
-   * pass; it touches no sale/registro/tender. UNLIKE `ready`, it EXISTENCE-checks the course, so a
-   * malformed/unknown course id rejects `course.not_found` (404); a malformed order id
-   * `working_order.not_found`. The server answers an empty 200; re-read {@link getExpoQueue}.
+   * DISPATCH a plated course to the floor → `POST /api/orders/:id/courses/:courseId/away`: stamps
+   * `away_at` on every `ready` item of the order and course, skipping already-away ones. NON-FISCAL.
+   * UNLIKE {@link bumpCourseReady} it existence-checks the course, so a malformed or unknown course id
+   * rejects `course.not_found` (404); a malformed order id `working_order.not_found`.
    */
   async markCourseAway(orderId: string, courseId: string): Promise<void> {
     await this.#request<void>(`/api/orders/${orderId}/courses/${courseId}/away`, "POST", {});
   }
 
   /**
-   * Cancel a PLACED order (7c, spec §4) → `POST /api/working-orders/:id/cancel`. `placed → abandoned`,
-   * appending a logged `order_cancelled` amendment carrying `reason` — the accountable content, so an
-   * absent/blank reason rejects `{ code: "working_order.reason_required" }` before any transition. A
-   * non-placed or absent/foreign id rejects `{ code: "working_order.not_placed" }`.
+   * Cancel a PLACED order → `POST /api/working-orders/:id/cancel` (`placed → abandoned`), logging an
+   * `order_cancelled` amendment carrying `reason`. A blank reason rejects
+   * `working_order.reason_required` before any transition; a non-placed or absent id
+   * `working_order.not_placed`.
    */
   async cancelOrder(id: string, reason: string): Promise<void> {
     await this.#request<void>(`/api/working-orders/${id}/cancel`, "POST", { reason });
   }
 
-  // --- Live floor (FP-1): zones, occupancy read-model, served markers, tab open/round. All
-  // SESSION-GUARDED reads/writes; `served_at` is a PRE-FISCAL operational field (design H2), so the
-  // served markers below touch no fiscal path. ---
+  // --- Live floor. `served_at` is a PRE-FISCAL operational field, so the served markers touch no
+  // fiscal path. ---
 
-  /** The venue's ACTIVE floor-plan zones, by display order → `GET /api/zones` (FP-1). LIST-ONLY. */
+  /** The venue's ACTIVE floor-plan zones, by display order → `GET /api/zones`. */
   listZones(): Promise<FloorZone[]> {
     return this.#request<FloorZone[]>("/api/zones", "GET");
   }
 
-  /**
-   * The venue's ACTIVE service statuses for the table-order screen's Estado picker (FP-1) →
-   * `GET /api/statuses`. LIST-ONLY and active-only (a deactivated status can't be applied); status CRUD
-   * is the management API's. Operator-session-gated like the other floor reads.
-   */
+  /** The venue's ACTIVE service statuses → `GET /api/statuses`; a deactivated status can't be applied. */
   listStatuses(): Promise<TableServiceStatus[]> {
     return this.#request<TableServiceStatus[]>("/api/statuses", "GET");
   }
 
-  /**
-   * The live-floor occupancy read-model → `GET /api/tables/state` (FP-1, design §4). One row per active
-   * table with its derived `state`, the raw occupancy signals, the open tab's summary (when any), and the
-   * table's manual service status. Gathers tabs across NODES (a table lives at the venue, not the till).
-   */
+  /** The live-floor occupancy read-model → `GET /api/tables/state`, one row per active table. */
   getTablesState(): Promise<TableState[]> {
     return this.#request<TableState[]>("/api/tables/state", "GET");
   }
 
   /**
-   * Mark ONE line of an open tab as DELIVERED (`served_at = now()`) → `POST
-   * /api/working-orders/:orderId/lines/:lineNo/served` (FP-1, design §3b). The live floor's "this went
-   * out" tap — an operational verb, PRE-FISCAL (design H2): it never enters `registros`/`computeHuella`.
-   * The server answers an empty 200; re-read `getTablesState` for the new "N still to serve" count.
+   * Mark ONE line of an open tab as delivered → `POST /api/working-orders/:orderId/lines/:lineNo/served`.
+   * PRE-FISCAL: it never enters `registros`/`computeHuella`.
    */
   async markLineServed(orderId: string, lineNo: number): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}/served`, "POST");
   }
 
-  /**
-   * Clear ONE line's delivered marker (`served_at = NULL`) → `DELETE
-   * /api/working-orders/:orderId/lines/:lineNo/served` (FP-1) — the inverse of {@link markLineServed},
-   * for a mis-tap. Same PRE-FISCAL note; the server answers an empty 200.
-   */
+  /** Clear ONE line's delivered marker, for a mis-tap — the inverse of {@link markLineServed}. */
   async unmarkLineServed(orderId: string, lineNo: number): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}/served`, "DELETE");
   }
 
   /**
-   * Open the running tab on a table → `POST /api/tables/:tableId/tab` (FP-1, design §3a). `lines?` opens
-   * the tab with an initial round; absent, the tab opens empty (the body is `{}`, so the route still has
-   * JSON to parse). Returns the new tab's working-order id + order number. `table.not_found` /
-   * `table.inactive` / `tab.already_open` surface as a rejected `{ code }`.
+   * Open the running tab on a table → `POST /api/tables/:tableId/tab`. `lines` opens it with an initial
+   * round; absent, the tab opens empty and the body is `{}`, so the route still has JSON to parse.
+   * `table.not_found`, `table.inactive` and `tab.already_open` surface as a rejected `{ code }`.
    */
   openTab(tableId: string, lines?: SaleLine[]): Promise<TabResult> {
     return this.#request<TabResult>(`/api/tables/${tableId}/tab`, "POST", { lines });
   }
 
   /**
-   * Append a priced round to an open tab → `POST /api/working-orders/:orderId/round` (FP-1, design §3b).
-   * Prices each new line at add-time and appends WITHOUT re-pricing the existing lines. `lines` carry no
-   * price — the server prices them — but each MAY carry a `courseId` OVERRIDE the tab's course picker set
-   * (KDS-2 §5b); absent, the server applies the product's default course. The server answers an empty 200;
-   * `tab.not_open` (a non-open/absent tab) / `sale.empty_basket` (no lines) surface as a rejected `{ code }`.
+   * Append a round to an open tab → `POST /api/working-orders/:orderId/round`. The new lines are priced
+   * at add-time and the existing lines are NOT re-priced. `tab.not_open` and `sale.empty_basket` surface
+   * as a rejected `{ code }`.
    */
   async addTabRound(orderId: string, lines: RoundLine[]): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/round`, "POST", { lines });
   }
 
   /**
-   * Read one open tab's lines for the table-order screen → `GET /api/working-orders/:orderId/lines`
-   * (FP-1, design §3b). Each line carries its `lineNo`, `productId`, `quantity`, the LOCKED gross unit
-   * price (`unitPriceGross` — a tab does NOT re-price, so this is the add-time lock, never a recompute)
-   * and its `servedAt` marker (null ⇒ still to serve). A non-open/absent tab rejects with
-   * `{ code: "tab.not_open" }`; each line also carries the server's frozen staff `name` ({@link TabLine}),
-   * and the screen's own catalogue prop is only the fallback for a payload that omits it.
+   * Read one open tab's lines → `GET /api/working-orders/:orderId/lines`. A non-open or absent tab
+   * rejects with `tab.not_open`.
    */
   getTabLines(orderId: string): Promise<TabLine[]> {
     return this.#request<TabLine[]>(`/api/working-orders/${orderId}/lines`, "GET");
   }
 
   /**
-   * Move ONE not-yet-fired line of an open tab into another course, or clear its course to `null`
-   * (coursing editing A1) → `PATCH /api/working-orders/:orderId/lines/:lineNo/course` with
-   * `{ courseId }`. `courseId` is a first-class `string | null` — `null` CLEARS the line's course
-   * override, sent as an explicit null, not an absent field. NON-FISCAL. `tab.not_open` (a malformed
-   * tab id) / `course.not_found` (an absent/foreign/retired target) / `tab.line_not_found` (an
-   * in-range line matching nothing) / `ticket.already_fired` (the line's ticket has already fired —
-   * correct via {@link recallLines}, not a move) surface as a rejected `{ code }`. The server answers
-   * an empty 200; re-read {@link getTabLines} for the new course.
+   * Move ONE not-yet-fired line into another course → `PATCH
+   * /api/working-orders/:orderId/lines/:lineNo/course`. `null` CLEARS the line's course and is sent as an
+   * explicit null, not an absent field. NON-FISCAL. Rejects `tab.not_open`, `course.not_found`,
+   * `tab.line_not_found`, or `ticket.already_fired` (correct a fired line via {@link recallLines}).
    */
   async setLineCourse(orderId: string, lineNo: number, courseId: string | null): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}/course`, "PATCH", {
@@ -1973,70 +1461,52 @@ export class TillApi {
   }
 
   /**
-   * Fire SPECIFIC held lines of an open tab (coursing editing A2) → `POST
-   * /api/working-orders/:orderId/lines/send` with `{ lineNos }` — a finer release than
-   * {@link fireCourse}'s whole-course fire. An empty/omitted `lineNos` releases every held line of the
-   * tab (send-all). NON-FISCAL: it writes only `ticket_items` (fired_at/queued_at) + the kitchen-print
-   * outbox, never a filed record. IDEMPOTENT — an unknown or already-fired line simply matches nothing.
-   * `tab.not_open` (a malformed/absent/non-open tab) surfaces as a rejected `{ code }`. The server
-   * answers an empty 200; re-read {@link getTabLines}/{@link getStationQueue} for the fired lines.
+   * Fire SPECIFIC held lines of an open tab → `POST /api/working-orders/:orderId/lines/send`. An empty
+   * `lineNos` releases every held line of the tab. NON-FISCAL; idempotent — an unknown or already-fired
+   * line matches nothing. Rejects `tab.not_open`.
    */
   async sendLines(orderId: string, lineNos: number[]): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/send`, "POST", { lineNos });
   }
 
   /**
-   * UN-send not-yet-started lines of an open tab (coursing editing A4) → `POST
-   * /api/working-orders/:orderId/lines/recall` with `{ lineNos }` — the inverse of {@link sendLines}.
-   * NON-FISCAL: it writes `ticket_items` (clearing `fired_at`) plus, for a previously-fired line, a
-   * RECALLED correction slip to the `print_jobs` outbox; never a filed record. `tab.not_open` (a
-   * malformed/absent/non-open tab) / `tab.line_not_found` (an
-   * absent line) / `ticket.already_started` (the kitchen has already started the line — preparing/
-   * ready, so it can no longer be recalled) surface as a rejected `{ code }`; an already-held line is
-   * a no-op. The server answers an empty 200; re-read {@link getTabLines} for the recalled lines.
+   * UN-send not-yet-started lines of an open tab → `POST /api/working-orders/:orderId/lines/recall`, the
+   * inverse of {@link sendLines}. NON-FISCAL; a previously-fired line gets a RECALLED correction slip.
+   * Rejects `tab.not_open`, `tab.line_not_found`, or `ticket.already_started` (the kitchen has started
+   * it); an already-held line is a no-op.
    */
   async recallLines(orderId: string, lineNos: number[]): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/recall`, "POST", { lineNos });
   }
 
   /**
-   * Cancel (VOID) ONE line of an open tab (coursing editing C5) → `DELETE
-   * /api/working-orders/:orderId/lines/:lineNo` (the server's `voidTabLine`). This is the cancel path for
-   * a line the kitchen has already STARTED — one that can no longer be {@link recallLines}'d — so the till
-   * gates it behind a consequence-naming confirm. NON-FISCAL: it edits the pre-fiscal working order (drops
-   * the line + its kitchen ticket item), never a filed record; the server prints a correction slip.
-   * `tab.not_open` (a malformed/absent/non-open tab) / `tab.line_not_found` (an absent line) surface as a
-   * rejected `{ code }`. The server answers an empty 200; re-read {@link getTabLines} after.
+   * Cancel (VOID) ONE line of an open tab → `DELETE /api/working-orders/:orderId/lines/:lineNo`: the
+   * cancel path for a line the kitchen has already STARTED, which can no longer be recalled. NON-FISCAL;
+   * the server prints a correction slip. Rejects `tab.not_open` or `tab.line_not_found`.
    */
   async voidLine(orderId: string, lineNo: number): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}`, "DELETE");
   }
 
   /**
-   * Set (or clear) a table's MANUAL service status → `POST /api/tables/:tableId/status` (FP-1, design
-   * §3b). Keyed by TABLE id, not order id — the status is a property of the table, independent of any
-   * open tab. `statusId` null CLEARS the badge (a first-class value the route accepts, sent as an
-   * explicit null). An unknown/malformed status id rejects `{ code: "status.not_found" }`, a
-   * deactivated one `{ code: "status.inactive" }`, a bad table id `{ code: "table.not_found" }`. The
-   * server answers an empty 200; re-read `getTablesState` for the new badge.
+   * Set or clear a table's MANUAL service status → `POST /api/tables/:tableId/status`. Keyed by TABLE
+   * id: the status belongs to the table, not to any tab. `null` CLEARS it, sent as an explicit null.
+   * Rejects `status.not_found`, `status.inactive` or `table.not_found`.
    */
   async setTableStatus(tableId: string, statusId: string | null): Promise<void> {
     await this.#request<void>(`/api/tables/${tableId}/status`, "POST", { statusId });
   }
 
   /**
-   * Relocate this tab's party to a FREE table (TS-3 move) → `POST /api/tabs/:tabId/move`. Frees the
-   * tab's current table(s) and points `toTableId` at the tab. NO line move, PRE-FISCAL. The server
-   * answers an empty 200; re-read `getTablesState`/`getTabLines` after. Rejects `{ code: "table.occupied" }`
-   * / `"table.inactive"` / `"table.not_found"` / `"tab.not_open"`.
+   * Relocate this tab's party to a FREE table → `POST /api/tabs/:tabId/move`. No line moves;
+   * PRE-FISCAL. Rejects `table.occupied`, `table.inactive`, `table.not_found` or `tab.not_open`.
    */
   async moveTab(orderId: string, toTableId: string): Promise<void> {
     await this.#request<void>(`/api/tabs/${orderId}/move`, "POST", { toTableId });
   }
 
   /**
-   * Extend this tab's coverage onto an ADDITIONAL free table (TS-3 join) → `POST /api/tabs/:tabId/join`.
-   * Both the original and the new table then point at the tab. NO line move, no status turnover,
+   * Extend this tab onto an ADDITIONAL free table → `POST /api/tabs/:tabId/join`. No line moves;
    * PRE-FISCAL. Same rejection codes as {@link moveTab}.
    */
   async joinTable(orderId: string, tableId: string): Promise<void> {
@@ -2044,22 +1514,20 @@ export class TillApi {
   }
 
   /**
-   * Combine ANOTHER open tab onto THIS bill (TS-3 merge) → `POST /api/tabs/:tabId/merge`, where `:id` is
-   * the DESTINATION (into) tab and `fromTabId` is the source that gets absorbed (its lines move here, it
-   * is then abandoned). `freeSourceTable` frees the vacated table (`true`) or re-points it at this tab
-   * (`false`). PRE-FISCAL. Rejects `{ code: "tab.not_open" }` / `"tab.merge_self"`.
+   * Combine ANOTHER open tab onto this one → `POST /api/tabs/:tabId/merge`, where the path names the
+   * DESTINATION tab and `fromTabId` the source, whose lines move here before it is abandoned.
+   * `freeSourceTable` frees the vacated table (`true`) or re-points it at this tab (`false`).
+   * PRE-FISCAL. Rejects `tab.not_open` or `tab.merge_self`.
    */
   async mergeTabs(orderId: string, fromTabId: string, freeSourceTable: boolean): Promise<void> {
     await this.#request<void>(`/api/tabs/${orderId}/merge`, "POST", { fromTabId, freeSourceTable });
   }
 
   /**
-   * Move SELECTED items OUT of this tab into another open tab (TS-4 transfer) → `POST
-   * /api/tabs/:tabId/transfer`, where `:id` is the SOURCE tab and `toTabId` the destination. Each entry
-   * omits `quantity` for a whole-line move or carries a `quantity` < the line's for a partial split (the
-   * locked per-unit price is carried, never re-priced). PRE-FISCAL. Rejects `{ code: "tab.not_open" }` /
-   * `"tab.transfer_self"` / `"tab.line_not_found"` / `"tab.transfer_quantity_invalid"` /
-   * `"tab.transfer_duplicate_line"`.
+   * Move SELECTED items OUT of this tab into another open tab → `POST /api/tabs/:tabId/transfer`, where
+   * the path names the SOURCE tab (see {@link TabTransfer}). PRE-FISCAL. Rejects `tab.not_open`,
+   * `tab.transfer_self`, `tab.line_not_found`, `tab.transfer_quantity_invalid` or
+   * `tab.transfer_duplicate_line`.
    */
   async transferLines(
     orderId: string,
@@ -2075,29 +1543,26 @@ export class TillApi {
   }
 
   /**
-   * Place (or re-place) a table on the FP-2 spatial floor plan → `PUT /api/tables/:tableId/placement`
-   * (Task 4's ON-TILL route, gated by the operator's OWN `venue.configure` role — NOT the management-api
-   * route). Writes the four placement columns + the target zone; the server re-checks the manager gate
-   * (client hiding is convenience only) and re-validates the values (`placement.invalid` /
-   * `zone.not_found` / `table.not_found` surface as a rejected `{ code }`). The route answers an empty
-   * 204, so this resolves void. The live-floor screen re-reads `getTablesState` after a successful call.
+   * Place a table on the floor plan → `PUT /api/tables/:tableId/placement`, gated by the operator's OWN
+   * `venue.configure` permission. The server re-checks the gate (client hiding is convenience only) and
+   * re-validates the values: `placement.invalid`, `zone.not_found` and `table.not_found` surface as a
+   * rejected `{ code }`.
    */
   async setTablePlacement(tableId: string, placement: TablePlacement): Promise<void> {
     await this.#request<void>(`/api/tables/${tableId}/placement`, "PUT", placement);
   }
 
   /**
-   * Un-place a table (NULL its four placement columns, leaving `zone_id` as-is) →
-   * `DELETE /api/tables/:tableId/placement` (Task 4's on-till route). Same manager gate as
-   * {@link setTablePlacement}; the route answers an empty 204, so this resolves void. `table.not_found`
-   * (a bad/absent id) surfaces as a rejected `{ code }`.
+   * Un-place a table (its four placement columns become null; its zone stays) →
+   * `DELETE /api/tables/:tableId/placement`. Same gate as {@link setTablePlacement}; an unknown id
+   * rejects `table.not_found`.
    */
   async clearPlacement(tableId: string): Promise<void> {
     await this.#request<void>(`/api/tables/${tableId}/placement`, "DELETE");
   }
 
-  // --- Staff schedule (the till-session-gated request path, `apps/server/src/schedule-api.ts`). The
-  // server takes the requester from the session, never from the request body. ---
+  // --- Staff schedule (`apps/server/src/schedule-api.ts`). The server takes the requester from the
+  // session, never from the request body. ---
 
   /** My shifts over a half-open `[from, to)` window (`YYYY-MM-DD`) → `GET /api/schedule/shifts`. */
   listMyShifts(from: string, to: string): Promise<MyShift[]> {
@@ -2110,9 +1575,8 @@ export class TillApi {
   }
 
   /**
-   * Request a swap → `POST /api/schedule/swaps`. Offer one of MY shifts (`fromShiftId`) to a colleague
-   * (`toPersonId`); `toShiftId` null is a one-sided give-away (the case this slice's UI files). A shift
-   * that is not mine rejects `{ code: "swap.not_permitted" }`. Returns the new swap's id.
+   * Request a swap → `POST /api/schedule/swaps`: offer one of MY shifts to a colleague; `toShiftId`
+   * null is a one-sided give-away. A shift that is not mine rejects `swap.not_permitted`.
    */
   requestSwap(req: {
     fromShiftId: string;
@@ -2123,9 +1587,8 @@ export class TillApi {
   }
 
   /**
-   * Accept a swap offered TO me → `POST /api/schedule/swaps/:swapId/accept`. Only the named recipient
-   * may accept; a swap not offered to me rejects `{ code: "swap.not_permitted" }`, one no longer
-   * `requested` `{ code: "swap.not_acceptable" }`. The server answers an empty 204.
+   * Accept a swap offered TO me → `POST /api/schedule/swaps/:swapId/accept`. A swap not offered to me
+   * rejects `swap.not_permitted`; one no longer `requested` `swap.not_acceptable`.
    */
   async acceptSwap(swapId: string): Promise<void> {
     await this.#request<void>(`/api/schedule/swaps/${swapId}/accept`, "POST");
@@ -2138,7 +1601,7 @@ export class TillApi {
 
   /**
    * Request an absence for myself → `POST /api/schedule/absences`. A range overlapping an existing
-   * absence rejects `{ code: "absence.overlaps" }`. Returns the new absence's id.
+   * absence rejects `absence.overlaps`.
    */
   requestAbsence(req: {
     kind: AbsenceKind;
@@ -2150,20 +1613,16 @@ export class TillApi {
   }
 
   /**
-   * The one request path every method funnels through. `credentials: "include"` on every call (the
-   * session cookie). A `body` is JSON-encoded and its `content-type` header set only when one is
-   * present, so a GET/DELETE carries neither. A non-2xx becomes a rejected `{ code, ...params, status }`
-   * read from the server's `{ error: { code } }` envelope — falling back to `server.internal` when the
-   * body is missing, non-JSON or names no code — so callers branch on a stable domain code, never on a
-   * raw message; `status` is the answered response's HTTP status, carried for the rare caller that needs it.
+   * The one request path every method funnels through. A non-2xx becomes a rejected
+   * `{ ...params, code, status }` read from the server's `{ error: { code, params } }` envelope, falling
+   * back to `server.internal` when the body names no code, so callers branch on a stable domain code;
+   * `status` is the answered HTTP status.
    *
-   * `fetchImpl` is read into a local before the call so it is invoked as a free function, not as a
-   * method of `this` (which would rebind a native `fetch`).
+   * `fetchImpl` is read into a local so it is invoked as a free function, not as a method of `this`
+   * (which would rebind a native `fetch`).
    *
-   * A 2xx with an EMPTY body resolves to `undefined` rather than being JSON-parsed: the working-order
-   * `PUT`/`DELETE` routes answer `204`-style empty 200s (`c.body(null, 200)`), on which `res.json()`
-   * would throw a `SyntaxError`. Those callers type `T` as `void`; every JSON route sends a body, so
-   * the non-empty branch parses exactly as before.
+   * A 2xx with an EMPTY body resolves to `undefined`, where `res.json()` would throw; a method
+   * whose route answers one types `T` as `void`.
    */
   async #request<T>(path: string, method: string, body?: unknown): Promise<T> {
     const fetchImpl = this.#fetchImpl;
@@ -2178,22 +1637,15 @@ export class TillApi {
           };
     const res = await fetchImpl(this.#baseUrl + path, init);
     if (!res.ok) {
-      // The body is untrusted: a gateway or a vanished route can answer a non-2xx as `text/plain`, on
-      // which `res.json()` throws, and the literal `null` is valid JSON, so a bare try/catch is not
-      // enough — the parsed value is checked for being an object before `.error` is read off it, and
-      // `code` is used only when it is a string. Any of these falls back to `server.internal` rather
-      // than surfacing a parse error to the caller as a fake network failure.
+      // The body is untrusted: it may not be JSON, and the literal `null` is valid JSON, so the parsed
+      // value is checked for being an object before `.error` is read off it.
       const parsed: unknown = await res.json().catch(() => undefined);
       const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined;
       const rawCode = envelope?.code;
       const code = typeof rawCode === "string" ? rawCode : "server.internal";
       const rawParams = envelope?.params;
       const params = isRecord(rawParams) ? rawParams : undefined;
-      // Spread the error's `params` FIRST so a caller can act on structured detail — the lock screen's
-      // `pin.throttled` countdown reads `retryAfterSeconds` off the thrown object — but let the
-      // validated `code` and the answered HTTP `status` overwrite anything of the same name inside
-      // `params`. The thrown `code` is guaranteed a validated string and `status` the real status, so a
-      // server (buggy or hostile) putting a `code`/`status` key in `params` cannot break the caller.
+      // `params` first, so a `code` or `status` key inside it cannot overwrite the validated ones.
       throw { ...params, code, status: res.status };
     }
     const text = await res.text();

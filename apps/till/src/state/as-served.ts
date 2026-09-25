@@ -1,23 +1,17 @@
-// Deep-import the SHARED derivation leaves, exactly as `working-order.ts` deep-imports `priceBasket`
-// from `@waitron/catalogue/src/pricing.js`: a barrel `import { … } from "@waitron/catalogue"` would
-// pull the package's runtime dependencies (drizzle, the DB layer) into the browser bundle. These are
-// runtime-dependency-free leaf modules, so the deep paths keep the bundle clean. Types come via
-// `import type`, fully erased at build.
+// Deep imports, not the barrel, which would pull the DB layer into the browser bundle.
 import { deriveDietProfile, overlayDietProfile } from "@waitron/catalogue/src/dietary.js";
 import { expandDietaryDeclarations } from "@waitron/catalogue/src/dietary-declarations.js";
 import type { DietaryLabel } from "@waitron/catalogue/src/dietary-declarations.js";
 import type { DietDerivation, DietOverride, DietProfile } from "@waitron/catalogue/src/dietary.js";
 import type { OrderLine } from "./working-order.js";
 
-/** The dish's own allergen profile: its declared set, and `pending` when the dish's own allergens are
- *  unreviewed (a null base). A local shape — catalogue's `AsServedAllergens` and the modifier fold it
- *  served are removed. Each extra's own list is shown separately (Task 4). */
+/** `pending` when the dish's own allergens are unreviewed (a null base). */
 interface AsServedAllergens {
   allergens: NonNullable<OrderLine["product"]["allergens"]>;
   pending: boolean;
 }
 
-/** The dish's OWN published allergens — no modifier contribution (removed in the nutrition redesign). */
+/** The dish's OWN allergens, with no modifier contribution: each extra's list is shown separately. */
 export function asServedAllergens(line: OrderLine): AsServedAllergens {
   return {
     allergens: line.product.allergens ?? {},
@@ -25,8 +19,7 @@ export function asServedAllergens(line: OrderLine): AsServedAllergens {
   };
 }
 
-/** The dish's OWN diet profile — recipe-derived, with no modifier overlay. Direct declarations take
- *  precedence; otherwise the product-level derivation (no overlays) plus any staff override. */
+/** The dish's OWN diet profile, with no modifier overlay. Direct declarations take precedence. */
 export function asServedDiet(line: OrderLine): DietProfile {
   if (line.product.dietaryDeclarations !== undefined) {
     const declarations = expandDietaryDeclarations(

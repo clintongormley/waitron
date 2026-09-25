@@ -1,9 +1,7 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { subscribeLocale } from "../i18n/t.js";
 
-/** Re-renders its host on a live locale switch — the i18n twin of
- * StoreChangeController. Add `new LocaleChangeController(this)` in a component
- * that renders translated text and must repaint when the language changes. */
+/** Re-renders its host on a live locale switch. */
 export class LocaleChangeController implements ReactiveController {
   readonly #host: ReactiveControllerHost;
   readonly #handler: () => void;

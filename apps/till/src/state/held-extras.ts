@@ -2,37 +2,21 @@ import type { HeldExtra, OfferedModifier } from "../api/client.js";
 import type { NotOfferedExtra, SelectedExtra } from "./working-order.js";
 
 /**
- * Put a retrieved order's extras back into a re-sendable selection.
+ * A held order's child lines name the picked product but not the list that offered it, while the
+ * wire names a list, so each pick is given the dish's first OFFERED list that carries the product.
+ * Two lists offering the same product is left deliberately at "the first one wins": the server
+ * cannot tell which list a stored child came off either (`docs/developers/modifiers.md`, "A picked
+ * product that more than one of the dish's ACTIVE lists offers refuses the pairing"). With NO list
+ * offering it the pick goes to `notOffered`, because no valid wire entry exists.
  *
- * A held order hands its extras back as VALUES — each CHILD line's picked product, its frozen name,
- * the price it was sold at and how many of it the dish takes — and a child holds no list id, because
- * an open order's child points at the product and not at the list that offered it (spec
- * `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.4/§3.5). The wire, though, names
- * a list per answer, so an edit has to find one: the dish's OFFERED list that carries the picked
- * product. `readOfferedModifiers` (`packages/catalogue/src/offered-modifiers.ts`) hands back ACTIVE
- * lists alone, so "offered" already means active here and nothing re-checks a flag.
- *
- * TWO lists offering the same product is left deliberately at "the first one wins". The server cannot
- * tell which list a stored child came off either, so it refuses the pairing whichever of them the
- * till names, and the refusal re-prices the WHOLE order rather than the one line
- * (`updateHeldOrder`, `apps/server/src/working-order.ts`) — documented behaviour, not a decision
- * this function can improve (`docs/developers/modifiers.md`, "A picked product that more than one of the dish's ACTIVE lists
- * offers refuses the pairing").
- *
- * NO list offering it is a different case, and there the pick goes to `notOffered`: no valid wire
- * entry exists at all, since `validateExtraSelections` (`packages/catalogue/src/extra-contract.ts`)
- * refuses a pick naming a product the list does not carry.
- *
- * The frozen `name` and `price` are carried through rather than re-read from today's offer: they are
- * what the order was written at, and what the basket must keep showing until the server re-prices.
+ * The frozen `name` and `price` are kept rather than re-read from today's offer: they are what the
+ * order was written at.
  */
 export function deriveExtraSelections(
   offered: readonly OfferedModifier[],
   heldExtras: readonly HeldExtra[] | undefined,
 ): { extras: SelectedExtra[]; notOffered: NotOfferedExtra[] } {
-  // Each picked product's list, resolved once for the whole line rather than re-scanned per pick.
-  // Written only when the product is unseen, which is what makes "the first offering list wins"
-  // above a stated rule rather than a property of whichever scan runs.
+  // Written only when the product is unseen: that is what makes the first offering list win.
   const listOfProduct = new Map<string, OfferedModifier>();
   for (const entry of offered) {
     if (entry.kind !== "extras") continue;
@@ -43,8 +27,7 @@ export function deriveExtraSelections(
   const extras: SelectedExtra[] = [];
   const notOffered: NotOfferedExtra[] = [];
   for (const held of heldExtras ?? []) {
-    // Lower-cased for the reason the two contracts lower-case an answer: the stored rows come back
-    // from their `uuid` columns lower-cased, so an id in any other case has to be folded first.
+    // Lower-cased, as the extras and options contracts lower-case an id they are sent.
     const productId = held.productId?.toLowerCase() ?? null;
     const list = productId === null ? undefined : listOfProduct.get(productId);
     if (list === undefined || productId === null) {
