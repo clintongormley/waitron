@@ -2817,12 +2817,34 @@ image constraints under *Detail → Box image*.
   in `till-app.ts`, `api/client.ts` and `widgets/card-grid.ts`; text inside `css` templates left)
   and `apps/server`'s errors, management, catalogue, configuration, purchasing and recipe files,
   part d of eight (#615, about 4,110 to about 1,340, parse-tree walk, tests included; five other
-  server files' pointers into the pruned text repointed).
+  server files' pointers into the pruned text repointed) and `apps/till/src/widgets`, part b of
+  four (#616, about 1,870 to about 725, parse-tree walk, tests included, plus stale twins of its
+  corrected claims in `till-app.ts`, `api/client.ts` and three screens; text inside `css` templates
+  left).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614 and #615 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615 and #616 and left for the package that owns each, all
   still OPEN:
+  - Found by #616 (`apps/till/src/widgets`), not fixable in a comments-only change. Test titles
+    repeat claims the branch corrected: `apps/till/src/screens/till-allergen-screen.test.ts`
+    "(escape/backdrop)" — `wt-dialog` closes on Escape and, measured in Playwright's Chromium 153,
+    not on a backdrop click — and `apps/server/src/working-order.test.ts` "lists the node's open
+    orders" (the list is venue-wide); `station-queue.test.ts` "(nothing to release)" is false for a
+    held line with no course, and several `station-queue`, `tender-pay` and `modifier-picker` test
+    titles carry task numbers. `css` comments in `apps/till/src/widgets/station-queue.ts` and
+    `screens/till-expo-screen.ts` still call the courseless group "auto-fired", as does
+    `apps/server/src/working-order.ts` (around line 4488, for its own part). For the till's
+    `api`/`state` part: `apps/till/src/state/working-order.ts`'s header says the preview total comes
+    from `priceBasket`, and `api/client.ts`'s expo-queue notes say "this node's OPEN orders" for a
+    queue that is venue-wide and includes placed orders. `apps/till/README.md` says the held list is
+    shared across the registers "on a node". Read, not run: a courseless section the server held
+    shows its lines greyed with no fire button (`#fireAction` in `station-queue.ts`, from #131);
+    `GET /api/till` never sends `stripe_on_device`, so the offline-consent toggle cannot appear;
+    `ReaderOption.online` is never set outside tests; `card-grid.ts` passes a
+    `.canExitToCounter=${false}` that `embedded` already makes irrelevant; the tab shell and the
+    supervisor dialog emit events not named `wt-*` (CLAUDE.md §3; not checked whether the rule
+    reaches till widgets).
   - Found by #615 (`apps/server` part d), outside its files or not fixable in a comments-only
     change. **The recipe routes and the recipe screen are unreached**: #345 (`f5c8e7b5f`) removed
     `mountRecipeApi` from `apps/server/src/boot.ts`, nothing outside tests mounts
@@ -2914,11 +2936,9 @@ image constraints under *Detail → Box image*.
     change. `apps/dashboard/src/widgets/language-chooser.ts` puts `aria-haspopup` and
     `aria-expanded` on the `wt-button` host, and `wt-button` does not pass them to its inner
     button, so a screen reader probably never hears them (read, not run). `reorder.test.ts`'s test
-    names say an out-of-range move "clamps"; `reorder()` ignores it. The same false comments are in
-    `apps/till`, for its own pruning pull request: "a runtime shape error a view test catches"
-    (`apps/till/src/api/client.ts:16`), and "a `wt-button` forwards only `disabled`/`aria-label`"
-    (`apps/till/src/widgets/language-chooser.ts:31`, `menu-switcher.ts:26`; it also sets
-    `aria-busy` from its `loading` property).
+    names say an out-of-range move "clamps"; `reorder()` ignores it. #616 fixed the till's copies of
+    "a `wt-button` forwards only `disabled`/`aria-label`"; "a runtime shape error a view test
+    catches" is still in `apps/till/src/api/client.ts:16`, for its own pruning pull request.
   - Found by #607 (`apps/dashboard/src/screens`), outside the screens folder; #610 fixed the
     dashboard's copies and #614 the till's "never send a personId". Still open: the fire-control modes are listed as
     `waiter`/`kitchen` only, leaving out `expo` (`fireControlMode`,
