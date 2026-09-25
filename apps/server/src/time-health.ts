@@ -8,9 +8,7 @@ export type TimeHealth = { synced: boolean; source: "timedatectl" | "unavailable
 
 export type CommandRunner = (cmd: string, args: string[]) => Promise<{ stdout: string }>;
 
-// The injected-runner tests cover every branch in `checkTimeHealth` below; the `?? defaultRun`
-// fallback and the default-parameter branch stay structurally uncovered by design — the real OS
-// shell-out here is environment-coupled and unreachable from a unit test, so it is v8-ignored.
+// The real OS shell-out is environment-coupled and unreachable from a unit test.
 /* v8 ignore start */
 const defaultRun: CommandRunner = (cmd, args) =>
   new Promise((resolve, reject) => {

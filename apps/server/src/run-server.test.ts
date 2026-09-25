@@ -32,7 +32,7 @@ describe("installShutdownHandlers", () => {
     h.handlers.get("SIGTERM")!();
     await vi.waitFor(() => expect(h.exit).toHaveBeenCalledWith(1));
     expect(h.written.join("")).toContain("server.shutdown_failed");
-    // The raw driver message can embed the connection string — it must not reach the sink.
+    // The caught value's own message must not reach the sink.
     expect(h.written.join("")).not.toContain("pool end failed");
   });
 
@@ -45,9 +45,7 @@ describe("installShutdownHandlers", () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
-  // A box's whole restart mechanism is SIGTERM → shutdown → exit → Docker restarts into trading mode.
-  // If close() hangs (a keep-alive socket, a stuck pool), the process must STILL exit or the box never
-  // comes back — the setup→trading hang seen on real hardware. A deadline forces the exit.
+  // A box restarts by SIGTERM → shutdown → exit → Docker restart, so a hung close() must still exit.
   it("forces exit when close() hangs past the shutdown deadline", () => {
     let fire: (() => void) | undefined;
     const exit = vi.fn();
@@ -76,8 +74,7 @@ describe("installShutdownHandlers", () => {
     expect(written.join("")).toContain("server.shutdown_timeout");
   });
 
-  // The deadline's exit must not depend on the log write completing — a stalled/broken stdout pipe
-  // must not be able to keep a wedged box from restarting. (The write callback is never invoked here.)
+  // The deadline's exit must not depend on the log write completing.
   it("forces exit even when the shutdown-timeout log write never completes", () => {
     let fire: (() => void) | undefined;
     const exit = vi.fn();
@@ -102,8 +99,6 @@ describe("installShutdownHandlers", () => {
     expect(exit).toHaveBeenCalledWith(0);
   });
 
-  // A rejected close() exits from the failure log's write callback so the line is not truncated —
-  // but a stalled pipe that never completes that write must not keep the box from restarting.
   function rejectingHarness(completeWrites: boolean) {
     let fire: (() => void) | undefined;
     const exit = vi.fn();

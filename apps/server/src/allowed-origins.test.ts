@@ -62,8 +62,7 @@ describe("createOriginAllowlist", () => {
     const calls = Array.from({ length: 10 }, () => allow("https://cloud.deli.test"));
     resolve(doc(["https://cloud.deli.test"]));
     const results = await Promise.all(calls);
-    // Single-flight: ten concurrent cold-cache callers share ONE in-flight read (§3.4 "at most once
-    // per TTL"), not ten.
+    // Single-flight: ten concurrent cold-cache callers share ONE in-flight read, not ten.
     expect(read).toHaveBeenCalledTimes(1);
     expect(results.every((r) => r === true)).toBe(true);
   });

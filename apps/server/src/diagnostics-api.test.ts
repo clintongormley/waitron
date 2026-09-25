@@ -30,10 +30,6 @@ const suite = useVenueDb({
 /** A no-op logger: only the HTTP responses matter here. */
 const noopLog: Logger = () => {};
 
-// This counter was here because tenants accumulated for the life of the shared PostgreSQL
-// container. They do not now: the suite gets its own database file and the per-test reset empties
-// `tenants` (`packages/db/src/testing/venue-db.ts`). It is kept because a distinct NIF per call
-// costs nothing and no assertion here reads its value.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -87,9 +83,8 @@ async function setupVenue(): Promise<Venue> {
   );
 
   const { managerSid, staffSid, supervisorSid } = await withTransaction(suite.db, async (tx) => {
-    // Seeded through the table definition rather than raw SQL: `persons.id` and `created_at` are
-    // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns
-    // are NOT NULL — the change `apps/server/src/alerts-api.test.ts:103` took.
+    // Through the table definition: `persons.id` and `created_at` are NOT NULL `$defaultFn`
+    // generators a raw insert never reaches.
     const seedPerson = async (role: PersonRoleValue): Promise<string> => {
       const [p] = await tx
         .insert(persons)

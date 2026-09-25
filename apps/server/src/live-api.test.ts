@@ -33,9 +33,8 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] })
 async function fixture() {
   await seedTenant(suite.db);
   const session = await withTransaction(suite.db, async (tx) => {
-    // Through the table definition, the change `apps/server/src/testing/fiscal-fixtures.ts` took:
-    // `persons.id` and `persons.created_at` are `$defaultFn` generators on this engine which a raw
-    // insert never reaches, and both columns are NOT NULL.
+    // Through the table definition: `persons.id` and `persons.created_at` are NOT NULL `$defaultFn`
+    // generators a raw insert never reaches.
     const [p] = await tx
       .insert(persons)
       .values({ displayName: "Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -80,8 +79,7 @@ describe("management live events", () => {
   it("does not extend the session and closes it when the next change finds it expired", async () => {
     const { app, path, cookie, bus, session } = await fixture();
     // The clock is read in JavaScript and the instant bound: this engine has neither `now()` nor an
-    // interval type. Each of these is one statement, so there is no transaction-start reading of
-    // `now()` that two statements had to share.
+    // interval type.
     const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
     await suite.db.execute(
       sql`update management_sessions set last_seen_at = ${tenMinutesAgo} where token_hash = ${hashSessionToken(session.token)}`,
@@ -312,8 +310,6 @@ it("delivers a write made outside withTransaction on the next transaction the pr
       .values({ name: "Probe", invoiceLocales: ["es"], operationDescription: "probe" })
       .returning({ id: locations.id });
     await suite.db.insert(diningTables).values({ locationId: location!.id, label: "T9" });
-    // No `::int`: `count(*)` already comes back as a JavaScript number here, and the cast operator
-    // is a syntax error to this parser (`unrecognized token: ":"`).
     const waiting = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from change_log`,
     );

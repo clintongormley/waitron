@@ -1,24 +1,7 @@
-// Self-contained, human-checkable demonstration of the recipes → allergen-inheritance seam: an
-// ingredient's EU 1169/2011 Annex II declaration flows onto every product whose recipe uses it, the
-// derived floor unions with the product's own manual overlay (add-only), and a single unreviewed
-// ingredient forces the whole product PENDING — end-to-end and headless.
-//
-// Modelled on `allergens-demo.ts` (a throwaway venue directory, self-migrating, tsx-run) rather
-// than on the real-database demo it sat beside: this demo never writes a fiscal record, so it
-// needs no fiscal backend, no AEAT and no SIF registration. Two migration sets carry everything it
-// touches — `catalogue` creates the catalogue tables and the `products.allergens` published column
-// with its `manual_allergens`/`recipe_derivation` overlays, and `core` the `ingredients` and
-// `recipe_lines` tables read and written here.
-//
-// SQLite has no roles and no grants: nothing below demonstrates who may write.
-//
-// It:
-// 1. makes a throwaway venue directory under the OS temp dir, applies the `core` and `catalogue`
-//    migration sets to it through `applyMigrations` (the entry point `dev-setup.ts` also uses),
-//    and removes the directory when it finishes;
-// 2. seeds nothing but what the story needs — the ingredients, catalogue and product below;
-// 3. walks the six-step story in one transaction, reading the PUBLISHED `products.allergens`
-//    column back after each mutation and asserting it matches.
+// Shows ingredient allergen declarations flowing onto a product through its recipe, in a throwaway
+// venue directory: the derived floor unions with the product's manual overlay (add-only), and one
+// unreviewed ingredient makes the whole product PENDING. Each step's published `products.allergens`
+// is checked, and a mismatch throws.
 //
 // The story (design D4 — floor ∪ manual, add-only, with PENDING contagion):
 //   3. setProductRecipe(bocadillo, [alioli, pan])            → {eggs, gluten}         (inherited floor)
@@ -29,9 +12,7 @@
 // `apps/*` is out of the english-only guard's scope, so the Spanish names (alioli, pan, misterio,
 // bocadillo) are fine here.
 //
-// Run it:
-//   pnpm --filter @waitron/server demo:recipes
-//   # or: pnpm --filter @waitron/server exec tsx scripts/recipes-demo.ts
+// Run it: pnpm --filter @waitron/server demo:recipes
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,13 +24,9 @@ import { createCatalogue, createProduct, updateProduct } from "@waitron/catalogu
 import type { ProductAllergens } from "@waitron/catalogue";
 import { createIngredient, setProductRecipe, updateIngredient } from "@waitron/recipes";
 
-/** The migration sets this demo applies, in manifest order — core carries `ingredients` and
- * `recipe_lines`, catalogue the products and their allergen columns. */
 const SETS = ["core", "catalogue"];
 
-/** Read the PUBLISHED declaration straight off the `products.allergens` column — the surface the till
- * sells from — after each recipe/manual change, as a Drizzle select. Returns null for a PENDING
- * product (and also for a missing id, but the ids here are all real). */
+/** The published column the till sells from. */
 async function readPublished(tx: Transaction, productId: string): Promise<ProductAllergens | null> {
   const [row] = await tx
     .select({ allergens: products.allergens })
@@ -58,8 +35,6 @@ async function readPublished(tx: Transaction, productId: string): Promise<Produc
   return row?.allergens ?? null;
 }
 
-/** Render a published declaration for the console: `PENDING (null)` when unreviewed, else the codes
- * with their presence, sorted so the line is stable regardless of map insertion order. */
 function format(a: ProductAllergens | null): string {
   if (a === null) return "PENDING (null)";
   const parts = Object.entries(a)
@@ -68,14 +43,10 @@ function format(a: ProductAllergens | null): string {
   return `{ ${parts.join(", ")} }`;
 }
 
-/** The sorted allergen codes of a published declaration, or the sentinel `["<pending>"]` for null —
- * so the expectation checks below compare code SETS and the pending state in one shape. */
 function codes(a: ProductAllergens | null): string[] {
   return a === null ? ["<pending>"] : Object.keys(a).sort((x, y) => x.localeCompare(y));
 }
 
-/** Print the actual published declaration, compare its code set to what the step expects, and THROW
- * on any mismatch — a demo that silently diverged from its own narration would be worse than none. */
 function expect(actual: ProductAllergens | null, expected: string[]): void {
   console.log(`  products.allergens = ${format(actual)}`);
   console.log(`  expected codes     = { ${expected.join(", ")} }`);
@@ -89,22 +60,16 @@ function expect(actual: ProductAllergens | null, expected: string[]): void {
 }
 
 async function main(): Promise<void> {
-  // A throwaway venue directory: the two SQLite files plus their write-ahead sidecars, removed at
-  // the end. The migrate goes through `applyMigrations`, which takes the DIRECTORY and opens it
-  // itself; `openVenueDatabase` then hands back the venue handle the story runs against.
   const venueDir = await mkdtemp(join(tmpdir(), "recipes-demo-"));
   const sets = manifestSets().filter((set) => SETS.includes(set.name));
   await applyMigrations(venueDir, migrationOptionsFor(sets, null));
   const store = await openVenueDatabase(venueDir);
   try {
-    // The whole story runs in one transaction: every op takes `tx`, and each read below sees the
-    // writes above it.
     await withTransaction(store.venue, async (tx) => {
       console.log("recipes-demo: allergen inheritance from ingredients to a product, end-to-end");
       console.log("");
 
-      // Step 1 — three ingredients: two reviewed, one deliberately UNREVIEWED (allergens omitted →
-      // null). The unreviewed one is what makes the product go PENDING in step 5.
+      // Step 1 — two reviewed ingredients and one unreviewed, which makes the product PENDING in step 5.
       const alioli = await createIngredient(tx, {
         name: "alioli",
         allergens: { eggs: { presence: "contains" } },
@@ -121,8 +86,7 @@ async function main(): Promise<void> {
       console.log(`  misterio → ${format(misterio.allergens)}  (unreviewed on purpose)`);
       console.log("");
 
-      // Step 2 — a product with NO manual allergens of its own. Its declaration is whatever its
-      // recipe derives (nothing, yet).
+      // Step 2 — a product with no manual allergens of its own.
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
       const bocadillo = await createProduct(tx, {
         catalogueId: cat.id,
@@ -131,22 +95,18 @@ async function main(): Promise<void> {
         pricingUnit: "each",
         unitPrice: "5.50",
         vatClass: "reduced",
-        // allergens omitted — no manual overlay; the recipe drives the published column.
       });
       console.log(`Step 2 — product "bocadillo" created with no manual allergens`);
       console.log(`  ${format(bocadillo.allergens)}`);
       console.log("");
 
-      // Step 3 — give it a recipe of the two REVIEWED ingredients. The published declaration is now
-      // the derived floor: eggs (from alioli) ∪ gluten (from pan).
+      // Step 3 — a recipe of the two reviewed ingredients: the derived floor.
       console.log("Step 3 — setProductRecipe(bocadillo, [alioli, pan])  → inherited floor");
       await setProductRecipe(tx, bocadillo.id, [alioli.id, pan.id]);
       expect(await readPublished(tx, bocadillo.id), ["eggs", "gluten"]);
       console.log("");
 
-      // Step 4 — add a MANUAL declaration on the product itself ("may contain nuts — shared slicer").
-      // The published column is add-only: the manual overlay UNIONS with the derived floor, it never
-      // subtracts. Result: eggs ∪ gluten ∪ nuts.
+      // Step 4 — a manual declaration unions with the derived floor; it never subtracts.
       console.log(
         'Step 4 — updateProduct(bocadillo, { allergens: "may_contain nuts (shared slicer)" })',
       );
@@ -156,9 +116,8 @@ async function main(): Promise<void> {
       expect(await readPublished(tx, bocadillo.id), ["eggs", "gluten", "nuts"]);
       console.log("");
 
-      // Step 5 — add the UNREVIEWED ingredient to the recipe. A single unreviewed ingredient poisons
-      // the whole derivation: the product publishes PENDING (null), never "allergen-free". This is the
-      // contagion rule — the manual `nuts` does NOT rescue it.
+      // Step 5 — one unreviewed ingredient makes the product PENDING; the manual `nuts` does not
+      // rescue it.
       console.log(
         "Step 5 — setProductRecipe(bocadillo, [alioli, pan, misterio])  → PENDING contagion",
       );
@@ -166,9 +125,7 @@ async function main(): Promise<void> {
       expect(await readPublished(tx, bocadillo.id), ["<pending>"]);
       console.log("");
 
-      // Step 6 — review the mystery ingredient. Tagging it (contains fish) propagates through every
-      // product whose recipe uses it: bocadillo republishes, no longer PENDING, and the newly-known
-      // fish joins the floor → eggs ∪ gluten ∪ fish, still ∪ the manual nuts.
+      // Step 6 — reviewing the ingredient republishes every product whose recipe uses it.
       console.log(
         "Step 6 — updateIngredient(misterio, { allergens: { contains fish } })  → propagation",
       );

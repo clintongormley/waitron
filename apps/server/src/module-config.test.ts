@@ -8,8 +8,6 @@ import { isEnabled, parseModuleConfig } from "@waitron/module";
 import { readModuleConfig, writeModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 
-// A real toggleable module name from ALL_MODULES to disable in the fixture (not a production
-// recommendation — a test fixture). Pick the first toggleable descriptor.
 const TOGGLEABLE = ALL_MODULES.find((m) => m.tier === "toggleable")!.name;
 
 let dir: string;

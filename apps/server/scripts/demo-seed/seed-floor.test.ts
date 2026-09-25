@@ -1,11 +1,8 @@
 /**
- * `seedFloor`: the floor-plan zones, the ~16 placed tables, and the four service statuses.
- *
- * SQLite has no roles, and every call below runs on the one handle. Nothing now checks who
- * may write the floor plan.
+ * `seedFloor`: the floor-plan zones, the placed tables, and the service statuses.
  *
  * `floor_zones.active` is read RAW below, and a raw read reaches no column mapper, so a boolean
- * column arrives as 0 or 1 rather than as `false`/`true`.
+ * column arrives as 0 or 1.
  */
 
 import { describe, expect, it } from "vitest";
@@ -27,15 +24,13 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// One NIF per provisioned venue. `useVenueDb`'s per-test reset empties every data table, so the
-// counter no longer keeps two tests apart; it keeps two `provisionVenue` calls within a test apart.
+// One NIF per provisioned venue.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(60_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** Provision a fresh chained venue (as the owner) and return the ids the seed needs. */
 async function provisionVenue(): Promise<{ locationId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -108,7 +103,6 @@ describe("seedFloor", () => {
     ]);
     expect(res.zones.every((z) => z.active === 1)).toBe(true);
 
-    // ~16 tables, each placed (a live zone, a capacity, and a full spatial placement).
     expect(res.tables.length).toBe(16);
     for (const table of res.tables) {
       expect(table.zone_id).not.toBeNull();
@@ -118,7 +112,6 @@ describe("seedFloor", () => {
       expect(table.shape).not.toBeNull();
     }
 
-    // Four statuses, in the authored order, each with its own colour.
     expect(res.statuses.map((s) => s.label)).toEqual([
       "Free",
       "Occupied",

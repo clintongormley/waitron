@@ -9,10 +9,7 @@ import type { Logger } from "./logger.js";
  *
  * A failed reset, whether its promise rejects or `reset` throws before returning one, does not
  * drain. It logs `drain.restart_reset_failed` once, and every pass waiting on that attempt reports
- * it in `skipped` with `nextDueAt` `skipRetryMs` later, the way the drain reports its own failures;
- * `pass.ts` logs `drain.tenant_skipped` for that entry, and leaves the awaiting-certificate flag as
- * it was because `tenantsWithWork` is 0 when the drain did not run. The next pass tries the reset
- * again.
+ * it in `skipped` with `nextDueAt` `skipRetryMs` later. The next pass tries the reset again.
  */
 export function resetBeforeFirstDrain({
   reset,

@@ -23,28 +23,11 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
-/**
- * The deps the staff schedule API needs: a database handle and nothing else. No fiscal backend,
- * clock or card provider — these routes touch only the identity session and the planning tables
- * (`shifts`/`shift_swaps`/`absences`). `mountWorkforceApi` takes a WIDER shape (it also carries the
- * node id); this one is genuinely just the handle.
- */
 export interface ScheduleApiDeps {
   db: Database;
 }
 
-/**
- * Every AppError code the schedule API answers, and its HTTP status. CLIENT faults only (a genuine
- * server fault reaches `run` as a NON-AppError → an opaque 500). `session.required` (no/expired
- * cookie) is 401; a malformed body/query field is `management.request_invalid` 400 and a malformed
- * path `:swapId` is `shared.invalid_id` 400 (the request-screens split); a cross-field bad interval (an
- * inverted absence range) is `absence.invalid` 400. The swap/shift/absence domain
- * codes carry their meaning — `swap.not_permitted` is a 403 (a permission fact: you may offer only your
- * own shift, supply only the recipient's own shift as the return leg, and accept only what is offered to
- * you — the three cases in errors.ts's `swap.not_permitted` doc), `swap.not_acceptable`/`absence.overlaps`
- * are 409 (exists but wrong state), the `not_found` pair 404. A registered code absent here defaults to
- * 400; the client codes are enumerated anyway so this map is the surface's whole 4xx contract.
- */
+/** The surface's whole 4xx contract; a registered code absent here defaults to 400. */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "session.required": 401,
   "management.request_invalid": 400,
@@ -60,16 +43,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const run = createErrorBoundary(STATUS, "schedule.failed");
 
 /**
- * Mounts the STAFF-FACING schedule request routes (prefix `/api/schedule`) — the counterpart to
- * the manager approval half. Every route resolves the requester via `requireSession(deps, c)`
- * FIRST and passes THAT `personId` into the verb; the request body is NEVER trusted for identity
- * (the crux of this surface — a staff member acts only as themselves). The verb then runs under
- * the till's tenant (`withTransaction`), in the database holding this tenant. The explicit
- * `person_id` predicate scopes the operation to the requester.
+ * Mounts the STAFF-FACING schedule request routes. Every route takes the requester's `personId` from
+ * `requireSession`, never from the request body: a staff member acts only as themselves.
  */
 export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger): void {
-  /** Run `fn` under the till's tenant — the one place withTransaction is expressed, so no route
-   * re-implements it. */
   const asStaff = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
       return fn(tx);
@@ -86,7 +63,6 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
     }),
   );
 
-  // The swaps the requester is party to (offered to them, or requested by them).
   app.get("/api/schedule/swaps", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
@@ -95,8 +71,7 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
     }),
   );
 
-  // Request a swap: offer one of MY shifts to a colleague (`toShiftId` null = a one-sided give-away).
-  // The requester is the session's person — never a body field.
+  // `toShiftId` null = a one-sided give-away.
   app.post("/api/schedule/swaps", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
@@ -116,8 +91,6 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
     }),
   );
 
-  // Accept a swap offered TO me — the acceptor is the session's person, so only the named recipient
-  // can accept (acceptSwap's own guard).
   app.post("/api/schedule/swaps/:swapId/accept", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
@@ -127,7 +100,6 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
     }),
   );
 
-  // The requester's OWN absences (every status).
   app.get("/api/schedule/absences", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
@@ -136,7 +108,6 @@ export function mountScheduleApi(app: Hono, deps: ScheduleApiDeps, log: Logger):
     }),
   );
 
-  // Request an absence for MYSELF — the person is the session's, never a body field.
   app.post("/api/schedule/absences", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);

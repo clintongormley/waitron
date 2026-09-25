@@ -60,10 +60,8 @@ export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
     b.line();
   }
   row("Importe", formatMoney(input.amount, input.invoiceLocale));
-  // A zero tip prints no line. The comparison is a string one because `tip` is a two-place decimal
-  // literal, never a stored count of cents: its one production source converts `tenders.tip_amount`
-  // at the row it reads (`payment-slip-print.ts`), and `centsToDecimal` always renders two places,
-  // so a zero tip is "0.00" and nothing else.
+  // A zero tip prints no line. `tip` comes from `centsToDecimal` (`payment-slip-print.ts`), which
+  // always renders two places, so a zero tip is "0.00" and nothing else.
   if (input.tip !== "0.00") row("Propina", formatMoney(input.tip, input.invoiceLocale));
   row("Cobrado", formatMoney(input.charged, input.invoiceLocale));
   return b.feedAndCut().bytes();

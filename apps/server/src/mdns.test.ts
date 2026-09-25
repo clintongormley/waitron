@@ -22,9 +22,7 @@ function fakeSocket() {
     respond,
     destroy,
     query: (q: { questions: { name: string; type: string }[] }) => queryHandler?.(q),
-    // Mirrors Node's EventEmitter: an `'error'` with no listener THROWS. So this stays quiet ONLY
-    // because `startMdnsResponder` registered a handler — which is exactly what the resilience test
-    // below proves by deletion (drop the `socket.on("error", …)` line and this throws again).
+    // Mirrors Node's EventEmitter: an `'error'` with no listener THROWS.
     emitError: (err: Error) => {
       if (errorHandler === undefined) throw err;
       errorHandler(err);
@@ -143,11 +141,8 @@ describe("mdns", () => {
   });
 
   it("logs a socket error without throwing", () => {
-    // A real `multicast-dns` instance surfaces a bind/membership failure (EADDRINUSE/EACCES on a host
-    // with no multicast route — some CI/containers) as an ASYNC `'error'` event; with no listener,
-    // Node throws it and kills the box. The box stays reachable by IP whether or not mDNS advertises,
-    // so this must be swallowed, not fatal: `startMdnsResponder` registers an `'error'` handler that
-    // logs `mdns.socket_error` and rethrows nothing.
+    // A bind/membership failure arrives as an ASYNC `'error'` event, which with no listener kills the
+    // box. The box stays reachable by IP without mDNS, so it must be swallowed, not fatal.
     const f = fakeSocket();
     const logged: Array<{ level: string; event: string; fields?: Record<string, unknown> }> = [];
     startMdnsResponder({
@@ -158,9 +153,6 @@ describe("mdns", () => {
       log: (level, event, fields) => logged.push({ level, event, fields }),
       makeSocket: () => f.socket,
     });
-    // The fake mirrors Node: `emitError` throws if no handler was registered. So `not.toThrow()`
-    // proves the handler exists AND swallows — delete the `socket.on("error", …)` line in mdns.ts and
-    // this throws (proof by deletion).
     expect(() => f.emitError(new Error("bind EADDRINUSE 0.0.0.0:5353"))).not.toThrow();
     expect(logged).toContainEqual({
       level: "warn",

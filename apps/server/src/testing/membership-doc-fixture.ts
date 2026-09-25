@@ -9,16 +9,8 @@ import {
 
 /**
  * A signed membership document at `term`, signed by `signerNodeId` (default "A") with a generated —
- * or caller-supplied — node identity key. Shared equivalent of the tiny local fixture several
- * membership suites hand-built independently: @waitron/membership's own `sampleBody`/`signDoc`
- * fixtures are package-internal (not on the barrel), so this is built from the exported
- * `signDocumentBody` rather than widening that package's surface.
- *
- * `nodes` defaults to a single serving-primary entry for the signer; pass it when the suite is about
- * the chart itself. Pass `keyPair` when the caller also needs to build a `TrustSet` mapping
- * `signerNodeId` to the same public key (`{ [signerNodeId]: keyPair.publicKey }`) — generate the pair
- * once at module scope, hand it to every `signedMembershipDoc` call, and derive the trust set from it
- * directly.
+ * or caller-supplied — node identity key. `nodes` defaults to a single serving-primary entry for the
+ * signer. Pass `keyPair` when the caller also builds a `TrustSet` for the same key.
  */
 export function signedMembershipDoc(
   term: number,

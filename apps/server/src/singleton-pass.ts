@@ -1,12 +1,9 @@
 import type { SingletonRole } from "@waitron/db";
 import type { PassReport } from "./pass.js";
 
-/** Wraps the fiscal/settlement pass so it runs ONLY when this node holds the singleton duties (its
- * `node_roles.singleton_role = 'primary'`). A mirror or a sell-only local secondary returns a
- * trivial empty pass — running drain/reconcile there would submit to AEAT / settle for a host that
- * must not (promotion runbook design §2/§3c; #33 §7). `getRole` is read PER PASS (not captured
- * once), so a later promotion that flips the holder starts the duties on the next tick, no
- * restart. */
+/** Runs the fiscal/settlement pass ONLY when this node holds the singleton duties
+ * (`node_roles.singleton_role = 'primary'`); any other node must not submit to AEAT or settle.
+ * `getRole` is read per pass, so a promotion starts the duties on the next tick without a restart. */
 export function singletonPass(
   getRole: () => SingletonRole,
   runPrimaryPass: (now: Date) => Promise<PassReport>,

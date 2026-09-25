@@ -18,11 +18,9 @@ import { listTablesWithState } from "./working-order.js";
 import { ALL_MODULES, enabledFloorAnnotators } from "./modules.js";
 import "./errors.js";
 
-// The MERGE (does `listTablesWithState` surface a booked row's time through the floor-annotator seat?)
-// and the deletion proof (a descriptor with `floorAnnotations` omitted yields no badge) live in
-// apps/server — a module cannot import apps/server, so the SEAM they exercise (core's read-model calling
-// the module's annotator) can only be pinned here. The pure per-table annotator scenarios live in
-// `@waitron/bookings`'s `floor.test.ts`. What is under test here is a correlated read.
+// The seam between core's read-model and a module's floor annotator: a module cannot import
+// apps/server, so it can only be pinned here. The per-table annotator cases live in
+// `@waitron/bookings`'s `floor.test.ts`.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -36,11 +34,8 @@ const LOCALE = "es-ES";
 
 async function setupVenue(): Promise<TillConfig> {
   await seedTenant(db);
-  // Inserted through the table definition: `locations.id` is a `$defaultFn` generator on this engine
-  // and a raw insert reaches none of them (the column is NOT NULL —
-  // `packages/db/drizzle/0000_baseline.sql:2`), and `invoice_locales` is a JSON array in a text
-  // column, which is what refused the `array[...]` constructor that used to fill it
-  // (`near "['es-ES']": syntax error`).
+  // Through the table definition: `locations.id` is a NOT NULL `$defaultFn` generator a raw insert
+  // never reaches.
   const [location] = await db
     .insert(locations)
     .values({
@@ -72,9 +67,7 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
 }
 
 async function insertBooking(cfg: TillConfig, tableId: string, time: string): Promise<void> {
-  // Through the table definition for the same reason as the venue row above: `bookings.id` and
-  // `bookings.created_at` are `$defaultFn` generators and both columns are NOT NULL
-  // (`packages/bookings/drizzle/0000_baseline.sql:2` and `:14`).
+  // Through the table definition for the same reason as the venue row above.
   await asApp(cfg, (tx) =>
     tx.insert(bookings).values({
       locationId: cfg.locationId,
@@ -107,9 +100,8 @@ describe("listTablesWithState — floor-annotator merge", () => {
   });
 
   it("returns nextReservation null with NO annotators, even for a table with a booked row (deletion proof)", async () => {
-    // Modelling a descriptor whose `floorAnnotations` seat is OMITTED: `enabledFloorAnnotators` yields
-    // nothing, so the merge runs over an empty set and the booked row never reaches the floor. Proves the
-    // badge flows ONLY through the seat — no residual reserved read left in core's query.
+    // A descriptor whose `floorAnnotations` seat is OMITTED: the badge flows ONLY through the seat, so
+    // the booked row never reaches the floor.
     const cfg = await setupVenue();
     const { id: tableId } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "8" }));
     await insertBooking(cfg, tableId, "14:00");

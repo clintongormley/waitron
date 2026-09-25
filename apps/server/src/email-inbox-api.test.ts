@@ -56,9 +56,8 @@ async function setupVenue(): Promise<{ manager: string; staff: string }> {
     { db: suite.db, modules: ALL_MODULES },
   );
   const sessions = await withTransaction(suite.db, async (tx) => {
-    // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
-    // `$defaultFn` generators (`packages/identity/src/schema/persons.ts:26,:67`) that an insert
-    // statement never reaches, and both columns are NOT NULL.
+    // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are NOT NULL
+    // `$defaultFn` generators (`packages/identity/src/schema/persons.ts`) a raw insert never reaches.
     const start = async (role: "manager" | "staff") => {
       const [inserted] = await tx
         .insert(persons)

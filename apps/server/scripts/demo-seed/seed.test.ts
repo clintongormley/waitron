@@ -1,21 +1,6 @@
 /**
- * `seedDemoRestaurant`, the orchestrator that wires the sub-seeds together — catalogues → floor →
- * staff → media inside ONE transaction, then the historical sales in their own per-sale ones. It
- * asserts every sub-seed actually ran: both menus, the full floor, the staff, at least one
- * back-dated sale, and a product's `image` rewritten to the content-addressed served name.
- *
- * Preproduction only: `WAITRON_ENV` is left unset, which `deploymentEnvironment` resolves to
- * `preproduction` — the safe default `seedSales` stamps (a wrong `entorno` is unrecoverable, §5).
- *
- * SQLite has no roles, and every call below runs on the one handle. Nothing now checks who
- * may write any of the seeded tables.
- *
- * Three read-back shapes moved with the engine, none of them changing what is asserted:
- * `count(...)::int` is `cast(count(...) as integer)`; `array_agg(x order by y)` is
- * `json_group_array(x order by y)`, which hands back JSON TEXT the mapping parses (the same
- * substitution `packages/catalogue/src/categories.ts:40` makes in product code); and a boolean
- * column arrives as 0 or 1, so `is_counter_default` is compared to 1 in the mapping rather than
- * reaching the assertion as a number.
+ * `seedDemoRestaurant` runs every sub-seed. `WAITRON_ENV` is left unset, so `deploymentEnvironment`
+ * resolves to `preproduction` for the seeded sales.
  */
 
 import { describe, expect, it } from "vitest";
@@ -38,8 +23,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// One NIF per provisioned venue. `useVenueDb`'s per-test reset empties every data table, so the
-// counter no longer keeps two tests apart; it keeps two `provisionVenue` calls within a test apart.
+// One NIF per provisioned venue.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -53,7 +37,6 @@ interface Venue {
   locationId: string;
 }
 
-/** Provision a fresh chained venue (as the owner) and return the ids the orchestrator needs. */
 async function provisionVenue(): Promise<Venue> {
   const venue = await applyVenue(
     planVenue(
@@ -100,8 +83,6 @@ describe("seedDemoRestaurant", () => {
   it("runs every sub-seed: both menus, the floor, the staff, a sale, and content-addressed media", async () => {
     const venue = await provisionVenue();
 
-    // A horizon long enough that the deterministic sales LCG (seeded fixed, not by `days`) is all but
-    // certain to draw the coffee/steak at least once each — see the modifier assertions below.
     await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 7 });
 
     const read = await withTransaction(suite.db, async (tx) => {
@@ -220,9 +201,7 @@ describe("seedDemoRestaurant", () => {
       };
     });
 
-    // What the till is offered: the steak asks the cooking question and nothing else does. The
-    // seed writes one options list and no extras list at all, so this is the whole of the demo's
-    // ordering-modifier content.
+    // The steak asks the cooking question and nothing else does.
     const coffee = read.products.find((p) => p.name === "Café");
     const steak = read.products.find((p) => p.name === "Solomillo");
     expect(coffee).toBeDefined();
@@ -231,8 +210,7 @@ describe("seedDemoRestaurant", () => {
     expect(steak!.offeredModifiers.map((entry) => [entry.kind, entry.name])).toEqual([
       ["options", "Punto"],
     ]);
-    // A sale line expands into child rows only for an EXTRAS pick, and the demo seeds no extras
-    // list, so the back-dated generator writes one row per dish and nothing below it.
+    // The back-dated generator writes one row per dish and nothing below it.
     expect(read.modifierLines).toBe(0);
 
     expect(read.menus.map((m) => m.name).sort()).toEqual([
@@ -316,8 +294,7 @@ describe("seedDemoRestaurant", () => {
       { zone_name: "Upstairs bar", station_name: "Upstairs bar" },
     ]);
 
-    // seedOptionLists ran: the cooking list as it is STORED — the rows behind the `offeredModifiers`
-    // read above, down to each label's own name and the default the list points at.
+    // The cooking list as it is STORED, behind the `offeredModifiers` read above.
     expect(read.optionLists).toEqual([
       {
         product_name: "Solomillo",
@@ -327,19 +304,14 @@ describe("seedDemoRestaurant", () => {
       },
     ]);
 
-    // Floor: the ~16-table demo plan (seedFloor seeds 16).
     expect(read.tables).toBeGreaterThanOrEqual(16);
 
-    // Staff: the demo team (seedStaff seeds 6).
     expect(read.staff).toBeGreaterThanOrEqual(5);
 
-    // Sales: at least one back-dated preproduction sale (seedSales).
     expect(read.sales).toBeGreaterThanOrEqual(1);
 
-    // Products were seeded (feed the sales generator).
     expect(read.products.length).toBeGreaterThan(0);
 
-    // Media: seedMedia rewrote each product's `image` to the served `<sha256hex>.webp` name.
     // listAvailableProducts does not project `image`, so read one product's image directly.
     const { rows: imageRows } = await withTransaction(suite.db, async (tx) => {
       return tx.execute<{ image: string | null }>(

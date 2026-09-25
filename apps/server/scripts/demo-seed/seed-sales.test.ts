@@ -1,9 +1,6 @@
 /**
  * Back-dated preproduction sales through `recordSale`: the stored environment, the chain, and the
  * reports they light up.
- *
- * SQLite has no roles, and every call below runs on the one handle. Nothing now checks who
- * may write a sale, a tender or a fiscal record.
  */
 
 import { describe, expect, it } from "vitest";
@@ -37,17 +34,15 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// One NIF per provisioned venue. `useVenueDb`'s per-test reset empties every data table, so the
-// counter no longer keeps two tests apart; it keeps two `provisionVenue` calls within a test apart.
+// One NIF per provisioned venue.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(80_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-// One product per standing Spanish VAT class, so the filed desglose spans several rates and the VAT
-// summary has more than one `byRate` line. Prices are GROSS (VAT-inclusive), the same convention as
-// `products.unit_price`.
+// One product per Spanish VAT class, so the VAT summary has more than one `byRate` line. Prices are
+// GROSS (VAT-inclusive).
 const PRODUCTS: SeedSalesProduct[] = [
   {
     id: "p-general",
@@ -136,7 +131,6 @@ describe("seedSales", () => {
       products: PRODUCTS,
     });
 
-    // (a) It recorded something.
     expect(count).toBeGreaterThan(0);
 
     const read = await withTransaction(suite.db, async (tx) => {
@@ -147,9 +141,8 @@ describe("seedSales", () => {
         .select({ entorno: registrosFacturacion.entorno })
         .from(registrosFacturacion);
       const sampled = saleRows[0]!;
-      // Three money columns, all counts of whole cents read raw and converted by
-      // `rawCentsToDecimal` at the assertion — see its doc comment. The identity below is checked
-      // in the decimal domain, never in cents.
+      // Money columns read raw are counts of whole cents; `rawCentsToDecimal` converts them at the
+      // assertion.
       const { rows: coverage } = await tx.execute<{
         total: string;
         tendered: string;
@@ -174,32 +167,27 @@ describe("seedSales", () => {
       return { saleRows, registros, coverage: coverage[0]!, close };
     });
 
-    // Count matches: one sale row per recorded sale, one fiscal record per sale.
     expect(read.saleRows.length).toBe(count);
     expect(read.registros.length).toBe(count);
 
-    // (b) Every sale is back-dated: strictly in the past, and within the last 3 days.
     for (const row of read.saleRows) {
       const t = new Date(row.issuedAt).getTime();
       expect(t).toBeLessThan(start);
       expect(t).toBeGreaterThan(start - 3.5 * DAY_MS);
     }
 
-    // (c) Every fiscal record carries the preproduction stamp — never production.
     expect(read.registros.length).toBeGreaterThan(0);
     for (const r of read.registros) {
       expect(r.entorno).toBe("preproduction");
     }
 
-    // (d) Coverage identity for the sampled sale: Σ tender amount = total + Σ tip.
+    // Σ tender amount = total + Σ tip.
     const expected = addDecimal(
       rawCentsToDecimal(read.coverage.total),
       rawCentsToDecimal(read.coverage.tips),
     );
     expect(compareDecimal(rawCentsToDecimal(read.coverage.tendered), expected)).toBe(0);
 
-    // (e) The reports are non-blank for a seeded business day: a per-rate VAT summary and a cash-up
-    // with real tenders. This is the whole point of the task.
     expect(read.close.vat.byRate.length).toBeGreaterThan(0);
     expect(compareDecimal(read.close.vat.taxTotal, decimal("0.00"))).toBeGreaterThan(0);
     expect(read.close.cash.byTill.length).toBeGreaterThan(0);

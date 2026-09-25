@@ -36,22 +36,16 @@ export interface LoopDeps {
 /**
  * Real sleep, interruptible by the shutdown signal so SIGTERM does not wait out an hour.
  *
- * Narrow on purpose: only the abort is silenced. Anything else rethrows rather than vanishing the
- * way a bare `catch {}` would vanish it — `runLoop`'s own try/catch around calling this is what
- * gives an unforeseen sleep failure the same visibility an unforeseen pass failure gets, so this
- * function does not need a logger of its own to stay honest.
+ * Narrow on purpose: only the abort is silenced. Anything else rethrows, and `runLoop`'s own
+ * try/catch gives it the same visibility an unforeseen pass failure gets.
  */
 export async function realSleep(ms: number, signal: AbortSignal): Promise<void> {
   try {
     await delay(ms, undefined, { signal });
   } catch (error) {
     /* v8 ignore start */
-    // Unreachable through this repo's own call sites: `ms` is always the clamped, positive-integer
-    // output of `sleepMsFor`, and `signal` is always a genuine AbortSignal per `LoopDeps`'s typing,
-    // and node:timers/promises' setTimeout has no other rejection path for legitimate arguments
-    // (verified directly against this Node build — a negative or NaN ms clamps to 1ms and resolves
-    // rather than rejecting). Kept as a rethrow, not a silent drop, in case that ever stops being
-    // true, or a differently-behaved `sleep` is injected in `LoopDeps`'s place.
+    // Unreachable through this repo's own call sites; a rethrow, not a silent drop, in case that ever
+    // stops being true.
     if (!signal.aborted) throw error;
     /* v8 ignore stop */
   }
@@ -89,10 +83,8 @@ export async function runLoop(deps: LoopDeps): Promise<void> {
     try {
       await deps.sleep(sleepMs, deps.signal);
     } catch (error) {
-      // A well-behaved `sleep` resolves — never rejects — for the ordinary abort; see `realSleep`.
-      // A rejection reaching here is therefore itself unforeseen, structurally the same case as a
-      // pass that throws, and contained the same way: log and go around again rather than let a
-      // sleep failure end the loop and, with it, the hourly duty.
+      // A well-behaved `sleep` resolves for the ordinary abort (see `realSleep`), so a rejection here is
+      // unforeseen and contained like a pass that throws: a sleep failure must not end the hourly duty.
       deps.log("error", "sleep.threw", { errorCode: codeOf(error) });
     }
   }

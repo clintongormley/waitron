@@ -9,12 +9,10 @@ import type { ServerConfig } from "./config.js";
 import type { Logger } from "./logger.js";
 
 /**
- * A real boot of the plain-HTTP landing listener: `startLandingListener` binds an actual socket on an
- * ephemeral port against a temp state dir holding a minted leaf + CA, and an `http` GET of `/` proves
- * the load-bearing properties this surface exists for — a 200 (never a redirect) and NO
- * `Strict-Transport-Security` (HSTS would strand a phone on the interstitial). Mirrors `tls.test.ts`'s
- * real-`serve` pattern. `startLandingListener` returns `undefined` when disabled/operator-TLS/leaf-less,
- * so those branches are proven here too without a socket.
+ * A real boot of the plain-HTTP landing listener on an ephemeral port. What this surface exists for:
+ * a 200 (never a redirect) and NO `Strict-Transport-Security` (HSTS would strand a phone on the
+ * interstitial). `startLandingListener` returns `undefined` when disabled/operator-TLS/leaf-less,
+ * so those branches need no socket.
  */
 
 const dirs: string[] = [];
@@ -122,11 +120,9 @@ describe("startLandingListener", () => {
     }
   });
 
-  // The non-fatal bind-failure path (boot.ts): a landing-listener 'error' logs `landing.listen_failed`
-  // at warn and is SWALLOWED — no throw, no process.exit — and the box (here the first listener) keeps
-  // serving. Proven by an actual EADDRINUSE collision, not by reading: a first listener holds the port,
-  // a second `startLandingListener` on the SAME port fails to bind, and we assert the warn line, that
-  // process.exit was never called, and that the first listener still answers 200.
+  // The non-fatal bind-failure path: a landing-listener 'error' logs `landing.listen_failed` at warn
+  // and is SWALLOWED — no throw, no process.exit — and the box (here the first listener) keeps serving.
+  // A real EADDRINUSE: a second `startLandingListener` on the SAME port fails to bind.
   it("logs landing.listen_failed on a port collision without throwing or exiting, and the first listener keeps serving", async () => {
     const stateDir = await stateDirWithLeaf();
     const port = await freePort();
@@ -157,8 +153,7 @@ describe("startLandingListener", () => {
       expect(await getStatus(port)).toBe(200);
     } finally {
       exitSpy.mockRestore();
-      // The second listener never bound, so its close() rejects (Node calls back with an error) — the
-      // same shape boot.test.ts's EADDRINUSE case documents; swallow it, then close the real one.
+      // The second listener never bound, so its close() rejects; swallow it, then close the real one.
       await second?.close().catch(() => {});
       await first?.close();
     }

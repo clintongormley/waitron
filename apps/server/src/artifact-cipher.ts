@@ -6,15 +6,10 @@ import "./errors.js";
 const MAGIC = Buffer.from("WBK1"); // Waitron BacKup, format 1
 export const VERSION = 1;
 /** The version byte selects the KDF cost params, so an artifact stays decryptable after a future
- * SCRYPT_PARAMS hardening: bump to VERSION 2 for new writes and keep v1's params in this map.
- * (Same self-describing-KDF property the recovery bundle keeps — see the Task 1 ruling.)
+ * SCRYPT_PARAMS hardening: bump VERSION for new writes and keep the old params here.
  *
- * v1's entry is a FROZEN LITERAL of today's `SCRYPT_PARAMS`, deliberately NOT an alias of the live
- * shared constant: if it aliased `SCRYPT_PARAMS`, a future in-place hardening of that constant that
- * bumped `VERSION` but forgot to pin v1 would silently re-cost every historical v1 artifact and make
- * it undecryptable. The guard test in artifact-cipher.test.ts asserts this literal still equals
- * `SCRYPT_PARAMS` today (they match) and FAILS the moment `SCRYPT_PARAMS` is changed in place without
- * a new frozen entry here — forcing the safe move (bump VERSION, add the new params, leave v1 pinned). */
+ * v1's entry is a FROZEN LITERAL, deliberately NOT an alias of `SCRYPT_PARAMS`: an in-place hardening
+ * of that constant would otherwise re-cost every v1 artifact and make it undecryptable. */
 export const KDF_BY_VERSION: Record<number, ScryptParams> = {
   1: { N: 2 ** 17, r: 8, p: 1, keylen: 32, maxmem: 256 * 1024 * 1024 },
 };
@@ -22,16 +17,11 @@ const SALT_LEN = 16;
 const IV_LEN = 12;
 const TAG_LEN = 16;
 /** The authenticated header prefix: MAGIC|version|salt|iv, everything before the tag. These bytes are
- * bound into the GCM tag as AAD, so a flipped magic/version/salt/iv byte fails authentication just
- * like a flipped ciphertext byte does — the frame header is not a plaintext side-channel a tamperer
- * can edit unnoticed. */
-const AAD_LEN = MAGIC.length + 1 + SALT_LEN + IV_LEN; // 33 — magic+version+salt+iv, NOT the tag
+ * bound into the GCM tag as AAD, so a flipped header byte fails authentication. */
+const AAD_LEN = MAGIC.length + 1 + SALT_LEN + IV_LEN; // 33
 const HEADER_LEN = AAD_LEN + TAG_LEN; // 49
 
-/** Encrypt bytes under a passphrase. Frame: MAGIC|version|salt|iv|tag|ciphertext (all binary). The
- * MAGIC|version|salt|iv header prefix is authenticated as GCM AAD, so tampering with it fails
- * decryption. Derives with `KDF_BY_VERSION[VERSION]` (the same map decrypt reads) so write/read cost
- * symmetry is structural, not merely test-enforced. */
+/** Encrypt bytes under a passphrase. Frame: MAGIC|version|salt|iv|tag|ciphertext (all binary). */
 export function encryptArtifact(plaintext: Uint8Array, passphrase: string): Buffer {
   const salt = randomBytes(SALT_LEN);
   return frameUnderKey(plaintext, salt, deriveKey(passphrase, salt, KDF_BY_VERSION[VERSION]));
@@ -77,8 +67,6 @@ export function decryptArtifact(framed: Uint8Array, passphrase: string): Buffer 
   const iv = buf.subarray(off, (off += IV_LEN));
   const tag = buf.subarray(off, (off += TAG_LEN));
   const ct = buf.subarray(off);
-  // The exact header bytes as read from the frame — magic|version|salt|iv, up to but not including
-  // the tag — must be re-supplied as AAD before the tag is set, matching the encrypt side.
   const header = buf.subarray(0, AAD_LEN);
   const decipher = createDecipheriv("aes-256-gcm", deriveKey(passphrase, salt, params), iv);
   decipher.setAAD(header);

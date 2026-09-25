@@ -37,10 +37,6 @@ describe("artifact cipher", () => {
     );
   });
 
-  // The header prefix (magic|version|salt|iv) is authenticated as GCM AAD, so tampering with a
-  // header byte fails authentication exactly like a flipped ciphertext byte — it is NOT an
-  // unauthenticated side-channel a tamperer can edit unnoticed. Flip a salt byte (offset 5, right
-  // after magic+version) to a byte that still parses as a valid frame but no longer matches the AAD.
   it("rejects a tampered header byte (AAD authentication)", () => {
     const framed = encryptArtifact(randomBytes(64), "pw-000000000000");
     framed[5] ^= 0xff; // first salt byte — inside the authenticated header, frame still well-formed
@@ -55,9 +51,8 @@ describe("artifact cipher", () => {
     );
   });
 
-  // A 49-byte frame is exactly the header length, so it hits the magic check, not the length
-  // guard — a truncated artifact (a corrupted download) is a distinct, realistic malformed-frame
-  // shape and needs its own case to exercise the too_short reason at all.
+  // A 49-byte frame is exactly the header length and hits the magic check, so the too_short reason
+  // needs its own case.
   it("rejects a frame shorter than the header", () => {
     expect(() => decryptArtifact(Buffer.alloc(10), "pw-000000000000")).toThrowError(
       expect.objectContaining({
@@ -67,18 +62,13 @@ describe("artifact cipher", () => {
     );
   });
 
-  // The current VERSION's frozen params must still equal the live SCRYPT_PARAMS today — they match
-  // by construction. This FAILS the moment a future dev changes SCRYPT_PARAMS in place without
-  // bumping VERSION and adding a new frozen entry, which is exactly the unsafe move that would
-  // re-cost (and so break decryption of) every historical v1 artifact. The failure forces the safe
-  // path: bump VERSION, add the new params, leave the pinned v1 literal untouched.
+  // Fails when SCRYPT_PARAMS changes in place without a VERSION bump and a new frozen entry, which
+  // would break decryption of every existing artifact.
   it("pins the current version's KDF params to the live SCRYPT_PARAMS default", () => {
     expect(KDF_BY_VERSION[VERSION]).toEqual(SCRYPT_PARAMS);
   });
 
-  // The magic check runs before the version check, so an all-zero frame (the test above) never
-  // exercises KDF_BY_VERSION's own rejection path — the exact mechanism the self-describing-KDF
-  // property depends on. A valid magic with an unrecognised version byte isolates it.
+  // The magic check runs before the version check, so this needs a valid magic to reach it.
   it("rejects a frame with a valid magic but an unknown version", () => {
     const framed = encryptArtifact(randomBytes(64), "pw-000000000000");
     framed[4] = 99; // version byte, right after the 4-byte magic

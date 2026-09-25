@@ -4,11 +4,8 @@ import { writeFileAtomic } from "./fs-atomic.js";
 import type { BackupDestination, StorageBackend, StoredObject } from "./storage-backend.js";
 
 /**
- * v1 storage backend: a local directory. `put` writes to `<target>.tmp` then `rename`s onto the final
- * key via `writeFileAtomic` (`fs-atomic.ts`) — the same temp-then-rename idiom the archive copy
- * uses (`archiveTo`, `packages/store/src/archive.ts`), so a fan-out write that dies mid-write never
- * leaves a half-written key visible under its real name. `list` therefore excludes that helper's `.tmp` suffix (below) so a leftover temp is
- * never returned as a backup.
+ * v1 storage backend: a local directory. `put` writes through `writeFileAtomic` (`fs-atomic.ts`), so
+ * a write that dies mid-way never leaves a half-written key visible under its real name.
  */
 export class LocalFsBackend implements StorageBackend {
   constructor(
@@ -61,10 +58,7 @@ export function buildBackend(dest: BackupDestination): StorageBackend {
   switch (dest.kind) {
     case "local-fs":
       return new LocalFsBackend(dest.id, dest.dir);
-    // Compile-time exhaustiveness guard: adding an `s3`/`sftp` kind to `BackupDestination` without a
-    // case above makes `dest.kind` non-`never` here and fails typecheck, rather than silently
-    // returning `undefined` from a fell-through switch. Structurally unreachable today (only
-    // `local-fs` exists), so v8-ignored — there is no runtime input that reaches it.
+    // Compile-time exhaustiveness guard: a `BackupDestination` kind without a case above fails typecheck.
     /* v8 ignore start */
     default: {
       const _never: never = dest.kind;

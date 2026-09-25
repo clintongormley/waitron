@@ -92,12 +92,8 @@ it("trust page notes the operator-cert case instead of a download when no box CA
   expect(html).toMatch(/own certificate|installer supplied/i);
 });
 
-// Beyond the six brief tests: the box with no LAN address (loopback-only) has a null `qrTarget`, so
-// the trust page must omit the QR section entirely and never call `renderQrSvg`. It says nothing
-// about the missing QR: a line explaining an absence the reader never noticed is page length spent
-// for nothing (owner, 2026-09-13). Pure injection (`listIpv4: () => []`), not a real-network probe —
-// so it closes the null-QR branch the six tests, which always inject an address, leave for the
-// aggregate.
+// A box with no LAN address has a null `qrTarget`, so the trust page omits the QR section entirely,
+// without a line explaining the absence.
 it("trust page omits the QR section (and skips the renderer) when there is no LAN address", async () => {
   let rendered = 0;
   const app = appFor(await stateDirWithCa(), {
@@ -116,8 +112,7 @@ it("trust page omits the QR section (and skips the renderer) when there is no LA
   expect(html).not.toMatch(/no QR/i);
 });
 
-// A non-ENOENT ca.crt read failure (misconfiguration) must still answer 404 no_box_ca to the LAN
-// caller — no fs detail leaked — but log one line, unlike the ordinary ENOENT. Mirrors
+// A non-ENOENT ca.crt read failure still answers 404 no_box_ca with no fs detail, but logs one line.
 // A `ca.crt` that is a directory makes readFile throw EISDIR.
 it("logs a non-ENOENT ca.crt read failure and still answers 404 no_box_ca", async () => {
   const d = await mkdtemp(join(tmpdir(), "disc-eisdir-"));

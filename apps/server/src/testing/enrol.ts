@@ -3,10 +3,8 @@ import { createJoinRequest, acceptDeviceJoinRequest } from "../join-requests.js"
 import type { TillConfig } from "../till-config.js";
 
 /**
- * Enrol a device the way production now does — knock, then accept — in one call, so the suites that
- * only ever wanted "a device exists" do not each re-implement the two-step flow. Deliberately NOT a
- * production verb: it bypasses the pairing window and the numeric match, which is exactly what a
- * fixture wants and exactly what a route must never do.
+ * Enrol a device — knock, then accept — in one call. Deliberately NOT a production verb: it bypasses
+ * the pairing window and the numeric match, which a route must never do.
  */
 export async function enrolDeviceForTest(
   db: Database,

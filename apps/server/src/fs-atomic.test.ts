@@ -24,10 +24,8 @@ describe("writeFileAtomic", () => {
     await expect(stat(`${target}.tmp`)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  // The security property Copilot flagged: a stale `${path}.tmp` left by an earlier crash must NOT
-  // have its (possibly broader) permissions carried onto the target. `writeFile` only applies `mode`
-  // when it CREATES the file, so reusing/truncating a stale 0644 tmp would rename a 0644 secret into
-  // place. writeFileAtomic removes the stale tmp first, so the write always creates a fresh 0600 file.
+  // A stale `${path}.tmp` must NOT carry its broader permissions onto the target: `writeFile` applies
+  // `mode` only when it CREATES the file.
   it("does not inherit a stale tmp's broader permissions (secret-leak guard)", async () => {
     const d = await newDir();
     const target = join(d, "server.key");
@@ -37,8 +35,7 @@ describe("writeFileAtomic", () => {
 
     await writeFileAtomic(target, "fresh-secret", 0o600);
 
-    // The freshly-created file is 0600 — NOT the stale 0644. (Without the pre-write `rm`, `writeFile`
-    // would truncate-and-reuse the 0644 tmp and rename 0644 into place.)
+    // The freshly-created file is 0600 — NOT the stale 0644.
     expect(await readFile(target, "utf8")).toBe("fresh-secret");
     expect((await stat(target)).mode & 0o777).toBe(0o600);
   });

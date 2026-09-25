@@ -14,5 +14,4 @@ export interface StorageBackend {
   delete(key: string): Promise<void>;
 }
 
-/** v1: only local-fs. Adding a kind (s3, sftp) is a config-shape + buildBackend addition. */
 export type BackupDestination = { kind: "local-fs"; id: string; dir: string };

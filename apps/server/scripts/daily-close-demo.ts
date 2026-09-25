@@ -1,23 +1,7 @@
-// Self-contained, human-checkable demonstration of `@waitron/reporting`'s daily close (design D9,
-// modelled on `record-one-sale.ts`). It makes a throwaway venue directory under the OS temp dir,
-// applies the `core` and `identity` migration sets to it through `applyMigrations` (the entry
-// point `dev-setup.ts` also uses), and rings up a real day of trade through the REAL write path
-// (`recordSale` / `settleSale` / `recordCorrection` from `@waitron/core`) against the fake
-// `FiscalBackend` from `@waitron/fiscal` — no AEAT and no SIF registration. It then prints the
-// `DailyClose` for that day so a human can eyeball that the numbers reconcile, and removes the
-// directory.
+// Rings up a day of trade through the real write path against the fake `FiscalBackend`, in a
+// throwaway venue directory, and prints `@waitron/reporting`'s `DailyClose` for a human to check.
 //
-// `computeDailyClose` reads only the commercial tables (`sales`, `sale_lines`, `tenders`,
-// `sale_voids`, `sale_substitutions`), all of which the `core` set creates — the fiscal chain is
-// never read. The `identity` set is here for the supervisor whose session authorises the
-// rectificativa, nothing else.
-//
-// SQLite has no roles and no grants: nothing below demonstrates who may write.
-//
-// Run it:
-//   pnpm --filter @waitron/server exec tsx scripts/daily-close-demo.ts
-//   # or, via the package script:
-//   pnpm --filter @waitron/server demo:daily-close
+// Run it: pnpm --filter @waitron/server demo:daily-close
 //
 // The day it rings up (all on business day 2026-08-04, Europe/Madrid):
 //   - Sale A: base 100.00 @ 21%, total 121.00, settled IMMEDIATELY in cash (121.00);
@@ -59,25 +43,18 @@ import {
 } from "@waitron/shared";
 import type { NodeId, SeriesId, TillId } from "@waitron/shared";
 
-/** The migration sets this demo applies, in manifest order — core carries the commercial tables
- * the close reads, identity the supervisor who authorises the rectificativa. */
+/** identity holds the supervisor who authorises the rectificativa. */
 const SETS = ["core", "identity"];
 
 const LOCALE = "es-ES";
 const TIME_ZONE = "Europe/Madrid";
 const BUSINESS_DAY = "2026-08-04";
 
-// Every write's issuance instant: 2026-08-04 12:00 Madrid (10:00Z, +02:00 CEST). One fixed clock,
-// so all three writes land on business day 2026-08-04.
+// 2026-08-04 12:00 Madrid, so every write lands on business day 2026-08-04.
 const ISSUED_AT = new Date("2026-08-04T10:00:00Z");
-// The deferred sale's card payment, later the same business day (18:00 Madrid).
+// 18:00 Madrid, the same business day.
 const SETTLED_LATER = new Date("2026-08-04T16:00:00Z");
 
-/**
- * A `TrustedClock` whose `now()` is fixed at `ISSUED_AT`. `recordSale`/`recordCorrection` read
- * `now()` exactly once (for `issued_at`) and never touch `anchor`/`currentAnchor`, so both are
- * stubs — the identical shape `record-one-sale.ts`'s own `systemClock` documents.
- */
 function fixedClock(): TrustedClock {
   return {
     now: () => ({
@@ -99,18 +76,13 @@ interface Venue {
   nodeId: NodeId;
   seriesId: SeriesId;
   rectificativeSeriesId: SeriesId;
-  // The person who authorises the rectificativa. `recordCorrection` now gates on `sale.rectify`
-  // (Task 10); a supervisor holds it. Task 13's venue-seed comes later, so this demo seeds its own.
+  // `recordCorrection` gates on `sale.rectify`, which a supervisor holds.
   authorizerId: string;
 }
 
 /**
- * Seeds tenant → location → till → node → standard series → rectificative series → supervisor.
- *
- * Drizzle inserts rather than the raw SQL that was here: these `id` columns no longer carry a SQL
- * DEFAULT — the value comes from `$defaultFn(newId)`, which drizzle's insert builder runs and raw
- * SQL does not (`packages/db/src/schema/columns.ts`) — and `invoice_locales` is a JSON array in a
- * text column, not the PostgreSQL `array['es-ES']` this used to write.
+ * Drizzle inserts, not raw SQL: the `id` values come from `$defaultFn`, which raw SQL does not run
+ * (`packages/db/src/schema/columns.ts`).
  */
 async function seedVenue(db: Database): Promise<Venue> {
   await db
@@ -145,8 +117,6 @@ async function seedVenue(db: Database): Promise<Venue> {
     .values({ nodeId, code: "R", purpose: "rectificative" })
     .returning({ id: invoiceSeries.id });
   const rectificativeSeriesId = brandSeriesId(rSeries!.id);
-  // A supervisor (holds `sale.rectify`), whose PIN is "1234" — the authorizer the rectificativa's
-  // gate requires.
   const [person] = await db
     .insert(persons)
     .values({
@@ -161,9 +131,6 @@ async function seedVenue(db: Database): Promise<Venue> {
 }
 
 async function main(): Promise<void> {
-  // A throwaway venue directory: the two SQLite files plus their write-ahead sidecars, removed at
-  // the end. `applyMigrations` takes the DIRECTORY and opens it itself; the filter below keeps
-  // manifest order, core before identity.
   const venueDir = await mkdtemp(join(tmpdir(), "daily-close-demo-"));
   const sets = manifestSets().filter((set) => SETS.includes(set.name));
   await applyMigrations(venueDir, migrationOptionsFor(sets, null));
@@ -175,8 +142,7 @@ async function main(): Promise<void> {
     const backend = new FakeFiscalBackend(db);
     const clock = fixedClock();
 
-    // Register the node once (a one-time admin action recordSale itself never performs), in its own
-    // committed transaction so the later write transactions see it.
+    // A one-time admin action recordSale never performs.
     await withTransaction(db, async (tx) => {
       await backend.registerNode(tx, venue.nodeId);
     });
@@ -244,8 +210,6 @@ async function main(): Promise<void> {
       });
     });
 
-    // Open the supervisor's shift session — the authorizer the rectificativa's `sale.rectify` gate
-    // requires — exactly as a till would at the start of a shift.
     const authorizerSession = await withTransaction(db, async (tx) => {
       return loginWithPin(tx, {
         tillId: venue.tillId,
@@ -254,8 +218,7 @@ async function main(): Promise<void> {
       });
     });
 
-    // A rectificativa correcting Sale A by −5.00 base @ 21% (total −6.05), authorised by the
-    // supervisor session opened above.
+    // Corrects Sale A by −5.00 base @ 21% (total −6.05).
     const correctionInput: RecordCorrectionInput = {
       tillId: venue.tillId,
       nodeId: venue.nodeId,
@@ -280,7 +243,6 @@ async function main(): Promise<void> {
       await recordCorrection(tx, backend, correctionInput);
     });
 
-    // The read, exactly as a till/report consumer would call it.
     const close = await withTransaction(db, async (tx) => {
       return computeDailyClose(tx, {
         nodeId: venue.nodeId,

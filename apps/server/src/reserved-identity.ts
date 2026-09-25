@@ -19,9 +19,9 @@ export interface StandbyIdentity {
   privateKey: string;
 }
 
-/** Mint a standby's own identity in memory (design §6 R2): a fresh nodeId + Ed25519 keypair. Generated
- * BEFORE the adopt fetch so the public half + nodeId can be sent to the primary for endorsement +
- * number allocation; the private half is sealed by `establishReservedStandbyIdentity` after the tenant
+/** Mint a standby's own identity in memory: a fresh nodeId + Ed25519 keypair. Generated BEFORE the
+ * adopt fetch so the public half + nodeId can be sent to the primary for endorsement + number
+ * allocation; the private half is sealed by `establishReservedStandbyIdentity` after the tenant
  * exists. */
 export function generateStandbyIdentity(): StandbyIdentity {
   const { publicKey, privateKey } = generateNodeKeyPair();
@@ -29,13 +29,11 @@ export function generateStandbyIdentity(): StandbyIdentity {
 }
 
 /**
- * Persist the standby's complete dormant identity on the cloud's own database (design §6 R2), all
- * inert until an R3 promotion activates it. IDEMPOTENT (design §8 / Slice-4 follow-up b): if the
- * membership key is already sealed, an earlier adopt attempt already established the identity — return
- * without minting a fresh keypair or re-establishing anything (a re-fetch may have burned one cheap
- * primary allocation, which is acceptable; §7). Otherwise ONE owner tenant transaction seals the
- * private key, inserts the standby's own node (public_key + endorsement), hands each module its own
- * reservation to establish, and inserts the reserved series.
+ * Persist the standby's complete dormant identity on the cloud's own database, inert until a
+ * promotion activates it. IDEMPOTENT: if the membership key is already sealed, an earlier adopt
+ * attempt already established the identity, so return without re-establishing anything. Otherwise
+ * ONE transaction seals the private key, inserts the standby's own node (public_key + endorsement),
+ * hands each module its own reservation to establish, and inserts the reserved series.
  *
  * `args.reserved` is WIRE input from the primary. The carrier never inspects `reserved.modules`: each
  * module validates its own state inside `establish` and throws there, which rolls this transaction back

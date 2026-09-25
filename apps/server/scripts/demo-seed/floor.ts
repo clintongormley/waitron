@@ -1,36 +1,17 @@
-// Demo floor-plan content for the Casa Delgado seed (Phase 2, Task 7) — spec §4.3. This is DEV/DEMO
-// data, plausibility rather than accuracy is the bar, the same posture `menu.ts` states for the
-// catalogue content it authors.
-//
-// Three table-bearing zones and ~16 tables, spatially placed on a shared 0..1000 canvas so
-// the live floor and the FP-2 spatial editor both look real: Comedor (the indoor dining room) fills
-// the top-left, Terraza (the outdoor terrace) the top-right, and Barra (the bar) a strip along the
-// bottom — the three zones occupy visually distinct regions rather than overlapping. Zone names are
-// kept identical in both locales (proper venue-area names, the same choice `menu.ts` makes for the
-// catalogue names themselves, e.g. `CASA_DELGADO.name`); table labels are plain, locale-independent
-// strings (`dining_tables.label` is a single `text` column, not a per-locale one). Coordinates/shape/
-// rotation satisfy `setTablePlacement`'s ranges (`apps/server/src/tables.ts`): `posX`/`posY` 0..1000,
-// `shape` one of the `floor_table_shape` enum members, `rotation` 0..359.
-//
-// The four `table_service_statuses` (Libre/Ocupada/Reservada/Cuenta pedida) are genuinely translated
-// per locale — the same per-locale-distinct choice `menu.ts` makes for category/product names —
-// matching the English wording `table-service-statuses.ts`'s own doc comment already uses ("Bill
-// requested") for its worked example.
+// Demo floor-plan content for the Casa Delgado seed: plausibility rather than accuracy is the bar.
+// Placements must satisfy `setTablePlacement`'s ranges (`apps/server/src/tables.ts`).
 
 import type { SeedLocale } from "./menu.js";
 import type { FloorTableShape } from "../../src/tables.js";
 
-/** A floor-plan zone: both-locale name and its editor `displayOrder`. `key` is this module's own
- *  internal handle joining a {@link SeedTable} to the zone it sits in — it has no DB counterpart
- *  (the real `floor_zones.id` is minted at seed time). */
+/** `key` joins a {@link SeedTable} to its zone; it has no DB counterpart (the real
+ *  `floor_zones.id` is minted at seed time). */
 export interface SeedZone {
   key: "dining" | "terrace" | "bar";
   name: Record<SeedLocale, string>;
   displayOrder: number;
 }
 
-/** A demo table: a plain label, the zone it sits in (by {@link SeedZone.key}), a capacity, and its
- *  FP-2 spatial placement — everything `createTable` + `setTablePlacement` need. */
 export interface SeedTable {
   label: string;
   zoneKey: SeedZone["key"];
@@ -41,9 +22,8 @@ export interface SeedTable {
   rotation: number;
 }
 
-/** A demo service status: both-locale label and its floor-plan swatch (a hex or short token, the
- *  same shape `validateStatusColor` in `tables.ts` accepts — unvalidated here since the raw insert
- *  bypasses `createStatus`, but chosen to satisfy that pattern anyway). */
+/** `color` is not validated here, because the raw insert bypasses `createStatus`; keep it to what
+ *  `validateStatusColor` in `tables.ts` accepts. */
 export interface SeedStatus {
   label: Record<SeedLocale, string>;
   color: string;
@@ -56,7 +36,6 @@ export const DEMO_ZONES: SeedZone[] = [
 ];
 
 export const DEMO_TABLES: SeedTable[] = [
-  // ── Comedor (indoor dining room) — 8 tables, top-left of the canvas ─────────────────────────────
   {
     label: "1",
     zoneKey: "dining",
@@ -129,7 +108,6 @@ export const DEMO_TABLES: SeedTable[] = [
     shape: "rect",
     rotation: 90,
   },
-  // ── Terraza (outdoor terrace) — 5 tables, top-right of the canvas ───────────────────────────────
   {
     label: "T1",
     zoneKey: "terrace",
@@ -175,7 +153,6 @@ export const DEMO_TABLES: SeedTable[] = [
     shape: "rect",
     rotation: 90,
   },
-  // ── Barra (bar) — 3 high tables, a strip along the bottom of the canvas ─────────────────────────
   { label: "B1", zoneKey: "bar", capacity: 2, posX: 150, posY: 750, shape: "rect", rotation: 0 },
   { label: "B2", zoneKey: "bar", capacity: 2, posX: 450, posY: 750, shape: "rect", rotation: 0 },
   { label: "B3", zoneKey: "bar", capacity: 2, posX: 750, posY: 750, shape: "rect", rotation: 0 },

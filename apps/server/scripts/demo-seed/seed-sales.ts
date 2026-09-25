@@ -1,32 +1,13 @@
-// `seedSales` — the demo-seed's historical-sales step (Phase 2, Task 10). Back-fills the last N days
-// with real, hash-chained, PREPRODUCTION sales so the reports screens (VAT summary, cash-up, daily
-// close) are non-blank when the demo restaurant is first opened. There is no data to preserve and no
-// production chain in play: this is dev/demo seeding.
+// Back-fills the last N days with hash-chained sales through `recordSale`, so the report screens
+// are non-blank when the demo is first opened. It writes fiscal records ONLY through `recordSale`
+// and never drains: the resulting `envios` rows stay pending.
 //
-// FISCAL POSTURE (binding). This module writes IMMUTABLE, append-only `registros_facturacion` rows,
-// but it does so ONLY by calling `recordSale` — it never touches the fiscal core (the chain, the
-// huella, invoice numbering) and must not. Two rules keep it safe:
+// The `entorno` stamp comes from `deploymentEnvironment(process.env)`, which is `preproduction`
+// when `WAITRON_ENV` is unset. A demo seed must never run against a production chain; a wrong
+// stamp is unrecoverable (CLAUDE.md §5).
 //
-//   1. It stamps `preproduction`. The single `VerifactuBackend` is built with BOTH `environment` and
-//      `deploymentEnvironment` set to `deploymentEnvironment(process.env)`, which resolves to
-//      `preproduction` when `WAITRON_ENV` is unset — the safe default (config.ts). A demo seed must
-//      never be pointed at a production chain; a wrong `entorno` stamp is unrecoverable (CLAUDE.md §5).
-//   2. It never drains. The generator only calls `recordSale`; the resulting `envios` rows stay
-//      `pendiente`. Nothing here imports or invokes the AEAT submit/drain path.
-//
-// Backend construction mirrors `record-one-sale.ts` / `till-sale.test.ts` exactly — `resolveClient`
-// is supplied but never reached (`recordSale` never contacts AEAT), so its stub throws if it ever is.
-//
-// The one departure from `record-one-sale.ts` is the CLOCK: a settable, back-dating clock whose
-// `now()` returns whatever past instant the generator last `set`, so `recordSale` files each sale —
-// its `sales.issued_at`, its fiscal record's timestamp and its tender's `settled_at` — into the past.
-//
-// Reproducibility: a small seeded LCG drives the per-day counts, the service-window placement and
-// the product/tender choices, so the same `days` always produces the same shape of demo — and the
-// test is stable.
-//
-// All arithmetic goes through `@waitron/shared`'s decimal helpers; no SQL is built here at all (every
-// write is `recordSale`'s, parameterised by Drizzle).
+// A settable clock files each sale — its `issued_at` and its fiscal record's timestamp — into
+// the past.
 
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput, RecordSaleLine } from "@waitron/core";
@@ -57,32 +38,25 @@ import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "../../src/config.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 
-/** The venue a seed run files against — the ids `applyVenue` returns (with `seriesId` picked from
- *  its `seriesIds`, the standard series being first). */
+/** `seriesId` is the standard series, the first of `applyVenue`'s `seriesIds`. */
 export interface SeedSalesVenue {
   tillId: string;
   nodeId: string;
   seriesId: string;
 }
 
-/** A sellable item the generator can draw a line from. `id` is carried for the caller's convenience
- *  (the Task 6 product map passes straight through) and for debugging, but is NOT written anywhere:
- *  `sales`/`sale_lines` carry no product FK and snapshot the description, price and rate instead. */
+/** `id` is NOT written anywhere: `sales`/`sale_lines` carry no product FK and snapshot the
+ *  description, price and rate instead. */
 export interface SeedSalesProduct {
   id: string;
-  /** The staff-facing name, frozen onto the line's `name`. */
   name: string;
-  /** BARE content locale -> customer-facing text (e.g. `{ es: "Café" }`), as `listAvailableProducts`
-   *  returns it; `null` or blank falls back to `name`. Resolved through `product-presentation.ts`
-   *  and then re-keyed to the venue's full invoice tag before it lands on a line's `descriptions`. */
+  /** `null` or all blank falls back to `name`. */
   customerName: Record<string, string> | null;
-  /** GROSS (VAT-inclusive) unit price — the same figure `products.unit_price` stores. */
+  /** GROSS (VAT-inclusive). */
   unitPrice: string;
   vatClass: VatClass;
 }
 
-/** A settable, back-dating clock. `clock` is what `recordSale` and `VerifactuBackend` read; `set`
- *  moves the instant it reports before each sale is recorded. */
 export interface BackDatingClock {
   clock: TrustedClock;
   set: (instant: Date, offsetMinutes: number) => void;
@@ -90,27 +64,18 @@ export interface BackDatingClock {
 
 export interface SeedSalesInput {
   venue: SeedSalesVenue;
-  /** The venue's BARE content locale (e.g. `es`). The sale/line fiscal fields are filed under the
-   *  FULL tag it maps to (`SEED_INVOICE_LOCALE`, e.g. `es-ES`) — content authored bare, filed full. */
   locale: SeedLocale;
   /** How many trailing days to fill. `0` writes nothing and returns `{ count: 0 }`. */
   days: number;
   /** The pool of items sales are drawn from — must be non-empty when `days > 0`. */
   products: readonly SeedSalesProduct[];
-  /** Optional injected clock controller. The demo lets `seedSales` build its own; a caller that
-   *  wants full control (or determinism beyond the seeded PRNG) can supply one. */
   clock?: BackDatingClock;
 }
 
 const HUNDRED = decimal("100");
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/**
- * Builds a settable, back-dating clock. `now()` reports the instant last handed to `set` as already
- * confident and anchored — the same one-shot shape `record-one-sale.ts`'s `systemClock` documents,
- * except the instant is settable rather than "right now". `anchor`/`currentAnchor` are never called
- * by `recordSale`, so they throw / return null.
- */
+/** `anchor`/`currentAnchor` are never called by `recordSale`, so they throw / return null. */
 function backDatingClock(): BackDatingClock {
   let instant = new Date();
   let offsetMinutes = -instant.getTimezoneOffset();
@@ -136,10 +101,8 @@ function backDatingClock(): BackDatingClock {
   };
 }
 
-/**
- * A small deterministic LCG (Numerical Recipes constants) yielding `[0, 1)`. Seeded so the same
- * `days` produces the same demo and the test is stable — never `Math.random()`.
- */
+/** A deterministic LCG yielding `[0, 1)`, never `Math.random()`, so the demo's shape is
+ *  reproducible. */
 function makeLcg(seed: number): () => number {
   let s = seed >>> 0;
   return () => {
@@ -153,20 +116,12 @@ function randInt(rng: () => number, min: number, max: number): number {
   return min + Math.floor(rng() * (max - min + 1));
 }
 
-/**
- * The VAT-exclusive base of a gross price: `base = gross ÷ (1 + rate/100)`, one rounded division at
- * money scale — the ruling's reversal, matching `@waitron/catalogue`'s own `baseFromGross` (which is
- * package-private, so it is restated here rather than deep-imported).
- */
+/** Restates `@waitron/catalogue`'s package-private `baseFromGross`. */
 function baseFromGross(gross: Decimal, rate: Decimal): Decimal {
   return divideDecimal(multiplyDecimal(gross, HUNDRED), addDecimal(HUNDRED, rate), MONEY_SCALE);
 }
 
-/**
- * Groups lines by rate and derives each group's tax with `percentOf` (the direct method, matching
- * `@waitron/core`'s `buildVatBreakdown` — not the catalogue's difference method). `buildVatBreakdown`
- * is not on core's public barrel, so the same grouping is restated here.
- */
+/** Restates `@waitron/core`'s `buildVatBreakdown`, which is not on core's public barrel. */
 function breakdownOf(lines: readonly RecordSaleLine[]): VatBreakdownLine[] {
   const bases = new Map<Decimal, Decimal>();
   for (const line of lines) {
@@ -178,27 +133,15 @@ function breakdownOf(lines: readonly RecordSaleLine[]): VatBreakdownLine[] {
   return [...bases.entries()].map(([rate, base]) => ({ rate, base, tax: percentOf(base, rate) }));
 }
 
-/** The taxable total that reconciles with `breakdown`: Σ(base + tax) across rates — computed exactly
- *  the way `recordSale` re-checks a supplied `vatBreakdown` against `total`, so the check passes by
- *  construction (fail-loud only if this math ever drifts). */
 function totalOf(breakdown: readonly VatBreakdownLine[]): Decimal {
   return sumDecimals(breakdown.flatMap((g) => [g.base, g.tax]));
 }
 
-/**
- * Back-fill the last `days` days of the given venue with reproducible, back-dated, preproduction
- * sales through the real `recordSale` path. Returns how many sales were recorded.
- *
- * Each sale is 1-4 lines, one product per line at quantity 1; the line's base is reversed out of the
- * product's gross price (ruling), the desglose is grouped per rate, and the sale's `total` and
- * `vatBreakdown` are handed to `recordSale` together so it asserts they reconcile (`sale.total_mismatch`
- * otherwise). One tender per sale (`cash`|`card`) covers the whole total; tips are always "0.00".
- */
+/** Returns how many sales were recorded. */
 export async function seedSales(
   db: Database,
   { venue, locale, days, products, clock }: SeedSalesInput,
 ): Promise<{ count: number }> {
-  // Guard by deletion: nothing is built, constructed or written for a zero/negative horizon.
   if (days <= 0) {
     return { count: 0 };
   }
@@ -206,22 +149,16 @@ export async function seedSales(
     throw new Error("seedSales: products must be non-empty when days > 0");
   }
 
-  // Content is authored bare (`es`); a filed sale is fiscal, so its `locale`/`invoice_locales` and its
-  // line `descriptions` are the FULL tag (`es-ES`) that bare content files under — the same re-key the
-  // live sale path applies at `priceOrderLines`, here on the direct `recordSale` path the seed uses.
+  // A filed sale takes the FULL tag (`es-ES`), not the bare content locale.
   const invoiceLocale = SEED_INVOICE_LOCALE[locale];
 
   const backDating = clock ?? backDatingClock();
   const backend = new VerifactuBackend({
     clock: backDating.clock,
     db,
-    // Both fields resolve to `preproduction` when WAITRON_ENV is unset (config.ts's one irreversible
-    // default). `environment` picks the QR validation host (never contacted here); `deploymentEnvironment`
-    // is stamped onto `entorno` (never hashed). See this file's header.
     environment: deploymentEnvironment(process.env),
     deploymentEnvironment: deploymentEnvironment(process.env),
-    // Never reached — `recordSale` does not contact AEAT (that is `drain`'s job, which this seed never
-    // runs). A rejection here would surface a bug, not a real submission.
+    // Never reached: `recordSale` does not contact AEAT.
     resolveClient: () =>
       Promise.reject(new Error("seed-sales: resolveClient must never be called by recordSale")),
   });
@@ -245,27 +182,25 @@ export async function seedSales(
     const dow = dayDate.getUTCDay();
     const weekend = dow === 0 || dow === 6;
 
-    // Weekends busier; a lunch and a dinner peak. Minimum is comfortably positive so every day —
-    // including yesterday, which the test reports on — is populated.
+    // The minimum is positive so every day, including yesterday, which the test reports on, is
+    // populated.
     const perDay = (weekend ? 16 : 9) + randInt(rng, 0, 8);
 
     for (let s = 0; s < perDay; s += 1) {
-      // Service windows in UTC: lunch 11:00-13:59 (Madrid 13:00-15:59), dinner 18:00-20:59 (Madrid
-      // 20:00-22:59) — both comfortably inside one Madrid business day. Dinner is the busier service.
+      // Service windows in UTC: lunch 11:00-13:59, dinner 18:00-20:59, both inside one Madrid
+      // business day.
       const dinner = rng() < 0.55;
       const hour = dinner ? randInt(rng, 18, 20) : randInt(rng, 11, 13);
       const instant = new Date(
         Date.UTC(year, month, date, hour, randInt(rng, 0, 59), randInt(rng, 0, 59)),
       );
-      // Keep every sale strictly in the past: today's later slots may fall after `now`, so skip them
-      // rather than file a future sale.
+      // Today's later slots may fall after `now`; never file a future sale.
       if (instant.getTime() >= now) {
         continue;
       }
 
-      // `lineCount` is the number of DISHES (1-4 per sale). `lineNo` tracks `lines.length` rather
-      // than the loop index `l`, because `RecordSaleLine` allows a dish to expand into more than one
-      // row; the demo generator writes exactly one row per dish and no child lines at all.
+      // `lineNo` tracks `lines.length` rather than the loop index, because `RecordSaleLine` allows
+      // a dish to expand into more than one row.
       const lineCount = randInt(rng, 1, 4);
       const lines: RecordSaleLine[] = [];
       for (let l = 0; l < lineCount; l += 1) {
@@ -312,8 +247,7 @@ export async function seedSales(
         invoiceLocales: [invoiceLocale],
         total,
         lines,
-        // Supplied verbatim AND derived from the same lines, so `recordSale`'s reconciliation check
-        // passes by construction — a fail-loud defence for an unrepairable record, never a fudge.
+        // Derived from the same lines as `total`, so `recordSale`'s reconciliation check passes.
         vatBreakdown,
         settlement: {
           kind: "immediate",

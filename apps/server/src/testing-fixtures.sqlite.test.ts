@@ -8,15 +8,8 @@ import { ensureMirrorViewer, MIRROR_VIEWER_SESSION_ID } from "./mirror-session.j
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 
 /**
- * This package's two shared fixtures, RUN against a real migrated venue database.
- *
- * They earn a suite of their own because a broken fixture does not fail where it is written: every
- * case in every file that calls one dies inside it, in `beforeAll`, before reaching the code under
- * test — which is what `seed-units.ts` did on this branch, in 101 stack frames across the package,
- * while nothing named it. Both carried SQL this engine refuses at PREPARE (`unrecognized token:
- * ":"`, from `::jsonb` and `array[...]`) and both relied on PostgreSQL column DEFAULTS that are
- * JavaScript generators now, which a raw insert never reaches (`NOT NULL constraint failed:
- * tenants.created_at`).
+ * This package's shared fixtures, RUN against a real migrated venue database: a broken fixture
+ * otherwise fails every caller's `beforeAll` without naming itself.
  */
 
 const suite = useVenueDb({
@@ -65,19 +58,14 @@ describe("the shared fixtures seed a real migrated venue", () => {
       entorno: "production",
       chain: seeded.huella,
       envio: "pendiente",
-      // The `+01:00` literal the fixture states reaches the column as the UTC instant it names —
-      // what PostgreSQL's `timestamptz` already did to it, and the one spelling that sorts
-      // correctly here (`packages/printing/src/runtime.ts` has the measurement).
+      // The fixture's `+01:00` literal reaches the column as the UTC instant it names.
       fecha: "2026-07-20T18:20:30.000Z",
     });
-    // `creado_en` has no SQL default any more: it comes from the column's own generator, which only
-    // the insert BUILDER runs. A raw insert would have left it null and been refused.
+    // `creado_en` comes from the column's own generator, which only the insert BUILDER runs.
     expect(Number.isNaN(Date.parse(rows[0]!.creado))).toBe(false);
   });
 
   it("plants a second registro on the same chain", async () => {
-    // The two-step composition (`seedFiscalParents` + `insertFiscalRegistro`) other suites use to
-    // put a registro on a database whose parents already exist.
     const first = await seedFiscalRegistro(db);
     const second = await insertFiscalRegistro(db, first, { secuencia: 2, numSerie: "A/2" });
     expect(second.secuencia).toBe(2);
@@ -89,11 +77,6 @@ describe("the shared fixtures seed a real migrated venue", () => {
 });
 
 describe("the mirror's ambient viewer is seeded on a real migrated venue", () => {
-  // The two inserts the storage swap rewrote: both relied on PostgreSQL column defaults
-  // (`persons.created_at`, `management_sessions.created_at` / `last_seen_at`) and the upsert
-  // stamped `now()`. `mirror-session.test.ts` covers `ensureMirrorViewer` too and now runs
-  // (9 passed, 2026-09-22); this case is kept because it drives it against the fixture module's
-  // own migrated venue rather than that suite's.
   it("creates the viewer and its live session, and a second call revives rather than duplicates", async () => {
     await ensureMirrorViewer(db);
     await ensureMirrorViewer(db);

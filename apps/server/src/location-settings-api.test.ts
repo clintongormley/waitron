@@ -15,23 +15,7 @@ import { recordTillSale } from "./till-sale.js";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 
-/**
- * The venue's invoice operation description, over the route.
- *
- * ## Two blockers this header used to declare are fixed
- *
- * 1. The shared fixture seeded `persons` with a raw statement, which reaches no `$defaultFn`
- *    generator, so `beforeAll` never got past `setupVenue`
- *    (`NOT NULL constraint failed: persons.id`). `apps/server/src/testing/venue-fixtures.ts` writes
- *    those rows through the table definition now.
- *
- * 2. `filedReceiptFor` read `registros_facturacion` with a raw select, which skips drizzle's JSON
- *    decoding, so `desglose` arrived as text and the edited-description case died in
- *    `desglose.map`. `packages/fiscal-verifactu/src/backend.ts` decodes the row it read
- *    (`decodeRegistroRow`).
- *
- * The file is green — run on its own, 2026-09-22.
- */
+/** The venue's invoice operation description, over the route. */
 // The full manifest, because the first case files a real fiscal record through `recordTillSale`.
 // `resetPerTest: false`: the venue set up once in `beforeAll` is read by every case, and each case
 // that writes the description restores it in a `finally`.

@@ -10,7 +10,7 @@ import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
 
 /** Public certificate files use a fixed state path; requests never choose a filesystem location. */
 export interface DiscoveryDeps {
-  /** The persisted state dir (config.stateDir); the CA lives at <stateDir>/tls/ca.crt (2a). */
+  /** The persisted state dir; the CA lives at <stateDir>/tls/ca.crt. */
   stateDir: string;
   hostname: string; // "waitron.local"
   port: number; // config.httpPort
@@ -36,9 +36,6 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
   const caPath = caCertPath(deps.stateDir);
   const renderQrSvg = deps.renderQrSvg ?? defaultRenderQrSvg;
 
-  // The reach info is the same lookup for both read routes — one options object, built here once so
-  // the two callers cannot drift apart. Cheap and synchronous (it just enumerates interfaces via the
-  // injected `listIpv4`), so it is recomputed per request rather than cached across the app's life.
   const getReach = (): ReachInfo =>
     buildReachInfo({
       hostname: deps.hostname,
@@ -104,8 +101,6 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
 
   app.get("/setup/trust", async (c) => {
     const reach = getReach();
-    // `renderQrSvg` (encode the reach URL) and `caExists` (stat the CA file) are independent, so run
-    // them concurrently — the route's latency is max(qr, fs) rather than their sum.
     const [qr, caAvailable] = await Promise.all([
       reach.qrTarget ? renderQrSvg(reach.qrTarget) : Promise.resolve(null),
       caExists(),
@@ -121,7 +116,5 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
     return c.html(html, 200, { "Cache-Control": "no-cache" });
   });
 
-  // One line at mount, mirroring `mountSetup`: an operator scanning logs sees the
-  // discovery surface came up. Fires once, not per request.
   log("info", "discovery.mounted", { hostname: deps.hostname });
 }

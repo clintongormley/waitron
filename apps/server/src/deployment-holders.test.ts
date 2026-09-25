@@ -4,13 +4,6 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createDeploymentHolders, refreshDeploymentHolders } from "./deployment-holders.js";
 
-// One SQLite venue file with the core set applied, opened the way the product opens it.
-//
-// This header used to justify picking PGlite over real PostgreSQL, and then defer the
-// owner-vs-app WRITE distinction on `deployment` to a real-PG booted e2e. Both halves described
-// choices that no longer exist: there is one engine to pick, and it has no roles, so no suite
-// anywhere can exercise a write-privilege split on this table. What is under test is unchanged —
-// the refresh READS both axes back into the holder.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";

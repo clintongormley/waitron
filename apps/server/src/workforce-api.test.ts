@@ -24,10 +24,8 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     const seeded = await withTransaction(db, async (tx) => {
-      // Through the table definitions, not raw SQL: every `id` here is a JavaScript `$defaultFn`
-      // generator on this engine (`id text PRIMARY KEY NOT NULL`), which a raw insert never reaches,
-      // and `invoice_locales` is encoded by the column's own write mapping — the `array[...]`
-      // constructor it replaces is a syntax error here.
+      // Through the table definitions, not raw SQL: every `id` here is a NOT NULL `$defaultFn`
+      // generator a raw insert never reaches.
       const [loc] = await tx
         .insert(locations)
         .values({
@@ -148,9 +146,8 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
   });
 
   it("400s a POST /roster with a MALFORMED body (never a 500)", async () => {
-    // `c.req.json()` throws on a malformed body; the shared `readJsonBody` coerces that throw to `{}` →
-    // `requireBodyUuid` rejects the missing locationId as a 400, not an opaque 500. Sent raw, since
-    // `send` would JSON.stringify a valid body.
+    // `readJsonBody` coerces the malformed body to `{}`, so `requireBodyUuid` rejects the missing
+    // locationId. Sent raw, since `send` would JSON.stringify a valid body.
     const res = await mountApp().request("/management-api/roster", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: managerCookie },
@@ -160,8 +157,7 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
   });
 
   it("400s a shaped-but-invalid calendar date on POST (2026-02-30 → request_invalid, never a 500)", async () => {
-    // Shape passes the YYYY-MM-DD regex but Feb 30 is not a real day; without a calendar-validity
-    // check it reaches the `::date` column as 22008 → an opaque server.internal 500.
+    // Shape passes the YYYY-MM-DD regex but Feb 30 is not a real day.
     const res = await send(mountApp(), "POST", "/management-api/roster", {
       body: { locationId, period: "2026-02-30" },
     });
@@ -339,9 +335,8 @@ describe("mountWorkforceApi — shift routes", () => {
   });
 
   it("400s a non-parseable startsAt on add (management.request_invalid, never a 500)", async () => {
-    // "nope" is a string, so requireBodyString passed it; addShift's `NaN >= NaN` interval guard is
-    // false, so without a route-level timestamp screen it lands in the `::timestamptz` column (22007
-    // → 500). Screened at the route it is a 400 request_invalid.
+    // "nope" is a string, so requireBodyString passes it, and addShift's `NaN >= NaN` interval guard
+    // is false: only the route-level timestamp screen refuses it.
     const app = mountApp();
     const versionId = await draftVersion("2026-04-27");
     const res = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
@@ -354,8 +349,7 @@ describe("mountWorkforceApi — shift routes", () => {
   });
 
   it("400s an out-of-range startsOffsetMinutes on add (management.request_invalid, never a 500)", async () => {
-    // 900 is an integer, so requireBodyInt passed it; the DB check `between -840 and 840` then raises
-    // 23514 → 500. Range-checked at the route it is a 400 request_invalid.
+    // 900 is an integer, so requireBodyInt passes it; the route's range check refuses it.
     const app = mountApp();
     const versionId = await draftVersion("2026-05-25");
     const res = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {

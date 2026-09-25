@@ -1,7 +1,3 @@
-// H2 receipt (Step 1): `git diff --stat main -- packages/core/src/record-sale.ts
-// packages/fiscal-verifactu/src/backend.ts @waitron/verifactu apps/server/src/till-sale.ts` → no
-// changes; `grep -nE 'status_id|statusId|table_service_statuses|tableServiceStatuses'` over those files
-// → empty. The reset is a trigger + an openTab edit; the fiscal pay path is byte-unchanged.
 import { randomUUID } from "node:crypto";
 import {
   CORE_MIGRATIONS,
@@ -21,9 +17,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import "./errors.js";
 
-// The core migration set alone: the trigger under test, its two tables and the working order are
-// all core. `resetPerTest: false` — the venue, till and node seeded once in `beforeAll` are read by
-// every case, and each case seeds its own tab.
+// `resetPerTest: false`: the venue, till and node are seeded once, and each case seeds its own tab.
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
   resetPerTest: false,
@@ -49,12 +43,7 @@ async function statusOf(tableId: string): Promise<string | null> {
 
 beforeAll(async () => {
   await seedTenant(suite.db);
-  // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
-  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
-  // engine and a raw insert reaches none of them (all three columns are NOT NULL —
-  // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
-  // a text column, which is what refused the `array[...]` constructor that used to fill it
-  // (`near "['es']": syntax error`).
+  // Inserted through the table definitions so each column's `$defaultFn` runs.
   const [location] = await suite.db
     .insert(locations)
     .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
@@ -74,10 +63,6 @@ let orderSeq = 0;
 async function seedJoinedTab(tableCount: number): Promise<{ orderId: string; tableIds: string[] }> {
   orderSeq += 1;
   return asApp(async (tx) => {
-    // Through the table definitions for the same reason as the venue rows above — every `id` here,
-    // plus `table_service_statuses.created_at`, `working_orders.opened_at` and
-    // `dining_tables.created_at`, is a `$defaultFn` generator filling a NOT NULL column
-    // (`packages/db/drizzle/0000_baseline.sql:517`, `:522`, `:114`, `:120`, `:161`, `:167`).
     const [status] = await tx
       .insert(tableServiceStatuses)
       .values({ label: `Bill ${randomUUID()}`, color: "#ef4444" })
@@ -116,10 +101,8 @@ describe("working_orders_clear_table_status (reset-on-turnover)", () => {
   });
 
   it("a tab that goes open→placed→settled ALSO has its table's status_id cleared (WHEN covers placed→terminal)", async () => {
-    // placeOrder(tabId) → pay walks a tab open → placed → settled (placeOrder carries no guard that
-    // the order is not a tab — a separate follow-up), so the reset-on-turnover WHEN must fire on
-    // placed→terminal too, not only open→terminal. enforce_transition (0030) permits open→placed and
-    // placed→settled, and the AFTER trigger's broadened WHEN clears the table on the settle.
+    // placeOrder(tabId) → pay walks a tab open → placed → settled, so the reset must fire on
+    // placed→terminal too, not only open→terminal.
     const { orderId, tableIds } = await seedJoinedTab(1);
     expect(await statusOf(tableIds[0]!)).not.toBeNull();
 
@@ -129,7 +112,7 @@ describe("working_orders_clear_table_status (reset-on-turnover)", () => {
     );
     expect(await statusOf(tableIds[0]!)).not.toBeNull();
 
-    // placed → settled IS terminal → the broadened WHEN fires and clears the table.
+    // placed → settled IS terminal.
     await asApp((tx) =>
       tx.execute(
         sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${orderId}`,

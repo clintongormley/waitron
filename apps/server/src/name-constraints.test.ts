@@ -7,9 +7,8 @@ import { describe, expect, it } from "vitest";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 /**
- * Proves the CA's nameConstraints actually CONSTRAIN, by running openssl rather than reading the DER:
- * a control leaf for `example.com` signed by the same CA must be REFUSED, while a `waitron.local`
- * leaf is accepted. Mirrors the desktop spike (spec §6). Skips cleanly where openssl is absent.
+ * Runs openssl to check the CA's nameConstraints CONSTRAIN: an `example.com` leaf signed by the same CA
+ * is REFUSED, a `waitron.local` leaf accepted. Skips where openssl is absent.
  */
 function haveOpenssl(): boolean {
   try {

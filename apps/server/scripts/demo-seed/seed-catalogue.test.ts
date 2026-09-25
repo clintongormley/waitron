@@ -1,18 +1,6 @@
 /**
- * `seedCatalogues`: the two demo menus, each category routed to its KDS station, the default and
- * the accessible second menu, and the image→product map the media and sales steps read.
- *
- * SQLite has no roles, and every call below runs on the one handle. Nothing now checks who
- * may write the catalogue.
- *
- * Three read-back shapes moved with the engine, none of them changing what is asserted:
- * `count(...)::int` is `cast(count(...) as integer)`; `array_agg(x order by y)` is
- * `json_group_array(x order by y)`, which hands back JSON TEXT the mapping parses (the same
- * substitution `packages/catalogue/src/categories.ts:40` makes in product code); and a JSON column
- * read RAW arrives as its stored text rather than as a parsed object, because a raw read reaches no
- * column mapper — so `description`, `dietary_declarations`, a unit's `name` and its `abbreviation`
- * are parsed in the mapping. A boolean column arrives as 0 or 1 for the same reason, which is why
- * `is_default` is compared to 1 there.
+ * `seedCatalogues`: the three demo menus, each category routed to its preparation station, the
+ * default menu, and the image→product map the media and sales steps read.
  */
 
 import { describe, expect, it } from "vitest";
@@ -39,15 +27,13 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// One NIF per provisioned venue. `useVenueDb`'s per-test reset empties every data table, so the
-// counter no longer keeps two tests apart; it keeps two `provisionVenue` calls within a test apart.
+// One NIF per provisioned venue.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(50_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** Provision a fresh chained venue (as the owner) and return the ids the seed needs. */
 async function provisionVenue(): Promise<{ locationId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -94,7 +80,6 @@ describe("seedCatalogues", () => {
       const menus = await listAccessibleCatalogues(tx, locationId);
       const { products } = await listAvailableProducts(tx, locationId);
       const contentLanguages = await readContentLanguages(tx, LOCALE);
-      // Read back the two stations and one category's route per menu, to prove routing.
       const { rows: stationRows } = await tx.execute<{ name: string; is_default: number }>(sql`
         select name, is_default from kitchen_stations where location_id = ${locationId}`);
       const stations = stationRows.map((row) => ({
@@ -211,12 +196,10 @@ describe("seedCatalogues", () => {
       languages: ["en", "es"],
     });
 
-    // Products span BOTH menus and clear the demo floor.
     expect(res.products.length).toBeGreaterThan(35);
     const menuNames = new Set(res.products.map((p) => p.catalogueName));
     expect(menuNames).toEqual(new Set(["Casa Delgado", "Menú del Día", "Deli takeaway"]));
 
-    // A known dish from each menu is present.
     expect(res.products.some((p) => p.name === "Sliced Iberian ham (per kg)")).toBe(true);
     expect(res.products.some((p) => p.name === "Mixed salad")).toBe(true);
 
@@ -229,7 +212,6 @@ describe("seedCatalogues", () => {
     expect(upstairsBar?.is_default).toBe(false);
     expect(deli?.is_default).toBe(false);
 
-    // Routing: a drinks category → the bar (Barra); a food category → the kitchen (Cocina).
     expect(res.drinksRoute[0]?.station_name).toBe("Downstairs bar");
     expect(res.charcuterieRoute[0]?.station_name).toBe("Deli counter");
 
@@ -256,7 +238,6 @@ describe("seedCatalogues", () => {
         menu_overrides: 0,
       },
     ]);
-    // A variant is named in full, and its three names are its own.
     expect(res.coffeeVariants).toEqual([
       { name: "Café solo", customer_en: "Espresso", kitchen_name: "ESPRESSO" },
       { name: "Café doble", customer_en: "Double espresso", kitchen_name: null },
@@ -269,7 +250,6 @@ describe("seedCatalogues", () => {
       },
     ]);
 
-    // The returned map covers every seeded product and points at a real created id.
     expect(res.out.productsByImage.size).toBe(res.products.length);
     const hamId = res.out.productsByImage.get("jamon-iberico.png");
     expect(hamId).toBeDefined();

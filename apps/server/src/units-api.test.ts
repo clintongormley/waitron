@@ -27,9 +27,7 @@ beforeEach(async () => {
   await suite.db.execute(sql`delete from persons`);
   await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
-    // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
-    // `$defaultFn` generators and both columns are NOT NULL, so a raw insert naming neither stops
-    // at `NOT NULL constraint failed: persons.id`. The same holds for every fixture insert below.
+    // Every fixture insert goes through the table definition so each column's `$defaultFn` runs.
     const [person] = await tx
       .insert(persons)
       .values({ displayName: "Manager", pinHash: hashPin("1234"), role: "manager" })
@@ -39,8 +37,7 @@ beforeEach(async () => {
   });
 });
 
-/** A catalogue to hang fixture products off. Through the table definition for the reason the
- *  `persons` insert above states: `id`, `created_at` and `updated_at` are `$defaultFn` generators. */
+/** A catalogue to hang fixture products off. */
 async function seedCatalogue(tx: Transaction): Promise<string> {
   const [menu] = await tx
     .insert(catalogues)
