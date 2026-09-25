@@ -1,9 +1,13 @@
-import { mkdir, access } from "node:fs/promises";
+import { mkdir, access, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
 import { listBoxIpv4 } from "./box-reach.js";
-import { mintSelfSignedServerCert, isPermittedLeafIpv4 } from "./self-signed-cert.js";
+import {
+  mintSelfSignedServerCert,
+  isPermittedLeafIpv4,
+  reissueServerLeaf,
+} from "./self-signed-cert.js";
 import { writeFileAtomic } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
 import type { TlsFiles } from "./tls.js";
@@ -168,4 +172,30 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
   }
 
   return { certFile: files.certFile, keyFile: files.keyFile, caCertFile: files.caCertFile };
+}
+
+/**
+ * Replace the leaf with one naming THIS machine's addresses, signed by the authority already in
+ * `<stateDir>/tls`, which stays untouched. `server.key` is written last, as `ensureBoxSecrets`
+ * writes it.
+ */
+export async function reissueBoxLeaf(deps: {
+  stateDir: string;
+  hostnames: string[];
+  now: () => Date;
+  listIpv4: () => string[];
+}): Promise<void> {
+  const tlsDir = join(deps.stateDir, "tls");
+  const caCertPem = await readFile(caCertPath(deps.stateDir), "utf8");
+  const caKeyPem = await readFile(join(tlsDir, "ca.key"), "utf8");
+  const ips = Array.from(new Set(["127.0.0.1", ...deps.listIpv4()])).filter(isPermittedLeafIpv4);
+  const leaf = reissueServerLeaf({
+    caCertPem,
+    caKeyPem,
+    hostnames: deps.hostnames,
+    ipAddresses: ips,
+    now: deps.now(),
+  });
+  await writeFileAtomic(join(tlsDir, "server.crt"), leaf.serverCertPem, 0o600);
+  await writeFileAtomic(join(tlsDir, "server.key"), leaf.serverKeyPem, 0o600);
 }

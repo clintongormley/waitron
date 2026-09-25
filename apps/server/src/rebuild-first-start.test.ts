@@ -1,0 +1,245 @@
+import { X509Certificate, createPrivateKey } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { sql } from "drizzle-orm";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { loadKeyRing, type KeyRing } from "@waitron/credentials";
+import {
+  locations,
+  nodes,
+  readMembershipTrustSet,
+  readNodeMembership,
+  tenants,
+  writeNodeMembership,
+} from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { verifyMembershipDocument, type MembershipNode } from "@waitron/membership";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { ensureBoxSecrets } from "./box-secrets.js";
+import { mintNextMembershipDocument } from "./membership-mint.js";
+import { seedTermZeroMembership } from "./membership-seed.js";
+import { establishNodeIdentity } from "./node-identity.js";
+import {
+  REBUILD_MARKER,
+  completeRebuild,
+  type RebuildDeps,
+  type RebuildSource,
+} from "./rebuild-first-start.js";
+
+const RING: KeyRing = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
+/** A key ring that cannot open this node's membership key, so signing the next term fails. */
+const OTHER_RING: KeyRing = loadKeyRing({
+  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
+  WAITRON_CREDENTIALS_KEY_VERSION: "1",
+});
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  resetPerTest: false,
+  timeoutMs: 120_000,
+});
+const NODE = "c0000000-0000-4000-8000-000000000008";
+const OTHER_NODE = "c0000000-0000-4000-8000-000000000009";
+const LOCATION = "c0000000-0000-4000-8000-000000000002";
+const OLD_ADDRESS = "192.168.1.10";
+const NEW_ADDRESS = "192.168.1.77";
+const NOW = new Date("2026-09-23T10:00:00Z");
+
+beforeAll(async () => {
+  await suite.db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
+  await suite.db.insert(locations).values({
+    id: LOCATION,
+    name: "Local",
+    invoiceLocales: ["es"],
+    operationDescription: "Venta",
+  });
+  await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Node 1" });
+  await establishNodeIdentity({ ownerDb: suite.db, ring: RING }, NODE);
+});
+
+const dirs: string[] = [];
+afterEach(async () => {
+  for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
+});
+
+/** A state folder as a restore leaves it: the dead box's certificate files, naming its old
+ * address, the marker the restore wrote (none for an ordinary start), and the dead box's term-0
+ * membership document. */
+async function rebuiltStateDir(marker: RebuildSource | false): Promise<string> {
+  const stateDir = await mkdtemp(join(tmpdir(), "waitron-rebuild-"));
+  dirs.push(stateDir);
+  await ensureBoxSecrets({
+    stateDir,
+    hostnames: ["waitron.local", "localhost"],
+    now: () => NOW,
+    listIpv4: () => [OLD_ADDRESS],
+  });
+  if (marker !== false) {
+    await writeFile(join(stateDir, REBUILD_MARKER), JSON.stringify({ version: 1, source: marker }));
+  }
+  await seedTermZeroMembership({ db: suite.db, ring: RING }, NODE, "https://old-box.example");
+  return stateDir;
+}
+
+function deps(stateDir: string, overrides: Partial<RebuildDeps> = {}): RebuildDeps {
+  return {
+    stateDir,
+    db: suite.db,
+    ring: RING,
+    nodeId: NODE,
+    contactUrl: "https://waitron.local",
+    hostnames: ["waitron.local", "localhost"],
+    listIpv4: () => [NEW_ADDRESS],
+    now: () => NOW,
+    log: () => {},
+    ...overrides,
+  };
+}
+
+async function leafOf(stateDir: string): Promise<X509Certificate> {
+  return new X509Certificate(await readFile(join(stateDir, "tls", "server.crt"), "utf8"));
+}
+
+describe("completeRebuild", () => {
+  it.each(["archive", "stream"] as const)(
+    "after a %s restore, presents a certificate naming THIS machine's addresses, from the same authority",
+    async (source) => {
+      const stateDir = await rebuiltStateDir(source);
+      const caBefore = await readFile(join(stateDir, "tls", "ca.crt"), "utf8");
+      expect(await completeRebuild(deps(stateDir))).toBe(true);
+      // The two files `mintedBoxLeaf` (box-secrets.ts) hands the trading listener.
+      const leaf = await leafOf(stateDir);
+      expect(leaf.subjectAltName).toContain(`IP Address:${NEW_ADDRESS}`);
+      expect(leaf.subjectAltName).not.toContain(OLD_ADDRESS);
+      const ca = await readFile(join(stateDir, "tls", "ca.crt"), "utf8");
+      expect(ca).toBe(caBefore);
+      expect(leaf.verify(new X509Certificate(ca).publicKey)).toBe(true);
+      const key = await readFile(join(stateDir, "tls", "server.key"), "utf8");
+      expect(leaf.checkPrivateKey(createPrivateKey(key))).toBe(true);
+      expect((await stat(join(stateDir, "tls", "server.key"))).mode & 0o777).toBe(0o600);
+    },
+  );
+
+  it.each(["archive", "stream"] as const)(
+    "after a %s restore, signs the membership document one term higher, carrying this machine's contact address",
+    async (source) => {
+      const stateDir = await rebuiltStateDir(source);
+      await completeRebuild(deps(stateDir));
+      const held = await readNodeMembership(suite.db);
+      expect(held!.body.term).toBe(1);
+      expect(held!.body.nodes).toEqual([
+        { nodeId: NODE, contactUrl: "https://waitron.local", standing: "serving-primary" },
+      ]);
+      expect(verifyMembershipDocument(held!, await readMembershipTrustSet(suite.db))).toMatchObject(
+        { valid: true },
+      );
+      await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    },
+  );
+
+  it("removes the marker last: a step that fails leaves it, so the next start runs the routine again", async () => {
+    const stateDir = await rebuiltStateDir("stream");
+    await expect(completeRebuild(deps(stateDir, { ring: OTHER_RING }))).rejects.toMatchObject({
+      code: "credentials.decrypt_failed",
+    });
+    await stat(join(stateDir, REBUILD_MARKER));
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
+    // The other direction: the same folder with the right ring completes and removes it.
+    expect(await completeRebuild(deps(stateDir))).toBe(true);
+    await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("does nothing on an ordinary start — the leaf stays byte-for-byte and the term does not move", async () => {
+    const stateDir = await rebuiltStateDir(false);
+    const leafBefore = await readFile(join(stateDir, "tls", "server.crt"));
+    expect(await completeRebuild(deps(stateDir))).toBe(false);
+    expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(leafBefore);
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
+  });
+
+  it.each(["{ torn", "{}"])(
+    "runs on a marker whose body names no source (%s), because only a restore writes one",
+    async (markerBody) => {
+      const stateDir = await rebuiltStateDir(false);
+      await writeFile(join(stateDir, REBUILD_MARKER), markerBody);
+      const logged: Array<[string, Record<string, unknown> | undefined]> = [];
+      expect(
+        await completeRebuild(
+          deps(stateDir, { log: (_level, event, fields) => logged.push([event, fields]) }),
+        ),
+      ).toBe(true);
+      expect((await readNodeMembership(suite.db))!.body.term).toBe(1);
+      expect(logged).toContainEqual(["restore.first_start_done", { term: 1, source: "unknown" }]);
+    },
+  );
+
+  it("names the source the marker recorded in its log line", async () => {
+    const stateDir = await rebuiltStateDir("stream");
+    const logged: Array<[string, Record<string, unknown> | undefined]> = [];
+    await completeRebuild(
+      deps(stateDir, { log: (_level, event, fields) => logged.push([event, fields]) }),
+    );
+    expect(logged).toContainEqual(["restore.first_start_done", { term: 1, source: "stream" }]);
+  });
+
+  it("fails on a marker it cannot read at all, leaving it for the next start", async () => {
+    const stateDir = await rebuiltStateDir(false);
+    // A directory where the marker file goes: reading it fails with something other than ENOENT.
+    await mkdir(join(stateDir, REBUILD_MARKER));
+    await expect(completeRebuild(deps(stateDir))).rejects.toMatchObject({ code: "EISDIR" });
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
+  });
+
+  it("drops an address the authority cannot vouch for, as first minting does", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    await completeRebuild(deps(stateDir, { listIpv4: () => [NEW_ADDRESS, "100.64.0.9"] }));
+    const leaf = await leafOf(stateDir);
+    expect(leaf.subjectAltName).not.toContain("100.64.0.9");
+    expect(leaf.subjectAltName).toContain(NEW_ADDRESS);
+    expect(leaf.subjectAltName).toContain("IP Address:127.0.0.1");
+  });
+
+  it("changes only this node's contact address, leaving every other node as it was", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    const other: MembershipNode = {
+      nodeId: OTHER_NODE,
+      contactUrl: "https://other.example",
+      standing: "sell-only",
+    };
+    const held = await readNodeMembership(suite.db);
+    await writeNodeMembership(
+      suite.db,
+      await mintNextMembershipDocument(
+        { db: suite.db, ring: RING },
+        {
+          heldDocument: null,
+          nodes: [...held!.body.nodes, other],
+          signerNodeId: NODE,
+        },
+      ),
+    );
+    await completeRebuild(deps(stateDir));
+    expect((await readNodeMembership(suite.db))!.body.nodes).toEqual([
+      { nodeId: NODE, contactUrl: "https://waitron.local", standing: "serving-primary" },
+      other,
+    ]);
+  });
+
+  it("signs term 0 naming this node alone when the restored database holds no document", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    await suite.db.execute(sql`delete from node_membership`);
+    await completeRebuild(deps(stateDir));
+    const held = await readNodeMembership(suite.db);
+    expect(held!.body.term).toBe(0);
+    expect(held!.body.nodes).toEqual([
+      { nodeId: NODE, contactUrl: "https://waitron.local", standing: "serving-primary" },
+    ]);
+  });
+});

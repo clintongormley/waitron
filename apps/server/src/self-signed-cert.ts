@@ -141,8 +141,8 @@ const VALIDITY_DAYS = 3650;
 const CA_COMMON_NAME = "waitron-setup-ca";
 
 /**
- * A fresh, positive X.509 serial as a hex string. The CA key is kept (see `caKeyPem` above) so the
- * same CA can re-sign a rotated leaf in a later slice — a hardcoded leaf serial would collide with
+ * A fresh, positive X.509 serial as a hex string. The same CA signs again when a restored box
+ * re-issues its leaf ({@link reissueServerLeaf}) — a hardcoded leaf serial would collide with
  * itself the second time that CA signs, which violates X.509 serial uniqueness per issuer. Random
  * (rather than counter-based) sidesteps needing any persisted state to avoid that collision.
  */
@@ -150,6 +150,34 @@ function randomSerial(): string {
   const bytes = randomBytes(16);
   bytes[0] &= 0x7f; // clear the high bit so the ASN.1 INTEGER is positive (node-forge would otherwise treat it as negative)
   return bytes.toString("hex");
+}
+
+/** The leaf's extensions and SANs, shared by minting and re-issuing so the two cannot drift. */
+function signLeaf(
+  caKey: forge.pki.rsa.PrivateKey,
+  serverKeys: forge.pki.rsa.KeyPair,
+  hostnames: string[],
+  ipAddresses: string[],
+  validity: { notBefore: Date; notAfter: Date },
+): forge.pki.Certificate {
+  // type 2 is dNSName, type 7 is iPAddress, so a client can dial either a hostname or an IP.
+  const altNames = [
+    ...hostnames.map((value) => ({ type: 2, value })),
+    ...ipAddresses.map((ip) => ({ type: 7, ip })),
+  ];
+  return certificate(
+    hostnames[0],
+    serverKeys,
+    { cn: CA_COMMON_NAME, key: caKey },
+    randomSerial(),
+    validity,
+    [
+      { name: "basicConstraints", cA: false },
+      { name: "keyUsage", digitalSignature: true, keyEncipherment: true },
+      { name: "extKeyUsage", serverAuth: true },
+      { name: "subjectAltName", altNames },
+    ],
+  );
 }
 
 /**
@@ -193,29 +221,39 @@ export function mintSelfSignedServerCert(opts: MintOptions): SelfSignedMaterial 
   );
 
   const serverKeys = makeKeypair();
-  // type 2 is dNSName, type 7 is iPAddress, so a client can dial either a hostname or an IP.
-  const altNames = [
-    ...hostnames.map((value) => ({ type: 2, value })),
-    ...ipAddresses.map((ip) => ({ type: 7, ip })),
-  ];
-  const serverCert = certificate(
-    hostnames[0],
-    serverKeys,
-    { cn: CA_COMMON_NAME, key: caKeys.privateKey },
-    randomSerial(),
-    validity,
-    [
-      { name: "basicConstraints", cA: false },
-      { name: "keyUsage", digitalSignature: true, keyEncipherment: true },
-      { name: "extKeyUsage", serverAuth: true },
-      { name: "subjectAltName", altNames },
-    ],
-  );
+  const serverCert = signLeaf(caKeys.privateKey, serverKeys, hostnames, ipAddresses, validity);
 
   return {
     caCertPem: forge.pki.certificateToPem(caCert),
     caKeyPem: forge.pki.privateKeyToPem(caKeys.privateKey),
     serverCertPem: forge.pki.certificateToPem(serverCert),
+    serverKeyPem: forge.pki.privateKeyToPem(serverKeys.privateKey),
+  };
+}
+
+/**
+ * A new leaf, with a new key pair, signed by an EXISTING authority. Devices trust the authority,
+ * not the leaf, so they accept it without a new trust step. The leaf never outlives its authority.
+ */
+export function reissueServerLeaf(opts: {
+  caCertPem: string;
+  caKeyPem: string;
+  hostnames: string[];
+  ipAddresses: string[];
+  now: Date;
+  keypair?: () => forge.pki.rsa.KeyPair;
+}): { serverCertPem: string; serverKeyPem: string } {
+  if (opts.hostnames.length === 0) throw new AppError("setup.cert_hostnames_empty", {});
+  const caCert = forge.pki.certificateFromPem(opts.caCertPem);
+  const caKey = forge.pki.privateKeyFromPem(opts.caKeyPem) as forge.pki.rsa.PrivateKey;
+  const serverKeys = (opts.keypair ?? (() => forge.pki.rsa.generateKeyPair(2048)))();
+  const wanted = opts.now.getTime() + VALIDITY_DAYS * DAY_MS;
+  const leaf = signLeaf(caKey, serverKeys, opts.hostnames, opts.ipAddresses, {
+    notBefore: new Date(opts.now.getTime() - DAY_MS),
+    notAfter: new Date(Math.min(wanted, caCert.validity.notAfter.getTime())),
+  });
+  return {
+    serverCertPem: forge.pki.certificateToPem(leaf),
     serverKeyPem: forge.pki.privateKeyToPem(serverKeys.privateKey),
   };
 }
