@@ -24,11 +24,10 @@ import type { ImageApi, ImageMetadata, ImageQuery, ImageUsage, LibraryImage } fr
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { t } from "./strings.js";
 
-type LinkedUsage = Exclude<ImageUsage, { kind: "section" }>;
-
 /** Where a blocking use sends the operator: a variant opens its own product page. */
-function usageHref(use: LinkedUsage): string {
+function usageHref(use: ImageUsage): string {
   if (use.kind === "category") return `/manage/categories?category=${encodeURIComponent(use.id)}`;
+  if (use.kind === "section") return `/manage/sections?section=${encodeURIComponent(use.id)}`;
   return `/manage/catalogue/product/${encodeURIComponent(use.id)}`;
 }
 
@@ -181,11 +180,17 @@ export class ImageLibrary extends LitElement {
   #text(value: Record<string, string>): string {
     return resolveEnabledContentText(value, currentLocale(), currentContentLanguages());
   }
-  /** No screen shows a single section, so a section is named without a link. */
   #usage(use: ImageUsage) {
-    if (use.kind === "section") return use.internalName;
-    const name = use.kind === "category" ? this.#text(use.names) : use.name;
-    const inactive = use.kind === "category" || use.active ? "" : ` (${t("image.inactive")})`;
+    const name =
+      use.kind === "category"
+        ? this.#text(use.names)
+        : use.kind === "section"
+          ? use.internalName
+          : use.name;
+    const inactive =
+      use.kind === "category" || use.kind === "section" || use.active
+        ? ""
+        : ` (${t("image.inactive")})`;
     return html`<a href=${usageHref(use)}>${name}${inactive}</a>`;
   }
 

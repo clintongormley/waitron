@@ -32,8 +32,9 @@ empty in every language and Waitron falls back to the staff name, so it never bl
 it in for Spanish and leave English blank, though, and that *is* a missing translation — you clearly
 meant to translate it — so it does hold the change up until you finish it or clear it. A reusable
 section's customer names work the same way: none at all never blocks the change, but a section with
-some names and none in the new default language does. The dashboard cannot edit reusable sections
-yet: **Venue operations**, **Menus**, **Sections** edits a menu's own section headings, not these.
+some names and none in the new default language does. Edit a reusable section's customer names in
+**Products and recipes**, **Sections**; **Venue operations**, **Menus**, **Sections** edits a menu's
+own section headings, not these.
 
 Removing an additional language hides its ordinary translation fields but keeps the saved text.
 Add the language again to resume using those translations. You cannot remove the default language
@@ -97,7 +98,7 @@ The photograph stays in the library for your other products.
 
 To remove the photograph itself, choose **Delete** in the library and confirm. If any product,
 product variant, category or section still uses it, deletion is blocked. You see links to those
-products, including inactive products, and to those categories. A section is named by its internal
-name, without a link, because the dashboard has no sections screen yet. Remove the photograph from
-each of those products and categories before trying deletion again. The dashboard cannot yet remove
-a photograph from a section.
+products, including inactive products, to those categories, and to those sections, a section
+shown by its internal name. Remove the photograph from each of them before trying deletion again. A
+section's link opens its editor in **Products and recipes**, **Sections**, where **Remove image**
+clears it when you save the section.

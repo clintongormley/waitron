@@ -12,8 +12,14 @@ import {
   products,
   table,
 } from "@waitron/db";
-import { SECTION_ROLES } from "../section-types.js";
+import type { SectionRole } from "../section-types.js";
 
+// Kept out of section-types.ts, which the dashboard imports and so must hold types alone.
+const SECTION_ROLES = [
+  "library",
+  "menu_root",
+  "home_layout",
+] as const satisfies readonly SectionRole[];
 const sectionRole = enumType(SECTION_ROLES);
 
 /** An ordered list of products and other sections. A reporting category is not a section. */

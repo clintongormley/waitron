@@ -1,6 +1,5 @@
 /** A `library` section is reusable; a `menu_root` or `home_layout` list belongs to one menu. */
-export const SECTION_ROLES = ["library", "menu_root", "home_layout"] as const;
-export type SectionRole = (typeof SECTION_ROLES)[number];
+export type SectionRole = "library" | "menu_root" | "home_layout";
 
 export type MemberRef =
   { kind: "product"; productId: string } | { kind: "section"; sectionId: string };
