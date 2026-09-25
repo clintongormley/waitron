@@ -502,7 +502,15 @@ describe("the live copy's wiring", () => {
           await vi.waitFor(() => expect(release).toBeDefined(), { timeout: 10_000 });
           reloaded = true;
           await rt.reload();
-          await vi.waitFor(() => expect(store.has(key)).toBe(true), { timeout: 10_000 });
+          // The status names the next generation only once it is claimed and Litestream started,
+          // which can trail the old write landing.
+          await vi.waitFor(
+            () => {
+              expect(store.has(key)).toBe(true);
+              expect(generationOf(rt.status())).not.toBe("");
+            },
+            { timeout: 10_000 },
+          );
           const second = generationOf(rt.status());
           expect(second).not.toBe(first);
           expect((await readPointer(store, "venue-1"))!.pointer.body.generation).toBe(first);
