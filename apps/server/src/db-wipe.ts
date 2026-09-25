@@ -11,8 +11,10 @@ const SIDECARS = ["", "-wal", "-shm"] as const;
  * afterwards.
  *
  * `migrations.lock` and `venue.lock` are deliberately left where they are: they carry no data, and
- * unlinking a held lock file lets another opener take a new one beside the holder, so migrators
- * would no longer be serialised. The wipe runs under the venue lock (`rejoin-command.ts`).
+ * unlinking a held lock file lets another opener take a new one beside the holder. Measured with a
+ * control: while one connection holds `begin immediate` on `migrations.lock`, a second opener of
+ * the same path is refused `database is locked` (errcode 5), and a second opener after the path is
+ * unlinked acquires it at once. The wipe runs under the venue lock (`rejoin-command.ts`).
  *
  * Each removal is `force`, so a box that never migrated, or a half-wiped one being re-run, succeeds.
  */

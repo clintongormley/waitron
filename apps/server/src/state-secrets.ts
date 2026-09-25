@@ -42,8 +42,8 @@ export async function collectStateSecrets(stateDir: string): Promise<BundleFiles
  * crafted-but-authentic artifact is still refused here before any write.
  *
  * `destRoot` must already exist, and `realDestRoot` is its `realpath`. `onUnsafe` must throw: each
- * caller keeps its own shipped error code. The parent is created 0700 so a secrets tool leaves no
- * world-readable directory listing filenames.
+ * caller keeps its own shipped error code. A parent this call creates is made 0700, so a secrets
+ * tool adds no world-readable directory listing filenames; an existing one keeps its mode.
  */
 export async function resolveSafeEntryPath(
   name: string,
@@ -69,7 +69,8 @@ export async function resolveSafeEntryPath(
 
 /** The inverse of `collectStateSecrets`: each file written atomically, 0600. */
 export async function unpackBundleToDir(files: BundleFiles, destDir: string): Promise<void> {
-  // Created before the guard's `realpath`, which fails on a missing path.
+  // Created before the guard's `realpath`, which fails on a missing path. Only a directory created
+  // here is made 0700.
   await mkdir(destDir, { recursive: true, mode: 0o700 });
   const realDestRoot = await realpath(resolve(destDir));
   for (const [rel, contents] of Object.entries(files)) {

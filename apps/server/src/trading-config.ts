@@ -11,8 +11,9 @@ export type OnboardingIntent = "demo" | "prepare" | "live";
  * The provisioned identity of a single till, written out as the env the supervisor sources on the
  * next boot so the box enters TRADING mode.
  *
- * Nothing here names the venue directory: boot derives it from the state root, and an absolute path
- * written here would pin one that a moved state root could not correct.
+ * Nothing here names the venue directory: boot derives it from `WAITRON_VENUE_DIR` or, by default,
+ * the state root, and an absolute path written here would pin one that a moved state root could not
+ * correct.
  */
 export interface TradingConfig {
   tillId: string;
