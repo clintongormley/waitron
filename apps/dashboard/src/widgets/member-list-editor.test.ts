@@ -149,6 +149,80 @@ it("reports nothing when a drag continues after its member left the list", async
   expect(rowIds(el)).toEqual(["m-drinks", "m-lemonade"]);
 });
 
+/** Presses on a row's handle, crosses the rows named in `over` one by one, then ends the gesture. */
+async function drag(
+  el: MemberListEditor,
+  memberId: string,
+  over: string[],
+  end: "pointerup" | "pointercancel" = "pointerup",
+  seen?: unknown[],
+): Promise<number[]> {
+  const counts: number[] = [];
+  q(el, `[data-test="drag-${memberId}"]`).dispatchEvent(
+    new PointerEvent("pointerdown", { bubbles: true, pointerId: 9 }),
+  );
+  for (const target of over) {
+    const box = q(el, `tr[data-member="${target}"]`).getBoundingClientRect();
+    document.dispatchEvent(
+      new PointerEvent("pointermove", {
+        bubbles: true,
+        pointerId: 9,
+        clientY: box.top + box.height / 2,
+      }),
+    );
+    await el.updateComplete;
+    if (seen) counts.push(seen.length);
+  }
+  document.dispatchEvent(new PointerEvent(end, { bubbles: true, pointerId: 9 }));
+  await el.updateComplete;
+  return counts;
+}
+
+it("reports a pointer drag once, when it ends, with the row's final place", async () => {
+  const el = await mount();
+  const moves = capture<{ memberId: string; to: number }>(el, "wt-member-move");
+  const during = await drag(el, "m-burger", ["m-drinks", "m-lemonade"], "pointerup", moves);
+  // The rows follow the pointer while it moves, but nothing is reported until it lets go.
+  expect(during).toEqual([0, 0]);
+  expect(rowIds(el)).toEqual(["m-drinks", "m-lemonade", "m-burger"]);
+  expect(moves).toEqual([{ memberId: "m-burger", to: 2 }]);
+});
+
+it("reports a cancelled drag's final place too, since the rows already moved", async () => {
+  const el = await mount();
+  const moves = capture<{ memberId: string; to: number }>(el, "wt-member-move");
+  await drag(el, "m-lemonade", ["m-drinks"], "pointercancel");
+  expect(rowIds(el)).toEqual(["m-burger", "m-lemonade", "m-drinks"]);
+  expect(moves).toEqual([{ memberId: "m-lemonade", to: 1 }]);
+});
+
+it("reports nothing for a drag that ends where it started", async () => {
+  const el = await mount();
+  const moves = capture(el, "wt-member-move");
+  await drag(el, "m-burger", ["m-drinks", "m-drinks"]);
+  expect(rowIds(el)).toEqual(["m-burger", "m-drinks", "m-lemonade"]);
+  await drag(el, "m-burger", []);
+  expect(moves).toEqual([]);
+});
+
+it("reports nothing when the dragged member leaves the list before the drag ends", async () => {
+  const el = await mount();
+  const moves = capture(el, "wt-member-move");
+  q(el, '[data-test="drag-m-burger"]').dispatchEvent(
+    new PointerEvent("pointerdown", { bubbles: true, pointerId: 9 }),
+  );
+  const box = q(el, 'tr[data-member="m-drinks"]').getBoundingClientRect();
+  document.dispatchEvent(
+    new PointerEvent("pointermove", { bubbles: true, pointerId: 9, clientY: box.top + 1 }),
+  );
+  await el.updateComplete;
+  el.members = members().filter((member) => member.id !== "m-burger");
+  await el.updateComplete;
+  document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 9 }));
+  await el.updateComplete;
+  expect(moves).toEqual([]);
+});
+
 it("offers products and sections under separate headings, leaving out held and excluded ones", async () => {
   const el = await mount();
   const groups = [...el.shadowRoot!.querySelectorAll("optgroup")];

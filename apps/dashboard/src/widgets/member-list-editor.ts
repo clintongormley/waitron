@@ -104,7 +104,8 @@ export class MemberListEditor extends LitElement {
 
   readonly #reorder = new ReorderController(this, {
     order: () => this.order.map((member) => member.id),
-    move: (id, to) => this.#move(id, to),
+    move: (id, to, via) => this.#move(id, to, via),
+    drop: (id) => this.#drop(id),
     label: (id) => this.#name(this.order.find((member) => member.id === id)!),
     busy: () => this.busy,
     get reorderLabel(): string {
@@ -171,14 +172,26 @@ export class MemberListEditor extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
-  #move(memberId: string, to: number): void {
+  /** Where the row being dragged started, so its drop reports one move rather than one per row
+   * crossed. */
+  #dragFrom: number | null = null;
+
+  #move(memberId: string, to: number, via: "key" | "pointer"): void {
     const from = this.order.findIndex((member) => member.id === memberId);
     const next = reorder(this.order, from, to);
     // `reorder` leaves the list alone for an unknown member or an out-of-range `to`, which the
     // pointer path can produce mid-gesture; neither is a move to report.
     if (next[to]?.id !== memberId) return;
     this.order = next;
-    this.#emit("wt-member-move", { memberId, to });
+    if (via === "key") this.#emit("wt-member-move", { memberId, to });
+    else this.#dragFrom ??= from;
+  }
+
+  #drop(memberId: string): void {
+    const from = this.#dragFrom;
+    this.#dragFrom = null;
+    const to = this.order.findIndex((member) => member.id === memberId);
+    if (from !== null && to >= 0 && to !== from) this.#emit("wt-member-move", { memberId, to });
   }
 
   #add(event: Event): void {
