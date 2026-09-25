@@ -1,42 +1,18 @@
-// Records exactly one real sale through the real Veri*Factu backend, then exits.
+// Records exactly one sale through the real Veri*Factu backend, then exits. It never contacts
+// AEAT: the running server's drain submits the record later.
 //
-// There is no till application in this repository yet — this is the only way to put a real sale
-// into the fiscal chain, so `apps/server`'s drain loop has something to submit. Deliberately NOT
-// a till: one line, one tender, one sale, no loop, no menu, no argument that would let it record
-// more than the single line it was invoked for.
+// The venue directory comes from `WAITRON_VENUE_DIR`, else `venue` under `WAITRON_STATE_DIR`, else
+// the bundle's default state root — the same resolver the server uses (`scripts/venue-dir.ts`).
 //
-// Backend construction mirrors `packages/fiscal-verifactu/src/write-path.e2e.test.ts` exactly —
-// `VerifactuBackendOptions` has several construction sites in this repo, and the wrong shape
-// silently produces a different chain rather than a compile error. `resolveClient` is supplied
-// but never called: `recordSale` never contacts AEAT (that is `drain`'s job, run later by
-// `apps/server` itself), so the stub below throws if it is ever reached at all.
-//
-// The venue is a DIRECTORY of two SQLite files, not a connection string. Which directory is not an
-// argument: it comes from `WAITRON_VENUE_DIR`, else `venue` under `WAITRON_STATE_DIR`, else the
-// bundle's own default state root — the same three steps, through the same resolver, that the
-// server beside it uses to pick the directory it serves (`scripts/venue-dir.ts`). A sale recorded
-// into a directory nothing on the box serves is a chain nobody drains.
-//
-// Usage — build first, exactly like `dist/server.js`; this repo's `.js`-suffixed relative
-// imports (this file's own included) resolve through esbuild's bundler, not through plain
-// `node <file>.ts`, which cannot follow a `./record-sale.js` specifier back to the sibling
-// `record-sale.ts` it actually names (confirmed empirically — see this task's own report):
+// Usage — build first: plain `node <file>.ts` cannot resolve this repo's `.js`-suffixed relative
+// imports to their `.ts` siblings.
 //   pnpm --filter @waitron/server build
 //   WAITRON_ENV=production|preproduction \
 //     node apps/server/dist/record-one-sale.js \
 //     <tillId> <nodeId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]
 //
-// `baseAmount` is the line's tax-EXCLUSIVE amount (quantity is always 1 — this script records one
-// line, never a basket). `vatRate` is a percentage literal, e.g. "10.00" meaning 10%. `tipAmount`
-// defaults to "0.00".
-//
-// `WAITRON_ENV` is REQUIRED here, unlike every other caller of `deploymentEnvironment`
-// (`apps/server` itself defaults it to `preproduction`, deliberately the safe reading of "not
-// set"). This script cannot accept that default: it stamps `entorno` onto an append-only fiscal
-// record (CLAUDE.md §5), and a wrong stamp does not just mislabel that one row — `claimBatch`
-// refuses it AND every successor on its chain, every pass, until a human abandons the chain via
-// `registerSif` (`packages/fiscal-verifactu/src/drain.ts:577`). A safe default is the right answer
-// when being wrong costs a retry; it is the wrong answer when being wrong costs a chain.
+// `WAITRON_ENV` is required here rather than defaulted: it stamps `entorno` onto an append-only
+// fiscal record (CLAUDE.md §5), so a wrong default cannot be corrected afterwards.
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -55,8 +31,6 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 
-// The deli's operating locale. Not an argument: this script is not a general-purpose till, and
-// every tenant this plan touches operates in Spanish.
 const LOCALE = "es-ES";
 
 function usageError(message: string): never {
@@ -69,17 +43,7 @@ function usageError(message: string): never {
   process.exit(1);
 }
 
-/**
- * The wall clock at the moment this process runs, reported as already confident and anchored.
- * This is a one-shot admin script executed directly on a host whose own system clock is the thing
- * being trusted, not a PWA subject to device drift — there is no prior anchor to restore and no
- * monotonic source to compare it against, so there is nothing `createTrustedClock`
- * (`@waitron/fiscal`) would add here.
- *
- * `anchor`/`currentAnchor` are stubs, never called: `recordSale` reads `now()` exactly once and
- * touches neither of the others — the identical shape `write-path-fixtures.ts`'s own
- * `steadyClock` documents for the same reason.
- */
+/** The host's system clock, trusted as anchored: this runs once, on the box itself. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -113,18 +77,9 @@ export interface RecordOneSaleArgs {
   tipAmount?: string;
 }
 
-/** Exactly what `recordSale` returns — restating its shape here would be a second claim about it. */
 export type RecordOneSaleResult = Awaited<ReturnType<typeof recordSale>>;
 
-/**
- * Open the venue directory `env` names, record one sale into it through the real Veri*Factu
- * backend, and close both files. Exported so a test can run the whole path — the argv shim below
- * adds nothing but the arity check, the `WAITRON_ENV` guard and stdout.
- *
- * `store.venue` is the handle, not `store.node`: every migration set is applied to the venue file
- * (`packages/migrations/src/apply.ts`), so `sales`, `tenders` and `registros_facturacion` live
- * there and the node file holds no tables.
- */
+/** Exported so a test can run the whole path; `main` adds only the argument checks and stdout. */
 export async function recordOneSale(
   args: RecordOneSaleArgs,
   env: NodeJS.ProcessEnv,
@@ -137,16 +92,10 @@ export async function recordOneSale(
   const vatRate = decimal(args.vatRate);
   const tipAmount = decimal(args.tipAmount ?? "0.00");
 
-  // The same `percentOf` (multiply, then divide by 100, rounded to money scale) that `recordSale`
-  // applies internally when it derives the VAT breakdown from `lines`. Using the identical function
-  // is what keeps this computed `total` agreeing with that breakdown — a caller-supplied total that
-  // disagreed would not fail loudly (there is no CHECK constraint comparing the two), it would just
-  // be wrong.
+  // The same `percentOf` `recordSale` uses for the VAT breakdown, so `total` agrees with it.
   const tax = percentOf(baseAmount, vatRate);
   const total = addDecimal(baseAmount, tax);
-  // The single tender's whole charge: total plus the tip, which rides ON the tender
-  // (`tenders.tip_amount`) rather than on the sale. This is the coverage identity settleSale
-  // enforces: sum(amount) = total + tip.
+  // The tip rides on the tender, not the sale: the tender covers total plus tip.
   const tenderAmount = addDecimal(total, tipAmount);
 
   // No lock: the sale is written for a running server's drain to send.
@@ -157,22 +106,9 @@ export async function recordOneSale(
     const backend = new VerifactuBackend({
       clock,
       db,
-      // `VerifactuBackendOptions.environment` defaults to `"production"`, which is the wrong default
-      // for a script whose whole plan is pre-production only. The `deploymentEnvironment(env)`
-      // resolver (imported above, from ../src/config.js — NOT the `deploymentEnvironment` option
-      // key two lines below, which is a different `VerifactuBackendOptions` field entirely) defaults
-      // the other way, deliberately: config.ts calls it "the one default in the file whose mistake
-      // is irreversible", because production numbering can never be reused. Assigned here to
-      // `environment`, it decides only which QR validation host `verificationUrl` names — this
-      // script never contacts AEAT — but that URL is the one thing it prints for a human to act on.
       environment: deploymentEnvironment(env),
-      // Which environment this script is generating the registro FOR — the fact `drain`
-      // will refuse to submit if it disagrees with the host it eventually runs on. Same resolver,
-      // same host config, different field: this one is never read for the QR host and is stored on
-      // the row itself, never hashed (`entorno`, ./schema/registros.ts).
       deploymentEnvironment: deploymentEnvironment(env),
-      // Never invoked by `recordSale` (see this file's header comment) — a rejection here would
-      // only ever surface a bug in this script or in the backend, not a real AEAT contact.
+      // `recordSale` never contacts AEAT, so this is never called.
       resolveClient: () =>
         Promise.reject(
           new Error("record-one-sale: resolveClient must never be called by recordSale"),
@@ -183,9 +119,6 @@ export async function recordOneSale(
       tillId: till,
       nodeId: node,
       seriesId: series,
-      // Audit-trail context only — `sales` carries no foreign key onto `working_orders` at all,
-      // and this script has no working order to point at (`write-path-fixtures.ts`'s
-      // `seedTenantWithSif` makes the identical choice, for the identical reason).
       locale: LOCALE,
       invoiceLocales: [LOCALE],
       total,
@@ -200,9 +133,6 @@ export async function recordOneSale(
           lineTotal: baseAmount,
         },
       ],
-      // Pay-first: one cash tender carrying its own tip, settled at this instant, handed straight to
-      // settleSale inside recordSale's immediate mode (design D6). This script records a completed
-      // sale, so there is nothing deferred to settle later.
       settlement: {
         kind: "immediate",
         tenders: [
@@ -214,7 +144,6 @@ export async function recordOneSale(
 
     return await withTransaction(db, (tx) => recordSale(tx, backend, input));
   } finally {
-    // Two open SQLite files; leaking them keeps the process alive after `main` returns.
     await store.close();
   }
 }
@@ -226,11 +155,6 @@ async function main(): Promise<void> {
   }
   const [tillArg, nodeArg, seriesArg, description, baseAmountArg, vatRateArg, tipArg] = args;
 
-  // No default accepted here — see this file's header comment. `deploymentEnvironment` below
-  // would happily default an unset/empty value to `"preproduction"`, which is exactly the
-  // failure mode this guard exists to refuse: a shell that forgot `WAITRON_ENV` while pointed at
-  // a PRODUCTION venue directory would otherwise stamp an unrecoverable `preproduction` `entorno`
-  // onto a real chain with no error at all.
   const rawEnv = process.env.WAITRON_ENV;
   if (rawEnv === undefined || rawEnv === "") {
     usageError("WAITRON_ENV must be set in the environment (production or preproduction)");
@@ -257,9 +181,7 @@ async function main(): Promise<void> {
   }
 }
 
-// Run only when invoked directly, never when imported by a test — `recordOneSale` above writes an
-// append-only fiscal record and consumes an invoice number (CLAUDE.md §5), so an import that ran it
-// would be destructive and unrepairable.
+// Only when invoked directly: an import that ran it would write an append-only fiscal record.
 if (
   process.argv[1] !== undefined &&
   realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))

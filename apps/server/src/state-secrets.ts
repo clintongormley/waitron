@@ -6,12 +6,10 @@ import { writeFileAtomic } from "./fs-atomic.js";
 import "./errors.js";
 
 /**
- * The fixed set of state-dir secret/identity files a recovery bundle carries — the box's UNRECOVERABLE
- * material (the vault master key in `secrets.env`), its fiscal identity (`trading.env`), the CA (with
- * its key), which already-trusting devices keep trusting after a restore, and the leaf it signed.
- * Relative to `stateDir`, posix-slashed. NOT the database — that is a separate scheduled backup
- * (slice 4b-ii). Cloud installation keys are excluded: a replacement pairs with its own key.
- * The layout mirrors `box-secrets.ts`/`trading-config.ts` which WROTE these.
+ * The state-dir files a recovery bundle carries: the vault master key (`secrets.env`), the fiscal
+ * identity (`trading.env`), and the CA with its key, which already-trusting devices keep trusting
+ * after a restore. Not the database. Cloud installation keys are excluded: a replacement pairs with
+ * its own key.
  */
 export const RECOVERY_FILES = [
   "secrets.env",
@@ -22,11 +20,7 @@ export const RECOVERY_FILES = [
   "tls/server.key",
 ] as const;
 
-/**
- * Read every `RECOVERY_FILES` path under `stateDir` into a `BundleFiles` map. A missing file is a
- * fatal `recovery.state_incomplete` (a bundle without the vault key is worthless — fail loud, name
- * the file), not a silently short bundle. Any other read error propagates unchanged.
- */
+/** A missing file is `recovery.state_incomplete`: a bundle without the vault key is worthless. */
 export async function collectStateSecrets(stateDir: string): Promise<BundleFiles> {
   const files: BundleFiles = {};
   for (const rel of RECOVERY_FILES) {
@@ -43,32 +37,13 @@ export async function collectStateSecrets(stateDir: string): Promise<BundleFiles
 }
 
 /**
- * Validate ONE archive/bundle entry `name` against `destRoot` and return the resolved absolute path
- * it is safe to write to — the SINGLE home of BR-3's two-layer traversal guard, shared by
- * `unpackBundleToDir` here and `assertSafeEntryName` (`restore-entry-guard.ts`) so this
- * security-critical check lives in exactly one place. GCM/tar integrity proves an artifact's BYTES
- * are authentic, never that its entry NAMES stay inside `destRoot`, so a crafted-but-authentic
- * artifact must still be refused here before any write.
+ * Validate one archive or bundle entry `name` against `destRoot` and return the path it is safe to
+ * write to. Authenticated bytes do not prove an entry's NAME stays inside `destRoot`, so a
+ * crafted-but-authentic artifact is still refused here before any write.
  *
- * Layer 1 — LEXICAL: reject an absolute `name` outright, and reject when `resolve(join(destRoot,
- * name))` does not land under `resolve(destRoot)` (a `../../etc/x`-style escape). Cheap, catches the
- * common case, blind to symlinks. Layer 2 — SYMLINK-aware: `mkdir(dirname(target), { recursive:
- * true })` is a no-op when that directory already "exists" through a symlink, so a pre-existing
- * `destRoot/tls -> /outside` link lets a lexically-fine name like `tls/ca.crt` resolve to a target
- * whose real, on-disk parent is `/outside`. Only `realpath`ing the parent AFTER ensuring it exists
- * reveals that. `destRoot` must already exist (its callers create it before validating any entry).
- *
- * `realDestRoot` is `realpath(resolve(destRoot))`, precomputed by the caller — a caller validating
- * many entries against the same root (`unpackBundleToDir`'s loop) computes
- * it ONCE rather than once per entry; a single-entry caller (`assertSafeEntryName`) just computes it
- * inline before the one call, which costs nothing extra.
- *
- * On EITHER layer failing it calls `onUnsafe`, which MUST throw — the callback is how each caller
- * maps the one shared check to its OWN long-standing error code (`unpackBundleToDir` throws
- * `recovery.bundle_invalid{unsafe_path}`, `assertSafeEntryName` throws `restore.unsafe_entry_path`),
- * both shipped and never renamed (CLAUDE.md §3). Never writes file contents — that stays the
- * caller's job once this returns the safe path. The parent dir is created 0700 (subject to umask):
- * a secrets tool must not leave a world-readable dir that leaks filenames.
+ * `destRoot` must already exist, and `realDestRoot` is its `realpath`. `onUnsafe` must throw: each
+ * caller keeps its own shipped error code. The parent is created 0700 so a secrets tool leaves no
+ * world-readable directory listing filenames.
  */
 export async function resolveSafeEntryPath(
   name: string,
@@ -92,23 +67,9 @@ export async function resolveSafeEntryPath(
   return target;
 }
 
-/**
- * Write a decrypted `BundleFiles` map back under `destDir` — the inverse of `collectStateSecrets`,
- * used by the `waitron-recovery unpack` CLI and by tests. Each file is created 0600 via
- * `writeFileAtomic` (temp-then-rename, so a reader never sees a torn file), and any parent (`tls/`)
- * is made 0700 first. Each key is traversal-guarded two ways by the shared {@link
- * resolveSafeEntryPath} — a cheap LEXICAL check (rejected if absolute or if it resolves outside
- * `destDir`) rejects `../../etc/x`-style keys up front, and a SYMLINK-aware check catches what the
- * lexical one cannot — if `destDir/tls` is a pre-existing symlink to somewhere outside, a
- * lexically-fine key like `tls/server.key` would still let `mkdir`/write follow the link and escape.
- * GCM auth proves the bundle's integrity, not that its keys are the fixed `RECOVERY_FILES` set, so a
- * crafted-but-authentic bundle must not be allowed to escape `destDir`. An unsafe key throws
- * `recovery.bundle_invalid{unsafe_path}`, this caller's long-standing code (CLAUDE.md §3).
- */
+/** The inverse of `collectStateSecrets`: each file written atomically, 0600. */
 export async function unpackBundleToDir(files: BundleFiles, destDir: string): Promise<void> {
-  // The CLI unpacks to a fresh dir the operator names, so create destDir before the guard's
-  // realpath() — which ENOENTs on a missing path. 0700 (subject to umask, dirs THIS call creates):
-  // a secrets tool must not leave a world-readable dir that leaks filenames — matches box-secrets.ts.
+  // Created before the guard's `realpath`, which fails on a missing path.
   await mkdir(destDir, { recursive: true, mode: 0o700 });
   const realDestRoot = await realpath(resolve(destDir));
   for (const [rel, contents] of Object.entries(files)) {

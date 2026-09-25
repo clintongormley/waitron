@@ -9,15 +9,10 @@ export type OnboardingIntent = "demo" | "prepare" | "live";
 
 /**
  * The provisioned identity of a single till, written out as the env the supervisor sources on the
- * next boot so the box enters TRADING mode. The four *Id fields become the `WAITRON_TILL_*_ID`
- * config the till reads, and `environment` the `WAITRON_ENV` the running server expects.
+ * next boot so the box enters TRADING mode.
  *
- * **Nothing here names a database.** The storage is a directory of SQLite files, and boot derives
- * it from the state root (`config.ts`'s `venueDir`, defaulting under `stateDir`) — the same state
- * root the supervisor hands BOTH the setup process that writes this file and the trading process
- * that sources it. An explicit `WAITRON_VENUE_DIR` reaches both the same way, through the
- * supervisor's own environment. So the location is never a value setup has to hand forward, and
- * writing an absolute path here would pin one that a moved state root could not correct.
+ * Nothing here names the venue directory: boot derives it from the state root, and an absolute path
+ * written here would pin one that a moved state root could not correct.
  */
 export interface TradingConfig {
   tillId: string;
@@ -33,12 +28,7 @@ export interface TradingConfig {
   accountKey?: string;
 }
 
-/**
- * Atomically write `<stateDir>/trading.env` (`KEY=value\n`, 0600) — the file the supervisor sources
- * on the next boot so the four `WAITRON_TILL_*_ID` + `WAITRON_ENV` are present and the box boots in
- * TRADING mode. Sibling to 2a's secrets.env (left untouched). Returns the
- * path written.
- */
+/** Atomically write `<stateDir>/trading.env` (0600). Returns the path written. */
 export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Promise<string> {
   const path = join(stateDir, "trading.env");
   const body = formatEnvFile({
@@ -56,11 +46,7 @@ export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Pro
   return path;
 }
 
-/**
- * Remove `<stateDir>/trading.env` so the next boot has no trading identity to source and comes up in
- * SETUP mode. Idempotent (`force: true`) — a box with no trading.env is already in the target state,
- * so a missing file is not an error. The sibling `secrets.env` is left untouched.
- */
+/** Remove `<stateDir>/trading.env` so the next boot comes up in SETUP mode. */
 export async function clearTradingEnv(stateDir: string): Promise<void> {
   await rm(join(stateDir, "trading.env"), { force: true });
 }

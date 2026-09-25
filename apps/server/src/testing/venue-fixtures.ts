@@ -19,12 +19,8 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "../modules.js";
 import type { TillConfig } from "../till-config.js";
 
-// Shared venue provisioning for the device/join-request suites — extracted from device-api.test.ts
-// (which had the original) so join-requests.test.ts can stand up the same fixture without
-// duplicating it. Neither suite opens a container any more:
-// `grep -c 'useRealPostgres\|Testcontainers' apps/server/src/device-api.test.ts
-// apps/server/src/join-requests.test.ts` prints 0 for both (run 2026-09-23). Lives under apps/server/src/testing/ (coverage-excluded, per
-// vitest.config.ts) alongside fiscal-fixtures.ts, which follows the same pattern.
+// Shared venue provisioning, extracted so the suites that need it stand up one fixture rather than
+// each keeping a copy.
 
 const LOCALE = "es-ES";
 
@@ -56,10 +52,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
   };
 }
 
-// Tenants accumulate for the life of the shared container and `tenants_country_tax_id_key` is unique,
-// so each provisioned venue needs its own NIF — a per-module counter. Module state resets per test
-// file (vitest's default isolation), so this stays collision-free within one file exactly as it did
-// when it lived there directly.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -67,10 +59,9 @@ function nextNif(): string {
 }
 
 /**
- * Stand up a fresh provisioned venue (mode `ticket_then_pay`), seed a two-product catalogue, and mint a
- * manager + staff management session. The venue provisions with the DEFAULT `prepay`; the `order_flow`
- * column is flipped to `ticket_then_pay` (as the owner, fixture setup) so the DB agrees with `cfg`, the
- * way `boot.ts`/`modeVenue` wire them.
+ * A provisioned venue in `ticket_then_pay`, a two-product catalogue, and a manager and a staff
+ * management session. The venue provisions as `prepay`, so `order_flow` is flipped to agree with
+ * `cfg`.
  */
 export async function setupVenue(db: Database): Promise<Venue> {
   const venue = await applyVenue(
@@ -135,10 +126,6 @@ export async function setupVenue(db: Database): Promise<Venue> {
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
 
-    // Through the table definition, never a raw insert: `persons.id` and `persons.created_at` are
-    // NOT NULL columns whose values come from `$defaultFn` generators
-    // (`packages/identity/src/schema/persons.ts`), and a statement reaches no generator — measured
-    // here as `NOT NULL constraint failed: persons.id`.
     const [mgr] = await tx
       .insert(persons)
       .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })

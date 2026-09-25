@@ -75,11 +75,6 @@ interface Venue {
 
 async function seedVenue(): Promise<Venue> {
   await seedTenant(db);
-  // Seeded through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
-  // took: each `id` here (and `tills.created_at`, `persons.created_at`) is a `$defaultFn` generator
-  // on this engine which a raw insert never reaches while the column is NOT NULL, and
-  // `invoice_locales` is a JSON array in a text column, so the `array[...]` constructor was refused
-  // with `near "['es-ES']": syntax error`.
   const [location] = await db
     .insert(locations)
     .values({
@@ -128,9 +123,7 @@ async function raise(
 
 function appFor(registry = createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [] })): Hono {
   const app = new Hono();
-  // Mirror boot.ts: a GET carrying `x-waitron-live: 1` runs under a passive read, so an automatic
-  // dashboard poll verifies the session without sliding its idle window. Requests without the header
-  // are unaffected, so every other test in this file sees the ordinary active-read path.
+  // Mirror boot.ts: a GET carrying `x-waitron-live: 1` runs under a passive read.
   app.use("*", async (c, next) => {
     if (c.req.method === "GET" && c.req.header("x-waitron-live") === "1") {
       await withPassiveManagementRead(next);
@@ -318,8 +311,7 @@ describe("alert routes", () => {
   });
 });
 
-// A card-provider seat whose only live method reports a flat 5% battery, so a seeded reader always
-// fires `reader.battery_low`. Every other method throws — the battery source never reaches them.
+// A card-provider seat whose only live method reports a flat 5% battery.
 function stubCardProvider(): CardProviderContribution {
   const unused = (): never => {
     throw new Error("stubCardProvider: this method is not used by the battery source");
@@ -347,11 +339,8 @@ const cardRuntimeDeps = (): CardProviderRuntimeDeps => ({
 });
 
 /**
- * The server-owned ongoing sources, wired as boot does, so a route test exercises the real
- * registry composition. By default the in-memory sources are quiet (backup configured with no
- * destinations and no bucket copy, sealed state refreshed, certificate present) and only the two DB
- * sources — printing and
- * card-reader battery — can fire; flip `backupDisabled`/`awaitingCert` to make those two fire too.
+ * The server-owned ongoing sources, wired as boot does. By default only the printing and battery
+ * sources can fire; `backupDisabled`/`awaitingCert` make those two fire too.
  */
 function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolean } = {}) {
   return createAlertRegistry({
@@ -378,20 +367,13 @@ function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolea
 }
 
 async function seedLowReader(name = "Datafono"): Promise<void> {
-  // `active` is an integer column here, so a JavaScript boolean bound into a raw template is
-  // refused with `TypeError: Provided value cannot be bound to SQLite parameter`; the table
-  // definition is what maps it.
   await db
     .insert(cardReaders)
     .values({ provider: "stub", providerRef: `ref-${name}`, name, active: true });
 }
 
-/** A document print job old enough to count as stuck, on an active printer, so `printingAlertSource`
- * fires `printer.jobs_waiting` for this tenant. */
+/** A document print job old enough to count as stuck, on an active printer. */
 async function seedStuckPrintJob(): Promise<void> {
-  // Through the table definitions for the same reasons as `seedVenue`, plus one more:
-  // `print_jobs.payload` is a blob on this engine, so the one-byte payload is bound as bytes rather
-  // than built by PostgreSQL's `decode('01', 'hex')` (`no such function: decode`).
   const [loc] = await db
     .insert(locations)
     .values({ name: "Barra", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
@@ -425,8 +407,7 @@ const liveGet = (app: Hono, cookie: string) =>
 
 describe("ongoing alert sources through the route", () => {
   it("filters ongoing sources by permission: a payments.manage-only session sees only card_reader alerts", async () => {
-    // Give the supervisor exactly the battery source's permission and nothing else, the way branch-1's
-    // permission tests do, then fire all four areas.
+    // Give the supervisor exactly the battery source's permission, then fire all four areas.
     roleOverride.set("supervisor", ["payments.manage"]);
     const v = await seedVenue();
     await seedLowReader();
@@ -522,9 +503,7 @@ describe("ongoing alert sources through the route", () => {
     const v = await seedVenue();
     const app = appFor(ongoingRegistry());
     const sid = v.manager.slice(MANAGEMENT_COOKIE.length + 1);
-    // Age the session so a touch would visibly move its expiry away from the aged baseline. The
-    // clock is read in JavaScript and the instant bound: this engine has neither `now()` nor an
-    // interval type. One statement, so there is no transaction-start reading to preserve.
+    // Age the session so a touch would visibly move its expiry.
     const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
     await db.execute(
       sql`update management_sessions set last_seen_at = ${tenMinutesAgo} where token_hash = ${hashSessionToken(sid)}`,

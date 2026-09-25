@@ -90,12 +90,10 @@ export interface StreamHostDeps {
 }
 
 /**
- * The one owner of the live copy's supervisor in this process: reads the bucket settings, builds
- * the supervisor on the primary, rebuilds it when the settings change, and stops it. `start()` and
- * `reload()` never throw for a bucket or vault problem: a copy that cannot start is logged and reads
- * off, and the till is untouched. The only bucket wait on their path is a stopping supervisor's
- * (`StreamSupervisor.stop()`), which both wait for before starting the next. At most one supervisor
- * runs, and the old one's `stop()` has resolved before the next starts.
+ * The one owner of the live copy's supervisor in this process. `start()` and `reload()` never throw
+ * for a bucket or vault problem: a copy that cannot start is logged and reads off, and the till is
+ * untouched. At most one supervisor runs, and the old one's `stop()` has resolved before the next
+ * starts.
  */
 export class StreamHost {
   readonly #deps: StreamHostDeps;
@@ -164,9 +162,6 @@ export class StreamHost {
       this.#supervisor = supervisor;
       await supervisor.start();
     } catch (error) {
-      // Absent settings read as null (`tryGetCredential`, packages/credentials/src/store.ts), so a
-      // throw here comes from stored settings, from a later step, or from the database failing to
-      // answer.
       log("error", "stream.start_failed", { errorCode: codeOf(error) });
       this.#notStartedFor("start_failed");
     }
