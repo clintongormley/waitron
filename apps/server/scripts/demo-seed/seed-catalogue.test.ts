@@ -79,7 +79,8 @@ describe("seedCatalogues", () => {
     const { locationId } = await provisionVenue();
     const read = await withTransaction(suite.db, async (tx) => {
       const { menuIds, productsByImage } = await seedCatalogues(tx, { locationId, locale: LOCALE });
-      const library = new Map((await listSections(tx)).map((row) => [row.id, row.internalName]));
+      const sections = await listSections(tx);
+      const library = new Map(sections.map((row) => [row.id, row.internalName]));
       const topLevel = async (menuId: string) =>
         (await readMenuStructure(tx, menuId)).nodes.map(({ ref }) =>
           ref.kind === "section" ? library.get(ref.sectionId) : ref.productId,
@@ -90,6 +91,10 @@ describe("seedCatalogues", () => {
       );
       return {
         negroni,
+        internalNames: sections.map((row) => row.internalName),
+        lunchNames: sections
+          .filter((row) => row.internalName.startsWith("Menú del Día"))
+          .map((row) => [row.internalName, row.names]),
         restaurant: await topLevel(menuIds.restaurant),
         lunch: await topLevel(menuIds.lunch),
         deli: await topLevel(menuIds.deli),
@@ -97,7 +102,14 @@ describe("seedCatalogues", () => {
       };
     });
     expect(read.restaurant).toEqual(["Tapas", "Sharing plates", "Mains", "Desserts", "Drinks"]);
-    expect(read.lunch).toEqual(["Starters", "Mains", read.negroni]);
+    expect(read.lunch).toEqual(["Menú del Día starters", "Menú del Día mains", read.negroni]);
+    // Two lists both named "Mains" would read as one in the sections library; a diner still sees
+    // the short names.
+    expect(new Set(read.internalNames).size).toBe(read.internalNames.length);
+    expect(read.lunchNames).toEqual([
+      ["Menú del Día mains", { en: "Mains", es: "Segundos" }],
+      ["Menú del Día starters", { en: "Starters", es: "Primeros" }],
+    ]);
     expect(read.deli).toEqual(["Charcuterie", "Cheeses", "Conserves"]);
     expect(read.lunchNegroni).toMatchObject({ grossPrice: "9.00", placements: [[]] });
   });

@@ -127,7 +127,7 @@ export async function seedCatalogues(
       });
       const section = await createSection(
         tx,
-        { internalName: cat.name[locale], names: cat.name },
+        { internalName: (cat.sectionName ?? cat.name)[locale], names: cat.name },
         locale,
       );
       const productIds: string[] = [];
