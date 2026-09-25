@@ -5536,7 +5536,7 @@ open:
   Cloud restore's download of its snapshot from Waitron Cloud's storage is not one of these calls:
   it has its own limit (`downloadArchive`, `apps/server/src/cloud-recovery.ts`).
 
-Task 9c, "Restore from my bucket" in the setup wizard. A third card on the wizard's "Join or
+Task 9c, "Restore from my bucket" in the setup wizard (#646). A third card on the wizard's "Join or
 recover an existing restaurant" screen takes the recovery kit (pasted or read from a file) and the
 environment, and posts them to `POST /setup-api/restore-bucket`, which checks the bucket and
 stages the rebuild through `stageStreamRestore` (`apps/server/src/restore-request.ts`) for the
