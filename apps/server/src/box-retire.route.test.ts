@@ -18,8 +18,7 @@ const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
 const MANAGER_EMAIL = "manager@x.com";
 
-// The box key ring that seals this node's identity private key (node-identity/promote pattern):
-// deterministic so the sealed key round-trips within the suite, and the same key the mint unseals.
+// Deterministic, so the sealed identity key round-trips within the suite.
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -35,8 +34,6 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// One fixed NIF: this suite owns its own venue directory, so nothing else ever writes the `tenants`
-// row the uniqueness constraint covers.
 const NIF = "72000001K";
 
 /** Provision a venue as owner and seed the people and sessions this route fixture needs. */
@@ -77,8 +74,7 @@ async function setupTenant(): Promise<{ nodeId: string }> {
 
   await withTransaction(suite.db, async (tx) => {
     // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
-    // `$defaultFn` generators (`packages/identity/src/schema/persons.ts:26,:67`) that an insert
-    // statement never reaches, and both columns are NOT NULL.
+    // `$defaultFn` generators (`packages/identity/src/schema/persons.ts`) that raw SQL never reaches.
     await tx.insert(persons).values({
       displayName: "The Manager",
       email: MANAGER_EMAIL,
@@ -90,8 +86,7 @@ async function setupTenant(): Promise<{ nodeId: string }> {
   return { nodeId: venue.nodeId };
 }
 
-/** A Hono app carrying the management API (for its login route) plus the box-retire route under test.
- * Both surfaces share the owner db + tenant, so a cookie minted on one resolves on the other. */
+/** The management API (for its login route) plus the box-retire route under test. */
 function buildApp(nodeId: string): Hono {
   const app = new Hono();
   mountManagementApi(
@@ -128,8 +123,8 @@ async function login(app: Hono, email: string): Promise<string> {
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-/** A held membership document (design §3/§5) at `term` naming the given nodes. Written through the
- * plain-upsert setter (the read is unverified), so the placeholder signature is fine. */
+/** Written through the plain-upsert setter (the read is unverified), so the placeholder signature is
+ * fine. */
 function membershipDoc(term: number, nodes: readonly MembershipNode[]): SignedMembershipDocument {
   return {
     body: { term, nodes },
@@ -197,7 +192,6 @@ describe("POST /api/box/retire", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ evicted: true, term: 6 }); // held term 5 → minted 6
 
-    // The persist landed: self now reads `evicted` in the held chart.
     const held = await readNodeMembership(suite.db);
     const self = held!.body.nodes.find((n) => n.nodeId === nodeId);
     expect(self?.standing).toBe("evicted");

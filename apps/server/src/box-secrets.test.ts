@@ -9,10 +9,7 @@ import { ensureBoxSecrets, mintedBoxLeaf } from "./box-secrets.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 // `access` alone is wrapped so one test can inject a non-ENOENT failure for a single path; every
-// other export (and every OTHER call to `access`) forwards to the real node:fs/promises
-// implementation, so the rest of this file's real-fs tests are unaffected. `vi.hoisted` is needed
-// because `vi.mock` factories run in an isolated scope — this is the documented way to reach the
-// mock function from a test body.
+// other call forwards to the real implementation.
 const { accessMock } = vi.hoisted(() => ({ accessMock: vi.fn() }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
@@ -51,7 +48,6 @@ describe("ensureBoxSecrets", () => {
     expect(tls.certFile).toBe(join(d, "tls", "server.crt"));
     expect(tls.keyFile).toBe(join(d, "tls", "server.key"));
     expect(tls.caCertFile).toBe(join(d, "tls", "ca.crt"));
-    // secrets.env holds both credentials-key names
     const env = await readFile(join(d, "secrets.env"), "utf8");
     expect(env).toMatch(/^WAITRON_CREDENTIALS_KEY=/m);
     expect(env).toMatch(/^WAITRON_CREDENTIALS_KEY_VERSION=1$/m);
@@ -75,27 +71,19 @@ describe("ensureBoxSecrets", () => {
   it("leaves no *.tmp files behind and creates the tls dir 0700", async () => {
     const d = await newDir();
     await ensureBoxSecrets(deps(d));
-    // Every file is written temp-then-rename; a successful run must have renamed all of them, so no
-    // orphan *.tmp may linger in the state dir or its tls subdir. A lingering one would mean a rename
-    // was skipped — i.e. a reader could see a torn file, the whole point of the atomic write.
     for (const dir of [d, join(d, "tls")]) {
       const names = await readdir(dir);
       expect(names.filter((n) => n.endsWith(".tmp"))).toEqual([]);
     }
-    // The tls dir holds the private material, so it is created owner-only. mode is masked by the
-    // test's umask (mode & ~umask), so assert it is no WIDER than 0o700 rather than exactly equal.
+    // mode is masked by the umask, so assert it is no WIDER than 0o700 rather than exactly equal.
     const tlsMode = (await stat(join(d, "tls"))).mode & 0o777;
     expect(tlsMode & ~0o700).toBe(0);
   });
 
   it("is idempotent: a second call reuses the exact same bytes and regenerates nothing", async () => {
     const d = await newDir();
-    // secrets.env is regenerated from a FIXED injected factory (the key ring), so a re-write would
-    // be byte-identical — byte-equality on it alone would pass even with its presence guard removed,
-    // and so would not test that guard. (The cert's serials are random per mint, so a re-minted cert
-    // WOULD differ; we don't lean on that.) Spy on every factory instead — the uniform tell of "never
-    // regenerates": with the guards in place each is invoked once across two boots; drop a guard and
-    // the second boot bumps its count to 2 and this fails.
+    // The injected key-ring factory is fixed, so a re-written secrets.env would be byte-identical:
+    // byte-equality alone cannot tell reuse from regeneration. The factory call counts can.
     const base = deps(d);
     const spied = {
       ...base,
@@ -109,7 +97,6 @@ describe("ensureBoxSecrets", () => {
     await ensureBoxSecrets(spied); // second boot
     expect(await readFile(join(d, "tls", "server.crt"), "utf8")).toBe(before);
     expect(await readFile(join(d, "secrets.env"), "utf8")).toBe(beforeEnv);
-    // The second boot touched neither the minter nor the secret factories.
     expect(spied.mint).toHaveBeenCalledTimes(1);
     expect(spied.listIpv4).toHaveBeenCalledTimes(1);
     expect(spied.makeKeyRing).toHaveBeenCalledTimes(1);
@@ -127,8 +114,6 @@ describe("ensureBoxSecrets", () => {
 
   it("dedupes 127.0.0.1 when listIpv4 also reports it (the leaf carries it exactly once)", async () => {
     const d = await newDir();
-    // listIpv4 overlaps the loopback address ensureBoxSecrets always prepends; its `new Set` must
-    // collapse the two so the leaf does not carry 127.0.0.1 as a duplicate SAN.
     await ensureBoxSecrets({ ...deps(d), listIpv4: () => ["127.0.0.1"] });
     const { X509Certificate } = await import("node:crypto");
     const cert = new X509Certificate(await readFile(join(d, "tls", "server.crt"), "utf8"));
@@ -140,10 +125,7 @@ describe("ensureBoxSecrets", () => {
 
   it("drops candidate IP SANs outside the CA's permitted set, keeping loopback + a permitted LAN IP", async () => {
     const d = await newDir();
-    // listBoxIpv4 (or the operator override) can surface addresses the box CA cannot vouch for — a
-    // Tailscale CGNAT 100.64/10, a 169.254/16 link-local. Left unfiltered they would poison the whole
-    // leaf: the CA's nameConstraints make ca.verify FAIL on a permitted-subtree violation, so the box
-    // could not serve HTTPS at all. They must be dropped before minting; the permitted LAN IP stays.
+    // Left unfiltered, one out-of-set address fails the whole leaf against the CA's nameConstraints.
     await ensureBoxSecrets({
       ...deps(d),
       listIpv4: () => ["192.168.1.50", "100.64.1.2", "169.254.1.2"],
@@ -155,14 +137,10 @@ describe("ensureBoxSecrets", () => {
     expect(san).toContain("192.168.1.50"); // a permitted RFC1918 LAN IP is retained
     expect(san).not.toContain("100.64.1.2"); // CGNAT — outside the permitted subtrees
     expect(san).not.toContain("169.254.1.2"); // link-local — outside the permitted subtrees
-    // The name-based reach still works even after IP filtering.
     expect(san).toContain("DNS:waitron.local");
   });
 
-  // Every case above injects mint/makeKeyRing/listIpv4, which leaves the REAL default
-  // branches (mintSelfSignedServerCert, generateKeyRing, listBoxIpv4) unexercised. This one case
-  // runs ensureBoxSecrets with ONLY the required deps, exercising real keygen/entropy/os in a
-  // single fresh temp dir and asserting the four PEMs + a well-formed secrets.env land.
+  // Every other case injects mint/makeKeyRing/listIpv4; this one runs the real defaults.
   it("uses the real minter, key ring and IPv4 detection with no injectables", async () => {
     const d = await newDir();
     const tls = await ensureBoxSecrets({
@@ -170,7 +148,6 @@ describe("ensureBoxSecrets", () => {
       hostnames: ["waitron.local", "localhost"],
       now: () => new Date("2026-08-26T00:00:00Z"),
     });
-    // The real cert parses as an X509 certificate and the CA + private keys are present.
     const { X509Certificate } = await import("node:crypto");
     const serverCrt = await readFile(tls.certFile, "utf8");
     expect(() => new X509Certificate(serverCrt)).not.toThrow();
@@ -190,11 +167,8 @@ describe("ensureBoxSecrets", () => {
 
   it("rethrows a non-ENOENT access error instead of treating the file as absent", async () => {
     const d = await newDir();
-    // secrets.env exists (holds the unrepairable vault master key); a permission/IO error probing it
-    // must NOT be read as "absent" — that would make ensureBoxSecrets mint a brand new key ring over
-    // it and orphan anything already sealed under the old one. Simulate that by making `access` reject
-    // with EACCES for exactly the secrets.env path, real fs otherwise (restored in `finally`, so a
-    // failing assertion still cannot leak the override into a later test).
+    // Read as "absent", a permission error on secrets.env would mint a new key ring over it and
+    // orphan everything sealed under the old one.
     const secretsFile = join(d, "secrets.env");
     const eacces = Object.assign(new Error("permission denied"), {
       code: "EACCES",
@@ -209,7 +183,6 @@ describe("ensureBoxSecrets", () => {
     } finally {
       accessMock.mockImplementation(passthrough);
     }
-    // Proves it wasn't swallowed-and-regenerated: nothing was ever written for secrets.env.
     await expect(readFile(secretsFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
@@ -249,7 +222,7 @@ function haveOpenssl(): boolean {
 
 // node-forge's verifyCertificateChain does NOT enforce nameConstraints (lib/x509.js §"check names
 // with permitted names tree" is a TODO), so openssl is the only local proof that the filtered leaf
-// carries no SAN the CA refuses. Skips cleanly where openssl is absent; mirrors name-constraints.test.ts.
+// carries no SAN the CA refuses.
 describe.runIf(haveOpenssl())("ensureBoxSecrets leaf verifies against its own CA (openssl)", () => {
   it("mints a leaf that verifies even when the interface list carries out-of-set addresses", async () => {
     const d = await newDir();
@@ -257,8 +230,6 @@ describe.runIf(haveOpenssl())("ensureBoxSecrets leaf verifies against its own CA
       ...deps(d),
       listIpv4: () => ["192.168.1.50", "100.64.1.2", "169.254.1.2"],
     });
-    // Before the filter these out-of-set SANs made this verify FAIL with "error 47 … permitted subtree
-    // violation" (the run-it reviewer's reproduction). With the filter the leaf is a clean subset.
     const out = execFileSync(
       "openssl",
       ["verify", "-CAfile", join(d, "tls", "ca.crt"), join(d, "tls", "server.crt")],

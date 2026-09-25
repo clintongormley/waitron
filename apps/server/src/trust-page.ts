@@ -1,7 +1,6 @@
 import { DEVICE_HELP, DEVICE_ORDER, type DeviceHelp, type DeviceId } from "./trust-page-devices.js";
 import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
 
-/** Shared, self-contained instructions for the HTTP landing page and HTTPS setup help. */
 export const CA_CONTENT_TYPE = "application/x-x509-ca-cert";
 export const CA_FILENAME = "waitron-ca.crt";
 
@@ -24,10 +23,8 @@ function escapeHtml(value: string): string {
 }
 
 /**
- * Step one, not an aside. Installing a new certificate while the old one is still trusted does
- * nothing an operator can see: the browser keeps using the entry it already has, and the page still
- * warns. The spec's "do not ask operators to remove an ambiguous entry" is why the caution about
- * removing only Waitron's own entry travels with it.
+ * Step one, not an aside: installing a new certificate while the old one is still trusted changes
+ * nothing an operator can see — the browser keeps the entry it already has.
  */
 const REMOVAL_INTRO = `If you have installed a Waitron certificate on this computer before, then you
   will need to remove it before installing the new certificate. Remove only Waitron's own entry — if
@@ -37,7 +34,6 @@ function notes(help: DeviceHelp): string {
   return (help.notes ?? []).map((n) => `<p class="note">${n}</p>`).join("");
 }
 
-/** The remove step for the device we guessed; otherwise a pointer at the list in step 3. */
 function removeSection(device: DeviceId | "unknown"): string {
   const body =
     device === "unknown"
@@ -49,7 +45,6 @@ function removeSection(device: DeviceId | "unknown"): string {
     <p>${REMOVAL_INTRO}</p>${body}</section>`;
 }
 
-/** One device inside a fold: how to clear an old certificate, then how to install the new one. */
 function deviceDetails(id: DeviceId): string {
   const help = DEVICE_HELP[id];
   const removal = help.removal.map((r) => `<li>${r}</li>`).join("");
@@ -63,10 +58,6 @@ const MANAGED = `<p class="note">These steps use your device's own settings, wit
   names vary by version. On a device your employer manages, an administrator may have to install the
   certificate for you.</p>`;
 
-/**
- * The install step. When the request's headers named a device, its steps are open and every other
- * device folds into one disclosure; when they did not, the page falls back to the plain list.
- */
 function installSection(device: DeviceId | "unknown"): string {
   if (device === "unknown")
     return `<section><h2>3. Install it on your device</h2>${MANAGED}

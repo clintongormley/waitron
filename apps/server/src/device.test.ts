@@ -1,27 +1,11 @@
 /**
- * Device join-and-accept binding, on the engine the box now runs, plus direct cases over
- * `resolveDeviceBinding` and `requireDeviceBinding`.
+ * Device join-and-accept binding, plus direct cases over `resolveDeviceBinding` and
+ * `requireDeviceBinding`.
  *
- * ## What this file does not check
- *
- * **SQLite has no roles and no grants**: one process opens one file. The grant half of every
- * join-and-accept case below is checked by nothing, here or elsewhere.
- *
- * What survives is the binding RULE, which is what the join-and-accept case names describe:
- * `resolveDeviceBinding` picks the station or the register, and the database refuses any other
- * shape through `device_binding_rule_insert` / `_update`, created by
- * `packages/db/drizzle/0001_behavioural_triggers.sql` and driven by
+ * What the join-and-accept cases pin is the binding RULE: `resolveDeviceBinding` picks the station
+ * or the register, and the database refuses any other shape through `device_binding_rule_insert` /
+ * `_update`, created by `packages/db/drizzle/0001_behavioural_triggers.sql` and driven by
  * `scripts/behavioural-triggers.test.ts` and `packages/db/src/schema/devices.trigger.test.ts`.
- *
- * ## The disposition document expected a seventh case to be RED here, and it is not
- *
- * `docs/handoffs/2026-09-21-f1-step25-disposition.md` records this file as "convert 6, BLOCKER 1",
- * on the ground that `tills_tenant_location_name_key` was absent from the SQLite baseline, so a
- * duplicate register name would insert cleanly and the refusal would never come. That is no longer
- * true of this tree: the index is at `packages/db/drizzle/0000_baseline.sql:49`, and the
- * register-name collision case passes. Control run 2026-09-22, so the green is not the look-alike CLAUDE.md §1 warns about:
- * giving the colliding device a name that does NOT collide ("Caja 2") fails the case with
- * `promise resolved "{ …(2) }" instead of rejecting`, and the name restored, it passes again.
  */
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -60,10 +44,8 @@ interface SeededVenue {
 async function setupVenue(): Promise<SeededVenue> {
   const admin = suite.db;
   await seedTenant(admin);
-  // Seeded through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
-  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators a raw
-  // insert never reaches while the columns are NOT NULL, and `invoice_locales` is a JSON array in a
-  // text column rather than the PostgreSQL `text[]` the `array[...]` constructor built.
+  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are
+  // `$defaultFn` generators raw SQL never reaches.
   const [loc] = await admin
     .insert(locations)
     .values({
@@ -94,8 +76,8 @@ async function setupVenue(): Promise<SeededVenue> {
   return { cfg, stationId: st.id };
 }
 
-/** Seed a device profile of the given form factor (owner SQL for setup). `name` is unique per tenant
- * (`device_profiles_tenant_name_key`), so a test seeding two profiles passes two distinct names. */
+/** `name` is unique (`device_profiles_tenant_name_key`), so a test seeding two profiles passes two
+ * distinct names. */
 async function seedProfile(formFactor: FormFactor, name: string): Promise<string> {
   const [row] = await suite.db
     .insert(deviceProfiles)
@@ -105,11 +87,7 @@ async function seedProfile(formFactor: FormFactor, name: string): Promise<string
 }
 
 async function tillCount(): Promise<number> {
-  const { rows } = await suite.db.execute<{ n: number }>(
-    // No `::int`: `count(*)` already comes back as a JavaScript number, and the cast operator is a
-    // syntax error to this parser (`unrecognized token: ":"`).
-    sql`select count(*) as n from tills `,
-  );
+  const { rows } = await suite.db.execute<{ n: number }>(sql`select count(*) as n from tills `);
   return rows[0]!.n;
 }
 
@@ -134,11 +112,6 @@ async function deviceRow(deviceId: string): Promise<{
 
 describe("device join-and-accept binds the device by its profile's form factor", () => {
   it("a till profile auto-creates exactly ONE register named after the device and binds it (station NULL)", async () => {
-    // The `till` branch (spec §2.2): the device describes itself as a till, so resolveDeviceBinding
-    // MINTS the cash register it rings against, names it after the device, and binds it. What the
-    // case turns on is that exactly ONE new till exists, named after the device, and the device
-    // points at it with a NULL station.
-    //
     // A `till_id` left NULL would also be refused by `device_binding_rule_insert`
     // (`packages/db/drizzle/0001_behavioural_triggers.sql`, its non-kds arm); what these assertions
     // add is WHICH register — the one this branch mints, named after the device.
@@ -148,13 +121,11 @@ describe("device join-and-accept binds the device by its profile's form factor",
 
     const dev = await enrolDeviceForTest(suite.db, cfg, { name: "Caja Nueva", profileId });
 
-    // Exactly ONE new till, named after the device.
     expect(await tillCount()).toBe(before + 1);
     const { rows: created } = await suite.db.execute<{ id: string }>(
       sql`select id from tills where location_id = ${cfg.locationId} and name = 'Caja Nueva'`,
     );
     expect(created).toHaveLength(1);
-    // …and the device is bound to THAT register, with no station.
     const row = await deviceRow(dev.deviceId);
     expect(row.till_id).toBe(created[0]!.id);
     expect(row.station_id).toBeNull();
@@ -163,8 +134,6 @@ describe("device join-and-accept binds the device by its profile's form factor",
   });
 
   it("a handheld profile binds an EXISTING register named by registerId and creates no new till", async () => {
-    // The else branch (phone-portrait / tablet-landscape): a handheld rings against an already-created
-    // register, so resolveDeviceBinding binds the named `registerId` and mints NO till.
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("phone-portrait", "Perfil Móvil");
     const before = await tillCount();
@@ -213,9 +182,7 @@ describe("device join-and-accept binds the device by its profile's form factor",
   });
 
   it("a handheld profile naming a register of another venue is device.binding_invalid (field tillId)", async () => {
-    // The explicit by-id read carries its own tenant AND location predicate (CLAUDE.md §3): a register
-    // that is not this venue's is rejected here, not trusted. A foreign-venue till (another location of
-    // the SAME tenant) trips it.
+    // The register read is scoped by location, so a till at another location trips it.
     const { cfg } = await setupVenue();
     const [other] = await suite.db
       .insert(locations)
@@ -241,10 +208,7 @@ describe("device join-and-accept binds the device by its profile's form factor",
 
   it("a till profile whose name collides at the venue is device.register_name_taken", async () => {
     // setupVenue already seeded a 'Caja 1' at cfg.locationId, so a till device named 'Caja 1'
-    // collides on `tills_tenant_location_name_key` (`packages/db/drizzle/0000_baseline.sql:49`) and
-    // the unique violation is translated to this code. Control, 2026-09-22: naming the device
-    // 'Caja 2' instead resolves the promise rather than rejecting it, so the assertion is reading
-    // the collision and not the happy path.
+    // collides on `tills_tenant_location_name_key`.
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("till", "Perfil Caja");
     const before = await tillCount();

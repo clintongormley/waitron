@@ -20,8 +20,6 @@ import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
 // manifest is migrated because the route composes cells several modules own.
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the seeded manager's dashboard password.
-// Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
-// (unique on `lower(email)` across the database — persons_tenant_email_uq).
 const MANAGER_EMAIL = "manager@x.com";
 
 const suite = useVenueDb({
@@ -30,12 +28,9 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// One fixed NIF: this suite owns its own venue directory, so nothing else ever writes the `tenants`
-// row the uniqueness constraint covers.
 const NIF = "72000001K";
 
-/** The suite's one venue. The database holds one tenant (one tenant per database) and is not reset
- *  between tests, so every group shares the venue provisioned on first use rather than another. */
+/** The database is not reset between tests, so every group shares the venue provisioned on first use. */
 let provisioned: Promise<{ nodeId: string; managerId: string }> | undefined;
 function setupTenant(): Promise<{ nodeId: string; managerId: string }> {
   provisioned ??= provisionTenant();
@@ -80,8 +75,7 @@ async function provisionTenant(): Promise<{ nodeId: string; managerId: string }>
 
   const managerId = await withTransaction(suite.db, async (tx) => {
     // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
-    // `$defaultFn` generators (`packages/identity/src/schema/persons.ts:26,:67`) that an insert
-    // statement never reaches, and both columns are NOT NULL.
+    // `$defaultFn` generators (`packages/identity/src/schema/persons.ts`) that raw SQL never reaches.
     const [manager] = await tx
       .insert(persons)
       .values({
@@ -97,11 +91,7 @@ async function provisionTenant(): Promise<{ nodeId: string; managerId: string }>
   return { nodeId: venue.nodeId, managerId };
 }
 
-/**
- * A Hono app carrying the management API (for its login route) plus the box-status route under test.
- * Both surfaces share the owner db + tenant, so a cookie minted on one resolves on the other. `now`
- * feeds BOTH the cert reader and the duties snapshot; `tlsCertPath` toggles the cert branch.
- */
+/** The management API (for its login route) plus the box-status route under test. */
 function buildApp(
   nodeId: string,
   opts: {
@@ -180,15 +170,11 @@ describe("GET /api/box/status", () => {
     expect(body.environment).toBe("preproduction");
     expect(body.cert).toEqual({ available: false }); // tlsCertPath undefined
     expect(body.backup).toEqual({ configured: false });
-    expect(body.configConflicts).toBeUndefined(); // the config-conflict cell was removed (swap S4)
+    expect(body.configConflicts).toBeUndefined();
     expect(body.time.source).toMatch(/timedatectl|unavailable/);
   });
 
   it("flows the per-destination backup shape through the route, reading a .backup.enc artifact as FRESH", async () => {
-    // The success-path twin of the `configured:false` case above: a real `LocalFsBackend` holding an
-    // encrypted `waitron-<ts>.backup.enc` archive must read FRESH per destination over the actual HTTP
-    // route + manager gate — the regression BR-1 left (the old `.dump`-anchored reader reported a
-    // working backup permanently stale) proven end-to-end, not just at the unit level.
     const now = new Date("2026-08-29T10:00:00Z");
     const dir = mkdtempSync(join(tmpdir(), "box-status-backup-"));
     const artifact = join(dir, "waitron-20260829T095900Z.backup.enc");
@@ -222,9 +208,7 @@ describe("GET /api/box/status with a configured TLS cert", () => {
 
   beforeAll(async () => {
     const { nodeId } = await setupTenant();
-    // A real leaf on disk exercises the cert-configured branch + `readCertExpiry` closure end-to-end
-    // (the undefined-cert suite above never touches them). `now` is 30 days before the fixture's
-    // notAfter, so `daysRemaining` is a deterministic 30.
+    // `now` is 30 days before the fixture's notAfter, so `daysRemaining` is a deterministic 30.
     const certPath = join(mkdtempSync(join(tmpdir(), "box-status-cert-")), "server.crt");
     writeFileSync(certPath, FIXTURE_CERT_PEM);
     app = buildApp(nodeId, {

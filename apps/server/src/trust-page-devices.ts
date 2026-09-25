@@ -1,8 +1,6 @@
 /**
- * The per-device certificate instructions shown on `/setup/trust`, one entry per device the page
- * can guess at. Install steps always end by reopening the browser, and every device carries its own
- * removal steps, because an operator whose server was re-imaged must clear the old certificate
- * before the new one takes effect. Guard: `trust-page-devices.test.ts`.
+ * Every device carries its own removal steps: an operator whose server was re-imaged must clear the
+ * old certificate before the new one takes effect. Guard: `trust-page-devices.test.ts`.
  *
  * Every string here is authored HTML, inserted into the page WITHOUT escaping so `<code>` renders.
  * Nothing from a request reaches this file: the page picks an entry by id and prints fixed text.
@@ -10,26 +8,22 @@
 import type { TrustDevice } from "./detect-device.js";
 
 /**
- * Every device `detectTrustDevice` can name, minus the case where it named none. Derived rather
- * than restated, so `DEVICE_HELP` below cannot compile while a detectable device has no
- * instructions — which is the drift a second hand-written list would hide.
+ * Derived rather than restated, so `DEVICE_HELP` cannot compile while a detectable device has no
+ * instructions.
  */
 export type DeviceId = Exclude<TrustDevice, "unknown">;
 
 export interface DeviceHelp {
-  /** The open section's heading, e.g. "Install it on this Mac". A full sentence, not a fragment. */
+  /** A full sentence, not a fragment. */
   readonly heading: string;
-  /** The closed list's one-line label, naming the operating system and its browsers. */
   readonly summary: string;
-  /** Numbered steps. The last one always closes and reopens the browser. */
+  /** The last step always closes and reopens the browser. */
   readonly install: readonly string[];
-  /** How to clear a Waitron certificate this device already holds. */
   readonly removal: readonly string[];
   /** Asides that are not a step — a browser that behaves differently, or a caution. */
   readonly notes?: readonly string[];
 }
 
-/** Display order of the "Using a different device?" list. */
 export const DEVICE_ORDER: readonly DeviceId[] = [
   "macos",
   "windows",

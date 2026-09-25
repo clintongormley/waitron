@@ -1,23 +1,6 @@
 /**
- * The management-side join routes — the pairing window, the queue, the challenge, deny, accept and
- * self-enrol — on the engine the box now runs.
- *
- * ## What this file does not check
- *
- * SQLite has no roles and no grants: one process opens one file. Nothing here or elsewhere checks
- * that these routes reach only what the deployment role is allowed to reach.
- *
- * What every case below still proves is the ROUTE: its permission gate, its refusal codes, the
- * shape of what it returns, and what it leaves in the tables — none of which the database enforced.
- *
- * ## Which of the two `join-api` suites this is
- *
- * This file is `join-api.db.test.ts`, the `.db` naming the difference a reader can check in the two
- * import lists: this one opens a database — `useVenueDb`, and `mountJoinApi` driven over HTTP —
- * while `join-api.test.ts` imports only `vitest` and `@waitron/identity` and opens none. That
- * sibling is one case over the role map, asserting `device.manage` and `printer.manage` are held by
- * exactly the same roles; its own header sets out why that has to be asserted on the map rather
- * than through a route.
+ * The management-side join routes — the pairing window, the queue, the challenge, deny and accept —
+ * driven over HTTP. The role-map fact they rely on is pinned in `join-api.test.ts`.
  */
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -35,8 +18,6 @@ import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
 
-// Each test provisions its OWN venue, and `useVenueDb` empties the data tables between tests, so
-// the rows each case reads back are its own.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -73,10 +54,8 @@ async function errorOf(res: Response): Promise<ErrorBody["error"]> {
   return ((await res.json()) as ErrorBody).error;
 }
 
-/** Mint a pending request straight through the verb — the knock ROUTE is `device-api.ts`'s, and
- *  every route under test here acts on a request that already exists. `numbers` pins the REAL number
- *  so the accept tests can name a wrong one deterministically (the decoys stay truly random, so a
- *  test never asserts on them by value). */
+/** Mint a pending request through the verb; the knock ROUTE is `device-api.ts`'s. `numbers` pins the
+ *  REAL number so the accept tests can name a wrong one; the decoys stay random. */
 async function knock(
   venue: Venue,
   input: { kind: JoinRequestKind; label: string; numbers?: () => number },
@@ -90,10 +69,6 @@ async function knock(
 let profileCounter = 0;
 async function seedProfile(formFactor: "till" | "kds" | "phone-portrait"): Promise<string> {
   profileCounter += 1;
-  // Through the table definition, as `apps/server/src/testing/fiscal-fixtures.ts` is:
-  // `device_profiles.id`, `created_at` and `updated_at` are `$defaultFn` generators a raw insert
-  // never reaches, and it is also what encodes `capabilities` — the `::jsonb` cast is a syntax
-  // error to this parser (`unrecognized token: ":"`).
   const [row] = await suite.db
     .insert(deviceProfiles)
     .values({ name: `Profile ${profileCounter}`, formFactor, capabilities: [] })
@@ -101,12 +76,9 @@ async function seedProfile(formFactor: "till" | "kds" | "phone-portrait"): Promi
   return row!.id;
 }
 
-/** How many pending requests this venue holds — read straight from the table, so the assertion is
- *  about what is stored and not about what a route chose to show. */
+/** Read straight from the table: the assertion is about what is stored, not what a route shows. */
 async function pendingCount(): Promise<number> {
   const { rows } = await suite.db.execute<{ n: number }>(
-    // No `::int` here or in the two sibling counts below: `count(*)` already comes back as a
-    // JavaScript number, and the cast operator is a syntax error to this parser.
     sql`select count(*) as n from join_requests `,
   );
   return rows[0]!.n;
@@ -190,10 +162,8 @@ describe("the pairing-mode control", () => {
       const app = mountApp(venue.cfg, mode);
       if (initiallyOpen) mode.open();
       clock += 60_000;
-      // The clock is read in JavaScript and the instant bound: this engine has neither `now()` nor
-      // an interval type. One statement, so no transaction-start reading has to be shared. `clock`
-      // above is the PAIRING mode's injected clock and is deliberately not this value: what is
-      // being aged here is the management session's own `last_seen_at`.
+      // `clock` is the PAIRING mode's injected clock and deliberately not this value: what is being
+      // aged here is the management session's own `last_seen_at`.
       const sessionSeenAt = new Date(Date.now() - 10 * 60_000).toISOString();
       await suite.db.execute(sql`
       update management_sessions set last_seen_at = ${sessionSeenAt}
@@ -470,8 +440,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       formFactor: "kds",
     });
     expect(await pendingCount()).toBe(0);
-    // Through the table definition, not raw SQL: a raw read skips drizzle's decoding and hands a
-    // boolean column back as SQLite's 0/1, which `active: true` could never match.
+    // Through the table definition: a raw read hands the boolean column back as 0/1.
     const rows = await suite.db
       .select({ label: devices.label, stationId: devices.stationId, active: devices.active })
       .from(devices)
@@ -506,9 +475,8 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect(res.status).toBe(400);
     expect((await errorOf(res)).code).toBe("device.join_mismatch");
 
-    // A SEPARATE request, so the deny is read back across the transaction boundary the route committed
-    // at. Throwing the mismatch from inside `withTransaction` would roll the consuming delete back and turn
-    // a wrong tap into an unlimited retry — the 400 alone cannot tell the two shapes apart.
+    // A SEPARATE request, so the deny is read back after the route's transaction committed: the 400
+    // alone cannot tell a committed deny from a rolled-back one.
     const retry = await send(
       app,
       "POST",
@@ -692,9 +660,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const live = await knock(venue, { kind: "device", label: "Bar till" });
-    // Live id, unknown id, malformed id and a malformed BODY all answer 403 to a staff session. The
-    // deny route's sibling test pins the same property for the shared paths; pinning it here too is
-    // what keeps the file's two by-id orderings from drifting apart.
+    // Live id, unknown id, malformed id and a malformed BODY all answer 403 to a staff session.
     const cases: { path: string; body: unknown }[] = [
       { path: live.joinId, body: { choice: live.verificationNumber, profileId: randomUUID() } },
       { path: randomUUID(), body: { choice: "42", profileId: randomUUID() } },
@@ -730,8 +696,8 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
     );
     expect(res.status).toBe(204);
     expect(await pendingCount()).toBe(0);
-    // The real row carries the request's own id (so the agent's Bearer keeps working) and its label.
-    // Through the table definition, for the reason the devices read-back above states.
+    // The request's own id, so the agent's Bearer keeps working. Through the table definition, for
+    // the reason the devices read-back above states.
     const rows = await suite.db
       .select({ name: printAgents.name, active: printAgents.active })
       .from(printAgents)
@@ -756,9 +722,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
     expect((await errorOf(wrong)).code).toBe("device.join_mismatch");
     expect(await agentCount()).toBe(0);
 
-    // The consuming delete stuck (the mismatch is thrown AFTER the transaction commits) — a FRESH
-    // request, even with the RIGHT number, finds nothing. Rolling the delete back would turn a wrong
-    // tap into an unlimited retry.
+    // The consuming delete stuck: a FRESH request, even with the RIGHT number, finds nothing.
     const retry = await send(app, "POST", path, {
       cookie: venue.managerCookie,
       body: { choice: made.verificationNumber },

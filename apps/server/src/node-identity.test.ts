@@ -8,8 +8,6 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 
-// `establishNodeIdentity` seals a credential and stamps `nodes.public_key`, both under
-// `withTransaction`. This suite exercises that round-trip and its behavioural assertions.
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -28,10 +26,6 @@ describe("node identity establishment", () => {
   beforeAll(async () => {
     db = suite.db;
     await seedTenant(db);
-    // Inserted through the table definition, the same change `packages/db/src/testing/seed.ts`
-    // took: `locations.id` is a `$defaultFn(newId)` value on this engine rather than a SQL
-    // DEFAULT, so a raw insert omitting it returns nothing to brand — and `array['es-ES']` is
-    // PostgreSQL array syntax the engine refuses at prepare (`near "['es-ES']": syntax error`).
     const [loc] = await db
       .insert(locations)
       .values({
@@ -47,7 +41,7 @@ describe("node identity establishment", () => {
     await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
     const trust = await readMembershipTrustSet(db);
     expect(Object.keys(trust)).toEqual([nodeId]);
-    expect(typeof trust[nodeId]).toBe("string"); // base64 SPKI, non-empty
+    expect(typeof trust[nodeId]).toBe("string");
     expect(trust[nodeId]!.length).toBeGreaterThan(0);
   });
 
@@ -55,8 +49,8 @@ describe("node identity establishment", () => {
     await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
     const priv = await readNodeIdentityKey(db, RING);
     const pub = (await readMembershipTrustSet(db))[nodeId]!;
-    // Proof they are ONE keypair: a signature by the sealed private key verifies under the stamped
-    // public key. This fails if establish seals one key and stamps a DIFFERENT one.
+    // A signature by the sealed private key verifies under the stamped public key only if the two
+    // are one keypair.
     const sig = signBytes("membership-slice-4-probe", priv);
     expect(verifyBytes("membership-slice-4-probe", sig, pub)).toBe(true);
   });

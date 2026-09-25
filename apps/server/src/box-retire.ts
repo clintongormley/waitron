@@ -7,11 +7,9 @@ import { retireSelf } from "./retire.js";
 import { requireManagementSession } from "@waitron/server-kit";
 import { createErrorBoundary } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
-// No `./errors.js` side-effect import: this file throws no code of its own — the auth helpers and
-// `retireSelf` each carry their own registry import for the codes they raise (matching box-status.ts).
+// No `./errors.js` side-effect import: this file throws no code of its own.
 
 export type BoxRetireDeps = {
-  /** The app pool retireSelf reads/writes `node_membership` and the identity key through. */
   appDb: Database;
   /** The box key ring — unseals this node's identity key so the minted eviction can be signed. */
   ring: KeyRing;
@@ -21,14 +19,8 @@ export type BoxRetireDeps = {
 };
 
 /**
- * The AppError codes this route can surface, and their HTTP status. `requireManagementSession` throws
- * `management_session.required` (401); `authorizeManager` re-resolves the session
- * (`management_session.required`/`.expired` → 401, `person.suspended` → 403) and refuses a role without
- * `system.manage` with `authorization.not_permitted` (403). `retireSelf`'s ordered refusals are
- * client-visible conflicts with the node's current membership standing, so each maps to 409 — an
- * UNMAPPED AppError would fall through to the boundary's 400 default, which is the wrong shape for a
- * "your node is not in a retirable state" answer. Any other thrown value is a server fault the boundary
- * answers with an opaque 500.
+ * `retireSelf`'s refusals conflict with the node's current membership standing, so each maps to 409;
+ * an unmapped AppError would take the boundary's 400 default.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -41,22 +33,16 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 /**
- * Registers `POST /api/box/retire` on the shared trading app — the management action a fenced node
- * self-evicts with (retire/evict R3). Gated exactly like `GET /api/box/status`:
- * `requireManagementSession` → 401 before any DB work, then `withTransaction` +
- * `authorizeManager("system.manage")` for the manager check (a `manager`-role person holds it).
- * `retireSelf` owns all retire SEMANTICS — the ordered refusals, idempotency, the
- * abort-before-write mint; this route is only the auth + status-mapping glue.
+ * The management action a fenced node self-evicts with. `retireSelf` owns all retire semantics; this
+ * route is only the auth and status-mapping glue.
  *
- * `"box-retire.failed"` is a LOG TAG only (the boundary's `tag`), NOT a registered error code — matching
- * box-status's `"box-status.failed"`. On a FENCED node this write verb is let through the read-only gate
- * by a single-route exemption in boot.ts (a fenced node legitimately serves this one management write).
+ * `"box-retire.failed"` is a LOG TAG only (the boundary's `tag`), NOT a registered error code.
  */
 export function mountBoxRetireApi(app: Hono, deps: BoxRetireDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "box-retire.failed");
   app.post("/api/box/retire", (c) =>
     run(c, log, async () => {
-      const sessionId = requireManagementSession(c); // throws 401 if absent
+      const sessionId = requireManagementSession(c);
       await withTransaction(deps.appDb, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,

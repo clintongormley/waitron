@@ -7,8 +7,7 @@ describe("DEVICE_HELP", () => {
     expect(new Set(DEVICE_ORDER).size).toBe(DEVICE_ORDER.length);
   });
 
-  // The owner asked for "restart browser" in every device's steps. Without this, a device added
-  // later silently ships instructions that leave the operator staring at a cached warning.
+  // Without a browser restart, the operator is left staring at a cached warning.
   it.each(Object.keys(DEVICE_HELP) as DeviceId[])(
     "%s ends its install steps by closing the browser and reopening THIS page",
     (id) => {

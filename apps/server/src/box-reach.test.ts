@@ -26,11 +26,6 @@ it("uses http when not secure", () => {
   expect(r.hostnameUrl).toBe("http://waitron.local");
 });
 
-// The advertised IP URLs must be cert-coverable: the box leaf's iPAddress SANs are filtered to the
-// CA's permitted subtrees (`isPermittedLeafIpv4`), so an out-of-set interface address (Tailscale
-// 100.64/10 CGNAT, 169.254/16 link-local) would present an `https://<ip>/` the leaf's cert cannot
-// vouch for → a TLS name mismatch on dial. Drop those from the advertised set; keep the permitted
-// LAN address and always keep the `waitron.local` hostname URL (the cert covers the NAME).
 it("drops out-of-set IPs from the advertised URLs but keeps permitted LAN + the hostname URL", () => {
   const r = buildReachInfo({
     hostname: "waitron.local",
@@ -44,8 +39,6 @@ it("drops out-of-set IPs from the advertised URLs but keeps permitted LAN + the 
   expect(r.qrTarget).toBe("https://192.168.1.50:8080");
 });
 
-// No cert-coverable IP: the box still advertises the hostname URL (name-based reach via mDNS, whose
-// `waitron.local` name the cert covers), and the IP-QR target is null rather than an error.
 it("advertises only the hostname URL when no IP is cert-coverable", () => {
   const r = buildReachInfo({
     hostname: "waitron.local",
@@ -99,8 +92,7 @@ describe("parseBoxAddresses", () => {
     );
   });
 
-  // 0.0.0.0 is a bind wildcard, never a destination — advertising it is as unreachable as
-  // advertising loopback, so the guard whose purpose is refusing undialable addresses refuses it.
+  // 0.0.0.0 is a bind wildcard, never a destination.
   it("refuses the unspecified address 0.0.0.0", () => {
     expect(() => parseBoxAddresses("0.0.0.0")).toThrow(
       expect.objectContaining({
@@ -112,10 +104,6 @@ describe("parseBoxAddresses", () => {
 });
 
 describe("listBoxIpv4", () => {
-  // A box always runs under Docker (network_mode: host), so the host carries docker0 / br-* bridge
-  // interfaces alongside the real LAN NIC. Their 172.x addresses are non-internal, so the old
-  // loopback-only filter advertised them over mDNS / in the cert SANs — and a phone that resolved
-  // waitron.local to one could not connect. Advertise only the default-route interface's addresses.
   const withBridges = asIfaces({
     lo: [{ address: "127.0.0.1", family: "IPv4", internal: true }],
     eth0: [
@@ -143,8 +131,6 @@ describe("listBoxIpv4", () => {
   });
 
   it("falls back to non-virtual interfaces when there is no default route", () => {
-    // No uplink resolvable (isolated/static LAN): keep every non-internal IPv4 EXCEPT those on a
-    // known virtual/container bridge interface, so a box with a gateway is not left unreachable.
     expect(
       listBoxIpv4({ interfaces: () => withBridges, defaultRouteIface: () => undefined }),
     ).toEqual(["192.168.10.10"]);
