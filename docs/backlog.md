@@ -5290,6 +5290,8 @@ configuration runs, refusing with `backup.stream_config_unsafe` naming the field
 name, the fix is lowercase letters, digits, dots and hyphens only), and refuse a prefix of a single
 `-`, which the vault would store as no prefix. The routes and the kit's decoder read the bucket settings through
 one reader (`packages/stream/src/bucket-config.ts`), and the kit is sent with `Cache-Control: no-store`.
+The kit is read in its turn too, since a retroactive Codex review of #627 found that a Save and a
+rotation landing between the kit's reads could pair the old bucket with the new key.
 Left open: the pointer write left open under
 Task 6, item (2), one from a process that has since died, landing after the restart.
 Task 8b, the Backups screen's bucket-copy panel and the archive setup reusing a held recovery key

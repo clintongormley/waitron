@@ -195,27 +195,31 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     }),
   );
 
+  // Read in a turn: a Save and a rotation landing between two unqueued reads could pair the old
+  // bucket with a key that cannot open the locked secrets row in that bucket's copy.
   app.get("/api/backup/stream/kit", (c) =>
     run(c, log, async () => {
       await authorize(c);
-      const settings = await readStreamSettings(deps.db, deps.ring);
-      if (settings === null) throw new AppError("backup.stream_not_configured", {});
-      const recoveryKey = await deps.readRecoveryKey();
-      if (recoveryKey === undefined) throw new AppError("backup.recovery_key_missing", {});
-      const pointerSignerPublicKey = (await readMembershipTrustSet(deps.db))[deps.nodeId];
-      if (pointerSignerPublicKey === undefined) {
-        throw new AppError("backup.stream_signer_missing", {});
-      }
-      c.header("Cache-Control", "no-store");
-      return c.json({
-        kit: encodeRecoveryKit({
-          version: 1,
-          venueId: settings.venueId,
-          bucket: settings.bucket,
-          recoveryKey,
-          pointerSignerPublicKey,
-        }),
-        keyFingerprint: keyFingerprint(recoveryKey),
+      return deps.turns(async () => {
+        const settings = await readStreamSettings(deps.db, deps.ring);
+        if (settings === null) throw new AppError("backup.stream_not_configured", {});
+        const recoveryKey = await deps.readRecoveryKey();
+        if (recoveryKey === undefined) throw new AppError("backup.recovery_key_missing", {});
+        const pointerSignerPublicKey = (await readMembershipTrustSet(deps.db))[deps.nodeId];
+        if (pointerSignerPublicKey === undefined) {
+          throw new AppError("backup.stream_signer_missing", {});
+        }
+        c.header("Cache-Control", "no-store");
+        return c.json({
+          kit: encodeRecoveryKit({
+            version: 1,
+            venueId: settings.venueId,
+            bucket: settings.bucket,
+            recoveryKey,
+            pointerSignerPublicKey,
+          }),
+          keyFingerprint: keyFingerprint(recoveryKey),
+        });
       });
     }),
   );
