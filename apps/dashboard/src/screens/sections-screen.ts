@@ -251,8 +251,17 @@ export class SectionsScreen extends LitElement {
       this.#occurrences = this.#tree();
       this.#sectionChoices = this.sections.map(({ id, internalName }) => ({ id, internalName }));
     }
+    // The picker offers Active products; an Inactive one the list already holds is passed too, only
+    // so its row keeps its name (the editor never offers a product the list holds).
+    if (changed.has("products") || changed.has("editorMembers")) {
+      const held = new Set(
+        this.editorMembers.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : [])),
+      );
+      this.#memberProducts = this.products
+        .filter((product) => product.active || held.has(product.id))
+        .map(({ id, name }) => ({ id, name }));
+    }
     if (changed.has("products")) {
-      this.#memberProducts = this.products.map(({ id, name }) => ({ id, name }));
       this.#productNames = new Map(this.products.map(({ id, name }) => [id, name]));
       this.#addable = this.products
         .filter((product) => product.active)
@@ -622,6 +631,8 @@ export class SectionsScreen extends LitElement {
         label: t("sections.member_count"),
         align: "end",
         sortValue: ({ section }) => section.members.length,
+        // Without this the search would fall back to the count and match every section of that size.
+        searchValue: () => "",
         cell: ({ section }) => String(section.members.length),
       },
       {

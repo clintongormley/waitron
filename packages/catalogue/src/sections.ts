@@ -13,7 +13,13 @@ import {
   type SectionGraph,
 } from "./section-graph.js";
 import { onStructureChanged } from "./section-structure.js";
-import type { LibrarySection, MemberRef, SectionMember, SectionUsages } from "./section-types.js";
+import type {
+  LibrarySection,
+  MemberRef,
+  SectionInput,
+  SectionMember,
+  SectionUsages,
+} from "./section-types.js";
 import "./errors.js";
 
 /*
@@ -24,12 +30,6 @@ import "./errors.js";
  * `sections.db.test.ts`, run through `racePair`.
  */
 
-export interface SectionInput {
-  internalName: string;
-  names?: Record<string, string>;
-  image?: string | null;
-  color?: string | null;
-}
 export type SectionPatch = Partial<SectionInput>;
 
 const details = {

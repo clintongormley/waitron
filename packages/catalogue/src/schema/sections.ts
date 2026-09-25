@@ -14,12 +14,16 @@ import {
 } from "@waitron/db";
 import type { SectionRole } from "../section-types.js";
 
-// Kept out of section-types.ts, which the dashboard imports and so must hold types alone.
+// Not in section-types.ts: the dashboard imports that file, and
+// scripts/dashboard-browser-purity.test.ts refuses a runtime value in it.
 const SECTION_ROLES = [
   "library",
   "menu_root",
   "home_layout",
 ] as const satisfies readonly SectionRole[];
+// Fails to compile when SectionRole gains a role this list (and so the column's check) lacks.
+const everyRoleListed: SectionRole extends (typeof SECTION_ROLES)[number] ? true : never = true;
+void everyRoleListed;
 const sectionRole = enumType(SECTION_ROLES);
 
 /** An ordered list of products and other sections. A reporting category is not a section. */

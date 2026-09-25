@@ -24,3 +24,11 @@ export interface SectionUsages {
   menus: { id: string; name: string }[];
   sections: { id: string; internalName: string }[];
 }
+
+/** A section's details, as creating or changing a library section takes them. */
+export interface SectionInput {
+  internalName: string;
+  names?: Record<string, string>;
+  image?: string | null;
+  color?: string | null;
+}

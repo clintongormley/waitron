@@ -327,6 +327,22 @@ it("searches the sections by name and by where they are used", async () => {
   expect(colour("s-drinks")).not.toBe(colour("s-beer"));
 });
 
+it("does not match a section by its item count", async () => {
+  const el = await mount();
+  const search = table(el).shadowRoot.querySelector<HTMLInputElement>('[name="search"]')!;
+  // Drinks holds 3 items; no name, customer name or place of use contains a 3.
+  search.value = "3";
+  search.dispatchEvent(new Event("input", { bubbles: true }));
+  await vi.waitFor(() => expect(shown(el)).toEqual([]));
+  // The count still sorts: Sides holds nothing and Drinks the most, three.
+  search.value = "";
+  search.dispatchEvent(new Event("input", { bubbles: true }));
+  await vi.waitFor(() => expect(shown(el, 1)).toHaveLength(5));
+  table(el).shadowRoot.querySelector<HTMLElement>('[data-sort="members"]')!.click();
+  await vi.waitFor(() => expect(shown(el, 1).at(-1)).toBe("s-drinks"));
+  expect(shown(el, 1)[0]).toBe("s-sides");
+});
+
 it("filters by use: in a menu, through nesting too, or not used at all", async () => {
   const el = await mount();
   const column = table(el).columns.find((each) => each.key === "usedIn")!;
@@ -455,15 +471,34 @@ it("opens an editor with the section's details, its wider use above its members,
   // The note comes before the member list, so a shared edit shows its wider use first.
   expect(usedIn.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(list.members.map((member) => member.id)).toEqual(["m-lager", "m-beer", "m-lemonade"]);
-  expect(list.products.map((each) => each.name)).toEqual([
-    "Lager",
-    "Lemonade",
-    "Burger",
-    "Old soup",
-  ]);
+  // Active products only: Old soup is Inactive and Drinks does not hold it.
+  expect(list.products.map((each) => each.name)).toEqual(["Lager", "Lemonade", "Burger"]);
   expect(list.sections.map((each) => each.internalName)).toContain("Favourites");
   // Drinks itself, and Favourites, which holds it, would each make a loop.
   expect([...list.excludeSectionIds].sort()).toEqual(["s-drinks", "s-fav"]);
+});
+
+it("never offers an Inactive product to add, but still names one the list already holds", async () => {
+  const holding = sections();
+  holding[1]!.members.push(productMember("m-soup", 1, "p-soup"));
+  const el = await mount(api({ listSections: vi.fn().mockResolvedValue(holding) }));
+  await openEditor(el, "s-drinks");
+  const offered = () =>
+    [
+      ...memberList(el).shadowRoot!.querySelectorAll<HTMLOptionElement>(
+        'select[name="member-ref"] option',
+      ),
+    ].map((option) => option.value);
+  await memberList(el).updateComplete;
+  expect(offered()).not.toContain("product:p-soup");
+  expect(offered()).toContain("product:p-burger");
+  click(el, '[data-test="editor-cancel"]');
+  await openEditor(el, "s-beer");
+  const list = memberList(el);
+  await list.updateComplete;
+  const soup = list.shadowRoot!.querySelector('tr[data-member="m-soup"] [data-test="name"]')!;
+  expect(soup.textContent!.trim()).toBe("Old soup");
+  expect(offered()).not.toContain("product:p-soup");
 });
 
 it("excludes every section that holds this one, however deep", async () => {

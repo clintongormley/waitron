@@ -35,19 +35,11 @@ import type {
 import type {
   LibrarySection,
   MemberRef,
+  SectionInput,
   SectionMember,
   SectionUsages,
 } from "@waitron/catalogue/src/section-types.js";
-export type { LibrarySection, MemberRef, SectionMember, SectionUsages };
-
-/** A section's details as `createSection`/`updateSection` take them
- * (`SectionInput`, packages/catalogue/src/sections.ts). */
-export interface SectionInput {
-  internalName: string;
-  names?: Record<string, string>;
-  image?: string | null;
-  color?: string | null;
-}
+export type { LibrarySection, MemberRef, SectionInput, SectionMember, SectionUsages };
 
 export type {
   ExtraList,
