@@ -6,16 +6,23 @@ import type {
 } from "./types.js";
 import { signDocumentBody } from "./verify.js";
 
-/** Build and sign the next membership document; persisting it is the caller's job. */
+/**
+ * Build and sign the next membership document; persisting it is the caller's job. `minTerm` raises
+ * the term to at least that value.
+ */
 export function buildNextMembershipDocument(args: {
   heldDocument: SignedMembershipDocument | null;
   nodes: readonly MembershipNode[];
   signerNodeId: string;
   signerPrivateKey: string;
   endorsements?: readonly Endorsement[];
+  minTerm?: number;
 }): SignedMembershipDocument {
   const body: MembershipDocumentBody = {
-    term: args.heldDocument === null ? 0 : args.heldDocument.body.term + 1,
+    term: Math.max(
+      args.heldDocument === null ? 0 : args.heldDocument.body.term + 1,
+      args.minTerm ?? 0,
+    ),
     nodes: args.nodes,
   };
   return {

@@ -100,6 +100,16 @@ describe("the live copy's wiring", () => {
     expect(logs).toContain("stream.not_configured");
   });
 
+  // With nothing set up there is no copy to hold, so the log and the status say "not set up".
+  it("reads plain off, not held, when no bucket is stored and a restore's first start is unfinished", async () => {
+    logs = [];
+    const rt = runtime({ spawn: new FakeLitestream().spawn, mayStream: () => false });
+    await rt.start();
+    expect(rt.status()).toEqual({ state: "off" });
+    expect(logs).toContain("stream.not_configured");
+    expect(logs).not.toContain("stream.first_start_pending");
+  });
+
   it("stores an absent endpoint and an empty prefix as '-', and a present one as itself", () => {
     const settings = {
       venueId: "venue-1",
@@ -281,6 +291,35 @@ describe("the live copy's wiring", () => {
             (event) => event === "spawn replicate" || event === "kill replicate",
           );
           expect(replicas).toEqual(["spawn replicate", "kill replicate", "spawn replicate"]);
+        } finally {
+          await rt.stop();
+        }
+      });
+
+      // A restored box whose first start has not finished holds a term that may not have moved
+      // (rebuild-first-start.ts), and a settings save reloads the host, so start AND reload hold it.
+      it("starts nothing, on a start or a reload, while a restore's first start is unfinished", async () => {
+        logs = [];
+        let mayStream = false;
+        const litestream = new FakeLitestream();
+        const rt = runtime({
+          spawn: litestream.spawn,
+          store: new SwitchableStore(() => new Date()),
+          mayStream: () => mayStream,
+        });
+        try {
+          await rt.start();
+          await rt.reload();
+          expect(rt.status()).toEqual({
+            state: "off",
+            reason: "first_start_pending",
+            stateSince: expect.any(String),
+          });
+          expect(litestream.children).toHaveLength(0);
+          expect(logs.filter((event) => event === "stream.first_start_pending")).toHaveLength(2);
+          mayStream = true;
+          await rt.reload();
+          await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
         } finally {
           await rt.stop();
         }

@@ -21,6 +21,7 @@ import {
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, type ProvisionedNode, type WaitronModule } from "@waitron/module";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
+import { writeFileAtomic } from "./fs-atomic.js";
 import { isUnset } from "./env-value.js";
 import { type ArchiveEntry, unpackArchive } from "./backup-archive.js";
 import { decryptArtifact } from "./artifact-cipher.js";
@@ -30,6 +31,7 @@ import type { Logger } from "./logger.js";
 import { checkRestoreCompatibility } from "./restore-gate.js";
 import { assertSafeEntryName } from "./restore-entry-guard.js";
 import type { BundleFiles } from "./recovery-bundle.js";
+import { REBUILD_MARKER, type RebuildSource } from "./rebuild-first-start.js";
 import { unpackBundleToDir } from "./state-secrets.js";
 import "./errors.js";
 
@@ -88,6 +90,8 @@ export interface RestoreDeps extends ValidationDeps {
   readonly migrate?: typeof applyMigrations;
   /** Holds the venue folder for the whole write. Default {@link lockRestoreTarget}. */
   readonly lockVenue?: (directory: string) => Promise<VenueLock>;
+  /** Recorded in the first-start marker. Default `"archive"`. */
+  readonly rebuildSource?: RebuildSource;
   readonly log: Logger;
 }
 
@@ -285,7 +289,23 @@ export async function writeValidated(
 ): Promise<void> {
   const lock = await (deps.lockVenue ?? lockRestoreTarget)(deps.venueDir);
   try {
-    await placeValidated(validated, deps);
+    // A restored identity finishes on its first trading start (rebuild-first-start.ts). Written
+    // before anything is placed, so a box that trades after this restore finds it; a restore that
+    // throws removes it while the lock is still held (slice-2 plan, Reconciliation N16).
+    const marker = join(deps.stateDir, REBUILD_MARKER);
+    if (!deps.skipSecrets) {
+      await writeFileAtomic(
+        marker,
+        JSON.stringify({ version: 1, source: deps.rebuildSource ?? "archive" }),
+        0o600,
+      );
+    }
+    try {
+      await placeValidated(validated, deps);
+    } catch (error) {
+      if (!deps.skipSecrets) await rm(marker, { force: true });
+      throw error;
+    }
   } finally {
     lock.release();
   }

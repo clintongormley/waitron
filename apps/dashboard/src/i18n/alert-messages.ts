@@ -2,8 +2,9 @@
 // params. Kept free of imports so the root guard (`scripts/alert-codes.test.ts`) can load it.
 //
 // No sentence promises a later check by the server: the daily payments check looks at each day once,
-// and the fiscal reconciliation sweep has no production caller. The one retry promised, in
-// `alert.source_unavailable`, is an open dashboard asking for its alerts again every minute.
+// and the fiscal reconciliation sweep has no production caller. Only `alert.source_unavailable`
+// promises an automatic retry, because an open dashboard asks for its alerts again every minute;
+// a sentence that asks for a retry or a restart asks the owner to do it.
 
 // An open payment incident swallows later detections for the same till and code, so its figures
 // are from when it was raised.
@@ -61,6 +62,10 @@ export const ALERT_MESSAGES: Readonly<
   "backup.sealed_state_failed": {
     en: "The box could not update the locked copy of its own keys and settings that it keeps with your data. A box rebuilt from your bucket might come back with out-of-date keys and settings, or without them if none were ever saved. Sales continue. Contact support.",
     es: "El equipo no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un equipo reconstruido desde tu bucket podría volver con claves y ajustes desactualizados, o sin ellos si nunca se llegaron a guardar. Las ventas continúan. Contacta con soporte.",
+  },
+  "restore.first_start_failed": {
+    en: "This box could not finish setting itself up after the restore. Sales continue, but it will not copy to a storage bucket until it does. Restart the box; if this message stays, contact support.",
+    es: "Este equipo no ha podido terminar de configurarse después de la restauración. Las ventas continúan, pero no copiará a ningún bucket de almacenamiento hasta que lo consiga. Reinicia el equipo; si el mensaje sigue, contacta con soporte.",
   },
   "chain.verification_failed": {
     en: "The invoice record chain failed its integrity check on a sale. Contact support.",

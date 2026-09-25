@@ -218,6 +218,10 @@ single task is most likely to get wrong.
   database holds bucket settings runs N19's old-box check before staging, and before the command
   line places anything (Task 9b's `refuseIfArchiveSourceLive`; a bucket that gives no answer refuses
   with `restore.stream_source_unchecked { reason: "bucket" }`).
+  _(2026-09-25, Task 9a review: when bucket settings exist but the pointer cannot be read within the
+  bound, `readBucketPointerTerm` throws and the first start FAILS under N24 — marker kept, copy held,
+  alert raised — rather than signing restored + 1 as Step 12's code and doc comment below show.
+  Signing below an unread pointer left the supervisor refusing `pointer_newer_term` for good.)_
 - N24. **(Lead decision.) A failed first start does not keep the box shut.** If `completeRebuild`
   fails, the box opens for sales, does NOT start streaming, raises the ongoing alert
   `restore.first_start_failed` (English and Spanish wording), and retries at the next start (the
@@ -4789,6 +4793,9 @@ what the backup supervisor is given a few lines above, so the row's manifest and
 describe the same module list. Later tasks reuse this one `sealedState` value: Task 8a's stream
 settings route and Task 9a's first-start routine each call `sealedState.refresh()`, never a second
 refresher, so the one-at-a-time rule holds across all of them.
+
+> 2026-09-25: as built, Task 9a's first start calls no refresher. It runs earlier in the same trading
+> start, and boot's own `await sealedState.refresh();` (`apps/server/src/boot.ts`) seals the new leaf.
 
 The order in `boot.ts` is fixed: `await backupSupervisor.reload();`, then `await sealedState.refresh();`,
 then Task 6's `await streamHost.start();`. The sealed-state refresh comes BEFORE the stream starts, so
@@ -17137,6 +17144,15 @@ recovery kit stays valid. Only Rotate makes a new key."
 
 ### Task 9a: The first start after a rebuild or a restore — a certificate for this machine, and the next membership term
 
+> 2026-09-25: as built, where the code departs from this task's (see also the dated notes under
+> Interfaces and at N23; Steps 10 to 12 below show the earlier shapes). `boot.ts` runs the first
+> start after the adoption-pending return, the returned-box reconciliation with the cloud peer and
+> the fence decision, not straight after `loadKeyRing`. A mirror or a fenced node calls
+> `deferFirstStart` instead, which re-issues and signs nothing, keeps the marker and holds the copy.
+> `boot.ts` starts `streamHost` unconditionally: `StreamHost` takes a `mayStream` dep and holds the
+> copy itself at each start, after reading the bucket settings. `reissueBoxLeaf` takes `listIpv4` as
+> a required dep. `docs/backlog.md`'s Task 9a entry states the rest.
+
 **Branch:** `feat/sqlite-slice2-rebuild-first-start` (one pull request)
 
 **Files:**
@@ -17162,6 +17178,10 @@ recovery kit stays valid. Only Rotate makes a new key."
   - `reissueBoxLeaf(deps: { stateDir: string; hostnames: string[]; now: () => Date; listIpv4?: () => string[] }): Promise<void>`.
   - `REBUILD_MARKER = "rebuild-first-start.json"`, `type RebuildSource = "archive" | "stream"` and `completeRebuild(deps: RebuildDeps): Promise<boolean>` in `apps/server/src/rebuild-first-start.ts`. The marker holds `{ version: 1, source }`.
   - `runFirstStart(deps: RebuildDeps): Promise<{ mayStream: boolean }>`, `readBucketPointerTerm(db, ring, options?): Promise<number | null>`, `POINTER_READ_TIMEOUT_MS`, and `RebuildDeps.pointerTerm?` (Reconciliation N23, N24); `buildNextMembershipDocument`/`mintNextMembershipDocument` accept `minTerm?`; the ongoing alert `restore.first_start_failed` and `backupAlertSource`'s `firstStartFailed` dep.
+  _(2026-09-25, Task 9a review: the alert is raised by a source of its own,
+  `firstStartAlertSource(firstStart)`, not a `backupAlertSource` dep, because that source's backups
+  listing can throw and collapse the whole source; `FirstStart` is `{ mayStream, failedSince }`; and a
+  held copy with bucket settings reads off with the reason `first_start_pending`.)_
   - `RestoreDeps.rebuildSource?: RebuildSource` (default `"archive"`). `writeValidated` writes the marker for either source whenever it restores an identity (`skipSecrets` false) — so the existing archive path (`restoreFromArtifact`, the staged restore and `waitron-restore restore <artifact>`) writes it from this task on, and Task 9b's stream path writes it by passing `rebuildSource: "stream"` through the same function. A rejoin (`skipSecrets: true`) keeps its own identity and writes none.
 
 **Why this is its own task.** Today the leaf is minted only when `tls/server.key` is absent
@@ -17691,6 +17711,8 @@ export async function writeValidated(
 
 where `placeValidated` is Task 3a's private function (today's `writeValidated` body), unchanged. (`validateArtifact` has already created `stateDir`, so the `mkdir` changes
 nothing on the archive path; it is there because `writeValidated` is also called on its own.)
+_(2026-09-25, Task 9a review: removed — every caller, Task 9b's `writeStreamRestore` included, hands
+`writeValidated` what `validateArtifact`/`validateEntries` returned, and both create `stateDir`.)_
 
 Run: `pnpm --filter @waitron/server exec vitest run src/rebuild-first-start.test.ts src/restore.test.ts src/restore-fiscal-e2e.test.ts src/rejoin-command.test.ts`
 Expected: PASS — the new cases (seven in `rebuild-first-start.test.ts`, counting each `it.each` row,

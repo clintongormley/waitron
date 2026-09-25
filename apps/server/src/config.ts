@@ -94,11 +94,12 @@ export interface ServerConfig {
    * `WAITRON_BOX_ADDRESSES` supplies it as a comma-separated IPv4 list; an unset OR empty value falls
    * back to the interfaces (the `VAR=`-means-unset rule, CLAUDE.md §3).
    *
-   * OPERATOR CAVEAT: the self-signed leaf is minted once and then reused forever (`ensureBoxSecrets`
-   * treats `<stateDir>/tls/server.key` as the presence sentinel), so setting or changing this on a
-   * box that has ALREADY booted does not re-mint its SANs — the QR and mDNS move to the new address
-   * while the certificate still covers the old one. Set it on the first boot of a state dir, or
-   * delete the `tls/` quartet to force a re-mint.
+   * OPERATOR CAVEAT: the self-signed leaf is minted once and then reused (`ensureBoxSecrets`
+   * treats `<stateDir>/tls/server.key` as the presence sentinel); the only other time it is replaced
+   * is the first trading start after a restore (`rebuild-first-start.ts`). So setting or changing
+   * this on a box that has ALREADY booted does not re-mint its SANs — the QR and mDNS move to the new
+   * address while the certificate still covers the old one. Set it on the first boot of a state dir,
+   * or delete the `tls/` quartet to force a re-mint.
    */
   boxAddresses?: string[];
   /**

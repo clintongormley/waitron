@@ -27,6 +27,7 @@ import {
   batteryAlertSource,
   BATTERY_ERROR,
   BATTERY_WARN,
+  firstStartAlertSource,
   printingAlertSource,
   recordBackupOutcome,
   sealedStateAlertSource,
@@ -62,6 +63,39 @@ const stream = (overrides: Partial<StreamStatus>): StreamStatus => ({
   lagMs: 0,
   lastConfirmedUploadAt: "2026-09-15T11:59:00.000Z",
   ...overrides,
+});
+
+describe("firstStartAlertSource", () => {
+  it("raises restore.first_start_failed, since the failure, while the first start is unfinished", async () => {
+    const at = "2026-09-15T11:20:00.000Z";
+    expect(await firstStartAlertSource({ failedSince: at }).read(ctx)).toEqual([
+      {
+        key: "restore.first_start_failed",
+        code: "restore.first_start_failed",
+        params: {},
+        severity: "warning",
+        since: at,
+        screen: "backup",
+      },
+    ]);
+    expect(await firstStartAlertSource({ failedSince: null }).read(ctx)).toEqual([]);
+  });
+});
+
+describe("backupAlertSource beside a copy held for a restore's first start", () => {
+  it("raises no backup.stream_stopped for the hold", async () => {
+    const held = () => ({
+      state: "off" as const,
+      reason: "first_start_pending",
+      stateSince: "2026-09-15T11:20:00.000Z",
+    });
+    const alerts = await src(
+      { configured: true, destinations: [] },
+      { failed: new Map() },
+      held,
+    ).read(ctx);
+    expect(alerts).toEqual([]);
+  });
 });
 
 describe("backupAlertSource", () => {

@@ -380,7 +380,8 @@ and never changes the status code.
 
 `stream` is the bucket copy. It reads `{ "state": "off" }` when no bucket copy is set up on this box,
 or the box is not the primary. When one is set up but did not start it reads `off` with a `reason`
-(`no_membership`, `start_failed`) and a `stateSince`. Otherwise it is the running copy's own status:
+(`no_membership`, `start_failed`, or `first_start_pending` while a restore's first start is
+unfinished, which holds the copy) and a `stateSince`. Otherwise it is the running copy's own status:
 its `state` (`opening`, `streaming`, `paused`, `refused`, or `off` with the reason it stopped),
 `lagMs` (how long the oldest change not yet in the bucket has waited), `lastConfirmedUploadAt` (the
 newest file seen in the bucket, by the bucket's clock) and `bucketProblem`. The name of the

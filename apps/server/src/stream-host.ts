@@ -22,6 +22,9 @@ import "./errors.js";
 /** The vault purpose holding the owner's bucket. */
 export const STREAM_PURPOSE = "backup.stream";
 
+/** The reason a copy set up here reads off while a restore's first start is unfinished. */
+export const FIRST_START_PENDING = "first_start_pending";
+
 /** How the vault stores an absent optional field: it refuses empty strings. */
 const ABSENT = "-";
 
@@ -77,6 +80,9 @@ export interface StreamHostDeps {
   now: () => Date;
   /** Read at each start, so a promotion is followed. */
   isPrimary: () => boolean;
+  /** False while a restored box's first start is unfinished (`rebuild-first-start.ts`). Read at
+   * each start, so a reload after a settings save is held too. Default: always true. */
+  mayStream?: () => boolean;
   /** Test seams; production leaves them unset. */
   spawn?: SpawnFn;
   store?: ObjectStore;
@@ -94,7 +100,7 @@ export interface StreamHostDeps {
 export class StreamHost {
   readonly #deps: StreamHostDeps;
   #supervisor: StreamSupervisor | undefined;
-  /** Set when the settings are stored but no supervisor could start, so the alerts can say so. */
+  /** Set when the settings are stored but no supervisor could start, so the status can say why. */
   #notStarted: StreamNotStarted | undefined;
   #reloading = false;
   #stopped = false;
@@ -118,6 +124,11 @@ export class StreamHost {
       const settings = await readStreamSettings(db, ring);
       if (settings === null) {
         log("info", "stream.not_configured", {});
+        return;
+      }
+      if (this.#deps.mayStream?.() === false) {
+        log("warn", "stream.first_start_pending", {});
+        this.#notStartedFor(FIRST_START_PENDING);
         return;
       }
       const membership = await readNodeMembership(db);

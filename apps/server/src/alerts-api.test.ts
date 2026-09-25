@@ -30,6 +30,7 @@ import {
   awaitingCertAlertSource,
   backupAlertSource,
   batteryAlertSource,
+  firstStartAlertSource,
   printingAlertSource,
   sealedStateAlertSource,
 } from "./alert-sources.js";
@@ -364,6 +365,7 @@ function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolea
         readStream: () => ({ state: "off" }),
       }),
       sealedStateAlertSource({ failedSince: null }),
+      firstStartAlertSource({ failedSince: null }),
       awaitingCertAlertSource({ current: opts.awaitingCert ?? false }),
       printingAlertSource(),
       batteryAlertSource({
@@ -488,6 +490,31 @@ describe("ongoing alert sources through the route", () => {
         area: "card_reader",
         params: { area: "card_reader" },
       }),
+    ]);
+  });
+
+  it("still raises restore.first_start_failed when the backups listing throws", async () => {
+    const v = await seedVenue();
+    const registry = createAlertRegistry({
+      claims: ALL_ALERT_CLAIMS,
+      sources: [
+        backupAlertSource({
+          listStatus: async () => {
+            throw new Error("backup listing failed");
+          },
+          outcomes: { failed: new Map() },
+          now: () => NOW,
+          readStream: () => ({ state: "off" }),
+        }),
+        firstStartAlertSource({ failedSince: NOW.toISOString() }),
+      ],
+    });
+    const body = (await (
+      await get(appFor(registry), "/management-api/alerts", v.manager)
+    ).json()) as { alerts: { code: string; area: string }[] };
+    expect(body.alerts.map((a) => a.code).sort()).toEqual([
+      "alert.source_unavailable",
+      "restore.first_start_failed",
     ]);
   });
 

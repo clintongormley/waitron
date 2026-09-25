@@ -86,6 +86,7 @@ import {
   awaitingCertAlertSource,
   backupAlertSource,
   sealedStateAlertSource,
+  firstStartAlertSource,
   type BackupOutcomeHolder,
   batteryAlertSource,
   printingAlertSource,
@@ -165,6 +166,7 @@ import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets, mintedBoxLeaf } from "./box-secrets.js";
 import { resolveTradingTls } from "./trading-tls.js";
+import { deferFirstStart, readBucketPointerTerm, runFirstStart } from "./rebuild-first-start.js";
 import { buildLandingApp } from "./landing-app.js";
 import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
@@ -305,6 +307,9 @@ const BACKUP_ENV_KEYS = [
  * pins all three to it.
  */
 export const BOX_HOSTNAME = "waitron.local";
+
+/** The dNSName SANs on the box's self-signed leaf, whether minted or re-issued after a restore. */
+const BOX_LEAF_HOSTNAMES = [BOX_HOSTNAME, "localhost"];
 
 /**
  * The upper bound on a single product-image upload, 20 MiB. What is stored is the shrunk copy
@@ -772,7 +777,8 @@ export async function startServer(
   // venue network can reach, so it needs the override; a box on the venue's own network does not.
   //
   // It does NOT keep them agreeing over time, and the difference is observable: the leaf is minted
-  // ONCE and reused (`server.key` is `ensureBoxSecrets`'s presence sentinel), while discovery and
+  // ONCE and reused (`server.key` is `ensureBoxSecrets`'s presence sentinel; the one exception is
+  // the first start after a restore, `rebuild-first-start.ts`), while discovery and
   // mDNS resolve per request. Adding or changing the override on a box that already holds
   // `<stateDir>/tls/server.key` therefore moves the QR and the mDNS answers to an address the
   // certificate does not cover — a name mismatch in the trust flow. Measured on a two-boot probe
@@ -1015,7 +1021,7 @@ export async function startServer(
     try {
       const ensured = await ensureBoxSecrets({
         stateDir: config.stateDir,
-        hostnames: [BOX_HOSTNAME, "localhost"],
+        hostnames: BOX_LEAF_HOSTNAMES,
         now,
         listIpv4: boxAddresses,
       });
@@ -1498,6 +1504,28 @@ export async function startServer(
   // gate's own per-request predicate re-reads `mode` live (so a promotion lifts it without a restart),
   // and is deliberately kept separate below.
   const fencedOrMirror = isMirror || fenced;
+  // A restored box finishes its restore here (rebuild-first-start.ts), before the trading listener
+  // reads the certificate and before the sealed-state refresh below seals it. After the peer
+  // reconciliation above, so a peer that answers during THIS start can fence the box before its
+  // term moves. A peer that does not answer now is not waited for: a fencing document it serves
+  // later at a term no higher than the new one reads as not newer (docs/backlog.md, Task 9a).
+  // A mirror or a fenced node defers it: nothing is re-issued or signed, and the bucket copy is
+  // held. A failure never keeps the box shut: it sells, does not stream, and raises
+  // restore.first_start_failed until a later start finishes.
+  const firstStart = fencedOrMirror
+    ? await deferFirstStart(config.stateDir, log)
+    : await runFirstStart({
+        stateDir: config.stateDir,
+        db,
+        ring,
+        nodeId: config.till.nodeId,
+        contactUrl: config.advertisedOrigin,
+        hostnames: BOX_LEAF_HOSTNAMES,
+        listIpv4: boxAddresses,
+        now,
+        log,
+        pointerTerm: () => readBucketPointerTerm(db, ring),
+      });
   // The primary-only SINGLETON duties below (scheduled backup, outbound tunnel client, and the
   // fiscal drain/reconcile pass) gate on THIS, not on `isMirror`: they must run on the ONE
   // `singleton_role='primary'` node, never on every non-mirror node (promotion runbook design
@@ -2122,6 +2150,7 @@ export async function startServer(
     log,
     now,
     isPrimary: () => holders.singletonRole.current === "primary",
+    mayStream: () => firstStart.mayStream,
   });
   await streamHost.start();
   health.readStream = () => streamHost.status();
@@ -2154,6 +2183,7 @@ export async function startServer(
   const serverAlertSources: AlertSource[] = [
     backupSource,
     sealedStateAlertSource(sealedStateStatus),
+    firstStartAlertSource(firstStart),
     awaitingCertAlertSource(awaitingFiscalCert),
     printingAlertSource(),
     batteryAlertSource({

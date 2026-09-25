@@ -1,10 +1,14 @@
-import { X509Certificate } from "node:crypto";
+import { X509Certificate, createPrivateKey } from "node:crypto";
 import { createServer as createHttpsServer } from "node:https";
 import type { AddressInfo } from "node:net";
 import { connect as tlsConnect } from "node:tls";
 import forge from "node-forge";
 import { beforeAll, describe, expect, it } from "vitest";
-import { mintSelfSignedServerCert, isPermittedLeafIpv4 } from "./self-signed-cert.js";
+import {
+  mintSelfSignedServerCert,
+  isPermittedLeafIpv4,
+  reissueServerLeaf,
+} from "./self-signed-cert.js";
 
 // One RSA-2048 keypair for the whole suite, injected into every mint so the suite pays keygen once
 // rather than per-case. The two certs a mint returns differ by subject/extensions/issuer regardless
@@ -128,6 +132,58 @@ describe("mintSelfSignedServerCert", () => {
     } finally {
       await new Promise<void>((r) => server.close(() => r()));
     }
+  });
+});
+
+describe("reissueServerLeaf", () => {
+  it("signs a new leaf, with a new key, for new addresses under the SAME authority", () => {
+    const now = new Date("2026-09-23T10:00:00Z");
+    const original = mint({ ipAddresses: ["127.0.0.1", "192.168.1.10"], now });
+    const leaf = reissueServerLeaf({
+      caCertPem: original.caCertPem,
+      caKeyPem: original.caKeyPem,
+      hostnames: ["waitron.local", "localhost"],
+      ipAddresses: ["127.0.0.1", "192.168.1.77"],
+      now,
+    });
+    const ca = new X509Certificate(original.caCertPem);
+    const cert = new X509Certificate(leaf.serverCertPem);
+    expect(cert.verify(ca.publicKey)).toBe(true);
+    expect(cert.subjectAltName).toContain("IP Address:192.168.1.77");
+    expect(cert.subjectAltName).not.toContain("192.168.1.10");
+    expect(cert.subjectAltName).toContain("DNS:waitron.local");
+    expect(cert.serialNumber).not.toBe(new X509Certificate(original.serverCertPem).serialNumber);
+    expect(leaf.serverKeyPem).not.toBe(original.serverKeyPem);
+    expect(cert.checkPrivateKey(createPrivateKey(leaf.serverKeyPem))).toBe(true);
+  });
+
+  it("never outlives its authority", () => {
+    const original = mint({ now: new Date("2026-09-23T10:00:00Z") });
+    const leaf = reissueServerLeaf({
+      caCertPem: original.caCertPem,
+      caKeyPem: original.caKeyPem,
+      hostnames: ["waitron.local"],
+      ipAddresses: [],
+      now: new Date("2031-09-23T10:00:00Z"),
+      keypair: () => sharedKeypair,
+    });
+    const caEnd = Date.parse(new X509Certificate(original.caCertPem).validTo);
+    const leafEnd = Date.parse(new X509Certificate(leaf.serverCertPem).validTo);
+    expect(leafEnd).toBe(caEnd);
+  });
+
+  it("refuses an empty hostname list, as minting does", () => {
+    const original = mint();
+    expect(() =>
+      reissueServerLeaf({
+        caCertPem: original.caCertPem,
+        caKeyPem: original.caKeyPem,
+        hostnames: [],
+        ipAddresses: [],
+        now: new Date("2026-09-23T10:00:00Z"),
+        keypair: () => sharedKeypair,
+      }),
+    ).toThrow(expect.objectContaining({ code: "setup.cert_hostnames_empty" }));
   });
 });
 

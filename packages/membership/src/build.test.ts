@@ -35,6 +35,21 @@ describe("buildNextMembershipDocument", () => {
     expect(doc.body.term).toBe(8);
   });
 
+  it("starts no lower than the floor it is given, and ignores a floor below the next term", () => {
+    const held = { body: { term: 0, nodes: [self] } } as unknown as SignedMembershipDocument;
+    const next = (heldDocument: SignedMembershipDocument | null, minTerm: number) =>
+      buildNextMembershipDocument({
+        heldDocument,
+        nodes: [self],
+        signerNodeId: nodeId,
+        signerPrivateKey: signer.privateKey,
+        minTerm,
+      }).body.term;
+    expect(next(held, 3)).toBe(3);
+    expect(next(held, 0)).toBe(1);
+    expect(next(null, 2)).toBe(2);
+  });
+
   it("carries a provided endorsements array through verbatim", () => {
     const endorsements = [
       {

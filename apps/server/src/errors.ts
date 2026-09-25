@@ -746,6 +746,15 @@ declare module "@waitron/shared" {
     /** This node's last attempt to rewrite its sealed state row failed, so the row a rebuild reads
      * is out of date or missing. Built as data by the sealed-state alert source, never thrown. */
     "backup.sealed_state_failed": Record<string, never>;
+    /** A restored box's first start (a certificate for this machine, the next membership term)
+     * failed, so the box sells but does not copy to the bucket. Built as data by
+     * `firstStartAlertSource`, never thrown. */
+    "restore.first_start_failed": Record<string, never>;
+    /** A restored box's first start found bucket settings but could not learn the term the
+     * bucket's pointer names: the bucket did not answer within the bound, or opening or reading it
+     * failed with no code of its own. The first start fails rather than sign a term the pointer may
+     * be above. Logged, never shown. */
+    "restore.pointer_unreadable": Record<string, never>;
     /**
      * The restore gate (`restore-gate.ts`) refused: the backup's environment differs from the
      * restoring binary's. One database per environment (CLAUDE.md §5): a cross-environment restore

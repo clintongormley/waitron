@@ -384,6 +384,12 @@ Beside the existing "Restore from an archive file":
    - opens its generation and starts streaming per §4.4;
    - trades.
 
+   > 2026-09-25: as built (Task 9a), the first start after a restore re-issues the leaf
+   > (`reissueBoxLeaf`, `apps/server/src/box-secrets.ts`); "minted only when `server.key` is absent"
+   > now describes setup alone. When bucket settings exist but the pointer cannot be read, the first
+   > start fails (§5.3) rather than signing one above the restored term. See `docs/backlog.md`'s
+   > Task 9a entry.
+
 Tills and handhelds keep trusting the box without re-pairing, because the certificate authority came
 back with it. **Finding the box at a changed address**, read from the code during planning and not
 run on hardware: tills, handhelds and kitchen screens opened at `https://waitron.local`, and a print
@@ -403,6 +409,12 @@ numbers (topology §7.5).
 Cash sales start as soon as the box is up. Filing and card payments need the credentials, which step 5
 already unlocked. **If a step of the first start fails** (step 7), the box still goes live, does not
 stream, raises an alert, and retries the step at the next start.
+
+> 2026-09-25: as built (Task 9a), the next start re-runs every step of the first start, not only
+> the one that failed; each re-run issues another leaf and, once the term has been stored, moves the
+> term up again. The first start runs after boot's check with the cloud peer, and a mirror or a
+> fenced node defers it: nothing is re-issued or signed, the marker stays and the copy is held. See
+> `docs/backlog.md`'s Task 9a entry.
 
 ---
 

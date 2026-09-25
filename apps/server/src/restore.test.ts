@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,6 +24,7 @@ import { enabledModules, fiscalSlot } from "@waitron/module";
 import type { RestoreHook, WaitronModule } from "@waitron/module";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { readModuleConfig } from "./module-config.js";
+import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { ALL_MODULES } from "./modules.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
@@ -384,6 +386,98 @@ setInterval(() => db, 1000);`;
     });
     await expectVenueUntouched();
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+describe("the first-start marker (rebuild-first-start.ts)", () => {
+  useTempDirs("waitron-marker-");
+
+  const boom: RestoreHook = async () => {
+    throw new AppError("restore.unexpected_entry", { name: "boom" });
+  };
+  const noMarker = () =>
+    expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({ code: "ENOENT" });
+
+  it("leaves the marker, naming the archive as its source", async () => {
+    await restoreFromArtifact(makeRestoreDeps());
+    expect(JSON.parse(await readFile(join(stateDir, REBUILD_MARKER), "utf8"))).toEqual({
+      version: 1,
+      source: "archive",
+    });
+    expect((await stat(join(stateDir, REBUILD_MARKER))).mode & 0o777).toBe(0o600);
+  });
+
+  it("names the stream as the source when a stream restore passes it", async () => {
+    await restoreFromArtifact(makeRestoreDeps({ rebuildSource: "stream" }));
+    expect(JSON.parse(await readFile(join(stateDir, REBUILD_MARKER), "utf8"))).toEqual({
+      version: 1,
+      source: "stream",
+    });
+  });
+
+  it("leaves no marker when it keeps the box's own identity (a rejoin)", async () => {
+    await restoreFromArtifact(makeRestoreDeps({ skipSecrets: true }));
+    await noMarker();
+  });
+
+  it("leaves no marker when the restore fails after it began writing", async () => {
+    await expect(
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": boom }) })),
+    ).rejects.toMatchObject({ code: "restore.hook_failed" });
+    await noMarker();
+  });
+
+  it("leaves no marker when the venue folder is held by a running server", async () => {
+    const lockVenue = async () => {
+      throw new AppError("provisioning.database_in_use", { database: "venue.db" });
+    };
+    await expect(restoreFromArtifact(makeRestoreDeps({ lockVenue }))).rejects.toMatchObject({
+      code: "provisioning.database_in_use",
+    });
+    await noMarker();
+  });
+
+  it("removes the marker before it releases the lock when a restore fails", async () => {
+    const seen: boolean[] = [];
+    const lockVenue = async () => ({
+      release: () => {
+        seen.push(existsSync(join(stateDir, REBUILD_MARKER)));
+      },
+    });
+    await expect(
+      restoreFromArtifact(
+        makeRestoreDeps({ lockVenue, modules: withHooks({ "fiscal-verifactu": boom }) }),
+      ),
+    ).rejects.toMatchObject({ code: "restore.hook_failed" });
+    expect(seen).toEqual([false]);
+  });
+
+  it("holds the marker while it places the restore", async () => {
+    let seenDuringMigrate: boolean | undefined;
+    const migrate = vi.fn(async () => {
+      seenDuringMigrate = existsSync(join(stateDir, REBUILD_MARKER));
+    });
+    await restoreFromArtifact(makeRestoreDeps({ migrate }));
+    expect(seenDuringMigrate).toBe(true);
+  });
+
+  it("leaves no marker when validation refuses the archive", async () => {
+    const artifact = buildArtifact(FULL_ENTRIES, { ...MANIFEST, environment: "production" });
+    await expect(restoreFromArtifact(makeRestoreDeps({ artifact }))).rejects.toMatchObject({
+      code: "restore.environment_mismatch",
+    });
+    await noMarker();
+  });
+
+  // `validateArtifact` creates the state folder; the write does not create one it was not given.
+  it("refuses before placing anything when handed a state folder validation never created", async () => {
+    const validated = await validateArtifact(makeRestoreDeps());
+    const migrate = vi.fn(async () => {});
+    await expect(
+      writeValidated(validated, makeRestoreDeps({ stateDir: join(stateDir, "absent"), migrate })),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(existsSync(join(venueDir, "venue.db"))).toBe(false);
+    expect(migrate).not.toHaveBeenCalled();
   });
 });
 
