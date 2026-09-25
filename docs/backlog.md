@@ -3005,8 +3005,13 @@ image constraints under *Detail → Box image*.
   - Found by #620 (`apps/server` part h1), not fixable in a comments-only change.
     **The demo seed does not refuse a production stamp** — DONE (owner instruction 2026-09-25):
     `demoSeedEnvironment` in `scripts/demo-seed/seed-sales.ts` refuses `production` with
-    `deployment.demo_data_refused` before `seedDemoRestaurant` or `seedSales` writes anything;
-    both guards proven by a test that first watched production-stamped sales get written.
+    `deployment.demo_data_refused` before `seedDemoRestaurant` or `seedSales` writes anything, and
+    `devSetup` (`scripts/dev-setup.ts`) calls it before it reads the `.env` or migrates the venue —
+    the run-it review measured the earlier shape committing the taxpayer and one staff row
+    (`{ tenants: 1, staff: 1, sales: 0 }`) before the seed refused, and a retry under `dev` on that
+    directory refused it as already holding a venue. Each call site's test was run red before its
+    guard existed, then green: the two seed tests resolved instead of rejecting, and the `devSetup`
+    test rejected through the seed's guard but found `venue.db` already on disk.
     `redact-secrets.ts` was written against the PostgreSQL connection-string parser, and `pg` is now
     installed only for `bench/pglite-throughput`; whether a credential-bearing URL can still reach
     the log is unchecked. `apps/server/vitest.config.ts`'s `coverage.exclude` lists `scripts/**`,

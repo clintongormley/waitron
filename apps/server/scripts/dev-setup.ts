@@ -1,6 +1,7 @@
 // Idempotent local-dev bootstrap: provision ONE preproduction venue into a local venue directory and
 // write its identity to `apps/server/.env`. Run from the repo root via `pnpm dev:setup`; never
-// against a production directory — it chains real fiscal records under `preproduction`.
+// against a production directory — it chains real fiscal records under `preproduction`, and it
+// refuses `WAITRON_ENV=production` before touching the directory.
 //
 // The `.env` carries `WAITRON_ENV=dev`, which `deploymentEnvironment` (src/config.ts) maps to
 // `preproduction`: the dev device switcher turns on, the fiscal side does not change. Note this is a
@@ -38,6 +39,7 @@ import { enrolDeviceForTest } from "../src/testing/enrol.js";
 import type { TillConfig } from "../src/till-config.js";
 import { parseEnvFile } from "../src/env-file.js";
 import { seedDemoRestaurant } from "./demo-seed/seed.js";
+import { demoSeedEnvironment } from "./demo-seed/seed-sales.js";
 import { DEMO_ADMIN_EMAIL, DEMO_DASHBOARD_PASSWORD } from "./demo-seed/staff.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./demo-seed/menu.js";
 
@@ -357,6 +359,10 @@ async function writeFiscalModulesJson(
  */
 export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   const { venueDir, envPath, stateDir, log = () => {} } = opts;
+
+  // Before the directory is read or migrated: the seed's own guard fires only after `applyVenue`
+  // has committed, which leaves a directory only `pnpm dev:reset` recovers.
+  demoSeedEnvironment(process.env);
 
   const existing = existsSync(envPath) ? parseEnvFile(readFileSync(envPath, "utf8")) : undefined;
   const expectedTillId =

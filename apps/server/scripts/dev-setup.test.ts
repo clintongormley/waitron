@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   deviceProfiles,
@@ -326,6 +326,48 @@ describe("devSetup against a real venue directory", () => {
       /already holds a venue/i,
     );
     expect(await tillsCount()).toBe(2);
+  });
+});
+
+describe("devSetup under WAITRON_ENV=production", () => {
+  let workDir: string;
+  let venueDir: string;
+  let envPath: string;
+
+  beforeAll(async () => {
+    workDir = await mkdtemp(join(tmpdir(), "waitron-dev-setup-production-"));
+    venueDir = join(workDir, "venue");
+    envPath = join(workDir, ".env");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  afterAll(async () => {
+    if (workDir !== undefined) await rm(workDir, { recursive: true, force: true });
+  });
+
+  it("refuses before touching the directory, so the same directory provisions once corrected", async () => {
+    vi.stubEnv("WAITRON_SEED_SALES_DAYS", "1");
+    vi.stubEnv("WAITRON_ENV", "production");
+
+    await expect(
+      devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} }),
+    ).rejects.toMatchObject({ code: "deployment.demo_data_refused" });
+
+    expect(existsSync(envPath)).toBe(false);
+    expect(existsSync(join(venueDir, "venue.db"))).toBe(false);
+    expect(existsSync(join(workDir, "modules.json"))).toBe(false);
+
+    vi.stubEnv("WAITRON_ENV", "dev");
+    const corrected = await devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} });
+    expect(corrected.reused).toBe(false);
+    expect(existsSync(envPath)).toBe(true);
+    await expect(inspectVenues(venueDir, corrected.env.WAITRON_TILL_TILL_ID)).resolves.toEqual({
+      hasExpected: true,
+      hasAny: true,
+    });
   });
 });
 
