@@ -22,8 +22,7 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   createProduct,
   listAvailableProducts,
   priceBasket,
@@ -190,24 +189,14 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
       });
       await assignCatalogueToLocation(tx, locationId, cat.id);
       const premium = await createCatalogue(tx, { name: "Carta premium" });
-      const section = await createMenuSection(tx, {
-        menuId: cat.id,
-        name: { [LOCALE]: "Bebidas" },
-      });
-      const premiumSection = await createMenuSection(tx, {
-        menuId: premium.id,
-        name: { [LOCALE]: "Bebidas" },
-      });
-      const cafeOffer = await createMenuItem(tx, {
+      const cafeOffer = await addProductToMenu(tx, {
         menuId: cat.id,
         productId: cafe.id,
-        sectionId: section.id,
         grossPrice: "2.50",
       });
-      const premiumCafeOffer = await createMenuItem(tx, {
+      const premiumCafeOffer = await addProductToMenu(tx, {
         menuId: premium.id,
         productId: cafe.id,
-        sectionId: premiumSection.id,
         grossPrice: "3.25",
       });
       // `departments.id`/`floor_zones.id` and both tables' `created_at` are `$defaultFn`
@@ -443,14 +432,9 @@ async function seedVariantOffer(
     unitPrice: "1.50",
     vatClass: "general",
   });
-  const section = await createMenuSection(tx, {
-    menuId: catalogueId,
-    name: { [LOCALE]: "Cafés" },
-  });
-  const offer = await createMenuItem(tx, {
+  const offer = await addProductToMenu(tx, {
     menuId: catalogueId,
     productId: product.id,
-    sectionId: section.id,
     grossPrice: "2.50",
   });
   const variants = await setProductVariants(
@@ -572,14 +556,9 @@ describe("parkOrder", () => {
         unitPrice: "1.50",
         vatClass: "general",
       });
-      const section = await createMenuSection(tx, {
-        menuId: catalogueId,
-        name: { [LOCALE]: "Cafés" },
-      });
-      const offer = await createMenuItem(tx, {
+      const offer = await addProductToMenu(tx, {
         menuId: catalogueId,
         productId: product.id,
-        sectionId: section.id,
         grossPrice: "2.50",
       });
       // "Large" carries all three names; "Small" carries only its staff name, so the row it freezes
@@ -1303,14 +1282,9 @@ describe("getHeldOrder", () => {
         unitPrice: "12.00",
         vatClass: "general",
       });
-      const section = await createMenuSection(tx, {
-        menuId: catalogueId,
-        name: { [LOCALE]: "Charcutería" },
-      });
-      const menuItem = await createMenuItem(tx, {
+      const menuItem = await addProductToMenu(tx, {
         menuId: catalogueId,
         productId: product.id,
-        sectionId: section.id,
         grossPrice: "12.00",
       });
       return { productId: product.id, menuItemId: menuItem.id, unitId };
@@ -2531,14 +2505,9 @@ describe("basket-wide modifier resolution (perf)", () => {
   it("reads each MENU-side definition once for an offer basket", async () => {
     const { cfg, cafeId, aguaId, catalogueId, zoneId, cafeOfferId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
-      const section = await createMenuSection(tx, {
-        menuId: catalogueId,
-        name: { [LOCALE]: "Aguas" },
-      });
-      const aguaOffer = await createMenuItem(tx, {
+      const aguaOffer = await addProductToMenu(tx, {
         menuId: catalogueId,
         productId: aguaId,
-        sectionId: section.id,
         grossPrice: "2.20",
       });
       const bacon = await addExtraList(tx, catalogueId, cafeId, "Bacon");
@@ -2788,14 +2757,9 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await tx.execute(sql`
         insert into preparation_routes (id, location_id, zone_id, product_id, station_id)
         values (${randomUUID()}, ${cfg.locationId}, ${zoneId}, ${aguaId}, ${kitchen.id})`);
-      const section = await createMenuSection(tx, {
-        menuId: catalogueId,
-        name: { [LOCALE]: "Agua" },
-      });
-      const aguaOffer = await createMenuItem(tx, {
+      const aguaOffer = await addProductToMenu(tx, {
         menuId: catalogueId,
         productId: aguaId,
-        sectionId: section.id,
         grossPrice: "2.00",
       });
       const table = await tx.execute<{ id: string }>(sql`
@@ -6238,14 +6202,9 @@ async function seedWine(tx: Transaction, cfg: TillConfig, catalogueId: string) {
     dietaryDeclarations: ["vegan"],
   });
   await setProductCourse(tx, cfg, parent.id, primero.id);
-  const section = await createMenuSection(tx, {
-    menuId: catalogueId,
-    name: { [LOCALE]: "Vinos" },
-  });
-  const offer = await createMenuItem(tx, {
+  const offer = await addProductToMenu(tx, {
     menuId: catalogueId,
     productId: parent.id,
-    sectionId: section.id,
     grossPrice: null,
   });
   const [wine125, wine175] = await setProductVariants(

@@ -10,8 +10,7 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   createProduct,
   listAvailableProducts,
 } from "@waitron/catalogue";
@@ -152,14 +151,9 @@ async function setupVenue(): Promise<{
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, venue.locationId, cat.id);
-    const section = await createMenuSection(tx, {
-      menuId: cat.id,
-      name: { es: "Bebidas" },
-    });
-    const menuItem = await createMenuItem(tx, {
+    const menuItem = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: created.id,
-      sectionId: section.id,
       grossPrice: "1.50",
     });
     await tx.execute(sql`

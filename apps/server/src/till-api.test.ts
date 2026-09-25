@@ -34,8 +34,7 @@ import {
   createCatalogue,
   createCategory,
   createExtraList,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   createOptionList,
   createProduct,
   readContentLanguages,
@@ -199,14 +198,9 @@ const suite = useVenueDb({
         values (${zone!.id}, ${cat.id})`);
         await tx.execute(sql`
         update zone_service_policies set default_menu_id = ${cat.id} where zone_id = ${zone!.id}`);
-        const section = await createMenuSection(tx, {
-          menuId: cat.id,
-          name: { es: "Bebidas" },
-        });
-        const offer = await createMenuItem(tx, {
+        const offer = await addProductToMenu(tx, {
           menuId: cat.id,
           productId: p.id,
-          sectionId: section.id,
           grossPrice: "1.75",
         });
         await tx.insert(preparationRoutes).values({
@@ -216,14 +210,9 @@ const suite = useVenueDb({
         });
 
         const hiddenMenu = await createCatalogue(tx, { name: "Staff" });
-        const hiddenSection = await createMenuSection(tx, {
-          menuId: hiddenMenu.id,
-          name: { es: "Staff" },
-        });
-        const hiddenOffer = await createMenuItem(tx, {
+        const hiddenOffer = await addProductToMenu(tx, {
           menuId: hiddenMenu.id,
           productId: p.id,
-          sectionId: hiddenSection.id,
           grossPrice: "0.50",
         });
 
@@ -3152,13 +3141,8 @@ async function modifierOfferFixture() {
       // INSERT … SELECT cannot go through the table definition, so the id is bound into the select.
       sql`insert into preparation_routes (id,location_id,product_id,station_id) select ${randomUUID()},location_id,${product.id},station_id from preparation_routes where product_id=${aguaProduct.id}`,
     );
-    const section = await createMenuSection(tx, {
+    const offer = await addProductToMenu(tx, {
       menuId: aguaProduct.catalogueId,
-      name: { es: "Pruebas" },
-    });
-    const offer = await createMenuItem(tx, {
-      menuId: aguaProduct.catalogueId,
-      sectionId: section.id,
       productId: product.id,
       grossPrice: "1.75",
     });

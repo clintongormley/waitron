@@ -2,13 +2,14 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { catalogues, categories, floorZones, kitchenStations, products } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
+  addProductToMenu,
   createCatalogue,
-  createMenuItem,
-  createMenuSection,
-  listMenuSections,
+  menuItems,
+  readMenuStructure,
   readProductModifiers,
   resolveAccessibleCatalogueIds,
   setMenuItemExtraLists,
+  updateMenuItem,
 } from "@waitron/catalogue";
 import type { ServiceMode } from "@waitron/module";
 import {
@@ -55,8 +56,8 @@ const TABLES_ZONE = "Test tables";
 
 /**
  * Offer products in a service zone from a menu of this helper's own, so a test can sell them on the
- * zoned path. The menu is never one the suite made: `createMenuItem` upserts on (menu, product), so
- * reusing a suite's menu would overwrite its prices. Each offer's price is null, so it sells at the
+ * zoned path. The menu is never one the suite made, so the prices this writes never overwrite the
+ * suite's own. Each product sits on the menu's top level with no menu price, so it sells at the
  * product's own price. Idempotent: call it again after adding products or changing stations.
  */
 export async function offerProducts(
@@ -76,13 +77,19 @@ export async function offerProducts(
   await allowMenuInZone(tx, cfg, zoneId, menuId, { makeDefault: policy!.defaultMenuId === null });
 
   const productIds = options.productIds ?? (await topLevelProducts(tx, cfg));
-  const sections = await listMenuSections(tx, menuId);
-  const sectionId =
-    sections[0]?.id ?? (await createMenuSection(tx, { menuId, name: { en: MENU_NAME } })).id;
+  // A second `addProductToMenu` for a product already on the top level is refused
+  // (`menu_section.member_duplicate`), so a repeat call resets that product's row instead.
+  const onTopLevel = new Set(
+    (await readMenuStructure(tx, menuId)).nodes.flatMap(({ ref }) =>
+      ref.kind === "product" ? [ref.productId] : [],
+    ),
+  );
   const offerByProduct = new Map<string, string>();
   const modifiers = await readProductModifiers(tx, [...productIds]);
   for (const productId of productIds) {
-    const item = await createMenuItem(tx, { menuId, productId, sectionId, grossPrice: null });
+    const item = onTopLevel.has(productId)
+      ? await existingOffer(tx, menuId, productId)
+      : await addProductToMenu(tx, { menuId, productId, grossPrice: null });
     offerByProduct.set(productId, item.id);
     const extras = (modifiers.get(productId.toLowerCase()) ?? []).filter(
       (ref) => ref.kind === "extras",
@@ -170,6 +177,19 @@ async function department(tx: Transaction, cfg: Cfg, serviceMode: ServiceMode): 
   return (
     await createDepartment(tx, cfg, { name: "Test department", defaultServiceMode: serviceMode })
   ).id;
+}
+
+async function existingOffer(
+  tx: Transaction,
+  menuId: string,
+  productId: string,
+): Promise<{ id: string }> {
+  const [row] = await tx
+    .select({ id: menuItems.id })
+    .from(menuItems)
+    .where(and(eq(menuItems.menuId, menuId), eq(menuItems.productId, productId)));
+  await updateMenuItem(tx, menuId, row!.id, { grossPrice: null, active: true });
+  return row!;
 }
 
 async function ownMenu(tx: Transaction): Promise<string> {

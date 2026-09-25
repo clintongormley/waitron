@@ -16,8 +16,7 @@ import {
   createCatalogue,
   createCategory,
   createExtraList,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   createProduct,
   readProductEditor,
   setMenuItemExtraLists,
@@ -211,20 +210,14 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
       vatClass: "general",
     });
     await assignCatalogueToLocation(tx, cfg.locationId, cat.id);
-    const section = await createMenuSection(tx, {
-      menuId: cat.id,
-      name: { [LOCALE]: "Bebidas" },
-    });
-    const aguaMenuItem = await createMenuItem(tx, {
+    const aguaMenuItem = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: agua.id,
-      sectionId: section.id,
       grossPrice: "1.50",
     });
-    const cafeMenuItem = await createMenuItem(tx, {
+    const cafeMenuItem = await addProductToMenu(tx, {
       menuId: cat.id,
       productId: cafe.id,
-      sectionId: section.id,
       grossPrice: "2.00",
     });
     // The table sits in a table_tab zone offering this menu, with a route per product to the

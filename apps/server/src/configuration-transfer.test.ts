@@ -2,8 +2,7 @@ import {
   addMember,
   createCatalogue,
   createExtraList,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   createOptionList,
   createProduct,
   createSection,
@@ -11,13 +10,14 @@ import {
   listMenuOffers,
   listOptionLists,
   listSections,
+  readMenuStructure,
   readSection,
   sections,
   setMenuItemExtraLists,
   updateOptionList,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { uploadImage, readImageBytes } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { describe, expect, it } from "vitest";
@@ -606,10 +606,6 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
   });
   const original = await withTransaction(suite.db, async (tx) => {
     const menu = await createCatalogue(tx, { name: "Modifier menu" });
-    const section = await createMenuSection(tx, {
-      menuId: menu.id,
-      name: { es: "Bebidas" },
-    });
     const product = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
@@ -683,9 +679,8 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       { kind: "extras", id: extraList.id },
       { kind: "options", id: withDefault.id },
     ]);
-    const offer = await createMenuItem(tx, {
+    const offer = await addProductToMenu(tx, {
       menuId: menu.id,
-      sectionId: section.id,
       productId: product.id,
       grossPrice: "2.75",
     });
@@ -704,12 +699,10 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       unitPrice: "1.80",
       vatClass: "reduced",
     });
-    await createMenuItem(tx, {
+    await addProductToMenu(tx, {
       menuId: menu.id,
-      sectionId: section.id,
       productId: tea.id,
       grossPrice: null,
-      displayOrder: 1,
     });
     return { optionList: withDefault, extraList, shotId: shot.id };
   });
@@ -808,11 +801,8 @@ it("transfers sections and their members, remapping ids, with a section's image"
     const beer = await createSection(tx, { internalName: "Cervezas" });
     await addMember(tx, drinks.id, { kind: "product", productId: water.id });
     await addMember(tx, drinks.id, { kind: "section", sectionId: beer.id });
-    const [root] = await tx
-      .insert(sections)
-      .values({ internalName: "Carta", role: "menu_root", ownerMenuId: menu.id })
-      .returning({ id: sections.id });
-    await addMember(tx, root!.id, { kind: "section", sectionId: drinks.id });
+    const { rootSectionId } = await readMenuStructure(tx, menu.id);
+    await addMember(tx, rootSectionId, { kind: "section", sectionId: drinks.id });
     return { drinks: drinks.id, image: image.filename };
   });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -823,7 +813,10 @@ it("transfers sections and their members, remapping ids, with a section's image"
     new Date("2026-09-25T12:00:00Z"),
     versions,
   );
-  expect(transferred.tables.sections).toHaveLength(3);
+  // The two library sections, and the top level and home layout of each of the source's two menus
+  // (the one provisioning made, and "Sections menu").
+  expect(transferred.tables.sections).toHaveLength(6);
+  expect(transferred.tables.menu_details).toHaveLength(2);
   expect(transferred.tables.section_members).toHaveLength(3);
   await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
     db: targetSuite.db,
@@ -852,7 +845,8 @@ it("transfers sections and their members, remapping ids, with a section's image"
     const [root] = await tx
       .select({ id: sections.id })
       .from(sections)
-      .where(eq(sections.ownerMenuId, menu!.id));
+      .where(and(eq(sections.ownerMenuId, menu!.id), eq(sections.role, "menu_root")));
+    expect((await readMenuStructure(tx, menu!.id)).rootSectionId).toBe(root!.id);
     expect((await readSection(tx, root!.id)).members.map((member) => member.ref)).toEqual([
       { kind: "section", sectionId: drinks!.id },
     ]);

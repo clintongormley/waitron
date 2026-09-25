@@ -18,8 +18,7 @@ import {
   createCatalogue,
   createCategory,
   createExtraList,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   createProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
@@ -158,14 +157,9 @@ describe("offerProducts", () => {
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
     // A menu the suite already has, offering the café dearer in the same zone.
     await withTransaction(suite.db, async (tx) => {
-      const section = await createMenuSection(tx, {
-        menuId: venue.catalogueId,
-        name: { "es-ES": "Bebidas" },
-      });
-      await createMenuItem(tx, {
+      await addProductToMenu(tx, {
         menuId: venue.catalogueId,
         productId: venue.cafe,
-        sectionId: section.id,
         grossPrice: "2.50",
       });
       await allowMenuInZone(tx, venue.cfg, offers.zoneId, venue.catalogueId);
