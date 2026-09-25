@@ -2384,6 +2384,19 @@ describe("KDS-1 station-display operate routes", () => {
       error: { code: "ticket.invalid_transition", params: { ticketItemId: itemId } },
     });
 
+    // Names every object inherits are not transitions either.
+    for (const to of ["__proto__", "toString", "constructor", "hasOwnProperty"]) {
+      const inherited = await app.request(`/api/ticket-items/${itemId}/advance`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ to }),
+      });
+      expect({ to, status: inherited.status }).toEqual({ to, status: 409 });
+      expect(await inherited.json()).toMatchObject({
+        error: { code: "ticket.invalid_transition", params: { ticketItemId: itemId } },
+      });
+    }
+
     // A missing `to` — the body has no `to` field at all.
     const missing = await app.request(`/api/ticket-items/${itemId}/advance`, {
       method: "POST",

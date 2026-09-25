@@ -802,7 +802,7 @@ export async function fireLines(
   >();
   if (legacyLines.length > 0) {
     // `active` is required: `deactivateStation` leaves `is_default` set on a deactivated default,
-    // and a line routed there would reach a queue no display shows. With it, the fire is refused.
+    // and a line routed there would reach a queue no display shows.
     const [fallback] = await tx
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
@@ -2775,16 +2775,12 @@ export async function advanceTicketItem(
   to: TicketState,
 ): Promise<void> {
   void cfg;
-  // "queued" and any garbage `to` read back `undefined` here and are refused together.
-  const table = TICKET_TRANSITIONS as Record<
-    string,
-    (typeof TICKET_TRANSITIONS)[Exclude<TicketState, "queued">] | undefined
-  >;
-  const transition = table[to];
-  if (transition === undefined) {
+  // Own keys only: an inherited name such as "__proto__" is not a transition.
+  if (!Object.hasOwn(TICKET_TRANSITIONS, to)) {
     throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
   }
   const validTo = to as Exclude<TicketState, "queued">;
+  const transition = TICKET_TRANSITIONS[validTo];
 
   const updated = await tx
     .update(ticketItems)
