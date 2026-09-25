@@ -47,19 +47,10 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
-// This suite proves the ROUTES — the request/response boundary, the body +
-// id screens, the agent Bearer guard, the claim/report logic, the management-gate wiring and the STATUS
-// map — end to end in-process, the same way `purchasing-api.test.ts` proves the purchase routes. The
-// agent-scope filters (cross-agent claim → empty, cross-agent report → no-op) and the revocation filter
-// (`active = true`) are QUERY predicates, shown faithfully here. The gate proven by
-// DELETION lives in `print-api.printer-wiring.test.ts`, which is also where the pointers to the
-// suites holding the claim's contention behaviour are. Tests share the seeded tenant
-// and create their own printers; assertions about tenant-wide results must account for other tests'
-// jobs.
+// The print routes end to end in-process. Tests share the seeded tenant and create their own
+// printers, so assertions about tenant-wide results must account for other tests' jobs.
 const noopLog: Logger = () => {};
 
-// The venue's routable servers the pull route echoes (via `readMembership` → `routableServers`).
-// A held chart with a primary + a secondary, so the pull test asserts the mapped, primary-first list.
 const MEMBERSHIP = signedMembershipDoc(3, {
   signerNodeId: "box",
   nodes: [
@@ -83,11 +74,8 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    // Through the table definitions, not raw SQL: `locations.id` and `persons.id` are `$defaultFn`
-    // generators on this engine (`id text PRIMARY KEY NOT NULL`,
-    // `packages/db/drizzle/0000_baseline.sql:1`), which a raw insert never reaches, and the locale
-    // list is encoded by the column's own write mapping — the `array[...]` constructor it replaces
-    // is a syntax error here.
+    // Through the table definitions: `locations.id` and `persons.id` are `$defaultFn` generators a
+    // raw insert never reaches.
     const [loc] = await db
       .insert(locations)
       .values({
@@ -97,9 +85,7 @@ const suite = useVenueDb({
       })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    // The FULL TillConfig the print verbs are typed on (branded ids). The join verbs read
-    // locationId and nodeId (every join-request statement filters by node), so this one cfg serves
-    // both knock and accept; the fiscal ids are unused here, so a branded random uuid stands in.
+    // Knock and accept must share this one cfg: every join-request statement filters by node.
     cfg = {
       tillId: brandTillId(randomUUID()),
       nodeId: brandNodeId(randomUUID()),
@@ -132,9 +118,6 @@ const suite = useVenueDb({
   },
 });
 
-/** Mount the print API. The pairing window is OPEN by default so `joinAndAccept`'s knock is admitted;
- *  `pairingOpen: false` proves the shut-window refusal. `readMembership` returns the fixture above so
- *  the pull route can echo `servers`. */
 function mountApp(
   opts: {
     pairingOpen?: boolean;
@@ -160,8 +143,6 @@ function mountApp(
   return app;
 }
 
-/** JSON request helper. `cookie` sends a management session; `bearer` sends an agent token; neither is
- * sent unless named (each caller is explicit about which auth it exercises). */
 async function send(
   app: Hono,
   method: "GET" | "POST" | "PATCH",
@@ -179,10 +160,7 @@ async function send(
   });
 }
 
-/** Knock (unauth, window-gated) then accept the join in-process (via the verb, as `enqueue` does — the
- * accept ROUTE lives in `join-api.ts` and is proven there), returning the enrolled agent's id + Bearer
- * token. The agent's Bearer is exactly the knock's `${joinId}.${secret}`, and `joinId` becomes the
- * agent id (accept carries it onto the `print_agents` row). */
+/** Accepts through the verb; the accept route is `join-api.ts`'s. */
 async function joinAndAccept(
   app: Hono,
   label = "Cocina agent",
@@ -197,8 +175,6 @@ async function joinAndAccept(
   return { agentId: joinId, token };
 }
 
-/** Knock the unauthenticated join route (window must be open) and return its reply plus the parsed
- * joinId (the selector half of the token). */
 async function knock(
   app: Hono,
   name = "Cocina agent",
@@ -212,9 +188,7 @@ async function knock(
   return { token, verificationNumber, joinId: token.slice(0, token.indexOf(".")) };
 }
 
-/** Create a network_tcp printer via the management route, returning its id. The `agentId` is passed in
- * the body but IGNORED by the create route (which agent serves a printer is derived at run time, never
- * stored — design §3); it is kept here so callers read naturally against a just-enrolled agent. */
+/** The create route ignores `agentId`; no agent binding is stored. */
 async function createPrinterVia(app: Hono, agentId: string, name = "Cocina"): Promise<string> {
   const res = await send(app, "POST", "/management-api/printers", {
     cookie: managerCookie,
@@ -224,7 +198,6 @@ async function createPrinterVia(app: Hono, agentId: string, name = "Cocina"): Pr
   return ((await res.json()) as { id: string }).id;
 }
 
-/** Create a usb printer keyed on `localKey` (the USB serial) via the management route. */
 async function createUsbPrinter(app: Hono, localKey: string, name = "USB"): Promise<string> {
   const res = await send(app, "POST", "/management-api/printers", {
     cookie: managerCookie,
@@ -234,7 +207,6 @@ async function createUsbPrinter(app: Hono, localKey: string, name = "USB"): Prom
   return ((await res.json()) as { id: string }).id;
 }
 
-/** Create a network_tcp printer on host:port via the management route, returning its id. */
 async function createNetworkPrinter(
   app: Hono,
   host: string,
@@ -266,8 +238,6 @@ interface PullReply {
   networkProbes?: NetworkProbe[];
 }
 
-/** POST the agent pull carrying an inventory (`visible`/`scanned` default to empty), asserting 200 and
- * returning the parsed reply. The pull is a POST (design §8): the body carries the box's live inventory. */
 async function pull(
   app: Hono,
   token: string,
@@ -278,8 +248,6 @@ async function pull(
   return (await res.json()) as PullReply;
 }
 
-/** Enqueue one job on `printerId` (directly via the outbox verb — there is no enqueue ROUTE in this
- * slice; a fire/sale enqueues in-process). Returns the job id. */
 async function enqueue(printerId: string, payload: Uint8Array): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const { jobId } = await enqueuePrintJob(tx, { locationId }, printerId, payload);
@@ -311,7 +279,6 @@ describe("POST /print-api/agent/join (the knock)", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "device.pairing_closed" },
     });
-    // Nothing was written — the window guard runs before any DB work.
     const rows = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(joinRequests).where(eq(joinRequests.label, name));
     });
@@ -325,7 +292,6 @@ describe("POST /print-api/agent/join (the knock)", () => {
     expect(res.status).toBe(201);
     const body = (await res.json()) as { token: string; verificationNumber: string };
     expect(body.verificationNumber).toMatch(/^\d{2}$/);
-    // `${joinId}.${secret}` — a uuid selector, a dot, then the base64url secret.
     expect(body.token).toMatch(/^[0-9a-f-]{36}\.[A-Za-z0-9_-]+$/);
     const joinId = body.token.slice(0, body.token.indexOf("."));
     const [pending] = await withTransaction(suite.db, async (tx) => {
@@ -335,7 +301,6 @@ describe("POST /print-api/agent/join (the knock)", () => {
         .where(eq(joinRequests.id, joinId));
     });
     expect(pending).toMatchObject({ kind: "print_agent" });
-    // The knock alone never creates the real row — that is the admin's accept.
     const agents = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(printAgents).where(eq(printAgents.name, name));
     });
@@ -352,9 +317,6 @@ describe("POST /print-api/agent/join (the knock)", () => {
   });
 
   it("rate-limits the knock: the (cap+1)th attempt is 429 device.join_rate_limited BEFORE the DB, then the window resets", async () => {
-    // THE GUARD (proven by deletion): a per-process GLOBAL fixed-window counter checked at the TOP of the
-    // knock handler, before the body parse and the window check. Deleting `enrolLimiter.check()` from
-    // print-api.ts's knock route makes the (cap+1)th attempt reach the handler (201) instead of 429.
     let fakeNow = 1_000;
     const limiter = createEnrolRateLimiter({ now: () => fakeNow });
     const app = mountApp({ pairingOpen: true, enrolRateLimiter: limiter });
@@ -364,7 +326,6 @@ describe("POST /print-api/agent/join (the knock)", () => {
     expect((await limited.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "device.join_rate_limited" },
     });
-    // Past the window — the counter resets and a well-formed knock reaches the handler (201).
     fakeNow += ENROL_RATE_WINDOW_MS + 1;
     const after = await send(app, "POST", "/print-api/agent/join", { body: { name: "x" } });
     expect(after.status).toBe(201);
@@ -380,7 +341,6 @@ describe("GET /print-api/agent/join/status", () => {
     expect(pending.status).toBe(200);
     expect((await pending.json()) as { status: string }).toEqual({ status: "pending" });
 
-    // Accept in-process (the route is proven in join-api.db.test.ts).
     await withTransaction(suite.db, async (tx) => {
       const r = await acceptPrintAgentJoinRequest(tx, cfg, joinId, { choice: verificationNumber });
       expect(r.ok).toBe(true);
@@ -388,7 +348,6 @@ describe("GET /print-api/agent/join/status", () => {
     const approved = await send(app, "GET", "/print-api/agent/join/status", { bearer: token });
     expect((await approved.json()) as { status: string }).toEqual({ status: "approved" });
 
-    // A non-uuid selector is guarded to `not_approved`, never a 22P02 → 500.
     const bad = await send(app, "GET", "/print-api/agent/join/status", { bearer: "nope.nope" });
     expect(bad.status).toBe(200);
     expect((await bad.json()) as { status: string }).toEqual({ status: "not_approved" });
@@ -455,20 +414,16 @@ describe("mountPrintApi — agent claim + report", () => {
       port: 9100,
       localKey: null,
     });
-    // The opaque bytes round-trip through base64 exactly.
     expect(Buffer.from(jobs[0]!.payload, "base64").equals(Buffer.from(payload))).toBe(true);
-    // The claim COMMITTED within the request: a fresh read sees the job as `printing`, and a SECOND
-    // claim returns nothing (it is no longer `queued`).
+    // The claim committed within the request.
     expect((await jobRow(jobId)).status).toBe("printing");
     const again = await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
     expect(((await again.json()) as { jobs: unknown[] }).jobs).toHaveLength(0);
   });
 
   it("does NOT claim a usb job whose key the pulling box cannot see (derived eligibility)", async () => {
-    // Derived eligibility (design §3/§5): a usb printer's job is claimable ONLY by the box that
-    // currently SEES its local_key. `mine` pulls WITHOUT that key visible, so the usb job stays queued —
-    // the replacement for the old agent-bound scope (network_tcp is now location-scoped, so a
-    // cross-agent claim of a network printer is expected, not a leak; the key-scope is the isolation).
+    // The visible key is the isolation between boxes: a network_tcp printer is claimable by any box at
+    // its location, so a cross-agent claim of one is expected.
     const app = mountApp();
     const mine = await joinAndAccept(app, "Mine");
     const serial = `SN-${randomUUID()}`;
@@ -477,7 +432,7 @@ describe("mountPrintApi — agent claim + report", () => {
 
     const res = await pull(app, mine.token, { visible: [], scanned: [] });
     expect(res.jobs).toHaveLength(0);
-    expect((await jobRow(jobId)).status).toBe("queued"); // untouched — the key is not visible
+    expect((await jobRow(jobId)).status).toBe("queued");
   });
 
   it("reports done → the job is done with delivered_at; failed → failed with attempts++ and last_error", async () => {
@@ -486,7 +441,6 @@ describe("mountPrintApi — agent claim + report", () => {
     const printerId = await createPrinterVia(app, agentId);
     const doneJob = await enqueue(printerId, new Uint8Array([1]));
     const failJob = await enqueue(printerId, new Uint8Array([2]));
-    // Claim both so they are `printing` (the state a real agent reports from).
     await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
 
     const doneRes = await send(app, "POST", `/print-api/agent/jobs/${doneJob}/result`, {
@@ -517,7 +471,7 @@ describe("mountPrintApi — agent claim + report", () => {
     await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
     const res = await send(app, "POST", `/print-api/agent/jobs/${jobId}/result`, {
       bearer: token,
-      body: { status: "failed" }, // no `error` — the route defaults it to ""
+      body: { status: "failed" },
     });
     expect(res.status).toBe(204);
     const row = await jobRow(jobId);
@@ -526,44 +480,36 @@ describe("mountPrintApi — agent claim + report", () => {
   });
 
   it("a report for another agent's job is an idempotent no-op (204, the job is NOT mutated)", async () => {
-    // THE GUARD (proven by deletion): `reportPrintJob`'s `and print_jobs.claimed_by = ${agentId}`
-    // predicate scopes the report to the agent that CLAIMED the job (design §5). The OTHER agent CLAIMS
-    // the job first so it is `printing` and stamped `claimed_by = other` — otherwise the idempotency
-    // guard (`status = 'printing'`) alone would block the report and the claimer-scope deletion would
-    // FALSE-pass. With the job `printing`, deleting the `claimed_by` predicate makes this cross-agent
-    // report mutate the other agent's job (status → done), flipping the `toBe("printing")` assertion red.
+    // The other agent claims the job first, so only the `claimed_by` predicate, not the
+    // `status = 'printing'` one, can stop this report.
     const app = mountApp();
     const mine = await joinAndAccept(app, "Mine");
     const other = await joinAndAccept(app, "Other");
     const otherPrinter = await createPrinterVia(app, other.agentId, "Other printer");
     const jobId = await enqueue(otherPrinter, new Uint8Array([1]));
-    await send(app, "POST", "/print-api/agent/jobs", { bearer: other.token }); // other claims → printing
+    await send(app, "POST", "/print-api/agent/jobs", { bearer: other.token });
 
     const res = await send(app, "POST", `/print-api/agent/jobs/${jobId}/result`, {
       bearer: mine.token,
       body: { status: "done" },
     });
-    expect(res.status).toBe(204); // idempotent sink — no oracle
-    expect((await jobRow(jobId)).status).toBe("printing"); // the other agent's claimed job is untouched
+    expect(res.status).toBe(204);
+    expect((await jobRow(jobId)).status).toBe("printing");
   });
 
   it("a duplicated failed report is idempotent — attempts is bumped ONCE (the status='printing' guard)", async () => {
-    // THE GUARD (proven by deletion): the `and print_jobs.status = 'printing'` predicate makes a report
-    // apply only to a currently-claimed job. Deleting it from `reportPrintJob`'s failed path lets the
-    // SECOND failed report bump `attempts` to 2, flipping the `toBe(1)` assertion red — a retried report
-    // would otherwise burn the 5-attempt cap faster than deliveries warrant.
+    // A retried report must not burn the attempt cap faster than deliveries warrant.
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const jobId = await enqueue(printerId, new Uint8Array([1]));
-    await send(app, "POST", "/print-api/agent/jobs", { bearer: token }); // claim → printing
+    await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
 
     const first = await send(app, "POST", `/print-api/agent/jobs/${jobId}/result`, {
       bearer: token,
       body: { status: "failed", error: "offline" },
     });
     expect(first.status).toBe(204);
-    // The retried report — same job, now `failed` (not `printing`) — is a 204 no-op.
     const second = await send(app, "POST", `/print-api/agent/jobs/${jobId}/result`, {
       bearer: token,
       body: { status: "failed", error: "offline again" },
@@ -571,8 +517,8 @@ describe("mountPrintApi — agent claim + report", () => {
     expect(second.status).toBe(204);
     const row = await jobRow(jobId);
     expect(row.status).toBe("failed");
-    expect(row.attempts).toBe(1); // bumped ONCE despite two failed reports
-    expect(row.last_error).toBe("offline"); // the second report changed nothing
+    expect(row.attempts).toBe(1);
+    expect(row.last_error).toBe("offline");
   });
 
   it("report screens the status (a bad/absent status → 400) and the job id shape (non-uuid → 400)", async () => {
@@ -618,7 +564,6 @@ describe("mountPrintApi — agent claim + report", () => {
     });
     const garbage = await send(app, "POST", "/print-api/agent/jobs", { bearer: "not.a.token" });
     expect(garbage.status).toBe(401);
-    // A revoked-shaped but valid uuid selector with a bad secret also folds to the same 401.
     const badSecret = await send(app, "POST", `/print-api/agent/jobs/${randomUUID()}/result`, {
       bearer: `${randomUUID()}.deadbeef`,
       body: { status: "done" },
@@ -631,7 +576,6 @@ describe("mountPrintApi — agent claim + report", () => {
     const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
     const jobId = await enqueue(printerId, new Uint8Array([1]));
-    // Works before revoke.
     expect((await send(app, "POST", "/print-api/agent/jobs", { bearer: token })).status).toBe(200);
 
     const revoke = await send(app, "POST", `/management-api/print-agents/${agentId}/revoke`, {
@@ -653,20 +597,16 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
   it("carries the inventory and claims by visible key (usb)", async () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);
-    // A unique serial per test — the suite shares one tenant/location and the partial UNIQUE is on
-    // (location_id, local_key), so a fixed key would clash with a sibling test's printer.
+    // Unique per test: the suite shares one location, and `local_key` is unique per location.
     const serial = `SN-${randomUUID()}`;
     const printerId = await createUsbPrinter(app, serial, "Cocina USB");
     const payload = esc().text("Mesa 4").cut().bytes();
     const jobId = await enqueue(printerId, payload);
 
-    // NOT visible → NOT eligible (design §3): the usb job stays queued when its key is absent from the
-    // reported inventory — an empty visible set degenerates the local branch to `false`.
     const blind = await pull(app, token, { visible: [], scanned: [] });
     expect(blind.jobs).toHaveLength(0);
     expect((await jobRow(jobId)).status).toBe("queued");
 
-    // Visible → claimed, the wire job carrying the printer's local_key (not a usb_path).
     const seen = await pull(app, token, {
       visible: [{ transport: "usb", localKey: serial }],
       scanned: [],
@@ -710,7 +650,6 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
   it("returns discoveryUntil after a discovery window is opened", async () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);
-    // Window shut → the pull reply carries null.
     expect((await pull(app, token)).discoveryUntil).toBeNull();
 
     const start = await send(app, "POST", "/management-api/printer-discovery/start", {
@@ -720,7 +659,6 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     const { discoveryUntil } = (await start.json()) as { discoveryUntil: number };
     expect(discoveryUntil).toBeGreaterThan(Date.now());
 
-    // The agent's next pull carries the same window end so the box knows to scan until it.
     expect((await pull(app, token)).discoveryUntil).toBe(discoveryUntil);
   });
 
@@ -729,7 +667,6 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     const { agentId, token } = await joinAndAccept(app, "Inventory agent");
     const registeredSerial = `SN-${randomUUID()}`;
     const unregisteredSerial = `SN-${randomUUID()}`;
-    // The agent reports two visible usb devices on its pull.
     await pull(app, token, {
       visible: [
         { transport: "usb", localKey: registeredSerial, make: "Epson", model: "TM-T20" },
@@ -737,7 +674,6 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
       ],
       scanned: [],
     });
-    // Register only the first.
     const registeredId = await createUsbPrinter(app, registeredSerial, "Registered USB");
 
     const res = await send(app, "GET", "/management-api/discovered-printers", {
@@ -775,12 +711,8 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
   });
 
   it("GET /management-api/discovered-printers marks a scanned network printer registered by host+port", async () => {
-    // A network printer has no local key — it is keyed on host:port — so the scan result of one that is
-    // already registered carries that printer's id (the dashboard hides it from the results and shows
-    // "seen" against the registered row). Same host on another port is a different printer.
     const app = mountApp();
     const { token } = await joinAndAccept(app, "Inventory agent");
-    // Each `it` mounts its own app and tenant; the random octets only keep two rows apart in the log.
     const [a, b] = randomUUID().split("-")[0]!.match(/../g)!;
     const host = `10.9.${parseInt(a!, 16) % 250}.${parseInt(b!, 16) % 250}`;
     const printerId = await createNetworkPrinter(app, host, 9100, "Counter");
@@ -806,7 +738,6 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     }[];
     const matched = rows.find((r) => r.host === host && r.port === 9100)!;
     expect(matched).toMatchObject({ alreadyRegistered: true, printerId });
-    // The report time travels as an ISO instant, like every other timestamp on the management wire.
     expect(Date.parse(matched.lastSeenAt)).toBeGreaterThanOrEqual(before);
     expect(rows.find((r) => r.host === host && r.port === 9101)).toMatchObject({
       alreadyRegistered: false,
@@ -815,8 +746,7 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
   });
 
   it("GET /management-api/discovered-printers matches a registered printer whose port is null on 9100", async () => {
-    // A cleared port is stored as null and printing treats it as 9100 (the transport's default), so a
-    // scan on 9100 must still match it — otherwise a working printer reappears as unregistered.
+    // Otherwise a working printer with a cleared port reappears as unregistered.
     const app = mountApp();
     const { token } = await joinAndAccept(app, "Inventory agent");
     const host = "10.9.250.1";
@@ -893,9 +823,8 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     const at = (agentId: string, h: string, port: number) =>
       rows.find((r) => r.agentId === agentId && r.host === h && r.port === port);
     expect(at(first.agentId, host, 9100)).toMatchObject({ pagePrinter: true });
-    // Fails while entries are reported per agent: the second agent's copy carries no mark of its own.
+    // Marked although the second agent reported no mark of its own.
     expect(at(second.agentId, host, 9100)).toMatchObject({ pagePrinter: true });
-    // Controls: another port on the same host, and another host, stay unmarked for both agents.
     expect(at(second.agentId, host, 9101)).not.toHaveProperty("pagePrinter");
     expect(at(first.agentId, "10.9.252.2", 9100)).not.toHaveProperty("pagePrinter");
     expect(at(second.agentId, "10.9.252.2", 9100)).not.toHaveProperty("pagePrinter");
@@ -921,7 +850,6 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
   it("create requires localKey for usb (422) and ignores agentId/usbPath", async () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app);
-    // usb with NO localKey — the (ignored) agentId/usbPath do not satisfy the requirement → 422.
     const missing = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body: { name: "Bad usb", transport: "usb", agentId, usbPath: "/dev/usb/lp0" },
@@ -930,7 +858,6 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     expect((await missing.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "printer.invalid_config" },
     });
-    // With localKey present the ignored fields are harmless → 201.
     const ok = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body: {
@@ -1124,10 +1051,10 @@ describe("mountPrintApi — management: printers CRUD", () => {
     const res = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
       cookie: managerCookie,
       body: {
-        transport: "network_tcp", // unchanged, but exercises the transport patch-branch
+        transport: "network_tcp",
         port: 9300,
-        localKey: null, // clear (nullable) — network_tcp carries no local_key
-        pollId: null, // clear (nullable)
+        localKey: null,
+        pollId: null,
         ticketScope: "order",
         active: true,
       },
@@ -1158,18 +1085,15 @@ describe("mountPrintApi — management: printers CRUD", () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
-    // printers create screens a null body to a 400 (naming the first missing field).
     expect(
       (await send(app, "POST", "/management-api/printers", { cookie: managerCookie, body: null }))
         .status,
     ).toBe(400);
-    // A null body on PATCH is an empty patch → a 204 no-op on an existing printer (never a 500).
     const patch = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
       cookie: managerCookie,
       body: null,
     });
     expect(patch.status).toBe(204);
-    // An EMPTY (no content-type) body on printers create likewise reaches the name screen → 400.
     const emptyCreate = await app.request("/management-api/printers", {
       method: "POST",
       headers: { cookie: managerCookie },
@@ -1180,7 +1104,6 @@ describe("mountPrintApi — management: printers CRUD", () => {
   it("create with a transport short of its required fields → 422 printer.invalid_config", async () => {
     const app = mountApp();
     await joinAndAccept(app);
-    // usb requires local_key; omitting it is invalid config (the app-layer required-field pre-check).
     const res = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body: { name: "Bad usb", transport: "usb" },
@@ -1252,7 +1175,6 @@ describe("mountPrintApi — management: printers CRUD", () => {
     const firstSerial = `SN-${randomUUID()}`;
     const secondSerial = `SN-${randomUUID()}`;
     const printerId = await createUsbPrinter(app, firstSerial, "Movable USB");
-    // Re-key to a new device serial (a usb printer swapped for a replacement unit).
     const res = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
       cookie: managerCookie,
       body: { localKey: secondSerial },
@@ -1390,8 +1312,6 @@ describe("mountPrintApi — management: test-print", () => {
     expect(res.status).toBe(202);
     const { jobId } = (await res.json()) as { jobId: string };
     expect(jobId).toMatch(/^[0-9a-f-]{36}$/);
-    // The enqueued job is a real `queued` outbox row on THIS printer — the never-block outbox path a
-    // fire/sale uses, driven by the dashboard's diagnostic button.
     const row = await jobRow(jobId);
     expect(row.status).toBe("queued");
     const jobs = (await (
@@ -1583,18 +1503,7 @@ describe("mountPrintApi — management: recent jobs", () => {
   it("returns an ISO last-print timestamp regardless of database date display settings", async () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused", "Timestamp printer");
-    // The STAGING went, not the assertion. `set datestyle` / `set timezone` are PostgreSQL session
-    // settings, and this engine refuses the statement outright — measured 2026-09-22 on Node
-    // v26.7.0, `node --experimental-sqlite` preparing each of the four: `near "set": syntax error`.
-    // So a database whose date DISPLAY differs is not a state that can be reached here at all, and
-    // the four statements are deleted rather than translated — the same treatment
-    // `packages/bookings/src/bookings-cas.test.ts` records for a staging mechanism this engine does
-    // not have.
-    //
-    // WHAT STILL HAS TO HOLD, and is what this case now checks: the stored value keeps a +02:00
-    // offset and two ways of spelling the same instant, and the route must still answer the
-    // canonical UTC ISO spelling. `delivered_at` is a text column here, so the conversion the
-    // assertion pins moved out of SQL and into `new Date(...).toISOString()` in `print-api.ts:766`.
+    // A stored value with a +02:00 offset must still answer the canonical UTC ISO spelling.
     await suite.db.insert(printJobs).values({
       locationId,
       printerId,
@@ -1612,14 +1521,10 @@ describe("mountPrintApi — management: recent jobs", () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused", "Summary printer");
     const emptyId = await createPrinterVia(app, "unused", "Empty printer");
-    // `generate_series` and `decode('01','hex')` are both PostgreSQL functions: the row set is built
-    // in JavaScript and the payload is the byte the hex literal decoded to.
     const payload = new Uint8Array([0x01]);
     await suite.db
       .insert(printJobs)
       .values(Array.from({ length: 101 }, () => ({ locationId, printerId, payload })));
-    // ONE clock reading bound three times. PostgreSQL's `now()` is transaction-start time, so the
-    // three rows below shared a single value; taking `nowIso()` once keeps that.
     const stamped = nowIso();
     await suite.db.insert(printJobs).values([
       {
@@ -1663,12 +1568,8 @@ describe("mountPrintApi — management: recent jobs", () => {
       });
       const existing = (await before.json()) as { id: string; status: string }[];
       const existingPending = existing.filter((job) => job.status !== "done");
-      // Four PostgreSQL-only shapes went in one rewrite, and none of them was the subject: the
-      // `status::print_job_status` cast (no cast operator here), the `(values …) as jobs(a, b)`
-      // column-aliased VALUES, `generate_series`, and the `::timestamptz ± n * interval '1 second'`
-      // arithmetic. The rows are built in JavaScript, the interval arithmetic happens on a `Date`,
-      // and each timestamp binds as the canonical `toISOString()` spelling — which is what makes a
-      // text column's comparison a time ordering (`print-api.ts:743`).
+      // Each timestamp binds as the canonical `toISOString()` spelling, which is what makes a text
+      // column's comparison a time ordering.
       const payload = new Uint8Array([0x01]);
       const pending = await suite.db
         .insert(printJobs)
@@ -1743,10 +1644,7 @@ describe("mountPrintApi — management: recent jobs", () => {
     const app = mountApp();
     const printerId = await createPrinterVia(app, "unused");
     try {
-      // Same rewrite as the case above: the cast, the column-aliased VALUES, the `cross join
-      // generate_series` fan-out and the interval arithmetic are all PostgreSQL-only. `'2020-01-01'`
-      // becomes the canonical `2020-01-01T00:00:00.000Z` because this column is TEXT and a
-      // date-only spelling does not sort against a full timestamp.
+      // A date-only spelling would not sort against a full timestamp in this text column.
       const payload = new Uint8Array([0x01]);
       const second = 1_000;
       const pending = await suite.db
@@ -1872,7 +1770,6 @@ describe("mountPrintApi — management: recent jobs", () => {
 describe("mountPrintApi — the printer.manage gate", () => {
   const DUMMY = "00000000-0000-0000-0000-000000000000";
 
-  // Every gated route, as [method, path, body].
   const routes: ["GET" | "POST" | "PATCH", string, unknown?][] = [
     ["GET", "/management-api/print-agents"],
     ["PATCH", `/management-api/print-agents/${DUMMY}`, { name: "Renamed" }],
@@ -1897,10 +1794,7 @@ describe("mountPrintApi — the printer.manage gate", () => {
   });
 
   it("refuses every management route for a staff session → 403 (the gate, proven by deletion)", async () => {
-    // THE GUARD: a `staff`-role session holds no `printer.manage`, so `authorizeManager` (inside
-    // print-api's `gated`) throws `authorization.not_permitted` before any op runs. Deleting the
-    // `authorizeManager(...)` call from print-api.ts's `gated` makes every staff request below succeed
-    // (201/200/404/422/204), flipping the `toBe(403)` assertions red; restoring it turns them green.
+    // A `staff`-role session holds no `printer.manage`.
     const app = mountApp();
     for (const [method, path, body] of routes) {
       const res = await send(app, method, path, {

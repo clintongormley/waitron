@@ -34,32 +34,8 @@ import "./errors.js";
 
 /**
  * H2 after a partial transfer: each tab files its own single fiscal record, at its own locked price.
- *
- * Named `transfer-lines.filing.test.ts` because paying is what separates it from its sibling — see
- * "Why the surviving case stays here" below.
- *
- * ## The case this file LOST, and what covers it now — nothing
- *
- * It held a second case: two reverse-orientation `transferLines` over the SAME pair of tabs, on two
- * PostgreSQL backends, never raising `40P01`. Its subject was the ascending-id lock order —
- * `transferLines` took `working_orders` rows in `[from, to].sort()` order, so a reverse pair could
- * not form a deadlock cycle. It was proven load-bearing by deletion: dropping the `.sort()` made all
- * twelve looped iterations deadlock.
- *
- * **That case is deleted and NOTHING replaces it.** There are no row locks left to order — every
- * `select … for update` in `working-order.ts` is gone — and no second writer to stage the pair
- * on: one venue file, one write transaction at a time
- * (`assertAnchoredTabOpen` in `apps/server/src/working-order.ts` carries the chain). The
- * proof-by-deletion belongs to the shape of the code it was taken against, and that shape is gone
- * (CLAUDE.md §4). The `.sort()` in `transferLines` survives for a smaller effect stated on the
- * function itself.
- *
- * ## Why the surviving case stays here rather than moving
- *
- * The sibling `apps/server/src/transfer-lines.test.ts` never pays a tab, so it cannot see whether a
- * transferred café double-files. This is the only case that transfers and then settles both tabs.
- * Checkable: `grep -n 'payWorkingOrder\|VerifactuBackend' apps/server/src/transfer-lines.test.ts`
- * prints nothing (exit 1, run 2026-09-22).
+ * The sibling `transfer-lines.test.ts` never pays a tab, so this is the only case that transfers and
+ * then settles both tabs.
  */
 const LOCALE = "es-ES";
 
@@ -91,10 +67,6 @@ function systemClock(): TrustedClock {
   };
 }
 
-// This counter was here because tenants accumulated for the life of the shared PostgreSQL
-// container. They do not now: the suite gets its own database file and the per-test reset empties
-// `tenants` (`packages/db/src/testing/venue-db.ts`). It is kept because a distinct NIF per call
-// costs nothing and no assertion here reads its value.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -110,7 +82,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    // No integrated card terminal for this transfer suite.
     tipsEnabled: false,
     orderFlow: "prepay",
   };
@@ -127,8 +98,7 @@ interface SeededVenue {
 
 /**
  * Stand up a fresh chained venue + registered SIF, then seed a catalogue and read back two
- * `each`/general(21%) products. Each test gets its OWN tenant so its state is order-independent
- * (CLAUDE.md §4).
+ * `each`/general(21%) products.
  */
 async function setupVenue(): Promise<SeededVenue> {
   const venue = await applyVenue(
@@ -195,8 +165,7 @@ async function setupVenue(): Promise<SeededVenue> {
 
 /**
  * A fresh venue with two open tabs, each on its own dining table, each holding café×4. Returns the tab
- * (working_order) ids to transfer between. Both tabs share the one tenant `cfg`, so they are the SAME-pair
- * the concurrency and H2 tests race/pay.
+ * (working_order) ids to transfer between.
  */
 async function setupTwoTabs(): Promise<{
   cfg: TillConfig;
@@ -246,8 +215,6 @@ async function registroCount(workingOrderId: string): Promise<number> {
  * at its OWN locked composition, not a re-price at pay.
  */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
-  // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
-  // returns the AMOUNT, so its callers' assertions read the same decimal literals they always did.
   const { rows } = await suite.db.execute<{ total: string }>(sql`
     select cast(total as text) as total from sales where working_order_id = ${workingOrderId}
   `);
@@ -273,8 +240,7 @@ describe("H2 — after a partial transfer, each tab files its OWN single registr
       await transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "1" }]); // A→B: 1 café (partial split)
     });
 
-    // A now holds café×3; B holds café×4 + café×1. Pay each via the UNCHANGED payWorkingOrder path
-    // (`lines: []` files from the stored locked lines). tender 20.00 comfortably covers each total.
+    // A now holds café×3; B holds café×4 + café×1. `lines: []` files from the stored locked lines.
     const deps = { db: suite.db, backend, clock };
     const paidA = await payWorkingOrder(deps, cfg, {
       id: tabA,
@@ -295,7 +261,7 @@ describe("H2 — after a partial transfer, each tab files its OWN single registr
     expect(await registroCount(tabB)).toBe(1);
 
     // Filed at the LOCKED café price (1.50), never re-priced by the transfer: A = 3 × 1.50, B = 5 × 1.50.
-    // Read back from the IMMUTABLE `sales.total` too, not only the returned object (CLAUDE.md §5).
+    // Read back from the IMMUTABLE `sales.total` too, not only the returned object.
     expect(paidA.total).toBe("4.50"); // 3 × 1.50
     expect(paidB.total).toBe("7.50"); // (4 + 1) × 1.50
     expect(await filedSaleTotal(tabA)).toBe("4.50");

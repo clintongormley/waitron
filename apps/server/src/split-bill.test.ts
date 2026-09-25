@@ -1,9 +1,4 @@
 // The domain outcomes of un-joining a table and settling a tab, single-threaded.
-//
-// A sibling suite used to race the two against each other and assert that pay was never the
-// deadlock victim. It was deleted with the storage switch (2026-09-22): there is one writer per
-// venue file, so the ordering between `unjoinTable` and the settle path is unobservable, and
-// nothing covers it now.
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -68,7 +63,6 @@ interface Seeded {
   /** "Jamón" — WEIGHT, 24.90/kg gross, reduced(10%). */
   jamonId: string;
   tableId: string;
-  /** A second table — unused by Task 1's asserts, seeded so the fixture is stable for later tasks. */
   tableId2: string;
   /** An ACTIVE `table_service_statuses` row, so a test can give a table a non-null manual status. */
   activeStatusId: string;
@@ -124,9 +118,8 @@ async function setupVenue(): Promise<Seeded> {
     offersByCfg.set(cfg, offers);
     const t1 = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
     const t2 = await createTable(tx, cfg, { label: "T2", zoneId: offers.zoneId });
-    // Through the table definition: `id` and `created_at` are `$defaultFn` generators on this
-    // engine, which a raw insert never reaches — it failed with
-    // `NOT NULL constraint failed: table_service_statuses.id`.
+    // Through the table definition: `id` and `created_at` are `$defaultFn` generators, which a raw
+    // insert never reaches.
     const activeStatusId = randomUUID();
     await tx
       .insert(tableServiceStatuses)
@@ -157,9 +150,6 @@ function openTabWith(
   });
 }
 
-/**
- * Run fn in one transaction.
- */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
@@ -269,11 +259,9 @@ describe("splitOffCheck", () => {
     // Inherits the origin's node/till (createOpenOrder stamps them from cfg).
     expect(state.check?.nodeId).toBe(cfg.nodeId);
     expect(state.check?.tillId).toBe(cfg.tillId);
-    // A check is a payment unit, NOT a seat: no dining_tables row points at it (design §2).
+    // A check is a payment unit, NOT a seat: no dining_tables row points at it.
     expect(state.anchoring).toEqual([]);
-    // The check holds the moved items. Order follows the landed move/split core (TS-4): WHOLE lines are
-    // moved first (moveOrderLines appends the whole jamón at check line 1), THEN partial splits (the 1 agua
-    // appended at check line 2) — not the transfers-array order.
+    // WHOLE lines are moved first, THEN partial splits — not the transfers-array order.
     // Read straight off the column, so each quantity is a count of whole THOUSANDTHS: 300 is the
     // 0.300 kg of jamón and 1000 is one agua.
     expect(state.checkLines).toEqual([
@@ -293,11 +281,8 @@ describe("splitOffCheck", () => {
   });
 
   it("refuses a DETACHED CHECK as the split origin (tab.not_open) — origin must be an open TAB", async () => {
-    // The origin of a split must be an open TAB (table-anchored, spec §3 + the `/api/tabs/:id/split`
-    // route). A detached check — a table-LESS open order minted BY a prior split — is a payment unit,
-    // not a seat, and must not itself be a split origin. `assertAnchoredTabOpen` adds the is-a-tab back-pointer
-    // assertion that `assertTabOpen` (status-only) lacks; a check has no `dining_tables.tab_id`
-    // pointing at it, so it fails closed to `tab.not_open`.
+    // A detached check — a table-LESS open order minted BY a prior split — is a payment unit, not a
+    // seat: no `dining_tables.tab_id` points at it, so it fails closed to `tab.not_open`.
     const { cfg, aguaId, tableId } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
       openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
@@ -317,9 +302,8 @@ describe("splitOffCheck", () => {
     const { tabId } = await asApp(cfg, (tx) =>
       openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
     );
-    // Two partial "1"s off the SAME line 1: without the guard each validates against the static 3 and the
-    // source is set to 3−1 twice (non-cumulative), so the check would gain 1.000+1.000 and the origin drop
-    // to 2.000 — 4 aguas from an original 3. Refused UP FRONT, before the check is minted.
+    // Two partial "1"s off the SAME line 1 would make 4 aguas from an original 3. Refused UP FRONT,
+    // before the check is minted.
     await expect(
       asApp(cfg, (tx) =>
         splitOffCheck(tx, cfg, tabId, [
@@ -367,11 +351,8 @@ describe("splitOffCheck", () => {
     const { tabId } = await asApp(cfg, (tx) =>
       openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
     );
-    // An empty `transfers` array makes carveOffLines' `inArray(col, [])` render `false` — a no-op WHERE
-    // clause — so without an up-front guard the call would SUCCEED after createOpenOrder had already
-    // minted a check: a table-less `open` working order, zero lines, a consumed order_number. An orphan.
-    // Refused before anything is minted, same "nothing to work with" shape as the walk-up/park/round
-    // paths' `sale.empty_basket` (see working-order.ts:221-227).
+    // Refused before anything is minted, or the call would leave an orphan check: a table-less
+    // `open` working order with zero lines and a consumed order_number.
     await expect(asApp(cfg, (tx) => splitOffCheck(tx, cfg, tabId, []))).rejects.toMatchObject({
       code: "sale.empty_basket",
     });
@@ -473,7 +454,7 @@ describe("unjoinTable", () => {
     await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, tableId2));
     // Give the joined table a NON-NULL manual status FIRST, so the post-unjoin null assertion below can
     // tell "unjoinTable cleared it" apart from "it was never set". joinTable sets only tab_id and never a
-    // status, so without this the clear would be untested (a §4 pass-for-the-wrong-reason).
+    // status, so without this the clear would be untested.
     await asApp(cfg, (tx) => setTableStatus(tx, cfg, tableId2, activeStatusId));
     const [before] = await asApp(cfg, (tx) =>
       tx
@@ -493,7 +474,7 @@ describe("unjoinTable", () => {
     );
     expect(result).toEqual({});
     expect(row?.tabId).toBeNull();
-    expect(row?.statusId).toBeNull(); // turnover: the manual TS-2 status clears (design §3, TS-3 pattern)
+    expect(row?.statusId).toBeNull(); // turnover: the manual status clears
   });
 
   it("refuses to un-join a table that isn't part of the tab (table.not_joined)", async () => {

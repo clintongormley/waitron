@@ -31,20 +31,15 @@ import type { AccountEmail } from "./account-email.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
-// The me routes are LOGIC (management session → verb → JSON) over mutable planning rows, the browser
-// twin of `schedule-api.ts`. Every DB touch runs through `withTransaction` exactly as
-// production does. The crux — "the requester is the SESSION's personId, never the body's" — is
-// proven in `me-api.cross-person.test.ts`; here we prove the route mechanics: whoami, the happy paths, the
-// request-shape 400s and the not-logged-in 401.
+// The route mechanics: whoami, the happy paths, the request-shape 400s and the not-logged-in 401.
+// The cross-person identity property is pinned in `me-api.cross-person.test.ts`.
 
 const noopLog: Logger = () => {};
 let me: string;
 let colleague: string;
 let manager: string;
-// A person carrying an explicit UI-language preference (`persons.locale = 'es-ES'`), for the whoami
-// test that proves the route surfaces the SESSION person's own locale. Deliberately DISTINCT from
-// `VENUE_LOCALE` ("en-GB") so `{ locale, venueLocale }` are pinned to their two different sources —
-// person preference vs venue default — and a mutant swapping them is killed (see whoami test below).
+// Carries `locale = 'es-ES'`, distinct from `VENUE_LOCALE`, so `locale` and `venueLocale` are
+// pinned to their two different sources.
 let localed: string;
 let locationId: string;
 
@@ -54,11 +49,8 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    // Seeded through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
-    // took: `locations.id`, `persons.id` and `persons.created_at` are `$defaultFn` generators on
-    // this engine that a raw insert never reaches while the columns are NOT NULL, and
-    // `invoice_locales` is a JSON array in a text column, which is what refused the `array[...]`
-    // constructor with `near "['es-ES']": syntax error`.
+    // Through the table definitions: `$defaultFn` generators and the locale list's write mapping
+    // are never reached by a raw insert.
     const [loc] = await db
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
@@ -79,7 +71,6 @@ const suite = useVenueDb({
       .values({ displayName: "Manager", pinHash: hashPin("3333"), role: "manager" })
       .returning({ id: persons.id });
     manager = mgrRow!.id;
-    // A staff person with an explicit `locale` preference (es-ES), distinct from VENUE_LOCALE (en-GB).
     const [localedRow] = await db
       .insert(persons)
       .values({
@@ -93,24 +84,14 @@ const suite = useVenueDb({
   },
 });
 
-// A distinctive `venueLocale` (NOT the ES default) so the public `GET /management-api/locales` test
-// proves the route echoes the injected boot value rather than a hardcoded constant. In production
-// `boot.ts` derives it via `readVenueLocale`; the me routes only carry it through.
+// Not the ES default, so a route echoing a hardcoded constant fails.
 const VENUE_LOCALE = "en-GB";
 
-// A fixed sentinel node id: this hermetic suite migrates WITHOUT the sync sets, so no
-// `persons` capture trigger fires and no test here asserts a sync origin — the value only has to be
-// present so the widened `MeApiDeps.cfg` (`{ nodeId }`) is satisfied. The origin-attribution suite
-// this used to point at, `sync-origin.test.ts`, is not in the tree.
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 
-// The enabled-module set the whoami echoes as `modules`, mirroring boot's `setsToMigrate.map(m => m.name)`
-// — which INCLUDES the always-on `core` (harmlessly: the browser registry only matches UI-bearing ids).
 const MODULES = ["core", "bookings"];
 
-// Register the bookings module permission exactly as the composition root does at boot, so
-// `permissionsForRole` folds `booking.manage` into manager + admin. Without it the module's permission is
-// not in the effective set and the manager whoami below could not carry it.
+// As the composition root does at boot, so the manager whoami below carries `booking.manage`.
 registerModulePermissions([{ permission: "booking.manage", grantedFrom: "manager" }]);
 
 const PROFILE_KEY_RING = { current: { version: 1, key: Buffer.alloc(32, 6) } };
@@ -133,8 +114,6 @@ function mountApp(overrides: Partial<MeApiDeps> = {}): Hono {
   return app;
 }
 
-/** Open a management session for `personId` (through the production `startManagementSession` path)
- * and return the cookie header that carries it — the credential every me route gates on. */
 async function cookieFor(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, async (tx) => {
     return startManagementSession(tx, { personId });
@@ -210,10 +189,6 @@ describe("mountMeApi — whoami", () => {
       cookie: await cookieFor(me),
     });
     expect(res.status).toBe(200);
-    // `me` carries NO locale preference, so `locale` is null; `venueLocale` is the injected boot
-    // default (VENUE_LOCALE), the language the dashboard falls back to when no preference is set. A
-    // staff person holds NO permission (empty effective set), and `modules` echoes the injected
-    // enabled set verbatim (the dashboard gates a module's nav/screen on both).
     expect(
       (await res.json()) as {
         personId: string;
@@ -248,10 +223,8 @@ describe("mountMeApi — whoami", () => {
   it("never reports a session lifetime above the configured idle timeout", async () => {
     const cookie = await cookieFor(me);
     const token = cookie.slice(`${MANAGEMENT_COOKIE}=`.length);
-    // Read out of the template rather than inlined into it: `postgres-sql-residue.test.ts` scans a
-    // `sql` template's text with the `${…}` interpolation left in place, so a JavaScript
-    // `Date.now()` inside one reads as PostgreSQL's `now()` to that guard. The value bound is
-    // unchanged.
+    // Outside the template: `scripts/postgres-sql-residue.test.ts` reads a `Date.now()` inside a
+    // `sql` template as PostgreSQL's `now()`.
     const tenSecondsFromNow = new Date(Date.now() + 10_000).toISOString();
     await suite.db.execute(sql`
       update management_sessions
@@ -282,10 +255,6 @@ describe("mountMeApi — whoami", () => {
   });
 
   it("surfaces the SESSION person's own locale preference, distinct from the venue default", async () => {
-    // `localed` carries `locale = 'es-ES'`, while `venueLocale` is en-GB — so this pins `locale` to the
-    // person's preference and `venueLocale` to the boot default, two DIFFERENT sources. A mutant that
-    // returned `deps.venueLocale` for both (or swapped the fields) fails here; the null case above
-    // alone could not catch that, since null ≠ any locale string regardless of the source.
     const res = await send(mountApp(), "GET", "/management-api/session/me", {
       cookie: await cookieFor(localed),
     });
@@ -322,12 +291,6 @@ describe("mountMeApi — whoami", () => {
   });
 
   it("returns the person's real role, effective permission set and enabled modules for a manager session — NEVER runs authorizeManager", async () => {
-    // The whoami route is role-blind: it resolves the session and echoes the role, so a manager
-    // session answers `manager` and a staff session `staff`, the same route serving both. If the route
-    // gated on `authorizeManager` (person.manage), the staff case above would 403 instead of 200. The
-    // manager's effective `permissions` carry the registered module permission `booking.manage` (folded
-    // in at grantedFrom:"manager") but NOT the admin-only `mirror.create`, and `modules` echoes the
-    // enabled set — the two the dashboard gates a module's nav/screen on.
     const res = await send(mountApp(), "GET", "/management-api/session/me", {
       cookie: await cookieFor(manager),
     });
@@ -343,9 +306,8 @@ describe("mountMeApi — whoami", () => {
     expect(body.modules).toEqual(MODULES);
   });
 
-  // `sessionDefault` is the Accept-Language match for THIS request — the language a person who has
-  // never chosen one should see. The venue default here is es-ES while the browser asks for en-GB, so
-  // the two sources are pinned apart: a mutant echoing `deps.venueLocale` into `sessionDefault` fails.
+  // The venue default is es-ES while the browser asks for en-GB, so the two sources are pinned
+  // apart.
   it("matches the browser's language for a signed-in person who has never chosen one", async () => {
     const res = await send(
       mountApp({ venueLocale: "es-ES" }),
@@ -514,11 +476,9 @@ describe("mountMeApi — locales (public)", () => {
   });
 
   it("GET /management-api/locales returns the supported list, venue default and venue name without a session", async () => {
-    // Deliberately unauthenticated — the dashboard shell fetches it before login. No cookie sent.
+    // Unauthenticated: the dashboard shell fetches it before login.
     const res = await send(mountApp(), "GET", "/management-api/locales", { cookie: null });
     expect(res.status).toBe(200);
-    // The static catalogue verbatim plus the injected boot default (`en-GB` here, proving the route
-    // echoes `deps.venueLocale` rather than a constant).
     expect(await res.json()).toEqual({
       locales: SUPPORTED_LOCALES,
       venueDefault: VENUE_LOCALE,
@@ -596,8 +556,7 @@ describe("mountMeApi — swaps", () => {
     const myShift = await insertShift(me, "2026-05-07T09:00:00Z", "2026-05-07T17:00:00Z");
     const res = await send(mountApp(), "POST", "/management-api/me/schedule/swaps", {
       cookie: await cookieFor(me),
-      // A hostile `requestedByPersonId` in the body is IGNORED — identity comes from the session only
-      // (`me-api.cross-person.test.ts` proves it by deletion; here we assert the filed row is `me`).
+      // A hostile `requestedByPersonId` in the body is ignored; identity comes from the session.
       body: {
         fromShiftId: myShift,
         toPersonId: colleague,
@@ -640,9 +599,7 @@ describe("mountMeApi — swaps", () => {
   });
 
   it("400s a POST /swaps with a MALFORMED body (management.request_invalid, never a 500)", async () => {
-    // `c.req.json()` throws on a malformed body; the shared `readJsonBody` coerces that throw to `{}` →
-    // the same field-screen 400 as the null-body test above, not an opaque 500. Sent raw, since `send`
-    // would JSON.stringify a valid body.
+    // Sent raw, since `send` would JSON.stringify a valid body.
     const res = await mountApp().request("/management-api/me/schedule/swaps", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: await cookieFor(me) },
@@ -860,9 +817,8 @@ describe("mountMeApi — absences", () => {
 });
 
 describe("mountMeApi — set your own locale", () => {
-  // Seed a FRESH staff person for each mutating test, so the row this route writes is disposable and no
-  // sibling whoami assertion (which pins `me`'s locale to null) is disturbed. The management session is
-  // opened via `cookieFor` (the production `startManagementSession` path). Cleaned up in a finally (§4).
+  // A fresh person per mutating test, so no sibling whoami assertion (which pins `me`'s locale to
+  // null) is disturbed.
   async function freshPerson(pin: string): Promise<string> {
     const [row] = await suite.db
       .insert(persons)
@@ -893,10 +849,7 @@ describe("mountMeApi — set your own locale", () => {
   });
 
   it("IGNORES a body personId naming ANOTHER person — only the session's own row changes", async () => {
-    // The crux of this surface: identity is the SESSION's person, never a body field. The body names
-    // `colleague`, but only the session person's row may change. A route that (wrongly) read
-    // `body.personId` would leave the session person untouched AND flip `colleague` — both assertions
-    // below catch that (this is the by-deletion proof's target, brief Step 6).
+    // Identity is the session's person, never a body field: only that person's row may change.
     const sessionPerson = await freshPerson("4002");
     try {
       const before = await suite.db.execute<{ locale: string | null }>(
@@ -907,12 +860,10 @@ describe("mountMeApi — set your own locale", () => {
         body: { locale: "en-GB", personId: colleague },
       });
       expect(res.status).toBe(204);
-      // The session person's OWN row changed...
       const mine = await suite.db.execute<{ locale: string | null }>(
         sql`select locale from persons where id = ${sessionPerson}`,
       );
       expect(mine.rows[0]!.locale).toBe("en-GB");
-      // ...and the body-named colleague's row did NOT.
       const theirs = await suite.db.execute<{ locale: string | null }>(
         sql`select locale from persons where id = ${colleague}`,
       );
@@ -935,9 +886,6 @@ describe("mountMeApi — set your own locale", () => {
   });
 
   it("400s (locale.unsupported) a missing/null body — coerced to '' → the ONE rejection path", async () => {
-    // A `null` JSON body → `?? {}` → an absent `locale` → the `typeof … ? … : ""` coercion → "", which
-    // `assertSupportedLocale` rejects as `locale.unsupported`. No separate request-invalid branch — a
-    // missing/non-string locale is the same 400 as any other unsupported value.
     const res = await send(mountApp(), "PUT", "/management-api/session/me/locale", {
       cookie: await cookieFor(me),
       body: null,
@@ -949,16 +897,10 @@ describe("mountMeApi — set your own locale", () => {
   });
 
   it("400s (locale.unsupported) an EMPTY or MALFORMED body, never a 500", async () => {
-    // hono's `c.req.json()` THROWS a `SyntaxError` on an empty or malformed body — BEFORE any `?? {}`
-    // could run — so without a defensive `.catch` the throw reaches `run` as a NON-AppError and becomes
-    // an opaque `server.internal` 500 (the `?? {}` alone only ever caught a literal JSON `null`, proven
-    // by the sibling test above). The guarded parse coerces a parse failure to `{}` too, so the body
-    // flows through the same `locale` coercion → `""` → the ONE `locale.unsupported` rejection path.
     const app = mountApp();
     const cookie = await cookieFor(me);
 
-    // An EMPTY body (`send` would omit the body and content-type entirely for `undefined`, so call
-    // `app.request` directly to send a real empty body under a JSON content-type).
+    // `send` would omit an undefined body and its content-type, so send a real empty body directly.
     const empty = await app.request("/management-api/session/me/locale", {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
@@ -969,7 +911,7 @@ describe("mountMeApi — set your own locale", () => {
       error: { code: "locale.unsupported" },
     });
 
-    // A MALFORMED body — sent raw, since `send` would JSON.stringify it into valid JSON.
+    // Sent raw, since `send` would JSON.stringify it into valid JSON.
     const malformed = await app.request("/management-api/session/me/locale", {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },

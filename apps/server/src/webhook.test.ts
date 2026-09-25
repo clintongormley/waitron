@@ -41,13 +41,9 @@ function deps(db: Database): WebhookDeps {
   return {
     db,
     ring,
-    // Required by WebhookDeps and not read by anything this suite asserts. The origin-capture guard
-    // it used to matter for was proven by a sibling suite that ran as a non-superuser role; that
-    // suite went with the storage switch, and nothing covers the guard now.
     nodeId: "11111111-1111-4111-8111-111111111111",
     environment: "preproduction",
-    // The secret key is ignored by the HMAC double — verification depends only on the per-tenant
-    // webhookSecret the route selects and hands to the client.
+    // The HMAC double ignores the secret key; verification depends only on `webhookSecret`.
     makeStripe: () => verifyingStripe(),
   };
 }
@@ -57,21 +53,14 @@ interface SeededPayment {
   webhookSecret: string;
 }
 
-/**
- * Seeds a tenant with an open working order, one `initiated` stripe payment (external_ref =
- * sessionId), and a `payments.stripe` credential carrying `webhookSecret`. Written straight to the
- * venue file for fixture setup.
- */
 async function seedInitiated(
   db: Database,
   opts: { webhookSecret: string; secretKey?: string; amount?: string; sessionId?: string },
 ): Promise<SeededPayment> {
   await seedTenant(db);
   const sessionId = opts.sessionId ?? `cs_${randomUUID()}`;
-  // Through the table definitions, not raw SQL: `locations.id`, `tills.id`, `working_orders.id` and
-  // the `created_at`/`opened_at` stamps are all JavaScript `$defaultFn` generators on this engine,
-  // which a raw insert never reaches, and `invoice_locales` is encoded by the column's own write
-  // mapping — the `array[...]` constructor it replaces is a syntax error here.
+  // Through the table definitions: `$defaultFn` generators and the locale list's write mapping are
+  // never reached by a raw insert.
   const [loc] = await db
     .insert(locations)
     .values({ name: "Counter", invoiceLocales: ["es"], operationDescription: "Retail" })
@@ -237,9 +226,7 @@ describe("the signature is the sole gate", () => {
     mountWebhook(app, deps(suite.db), collect([]));
 
     const spaced = `{"type":"checkout.session.completed",  "created":1740000000,  "data":{"object":{"id":"${seeded.sessionId}","amount_total":1210}}}`;
-    // The control for the test above: a signature over the NORMALISED bytes, posted with the spaced
-    // body, verifies only if the route normalised too. It does not, so this is a 400 — proving the
-    // 200 above came from the raw read, not from an incidental match.
+    // The control for the test above: a signature over the normalised bytes must not verify.
     const normalised = JSON.stringify(JSON.parse(spaced));
     const res = await post(app, spaced, signStripeBody(normalised, seeded.webhookSecret));
 
@@ -276,8 +263,7 @@ describe("no-op acknowledgements (2xx)", () => {
     expect((await post(app, body, sig)).status).toBe(200);
     const firstSettledAt = await settledAt(suite.db, seeded.sessionId);
 
-    // At-least-once redelivery: 2xx again, still captured, and `settled_at` untouched — the row was
-    // already past `initiated`, so `settleInitiated` matched nothing (no second write).
+    // A redelivery reports 2xx again and leaves `settled_at` untouched.
     expect((await post(app, body, sig)).status).toBe(200);
     expect(await paymentState(suite.db, seeded.sessionId)).toBe("captured");
     expect(await settledAt(suite.db, seeded.sessionId)).toBe(firstSettledAt);
@@ -290,8 +276,7 @@ describe("the webhook shares the app with /health", () => {
     const app = healthApp(createHealthState(new Date("2026-08-02T00:00:00Z")), () => new Date());
     mountWebhook(app, deps(suite.db), collect([]));
 
-    // /health still answers (503 — this state has never passed), proving the webhook mount did not
-    // displace it.
+    // 503: this health state has never passed.
     expect((await app.request("/health")).status).toBe(503);
 
     const body = completedEvent(seeded.sessionId);
@@ -302,9 +287,6 @@ describe("the webhook shares the app with /health", () => {
 
 describe("permanent client errors are 400 (a retry can never fix them)", () => {
   it("answers 404 for the old per-taxpayer path — the segment is gone, not ignored", async () => {
-    // The route used to be `/webhooks/stripe/:tenantId`. A caller still posting to the old shape
-    // gets Hono's 404 for an unmounted path, which is what keeps this a deliberate URL change
-    // rather than a silently-accepted second spelling.
     const app = new Hono();
     mountWebhook(app, deps(suite.db), collect([]));
 
@@ -319,9 +301,7 @@ describe("permanent client errors are 400 (a retry can never fix them)", () => {
   });
 
   it("answers 400 for a wrong-environment key and settles nothing", async () => {
-    // A LIVE key sealed on this pre-production host: `stripeSecretKeyFrom` throws
-    // `payment.credential_environment_mismatch` before verification — a provisioning mistake, not a
-    // race, so a retry can never succeed. 400, not 5xx.
+    // A live key sealed on this pre-production host: a provisioning mistake a retry can never fix.
     const seeded = await seedInitiated(suite.db, {
       webhookSecret: "whsec_envmix",
       secretKey: "sk_live_wrongenv",
@@ -341,9 +321,8 @@ describe("permanent client errors are 400 (a retry can never fix them)", () => {
 
 describe("a transient failure is surfaced 5xx so Stripe retries — the distinction holds", () => {
   it("answers 500 when the path tenant has no payments.stripe credential at all", async () => {
-    // A real tenant uuid with no Stripe credential: the vault's `credentials.missing` is a tenant
-    // not-yet-provisioned — a mid-provisioning race that resolves itself on Stripe's retry, so 5xx
-    // rather than a 400 that would drop the event. This is the control for the two 400 cases above.
+    // No Stripe credential yet can be a provisioning race that resolves on Stripe's retry. The
+    // control for the 400 cases above.
     await seedTenant(suite.db);
     const app = new Hono();
     const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
@@ -361,10 +340,8 @@ describe("a transient failure is surfaced 5xx so Stripe retries — the distinct
 describe("hostedWebhookSecretFrom", () => {
   const REF = { purpose: "payments.stripe" };
 
-  // Driven directly, not through a forged row: `putCredential` validates every required field is a
-  // non-empty string, so a payload sealed without `webhookSecret` cannot be written through the
-  // vault — the same reasoning as `stripeSecretKeyFrom`'s own unit tests. The pure function IS the
-  // read-side guard, so testing it directly tests the thing.
+  // Driven directly: `putCredential` refuses a payload without `webhookSecret`, so no such row
+  // can be sealed through the vault.
   it("fails loudly on a payload sealed without a webhookSecret, rather than passing undefined on", () => {
     expect(() => hostedWebhookSecretFrom({ secretKey: "sk_test_x" }, REF)).toThrow(
       /server.credential_unusable/,

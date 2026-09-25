@@ -21,9 +21,6 @@ import {
 } from "./station-printers.js";
 import "./errors.js";
 
-// These are CONFIG verbs — a live-check SELECT plus an INSERT/DELETE. The `printer.manage` gate
-// lives on the ROUTE (Task 5), and the composite PK and both by-id FKs are proven in packages/db's
-// station-printers.test.ts.
 const LOCALE = "es-ES";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let db: Database;
@@ -31,17 +28,10 @@ beforeAll(() => {
   db = suite.db;
 });
 
-/** Seed a tenant + location + till + node and return the till's config. `createStation` takes a
- *  `TillConfig`; the station→printer verbs take the narrower `PrintConfig` (its tenant + location),
- *  derived by {@link printCfg}. Mirrors kitchen.test.ts's `setupVenue`. */
 async function setupVenue(): Promise<TillConfig> {
   await seedTenant(db);
-  // Inserted through the table definitions, not as raw SQL: `locations.id`, `tills.id` and
-  // `tills.created_at` are JavaScript generators on this engine (`$defaultFn`), which a raw insert
-  // never reaches — `id text PRIMARY KEY NOT NULL` and `created_at text NOT NULL` in
-  // `packages/db/drizzle/0000_baseline.sql:1` and `:39`. The locale list goes over as an array
-  // because the column's own write mapping encodes it; the `array[...]` constructor it replaces is
-  // a syntax error here (`near "[?]": syntax error`).
+  // Inserted through the table definitions: the ids and `created_at` are `$defaultFn` generators,
+  // which a raw SQL insert never reaches.
   const [loc] = await db
     .insert(locations)
     .values({
@@ -68,7 +58,6 @@ async function setupVenue(): Promise<TillConfig> {
   };
 }
 
-/** The station→printer verbs' scope — the tenant + location the till carries. */
 function printCfg(cfg: TillConfig): PrintConfig {
   return { locationId: cfg.locationId };
 }
@@ -80,13 +69,11 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
   });
 }
 
-/** Create a station via the real KDS-1 verb (kitchen.ts). */
 function station(cfg: TillConfig, name: string): Promise<string> {
   return asApp(cfg, (tx) => createStation(tx, cfg, { name })).then((r) => r.id);
 }
 
-/** Create a printer via the real printing verb (printers.ts). `cloud_poll` needs only a `poll_id`
- *  (no agent to seed) — the minimal live printer for a mapping test. */
+/** `cloud_poll` needs only a `poll_id`, no agent to seed. */
 function printer(cfg: TillConfig, name: string): Promise<string> {
   return asApp(cfg, (tx) =>
     createPrinter(tx, printCfg(cfg), { name, transport: "cloud_poll", pollId: `poll-${name}` }),
@@ -104,8 +91,6 @@ describe("station→printer mapping verbs", () => {
       { stationId: s1, printerId: p1 },
     ]);
 
-    // Re-attaching the SAME pair is a silent no-op (ON CONFLICT DO NOTHING), not a duplicate row nor a
-    // throw — the idempotency the config UI relies on.
     await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: s1, printerId: p1 }));
     expect(await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg)))).toEqual([
       { stationId: s1, printerId: p1 },
@@ -123,7 +108,6 @@ describe("station→printer mapping verbs", () => {
     );
     expect(await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg)))).toEqual([]);
 
-    // Detaching a mapping that is no longer there is a no-op, never an error.
     await asApp(cfg, (tx) =>
       detachPrinterFromStation(tx, printCfg(cfg), { stationId: s1, printerId: p1 }),
     );
@@ -163,14 +147,12 @@ describe("station→printer mapping verbs", () => {
       await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId, printerId }));
     }
 
-    // No filter → every mapping in the tenant.
     const all = await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg)));
     expect(all).toHaveLength(3);
     expect(all).toContainEqual({ stationId: s1, printerId: p1 });
     expect(all).toContainEqual({ stationId: s1, printerId: p2 });
     expect(all).toContainEqual({ stationId: s2, printerId: p1 });
 
-    // Filter by station → only that station's printers.
     const byStation = await asApp(cfg, (tx) =>
       listStationPrinters(tx, printCfg(cfg), { stationId: s1 }),
     );
@@ -178,7 +160,6 @@ describe("station→printer mapping verbs", () => {
     expect(byStation).toContainEqual({ stationId: s1, printerId: p1 });
     expect(byStation).toContainEqual({ stationId: s1, printerId: p2 });
 
-    // Filter by printer → only the stations that printer serves (the group-printer read).
     const byPrinter = await asApp(cfg, (tx) =>
       listStationPrinters(tx, printCfg(cfg), { printerId: p1 }),
     );

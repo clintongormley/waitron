@@ -46,8 +46,6 @@ function deps(over: Partial<PassDeps> = {}): PassDeps & { lines: string[] } {
     lines,
     drain: () => Promise.resolve(drainResult()),
     reconcile: () => Promise.resolve(tickResult()),
-    // A fresh awaiting-cert cell per pass fixture — the edge-triggered "log once" tests below flip
-    // it and assert on the transitions, so each `deps()` starts from the same false baseline.
     awaitingCert: { current: false },
     monotonicMs: () => (ticks += 10),
     log: (level, event, fields) => lines.push(`${level} ${event} ${JSON.stringify(fields ?? {})}`),
@@ -69,8 +67,7 @@ describe("runPass", () => {
       },
     });
     await runPass(d, NOW);
-    // Not an aesthetic preference: drain is the duty with a legal clock, so a reconcile sweep that
-    // is behind must never delay it.
+    // Drain is the duty with a legal clock, so a reconcile sweep that is behind must never delay it.
     expect(order).toEqual(["drain", "reconcile"]);
   });
 
@@ -83,10 +80,7 @@ describe("runPass", () => {
   });
 
   it("folds the minimum even when reconcile answers earlier than drain", async () => {
-    // Pairs with the test above so the fold is proven order-free: that one only ever has drain's
-    // own answer be the smaller of the two, so alone it cannot tell a true cross-duty minimum
-    // apart from a bug that just prefers drain's non-null answer outright. This one has reconcile
-    // answer first, which only a genuine `Math.min` — not a drain-favouring shortcut — gets right.
+    // Here reconcile answers first, which a shortcut preferring drain's answer would get wrong.
     const d = deps({
       drain: () => Promise.resolve(drainResult({ nextDueAt: LATER })),
       reconcile: () => Promise.resolve(tickResult({ nextDueAt: SOON })),
@@ -105,8 +99,6 @@ describe("runPass", () => {
   });
 
   it("folds reconcile's answer when drain has none", async () => {
-    // The mirror of the test above, completing the null-fold matrix: both non-null (x2, order-free),
-    // drain-only, reconcile-only, both-null.
     const d = deps({
       drain: () => Promise.resolve(drainResult({ nextDueAt: null })),
       reconcile: () => Promise.resolve(tickResult({ nextDueAt: SOON })),
@@ -131,19 +123,14 @@ describe("runPass", () => {
     });
     const report = await runPass(d, NOW);
 
-    // The loop must survive a duty that throws: one transient database blip ending the hourly retry
-    // is precisely the failure the scheduler's nextDueAt semantics were written to prevent.
+    // The loop must survive a duty that throws: one transient blip must not end the hourly retry.
     const drainReport = report.duties.find((entry) => entry.duty === DRAIN_DUTY)!;
     expect(drainReport).toEqual({
       duty: DRAIN_DUTY,
       ok: false,
       errorCode: "server.credential_unusable",
-      // A duty that threw has no answer about when it is next due, and a failed drain is due
-      // immediately — the pass reports `now` so the loop retries on its floor rather than sleeping.
       nextDueAt: NOW,
-      // `deps()`'s injected clock advances 10ms per read; drain is the first duty attempted, so
-      // this is its own pair of reads (20 on entry, 30 on the catch branch) — 10 regardless of
-      // what reconcile does afterwards.
+      // Drain's own pair of clock reads: 20 on entry, 30 on the catch branch.
       durationMs: 10,
     });
     expect(report.duties.find((entry) => entry.duty === RECONCILE_DUTY)?.ok).toBe(true);
@@ -160,10 +147,8 @@ describe("runPass", () => {
     const d = deps({
       drain: () =>
         Promise.resolve(
-          // `DrainResult`'s own invariant (packages/fiscal/src/backend.ts): `nextDueAt` is never
-          // null while `skipped` is non-empty — a real drain reports `now` instead, so a host
-          // sleeping on the field cannot sleep past a skipped tenant's art. 16.4 hour. The fixture
-          // matches that shape rather than teaching a producer-impossible one.
+          // `DrainResult` never has a null `nextDueAt` while `skipped` is non-empty
+          // (packages/fiscal/src/backend.ts), so the fixture keeps that shape.
           drainResult({
             nextDueAt: NOW,
             skipped: [{ errorCode: "credentials.missing" }],
@@ -176,9 +161,8 @@ describe("runPass", () => {
   });
 
   it("sets the awaiting-cert flag and logs fiscal.awaiting_certificate for a credentials.missing skip, without failing the drain", async () => {
-    // A promoted mirror with no fiscal.aeat cert: the drain skips filing (does not throw), so the pass
-    // does not fail, the flag flips true, and the once-only awaiting line is logged alongside the
-    // per-pass drain.tenant_skipped trace (both signals, different consumers).
+    // A missing fiscal.aeat cert is a skip, not a throw: the pass does not fail, the flag flips true,
+    // and the once-only awaiting line is logged beside the per-pass skip trace.
     const d = deps({
       drain: () =>
         Promise.resolve(
@@ -193,8 +177,6 @@ describe("runPass", () => {
     expect(report.duties.find((e) => e.duty === DRAIN_DUTY)?.ok).toBe(true);
     expect(d.awaitingCert.current).toBe(true);
     expect(d.lines.some((line) => line.startsWith("warn fiscal.awaiting_certificate"))).toBe(true);
-    // The per-pass skip trace still fires — the awaiting-cert flag is in ADDITION to it. (The log
-    // line's own name, `drain.tenant_skipped`, is a shipped name and is not the claim here.)
     expect(d.lines.some((line) => line.startsWith("warn drain.tenant_skipped"))).toBe(true);
     // It counts toward the duty's skipped total, so /health sees the unmet obligation.
     expect(report.duties.find((e) => e.duty === DRAIN_DUTY)?.skipped).toBe(1);
@@ -249,14 +231,11 @@ describe("runPass", () => {
   });
 
   it("leaves the awaiting-cert flag UNCHANGED on a no-work pass — does not clear it, does not log recovery", async () => {
-    // Regression (Codex experiment): a no-work pass (`tenantsWithWork === 0`) read no certificate at
-    // all, so it must NOT clear a flag set by an earlier missing-cert pass and must NOT emit
-    // `fiscal.certificate_available`. Before the fix, the flag cleared on any pass with no
-    // missing-cert skip — including an empty DB — signalling "cert arrived" when nothing had.
+    // A no-work pass read no certificate, so it must not clear a flag an earlier missing-cert pass
+    // set, nor log `fiscal.certificate_available`.
     let missing = true;
     const d = deps({
-      // First pass: a due tenant, cert missing (skip). Later passes: NO due work at all — the empty-DB
-      // shape a promoted mirror sits in between sales, which never reads the cert.
+      // First pass: due work, cert missing. Later passes: no due work at all.
       drain: () =>
         Promise.resolve(
           missing
@@ -280,8 +259,7 @@ describe("runPass", () => {
   });
 
   it("clears the awaiting-cert flag on a pass that genuinely resolves the cert — due work, no missing-cert skip", async () => {
-    // The other half of the regression: a pass with due work that submitted (cert read and used) DOES
-    // clear the flag and logs recovery once — proving the no-work guard above did not disable clearing.
+    // A pass with due work that submitted does clear the flag and logs recovery once.
     let missing = true;
     const d = deps({
       drain: () =>
@@ -310,8 +288,6 @@ describe("runPass", () => {
   });
 
   it("logs drain's own summary counts", async () => {
-    // The mirror of "logs runDue's skipped pairs and its deferred count" below, for drain's own
-    // `drain.complete` line — otherwise half of "each duty logs its own summary" goes unverified.
     const d = deps({
       drain: () =>
         Promise.resolve(
@@ -351,9 +327,8 @@ describe("runPass", () => {
     expect(d.lines.some((line) => line.includes('"beyondHorizon":2'))).toBe(true);
   });
 
-  // A parked reconcile run is the CRITICAL pre-merge finding this suite exists to close: a bare
-  // `ran: result.ran.length` cannot tell "every run swept clean" apart from "every run was
-  // abandoned for good" — see health.test.ts's own describe block for how this reaches /health.
+  // A bare `result.ran.length` cannot tell a clean sweep from runs abandoned for good; health.test.ts
+  // pins how `parked` reaches /health.
   describe("breaks TickResult.ran down by outcome (pre-merge review, terminal reconcile runs)", () => {
     it("counts succeeded, failed and parked separately in reconcile.complete, not a bare total", async () => {
       const d = deps({
@@ -447,9 +422,7 @@ describe("runPass", () => {
     const passComplete = d.lines.filter((line) => line.startsWith("info pass.complete"));
     expect(passComplete).toHaveLength(1);
 
-    // The count alone would stay green if one duty's entry silently dropped out of the summary —
-    // parse the line and check both duties actually made it into `duties`, not just that some
-    // pass.complete line was emitted.
+    // Parsed, because a count alone would stay green if one duty dropped out of `duties`.
     const fields = JSON.parse(passComplete[0]!.slice(passComplete[0]!.indexOf("{"))) as {
       duties: { duty: string; ok: boolean }[];
     };
@@ -471,11 +444,7 @@ describe("runPass", () => {
       durationMs: number;
       duties: { duty: string; durationMs: number }[];
     };
-    // `deps()`'s injected clock advances 10ms per read, in the fixed order: one read at `runPass`
-    // entry, one at each `attempt` entry/exit, one at `runPass` exit right before this line is
-    // built. That is 10 (pass start), 20/30 (drain), 40/50 (reconcile), 60 (pass end) — so each
-    // duty's own duration is exactly 10, and the pass's is exactly 60 - 10 = 50. Asserted exactly,
-    // not `toBeGreaterThan(0)`: that would pass against a field that was never wired up.
+    // Clock reads 10ms apart: 10 (pass start), 20/30 (drain), 40/50 (reconcile), 60 (pass end).
     expect(payload.durationMs).toBe(50);
     expect(payload.duties.map((entry) => entry.durationMs)).toEqual([10, 10]);
   });

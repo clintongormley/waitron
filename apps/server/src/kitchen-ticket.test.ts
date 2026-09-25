@@ -5,11 +5,8 @@ import { formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import type { KitchenLayout, KitchenTicket } from "./kitchen-ticket.js";
 import { decodeTicket, printedLines } from "./testing/decode-ticket.js";
 
-// The formatter is a PURE byte producer (design §3c) — no database at all — so these are ordinary
-// unit tests. We decode the ESC/POS payload back to its Latin-1 text (the encoding escpos.ts uses,
-// pinned in escpos.test.ts) to assert the human-readable content, and check the raw cut bytes at the
-// tail. GS V 0 (full cut) is 0x1D 0x56 0x00 (escpos.ts / escpos.test.ts); feed precedes it, so the
-// final three bytes are always the cut.
+// Decodes the payload as Latin-1 to assert the readable content; the final three bytes are always the
+// full cut, GS V 0 (0x1D 0x56 0x00).
 const CUT_BYTES = [0x1d, 0x56, 0x00];
 /** ESC d n — the shared feed before every cut, so the tear-off clears the print head. */
 const FEED_THEN_CUT = [0x1b, 0x64, FEED_BEFORE_CUT, ...CUT_BYTES];
@@ -111,9 +108,6 @@ describe("formatKitchenTicket", () => {
     });
 
     it("sanitizes a free-text note with a newline so it prints on ONE ticket line", () => {
-      // A free-text note is operator-typed and may carry newlines / control bytes; printed raw they
-      // would split the note across ticket lines (or emit stray control commands) and garble the
-      // thermal ticket. The control chars collapse to a space so the note stays a single `* ` sub-line.
       const text = decodeTicket(
         formatKitchenTicket(
           {
@@ -128,7 +122,6 @@ describe("formatKitchenTicket", () => {
         ),
       );
       const lines = text.split("\n");
-      // Exactly one sub-line, with the newline collapsed to a space — never a second "muy hecho" line.
       expect(lines).toContain("  * sin sal muy hecho");
       expect(lines.filter((l) => l.includes("* "))).toHaveLength(1);
     });

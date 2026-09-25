@@ -49,30 +49,14 @@ import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import type { AccountEmailSender } from "./account-email.js";
 
-/**
- * The deps the "me" API needs: no fiscal backend, clock or card provider, because these routes touch
- * only the identity session (`management_sessions`) and the planning tables
- * (`shifts`/`shift_swaps`/`absences`). It carries the node id on top of the handle, so it is one
- * field wider than `mountScheduleApi`'s.
- */
 export interface MeApiDeps {
   db: Database;
-  /** This node's own id. */
   cfg: { nodeId: string };
-  /**
-   * The venue's DEFAULT UI locale, derived ONCE at boot (`readVenueLocale`, boot.ts). Surfaced by the
-   * public `GET /management-api/locales` as `venueDefault` — the language the dashboard defaults to
-   * before a signed-in person's own preference is known.
-   */
+  /** The language the dashboard defaults to before a signed-in person's own preference is known. */
   venueLocale: string;
   /** The setup journey that created this installation, shown persistently by the dashboard. */
   onboardingIntent?: OnboardingIntent;
-  /**
-   * The ENABLED module names on this node — boot's `setsToMigrate.map(m => m.name)`, which includes the
-   * always-on `core` (harmlessly: the dashboard's browser registry only matches UI-bearing ids).
-   * Surfaced by `GET /session/me` as `modules` so the dashboard shows a module's nav/screen only when
-   * the module is enabled AND the signed-in person holds its permission — the two runtime gates.
-   */
+  /** The enabled module names, `core` included. */
   modules: string[];
   credentialKeyRing?: TotpKeyRing;
   accountActionCodeKey?: Buffer;
@@ -81,20 +65,6 @@ export interface MeApiDeps {
   sendAccountEmail?: AccountEmailSender;
 }
 
-/**
- * Every AppError code the me API answers, and its HTTP status — the management-session twin of
- * `schedule-api.ts`'s `STATUS`, differing only in the session family: this surface is gated by a
- * MANAGEMENT session, so a missing/forged cookie or a session naming no live row is
- * `management_session.required` (401), an idled-out one `management_session.expired` (401), and a
- * mid-session suspension `person.suspended` (403) — the three faults `requireManagementSession` +
- * `resolveManagementSession` raise (identity's own codes). The request-shape and swap/absence domain
- * codes are identical to the till schedule surface (the shared `request-screens.ts` screens and the
- * #90 verbs), so their statuses match: a malformed body/query field is `management.request_invalid`
- * 400 and a malformed path `:swapId` is `shared.invalid_id` 400; an inverted absence range is
- * `absence.invalid` 400; `swap.not_permitted` is 403, `swap.not_acceptable`/`absence.overlaps` 409,
- * the `not_found` pair 404. A registered code absent here defaults to 400; the client codes are
- * enumerated anyway so this map is the surface's whole 4xx contract.
- */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
   "password.too_short": 400,
@@ -110,8 +80,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
   "person.suspended": 403,
-  // The signed-in person picked an unsupported UI language on `PUT /management-api/session/me/locale`
-  // — a request-shape fault, 400. Thrown by `setPersonLocale`'s `assertSupportedLocale` (identity).
   "locale.unsupported": 400,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
@@ -126,17 +94,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const run = createErrorBoundary(STATUS, "me.failed");
 
 /**
- * Mounts the STAFF SELF-SERVICE routes on the management dashboard's HTTP surface (prefixes
- * `/management-api/session/me` and `/management-api/me/schedule`) — the browser twin of
- * `apps/till`'s till-PIN-gated `mountScheduleApi`. Every route resolves the requester from the
- * MANAGEMENT SESSION (`requireManagementSession` → `resolveManagementSession` → `personId`) FIRST
- * and passes THAT `personId` into the #90 verb; the request body is NEVER trusted for identity
- * (the crux of this surface — a staff member acts only as themselves). It is deliberately
- * ROLE-BLIND: it calls `resolveManagementSession` (which returns `personId` + `role` but gates
- * only on idle-timeout + suspension), NEVER `authorizeManager` — a `staff`-role person holds an
- * EMPTY permission set, so an `authorizeManager` gate would 403 every staff person, defeating the
- * whole surface. The verb then runs under `withTransaction`, in the database holding this tenant.
- * The explicit `person_id` predicate scopes the operation to the requester.
+ * Staff self-service routes. Every route acts as the person its management session names, never
+ * one the request body names. Deliberately role-blind — never `authorizeManager`: a `staff` person
+ * holds an empty permission set, so that gate would refuse every staff member.
  */
 export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   const credentialKeyRing = deps.credentialKeyRing ?? {
@@ -144,8 +104,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   };
   const accountActionCodeKey = deps.accountActionCodeKey ?? randomBytes(32);
   const profileThrottle = createPasswordThrottle();
-  /** Run `fn` under this venue's tenant — the one place the `withTransaction` wrapper
-   * is expressed, so no route re-implements it. */
   const asStaff = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
       return fn(tx);
@@ -351,17 +309,13 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  /** Read the configured tenant's public display identity inside the same transaction as its
-   * caller. A missing row means the boot configuration names no tenant. */
   const readVenueName = async (tx: Transaction): Promise<string> => {
     const venue = await readTenant(tx);
     if (venue === null) throw new Error("Configured tenant does not exist");
     return venue.legalName;
   };
 
-  // No session is required: like GET /api/locales, this exposes only public identity and languages.
-  // Only loginDefault depends on the request;
-  // venueDefault remains the fallback for a signed-in person without a saved preference.
+  // No session is required: this exposes only public identity and languages.
   app.get("/management-api/locales", (c) =>
     run(c, log, async () => {
       const venueName = await asStaff(readVenueName);
@@ -376,18 +330,9 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  // The deployment holds one tenant per database. Whoami: who is signed into this browser, with
-  // what role and in which language. `requireManagementSession` screens the cookie's SHAPE (401
-  // before any DB work), then `resolveManagementSession` re-reads the live session + the person's
-  // current role, status and `locale` in this database (a suspended person 403s here).
-  // Role-blind: NO `authorizeManager`, so a staff session answers `{ role: "staff" }` rather than
-  // 403 — this is the endpoint the dashboard shell probes to decide whether to open the staff
-  // view or the manager screens. `locale` is the signed-in person's OWN UI-language preference
-  // (`persons.locale`, null when unset); `venueLocale` is the geography-derived boot default
-  // (`deps.venueLocale`) — the same value `GET /management-api/locales` echoes as `venueDefault`.
-  // `sessionDefault` is this request's Accept-Language match, already floored at `venueLocale` when
-  // the browser asks for nothing we ship — what the dashboard shows a person with no stored
-  // preference. It is DERIVED PER REQUEST and never stored: an explicit `locale` still wins.
+  // Role-blind, so a staff session answers `{ role: "staff" }` rather than 403: the dashboard shell
+  // probes this to decide between the staff view and the manager screens. `sessionDefault` is
+  // derived per request and never stored; an explicit `locale` still wins.
   app.get("/management-api/session/me", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -400,10 +345,8 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
       // least key on the language it varies by.
       c.header("Cache-Control", "no-store");
       c.header("Vary", "Accept-Language");
-      // `permissions` is the signed-in person's EFFECTIVE set (core catalog + registered module
-      // permissions, folded through identity's ladder) and `modules` the enabled-module names — a
-      // client-side HINT the dashboard gates a module's nav/screen on, NEVER a substitute for the
-      // server-side gate each route still enforces.
+      // `permissions` and `modules` are a client-side hint, never a substitute for each route's own
+      // gate.
       return c.json({
         personId,
         role,
@@ -424,15 +367,8 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  // Set the SIGNED-IN person's OWN UI-language preference (`persons.locale`) — the dashboard twin of the
-  // till's `PUT /api/session/locale`. Identity is the SESSION's person (`resolveManagementSession`'s
-  // `personId`, resolved INSIDE `asStaff`), NEVER a body field: the body carries `locale` and nothing
-  // else, so a hostile `personId` in it is ignored and a person can only set their own locale. Read via
-  // `readJsonBody`, so an empty/malformed/`null` body coerces to `{}` (never an opaque 500); the body
-  // then flows through the same `locale` coercion below, so a missing/non-string/unparsable `locale`
-  // all coerce to `""`, which `setPersonLocale`'s `assertSupportedLocale` rejects as `locale.unsupported`
-  // (400) — the ONE rejection path, no separate request-invalid branch and never an opaque
-  // `server.internal` 500. Returns 204 (no body), matching the accept/other 204 verbs on this surface.
+  // A missing or non-string `locale` becomes `""`, which `setPersonLocale` refuses as
+  // `locale.unsupported`: the one rejection path.
   app.put("/management-api/session/me/locale", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -446,13 +382,8 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  // Record that the sign-in passkey offer was settled — by adding a passkey or by skipping — so it is
-  // never made again. Identity is the SESSION's person (`resolveManagementSession`'s `personId`,
-  // resolved INSIDE `asStaff`), NEVER a body field: a body naming someone else would cancel an offer
-  // that person has never seen. The body is not read at all, so no body, an empty one and a malformed
-  // one all behave the same. Returns 204 and no body: a write on this surface answers with a body
-  // only when the caller needs something back from it — a newly minted id, a generated code — and
-  // the stamp gives the caller nothing to carry away.
+  // The passkey offer was settled (added or skipped), so it is never made again. The body is not
+  // read.
   app.post("/management-api/session/me/passkey-offer", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -464,7 +395,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  // The requester's OWN shifts over a half-open [from, to) local-date window.
   app.get("/management-api/me/schedule/shifts", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -478,7 +408,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  // The swaps the requester is party to (offered to them, or requested by them).
   app.get("/management-api/me/schedule/swaps", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -490,8 +419,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  // Request a swap: offer one of MY shifts to a colleague (`toShiftId` null = a one-sided give-away).
-  // The requester is the session's person — never a body field.
+  // `toShiftId` null is a one-sided give-away.
   app.post("/management-api/me/schedule/swaps", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -512,8 +440,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  // Accept a swap offered TO me — the acceptor is the session's person, so only the named recipient
-  // can accept (acceptSwap's own guard).
   app.post("/management-api/me/schedule/swaps/:swapId/accept", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -526,7 +452,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  // The requester's OWN absences (every status).
   app.get("/management-api/me/schedule/absences", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -538,7 +463,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
 
-  // Request an absence for MYSELF — the person is the session's, never a body field.
   app.post("/management-api/me/schedule/absences", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

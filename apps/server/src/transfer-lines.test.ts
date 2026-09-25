@@ -36,9 +36,8 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// This suite proves the WRITE behaviour of `transferLines`, and of
-// `moveTabLines` given a subset of lines — the split arithmetic, the guards, the line renumbering, the price-lock. The
-// concurrency race and the per-tab fiscal filing are
+// The WRITE behaviour of `transferLines`, and of `moveTabLines` given a subset of lines — the split
+// arithmetic, the guards, the line renumbering, the price-lock. The per-tab fiscal filing is
 // `transfer-lines.filing.test.ts`'s job.
 const LOCALE = "es-ES";
 const suite = useVenueDb({
@@ -184,8 +183,7 @@ async function linesOf(tabId: string): Promise<
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
-  // Three scaled-integer columns; the helper hands back the DECIMAL LITERALS, each at its own
-  // scale, so its callers' assertions read the same strings they always did.
+  // Three scaled-integer columns, handed back as DECIMAL LITERALS, each at its own scale.
   return rows.map((row) => ({
     ...row,
     quantity: thousandthsToDecimal(row.quantity),
@@ -273,13 +271,8 @@ describe("transferLines — whole line", () => {
     expect(await linesOf(tabA)).toHaveLength(1); // untouched
   });
 
-  // Isolates transferLines' OWN lock-loop guard from moveOrderLines' backstop. The absent-destination
-  // test above passes even with the lock loop deleted, because moveOrderLines' own status read throws
-  // tab.not_open for a missing working_orders row too. A PARKED walk-up is the discriminating case: it
-  // IS an open working order (moveOrderLines would happily move lines INTO it), but NO dining_tables row
-  // points at it, so it is not a TAB — only assertAnchoredTabOpen's back-pointer check rejects it.
-  // Delete that check loop and THIS test fails (the café line lands in the parked order); keep it and
-  // the transfer is refused tab.not_open. Design §3: a transfer moves items between two TABS, never into a walk-up.
+  // A PARKED walk-up IS an open working order, but no dining_tables row points at it, so only
+  // assertAnchoredTabOpen's back-pointer check refuses it: a transfer moves items between two TABS.
   it("refuses transferring INTO an open order no table points at — a parked walk-up (tab.not_open)", async () => {
     const { cfg, tableAId, zoneId, cafeOffer, aguaOffer } = await setupVenue();
     const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: cafeOffer, quantity: "2" }]);
@@ -382,8 +375,7 @@ describe("transferLines — partial split", () => {
       unitPriceGross: "24.90",
       lineTotal: "2.99",
     });
-    // Weight conserved: 0.200 + 0.120 = 0.320. (Money 4.98+2.99=7.97 == original — exact here; a
-    // sub-céntimo split difference would be harmless pre-fiscal, design §3.)
+    // Weight conserved: 0.200 + 0.120 = 0.320. (Money 4.98+2.99=7.97 == original — exact here.)
   });
 });
 
@@ -421,16 +413,8 @@ describe("transferLines — guards", () => {
     expect(await linesOf(tabB)).toHaveLength(1);
   });
 
-  // The presence check as the SOLE gate: every other tab.line_not_found test in this file pairs the
-  // unknown lineNo with a `quantity`, so the quantity guard ALSO fires if the presence check is
-  // deleted (`decimal(line.quantity)` on `undefined` throws, caught, reported as
-  // tab.transfer_quantity_invalid — a wrong shape, not silence). A WHOLE-line transfer (`quantity`
-  // omitted) takes a different path: it never reaches `decimal()` at all, so `t.lineNo` is pushed
-  // straight onto `wholeLineNos` with no check on `line`. Without the presence check, `moveOrderLines`
-  // then runs with `lineNos: [99]`, matches ZERO rows on `fromTab`, inserts nothing (guarded on
-  // `source.length > 0`) and deletes nothing — the whole call RESOLVES, moving nothing, silently.
-  // This is the ONLY case in the suite where deleting the presence check produces a silent no-op
-  // rather than a differently-shaped throw (see the deletion-proof in the task report).
+  // The presence check on its own: a WHOLE-line transfer (`quantity` omitted) never reaches the
+  // quantity guard, which the other tab.line_not_found cases here would also trip.
   it("throws tab.line_not_found for a WHOLE-line transfer (quantity omitted) naming an unknown line_no", async () => {
     const { cfg, tableAId, tableBId, cafeOffer, aguaOffer } = await setupVenue();
     const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: cafeOffer, quantity: "2" }]);
@@ -459,11 +443,7 @@ describe("transferLines — guards", () => {
     expect(await linesOf(tabB)).toHaveLength(1);
   });
 
-  // Over-quantity at DECIMAL scale, not just whole numbers: pins `compareDecimal`'s value-wise
-  // comparison against the recurring string-vs-decimal defect class this codebase guards against
-  // elsewhere (a naive string/lexical compare of "0.600" vs "0.500" would still happen to order
-  // correctly here, but this fixture exists so a future rewrite that compares scale-mismatched
-  // strings, e.g. "0.60" vs "0.500", is caught).
+  // Over-quantity at DECIMAL scale, not just whole numbers: the comparison must be value-wise.
   it("throws tab.transfer_quantity_invalid for a decimal-scale over-quantity on a WEIGHED line", async () => {
     const { cfg, tableAId, tableBId, aguaOffer, jamonOffer, jamonId } = await setupVenue();
     const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: jamonOffer, quantity: "0.500" }]);
@@ -478,12 +458,8 @@ describe("transferLines — guards", () => {
     expect(await linesOf(tabB)).toHaveLength(1);
   });
 
-  // Validate-before-mutate: the guard loop only classifies transfers into wholeLineNos/partials — it
-  // performs no write — so a bad entry ANYWHERE in the batch throws before the whole-line move or the
-  // split loop (both AFTER the guard loop) ever runs. Puts the valid entry FIRST, so this also proves
-  // that queuing it (pushing onto `partials`) is not itself a write: were the loop instead validating
-  // and writing entry-by-entry, this transfer's split would already have landed by the time the second
-  // entry's tab.line_not_found fires.
+  // Validate-before-mutate. The valid entry comes FIRST, so a loop that validated and wrote entry by
+  // entry would already have split it when the second entry is refused.
   it("validates every transfer before moving/splitting any of them — a bad entry leaves BOTH tabs unchanged", async () => {
     const { cfg, tableAId, tableBId, cafeOffer, aguaOffer } = await setupVenue();
     const tabA = await openTabWith(cfg, tableAId, [
@@ -527,14 +503,8 @@ describe("transferLines — guards", () => {
 });
 
 describe("transferLines — duplicate line_no in the batch", () => {
-  // A batch naming the SAME source line_no twice does NOT conserve quantity, because every entry is
-  // validated against the STATIC pre-batch snapshot of `line.quantity` (never updated between entries)
-  // and the split write sets the source to `original − q` (a plain set, NOT a cumulative decrement).
-  // Two partial "1"s off a café×3 line both pass (each ≤ the stale 3), the source ends at 3−1=2, and
-  // TWO 1-unit destination lines are inserted → 4 cafés from an original 3. Rejected UP FRONT, before
-  // any lock or write, so both tabs are untouched. Reported with the first line_no that repeats. The
-  // deletion-proof (remove the guard, rerun, watch this RED with dest gaining 1.000+1.000) is in the
-  // fix report.
+  // A batch naming the SAME source line_no twice cannot conserve quantity — see
+  // `assertDistinctTransferLines` — so it is refused before any write, naming the first repeat.
   it("rejects a partial+partial batch repeating a line_no (tab.transfer_duplicate_line), conserving quantity", async () => {
     const { cfg, cafeId, aguaId, tableAId, tableBId, cafeOffer, aguaOffer } = await setupVenue();
     const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: cafeOffer, quantity: "3" }]);
@@ -560,12 +530,7 @@ describe("transferLines — duplicate line_no in the batch", () => {
     ]);
   });
 
-  // The whole-line + partial pair on one line is CONTRADICTORY ("move the whole line" AND "move part
-  // of it"), which a cumulative-decrement fold cannot express — moveOrderLines DELETEs source line 1
-  // (moving it whole), then the split's `UPDATE ... WHERE line_no=1` matches ZERO rows while its
-  // INSERT still fires → a fabricated destination line. The up-front duplicate guard refuses the batch
-  // before EITHER path runs, which is why the guard rejects a repeated line_no uniformly rather than
-  // trying to reconcile the two shapes.
+  // A whole-line + partial pair on one line is contradictory, and refused by the same guard.
   it("rejects a whole-line+partial batch repeating a line_no (tab.transfer_duplicate_line), conserving quantity", async () => {
     const { cfg, cafeId, aguaId, tableAId, tableBId, cafeOffer, aguaOffer } = await setupVenue();
     const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: cafeOffer, quantity: "3" }]);

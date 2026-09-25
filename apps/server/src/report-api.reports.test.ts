@@ -27,14 +27,9 @@ import { mountReportApi } from "./report-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
-// This suite proves the `/reports/daily-close` and `/reports/period`
-// ROUTES — their request/response boundary, the `businessDay`/`from`/`to` screens
-// (missing/malformed → 400), the `report.view` gate + STATUS map, and the value mapping from
-// `computeDailyClose` / `computeVatSummaryForPeriod` / `computeTopSellers` onto the JSON — end to
-// end in-process, the way `report-api.overview.test.ts` proves the overview route. Unlike the
-// overview (which anchors on TODAY), these routes take an explicit day/range, so the fixtures seed
-// sales on FIXED historical business days and query them by date — no dependence on the wall clock.
-// The `report.view` gate run is asserted by `report-api.test.ts`'s own staff-session case.
+// The `/reports/daily-close` and `/reports/period` routes end to end: the date screens, the
+// `report.view` gate and the mapping onto the JSON. They take an explicit day or range, so the
+// fixtures seed FIXED historical business days and nothing depends on the wall clock.
 const noopLog: Logger = () => {};
 
 let tillId: string;
@@ -103,16 +98,10 @@ interface DaySeed {
 /** Seed one sale + its tender + one sale_line on a FIXED business day (issued/settled at a literal
  * midday-UTC instant). */
 async function seedDay(db: Database, invoiceNumber: number, d: DaySeed): Promise<void> {
-  // The DaySeed figures are the AMOUNTS the route's response carries, and the assertions read them
-  // unchanged. `sales.total`, `tenders.amount`, `tenders.tip_amount`, `sale_lines.unit_price` and
-  // `sale_lines.line_total` all store a count of whole cents, so each is converted on the way into
-  // the row. `vat_breakdown` is jsonb and keeps its decimal literals; `sale_lines.quantity` and
-  // `sale_lines.vat_rate` are whole numbers too, at their own scales — a count of thousandths and a
-  // count of basis points — so each gets its own converter here.
-  // Through the table definitions: every id is a `$defaultFn` generator here, and `vat_breakdown`,
-  // `descriptions` and `invoice_locales` are encoded by their own write mappings — the `::jsonb`
-  // casts and the `array[...]` constructor they replace are both refused by this engine. Every
-  // scaled-integer value is still converted by the same function it was.
+  // The DaySeed figures are the amounts the response carries; each scaled column (cents,
+  // thousandths, basis points) is converted on the way into the row by its own converter. Through
+  // the table definitions: every id is a `$defaultFn` generator, and the JSON and array columns are
+  // encoded by their own write mappings.
   const [sale] = await db
     .insert(sales)
     .values({

@@ -66,11 +66,8 @@ interface Seeded {
  *  Bacon 0.50, reduced). */
 async function setupVenue(): Promise<Seeded> {
   await seedTenant(db);
-  // Through the table definitions rather than raw SQL, the same change `testing/seed-units.ts`
-  // took: `units.id` and `locations.id`/`tills.id` are `$defaultFn` generators a raw insert never
-  // reaches, the `::jsonb` casts are `unrecognized token: ":"` on this engine, and
-  // `invoice_locales` is a JSON array in a text column (`labelList`), so there is no array
-  // constructor to write. Same two units, same fields.
+  // Through the table definitions rather than raw SQL: `units.id` and `locations.id`/`tills.id` are
+  // `$defaultFn` generators a raw insert never reaches.
   await db.insert(units).values([
     {
       seedKey: "each",
@@ -189,7 +186,7 @@ async function tabIdOf(tableId: string): Promise<string | null> {
   return rows[0]!.tab_id;
 }
 
-/** The dining table's current status_id — owner read. Consumes TS-2's status_id column. */
+/** The dining table's current status_id — owner read. */
 async function statusIdOf(tableId: string): Promise<string | null> {
   const { rows } = await db.execute<{ status_id: string | null }>(
     sql`select status_id from dining_tables where id = ${tableId}`,
@@ -224,10 +221,7 @@ async function configureTableZone(
 ): Promise<{ zoneId: string; departmentId: string }> {
   const departmentId = randomUUID();
   const zoneId = randomUUID();
-  // `created_at` is a `$defaultFn` generator on both tables now, not a SQL DEFAULT, and a raw
-  // insert reaches neither — it failed with `NOT NULL constraint failed: departments.created_at`.
-  // One reading bound to both rows, which is what PostgreSQL's transaction-start `now()` default
-  // gave these two statements.
+  // `created_at` is a `$defaultFn` generator on both tables, which a raw insert never reaches.
   const createdAt = nowIso();
   await db.execute(sql`
     insert into departments
@@ -246,10 +240,9 @@ async function configureTableZone(
   return { zoneId, departmentId };
 }
 
-/** Seed one active table_service_statuses row (TS-2 schema) as the owner; returns its id. */
+/** Seed one active table_service_statuses row as the owner; returns its id. */
 async function seedStatus(label: string): Promise<string> {
-  // `id` and `created_at` are `$defaultFn` generators a raw insert never reaches — it failed with
-  // `NOT NULL constraint failed: table_service_statuses.id`.
+  // `id` and `created_at` are `$defaultFn` generators a raw insert never reaches.
   const statusId = randomUUID();
   await db.execute(sql`
     insert into table_service_statuses (id, label, color, created_at)
@@ -271,8 +264,7 @@ async function linesOf(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
-  // `unit_price_gross` stores a count of whole cents; the helper hands back the locked AMOUNT, so
-  // its callers' assertions read the same decimal literals they always did.
+  // `unit_price_gross` stores a count of whole cents; the helper hands back the locked AMOUNT.
   return rows.map((row) => ({ ...row, gross: centsToDecimal(row.gross) }));
 }
 
@@ -333,8 +325,7 @@ describe("moveTabLines", () => {
     const from = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
     const to = await openTabOn(cfg, t2, []);
     // `id` and `created_at` are `$defaultFn` generators a raw insert never reaches, so both are
-    // written here; the ids are minted in JavaScript rather than read back from `returning`, which
-    // also drops the find-by-name step the two-row insert needed to tell the zones apart.
+    // written here.
     const departmentId = randomUUID();
     const prepayZoneId = randomUUID();
     const tabZoneId = randomUUID();
@@ -389,16 +380,13 @@ describe("moveTabLines", () => {
       { productId: cafeId, quantity: "1" },
       { productId: aguaId, quantity: "1" },
     ]);
-    // The exported primitive TS-4 (transfer) calls directly; mergeTabs guards this at its own top, but
-    // moveTabLines must self-guard. Without it, the "move all" shape (no lineNos) appends both lines as
-    // duplicates then deletes BOTH copies (the trailing delete matches workingOrderId = fromTabId, now
-    // also toTabId), wiping the tab.
+    // mergeTabs guards this at its own top, but moveTabLines is exported and must self-guard: a
+    // "move all" onto itself would wipe the tab.
     await expect(asApp(cfg, (tx) => moveTabLines(tx, cfg, tab, tab))).rejects.toMatchObject({
       code: "tab.merge_self",
       params: { tabId: tab },
     });
-    // The guard fires BEFORE any read/write, so the tab still holds both original lines — the data-loss
-    // footgun did not fire. Proven by deletion (guard removed → this drops to 0; see the finish-fix report).
+    // The guard fires BEFORE any read/write, so the tab still holds both original lines.
     expect(await linesOf(tab)).toHaveLength(2);
   });
 });
@@ -430,14 +418,14 @@ describe("moveTab", () => {
     const src = await seedTable(cfg, "Src");
     const dst = await seedTable(cfg, "Dst");
     const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
-    // A manual "bill requested" status on the source (TS-2 schema) must NOT linger onto the next party.
+    // A manual "bill requested" status on the source must NOT linger onto the next party.
     const status = await seedStatus("Bill requested");
     await db.execute(sql`update dining_tables set status_id = ${status} where id = ${src}`);
 
     await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
 
     expect(await tabIdOf(src)).toBeNull();
-    expect(await statusIdOf(src)).toBeNull(); // freed → status cleared (design §4)
+    expect(await statusIdOf(src)).toBeNull(); // freed → status cleared
     expect(await tabIdOf(dst)).toBe(tabId);
     // No line-move, no fiscal effect: the tab still carries its one line and stays open.
     expect(await linesOf(tabId)).toHaveLength(1);
@@ -448,7 +436,7 @@ describe("moveTab", () => {
     const src = await seedTable(cfg, "T-src");
     const dst = await seedTable(cfg, "T-dst");
     const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
-    // A stale manual status left on the free DESTINATION (TS-2 schema) — from its previous party —
+    // A stale manual status left on the free DESTINATION — from its previous party —
     // must NOT linger onto the moved-in party; the move turns the target over, exactly as openTab does.
     const status = await seedStatus("Needs cleaning");
     await db.execute(sql`update dining_tables set status_id = ${status} where id = ${dst}`);
@@ -456,7 +444,7 @@ describe("moveTab", () => {
     await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
 
     expect(await tabIdOf(dst)).toBe(tabId);
-    expect(await statusIdOf(dst)).toBeNull(); // target turned over → status cleared (design §4)
+    expect(await statusIdOf(dst)).toBeNull(); // target turned over → status cleared
   });
 
   it("refuses a target that already has an OPEN tab (table.occupied)", async () => {
@@ -476,7 +464,7 @@ describe("moveTab", () => {
     const src = await seedTable(cfg, "St-src");
     const dst = await seedTable(cfg, "St-dst");
     const oldTab = await openTabOn(cfg, dst, [{ productId: cafeId, quantity: "1" }]);
-    // Settle dst's tab (owner write) — tab_id STILL points at it, but it is now stale/free (TS-1 §2b).
+    // Settle dst's tab (owner write) — tab_id STILL points at it, but it is now stale/free.
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${oldTab}`,
     );
@@ -560,7 +548,7 @@ describe("joinTable", () => {
     const t1 = await seedTable(cfg, "JS1");
     const t2 = await seedTable(cfg, "JS2");
     const oldTab = await openTabOn(cfg, t2, [{ productId: cafeId, quantity: "1" }]);
-    // Settle t2's tab (owner write) — tab_id STILL points at it, but it is now stale/free (TS-1 §2b).
+    // Settle t2's tab (owner write) — tab_id STILL points at it, but it is now stale/free.
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${oldTab}`,
     );
@@ -603,11 +591,11 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
     const tInto = await seedTable(cfg, "C-into");
     const tFrom = await seedTable(cfg, "C-from");
     // intoTab: café at 1.50. Then raise the catalogue price and open fromTab: café at 9.99. A re-price
-    // would make both 9.99; the move must keep each line's OWN locked gross (the load-bearing check).
+    // would make both 9.99; the move must keep each line's OWN locked gross.
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
     await asApp(cfg, (tx) => updateProduct(tx, cafeId, { unitPrice: "9.99" }));
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: cafeId, quantity: "1" }]);
-    // A manual status on the source (TS-2 schema) must clear when it is freed.
+    // A manual status on the source must clear when it is freed.
     const status = await seedStatus("Needs cleaning");
     await db.execute(sql`update dining_tables set status_id = ${status} where id = ${tFrom}`);
 
@@ -636,7 +624,7 @@ describe("mergeTabs consolidate (freeSourceTable: true)", () => {
     const tFrom = await seedTable(cfg, "MOD-from");
 
     // Offer the Bacon as an extra of the café so the source tab can carry a parent dish line + a
-    // child line (parent_line_id set) — the same shape tabs.test.ts builds. `minPicks: 0` keeps the
+    // child line (parent_line_id set). `minPicks: 0` keeps the
     // list optional, so the plain café ordered on intoTab below still passes.
     const extraListId = await asApp(cfg, async (tx) => {
       const list = await createExtraList(
@@ -742,7 +730,7 @@ describe("mergeTabs join (freeSourceTable: false)", () => {
     const tFrom = await seedTable(cfg, "JN-from");
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: aguaId, quantity: "1" }]);
-    // A status on the source table (TS-2 schema): a JOINED table keeps its status (design §4).
+    // A status on the source table: a JOINED table keeps its status.
     const status = await seedStatus("VIP");
     await db.execute(sql`update dining_tables set status_id = ${status} where id = ${tFrom}`);
 

@@ -54,25 +54,14 @@ const SEED = {
   descriptions: { "es-ES": "Café con leche" },
 } as const;
 
-/** Seed one sale + its tender + one sale_line ON TODAY's business day (issued/settled at `now()`, so
- * the venue-clock business day the route computes from `now()` always contains them — the insert and
- * the read share the DB clock). Superuser insert (fixture setup). */
+/** Seed one sale, its tender and one sale_line on TODAY's business day. */
 async function seedTodaySale(db: Database): Promise<void> {
-  // The SEED constants above are the AMOUNTS the route's response carries, and the assertions read
-  // them unchanged. `sales.total`, `tenders.amount`, `tenders.tip_amount`, `sale_lines.unit_price`
-  // and `sale_lines.line_total` all store a count of whole cents, so each is converted here, on the
-  // way into the row. `vat_breakdown` is jsonb, not a scaled-integer column, and keeps its decimal
-  // literals; `sale_lines.quantity` and `sale_lines.vat_rate` are whole numbers at their OWN
-  // scales — thousandths and basis points — so each is converted by its own function.
-  // ONE clock reading, bound to BOTH stamps. `now()` has no equivalent here, and the two statements
-  // were separate `execute` calls, so PostgreSQL gave each its own transaction-start time; a single
-  // `nowIso()` keeps the sale and its tender on the same business day, which is what the fixture
-  // needs. `issued_at`/`settled_at` are text columns and this is their canonical spelling.
+  // The SEED constants are the amounts the response carries; each scaled column (cents,
+  // thousandths, basis points) is converted on the way into the row by its own converter. ONE clock
+  // reading stamps both the sale and its tender, so they share a business day.
   const stamp = nowIso();
-  // Through the table definitions: every id is a `$defaultFn` generator here, `vat_breakdown`,
-  // `descriptions` and `invoice_locales` are encoded by their own write mappings (the `::jsonb`
-  // casts and the `array[...]` constructor they replace are both refused by this engine), and every
-  // scaled-integer value above is still converted by the same function it was.
+  // Through the table definitions: every id is a `$defaultFn` generator, and the JSON and array
+  // columns are encoded by their own write mappings.
   const [sale] = await db
     .insert(sales)
     .values({
@@ -110,15 +99,11 @@ async function seedTodaySale(db: Database): Promise<void> {
   });
 }
 
-/** Seed dining tables at the node's location: one ACTIVE + OPEN (tab_id → a working order), one ACTIVE
- * + FREE (tab_id null), and one INACTIVE (active = false) that ALSO carries an open tab → the route's
- * openTables must be {open:1, total:2} because `countOpenTables`'s `and dt.active = true` predicate
- * excludes the inactive table from BOTH the total and the open count. The open tables need real
- * working_orders rows because dining_tables.tab_id carries a FK (0046_tab_link_fks).
- *
- * Proven by deletion: removing `and dt.active = true` from `countOpenTables` makes the inactive table
- * count, so openTables becomes {open:2, total:3} and the route test's {open:1, total:2} assertion
- * fails on both fields; restore it and the test passes. */
+/**
+ * One ACTIVE + OPEN table, one ACTIVE + FREE, and one INACTIVE that also carries an open tab: the
+ * route's openTables must be {open:1, total:2}, because an inactive table counts in neither. The
+ * open tables need real working_orders rows because `dining_tables.tab_id` is a foreign key.
+ */
 async function seedDiningTables(db: Database): Promise<void> {
   const [wo] = await db
     .insert(workingOrders)
@@ -253,9 +238,7 @@ describe("mountReportApi — /reports/overview", () => {
     // One non-correcting, non-voided sale on today.
     expect(body.counts).toEqual({ sales: 1, corrections: 0, voids: 0 });
 
-    // Two ACTIVE tables at the node's location, one with an open tab. The third seeded table is
-    // inactive (active = false) with an open tab and is excluded from BOTH counts — dropping
-    // `countOpenTables`'s `and dt.active = true` predicate would make this {open:2, total:3}.
+    // Two ACTIVE tables, one with an open tab; the inactive third counts in neither.
     expect(body.openTables).toEqual({ open: 1, total: 2 });
 
     // The single seeded line, keyed on its frozen STAFF name — never the customer-facing text.
@@ -270,13 +253,8 @@ describe("mountReportApi — /reports/overview", () => {
   });
 
   it("overview is VENUE-WIDE (aggregates all nodes) while the per-till daily-close stays node-scoped", async () => {
-    // Mount report-api pointed at `secondNodeId` — a node with NO sales — rather than the seeded sale's
-    // node. The overview must STILL return the sale: it ignores `cfg.nodeId` for its money/counts/
-    // top-sellers and aggregates the WHOLE venue (membership promotion R3a Part C). The mismatched node
-    // here isolates that venue-wide behaviour by construction — it is a STRONGER control than the real
-    // mirror case, where `cfg.nodeId` is the origin (the primary's node) and so MATCHES the node the
-    // venue's sales carry; if the overview still resolves the sale under a node it is NOT pointed at,
-    // it resolves it on a mirror too.
+    // Pointed at `secondNodeId`, a node with NO sales: the overview must still return the sale,
+    // because it aggregates the whole venue rather than `cfg.nodeId`.
     const app = new Hono();
     mountReportApi(app, { db: suite.db, cfg: { nodeId: secondNodeId } }, noopLog);
 
@@ -294,10 +272,7 @@ describe("mountReportApi — /reports/overview", () => {
       grossTotal: SEED.grossTotal,
     });
 
-    // Contrast: the daily-close for that SAME `cfg.nodeId` (the "data node id", Part B) is NODE-scoped,
-    // so a node with no sales returns an empty close — proving the overview's inclusion above is
-    // venue-wide, not a coincidence of node scoping. Proven by deletion: make the overview pass
-    // `nodeId` again and this test's `counts.sales` drops to 0 (the sale is under the other node).
+    // Contrast: the daily close for the same `cfg.nodeId` is node-scoped, so it is empty.
     const dc = await app.request(
       `/management-api/reports/daily-close?businessDay=${ovBody.businessDay}`,
       { method: "GET", headers: { cookie: managerCookie } },

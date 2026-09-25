@@ -33,36 +33,8 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 
 /**
- * Joining and merging tabs, through to what gets FILED — on the engine the box now runs.
- *
- * Named `move-merge.filing.test.ts` because paying is what separates it from its sibling: every case
- * here drives `payWorkingOrder` through a real `VerifactuBackend`, and
- * `grep -n 'payWorkingOrder\|VerifactuBackend' apps/server/src/move-merge.test.ts` prints nothing
- * (exit 1, run 2026-09-22), so the sibling can only see what the join/merge verbs write to
- * `working_orders`, never the record a settle files.
- *
- * ## The four cases this file LOST, and what covers them now
- *
- * It held seven cases; four of them staged two PostgreSQL backends through `suite.pg.connect()` and
- * asserted `pg_backend_pid()` was distinct. **There is no second writer to stage them on**: one
- * venue file, one write transaction at a time, which is wider than any row lock those cases were
- * written against — every `select … for update` in `working-order.ts` is gone, `mergeTabs`'s
- * four-lock class order with it (`assertAnchoredTabOpen` in `apps/server/src/working-order.ts`
- * carries the chain and the receipt). Deleted:
- *
- * 1. **Two movers racing onto one free table**, the loser getting `table.occupied`. The REFUSAL is
- *    covered sequentially by `move-merge.test.ts`, "refuses a target that already has an OPEN tab
- *    (table.occupied)" (it appears once for `moveTab` and once for `joinTable`); the RACE is not.
- * 2. **`mergeTabs(into=X)` racing `payWorkingOrder(X)` with no `40P01` and pay never the victim.**
- * 3. **Two reverse-orientation merges over the same two tabs**, the loser getting `tab.not_open` —
- *    the refusal survives in `move-merge.test.ts`, "refuses when either tab is not open
- *    (tab.not_open)".
- * 4. **The inverted-lock-order control that deliberately DID deadlock**, which existed only to show
- *    2's hazard was real.
- *
- * **LOST and replaced by nothing: the lock-ORDER guarantee between `mergeTabs` and
- * `payWorkingOrder`** — that a merge and a settle on the same tab cannot cross-lock. Nothing covers
- * it and nothing here can, because the pair of holders it ordered no longer exists.
+ * Joining and merging tabs, through to what gets FILED: every case here pays through a real
+ * `VerifactuBackend`, which the sibling `move-merge.test.ts` never does.
  */
 const LOCALE = "es-ES";
 
@@ -94,10 +66,6 @@ function systemClock(): TrustedClock {
   };
 }
 
-// This counter was here because tenants accumulated for the life of the shared PostgreSQL
-// container. They do not now: the suite gets its own database file and the per-test reset empties
-// `tenants` (`packages/db/src/testing/venue-db.ts`). It is kept because a distinct NIF per call
-// costs nothing and no assertion here reads its value.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -113,7 +81,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    // No integrated card terminal for these move/merge suites.
     tipsEnabled: false,
     orderFlow: "prepay",
   };
@@ -130,8 +97,7 @@ interface SeededVenue {
 
 /**
  * Stand up a fresh chained venue + registered SIF (as the owner), then seed a catalogue and read
- * back two `each`/general(21%) products. Each test gets its OWN tenant so its state is
- * order-independent (CLAUDE.md §4).
+ * back two `each`/general(21%) products.
  */
 async function setupVenue(): Promise<SeededVenue> {
   const venue = await applyVenue(
@@ -242,13 +208,7 @@ async function saleCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-/**
- * The working order's own state.
- *
- * It used to project `settled_at is not null` beside the status, for the deleted merge-vs-pay race.
- * No case left here reads it, and a raw read of that projection returns 1/0 rather than a boolean
- * on this engine, so it would be an unasserted value in the wrong shape.
- */
+/** The working order's own state. */
 async function orderState(id: string): Promise<{ status: string }> {
   const { rows } = await suite.db.execute<{ status: string }>(
     sql`select status from working_orders where id = ${id}`,
@@ -272,8 +232,6 @@ async function registroCount(workingOrderId: string): Promise<number> {
  * order files at the LOCKED price, not a re-price at pay.
  */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
-  // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
-  // returns the AMOUNT, so its callers' assertions read the same decimal literals they always did.
   const { rows } = await suite.db.execute<{ total: string }>(sql`
     select cast(total as text) as total from sales where working_order_id = ${workingOrderId}
   `);
@@ -329,7 +287,7 @@ describe("mergeTabs → one registro (H2)", () => {
       await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true });
     });
 
-    // fromTab is abandoned and files nothing — never reaches settled, so no double-file (CLAUDE.md §5).
+    // fromTab is abandoned and files nothing — never reaches settled, so no double-file.
     expect(await orderState(fromTab)).toMatchObject({ status: "abandoned" });
     expect(await saleCount(fromTab)).toBe(0);
 
@@ -343,10 +301,7 @@ describe("mergeTabs → one registro (H2)", () => {
     expect(await registroCount(intoTab)).toBe(1);
     expect(await registroCount(fromTab)).toBe(0);
     // The FILED sale reflects BOTH lines — café 1.50 (intoTab) + agua 2.00 (moved from fromTab) = 3.50.
-    // This is the load-bearing check: without it, a merge that silently moved NOTHING would still pass
-    // every count above (intoTab files its lone café for 1.50; fromTab stays abandoned/unfiled 0/0), so
-    // the moved line's fiscal contribution to the AEAT-filed total would go unproven — an under-report
-    // that is unrepairable once chained (CLAUDE.md §5). A line-drop leaves this at 1.50.
+    // Every count above would still pass on a merge that moved NOTHING; a dropped line files 1.50.
     expect(await filedSaleTotal(intoTab)).toBe("3.50");
   });
 });

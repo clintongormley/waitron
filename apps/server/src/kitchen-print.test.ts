@@ -46,13 +46,10 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// Print-on-fire is a set of INSERT/SELECTs inside the caller's fire tx, and the invariants HERE are
-// logical: the order-scope dedupe, round independence (ruling R-D), and never-block (no socket).
-// station_printers' PK and FKs are proven in packages/db's station-printers.test.ts,
-// enqueuePrintJob's outbox shape in packages/printing's outbox.test.ts. `node:sqlite` reaches the
-// venue file in-process, so the database access opens no socket of its own — which is what keeps
-// "Socket.prototype.connect was never called" a clean structural proof rather than one muddied by
-// driver traffic, exactly as outbox.test.ts relies on.
+// Pins print-on-fire's order-scope dedupe, round independence and never-block (no socket opened).
+// `station_printers`' keys are pinned in packages/db's station-printers.test.ts and the outbox shape in
+// packages/printing's outbox.test.ts. `node:sqlite` opens no socket of its own, so a spy on
+// `Socket.prototype.connect` sees only what the fire does.
 const LOCALE = "es-ES";
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -71,19 +68,12 @@ interface Venue {
   catalogueId: string;
 }
 
-/** Stand up a fresh tenant + location + till + node and an assigned catalogue, returning the till's
- *  config (the brief's `testCfg`, built minimally per ruling R-C — no shared helper exists). Each test
- *  gets its OWN tenant, so its print jobs and order numbers are its own and the suite is
- *  order-independent (CLAUDE.md §4). Mirrors working-order.test.ts / station-printers.test.ts setup. */
+/** A fresh location, till, node and assigned catalogue, returning the till's config. */
 async function setupVenue(): Promise<Venue> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
-  // Inserted through the table definitions, not as raw SQL: `locations.id`, `tills.id` and
-  // `tills.created_at` are JavaScript generators on this engine (`$defaultFn`), which a raw insert
-  // never reaches — `id text PRIMARY KEY NOT NULL` and `created_at text NOT NULL` in
-  // `packages/db/drizzle/0000_baseline.sql:1` and `:39`. The locale list goes over as an array
-  // because the column's own write mapping encodes it; the `array[...]` constructor it replaces is
-  // a syntax error here (`near "[?]": syntax error`).
+  // Inserted through the table definitions, not as raw SQL: the ids and `created_at` come from
+  // `$defaultFn` generators, which a raw insert never reaches.
   const [loc] = await db
     .insert(locations)
     .values({
@@ -116,13 +106,11 @@ async function setupVenue(): Promise<Venue> {
   return { cfg, catalogueId };
 }
 
-/** The tenant + location scope the printing verbs run under. */
+/** The location scope the printing verbs run under. */
 function printCfg(cfg: TillConfig): PrintConfig {
   return { locationId: cfg.locationId };
 }
 
-/** Run `fn` on a transaction scoped to the venue's tenant, the shape every route uses. `nodeId`
- *  mirrors the fire path so `ticket_items.node_id` is set as production would. */
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
@@ -130,12 +118,8 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
   });
 }
 
-/** Read the print-job outbox. `payload` is typed by the shared `binary` column, which declares a
- * Uint8Array. The column is a BLOB and `node:sqlite` hands a BLOB back as a plain Uint8Array
- * already, so nothing here can tell the column's read mapping from the driver's — the same blind
- * spot PGlite's bytea parser gave the PostgreSQL version of this file. What survives is that the
- * BYTES round-trip. The mapping itself is pinned in
- * `packages/db/src/schema/columns.test.ts:173`, which is where that file's line 624 points too. */
+/** Read the print-job outbox. This cannot tell `binary`'s read mapping from the driver's; the mapping
+ *  is pinned in packages/db/src/schema/columns.test.ts ("binary binds a Uint8Array…"). */
 async function printJobsFor(
   tx: Transaction,
 ): Promise<{ id: string; printerId: string; status: string; payload: Uint8Array }[]> {
@@ -149,11 +133,10 @@ async function printJobsFor(
     .from(printJobs);
 }
 
-/** A basket line for a product at quantity 1 — the shape createOpenOrder/fireLines/addTabRound consume. */
+/** A basket line for a product at quantity 1. */
 const line = (productId: string) => ({ productId, quantity: "1" });
 
-/** Create a sellable product (description in the venue's single locale so `check_locales` passes),
- *  optionally routed to a station and/or a course, and return its id. */
+/** Create a sellable product, optionally routed to a station and/or a course. */
 async function makeProduct(
   tx: Transaction,
   cfg: TillConfig,
@@ -174,9 +157,7 @@ async function makeProduct(
   return id;
 }
 
-/** Create a live printer via the real printing verb — `cloud_poll` needs only a poll id (no agent to
- *  seed). `scope: "order"` makes it a GROUP printer (the consolidated-ticket target) via updatePrinter,
- *  since createPrinter always mints `ticket_scope = 'station'`. */
+/** Create a live printer. `scope: "order"` makes it a group printer (the consolidated-ticket target). */
 async function makePrinter(
   tx: Transaction,
   cfg: TillConfig,
@@ -197,7 +178,6 @@ type ProductLine = {
   quantity: string;
   extras?: ExtraSelection[];
   options?: OptionSelection[];
-  // Order-line customisation (spec §2/§3): a parent line MAY carry a note, snapshotted at fire.
   note?: string;
 };
 
@@ -216,10 +196,8 @@ async function createOfferedOrder(
   });
 }
 
-/** Open a fresh working order carrying `lines` and FIRE it — the isolated createOpenOrder → fireLines
- *  sequence placeOrder/sendToPrep run (the brief's order-firing helper). Passes ALL persisted lines
- *  (parent dishes AND child modifier lines) to `fireLines`, exactly as placeOrder/sendToPrep do — so
- *  the parent-only filter under test lives in `fireLines`, not at this caller. Returns the order id. */
+/** Open a working order carrying `lines` and fire it, returning the order id. Passes every persisted
+ *  line, children included, to `fireLines`, so the parent-only filter under test is `fireLines`' own. */
 async function fireNewOrder(
   tx: Transaction,
   cfg: TillConfig,
@@ -293,12 +271,9 @@ async function fireContextlessDish(
   return id;
 }
 
-/** Offer one OPTIONAL extras list (`minPicks` 0, uncapped) on `dishId`, one item per entry, and
- *  return the list id with the offered products' ids in the order offered — the shape a round line's
- *  `extras: [{ listId, picks }]` picks from. Each item is a product of its own, created here, so a
- *  pick becomes a CHILD line carrying that product. `maxQuantity` is the per-dish cap a pick's own
- *  quantity is checked against. None of these products is routed to a station: a child line never
- *  resolves one, which is the point of the parent-only rule. */
+/** Offer one optional, uncapped extras list on `dishId`, returning the list id and the offered
+ *  products' ids in order. None of these products is routed to a station: a child line never resolves
+ *  one. */
 async function addExtras(
   tx: Transaction,
   cfg: TillConfig,
@@ -345,8 +320,7 @@ async function addExtras(
   return { listId: list.id, productIds };
 }
 
-/** Spy the single chokepoint every outbound TCP open funnels through (outbox.test.ts's proof): if the
- *  fire opened a socket, `Socket.prototype.connect` would have been called. */
+/** Every outbound TCP open goes through `Socket.prototype.connect`. */
 function spyOnNoSocketOpened() {
   return vi.spyOn(
     net.Socket.prototype as unknown as { connect: (...args: unknown[]) => unknown },
@@ -401,25 +375,22 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       const pDead = await makePrinter(tx, cfg, "Barra printer", "station");
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId: pActive });
       await attachPrinterToStation(tx, { stationId: barra.id, printerId: pDead });
-      // Deactivate AFTER attaching (attach requires the printer live). The mapping now points at an
-      // inactive printer, which enqueueKitchenTickets filters out — so Barra fires but enqueues nothing,
-      // and enqueuePrintJob (which would throw printer.not_found on an inactive id, aborting the fire tx)
-      // is never handed it.
+      // Deactivated after attaching (attach requires a live printer): `enqueuePrintJob` would throw
+      // `printer.not_found` for it, so it must never be handed this id.
       await deactivatePrinter(tx, printCfg(cfg), pDead);
       const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
       const beer = await makeProduct(tx, cfg, catalogueId, "Cerveza", { stationId: barra.id });
 
-      // The fire SUCCEEDS despite the dead-printer mapping (no throw escapes this block).
       await fireNewOrder(tx, cfg, [line(steak), line(beer)]);
       return { pActive, pDead, jobs: await printJobsFor(tx) };
     });
 
-    expect(connectSpy).not.toHaveBeenCalled(); // never-block: no delivery/transport call on the fire
+    expect(connectSpy).not.toHaveBeenCalled();
 
     const activeJobs = jobs.filter((j) => j.printerId === pActive);
     expect(activeJobs).toHaveLength(1);
-    expect(activeJobs[0]!.status).toBe("queued"); // outbox INSERT only — the agent delivers later
-    expect(jobs.filter((j) => j.printerId === pDead)).toHaveLength(0); // inactive → no job
+    expect(activeJobs[0]!.status).toBe("queued");
+    expect(jobs.filter((j) => j.printerId === pDead)).toHaveLength(0);
   });
 
   it("a second fire (fireCourse) prints only round-2 items and never reprints round 1 (R-D)", async () => {
@@ -445,7 +416,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       // Round 2: fireCourse releases the held course.
       await fireCourse(tx, cfg, orderId, pri.id);
       const afterRound2 = await printJobsFor(tx);
-      // Re-firing the already-fired course matches zero rows → enqueues nothing (empty-set short-circuit).
+      // Re-firing the already-fired course matches zero rows.
       await fireCourse(tx, cfg, orderId, pri.id);
       const afterRefire = await printJobsFor(tx);
       return { printerId, afterRound1, afterRound2, afterRefire };
@@ -460,8 +431,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     expect(round1Ticket).toContain("Sopa");
     expect(round1Ticket).not.toContain("Chuleton");
 
-    // Round 2: a SECOND ticket appears; the NEW job carries the steak only — round 1's soup is never
-    // reprinted (the capture-not-requery proof).
+    // Round 2: the new job carries the steak only; round 1's soup is not reprinted.
     expect(jobsFor(afterRound2)).toHaveLength(2);
     const round1Ids = new Set(afterRound1.map((j) => j.id));
     const round2New = afterRound2.filter((j) => !round1Ids.has(j.id));
@@ -469,7 +439,6 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     expect(decodeTicket(round2New[0]!.payload)).toContain("Chuleton");
     expect(decodeTicket(round2New[0]!.payload)).not.toContain("Sopa");
 
-    // The re-fire enqueued nothing.
     expect(jobsFor(afterRefire)).toHaveLength(2);
   });
 
@@ -486,15 +455,12 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
         stationId: cocina.id,
       });
       // A tab bound to a dining table → the order carries the table label the ticket header prints.
-      // Through the table definition: `dining_tables.id` is a `$defaultFn` generator on this engine
-      // and a raw insert reaches none of them (`NOT NULL constraint failed: dining_tables.id`).
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       const [table] = await tx
         .insert(diningTables)
         .values({ locationId: cfg.locationId, label: "Mesa 5", zoneId: offers.zoneId })
         .returning({ id: diningTables.id });
       const { tabId } = await openTab(tx, cfg, { tableId: table!.id });
-      // Fire the round with the FOREIGN-locale config so name resolution takes the fallback path.
       await addTabRound(tx, foreignCfg, tabId, offers.toOfferLines([line(drink)]));
       return { printerId, jobs: await printJobsFor(tx) };
     });
@@ -516,8 +482,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       return { printerId, steak };
     });
 
-    // Fire inside a transaction that then throws — the fire's ticket items AND their enqueued jobs must
-    // roll back together, because the enqueue lives in the SAME tx.
+    // The fire's ticket items and its enqueued jobs roll back together.
     await expect(
       asApp(cfg, async (tx) => {
         await fireNewOrder(tx, cfg, [line(setup.steak)]);
@@ -525,16 +490,12 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       }),
     ).rejects.toThrow("boom");
 
-    // A fresh transaction sees no print jobs.
     const jobs = await asApp(cfg, (tx) => printJobsFor(tx));
     expect(jobs).toHaveLength(0);
   });
 
   it("resolves the table label via the counter-delivery delivery_table_id direction", async () => {
-    // The table-label subquery covers BOTH `dt.tab_id = order.id` (a seated tab, tested above) and
-    // `order.delivery_table_id = dt.id` (a counter delivery — a walk-up order routed to a table). This
-    // pins the second direction. enqueueKitchenTickets is called directly on an order whose
-    // `delivery_table_id` points at the table (no tab_id back-pointer).
+    // The seated-tab direction of the table label is tested above; this pins the counter-delivery one.
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -543,7 +504,6 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       const drink = await makeProduct(tx, cfg, catalogueId, "Zumo", { stationId: cocina.id });
       const orderId = randomUUID();
       await createOfferedOrder(tx, cfg, orderId, [line(drink)]);
-      // A counter-delivery table the order delivers to — the order points AT it (no tab back-pointer).
       const [table] = await tx
         .insert(diningTables)
         .values({ locationId: cfg.locationId, label: "Barra 3" })
@@ -554,8 +514,6 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, orderId));
-      // Enqueue directly with the fired line routed to Cocina — the tableLabel must resolve to the
-      // delivery table via the `delivery_table_id = dt.id` arm of the subquery.
       await enqueueKitchenTickets(tx, cfg, orderId, [
         { workingOrderLineId: lineRow!.id, stationId: cocina.id },
       ]);
@@ -564,21 +522,15 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
 
     const stationJobs = jobs.filter((j) => j.printerId === printerId);
     expect(stationJobs).toHaveLength(1);
-    expect(decodeTicket(stationJobs[0]!.payload)).toContain("Barra 3"); // via delivery_table_id, not tab_id
+    expect(decodeTicket(stationJobs[0]!.payload)).toContain("Barra 3");
   });
 
   it("returns early after the single mapping read when the involved stations have NO attached printer", async () => {
-    // The no-kitchen-printer venue's common case: a station fires but nothing is mapped to it. The mapping
-    // read runs FIRST and comes back empty, so enqueueKitchenTickets RETURNS before the three
-    // line/station/order detail SELECTs — proven by counting the `tx.select` calls it issues (one mapping
-    // read, not four). It enqueues nothing. This distinguishes the reordered
-    // code (1 select) from the old order (4 selects); the zero-jobs assertion holds for both, so it is the
-    // select count that pins the early return (CLAUDE.md §4: a test must fail with the guard removed).
+    // Zero jobs would hold whether or not the detail reads ran, so the select count is what pins the
+    // early return.
     const { cfg, catalogueId } = await setupVenue();
     const { selectCalls, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      // A live order with a fired line routed to Cocina, but NO printer attached to the station — so the
-      // detail reads WOULD succeed (the rows exist) if they ran, isolating the count as the only signal.
       const dish = await makeProduct(tx, cfg, catalogueId, "Tortilla", { stationId: cocina.id });
       const orderId = randomUUID();
       await createOfferedOrder(tx, cfg, orderId, [line(dish)]);
@@ -586,7 +538,6 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
         .select({ id: workingOrderLines.id })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, orderId));
-      // Count only the SELECTs enqueueKitchenTickets itself issues.
       const selectSpy = vi.spyOn(tx, "select");
       await enqueueKitchenTickets(tx, cfg, orderId, [
         { workingOrderLineId: lineRow!.id, stationId: cocina.id },
@@ -596,8 +547,8 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
       return { selectCalls, jobs: await printJobsFor(tx) };
     });
 
-    expect(jobs).toHaveLength(0); // nothing mapped → nothing enqueued (a pure no-op)
-    expect(selectCalls).toBe(1); // ONLY the mapping read ran; the three detail SELECTs were skipped
+    expect(jobs).toHaveLength(0);
+    expect(selectCalls).toBe(1);
   });
 
   it("builds one kitchen ticket per distinct paper width and character set among the printers", async () => {
@@ -640,14 +591,10 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
     for (const printed of printedLines(new Uint8Array(payloadOf(ids.narrow)))) {
       expect(printed.length, printed).toBeLessThanOrEqual(30);
     }
-    // The 80mm ticket lays out to its own wider column count: a line exceeds 30 (impossible on the
-    // 58mm printer's 30 columns) yet none exceeds 42, and rejoining the wrap continuations recovers the
-    // whole dish name. The fired line reads "1.000 unitat x Chuletón…", whose 15-char qty+unit prefix
-    // wraps the name at both widths — so the plan's original `.endsWith` at 42 could never have held.
+    // The 80mm ticket lays out to 42 columns; the qty+unit prefix wraps the name at both widths, so
+    // the whole name is checked across the rejoined continuations.
     const wideLines = printedLines(new Uint8Array(payloadOf(ids.wide)));
     for (const printed of wideLines) expect(printed.length, printed).toBeLessThanOrEqual(42);
-    // Positively pins the WIDER direction, not just narrow != wide: a 30-column layout could not
-    // produce a line this long.
     expect(wideLines.some((printed) => printed.length > 30)).toBe(true);
     expect(wideLines.map((l) => l.trimStart()).join(" ")).toContain(
       "Chuletón de buey madurado a la brasa",
@@ -740,8 +687,7 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
-      // A dish with TWO extras picked — even with a DEFAULT station present (so a child would otherwise
-      // route to it), only the parent must become a ticket item.
+      // With a default station present, a child would otherwise route to it.
       const cortado = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: cocina.id });
       const { listId, productIds } = await addExtras(tx, cfg, catalogueId, cortado, [
         { name: "Nata" },
@@ -755,7 +701,6 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
           extras: [{ listId, picks: productIds.map((productId) => ({ productId, quantity: 1 })) }],
         },
       ]);
-      // The persisted lines: one parent (parent_line_id null) + one child per pick.
       const lines = await tx
         .select({
           id: workingOrderLines.id,
@@ -765,7 +710,7 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, orderId))
         .orderBy(workingOrderLines.lineNo);
-      expect(lines).toHaveLength(3); // parent + two child extra lines
+      expect(lines).toHaveLength(3);
       const parent = lines.find((l) => l.parentLineId === null)!;
       const ticketItemRows = await tx
         .select({ workingOrderLineId: ticketItems.workingOrderLineId })
@@ -774,7 +719,6 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
       return { orderId, parentLineId: parent.id, ticketItemRows };
     });
 
-    // Exactly ONE ticket item, and it is the PARENT's — the two children got none.
     expect(ticketItemRows).toEqual([{ workingOrderLineId: parentLineId }]);
     expect(orderId).toBeTruthy();
   });
@@ -806,13 +750,12 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     const stationJobs = jobs.filter((j) => j.printerId === printerId);
     expect(stationJobs).toHaveLength(1);
     const ticket = decodeTicket(stationJobs[0]!.payload);
-    expect(ticket).toContain("Cortado"); // the parent dish line
-    expect(ticket).toContain("+ Nata"); // each pick as indented sub-text beneath the parent
+    expect(ticket).toContain("Cortado");
+    expect(ticket).toContain("+ Nata");
     expect(ticket).toContain("+ Leche avena");
     // A cook reads the staff name, never the diner's wording.
     expect(ticket).not.toContain("Nata montada");
     expect(ticket).not.toContain("Bebida de avena");
-    // The picks appear BELOW the dish, and each sub-text row carries the "+ " marker.
     expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Nata"));
     expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Leche avena"));
   });
@@ -833,16 +776,13 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
 
     const ticket = decodeTicket(jobs.filter((j) => j.printerId === printerId)[0]!.payload);
     expect(ticket).toContain("Chuleton");
-    // The note prints as its own marked sub-line BENEATH the dish.
     expect(ticket).toContain("* sin sal");
     expect(ticket.indexOf("Chuleton")).toBeLessThan(ticket.indexOf("* sin sal"));
   });
 
   it("badges an extra's PER-DISH count when it exceeds one, leaving a single pick's line unchanged", async () => {
-    // Per-pick quantity: an extra taken ×N per dish is filed as a CHILD line whose stored `quantity` is
-    // the COMBINED count = dishQuantity × pickQuantity. The kitchen ticket shows the per-dish count
-    // (childQuantity ÷ parentDishQuantity) as an ASCII "xN" suffix on the child line ONLY when it
-    // exceeds 1 — so a single pick prints `  + <name>` exactly as before.
+    // A child line stores the combined quantity (dish × pick); the ticket shows the per-dish count as
+    // an ASCII "xN" suffix only when it exceeds 1.
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -855,8 +795,6 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
       ]);
       const [nata, avena] = productIds;
 
-      // Dish quantity 1; "Nata" picked ×2 → child quantity 2 (per-dish 2 → "x2"); "Leche avena" picked
-      // once → child quantity 1 (per-dish 1 → no suffix).
       await fireNewOrder(tx, cfg, [
         {
           productId: cortado,
@@ -879,27 +817,21 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
     expect(stationJobs).toHaveLength(1);
     const ticket = decodeTicket(stationJobs[0]!.payload);
     expect(ticket).toContain("Cortado");
-    expect(ticket).toContain("+ Nata x2"); // per-dish count badged with an ASCII "x"
-    expect(ticket).toContain("+ Leche avena"); // single pick — unchanged, no suffix
-    expect(ticket).not.toContain("Leche avena x"); // the single pick carries NO count
-    // Proven by contrast: without the badge the Nata line would read `+ Nata`, like the control.
+    expect(ticket).toContain("+ Nata x2");
+    expect(ticket).toContain("+ Leche avena");
+    expect(ticket).not.toContain("Leche avena x");
     expect(ticket).not.toMatch(/\+ Nata(?! x)/u);
   });
 
   it("never station-resolves a child line: a dish-with-extras fires with NO default station", async () => {
-    // The child line carries the picked extra's product, which routes nowhere of its own. With no venue
-    // default station, an independently-resolved child would fail LOUD with `station.no_default`. The
-    // parent-only filter means the child is never resolved — the fire succeeds and the parent uses its
-    // OWN station.
+    // The child's product routes nowhere and there is no default station, so a child resolved on its
+    // own would fail with `station.no_default`.
     const { cfg, catalogueId } = await setupVenue();
     const { stationId, ticketItemRows } = await asApp(cfg, async (tx) => {
-      // A NON-default station: the product routes to it explicitly; there is NO is_default station, so a
-      // line that resolves neither a product nor category route has nowhere to go (station.no_default).
       const barra = await createStation(tx, cfg, { name: "Barra", isDefault: false });
       const cafe = await makeProduct(tx, cfg, catalogueId, "Cafe", { stationId: barra.id });
       const { productIds } = await addExtras(tx, cfg, catalogueId, cafe, [{ name: "Nata" }]);
 
-      // This must NOT throw station.no_default — the child is filtered before station resolution.
       const orderId = await fireContextlessDish(tx, cfg, cafe, [productIds[0]!]);
       const ticketItemRows = await tx
         .select({
@@ -911,7 +843,6 @@ describe("ordering modifiers on the kitchen ticket (parent-only ticket_items, ch
       return { stationId: barra.id, ticketItemRows };
     });
 
-    // One ticket item — the parent — routed to the PARENT's own station, not a (missing) default.
     expect(ticketItemRows).toHaveLength(1);
     expect(ticketItemRows[0]!.stationId).toBe(stationId);
   });
@@ -940,38 +871,31 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
         courseId: pri.id,
       });
 
-      // Fire round 1 (auto-fires Entrantes/soup, holds Principales/steak), then round 2 releases the
-      // held course — so BOTH items are now fired, from two separate rounds.
+      // Two rounds: round 1 fires the soup and holds the steak, round 2 releases the steak.
       const orderId = await fireNewOrder(tx, cfg, [line(soup), line(steak)]);
       await fireCourse(tx, cfg, orderId, pri.id);
       const beforeReprint = await printJobsFor(tx);
 
-      // Reprint re-queries ALL currently-fired items (both rounds) and re-enqueues the whole ticket —
-      // unlike print-on-fire, which prints only the newly-fired set. This is the load-bearing difference.
       await reprintOrderTickets(tx, cfg, orderId);
       const afterReprint = await printJobsFor(tx);
       return { pStation, pGroup, beforeReprint, afterReprint };
     });
 
-    // The reprint added NEW jobs on top of the two rounds' print-on-fire jobs.
     const beforeIds = new Set(beforeReprint.map((j) => j.id));
     const newJobs = afterReprint.filter((j) => !beforeIds.has(j.id));
 
-    // One station ticket + one consolidated group ticket = two new jobs (the one involved station, Cocina,
-    // its station printer once and its group printer once), no more.
+    // One station ticket and one consolidated group ticket.
     const newStation = newJobs.filter((j) => j.printerId === pStation);
     const newGroup = newJobs.filter((j) => j.printerId === pGroup);
     expect(newStation).toHaveLength(1);
     expect(newGroup).toHaveLength(1);
     expect(newJobs).toHaveLength(2);
 
-    // The reprinted STATION ticket carries BOTH rounds' items — the whole current ticket, not just the
-    // last-fired course (round 2's print-on-fire ticket carried only Chuleton).
+    // Both rounds' items, where round 2's print-on-fire ticket carried only Chuleton.
     const stationTicket = decodeTicket(newStation[0]!.payload);
     expect(stationTicket).toContain("Sopa");
     expect(stationTicket).toContain("Chuleton");
 
-    // The reprinted GROUP ticket is the consolidated whole-event ticket, both items under the Cocina header.
     const groupTicket = decodeTicket(newGroup[0]!.payload);
     expect(groupTicket).toContain("Sopa");
     expect(groupTicket).toContain("Chuleton");
@@ -986,8 +910,6 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
       await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
       await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
 
-      // An order id that has no fired ticket_items at all — a well-formed but unknown/never-fired order.
-      // The verb re-queries zero fired rows and enqueues nothing, never throwing a new error code.
       await reprintOrderTickets(tx, cfg, randomUUID());
       return printJobsFor(tx);
     });
@@ -1052,9 +974,7 @@ it("prints a line's stored options answers, each side taking its KITCHEN name", 
 
 /**
  * Fire one line whose frozen kitchen/variant names are `frozen`, and return the printed ticket. The
- * product's staff name ("Coffee") and its customer-facing text ("Café recién hecho") are deliberately
- * DIFFERENT, so a ticket that fell back to the customer text reads differently from one that fell
- * back to the staff name — the two are not tellable apart when a product carries only one name.
+ * staff name and the customer-facing text differ, so the ticket shows which one it fell back to.
  */
 async function ticketWithNames(frozen: {
   kitchenName: string | null;
@@ -1109,9 +1029,6 @@ it("falls back to the variant's staff name when it has no kitchen name", async (
   expect(paper).not.toContain("COF");
 });
 
-// The product's kitchen name falls back to its STAFF name, not to the customer-facing text the
-// receipt prints — a cook reads the name the till buttons carry. A variant line prints the variant's
-// name alone, so this is a line with no variant.
 it("falls back to the product's staff name when it has no kitchen name", async () => {
   const paper = await ticketWithNames({
     kitchenName: null,
