@@ -2775,8 +2775,9 @@ export async function advanceTicketItem(
   to: TicketState,
 ): Promise<void> {
   void cfg;
-  // Own keys only: an inherited name such as "__proto__" is not a transition.
-  if (!Object.hasOwn(TICKET_TRANSITIONS, to)) {
+  // Own string keys only: `hasOwn` converts its key, so ["preparing"] would otherwise match, and an
+  // inherited name such as "__proto__" is not a transition.
+  if (typeof to !== "string" || !Object.hasOwn(TICKET_TRANSITIONS, to)) {
     throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
   }
   const validTo = to as Exclude<TicketState, "queued">;

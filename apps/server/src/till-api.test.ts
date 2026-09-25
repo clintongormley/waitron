@@ -2384,15 +2384,26 @@ describe("KDS-1 station-display operate routes", () => {
       error: { code: "ticket.invalid_transition", params: { ticketItemId: itemId } },
     });
 
-    // Names every object inherits are not transitions either.
-    for (const to of ["__proto__", "toString", "constructor", "hasOwnProperty"]) {
-      const inherited = await app.request(`/api/ticket-items/${itemId}/advance`, {
+    // Names every object inherits are not transitions, and a non-string `to` is refused, not
+    // converted to a key.
+    const malformed: unknown[] = [
+      "__proto__",
+      "toString",
+      "constructor",
+      "hasOwnProperty",
+      ["preparing"],
+      [["preparing"]],
+      { toString: null },
+      { toString: "preparing" },
+    ];
+    for (const to of malformed) {
+      const refused = await app.request(`/api/ticket-items/${itemId}/advance`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
         body: JSON.stringify({ to }),
       });
-      expect({ to, status: inherited.status }).toEqual({ to, status: 409 });
-      expect(await inherited.json()).toMatchObject({
+      expect({ to, status: refused.status }).toEqual({ to, status: 409 });
+      expect(await refused.json()).toMatchObject({
         error: { code: "ticket.invalid_transition", params: { ticketItemId: itemId } },
       });
     }
@@ -2407,6 +2418,10 @@ describe("KDS-1 station-display operate routes", () => {
     expect(await missing.json()).toMatchObject({
       error: { code: "ticket.invalid_transition", params: { ticketItemId: itemId } },
     });
+
+    const after = await app.request(`/api/stations/${cocina.id}/queue`, { headers: { cookie } });
+    const afterGroups = (await after.json()) as { orderId: string; items: { state: string }[] }[];
+    expect(afterGroups.find((g) => g.orderId === id)!.items[0]!.state).toBe("queued");
   });
 
   it("GET /api/stations/:id/queue with a malformed id is 404 station.not_found, not a 500", async () => {
