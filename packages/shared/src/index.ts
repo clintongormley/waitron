@@ -50,7 +50,6 @@ export {
 export type { Decimal } from "./money.js";
 export {
   addDecimal,
-  assertMoney,
   compareDecimal,
   decimal,
   divideDecimal,

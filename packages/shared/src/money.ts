@@ -169,24 +169,6 @@ export function toScale(value: Decimal, scale: number): Decimal {
   return fromParts({ units: negative ? -rounded : rounded, scale });
 }
 
-/**
- * Refuses an amount wider than `MAX_MONEY_INTEGER_DIGITS` integer digits with
- * `shared.decimal_overflow`. The bound is this system's own; the column does not enforce one.
- * Checks the integer digits only, so an intermediate at full precision can still be bounded.
- */
-export function assertMoney(value: Decimal): Decimal {
-  const { units, scale } = partsOf(value);
-  const magnitude = units < 0n ? -units : units;
-  const integerUnits = magnitude / 10n ** BigInt(scale);
-  if (integerUnits >= 10n ** BigInt(MAX_MONEY_INTEGER_DIGITS)) {
-    throw new AppError("shared.decimal_overflow", {
-      value,
-      maxIntegerDigits: MAX_MONEY_INTEGER_DIGITS,
-    });
-  }
-  return value;
-}
-
 // There is deliberately no `toNumber`, and `conventions.test.ts` fails this file's text on the
 // float-shaped operations it lists. The crossings into the number type are counts, in `./cents.ts`
 // and `./scales.ts`.

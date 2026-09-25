@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   addDecimal,
   AppError,
-  assertMoney,
   assertSupportedLocale,
   BAND_RANK,
   classifyBand,
@@ -87,7 +86,6 @@ describe("package public surface (./index.js)", () => {
     expect(sumDecimals([a, b])).toBe("3.30");
     expect(grossOf("1.50", "2.000")).toBe("3.00");
     expect(toScale(a, 3)).toBe("1.100");
-    expect(assertMoney(a)).toBe("1.10");
     expect(MONEY_SCALE).toBe(2);
     expect(MAX_MONEY_INTEGER_DIGITS).toBe(12);
     expect(QUANTITY_SCALE).toBe(3);
