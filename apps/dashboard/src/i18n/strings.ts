@@ -1088,7 +1088,7 @@ export const en = {
   "product.course": "Default course",
   "product.no_course": "— none —",
   "product.station": "Kitchen station",
-  "product.no_station": "— service route; otherwise reporting category, then venue default —",
+  "product.no_station": "— service route; otherwise main category, then venue default —",
   "product.search": "Search products",
   "product.no_matches": "No products match your search.",
   "product.delete_named": "Delete {name}",
@@ -2499,8 +2499,7 @@ export const es: Record<StringKey, string> = {
   "product.course": "Curso predeterminado",
   "product.no_course": "— ninguno —",
   "product.station": "Estación de cocina",
-  "product.no_station":
-    "— ruta del servicio; si no, categoría de informes y luego valor del local —",
+  "product.no_station": "— ruta del servicio; si no, categoría principal y luego valor del local —",
   "product.search": "Buscar productos",
   "product.no_matches": "Ningún producto coincide con tu búsqueda.",
   "product.delete_named": "Eliminar {name}",

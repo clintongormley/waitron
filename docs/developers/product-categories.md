@@ -4,9 +4,10 @@ A sales report has to add every sale up exactly once. If a product could sit in 
 categories, a report by category would either count its sales twice or have to pick one of them by
 some rule nobody can see. So Waitron gives each product two separate ways to be classified:
 
-- **One main reporting category**, in a strict tree. This is what the sales reports add up by.
+- **One main reporting category**, in a strict tree. The category reports will add sales up by it;
+  no report reads it yet.
 - **Any number of labels**, which are flat tags such as "Alcoholic" or "Happy hour drinks". A label
-  total can cut across categories and overlap other labels, and the reports say so.
+  can cut across categories and overlap other labels.
 
 The two are independent. A label never implies a category, and a category never implies a label.
 The design is in
@@ -23,8 +24,8 @@ the loop would be.
 
 A product's main reporting category is `products.category_id`. It may name any category in the
 tree, at any depth, and no other link between the product and the category is needed. When it is
-null the product is **Uncategorised**. Uncategorised is a fixed bucket in the reports rather than a
-category row, so nobody can rename, move or delete it.
+null the product is **Uncategorised**. Uncategorised is not a category row, so nobody can rename,
+move or delete it.
 
 A variant's main category is its own when it has one, and its parent's otherwise. That is the same
 fallback a variant uses for its other inherited fields (`effectiveProductColumns` in
@@ -45,9 +46,8 @@ refused with `product.variant_invalid` naming the field `labelIds`.
 
 ## Moving and deleting
 
-Moving a category to a new parent, or a product to a new main category, is always allowed. It
-changes what the current reports show. Sale lines already recorded keep the category name they were
-written with.
+Moving a category to a new parent, or a product to a new main category, is always allowed. Sale
+lines already recorded keep the category name they were written with.
 
 Deleting a category never strands a product or a subcategory, so the delete asks where they go:
 
@@ -131,9 +131,8 @@ anything is written: an unknown, repeated or variant's id refuses the entire req
 `category.membership_invalid`, and nothing moves. An empty list is accepted and does nothing.
 
 A variant's id answers as an unknown product (`product.not_found`, 404) on the product category and
-label routes, as it does on every product-by-id route except the product editor's. The editor is
-where a variant's own main category is set, and where its parent's labels are shown, under
-`inherited.labelIds`.
+label routes. The product editor is where a variant's own main category is set, and where its
+parent's labels are shown, under `inherited.labelIds`.
 
 The product editor body carries `primaryCategoryId` and `labelIds` in place of the old membership
 list. A body that still sends `categoryIds` is refused with `product.invalid` rather than having the

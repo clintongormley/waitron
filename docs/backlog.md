@@ -388,16 +388,11 @@ What it left open:
 - **No "category dependants" seat exists on the module contract.** The delete-preview route
   (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
   dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.
-- **The delete confirmation and the add-products button use a plural even for one.** The counts are
-  dropped into fixed plural sentences (`categories.delete_warning_products`,
-  `categories.delete_warning_children_under`, `categories.delete_warning_children_top`,
-  `categories.add_selected` in `apps/dashboard/src/i18n/strings.ts`), so one product or child reads
-  "Al eliminarla se quitará de 1 productos", "Sus 1 categorías hijas se moverán …" or "Añadir 1
-  productos", and the English is just as wrong. The plural sentences predate #362; the three
-  `delete_warning_*` keys are the delete-confirmation strings after #366
-  consolidated the old `delete_products`/`delete_children_*` lines into one warning (the plural bug
-  came along unchanged). **Next action:** give each a one-item form, or use a plural-aware formatter
-  if the dashboard adopts one.
+- **The add-products button uses a plural even for one.** The count is dropped into a fixed plural
+  sentence (`categories.add_selected` in `apps/dashboard/src/i18n/strings.ts`), so picking one
+  product reads "Añadir 1 productos", and the English "Add 1 products" is just as wrong. **Next
+  action:** give it a one-item form, as the delete warnings have, or use a plural-aware formatter if
+  the dashboard adopts one.
 - **Nothing stops the next screen making the same mistake.** A check that compares the class names a
   screen's own stylesheet styles against the class names it puts inside `wt-data-table` cell callbacks
   looks feasible and would catch this whole kind of bug; nobody has tried to write it.
@@ -421,18 +416,9 @@ categories screen: the colour picker now lays its twenty-four swatches out as hu
 splits across a line break (the palette order is now pinned by a test), and a product's other-category
 tags collapse to a localized count once there are four or more.
 
-What it left open:
-
-- **Three is a hardcoded number with nothing behind it.**
-  `OTHER_CATEGORIES_PREVIEW_LIMIT` in `apps/dashboard/src/screens/categories-screen.ts` was chosen to
-  look right at the column's current width, not measured against it, and the same table on a phone
-  has far less room than the number assumes. **Next action:** if the column looks crowded or empty on
-  a real screen, measure before changing it, and consider deriving the limit from the available width
-  rather than pinning another guess.
-- **The collapsed count tells you how many, not which.** A manager who wants to see a product's full
-  membership list has to open the product's category editor; the table offers no hover, tooltip or
-  expansion. That is a deliberate omission rather than an oversight, but nobody has watched anyone use
-  it. **Next action:** leave it until someone using the screen asks for the names back.
+What it left open was a fixed preview limit of three other-category tags, and a collapsed count that
+said how many categories a product had but not which. _2026-09-25: both are gone with the
+several-categories membership (sales classification Task 1)._
 
 **Product modifiers — LANDED #341 (2026-09-13).** Modifiers (free text, extras, options and a plain
 yes/no) are written once and attached to many products, and the till asks for them when the dish is
@@ -2301,8 +2287,10 @@ ongoing overhaul listed at the top of Track A.
   or several (`multiple`), and optionally offer to add what was typed when nothing matches. It landed
   with nothing using it; #362 (2026-09-14) is the first adopter, for the
   category form's parent picker (`apps/dashboard/src/widgets/category-form.ts`) and the
-  product's main-category and labels pickers
-  (`apps/dashboard/src/widgets/classification-fields.ts`). Left out on purpose, per its
+  product-categories editor's category and reporting-category dropdowns
+  (`apps/dashboard/src/widgets/category-membership-picker.ts`). _2026-09-25: the product-categories
+  editor is gone; the product's main-category and labels pickers
+  (`apps/dashboard/src/widgets/classification-fields.ts`) use it now._ Left out on purpose, per its
   [design](superpowers/specs/2026-09-13-wt-combobox-design.md): searching on the server, disabling
   single options, taking part in a native `<form>`, and showing chosen options as chips (it shows a
   count instead). **Undecided:** how it relates to the `wt-select` row above. The combobox does not

@@ -60,8 +60,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Elige una categoría superior fuera de esta categoría y sus descendientes.",
   },
   "category.primary_required": {
-    en: "Choose a replacement Reporting Category.",
-    es: "Elige una Categoría de informes de reemplazo.",
+    en: "Choose a replacement main category.",
+    es: "Elige una categoría principal de reemplazo.",
   },
   "category.membership_invalid": {
     en: "Some of the chosen products cannot be moved here. Refresh the list and try again.",

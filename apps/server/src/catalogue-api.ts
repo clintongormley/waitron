@@ -897,8 +897,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       return c.json(await gated(session, (tx) => listProducts(tx)));
     }),
   );
-  // A variant's id answers as an unknown id here, as on every product-by-id route but the editor's:
-  // `setMainReportingCategory`'s default scope finds only a product with no parent.
+  // A variant's id answers as an unknown id here: `setMainReportingCategory`'s default scope finds
+  // only a product with no parent.
   app.put("/management-api/products/:id/categories", (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
@@ -938,8 +938,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       return c.body(null, 204);
     }),
   );
-  // A variant's id answers as an unknown id on both, as on every product-by-id route but the
-  // editor's; the editor carries a variant's inherited labels.
+  // A variant's id answers as an unknown id on both; the editor carries a variant's inherited
+  // labels.
   app.get("/management-api/products/:id/labels", (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);

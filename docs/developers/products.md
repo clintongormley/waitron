@@ -353,11 +353,12 @@ migration, whose hash changed although the count did not", `packages/provisionin
 `dashboard-product-editor` (`apps/dashboard/src/widgets/product-editor.ts`) is one short form. The
 fields that change often are always visible; everything else is folded into a `wt-disclosure`
 section that shows a one-line summary of what is inside it, so nothing filled in is invisible while
-collapsed. Top to bottom: Name, Categories, Available, ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info,
-Price (and the variants table, if there are variants), Modifiers, then Cancel and Save. An Inactive
-product's editor also opens with a line saying so, and offers Restore beside Save. Opened on a
-variant, the same form is the variant's own page: it has no Modifiers or Variants section, and each
-field the variant may leave blank to take the parent's value shows that value as its hint.
+collapsed. Top to bottom: Name, Category and labels, Available, ▸ Kitchen, ▸ Descriptors,
+▸ Nutritional info, Price (and the variants table, if there are variants), Modifiers, then Cancel and
+Save. An Inactive product's editor also opens with a line saying so, and offers Restore beside
+Save. Opened on a variant, the same form is the variant's own page: it has no Modifiers or Variants
+section, and each field the variant may leave blank to take the parent's value shows that value as
+its hint.
 
 The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by
 each row's handle — a pointer drag or the arrow keys (`reorder-table.ts`'s `handle`) — with each row
