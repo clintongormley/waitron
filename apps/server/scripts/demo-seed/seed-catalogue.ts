@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { kitchenStations, type Transaction } from "@waitron/db";
 import { preparationRoutes } from "@waitron/venue-service";
 import {
@@ -14,7 +14,8 @@ import {
   createSection,
   createUnit,
   menuItems,
-  readMenuStructure,
+  renameCatalogue,
+  requireMenuRoot,
   setProductLabels,
   setProductVariants,
   writeContentLanguages,
@@ -105,12 +106,8 @@ export async function seedCatalogues(
       existingMenuId === undefined
         ? await createCatalogue(tx, { name: data.name[locale] })
         : { id: existingMenuId };
-    if (existingMenuId !== undefined) {
-      await tx.execute(sql`
-        update catalogues set name = ${data.name[locale]}
-        where id = ${existingMenuId}`);
-    }
-    const { rootSectionId } = await readMenuStructure(tx, catalogue.id);
+    if (existingMenuId !== undefined) await renameCatalogue(tx, existingMenuId, data.name[locale]);
+    const rootSectionId = await requireMenuRoot(tx, catalogue.id);
     for (const cat of data.categories) {
       const category = await createCategory(tx, { name: cat.name });
       if (cat.station !== null) {
@@ -184,13 +181,13 @@ export async function seedCatalogues(
       await addMember(tx, rootSectionId, { kind: "section", sectionId: section.id });
       // Each product's row sets no menu price, so the menu charges the product's own price and
       // follows it when it changes.
-      for (const productId of productIds) {
-        const [menuItem] = await tx
-          .select({ id: menuItems.id })
-          .from(menuItems)
-          .where(and(eq(menuItems.menuId, catalogue.id), eq(menuItems.productId, productId)));
-        menuItemsByProduct.set(productId, menuItem!.id);
-      }
+      const rows = await tx
+        .select({ id: menuItems.id, productId: menuItems.productId })
+        .from(menuItems)
+        .where(and(eq(menuItems.menuId, catalogue.id), inArray(menuItems.productId, productIds)));
+      if (rows.length !== productIds.length)
+        throw new Error(`demo-seed: a product of '${cat.name[locale]}' has no row on its menu`);
+      for (const row of rows) menuItemsByProduct.set(row.productId, row.id);
     }
     return catalogue.id;
   };

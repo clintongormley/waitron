@@ -114,6 +114,26 @@ describe("seedCatalogues", () => {
     expect(read.lunchNegroni).toMatchObject({ grossPrice: "9.00", placements: [[]] });
   });
 
+  it("names each menu's top level after the menu, the provisioned one included", async () => {
+    const { locationId } = await provisionVenue();
+    const named = await withTransaction(suite.db, async (tx) => {
+      const { menuIds } = await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const { rows } = await tx.execute<{ menu: string; root: string }>(sql`
+        select c.name as menu, s.internal_name as root
+        from menu_details d
+        join catalogues c on c.id = d.menu_id
+        join sections s on s.id = d.root_section_id
+        where d.menu_id in (${menuIds.restaurant}, ${menuIds.lunch}, ${menuIds.deli})
+        order by c.name`);
+      return rows;
+    });
+    expect(named).toEqual([
+      { menu: "Casa Delgado", root: "Casa Delgado" },
+      { menu: "Deli takeaway", root: "Deli takeaway" },
+      { menu: "Menú del Día", root: "Menú del Día" },
+    ]);
+  });
+
   it("creates restaurant, lunch and deli menus and routes each category to its preparation station", async () => {
     const { locationId } = await provisionVenue();
 
