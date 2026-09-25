@@ -18,23 +18,14 @@ import { requireManagementSession } from "@waitron/server-kit";
 import { createErrorBoundary } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
-/**
- * The box-status wire shape. `cert.available: false` and `backup.configured: false` are the deliberate
- * N/A placeholders — cert when no TLS path is configured or the leaf is unreadable, backup when
- * scheduled backup is off. `chain` is passed through untouched; the "no records" signal is
- * `chain.height === 0`, never `chain.lastAt`.
- */
+/** "No records" is `chain.height === 0`, never `chain.lastAt`: a provisioned node's head row carries a
+ * time at height 0. */
 export type BoxStatus = {
   mode: DeploymentMode;
   environment: DeploymentEnvironment;
   time: TimeHealth;
   cert: { available: true; notAfter: string; daysRemaining: number } | { available: false };
-  /**
-   * True when this node is a filing primary whose last drain pass skipped for a missing `fiscal.aeat`
-   * certificate — the promoted-mirror "sell and chain now, file once the cert lands" state (pass.ts's
-   * `AwaitingCertStatus`). `false` on any node that is filing normally, or not the singleton primary
-   * (a non-primary runs no drain, so the cell never leaves its `false` default).
-   */
+  /** pass.ts's `AwaitingCertStatus`. */
   awaitingFiscalCertificate: boolean;
   chain: ChainHeight;
   singletonRole: SingletonRole;
@@ -48,8 +39,6 @@ export type BoxStatusReaders = {
   environment: DeploymentEnvironment;
   time: () => Promise<TimeHealth>;
   cert: (() => Promise<CertExpiry>) | undefined;
-  /** The awaiting-fiscal-certificate cell read (pass.ts's `AwaitingCertStatus`). Always present — it is
-   * an in-process boolean, never an off-vs-on slot — read synchronously like `duties`. */
   awaitingFiscalCertificate: () => boolean;
   chain: () => Promise<ChainHeight>;
   singletonRole: () => Promise<SingletonRole>;
@@ -72,14 +61,12 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
       const c = await readers.cert();
       cert = { available: true, notAfter: c.notAfter, daysRemaining: c.daysRemaining };
     } catch {
-      // A missing or unreadable leaf must never fail the whole status read.
+      // An unreadable leaf must never fail the whole status read.
       cert = { available: false };
     }
   }
 
-  // Backup fails LOUD, unlike cert's swallow: an absent reader means backup is off
-  // (`configured: false`), but a reader that FAULTS (a filesystem error reading the dump dir) is a real
-  // problem worth surfacing — never a silent fallback to "off".
+  // Unlike cert, a backup reader that throws fails the read: a fault is not "backup is off".
   let backup: BoxStatus["backup"] = { configured: false };
   if (readers.backup !== undefined) {
     backup = await readers.backup();
@@ -110,20 +97,9 @@ export type BoxStatusDeps = {
   readStream: () => StreamView;
   readMode: () => DeploymentMode;
   readSingletonRole: () => SingletonRole;
-  /** Reads the awaiting-fiscal-certificate cell the fiscal pass writes (pass.ts's `AwaitingCertStatus`),
-   * the same live holder, so box-status tracks a promoted mirror's "sell now, file later" state without
-   * a DB read. */
   readAwaitingFiscalCertificate: () => boolean;
 };
 
-/**
- * The AppError codes this route can surface, and their HTTP status — the same code→status entries the
- * management API's `STATUS` map assigns them (reused, not reinvented). `requireManagementSession`
- * throws `management_session.required` (401); `authorizeManager` re-resolves the session
- * (`management_session.required`/`.expired` → 401, `person.suspended` → 403) and refuses a role without
- * `system.manage` with `authorization.not_permitted` (403). Any other thrown value is a server fault
- * the boundary answers with an opaque 500.
- */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
@@ -131,18 +107,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
 };
 
-/**
- * Registers `GET /api/box/status` on the shared trading app. Gated exactly like the FP-1 status routes:
- * `requireManagementSession` → 401 before any DB work, then `withTransaction` +
- * `authorizeManager("system.manage")` for the chain read (a `manager`-role person holds
- * it). The composed status is assembled by `collectBoxStatus` from the sibling slice-4a readers; a cert
- * path absent (plain-HTTP boot) yields `cert.available:false`.
- */
 export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "box-status.failed");
   app.get("/api/box/status", (c) =>
     run(c, log, async () => {
-      const sessionId = requireManagementSession(c); // throws 401 if absent
+      const sessionId = requireManagementSession(c);
       const chain = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
