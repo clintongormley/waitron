@@ -94,9 +94,6 @@ export function assertStorableKey(key: string): void {
   }
 }
 
-/** Strip the effective recovery KEY (a secret) from a runtime-status snapshot before it leaves over
- * the wire. `GET /api/backup/recovery-key` is the ONLY route that returns the key, and it does so
- * deliberately (authenticated admin, TLS); every other projection omits it. */
 function projectStatus<T extends BackupRuntimeStatus>(s: T): Omit<T, "recoveryKey"> {
   const rest: Omit<T, "recoveryKey"> & { recoveryKey?: string } = { ...s };
   delete rest.recoveryKey;

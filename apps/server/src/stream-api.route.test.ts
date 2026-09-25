@@ -616,6 +616,33 @@ describe("stream settings routes", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
+  it("the kit waits its turn, so it never pairs one Save's bucket with a later rotation's key", async () => {
+    const other: BucketConfig = { ...BUCKET, bucket: "venue-copy-two" };
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, {
+        purpose: "backup.stream",
+        value: streamSettingsPayload({ venueId: VENUE_ID, bucket: BUCKET }),
+      }),
+    );
+    const queue = heldTurns();
+    const { app, key } = harness({ turns: queue.turns }, "recovery-key-one-strong");
+    const cookie = await login(app);
+    const pending = app.request("/api/backup/stream/kit", { headers: { cookie } });
+    await Promise.race([queue.waiting, pending]);
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, {
+        purpose: "backup.stream",
+        value: streamSettingsPayload({ venueId: VENUE_ID, bucket: other }),
+      }),
+    );
+    key.value = "recovery-key-two-strong";
+    await queue.release();
+    const res = await pending;
+    expect(res.status).toBe(200);
+    const kit = parseRecoveryKit(((await res.json()) as { kit: string }).kit);
+    expect(kit).toMatchObject({ bucket: other, recoveryKey: "recovery-key-two-strong" });
+  });
+
   it("offers no kit while no bucket is configured", async () => {
     await clearBucket();
     const { app } = harness({}, "recovery-key-one-strong");
