@@ -426,6 +426,17 @@ export async function duplicateSection(
   return readSection(tx, copyId);
 }
 
+/** The ids behind `sectionUsages`: menus reaching the section or holding it directly in a list
+ * they own, and the library sections holding it directly. */
+function usageIds(graph: SectionGraph, sectionId: string) {
+  const parents = graph.parents(sectionId);
+  const menuIds = new Set(menusContaining(graph, sectionId));
+  for (const parent of parents)
+    if (graph.role(parent) !== "library") menuIds.add(graph.ownerMenu(parent)!);
+  const libraryParents = parents.filter((parent) => graph.role(parent) === "library");
+  return { menuIds, libraryParents };
+}
+
 /**
  * What deleting the section would touch: the menus whose root reaches it or whose home layout holds
  * it, and the library sections holding it directly.
@@ -434,11 +445,7 @@ export async function sectionUsages(tx: Transaction, sectionId: string): Promise
   const graph = await loadSectionGraph(tx);
   if (graph.role(sectionId) === undefined)
     throw new AppError("menu_section.not_found", { sectionId });
-  const parents = graph.parents(sectionId);
-  const menuIds = new Set(menusContaining(graph, sectionId));
-  for (const parent of parents)
-    if (graph.role(parent) !== "library") menuIds.add(graph.ownerMenu(parent)!);
-  const libraryParents = parents.filter((parent) => graph.role(parent) === "library");
+  const { menuIds, libraryParents } = usageIds(graph, sectionId);
   const menus =
     menuIds.size === 0
       ? []
@@ -456,4 +463,42 @@ export async function sectionUsages(tx: Transaction, sectionId: string): Promise
           .where(inArray(sections.id, libraryParents))
           .orderBy(asc(sections.internalName), asc(sections.id));
   return { menus, sections: holders };
+}
+
+/**
+ * `sectionUsages` for every library section, keyed by section id, from one graph read and one
+ * read each of the menu and section names, whatever the number of sections.
+ */
+export async function librarySectionUsages(
+  tx: Transaction,
+): Promise<Record<string, SectionUsages>> {
+  const graph = await loadSectionGraph(tx);
+  const library = await tx
+    .select({ id: sections.id, internalName: sections.internalName })
+    .from(sections)
+    .where(eq(sections.role, "library"))
+    .orderBy(asc(sections.internalName), asc(sections.id));
+  if (library.length === 0) return {};
+  const menus = await tx
+    .select({ id: catalogues.id, name: catalogues.name })
+    .from(catalogues)
+    .orderBy(asc(catalogues.name), asc(catalogues.id));
+  // Every id asked for is a row read here: a menu-owned list's menu is a foreign key into
+  // `catalogues`, and a library parent is a library section.
+  const inOrder = <T extends { id: string }>(rows: T[]) => {
+    const rank = new Map(rows.map((row, index) => [row.id, index]));
+    return (ids: Iterable<string>): T[] =>
+      [...ids]
+        .map((id) => rank.get(id)!)
+        .sort((a, b) => a - b)
+        .map((index) => rows[index]!);
+  };
+  const menusIn = inOrder(menus);
+  const sectionsIn = inOrder(library);
+  const result: Record<string, SectionUsages> = {};
+  for (const { id } of library) {
+    const { menuIds, libraryParents } = usageIds(graph, id);
+    result[id] = { menus: menusIn(menuIds), sections: sectionsIn(libraryParents) };
+  }
+  return result;
 }

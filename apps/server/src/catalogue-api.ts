@@ -38,6 +38,7 @@ import {
   replaceMember,
   duplicateSection,
   sectionUsages,
+  librarySectionUsages,
   type MemberRef,
   type SectionInput,
   type SectionPatch,
@@ -510,6 +511,10 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
 
   app.get(collection, (c) =>
     run(c, log, async () => c.json(await gated(requireManagementSession(c), listSections))),
+  );
+  // Registered before `one`, so `usages` is not read as a section id.
+  app.get(`${collection}/usages`, (c) =>
+    run(c, log, async () => c.json(await gated(requireManagementSession(c), librarySectionUsages))),
   );
   app.post(collection, (c) =>
     run(c, log, async () => {
