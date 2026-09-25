@@ -1,6 +1,7 @@
 # Menus, reusable categories and service home layouts
 
 **Status:** product decisions agreed with the owner on 2026-09-20; implementation deferred.
+Further owner decisions, 2026-09-25, are in §9.
 
 **Related decisions, 2026-09-20:** the [service workflow spec](2026-09-20-service-ordering-and-billing-design.md)
 adds a public/staff-only/not sold separately setting for standalone ordering. Menu membership
@@ -265,7 +266,9 @@ Implementation is explicitly deferred until all three workstreams named at the t
 The [SQLite storage design](2026-09-16-sqlite-slice1-storage-swap-design.md) is background for that
 dependency, not a source of schema choices for this spec.
 
-At that point, inspect the landed code and resolve these integration details before planning:
+At that point, inspect the landed code and resolve these integration details before planning.
+The owner settled several of them on 2026-09-25; the answers are in §9, and the list below is
+left as it was written:
 
 - Which variant products, extras and option selections enter the menu's sellable set and snapshot,
   how menu overrides apply to those products, and how reporting and station assignments remain
@@ -287,3 +290,45 @@ implementation and must be audited when implementation begins.
 This spec does not choose tables, migrations, API shapes or tasks against the changing storage and
 product code. Automatic popularity ranking, inventory control, scheduled publication and a rollback
 interface are outside its agreed scope. No implementation or test changes accompany this document.
+
+## 9. Owner decisions, 2026-09-25
+
+The owner settled these §8 questions before planning began. Each "today" below describes the code
+on `main` at `db23651f7`.
+
+**Availability is per product, for the whole venue.** Marking a product unavailable makes it
+unavailable on every menu at once; how an unavailable product is presented stays with the plan.
+There is no per-menu availability in this work. Today this is the product's own `available` flag
+(`packages/db/src/schema/catalogue.ts`); the plan keeps that as the live field beside the
+published snapshot.
+
+**Publishing never changes what is already in a basket or a held order.** A line already in an open
+basket, or in a held order sent to the kitchen but not yet paid, keeps the name, price and choices
+it was added with when a new version is published. A line added after the device has picked up the
+new version comes from the new version. The same rule covers baskets and held orders.
+
+**A product added back to a menu starts fresh.** Removing a product from a menu forgets everything
+that menu said about it: its menu price, its variant overrides and its extras overrides. Adding it
+again later starts from the product's own values, as if it had never been on that menu.
+
+**A shortcut whose target has gone shows "not found" and refreshes the home screen.** When staff
+tap a home tile whose product or category is no longer in the version the device should be showing,
+the device says the item was not found and reloads the home screen. How the editor and preview
+treat a shortcut whose target has left the working menu is not decided here and stays with the plan.
+
+**A device whose home layout is deleted falls back to the menu's default layout, with a warning
+first.** The device shows a warning notification, then switches to that menu's default layout.
+What a rename does, and what happens when a device switches to another menu, stay with the plan.
+
+**Today's per-menu overrides stay.** A menu can still change, for each product it offers, a
+variant's price or switch that variant off there (`menu_item_variant_overrides`), which extras
+lists it offers and each extra's price and availability there (`menu_item_extra_lists`,
+`menu_item_extra_items`), and whether the product is switched on for that menu (`menu_items`'s
+`active`). They belong to the menu and the product, like the menu price in §3, not to the path by
+which the product reaches the menu, and publishing captures them with the rest of the menu.
+
+Still open for the plan: which variant products, extras and option selections enter the sellable
+set and snapshot; how reporting and station assignments stay explicit when categories are reused;
+how the service spec's public, staff-only and not-sold-separately setting enters the snapshot and
+its filtering; how source deletion and media retention keep live snapshots whole; and the
+concurrency, publication and device-adoption questions in §8's last item.

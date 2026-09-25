@@ -178,8 +178,10 @@ live availability. **Do not start implementation until the PostgreSQL-to-SQLite 
 upgrades, and variants/extras-as-products changes have all landed.** The variants/extras-as-products
 part of that is met: extras and options landed on 2026-09-21 (branch 1, ending #480), and variants
 with branch 2 (Task 9, #556). This entry does not record the other two parts as
-done; check them before starting. Then reconcile the integration questions in the spec with the
-landed code before planning. Further specifications can be written
+done; check them before starting. The owner settled six of the spec's open points on
+2026-09-25 (availability, open baskets and held orders, re-adding a product, missing shortcuts,
+deleted home layouts, and keeping today's per-menu overrides), recorded in the spec's §9. Then
+reconcile the rest with the landed code before planning. Further specifications can be written
 during the wait.
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
