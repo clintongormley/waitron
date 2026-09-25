@@ -44,6 +44,18 @@ labels cannot share a name; the check is on the exact name after trimming the sp
 A variant carries no labels of its own. It reads its parent's, and an attempt to give it some is
 refused with `product.variant_invalid` naming the field `labelIds`.
 
+## Categories are not sections
+
+**Sections** are ordered lists of products and other sections that can be reused across menus and
+nested (`sections` and `section_members`, written by `packages/catalogue/src/sections.ts`). The
+menus plan's Task 3 builds each menu's structure from them; until it lands, menus keep their own
+`menu_sections` headings. A section only arranges products. Adding a product
+to a section, moving it, removing it or deleting the section changes neither the product's main
+reporting category nor the kitchen route it follows (the sections case in
+`apps/server/src/catalogue-api.full-manifest.test.ts`), and a product may sit in any number of
+sections while it has exactly one main category. The design is the
+[menus plan](../superpowers/plans/2026-09-25-menus-categories-home-layouts.md)'s decisions D1–D4.
+
 ## Moving and deleting
 
 Moving a category to a new parent, or a product to a new main category, is always allowed. Sale
@@ -166,8 +178,10 @@ The media set protects `category_details.image` with four triggers named
 `category_details_media_image_fk_*`, created in `packages/media/drizzle/0001_image_references.sql`,
 whose header explains why a real foreign key could not be used. The refusal arrives as errcode 1811,
 not 787, and `pragma foreign_key_list('category_details')` does not list the rule. Attaching an image
-does not lock the image's row: `validateImage` reads it and relies on there being no concurrent
-writer, and says so at the read.
+does not lock the image's row: `validateImage` reads it through `mediaImageExists`, which relies on
+there being no concurrent writer and says so at the read. A section's image is guarded the same way,
+by the four `sections_media_image_fk_*` triggers of
+`packages/media/drizzle/0002_section_image_references.sql`.
 
 Schema changes drop and recreate, with no translation and no backfill (`CLAUDE.md` §3). Follow the
 existing preproduction reset workflow for a populated database, and do not reset a populated shared
