@@ -308,6 +308,9 @@ const BACKUP_ENV_KEYS = [
  */
 export const BOX_HOSTNAME = "waitron.local";
 
+/** The dNSName SANs on the box's self-signed leaf, whether minted or re-issued after a restore. */
+const BOX_LEAF_HOSTNAMES = [BOX_HOSTNAME, "localhost"];
+
 /**
  * The upper bound on a single product-image upload, 20 MiB. What is stored is the shrunk copy
  * `prepareImage` makes, so this bounds how large an upload the server will buffer; the decode is
@@ -1018,7 +1021,7 @@ export async function startServer(
     try {
       const ensured = await ensureBoxSecrets({
         stateDir: config.stateDir,
-        hostnames: [BOX_HOSTNAME, "localhost"],
+        hostnames: BOX_LEAF_HOSTNAMES,
         now,
         listIpv4: boxAddresses,
       });
@@ -1517,7 +1520,7 @@ export async function startServer(
         ring,
         nodeId: config.till.nodeId,
         contactUrl: config.advertisedOrigin,
-        hostnames: [BOX_HOSTNAME, "localhost"],
+        hostnames: BOX_LEAF_HOSTNAMES,
         listIpv4: boxAddresses,
         now,
         log,

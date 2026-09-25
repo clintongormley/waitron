@@ -152,6 +152,26 @@ function randomSerial(): string {
   return bytes.toString("hex");
 }
 
+/**
+ * The key-pair factory a mint or re-issue uses, after refusing an empty `hostnames`: a leaf with no
+ * dNSName SAN authenticates no request, and the refusal comes before any RSA-2048 generation.
+ */
+function keypairFor(
+  hostnames: string[],
+  keypair: (() => forge.pki.rsa.KeyPair) | undefined,
+): () => forge.pki.rsa.KeyPair {
+  if (hostnames.length === 0) throw new AppError("setup.cert_hostnames_empty", {});
+  return keypair ?? (() => forge.pki.rsa.generateKeyPair(2048));
+}
+
+/** From a day before `now` (clock-skew slack) to `VALIDITY_DAYS` after it, or `cap` if earlier. */
+function validityFrom(now: Date, cap = Infinity): { notBefore: Date; notAfter: Date } {
+  return {
+    notBefore: new Date(now.getTime() - DAY_MS),
+    notAfter: new Date(Math.min(now.getTime() + VALIDITY_DAYS * DAY_MS, cap)),
+  };
+}
+
 /** The leaf's extensions and SANs, shared by minting and re-issuing so the two cannot drift. */
 function signLeaf(
   caKey: forge.pki.rsa.PrivateKey,
@@ -193,18 +213,8 @@ function signLeaf(
  */
 export function mintSelfSignedServerCert(opts: MintOptions): SelfSignedMaterial {
   const { hostnames, ipAddresses, now } = opts;
-
-  // Validate before generating any keypair: the empty-hostnames path must not pay for RSA-2048
-  // generation just to throw, and a leaf with no dNSName SAN is useless regardless.
-  if (hostnames.length === 0) {
-    throw new AppError("setup.cert_hostnames_empty", {});
-  }
-
-  const makeKeypair = opts.keypair ?? (() => forge.pki.rsa.generateKeyPair(2048));
-  const validity = {
-    notBefore: new Date(now.getTime() - DAY_MS),
-    notAfter: new Date(now.getTime() + VALIDITY_DAYS * DAY_MS),
-  };
+  const makeKeypair = keypairFor(hostnames, opts.keypair);
+  const validity = validityFrom(now);
 
   const caKeys = makeKeypair();
   const caCert = certificate(
@@ -243,15 +253,17 @@ export function reissueServerLeaf(opts: {
   now: Date;
   keypair?: () => forge.pki.rsa.KeyPair;
 }): { serverCertPem: string; serverKeyPem: string } {
-  if (opts.hostnames.length === 0) throw new AppError("setup.cert_hostnames_empty", {});
+  const makeKeypair = keypairFor(opts.hostnames, opts.keypair);
   const caCert = forge.pki.certificateFromPem(opts.caCertPem);
   const caKey = forge.pki.privateKeyFromPem(opts.caKeyPem) as forge.pki.rsa.PrivateKey;
-  const serverKeys = (opts.keypair ?? (() => forge.pki.rsa.generateKeyPair(2048)))();
-  const wanted = opts.now.getTime() + VALIDITY_DAYS * DAY_MS;
-  const leaf = signLeaf(caKey, serverKeys, opts.hostnames, opts.ipAddresses, {
-    notBefore: new Date(opts.now.getTime() - DAY_MS),
-    notAfter: new Date(Math.min(wanted, caCert.validity.notAfter.getTime())),
-  });
+  const serverKeys = makeKeypair();
+  const leaf = signLeaf(
+    caKey,
+    serverKeys,
+    opts.hostnames,
+    opts.ipAddresses,
+    validityFrom(opts.now, caCert.validity.notAfter.getTime()),
+  );
   return {
     serverCertPem: forge.pki.certificateToPem(leaf),
     serverKeyPem: forge.pki.privateKeyToPem(serverKeys.privateKey),

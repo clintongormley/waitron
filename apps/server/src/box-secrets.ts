@@ -1,4 +1,4 @@
-import { mkdir, access, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, access, readFile, rename, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
@@ -8,7 +8,7 @@ import {
   isPermittedLeafIpv4,
   reissueServerLeaf,
 } from "./self-signed-cert.js";
-import { writeFileAtomic } from "./fs-atomic.js";
+import { stageFile, stagedPath, writeFileAtomic } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
 import type { TlsFiles } from "./tls.js";
 
@@ -34,6 +34,26 @@ export function caCertPath(stateDir: string): string {
   return join(stateDir, "tls", "ca.crt");
 }
 
+/** The four TLS files under a state dir. */
+function boxTlsPaths(stateDir: string) {
+  const tlsDir = join(stateDir, "tls");
+  return {
+    tlsDir,
+    certFile: join(tlsDir, "server.crt"),
+    keyFile: join(tlsDir, "server.key"),
+    caCertFile: caCertPath(stateDir),
+    caKeyFile: join(tlsDir, "ca.key"),
+  };
+}
+
+/**
+ * The leaf's iPAddress SANs: loopback plus `listIpv4()`, filtered to the CA's permitted subtrees
+ * (see {@link ensureBoxSecrets}).
+ */
+function leafIpv4s(listIpv4: () => string[]): string[] {
+  return Array.from(new Set(["127.0.0.1", ...listIpv4()])).filter(isPermittedLeafIpv4);
+}
+
 /**
  * The box's own minted leaf (`<stateDir>/tls/server.{crt,key}`), or `undefined` when it has never
  * completed a setup boot. The ONE source of truth for the leaf-path convention, shared by every
@@ -45,8 +65,7 @@ export function caCertPath(stateDir: string): string {
  * to plain HTTP, the honest limit — refusing to serve would hand the operator nothing.
  */
 export function mintedBoxLeaf(stateDir: string): TlsFiles | undefined {
-  const certFile = join(stateDir, "tls", "server.crt");
-  const keyFile = join(stateDir, "tls", "server.key");
+  const { certFile, keyFile } = boxTlsPaths(stateDir);
   if (!existsSync(certFile) || !existsSync(keyFile)) return undefined;
   return { certFile, keyFile };
 }
@@ -119,17 +138,11 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
   const makeKeyRing = deps.makeKeyRing ?? generateKeyRing;
   const listIpv4 = deps.listIpv4 ?? listBoxIpv4;
 
-  const tlsDir = join(deps.stateDir, "tls");
+  const files = boxTlsPaths(deps.stateDir);
   // 0o700 so the dir holding the private material is owner-only too (defense in depth around the
   // 0o600 files). `mode` applies only to dirs THIS call CREATES (tls and any missing parent such as
   // stateDir) and is subject to umask — 0o700 under any sane umask — matching the file-mode note.
-  await mkdir(tlsDir, { recursive: true, mode: 0o700 });
-  const files = {
-    certFile: join(tlsDir, "server.crt"),
-    keyFile: join(tlsDir, "server.key"),
-    caCertFile: caCertPath(deps.stateDir),
-    caKeyFile: join(tlsDir, "ca.key"),
-  };
+  await mkdir(files.tlsDir, { recursive: true, mode: 0o700 });
 
   // server.key is the presence sentinel for the whole TLS quartet: mint + write all four only when
   // it is absent, so a reused install keeps its already-trusted cert byte-for-byte.
@@ -141,8 +154,11 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
     // from the SAN rather than poisoning the whole cert. 127.0.0.1 is inside 127.0.0.0/8 and kept; a
     // box whose only reachable IPs are all out-of-set still gets a leaf carrying the hostnames
     // (waitron.local/localhost), so mDNS reach survives and operator-supplied TLS covers the rest.
-    const ips = Array.from(new Set(["127.0.0.1", ...listIpv4()])).filter(isPermittedLeafIpv4);
-    const m = mint({ hostnames: deps.hostnames, ipAddresses: ips, now: deps.now() });
+    const m = mint({
+      hostnames: deps.hostnames,
+      ipAddresses: leafIpv4s(listIpv4),
+      now: deps.now(),
+    });
     // Each file is written to a temp path and atomically renamed, so a reader never observes a
     // partial or truncated PEM — only the whole file or its absence. server.key is renamed LAST, on
     // purpose: it is the quartet's presence sentinel the guard above tests, so a crash BETWEEN the
@@ -187,30 +203,23 @@ export async function reissueBoxLeaf(deps: {
   now: () => Date;
   listIpv4: () => string[];
 }): Promise<void> {
-  const tlsDir = join(deps.stateDir, "tls");
-  const caCertPem = await readFile(caCertPath(deps.stateDir), "utf8");
-  const caKeyPem = await readFile(join(tlsDir, "ca.key"), "utf8");
-  const ips = Array.from(new Set(["127.0.0.1", ...deps.listIpv4()])).filter(isPermittedLeafIpv4);
+  const files = boxTlsPaths(deps.stateDir);
   const leaf = reissueServerLeaf({
-    caCertPem,
-    caKeyPem,
+    caCertPem: await readFile(files.caCertFile, "utf8"),
+    caKeyPem: await readFile(files.caKeyFile, "utf8"),
     hostnames: deps.hostnames,
-    ipAddresses: ips,
+    ipAddresses: leafIpv4s(deps.listIpv4),
     now: deps.now(),
   });
-  const files = [
-    { path: join(tlsDir, "server.crt"), pem: leaf.serverCertPem },
-    { path: join(tlsDir, "server.key"), pem: leaf.serverKeyPem },
-  ].map((f) => ({ ...f, working: `${f.path}.tmp` }));
+  const pair = [
+    { path: files.certFile, pem: leaf.serverCertPem },
+    { path: files.keyFile, pem: leaf.serverKeyPem },
+  ];
   try {
-    for (const f of files) {
-      // Removed first: `writeFile` applies the mode only to a file it creates.
-      await rm(f.working, { force: true });
-      await writeFile(f.working, f.pem, { mode: 0o600 });
-    }
+    for (const { path, pem } of pair) await stageFile(path, pem, 0o600);
   } catch (error) {
-    for (const f of files) await rm(f.working, { force: true }).catch(() => {});
+    for (const { path } of pair) await rm(stagedPath(path), { force: true }).catch(() => {});
     throw error;
   }
-  for (const f of files) await rename(f.working, f.path);
+  for (const { path } of pair) await rename(stagedPath(path), path);
 }

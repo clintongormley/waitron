@@ -217,6 +217,14 @@ describe("reissueBoxLeaf", () => {
     ]);
   });
 
+  it("writes the new key owner-only even over a stale world-readable working copy", async () => {
+    const d = await newDir();
+    await ensureBoxSecrets(deps(d));
+    await writeFile(join(d, "tls", "server.key.tmp"), "stale", { mode: 0o644 });
+    await reissue(d);
+    expect((await stat(join(d, "tls", "server.key"))).mode & 0o777).toBe(0o600);
+  });
+
   // The listener reads both files and refuses a certificate whose key does not match, so a write
   // that fails part-way must leave the pair it found.
   it.each(["server.crt", "server.key"])(
