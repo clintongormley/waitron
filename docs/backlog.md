@@ -5699,7 +5699,7 @@ open:
     recovery page. One option is to keep
     the staged request on `restore.placement_failed`, so repeated failed starts end on the recovery
     page. **Owner decision 2026-09-25: leave it as it is.**
-  - Fixed by A31 (fix/restore-clean-aside-folders): a `.venue.db-replaced-` folder left in the
+  - Fixed by A31 (#660): a `.venue.db-replaced-` folder left in the
     venue folder is removed by the box's next start (`clearReplacedDatabases`,
     `apps/server/src/restore.ts`, called from `runEntry`, `apps/server/src/node-entry.ts`), which
     holds the venue folder from the clearing until the server's own store holds it. A folder still
