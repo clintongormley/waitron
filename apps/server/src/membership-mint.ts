@@ -4,9 +4,21 @@ import {
   type MembershipNode,
   type SignedMembershipDocument,
 } from "@waitron/membership";
-import type { Database } from "@waitron/db";
+import { readNodeEndorsement, type Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import { readNodeIdentityKey } from "./node-identity.js";
+
+/**
+ * The endorsements to carry on a document `signerNodeId` signs: its stored endorsement, if any, so a
+ * peer that trusts only the endorser's key still accepts the document.
+ */
+export async function readSignerEndorsements(
+  db: Database,
+  signerNodeId: string,
+): Promise<readonly Endorsement[]> {
+  const endorsement = await readNodeEndorsement(db, signerNodeId);
+  return endorsement === null ? [] : [endorsement];
+}
 
 /**
  * Read THIS node's signing key and build and sign the next membership document with

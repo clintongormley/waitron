@@ -5420,9 +5420,20 @@ a failed rename of the key puts the old certificate back unless that rename fail
 crash between the two renames leaves a mismatched pair, which the next start replaces before the
 listener reads it, because the marker is still there — unless that start defers the first start
 (fenced, mirror or adoption-pending), when the listener refuses the pair. The next membership
-document carries this node's stored endorsement, as mirror promotion does
-(`apps/server/src/promote.ts`), so a peer that trusts only the endorser (the primary that adopted
-this node) still accepts it. Left open:
+document carries this node's stored endorsement, so a peer that trusts only the endorser (the
+primary that adopted this node) still accepts it. Every signer except the term-0 seed
+(`apps/server/src/membership-seed.ts`) reads the signing node's stored endorsement through
+`readSignerEndorsements` (`apps/server/src/membership-mint.ts`): this first start, both promotions
+(`apps/server/src/promote.ts`), `retireSelf` (`apps/server/src/retire.ts`) and the chart append in
+`apps/server/src/mirror-bundle-api.ts`, which reads the row of the node it signs as,
+`designated.nodeId`. The cases "carries this node's stored endorsement, so a peer trusting only the
+endorser accepts the eviction" (`apps/server/src/retire.test.ts`), "… accepts the new term"
+(`apps/server/src/promote.test.ts`, local secondary) and "carries the primary's stored endorsement,
+so a peer trusting only the endorser accepts the appended chart"
+(`apps/server/src/mirror-bundle-api.test.ts`) each check that the stored document carries the
+endorsement and verifies both against the endorser's key alone and against the signer's own key
+held directly. A node row holding no endorsement still signs `endorsements: []`, which the other
+retire, both promotions' and chart-append cases in those files assert. Left open:
 - A restored box whose cloud peer does not answer during its first start signs the next term and
   removes the marker; a fencing document the peer serves later at that same term reads as not
   newer, so the box is never fenced. This task's review reproduced it with a temporary two-boot case in
@@ -5449,14 +5460,6 @@ this node) still accepts it. Left open:
   (`promoteMirrorToPrimary`, `apps/server/src/promote.ts`) keeps the bucket copy held, reading off
   with the reason `first_start_pending` and raising no alert, until the box next starts; that start
   runs the first start, because the marker is still there. From reading, not a run.
-- Three other places sign a membership document without this node's stored endorsement:
-  `apps/server/src/retire.ts` passes `endorsements: []` (matters for a fenced former mirror
-  retiring itself); `appendStandbyToChart` in `apps/server/src/mirror-bundle-api.ts` passes none
-  (matters when the designated primary signing it is itself a former mirror);
-  `promoteLocalSecondaryToPrimary` in `apps/server/src/promote.ts` passes none (matters only if a
-  former mirror can become a local secondary again, for which no path was found). A peer that
-  trusts only the endorser would refuse those documents. Found by reading during this branch's
-  review; not reproduced.
 
 Task 9b, restore from the bucket (#642). `waitron-restore restore --from-bucket <kit-file>
 --confirm-venue <tax id> [--confirm-old-box-gone]` reads the bucket the recovery kit names, checks

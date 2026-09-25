@@ -2,9 +2,10 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  nodes,
   readMembershipTrustSet,
   readNodeMembership,
   stampDeployment,
@@ -18,6 +19,7 @@ import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import {
   canonicalize,
+  endorseKey,
   generateNodeKeyPair,
   verifyBytes,
   verifyMembershipDocument,
@@ -264,6 +266,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(after?.body.nodes).toContainEqual(node);
     }
     expect(after?.signerNodeId).toBe(designated.nodeId);
+    expect(after?.endorsements).toEqual([]);
     expect(verifyMembershipDocument(after!, { [designated.nodeId]: primaryPublicKey }).valid).toBe(
       true,
     );
@@ -290,6 +293,36 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     for (const node of before?.body.nodes ?? []) {
       expect(afterReadopt?.body.nodes).toContainEqual(node);
     }
+  });
+
+  // A primary that began as a mirror is trusted by its peers only through the endorsement of its key
+  // that adopt stored on its node row.
+  it("carries the primary's stored endorsement, so a peer trusting only the endorser accepts the appended chart", async () => {
+    const { designated, adminPersonId, primaryPublicKey } = await setupVenue();
+    const endorserNodeId = crypto.randomUUID();
+    const endorser = generateNodeKeyPair();
+    const endorsement = endorseKey(
+      designated.nodeId,
+      primaryPublicKey,
+      endorserNodeId,
+      endorser.privateKey,
+    );
+    await db.update(nodes).set({ endorsement }).where(eq(nodes.id, designated.nodeId));
+    const app = mountApp(designated, "https://relay.example:9000/");
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+    expect(res.status).toBe(200);
+
+    const after = (await readNodeMembership(db))!;
+    expect(after.endorsements).toEqual([endorsement]);
+    const byEndorser = verifyMembershipDocument(after, { [endorserNodeId]: endorser.publicKey });
+    expect(byEndorser.valid ? "valid" : byEndorser.reason).toBe("valid");
+    const direct = verifyMembershipDocument(after, { [designated.nodeId]: primaryPublicKey });
+    expect(direct.valid ? "valid" : direct.reason).toBe("valid");
   });
 
   it("gives up with 503 membership.write_contended when every chart write loses its term guard", async () => {

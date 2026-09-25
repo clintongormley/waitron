@@ -15,7 +15,7 @@ import { authorizeManager, endManagementSession, loginManagerById } from "@waitr
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
-import { mintNextMembershipDocument } from "./membership-mint.js";
+import { mintNextMembershipDocument, readSignerEndorsements } from "./membership-mint.js";
 import { isBareOrigin } from "./config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
@@ -135,6 +135,7 @@ async function appendStandbyToChart(
   standbyNodeId: string,
   standbyContactUrl: string,
 ): Promise<void> {
+  const endorsements = await readSignerEndorsements(deps.appDb, deps.designated.nodeId);
   for (let round = 1; round <= MAX_CHART_WRITE_ROUNDS; round += 1) {
     const held = await readNodeMembership(deps.appDb);
     const document = await mintNextMembershipDocument(
@@ -143,6 +144,7 @@ async function appendStandbyToChart(
         heldDocument: held,
         nodes: withMember(held?.body.nodes ?? [], standbyNodeId, standbyContactUrl),
         signerNodeId: deps.designated.nodeId,
+        endorsements,
       },
     );
     if (await persistNodeMembershipIfNewer(deps.appDb, document)) return;
