@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { hasCode, isAppError } from "@waitron/shared";
-import { bucketClockOffset, newestOf, newestUpload } from "./bucket-times.js";
+import { bucketClockOffset, levelFolder, newestOf, newestUpload } from "./bucket-times.js";
 import { isPreconditionFailure } from "./conditional.js";
 import "./errors.js";
 import { CommitLog, computeLag } from "./freshness.js";
@@ -858,7 +858,9 @@ export class StreamSupervisor {
 
   async #bucketAnswers(generation: string): Promise<boolean> {
     try {
-      await this.#store.list(`${generationPrefix(this.#deps.venueId, generation)}0000/`);
+      await this.#store.list(
+        `${generationPrefix(this.#deps.venueId, generation)}${levelFolder(0)}`,
+      );
       return true;
     } catch {
       return false;

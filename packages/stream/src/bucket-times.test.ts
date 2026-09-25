@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bucketClockOffset, newestUpload } from "./bucket-times.js";
+import { bucketClockOffset, levelFolder, newestUpload } from "./bucket-times.js";
 import { generationPrefix } from "./generations.js";
 import type { ObjectStore } from "./object-store.js";
 import { createMemoryObjectStore } from "./testing/memory-store.js";
@@ -17,6 +17,13 @@ async function generationWith(files: Record<string, number>) {
   }
   return store;
 }
+
+describe("levelFolder", () => {
+  it("names a level by four lowercase hex digits and a slash", () => {
+    expect(levelFolder(0)).toBe("0000/");
+    expect(levelFolder(10)).toBe("000a/");
+  });
+});
 
 describe("newestUpload", () => {
   it("is the newest object anywhere in the generation, whatever order the listing gives", async () => {

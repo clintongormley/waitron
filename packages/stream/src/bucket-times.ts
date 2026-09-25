@@ -1,6 +1,8 @@
 import { generationPrefix } from "./generations.js";
 import type { ListedObject, ObjectStore } from "./object-store.js";
 
+export const levelFolder = (level: number): string => `${level.toString(16).padStart(4, "0")}/`;
+
 /** The newest `lastModified` among `objects`, or `floor` when none is newer. */
 export const newestOf = (objects: readonly ListedObject[], floor: Date | null): Date | null =>
   objects.reduce<Date | null>(
@@ -20,10 +22,7 @@ export async function newestUpload(
   options: { level?: number; floor?: Date | null } = {},
 ): Promise<Date | null> {
   const prefix = generationPrefix(venueId, generation);
-  const folder =
-    options.level === undefined
-      ? prefix
-      : `${prefix}${options.level.toString(16).padStart(4, "0")}/`;
+  const folder = options.level === undefined ? prefix : `${prefix}${levelFolder(options.level)}`;
   return newestOf(await store.list(folder), options.floor ?? null);
 }
 
