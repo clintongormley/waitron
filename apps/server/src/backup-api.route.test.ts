@@ -888,6 +888,7 @@ describe("backup admin routes", () => {
       enabled: false,
       managedByEnvironment: true,
       recoveryKeySet: true,
+      recoveryKeyTooShort: true,
     });
     // The environment owns this key, so rotate refuses before writing anything.
     const rot = await app.request("/api/backup/rotate", {

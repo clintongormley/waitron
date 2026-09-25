@@ -698,8 +698,9 @@ declare module "@waitron/shared" {
      * so a rebuild could not verify the pointer this node signs. */
     "backup.stream_signer_missing": Record<string, never>;
     /**
-     * `apply` was given a recovery key different from the one this box already holds. One recovery
-     * key per venue; `rotate` is the way to change it. No params — the keys are secrets. */
+     * `apply` was given a recovery key different from the usable key this box already holds (a held
+     * key under the length floor is replaced instead). One recovery key per venue; `rotate` is the
+     * way to change a usable one. No params — the keys are secrets. */
     "backup.recovery_key_exists": Record<string, never>;
     /**
      * The `primaryUrl` a mirror was pointed at fails to parse, uses a scheme other than http/https,

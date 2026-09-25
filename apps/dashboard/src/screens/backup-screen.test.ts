@@ -123,6 +123,7 @@ function setNativeInput(el: BackupScreen, sel: string, value: string): void {
 describe("backup-screen", () => {
   it("turning backups on with a recovery key already held mints none and sends none", async () => {
     const api = stubApi({}, { ...OFF, recoveryKeySet: true });
+    const invalidate = vi.spyOn(api.liveData, "invalidate");
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
     await flush(el);
     expect(api.mintBackupKey).not.toHaveBeenCalled();
@@ -141,6 +142,8 @@ describe("backup-screen", () => {
       schedule: { kind: "wall-clock", days: "daily", at: "auto" },
       retention: { count: 7, days: 30 },
     });
+    expect(invalidate).not.toHaveBeenCalledWith([{ type: "backup_status" }]);
+    expect(el.shadowRoot!.textContent).toContain("/mnt/usb/waitron");
   });
 
   it("replaces a held key too short to use with a new one, saying so", async () => {
@@ -388,6 +391,11 @@ describe("backup-screen", () => {
 
   it("apply sends the destination + key + policy and refreshes the status", async () => {
     const api = stubApi();
+    vi.mocked(api.applyBackup).mockImplementation(async () => {
+      vi.mocked(api.getBackupStatus).mockResolvedValue(ENABLED);
+      return ENABLED;
+    });
+    const invalidate = vi.spyOn(api.liveData, "invalidate");
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
     await flush(el);
     setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
@@ -401,8 +409,9 @@ describe("backup-screen", () => {
       schedule: { kind: "wall-clock", days: "daily", at: "auto" },
       retention: { count: 7, days: 30 },
     });
-    // Refreshed to the enabled status returned by apply.
+    // Refreshed to the enabled status.
     expect(el.shadowRoot!.textContent).toContain("/mnt/usb/waitron");
+    expect(invalidate).toHaveBeenCalledWith([{ type: "backup_status" }]);
   });
 
   it("surfaces a rejected apply as a localised role=alert (never the raw code)", async () => {

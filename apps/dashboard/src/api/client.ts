@@ -940,7 +940,7 @@ export interface BackupStatusView {
   archiveUnderCurrentKey: boolean;
   /** Whether the box holds a recovery key at all, archives on or off. */
   recoveryKeySet: boolean;
-  /** The held key is under the length floor; turning archives on replaces it. */
+  /** The held key is under the length floor. */
   recoveryKeyTooShort: boolean;
 }
 

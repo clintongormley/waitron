@@ -291,20 +291,20 @@ export class BackupScreen extends LitElement {
   }
 
   async #apply(): Promise<void> {
-    if (this.#applyDisabled || (!this.#reusesHeldKey && this.#pastedKeyTooShort())) return;
+    const sendsKey = !this.#reusesHeldKey;
+    if (this.#applyDisabled || (sendsKey && this.#pastedKeyTooShort())) return;
     this.errorKey = null;
     this.submitting = true;
-    const replacesShortKey = this.status?.recoveryKeyTooShort === true;
     const body: BackupApplyBody = {
       destinationDir: this.destinationDir.trim(),
-      ...(this.#reusesHeldKey ? {} : { recoveryKey: this.#effectiveKey }),
+      ...(sendsKey ? { recoveryKey: this.#effectiveKey } : {}),
       schedule: this.#buildSchedule(),
       retention: { count: this.retainCount, days: this.retainDays },
     };
     try {
       this.status = await this.api.applyBackup(body);
       // The bucket copy's panel reads the same key.
-      if (replacesShortKey) this.api.liveData.invalidate([{ type: "backup_status" }]);
+      if (sendsKey) this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.savedIt = false;
       this.advancedPaste = false;
       this.pastedKey = "";
