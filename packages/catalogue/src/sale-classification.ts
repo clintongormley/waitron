@@ -17,11 +17,13 @@ import {
 } from "./variant-fallback.js";
 import "./errors.js";
 
-/** The reporting tree, every label, and the listed products' classification, read once for a sale. */
+/** The reporting tree, and the listed products' classification and labels, read once for a sale. */
 export interface LoadedClassification {
-  /** Every reporting category: its name in the default content language, and its parent. */
-  categories: ReadonlyMap<string, { name: string; parentId: string | null }>;
-  /** Every label's name. */
+  /** Every reporting category: its name in every language it has, and its parent. */
+  categories: ReadonlyMap<string, { name: Record<string, string>; parentId: string | null }>;
+  /** The language a walked category's name is resolved in. */
+  language: string;
+  /** The name of every label a loaded product carries. */
   labels: ReadonlyMap<string, string>;
   /** Each loaded product: a variant's parent, its main category after the variant fallback, and
    * the ids of the labels it carries (a variant's are its parent's), sorted. */
@@ -33,19 +35,14 @@ export interface LoadedClassification {
 
 /**
  * Reads what `classifyLine` needs for every product in `productIds`, in three queries however many
- * products there are. Category names are resolved in `defaultLanguage`, the language the line's
- * free-text `category` is resolved in.
+ * products there are. A category's name is resolved only when `classifyLine` walks it, in
+ * `defaultLanguage`, the language the line's free-text `category` is resolved in.
  */
 export async function loadClassification(
   tx: Transaction,
   productIds: readonly string[],
   defaultLanguage: string,
 ): Promise<LoadedClassification> {
-  const categoryRows = await tx
-    .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })
-    .from(categories)
-    .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id));
-  const labelRows = await tx.select({ id: labels.id, name: labels.name }).from(labels);
   const productRows = await tx
     .select({
       id: products.id,
@@ -58,16 +55,19 @@ export async function loadClassification(
     .leftJoin(productLabels, labelOwnerJoin)
     .where(inArray(products.id, [...productIds]))
     .groupBy(products.id);
+  const labelRows = await tx
+    .select({ id: labels.id, name: labels.name })
+    .from(labels)
+    .where(inArray(labels.id, [...new Set(productRows.flatMap((row) => row.labelIds))]));
+  const categoryRows = await tx
+    .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })
+    .from(categories)
+    .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id));
   return {
     categories: new Map(
-      categoryRows.map((row) => [
-        row.id,
-        {
-          name: resolveContentText(row.name, defaultLanguage, defaultLanguage),
-          parentId: row.parentId,
-        },
-      ]),
+      categoryRows.map((row) => [row.id, { name: row.name, parentId: row.parentId }]),
     ),
+    language: defaultLanguage,
     labels: new Map(labelRows.map((row) => [row.id, row.name])),
     products: new Map(
       productRows.map((row) => [
@@ -104,7 +104,11 @@ export function classifyLine(c: LoadedClassification, productId: string): SaleLi
     id !== null && reporting.length <= c.categories.size;
     id = c.categories.get(id)?.parentId ?? null
   ) {
-    reporting.unshift({ id, name: c.categories.get(id)?.name ?? "" });
+    const category = c.categories.get(id);
+    reporting.unshift({
+      id,
+      name: category === undefined ? "" : resolveContentText(category.name, c.language, c.language),
+    });
   }
   const snapshot = {
     reporting,

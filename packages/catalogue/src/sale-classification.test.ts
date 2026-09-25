@@ -188,7 +188,8 @@ describe("classifyLine", () => {
 
   it("refuses to build a chain through a category that was not loaded", () => {
     const c: LoadedClassification = {
-      categories: new Map([["leaf", { name: "Leaf", parentId: "gone" }]]),
+      categories: new Map([["leaf", { name: { en: "Leaf" }, parentId: "gone" }]]),
+      language: "en",
       labels: new Map(),
       products: new Map([["p", { parentId: null, categoryId: "leaf", labelIds: [] }]]),
     };
@@ -204,9 +205,10 @@ describe("classifyLine", () => {
   it("refuses to build a chain round a loop in the tree, rather than walking it forever", () => {
     const c: LoadedClassification = {
       categories: new Map([
-        ["a", { name: "A", parentId: "b" }],
-        ["b", { name: "B", parentId: "a" }],
+        ["a", { name: { en: "A" }, parentId: "b" }],
+        ["b", { name: { en: "B" }, parentId: "a" }],
       ]),
+      language: "en",
       labels: new Map(),
       products: new Map([["p", { parentId: null, categoryId: "a", labelIds: [] }]]),
     };
@@ -249,12 +251,26 @@ describe("loadClassification", () => {
     expect(counts.loadedProducts).toBe(5);
   });
 
+  it("reads only the labels the loaded products carry", async () => {
+    const f = await fixture();
+    const [variantOnly, unlabelled] = await app(async (tx) => [
+      await loadClassification(tx, [f.products.wine125], "en"),
+      await loadClassification(tx, [f.products.water, f.products.lemon], "en"),
+    ]);
+
+    expect([...variantOnly.labels.keys()]).toEqual([f.labels.alcoholic.id]);
+    expect(unlabelled.labels.size).toBe(0);
+  });
+
   it("loads nothing for an empty basket but still answers", async () => {
     const f = await fixture();
     const c = await app((tx) => loadClassification(tx, [], "en"));
 
     expect(c.products.size).toBe(0);
-    expect(c.categories.get(f.categories.drinks.id)).toEqual({ name: "Drinks", parentId: null });
+    expect(c.categories.get(f.categories.drinks.id)).toEqual({
+      name: { en: "Drinks", es: "Bebidas" },
+      parentId: null,
+    });
   });
 });
 
