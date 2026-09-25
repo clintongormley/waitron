@@ -534,6 +534,20 @@ describe("the test shards", () => {
     }
   });
 
+  it("installs the stream loop test's two pinned binaries in every apps/server shard, before it runs", () => {
+    // The loop test (apps/server/src/stream-loop.e2e.test.ts) FAILS in CI when a binary is missing,
+    // so this is the cheaper place to learn the install step went. It reads ci.yml as text.
+    const body = job("test-server").body.join("\n");
+    const litestream = body.indexOf("node scripts/setup-litestream.mjs");
+    const versitygw = body.indexOf("node scripts/setup-s3-test-server.mjs");
+    const run = body.indexOf('pnpm --filter "@waitron/server" test:shard');
+    expect(run).toBeGreaterThan(-1);
+    expect(litestream).toBeGreaterThan(-1);
+    expect(versitygw).toBeGreaterThan(-1);
+    expect(litestream).toBeLessThan(run);
+    expect(versitygw).toBeLessThan(run);
+  });
+
   it("were found, each with at least one filter", () => {
     expect(shards.length).toBeGreaterThan(1);
     for (const shard of shards) expect(shard.filters.length).toBeGreaterThan(0);
