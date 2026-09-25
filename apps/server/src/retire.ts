@@ -9,7 +9,7 @@ import {
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
-import { mintNextMembershipDocument } from "./membership-mint.js";
+import { mintNextMembershipDocument, readSignerEndorsements } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 
 export interface RetireDeps {
@@ -57,7 +57,7 @@ export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
       heldDocument: held,
       nodes: evictNode(held!.body.nodes, deps.nodeId),
       signerNodeId: deps.nodeId,
-      endorsements: [],
+      endorsements: await readSignerEndorsements(deps.appDb, deps.nodeId),
     },
   );
 

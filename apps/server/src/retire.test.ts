@@ -1,10 +1,11 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import {
   captureError,
   CORE_MIGRATIONS,
   locations,
+  nodes,
   stampDeployment,
   readMembershipTrustSet,
   readNodeMembership,
@@ -15,6 +16,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
+  endorseKey,
+  generateNodeKeyPair,
   verifyMembershipDocument,
   type MembershipNode,
   type NodeStanding,
@@ -109,6 +112,26 @@ describe("retireSelf", () => {
 
     const trust = await readMembershipTrustSet(db);
     expect(verifyMembershipDocument(held!, trust).valid).toBe(true);
+  });
+
+  // A node that began as a mirror is trusted by a peer that holds only the endorser's key through the
+  // endorsement of its key that adopt stored on its node row.
+  it("carries this node's stored endorsement, so a peer trusting only the endorser accepts the eviction", async () => {
+    const { deps, nodeId } = await fencedNode();
+    const endorser = generateNodeKeyPair();
+    const ownKey = (await readMembershipTrustSet(db))[nodeId]!;
+    const endorsement = endorseKey(nodeId, ownKey, CARRIER_ID, endorser.privateKey);
+    await db.update(nodes).set({ endorsement }).where(eq(nodes.id, nodeId));
+    await writeNodeMembership(db, heldDoc(nodeId, "sell-only"));
+
+    await retireSelf(deps(noopLog));
+
+    const held = (await readNodeMembership(db))!;
+    expect(held.endorsements).toEqual([endorsement]);
+    const byEndorser = verifyMembershipDocument(held, { [CARRIER_ID]: endorser.publicKey });
+    expect(byEndorser.valid ? "valid" : byEndorser.reason).toBe("valid");
+    const direct = verifyMembershipDocument(held, { [nodeId]: ownKey });
+    expect(direct.valid ? "valid" : direct.reason).toBe("valid");
   });
 
   it("is idempotent — an already-evicted node is a no-op, even with no carrier in the chart", async () => {

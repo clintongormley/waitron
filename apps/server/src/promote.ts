@@ -2,7 +2,6 @@ import "./errors.js";
 import { AppError } from "@waitron/shared";
 import {
   persistNodeMembershipIfNewerTx,
-  readNodeEndorsement,
   readNodeMembership,
   readStandardSeriesId,
   setDeploymentModeTx,
@@ -20,7 +19,7 @@ import {
 } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import { refreshDeploymentHolders, type DeploymentHolders } from "./deployment-holders.js";
-import { mintNextMembershipDocument } from "./membership-mint.js";
+import { mintNextMembershipDocument, readSignerEndorsements } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 
 /**
@@ -94,6 +93,7 @@ export async function promoteLocalSecondaryToPrimary(
       heldDocument: held,
       nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
       signerNodeId: deps.nodeId,
+      endorsements: await readSignerEndorsements(deps.db, deps.nodeId),
     },
   );
 
@@ -168,17 +168,15 @@ export async function promoteMirrorToPrimary(
     return { alreadyPrimary: true, seriesId };
   }
 
-  // The primary's endorsement lets a peer that trusts only the primary trust this document.
   const held = await readNodeMembership(deps.db);
   assertNotFenced(held, deps.nodeId);
-  const endorsement = await readNodeEndorsement(deps.db, deps.nodeId);
   const document = await mintNextMembershipDocument(
     { db: deps.db, ring: deps.ring },
     {
       heldDocument: held,
       nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
       signerNodeId: deps.nodeId,
-      endorsements: endorsement === null ? [] : [endorsement],
+      endorsements: await readSignerEndorsements(deps.db, deps.nodeId),
     },
   );
 

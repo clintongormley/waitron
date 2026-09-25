@@ -591,3 +591,5 @@ git commit -s -m "feat(server): mint the next membership document on local-secon
 **Type consistency:** `buildNextMembershipDocument`'s argument object and return type match `SignedMembershipDocument` (Task 1) as consumed in Tasks 3 and 4; `writeNodeMembershipTx(tx, document)` / `setSingletonRoleTx(tx, role)` signatures (Task 2) match their Task 4 call sites; `PromoteDeps`' new `ring`/`tenantId`/`nodeId` (Task 4) match the boot call site.
 
 **Note for the executor:** R1 signs promotion documents with the promoting node's own directly-trusted key (`endorsements: []`). A receiver that only trusts the promoting node transitively (via the primary's endorsement) is an R2/R3 concern — do not add endorsement plumbing here.
+
+_(2026-09-25: `promoteLocalSecondaryToPrimary` now carries the signing node's stored endorsement, if any, through `readSignerEndorsements` in `apps/server/src/membership-mint.ts`.)_

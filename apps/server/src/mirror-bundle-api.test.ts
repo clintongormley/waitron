@@ -2,9 +2,10 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
+  nodes,
   readMembershipTrustSet,
   readNodeMembership,
   stampDeployment,
@@ -18,6 +19,7 @@ import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import {
   canonicalize,
+  endorseKey,
   generateNodeKeyPair,
   verifyBytes,
   verifyMembershipDocument,
@@ -31,7 +33,7 @@ import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 // No case races concurrent adopts: writers are serialised on this engine, so the chart-write retry
-// is driven by a trigger that refuses every update instead.
+// is driven by triggers that refuse updates of the held chart instead.
 const LOCALE = "es-ES";
 const ADMIN_PASSWORD = "dashPass123";
 const STAFF_PASSWORD = "staffPass123";
@@ -264,6 +266,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(after?.body.nodes).toContainEqual(node);
     }
     expect(after?.signerNodeId).toBe(designated.nodeId);
+    expect(after?.endorsements).toEqual([]);
     expect(verifyMembershipDocument(after!, { [designated.nodeId]: primaryPublicKey }).valid).toBe(
       true,
     );
@@ -290,6 +293,105 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     for (const node of before?.body.nodes ?? []) {
       expect(afterReadopt?.body.nodes).toContainEqual(node);
     }
+  });
+
+  // A primary that began as a mirror is trusted by a peer that holds only the endorser's key through
+  // the endorsement of its key that adopt stored on its node row.
+  it("carries the primary's stored endorsement, so a peer trusting only the endorser accepts the appended chart", async () => {
+    const { designated, adminPersonId, primaryPublicKey } = await setupVenue();
+    const endorserNodeId = crypto.randomUUID();
+    const endorser = generateNodeKeyPair();
+    const endorsement = endorseKey(
+      designated.nodeId,
+      primaryPublicKey,
+      endorserNodeId,
+      endorser.privateKey,
+    );
+    await db.update(nodes).set({ endorsement }).where(eq(nodes.id, designated.nodeId));
+    const app = mountApp(designated, "https://relay.example:9000/");
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+    expect(res.status).toBe(200);
+
+    const after = (await readNodeMembership(db))!;
+    expect(after.endorsements).toEqual([endorsement]);
+    const byEndorser = verifyMembershipDocument(after, { [endorserNodeId]: endorser.publicKey });
+    expect(byEndorser.valid ? "valid" : byEndorser.reason).toBe("valid");
+    const direct = verifyMembershipDocument(after, { [designated.nodeId]: primaryPublicKey });
+    expect(direct.valid ? "valid" : direct.reason).toBe("valid");
+  });
+
+  it("signs a retried chart write with the endorsement stored when that round reads, not the first round's", async () => {
+    const { designated, adminPersonId, primaryPublicKey } = await setupVenue();
+    const oldEndorserNodeId = crypto.randomUUID();
+    const oldEndorsement = endorseKey(
+      designated.nodeId,
+      primaryPublicKey,
+      oldEndorserNodeId,
+      generateNodeKeyPair().privateKey,
+    );
+    const newEndorserNodeId = crypto.randomUUID();
+    const newEndorser = generateNodeKeyPair();
+    const newEndorsement = endorseKey(
+      designated.nodeId,
+      primaryPublicKey,
+      newEndorserNodeId,
+      newEndorser.privateKey,
+    );
+    await db
+      .update(nodes)
+      .set({ endorsement: oldEndorsement })
+      .where(eq(nodes.id, designated.nodeId));
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+    await writeNodeMembership(
+      db,
+      signedMembershipDoc(seedTerm, {
+        signerNodeId: designated.nodeId,
+        nodes: [
+          {
+            nodeId: designated.nodeId,
+            contactUrl: "https://box.deli.test",
+            standing: "serving-primary",
+          },
+        ],
+      }),
+    );
+    // Only while the old endorsement is stored: the first chart write replaces it and loses its
+    // round, and every later round goes through.
+    const quote = (value: string): string => `'${value.replaceAll("'", "''")}'`;
+    await db.execute(
+      sql.raw(
+        `create trigger test_node_membership_endorsement_moves before update on node_membership
+         when (select json_extract(endorsement, '$.endorsedBy') from nodes where id = ${quote(designated.nodeId)}) = ${quote(oldEndorserNodeId)}
+         begin
+           update nodes set endorsement = ${quote(JSON.stringify(newEndorsement))} where id = ${quote(designated.nodeId)};
+           select raise(ignore);
+         end`,
+      ),
+    );
+    try {
+      const app = mountApp(designated, "https://relay.example:9000/");
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      await db.execute(sql.raw("drop trigger test_node_membership_endorsement_moves"));
+    }
+
+    const after = (await readNodeMembership(db))!;
+    expect(after.body.term).toBe(seedTerm + 1);
+    expect(after.endorsements).toEqual([newEndorsement]);
+    const byNewEndorser = verifyMembershipDocument(after, {
+      [newEndorserNodeId]: newEndorser.publicKey,
+    });
+    expect(byNewEndorser.valid ? "valid" : byNewEndorser.reason).toBe("valid");
   });
 
   it("gives up with 503 membership.write_contended when every chart write loses its term guard", async () => {

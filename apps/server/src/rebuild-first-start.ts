@@ -2,12 +2,7 @@ import { access, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { KeyRing } from "@waitron/credentials";
-import {
-  persistNodeMembershipIfNewer,
-  readNodeEndorsement,
-  readNodeMembership,
-  type Database,
-} from "@waitron/db";
+import { persistNodeMembershipIfNewer, readNodeMembership, type Database } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
 import { AppError, isAppError } from "@waitron/shared";
 import {
@@ -18,7 +13,7 @@ import {
 } from "@waitron/stream";
 import { reissueBoxLeaf } from "./box-secrets.js";
 import type { Logger } from "./logger.js";
-import { mintNextMembershipDocument } from "./membership-mint.js";
+import { mintNextMembershipDocument, readSignerEndorsements } from "./membership-mint.js";
 import { readStreamSettings } from "./stream-host.js";
 
 /** Left in the state folder by `writeValidated` (restore.ts) whenever a restore takes on the
@@ -79,16 +74,13 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
   // Never below the bucket's pointer: the stream supervisor refuses to replace a pointer naming a
   // higher term (slice-2 spec §5.1 step 7).
   const pointerTerm = (await deps.pointerTerm?.()) ?? null;
-  // As mirror promotion does (promote.ts): the endorsement lets a peer that trusts only the
-  // endorser (the primary that adopted this node) trust this document.
-  const endorsement = await readNodeEndorsement(deps.db, deps.nodeId);
   const next = await mintNextMembershipDocument(
     { db: deps.db, ring: deps.ring },
     {
       heldDocument: held,
       nodes,
       signerNodeId: deps.nodeId,
-      endorsements: endorsement === null ? [] : [endorsement],
+      endorsements: await readSignerEndorsements(deps.db, deps.nodeId),
       ...(pointerTerm === null ? {} : { minTerm: pointerTerm + 1 }),
     },
   );

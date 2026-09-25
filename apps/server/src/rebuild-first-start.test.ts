@@ -289,9 +289,9 @@ describe("completeRebuild", () => {
     expect((await readNodeMembership(suite.db))!.body.nodes).toEqual([other]);
   });
 
-  // A node promoted from a mirror is trusted by the other peers only through the endorsement of its
-  // key by the primary that adopted it, which adopt stored on its node row and promotion put on its
-  // document.
+  // A node promoted from a mirror is trusted by a peer that holds only the endorser's key through the
+  // endorsement of its key by the primary that adopted it, which adopt stored on its node row and
+  // promotion put on its document.
   it("carries this node's endorsement forward, so a peer trusting only the endorser accepts the new term", async () => {
     const stateDir = await rebuiltStateDir("archive");
     const endorser = generateNodeKeyPair();
