@@ -1,0 +1,571 @@
+import { page } from "vitest/browser";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { alertMessage } from "../i18n/alerts.js";
+import { codeMessage } from "../i18n/codes.js";
+import type { StringKey } from "../i18n/strings.js";
+import { t } from "../i18n/t.js";
+import type { DashboardApi, StreamSettingsView, StreamStatusView } from "../api/client.js";
+import type { StreamSettingsPanel } from "./stream-settings-panel.js";
+import "./stream-settings-panel.js";
+
+afterEach(cleanupWidgets);
+
+const OFF: StreamSettingsView = {
+  isPrimary: true,
+  configured: false,
+  bucket: null,
+  status: { state: "off" },
+  recoveryKeySet: false,
+  keyFingerprint: null,
+};
+const STREAMING = {
+  state: "streaming",
+  generation: "gen-0-n-20260923T101500Z",
+  reason: null,
+  stateSince: "2026-09-23T10:15:30.000Z",
+  bucketProblem: null,
+  lastConfirmedUploadAt: "2026-09-23T10:16:00.000Z",
+  lagMs: 0,
+} as const;
+const ON: StreamSettingsView = {
+  isPrimary: true,
+  configured: true,
+  bucket: {
+    endpoint: null,
+    region: "eu-west-1",
+    bucket: "venue-copy",
+    prefix: "",
+    accessKeyId: "AKIAEXAMPLE",
+  },
+  status: STREAMING,
+  recoveryKeySet: true,
+  keyFingerprint: "ab12cd34",
+};
+// A realistic kit is one long token with no spaces — the width case below depends on that.
+const KIT = `WAITRON-RECOVERY-KIT-1:${"eyJ2ZXJzaW9uIjoxLCJ2ZW51ZUlkIjoi".repeat(12)}`;
+
+function stubApi(overrides: Partial<DashboardApi> = {}, settings = OFF): DashboardApi {
+  return {
+    getStreamSettings: vi.fn().mockResolvedValue(settings),
+    saveStreamSettings: vi.fn().mockResolvedValue(ON),
+    testStreamBucket: vi.fn().mockResolvedValue({ ok: true }),
+    turnOffStream: vi.fn().mockResolvedValue(OFF),
+    getRecoveryKit: vi.fn().mockResolvedValue({ kit: KIT, keyFingerprint: "ab12cd34" }),
+    ...overrides,
+  } as unknown as DashboardApi;
+}
+
+function withStatus(status: StreamStatusView): StreamSettingsView {
+  return { ...ON, status };
+}
+
+async function flush(el: StreamSettingsPanel): Promise<void> {
+  for (let i = 0; i < 3; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+  }
+}
+
+async function mount(api: DashboardApi, props: Partial<StreamSettingsPanel> = {}) {
+  const mounted = await mountWidget<StreamSettingsPanel>("dashboard-stream-settings", {
+    api,
+    ...props,
+  });
+  await flush(mounted.el);
+  return mounted;
+}
+
+const q = (el: StreamSettingsPanel, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
+const field = (el: StreamSettingsPanel, name: string) =>
+  q(el, `wt-input[name=${name}]`) as HTMLElement & { error: string; value: string; type: string };
+const text = (el: StreamSettingsPanel, sel: string) => q(el, sel)?.textContent?.trim();
+const summaryErrors = (el: StreamSettingsPanel) =>
+  (q(el, "wt-form-error-summary") as HTMLElement & { errors: string[] }).errors;
+const focusedName = (el: StreamSettingsPanel) =>
+  el.shadowRoot!.activeElement?.getAttribute("name") ?? null;
+
+function type(el: StreamSettingsPanel, name: string, value: string): void {
+  field(el, name).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+}
+
+function fillRequired(el: StreamSettingsPanel): void {
+  type(el, "bucket-region", "eu-west-1");
+  type(el, "bucket-name", "venue-copy");
+  type(el, "bucket-access-key-id", "AKIAEXAMPLE");
+  type(el, "bucket-secret-access-key", "not-a-real-secret-0123456789");
+}
+
+async function press(el: StreamSettingsPanel, button: string): Promise<void> {
+  q(el, `[data-test=${button}]`)!.click();
+  await flush(el);
+}
+
+describe("stream-settings-panel: the bucket form", () => {
+  it("offers the bucket form with every field named and the required ones marked", async () => {
+    const { el } = await mount(stubApi());
+    const inputs = [...el.shadowRoot!.querySelectorAll("wt-input")];
+    expect(inputs.map((i) => i.getAttribute("name"))).toEqual([
+      "bucket-endpoint",
+      "bucket-region",
+      "bucket-name",
+      "bucket-prefix",
+      "bucket-access-key-id",
+      "bucket-secret-access-key",
+    ]);
+    const required = inputs
+      .filter((i) => (i as HTMLElement & { required: boolean }).required)
+      .map((i) => i.getAttribute("name"));
+    expect(required).toEqual([
+      "bucket-region",
+      "bucket-name",
+      "bucket-access-key-id",
+      "bucket-secret-access-key",
+    ]);
+  });
+
+  it("explains every missing field beside it and in one summary, focuses the first, and sends nothing", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    await press(el, "save");
+    expect(api.saveStreamSettings).not.toHaveBeenCalled();
+    expect(summaryErrors(el)).toEqual([
+      t("stream.form.region_required"),
+      t("stream.form.bucket_required"),
+      t("stream.form.access_key_id_required"),
+      t("stream.form.secret_access_key_required"),
+    ]);
+    expect(field(el, "bucket-region").error).toBe(t("stream.form.region_required"));
+    expect(field(el, "bucket-endpoint").error).toBe("");
+    expect(focusedName(el)).toBe("bucket-region");
+  });
+
+  it("refuses an endpoint that is not a web address, beside the field", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    fillRequired(el);
+    type(el, "bucket-endpoint", "s3.example.net");
+    await press(el, "save");
+    expect(api.saveStreamSettings).not.toHaveBeenCalled();
+    expect(field(el, "bucket-endpoint").error).toBe(t("stream.form.endpoint_invalid"));
+    expect(focusedName(el)).toBe("bucket-endpoint");
+  });
+
+  it("Test sends the typed bucket and says it passed", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    fillRequired(el);
+    type(el, "bucket-endpoint", " https://s3.example.net ");
+    await press(el, "test");
+    expect(api.testStreamBucket).toHaveBeenCalledWith({
+      endpoint: "https://s3.example.net",
+      region: "eu-west-1",
+      bucket: "venue-copy",
+      prefix: "",
+      accessKeyId: "AKIAEXAMPLE",
+      secretAccessKey: "not-a-real-secret-0123456789",
+    });
+    expect(text(el, "[data-test=test-passed]")).toBe(t("stream.form.test_passed"));
+  });
+
+  it("Test checks the fields first, as Save does", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    await press(el, "test");
+    expect(api.testStreamBucket).not.toHaveBeenCalled();
+    expect(summaryErrors(el)).toHaveLength(4);
+  });
+
+  it("a failed Test shows the localised refusal and the failed check in words", async () => {
+    const api = stubApi({
+      testStreamBucket: vi.fn().mockRejectedValue({
+        code: "backup.stream_test_failed",
+        params: { reason: "create_only_ignored" },
+        status: 422,
+      }),
+    });
+    const { el } = await mount(api);
+    fillRequired(el);
+    await press(el, "test");
+    const alert = q(el, "[role=alert]")!;
+    expect(alert.textContent).toContain(codeMessage("backup.stream_test_failed"));
+    expect(alert.textContent).toContain(t("stream.probe.create_only_ignored"));
+    expect(alert.textContent).not.toContain("create_only_ignored");
+    expect(q(el, "[data-test=test-passed]")).toBeNull();
+  });
+
+  it("a failed Test with a check it has no sentence for shows the refusal alone, never the reason's text", async () => {
+    const api = stubApi({
+      testStreamBucket: vi.fn().mockRejectedValue({
+        code: "backup.stream_test_failed",
+        params: { reason: "<b>made_up</b>" },
+      }),
+    });
+    const { el } = await mount(api);
+    fillRequired(el);
+    await press(el, "test");
+    expect(text(el, "[role=alert]")).toBe(codeMessage("backup.stream_test_failed"));
+  });
+
+  it("puts a refused bucket name beside the bucket field, in the summary, and focuses it", async () => {
+    const api = stubApi({
+      saveStreamSettings: vi.fn().mockRejectedValue({
+        code: "backup.stream_config_unsafe",
+        params: { field: "bucket" },
+      }),
+    });
+    const { el } = await mount(api);
+    fillRequired(el);
+    await press(el, "save");
+    expect(field(el, "bucket-name").error).toBe(t("stream.field.bucket_characters"));
+    expect(summaryErrors(el)).toEqual([t("stream.field.bucket_characters")]);
+    expect(focusedName(el)).toBe("bucket-name");
+    expect(q(el, "p[role=alert]")).toBeNull();
+    // What was typed stays, so the owner can correct it.
+    expect(field(el, "bucket-name").value).toBe("venue-copy");
+  });
+
+  it.each([
+    ["backup.stream_config_unsafe", "prefix", "bucket-prefix", "stream.field.prefix_folders"],
+    [
+      "backup.stream_config_unsafe",
+      "accessKeyId",
+      "bucket-access-key-id",
+      "stream.field.key_characters",
+    ],
+    [
+      "backup.stream_config_unsafe",
+      "secretAccessKey",
+      "bucket-secret-access-key",
+      "stream.field.key_characters",
+    ],
+    ["backup.stream_config_unsafe", "region", "bucket-region", "stream.field.check"],
+    ["backup.request_invalid", "prefix", "bucket-prefix", "stream.field.check"],
+    ["backup.request_invalid", "endpoint", "bucket-endpoint", "stream.field.check"],
+  ] as const)("puts %s naming %s beside its field", async (code, named, name, key) => {
+    const api = stubApi({
+      testStreamBucket: vi.fn().mockRejectedValue({ code, params: { field: named } }),
+    });
+    const { el } = await mount(api);
+    fillRequired(el);
+    await press(el, "test");
+    expect(field(el, name).error).toBe(t(key as StringKey));
+    expect(focusedName(el)).toBe(name);
+  });
+
+  it("shows a refusal naming something the form does not hold as one alert, with no field marked", async () => {
+    const api = stubApi({
+      saveStreamSettings: vi.fn().mockRejectedValue({
+        code: "backup.stream_config_unsafe",
+        params: { field: "replicaUrl" },
+      }),
+    });
+    const { el } = await mount(api);
+    fillRequired(el);
+    await press(el, "save");
+    expect(text(el, "[role=alert]")).toBe(codeMessage("backup.stream_config_unsafe"));
+    expect(summaryErrors(el)).toEqual([]);
+    expect(field(el, "bucket-name").error).toBe("");
+  });
+
+  it("explains, in this panel's words, a Save refused because the environment sets the backups", async () => {
+    const api = stubApi({
+      saveStreamSettings: vi.fn().mockRejectedValue({ code: "backup.managed_by_environment" }),
+    });
+    const { el } = await mount(api);
+    fillRequired(el);
+    await press(el, "save");
+    expect(text(el, "[role=alert]")).toBe(t("stream.error.managed_by_environment"));
+  });
+
+  it("sends the corrected value once a refused field is fixed", async () => {
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "backup.stream_config_unsafe", params: { field: "bucket" } })
+      .mockResolvedValueOnce(ON);
+    const { el } = await mount(stubApi({ saveStreamSettings: save }));
+    fillRequired(el);
+    await press(el, "save");
+    type(el, "bucket-name", "venue.copy");
+    await press(el, "save");
+    expect(save).toHaveBeenLastCalledWith(expect.objectContaining({ bucket: "venue.copy" }));
+    expect(q(el, "[data-test=kit]")).not.toBeNull();
+  });
+
+  it("submits Save when Enter is pressed in a field", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    fillRequired(el);
+    await el.updateComplete;
+    const input = field(el, "bucket-region").shadowRoot!.querySelector("input")!;
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+    );
+    await flush(el);
+    expect(api.saveStreamSettings).toHaveBeenCalledOnce();
+  });
+
+  it("shows and hides the secret access key", async () => {
+    const { el } = await mount(stubApi());
+    expect(field(el, "bucket-secret-access-key").type).toBe("password");
+    await press(el, "toggle-secret");
+    expect(field(el, "bucket-secret-access-key").type).toBe("text");
+    expect(q(el, "[data-test=toggle-secret]")!.getAttribute("aria-label")).toBe(
+      t("stream.form.hide_secret"),
+    );
+    expect(text(el, "[data-test=toggle-secret]")).toBe("");
+    await press(el, "toggle-secret");
+    expect(field(el, "bucket-secret-access-key").type).toBe("password");
+  });
+});
+
+describe("stream-settings-panel: once set up", () => {
+  it("Save switches the copy on and immediately offers the kit with its warning, a copy button and a real download", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    fillRequired(el);
+    await press(el, "save");
+    expect(api.saveStreamSettings).toHaveBeenCalled();
+    expect(api.getRecoveryKit).toHaveBeenCalled();
+    expect(text(el, "[data-test=kit]")).toBe(KIT);
+    expect(text(el, "[data-test=kit-warning]")).toBe(t("stream.kit.warning"));
+    const download = q(el, "[data-test=download-kit]") as HTMLAnchorElement;
+    expect(download.href.startsWith("blob:")).toBe(true);
+    expect(download.getAttribute("download")).toBe("waitron-recovery-kit-ab12cd34.txt");
+    expect(q(el, "[data-test=copy-kit]")).not.toBeNull();
+    // The secret is not kept once saved: changing the bucket later starts with it blank and the
+    // rest of the settings filled in from the server.
+    await press(el, "change");
+    expect(field(el, "bucket-secret-access-key").value).toBe("");
+    expect(field(el, "bucket-region").value).toBe("eu-west-1");
+  });
+
+  it("puts the kit file's heading and note above the kit", async () => {
+    const createObjectURL = vi.spyOn(URL, "createObjectURL");
+    try {
+      const { el } = await mount(stubApi({}, ON));
+      await press(el, "show-kit");
+      const blob = createObjectURL.mock.calls.at(-1)![0] as Blob;
+      expect(await blob.text()).toBe(
+        `${t("stream.kit.file_heading")}\n${t("stream.kit.file_note")}\n\n${KIT}\n`,
+      );
+    } finally {
+      createObjectURL.mockRestore();
+    }
+  });
+
+  it("copies the kit, and a refused clipboard leaves the kit on screen with nothing unhandled", async () => {
+    const { el } = await mount(stubApi({}, ON));
+    await press(el, "show-kit");
+    // A plain function, not a vi spy: a spy observes the promise it returns, which would mark the
+    // refusal handled and hide a missing catch.
+    const copied: string[] = [];
+    Object.defineProperty(navigator.clipboard, "writeText", {
+      configurable: true,
+      value: (value: string) => {
+        copied.push(value);
+        return Promise.reject(new DOMException("denied", "NotAllowedError"));
+      },
+    });
+    const unhandled: unknown[] = [];
+    const onRejection = (event: PromiseRejectionEvent) => {
+      unhandled.push(event.reason);
+      event.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    try {
+      q(el, "[data-test=copy-kit]")!.click();
+      expect(copied).toEqual([KIT]);
+      // Rejections are reported in the order they went unhandled, so once this marker arrives any
+      // unhandled clipboard refusal from the click above has been reported too.
+      const marker = new Error("marker");
+      void Promise.reject(marker);
+      await vi.waitFor(() => expect(unhandled).toContain(marker));
+      expect(unhandled).toEqual([marker]);
+      expect(text(el, "[data-test=kit]")).toBe(KIT);
+      expect(q(el, "[role=alert]")).toBeNull();
+    } finally {
+      window.removeEventListener("unhandledrejection", onRejection);
+      delete (navigator.clipboard as unknown as Record<string, unknown>)["writeText"];
+    }
+  });
+
+  it("shows how current the copy is when it is on, and the kit on request", async () => {
+    const { el } = await mount(stubApi({}, ON));
+    expect(text(el, "[data-test=stream-state]")).toBe(t("stream.state.streaming"));
+    expect(text(el, "[data-test=stream-lag]")).toBe(t("stream.status.lag_none"));
+    expect(text(el, "[data-test=stream-last]")).toBe(
+      new Date(STREAMING.lastConfirmedUploadAt).toLocaleString(),
+    );
+    expect(q(el, "[data-test=kit]")).toBeNull();
+    await press(el, "show-kit");
+    expect(text(el, "[data-test=kit]")).toBe(KIT);
+    expect(q(el, "[data-test=show-kit]")).toBeNull();
+  });
+
+  it.each([
+    [17 * 60_000, `17 ${t("stream.status.minutes")}`],
+    [30_000, t("stream.status.lag_under_minute")],
+  ])("reports %i ms of waiting changes as %s", async (lagMs, shown) => {
+    const { el } = await mount(stubApi({}, withStatus({ ...STREAMING, lagMs })));
+    expect(text(el, "[data-test=stream-lag]")).toBe(shown);
+  });
+
+  it("says no copy has been confirmed yet", async () => {
+    const { el } = await mount(
+      stubApi({}, withStatus({ ...STREAMING, state: "opening", lastConfirmedUploadAt: null })),
+    );
+    expect(text(el, "[data-test=stream-state]")).toBe(t("stream.state.opening"));
+    expect(text(el, "[data-test=stream-last]")).toBe(t("stream.status.never"));
+  });
+
+  it.each([
+    ["paused", "side_file_limit", "stream.state.paused"],
+    ["refused", "pointer_changed", "stream.state.another_server"],
+    ["refused", "pointer_newer_term", "stream.state.another_server"],
+    ["refused", "config_unsafe", "stream.state.unusable"],
+    ["off", "supervisor_failed", "stream.state.not_running"],
+    ["off", "stopped", "stream.state.not_running"],
+  ] as const)("words a supervisor that is %s for %s as %s", async (state, reason, key) => {
+    const { el } = await mount(stubApi({}, withStatus({ ...STREAMING, state, reason })));
+    expect(text(el, "[data-test=stream-state]")).toBe(t(key));
+    expect(q(el, "[data-test=stream-lag]")).not.toBeNull();
+  });
+
+  it("does not say another server is writing when the settings are what stopped the copy", async () => {
+    const { el } = await mount(
+      stubApi({}, withStatus({ ...STREAMING, state: "refused", reason: "config_unsafe" })),
+    );
+    expect(text(el, "[data-test=stream-state]")).not.toBe(t("stream.state.another_server"));
+  });
+
+  it.each([
+    [
+      "set up but not started",
+      { state: "off", reason: "no_membership", stateSince: STREAMING.stateSince },
+    ],
+    ["plainly off", { state: "off" }],
+  ] as const)(
+    "says a copy that is %s is not running, with no lag or last-copy rows",
+    async (_n, status) => {
+      const { el } = await mount(stubApi({}, withStatus(status)));
+      expect(text(el, "[data-test=stream-state]")).toBe(t("stream.state.not_running"));
+      expect(q(el, "[data-test=stream-lag]")).toBeNull();
+      expect(q(el, "[data-test=stream-last]")).toBeNull();
+      expect(q(el, "[data-test=bucket-problem]")).toBeNull();
+    },
+  );
+
+  it("names the bucket check that is failing, in words", async () => {
+    const bucketProblem = { reason: "access_denied", since: STREAMING.stateSince };
+    const { el } = await mount(stubApi({}, withStatus({ ...STREAMING, bucketProblem })));
+    expect(text(el, "[data-test=bucket-problem]")).toBe(t("stream.probe.access_denied"));
+  });
+
+  it("falls back to the bucket alert's sentence for a failing check it has no words for, never the reason's text", async () => {
+    const bucketProblem = { reason: "<i>made_up</i>", since: STREAMING.stateSince };
+    const { el } = await mount(stubApi({}, withStatus({ ...STREAMING, bucketProblem })));
+    expect(text(el, "[data-test=bucket-problem]")).toBe(
+      alertMessage("backup.stream_bucket_unusable", {}),
+    );
+  });
+
+  it("re-issues the kit when the recovery key changes, with the keep-the-old-kit banner", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api, { keyFingerprint: "ab12cd34" });
+    expect(q(el, "[data-test=kit-reissued]")).toBeNull();
+    el.keyFingerprint = "ffee0011";
+    await flush(el);
+    expect(api.getRecoveryKit).toHaveBeenCalledOnce();
+    expect(text(el, "[data-test=kit-reissued]")).toBe(t("stream.kit.reissued"));
+  });
+
+  it("does not re-issue on the first fingerprint it is given", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    el.keyFingerprint = "ab12cd34";
+    await flush(el);
+    expect(api.getRecoveryKit).not.toHaveBeenCalled();
+  });
+
+  it("does not fetch a kit when the key changes on a box with no bucket copy", async () => {
+    const api = stubApi();
+    const { el } = await mount(api, { keyFingerprint: "ab12cd34" });
+    el.keyFingerprint = "ffee0011";
+    await flush(el);
+    expect(api.getRecoveryKit).not.toHaveBeenCalled();
+  });
+
+  it("explains, in this panel's words, a kit refused because the box holds no recovery key", async () => {
+    const api = stubApi(
+      { getRecoveryKit: vi.fn().mockRejectedValue({ code: "backup.recovery_key_missing" }) },
+      ON,
+    );
+    const { el } = await mount(api);
+    await press(el, "show-kit");
+    expect(text(el, "[role=alert]")).toBe(t("stream.error.recovery_key_missing"));
+  });
+
+  it("Cancel leaves the bucket as it was", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    await press(el, "change");
+    type(el, "bucket-name", "other-bucket");
+    await press(el, "cancel");
+    expect(q(el, "wt-input")).toBeNull();
+    expect(api.saveStreamSettings).not.toHaveBeenCalled();
+  });
+
+  it("offers nothing to change on a server that is not the primary", async () => {
+    const { el } = await mount(stubApi({}, { ...OFF, isPrimary: false }));
+    expect(text(el, "[data-test=not-primary]")).toBe(t("stream.not_primary"));
+    expect(el.shadowRoot!.querySelector("wt-input")).toBeNull();
+  });
+
+  it("Turn off stops the copy and hides the kit", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    await press(el, "show-kit");
+    await press(el, "turn-off");
+    expect(api.turnOffStream).toHaveBeenCalled();
+    expect(q(el, "[data-test=kit]")).toBeNull();
+    expect(field(el, "bucket-region")).not.toBeNull();
+  });
+
+  it("keeps the copy on and says why when Turn off is refused", async () => {
+    const api = stubApi(
+      { turnOffStream: vi.fn().mockRejectedValue({ code: "backup.reload_in_progress" }) },
+      ON,
+    );
+    const { el } = await mount(api);
+    await press(el, "turn-off");
+    expect(text(el, "[role=alert]")).toBe(codeMessage("backup.reload_in_progress"));
+    expect(text(el, "[data-test=stream-state]")).toBe(t("stream.state.streaming"));
+  });
+
+  it("says why when the settings cannot be read", async () => {
+    const api = stubApi({
+      getStreamSettings: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    const { el } = await mount(api);
+    expect(text(el, "[role=alert]")).toBe(codeMessage("authorization.not_permitted"));
+    expect(q(el, "wt-input")).toBeNull();
+  });
+
+  it("fits a phone's width with the kit shown — the kit is one long token", async () => {
+    await page.viewport(390, 844);
+    try {
+      const { el, host } = await mount(stubApi({}, ON));
+      await press(el, "show-kit");
+      // State the width measured, not the one asked for (testing-guide.md, "A width you set…").
+      expect(window.innerWidth).toBe(390);
+      expect(el.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+      const kit = q(el, "[data-test=kit]")!;
+      expect(kit.scrollWidth).toBeLessThanOrEqual(kit.clientWidth);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+});

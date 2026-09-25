@@ -17,6 +17,7 @@ const OFF: BackupStatusView = {
   destinations: [],
   backupStatus: { configured: false },
   archiveUnderCurrentKey: false,
+  recoveryKeySet: false,
 };
 
 const ENABLED: BackupStatusView = {
@@ -34,6 +35,7 @@ const ENABLED: BackupStatusView = {
     ],
   },
   archiveUnderCurrentKey: true,
+  recoveryKeySet: true,
 };
 
 const MANAGED: BackupStatusView = { ...OFF, managedByEnvironment: true };
@@ -45,6 +47,14 @@ function stubApi(status: BackupStatusView, overrides: Partial<DashboardApi> = {}
     applyBackup: vi.fn().mockResolvedValue(ENABLED),
     getBackupRecoveryKey: vi.fn().mockResolvedValue({ key: "OLD-KEY-xyz789012345" }),
     rotateBackupKey: vi.fn().mockResolvedValue(ENABLED),
+    getStreamSettings: vi.fn().mockResolvedValue({
+      isPrimary: true,
+      configured: false,
+      bucket: null,
+      status: { state: "off" },
+      recoveryKeySet: false,
+      keyFingerprint: null,
+    }),
     ...overrides,
   } as unknown as DashboardApi;
 }

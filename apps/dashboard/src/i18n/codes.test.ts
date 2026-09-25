@@ -206,3 +206,30 @@ it("has English and Spanish copy for the two refusals that keep variants out of 
     expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
   }
 });
+
+// The bucket-copy routes' status map (`STATUS` in apps/server/src/stream-api.ts). Its fallback tag,
+// `backup.stream_failed`, is a log tag only: the error boundary answers anything unmapped as
+// `server.internal` (packages/server-kit/src/error-boundary.ts).
+it("has English and Spanish copy for every code the bucket-copy routes answer", () => {
+  for (const code of [
+    "management_session.required",
+    "management_session.expired",
+    "person.suspended",
+    "authorization.not_permitted",
+    "backup.request_invalid",
+    "backup.stream_config_unsafe",
+    "backup.managed_by_environment",
+    "backup.recovery_key_too_short",
+    "backup.not_primary",
+    "backup.reload_in_progress",
+    "backup.stream_test_failed",
+    "backup.stream_not_configured",
+    "backup.stream_signer_missing",
+    "backup.recovery_key_missing",
+    "backup.stream_request_failed",
+  ]) {
+    expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
+  }
+});

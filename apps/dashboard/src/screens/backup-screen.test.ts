@@ -15,6 +15,7 @@ const OFF: BackupStatusView = {
   destinations: [],
   backupStatus: { configured: false },
   archiveUnderCurrentKey: false,
+  recoveryKeySet: false,
 };
 
 const ENABLED: BackupStatusView = {
@@ -32,6 +33,7 @@ const ENABLED: BackupStatusView = {
     ],
   },
   archiveUnderCurrentKey: true,
+  recoveryKeySet: true,
 };
 
 const MANAGED: BackupStatusView = { ...OFF, managedByEnvironment: true };
@@ -46,6 +48,14 @@ function stubApi(
     applyBackup: vi.fn().mockResolvedValue(ENABLED),
     getBackupRecoveryKey: vi.fn().mockResolvedValue({ key: "OLD-KEY-xyz789012345" }),
     rotateBackupKey: vi.fn().mockResolvedValue(ENABLED),
+    getStreamSettings: vi.fn().mockResolvedValue({
+      isPrimary: true,
+      configured: false,
+      bucket: null,
+      status: { state: "off" },
+      recoveryKeySet: false,
+      keyFingerprint: null,
+    }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -87,6 +97,54 @@ function setNativeInput(el: BackupScreen, sel: string, value: string): void {
 }
 
 describe("backup-screen", () => {
+  it("turning backups on with a recovery key already held mints none and sends none", async () => {
+    const api = stubApi({}, { ...OFF, recoveryKeySet: true });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    expect(api.mintBackupKey).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=minted-key]")).toBeNull();
+    expect(q(el, "[data-test=saved-it]")).toBeNull();
+    expect(q(el, "[data-test=existing-key]")!.textContent!.trim()).toBe(t("backup.key.existing"));
+    expect((q(el, "[data-test=apply]") as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+    setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+    await el.updateComplete;
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+    // No `recoveryKey` at all: the server uses the one it holds.
+    expect(api.applyBackup).toHaveBeenCalledWith({
+      destinationDir: "/mnt/usb/waitron",
+      schedule: { kind: "wall-clock", days: "daily", at: "auto" },
+      retention: { count: 7, days: 30 },
+    });
+  });
+
+  it("explains a refused second recovery key in words", async () => {
+    const api = stubApi(
+      { applyBackup: vi.fn().mockRejectedValue({ code: "backup.recovery_key_exists" }) },
+      { ...OFF, recoveryKeySet: true },
+    );
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+    await el.updateComplete;
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+    expect(q(el, "[role=alert]")!.textContent).toContain(codeMessage("backup.recovery_key_exists"));
+  });
+
+  it("shows the bucket copy under the archive settings, handing it the api and the running key's fingerprint", async () => {
+    const api = stubApi({}, ENABLED);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    const panel = q(el, "dashboard-stream-settings") as HTMLElement & {
+      api: DashboardApi;
+      keyFingerprint?: string;
+    };
+    expect(panel.api).toBe(api);
+    expect(panel.keyFingerprint).toBe("ab12cd34");
+    expect(api.getStreamSettings).toHaveBeenCalled();
+  });
+
   it("exports prepared configuration under a confirmed passphrase", async () => {
     const api = stubApi({
       exportConfiguration: vi

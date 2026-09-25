@@ -811,6 +811,8 @@ export const en = {
   "backup.destination.hint":
     "A full path on this box — for example an attached USB drive or a mounted disk.",
   "backup.key.title": "Recovery key",
+  "backup.key.existing":
+    "Backups will use the recovery key this box already has. If you set up the bucket copy, it is the key inside your recovery kit. To change it, turn backups on, then use “Change the recovery key”.",
   "backup.key.minted_note":
     "This is your recovery key. Save it now — it is shown only once, and without it a backup cannot be restored.",
   "backup.key.copy": "Copy",
@@ -852,6 +854,77 @@ export const en = {
   "backup.weekday.fri": "Fri",
   "backup.weekday.sat": "Sat",
   "backup.weekday.sun": "Sun",
+  "stream.title": "Continuous copy to your bucket",
+  "stream.explanation":
+    "The box sends every change to an S3-compatible storage bucket you own, within seconds. If the box is lost, a new one can be rebuilt from the bucket with the recovery kit.",
+  "stream.not_primary": "Only the main server sends the copy to the bucket.",
+  "stream.status.state": "Bucket copy",
+  "stream.state.opening": "Starting",
+  "stream.state.streaming": "On",
+  "stream.state.paused": "Paused — the bucket cannot be reached",
+  "stream.state.another_server": "Stopped — another server is writing to this bucket",
+  "stream.state.unusable": "Stopped — the bucket settings cannot be used",
+  "stream.state.not_running": "Not running",
+  "stream.status.lag": "Changes not yet in the bucket",
+  "stream.status.lag_none": "None",
+  "stream.status.lag_under_minute": "Under a minute waiting",
+  "stream.status.minutes": "min waiting",
+  "stream.status.last": "Last confirmed copy",
+  "stream.status.never": "None yet",
+  "stream.status.bucket_check": "Bucket check",
+  "stream.form.endpoint": "Endpoint (leave blank for Amazon S3)",
+  "stream.form.region": "Region",
+  "stream.form.bucket": "Bucket name",
+  "stream.form.prefix": "Folder inside the bucket (optional)",
+  "stream.form.access_key_id": "Access key ID",
+  "stream.form.secret_access_key": "Secret access key",
+  "stream.form.region_required": "Enter the bucket's region.",
+  "stream.form.bucket_required": "Enter the bucket's name.",
+  "stream.form.access_key_id_required": "Enter the access key ID.",
+  "stream.form.secret_access_key_required": "Enter the secret access key.",
+  "stream.form.show_secret": "Show the secret access key",
+  "stream.form.hide_secret": "Hide the secret access key",
+  "stream.form.endpoint_invalid": "Enter the full address, starting with https:// or http://",
+  "stream.form.test": "Test",
+  "stream.form.save": "Save and turn on",
+  "stream.form.cancel": "Cancel",
+  "stream.form.test_passed": "The bucket passed every check.",
+  "stream.field.bucket_characters": "Use only lowercase letters, digits, dots and hyphens.",
+  "stream.field.prefix_folders":
+    'Two slashes in a row, or a folder named "." or "..", cannot be used.',
+  "stream.field.key_characters":
+    "Use only unaccented letters, digits, spaces and basic keyboard symbols. A single quote (') cannot be used.",
+  "stream.field.check": "Check this value.",
+  "stream.error.managed_by_environment":
+    "This box's backup settings come from its environment and it holds no recovery key, so the bucket copy cannot be turned on from this page.",
+  "stream.error.recovery_key_missing":
+    "This box holds no recovery key, so there is no recovery kit to show.",
+  "stream.show_kit": "Show recovery kit",
+  "stream.change": "Change bucket",
+  "stream.turn_off": "Turn off",
+  "stream.kit.title": "Recovery kit",
+  "stream.kit.warning":
+    "Anyone holding this kit can read every sale and every stored credential in the bucket copy. Keep it as safe as the recovery key: offline, and never in the bucket itself. It is the only thing a rebuild asks for.",
+  "stream.kit.reissued":
+    "The recovery key changed, so this is a new recovery kit. Download it now. Keep the old kit for seven days: copies made before the change still need it.",
+  "stream.kit.copy": "Copy",
+  "stream.kit.download": "Download kit file",
+  "stream.kit.file_heading": "Waitron recovery kit",
+  "stream.kit.file_note":
+    "Keep this safe. It opens the bucket copy of this restaurant. A new server rebuilt from the bucket asks for this file and nothing else.",
+  "stream.probe.access_denied": "The bucket refused this access key.",
+  "stream.probe.conditional_write_unsupported":
+    "This storage does not support the safe-write check Waitron needs.",
+  "stream.probe.write_failed": "A test file could not be written to the bucket.",
+  "stream.probe.read_mismatch": "The test file read back from the bucket was not the one written.",
+  "stream.probe.list_failed":
+    "The bucket's contents could not be listed; the key needs permission to list.",
+  "stream.probe.create_only_ignored":
+    "The bucket replaced a file it should have refused to replace, so it cannot guard against two servers writing at once.",
+  "stream.probe.fresh_version_refused": "The bucket refused a safe write it should have accepted.",
+  "stream.probe.if_match_ignored":
+    "The bucket accepted a write over a changed file, so it cannot guard against two servers writing at once.",
+  "stream.probe.delete_failed": "The test file could not be deleted from the bucket.",
   "person.new": "New user",
   "person.name": "Name",
   "person.first_names": "First name(s)",
@@ -2116,6 +2189,8 @@ export const es: Record<StringKey, string> = {
   "backup.destination.hint":
     "Una ruta completa en esta caja; por ejemplo, una memoria USB conectada o un disco montado.",
   "backup.key.title": "Clave de recuperación",
+  "backup.key.existing":
+    "Las copias usarán la clave de recuperación que este equipo ya tiene. Si has configurado la copia en el bucket, es la clave que va dentro de tu kit de recuperación. Para cambiarla, activa las copias y después usa «Cambiar la clave de recuperación».",
   "backup.key.minted_note":
     "Esta es tu clave de recuperación. Guárdala ahora: solo se muestra una vez y, sin ella, no se puede restaurar una copia.",
   "backup.key.copy": "Copiar",
@@ -2158,6 +2233,77 @@ export const es: Record<StringKey, string> = {
   "backup.weekday.fri": "Vie",
   "backup.weekday.sat": "Sáb",
   "backup.weekday.sun": "Dom",
+  "stream.title": "Copia continua en tu bucket",
+  "stream.explanation":
+    "El equipo envía cada cambio a un bucket de almacenamiento compatible con S3 que es tuyo, en segundos. Si el equipo se pierde, se puede reconstruir otro desde el bucket con el kit de recuperación.",
+  "stream.not_primary": "Solo el servidor principal envía la copia al bucket.",
+  "stream.status.state": "Copia en el bucket",
+  "stream.state.opening": "Iniciando",
+  "stream.state.streaming": "Activada",
+  "stream.state.paused": "En pausa: no se puede acceder al bucket",
+  "stream.state.another_server": "Detenida: otro servidor está escribiendo en este bucket",
+  "stream.state.unusable": "Detenida: los ajustes del bucket no se pueden usar",
+  "stream.state.not_running": "No está en marcha",
+  "stream.status.lag": "Cambios que aún no están en el bucket",
+  "stream.status.lag_none": "Ninguno",
+  "stream.status.lag_under_minute": "Menos de un minuto de espera",
+  "stream.status.minutes": "min de espera",
+  "stream.status.last": "Última copia confirmada",
+  "stream.status.never": "Ninguna todavía",
+  "stream.status.bucket_check": "Comprobación del bucket",
+  "stream.form.endpoint": "Endpoint (déjalo vacío para Amazon S3)",
+  "stream.form.region": "Región",
+  "stream.form.bucket": "Nombre del bucket",
+  "stream.form.prefix": "Carpeta dentro del bucket (opcional)",
+  "stream.form.access_key_id": "ID de la clave de acceso",
+  "stream.form.secret_access_key": "Clave de acceso secreta",
+  "stream.form.region_required": "Escribe la región del bucket.",
+  "stream.form.bucket_required": "Escribe el nombre del bucket.",
+  "stream.form.access_key_id_required": "Escribe el ID de la clave de acceso.",
+  "stream.form.secret_access_key_required": "Escribe la clave de acceso secreta.",
+  "stream.form.show_secret": "Mostrar la clave de acceso secreta",
+  "stream.form.hide_secret": "Ocultar la clave de acceso secreta",
+  "stream.form.endpoint_invalid": "Escribe la dirección completa, empezando por https:// o http://",
+  "stream.form.test": "Probar",
+  "stream.form.save": "Guardar y activar",
+  "stream.form.cancel": "Cancelar",
+  "stream.form.test_passed": "El bucket ha superado todas las comprobaciones.",
+  "stream.field.bucket_characters": "Usa solo minúsculas, cifras, puntos y guiones.",
+  "stream.field.prefix_folders":
+    'No se pueden usar dos barras seguidas ni una carpeta llamada "." o "..".',
+  "stream.field.key_characters":
+    "Usa solo letras sin tilde, cifras, espacios y símbolos básicos del teclado. No se puede usar la comilla simple (').",
+  "stream.field.check": "Revisa este valor.",
+  "stream.error.managed_by_environment":
+    "Los ajustes de copia de este equipo vienen de su entorno y no tiene clave de recuperación, así que la copia en el bucket no se puede activar desde esta página.",
+  "stream.error.recovery_key_missing":
+    "Este equipo no tiene clave de recuperación, así que no hay kit de recuperación que mostrar.",
+  "stream.show_kit": "Mostrar el kit de recuperación",
+  "stream.change": "Cambiar de bucket",
+  "stream.turn_off": "Desactivar",
+  "stream.kit.title": "Kit de recuperación",
+  "stream.kit.warning":
+    "Quien tenga este kit puede leer todas las ventas y todas las credenciales guardadas en la copia del bucket. Guárdalo con el mismo cuidado que la clave de recuperación: fuera de línea y nunca en el propio bucket. Es lo único que pide una reconstrucción.",
+  "stream.kit.reissued":
+    "La clave de recuperación ha cambiado, así que este es un kit de recuperación nuevo. Descárgalo ahora. Conserva el kit anterior siete días: las copias anteriores al cambio todavía lo necesitan.",
+  "stream.kit.copy": "Copiar",
+  "stream.kit.download": "Descargar el archivo del kit",
+  "stream.kit.file_heading": "Kit de recuperación de Waitron",
+  "stream.kit.file_note":
+    "Guárdalo en un lugar seguro. Abre la copia de este restaurante en el bucket. Un servidor nuevo reconstruido desde el bucket pide este archivo y nada más.",
+  "stream.probe.access_denied": "El bucket ha rechazado esta clave de acceso.",
+  "stream.probe.conditional_write_unsupported":
+    "Este almacenamiento no admite la comprobación de escritura segura que Waitron necesita.",
+  "stream.probe.write_failed": "No se ha podido escribir un archivo de prueba en el bucket.",
+  "stream.probe.read_mismatch": "El archivo de prueba leído del bucket no es el que se escribió.",
+  "stream.probe.list_failed":
+    "No se ha podido listar el contenido del bucket; la clave necesita permiso para listar.",
+  "stream.probe.create_only_ignored":
+    "El bucket sustituyó un archivo que debía negarse a sustituir, así que no puede impedir que dos servidores escriban a la vez.",
+  "stream.probe.fresh_version_refused": "El bucket rechazó una escritura segura que debía aceptar.",
+  "stream.probe.if_match_ignored":
+    "El bucket aceptó escribir sobre un archivo que había cambiado, así que no puede impedir que dos servidores escriban a la vez.",
+  "stream.probe.delete_failed": "No se ha podido borrar el archivo de prueba del bucket.",
   "person.new": "Nuevo usuario",
   "person.name": "Nombre",
   "person.first_names": "Nombre(s)",
