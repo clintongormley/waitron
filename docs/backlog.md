@@ -210,7 +210,7 @@ guarding a section's image. Menus do not use them yet; Task 3 does. Measured: a 
 demo-seeded by `main` at `f19d556d4`, upgraded by this task through `applyMigrations`, applied one
 catalogue and one media migration and changed no row count in the fourteen tables compared, and the
 upgraded file refused a section naming a missing image — so this task needs no venue reset. The
-three things it left for Task 2 are done on Task 2's branch (`feat/menus-section-library`): the
+three things it left for Task 2 were done by Task 2 (#654): the
 image library links a section to its editor (`/manage/sections?section=<id>`),
 `docs/content-and-images.md` points at the new screen, and `SECTION_ROLES` moved into
 `packages/catalogue/src/schema/sections.ts` so `section-types.ts` joined the type-only list in
@@ -223,11 +223,20 @@ such table one edit. Two notes for Task 3 (menu structure): `sections_owner_menu
 delete rule, so deleting a menu that owns a section will be refused until Task 3 chooses one; and
 media's triggers name `sections`, so a later drizzle rebuild of that table meets the same trap
 `docs/developers/conventions-data.md` records for rebuilds. **Menus Task 2 (the sections library
-screen)** is on `feat/menus-section-library`, not yet landed: **Products and recipes**,
+screen), landed as #654 (2026-09-25):** **Products and recipes**,
 **Sections** lists every library section with where it is used (one batch read,
 `GET /management-api/sections/usages`), shows each place a section is nested, and edits, duplicates
 and deletes sections and their members. Until Task 3 drops the old per-menu headings, the dashboard
 has two things called Sections: this library, and **Venue operations**, **Menus**, **Sections**.
+Left by #654, none blocking: opening a nested section from the editor drops unsaved edits to the
+open one without a warning; the "Used in" filter's two choices (Used in a menu, Not used) leave a
+section held only by sections that are on no menu findable only under Any; the screen
+(`apps/dashboard/src/screens/sections-screen.ts`, about 1,140 lines) could move its editor form into
+a widget as the categories screen does; the editor and delete dialog still read one section's
+usages although the batch read already holds them; and `wt-data-table` searches a column's sort
+value when it has no search value, so a number column matches typed digits unless it opts out as
+the Items column now does — changing that default needs a check of every table that searches
+prices or counts.
 Next in the lane after Task 2: menus Task 3. The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
