@@ -90,6 +90,20 @@ function isField(value: unknown): value is Field {
   return typeof value === "string" && Object.hasOwn(EMPTY, value);
 }
 
+/** The bucket fields a settings read carries. The secret access key is not one of them, so a change
+ * of the secret alone does not take the kit away. */
+function bucketKey(bucket: StreamSettingsView["bucket"]): string {
+  return bucket === null
+    ? ""
+    : JSON.stringify([
+        bucket.endpoint,
+        bucket.region,
+        bucket.bucket,
+        bucket.prefix,
+        bucket.accessKeyId,
+      ]);
+}
+
 function stateKey(status: StreamStatusView): StringKey {
   switch (status.state) {
     case "streaming":
@@ -123,7 +137,8 @@ function failureOf(error: unknown): Failure {
  * The bucket copy on the Backups screen: the bucket settings, Test, how current the copy is, and
  * the recovery kit. When a later read of the settings brings a different key fingerprint, the key
  * was changed, so the kit is fetched again with a banner, because copies made before the change
- * still need the old kit. A failed fetch is tried again on the next read.
+ * still need the old kit. A failed re-fetch is tried again on the next read. The kit describes the
+ * bucket too, so a read bringing different bucket fields takes the kit away.
  */
 @customElement("dashboard-stream-settings")
 export class StreamSettingsPanel extends LitElement {
@@ -240,6 +255,9 @@ export class StreamSettingsPanel extends LitElement {
    * the settings takes it away, unless that read retries a failed kit fetch: then the fetch
    * succeeding takes it away, so the alert does not vanish and return on every retry. */
   @state() private readFailure: Failure | null = null;
+  /** A failed kit fetch the owner caused (Save or Show recovery kit). Apart from `failure`, so a
+   * fetch failing after a successful Save does not read as a refused save. */
+  @state() private kitFailure: Failure | null = null;
   @state() private kit: string | null = null;
   @state() private kitFingerprint: string | null = null;
   @state() private kitReissued = false;
@@ -253,7 +271,11 @@ export class StreamSettingsPanel extends LitElement {
    * key is accepted only once the kit has been fetched again, so the next read retries a failed
    * fetch. */
   #knownFingerprint: string | null | undefined = undefined;
-  #reissuing = false;
+  /** The re-issue still running, if any. While it is the latest kit fetch, a read bringing the same
+   * key starts no second one. */
+  #reissue: { fingerprint: string; request: number } | null = null;
+  /** Every kit fetch takes the next number; only the latest may put its answer on screen. */
+  #kitRequest = 0;
   #reissueFailed = false;
   #blobUrls = new Map<string, string>();
 
@@ -287,7 +309,10 @@ export class StreamSettingsPanel extends LitElement {
 
   /** The first key the panel sees is no change; a later different one is. */
   #arrived(value: StreamSettingsView): void {
+    const before = this.settings;
     this.settings = value;
+    if (before !== undefined && bucketKey(before.bucket) !== bucketKey(value.bucket))
+      this.#dropKit();
     if (!value.configured) this.turnOffArmed = false;
     const known = this.#knownFingerprint;
     const after = value.keyFingerprint;
@@ -301,27 +326,30 @@ export class StreamSettingsPanel extends LitElement {
     }
   }
 
-  /** Through the background client, so an unattended screen stays passive. A fetch that settles
-   * after the copy was turned off shows nothing. */
+  /** Through the background client, so an unattended screen stays passive. */
   async #reissueKit(fingerprint: string): Promise<void> {
-    if (this.#reissuing) return;
-    this.#reissuing = true;
+    if (this.#reissue?.fingerprint === fingerprint && this.#reissue.request === this.#kitRequest)
+      return;
+    const request = ++this.#kitRequest;
+    this.#reissue = { fingerprint, request };
+    const current = () => this.#current(request) && this.settings?.keyFingerprint === fingerprint;
     try {
       const { kit, keyFingerprint } = await (this.api.background ?? this.api).getRecoveryKit();
-      if (!this.settings!.configured) return;
+      if (!current()) return;
       this.kit = kit;
       this.kitFingerprint = keyFingerprint;
       this.kitReissued = true;
       this.#knownFingerprint = fingerprint;
       this.#reissueFailed = false;
       this.readFailure = null;
+      this.kitFailure = null;
     } catch (error) {
-      if (!this.settings!.configured) return;
+      if (!current()) return;
       this.readFailure = failureOf(error);
       this.kitReissued = false;
       this.#reissueFailed = true;
     } finally {
-      this.#reissuing = false;
+      if (this.#reissue?.request === request) this.#reissue = null;
     }
   }
 
@@ -340,8 +368,21 @@ export class StreamSettingsPanel extends LitElement {
     this.failure = failureOf(error);
   }
 
+  #current(request: number): boolean {
+    return request === this.#kitRequest && this.settings?.configured === true;
+  }
+
+  /** Also discards the answer of any kit fetch still running. */
+  #dropKit(): void {
+    this.#kitRequest++;
+    this.kit = null;
+    this.kitReissued = false;
+    this.kitFailure = null;
+  }
+
   #clearMessages(): void {
     this.failure = null;
+    this.kitFailure = null;
     this.testPassed = false;
     this.turnOffArmed = false;
   }
@@ -383,9 +424,11 @@ export class StreamSettingsPanel extends LitElement {
   async #test(): Promise<void> {
     if (!this.#ready()) return;
     this.submitting = true;
+    const body = this.#body();
+    const tested = JSON.stringify(body);
     try {
-      await this.api.testStreamBucket(this.#body());
-      this.testPassed = true;
+      await this.api.testStreamBucket(body);
+      this.testPassed = JSON.stringify(this.#body()) === tested;
     } catch (error) {
       this.#fail(error);
     } finally {
@@ -402,6 +445,7 @@ export class StreamSettingsPanel extends LitElement {
       this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.editing = false;
       this.draft = { ...EMPTY };
+      this.#dropKit();
       await this.#loadKit();
     } catch (error) {
       this.#fail(error);
@@ -423,8 +467,7 @@ export class StreamSettingsPanel extends LitElement {
     this.busy = true;
     try {
       this.settings = await this.api.turnOffStream();
-      this.kit = null;
-      this.kitReissued = false;
+      this.#dropKit();
     } catch (error) {
       this.#fail(error);
     } finally {
@@ -444,12 +487,15 @@ export class StreamSettingsPanel extends LitElement {
   }
 
   async #loadKit(): Promise<void> {
+    const request = ++this.#kitRequest;
     try {
       const { kit, keyFingerprint } = await this.api.getRecoveryKit();
+      if (!this.#current(request)) return;
       this.kit = kit;
       this.kitFingerprint = keyFingerprint;
     } catch (error) {
-      this.#fail(error);
+      if (!this.#current(request)) return;
+      this.kitFailure = failureOf(error);
     }
   }
 
@@ -498,6 +544,13 @@ export class StreamSettingsPanel extends LitElement {
             ? nothing
             : html`<p class="error" role="alert" data-test="refusal">
                 ${this.#failureText(this.failure)}
+              </p>`
+        }
+        ${
+          this.kitFailure === null
+            ? nothing
+            : html`<p class="error" role="alert" data-test="kit-failure">
+                ${this.#failureText(this.kitFailure)}
               </p>`
         }
         ${

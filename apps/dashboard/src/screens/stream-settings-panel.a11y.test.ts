@@ -163,6 +163,15 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
     await expectNoA11yViolations(host);
   });
 
+  it("a failed kit fetch with its alert", async () => {
+    const { el, host } = await mount(STREAMING);
+    vi.mocked(el.api.getRecoveryKit).mockRejectedValue({ code: "connection.failed" });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=show-kit]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=kit-failure]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("changing the bucket, with Cancel", async () => {
     const { el, host } = await mount(PAUSED);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=change]")!.click();
