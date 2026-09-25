@@ -5508,7 +5508,7 @@ open:
   but no dedicated error code names that case.
 - An interrupted bucket rebuild or archive check leaves its scratch folder, a full copy of the
   venue database, under the state folder; the next run makes a new one and does not remove it.
-- Fixed in (this branch): the placement step no longer loses both databases. `restoreDatabase`
+- Fixed in #647: the placement step no longer loses both databases. `restoreDatabase`
   (`apps/server/src/restore.ts`) moves the old `venue.db` and its side files into a folder beside
   them and deletes nothing that is database content until the new file is in place; a failure puts
   them back and says `restore.placement_failed`, naming the folder when one could not go back.
