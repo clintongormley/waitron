@@ -469,13 +469,15 @@ describe("the first-start marker (rebuild-first-start.ts)", () => {
     await noMarker();
   });
 
-  it("creates the state folder for the marker when writeValidated is called on its own", async () => {
+  // `validateArtifact` creates the state folder; the write does not create one it was not given.
+  it("refuses before placing anything when handed a state folder validation never created", async () => {
     const validated = await validateArtifact(makeRestoreDeps());
-    const newState = join(stateDir, "fresh");
-    await writeValidated(validated, makeRestoreDeps({ stateDir: newState }));
-    expect(JSON.parse(await readFile(join(newState, REBUILD_MARKER), "utf8"))).toMatchObject({
-      source: "archive",
-    });
+    const migrate = vi.fn(async () => {});
+    await expect(
+      writeValidated(validated, makeRestoreDeps({ stateDir: join(stateDir, "absent"), migrate })),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(existsSync(join(venueDir, "venue.db"))).toBe(false);
+    expect(migrate).not.toHaveBeenCalled();
   });
 });
 

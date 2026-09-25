@@ -294,7 +294,6 @@ export async function writeValidated(
     // throws removes it while the lock is still held (plan Reconciliation N16).
     const marker = join(deps.stateDir, REBUILD_MARKER);
     if (!deps.skipSecrets) {
-      await mkdir(deps.stateDir, { recursive: true, mode: 0o700 });
       await writeFileAtomic(
         marker,
         JSON.stringify({ version: 1, source: deps.rebuildSource ?? "archive" }),
