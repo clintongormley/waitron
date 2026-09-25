@@ -40,6 +40,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { issuancePass } from "./issuance-pass.js";
 import { ALL_MODULES } from "./modules.js";
+import { systemClock } from "./till-backend.js";
 import type { OrderFlow, TillConfig } from "./till-config.js";
 import {
   collectOrder,
@@ -74,25 +75,6 @@ const suite = useVenueDb({
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
-
-function systemClock(): TrustedClock {
-  return {
-    now: () => {
-      const instant = new Date();
-      return {
-        instant,
-        offsetMinutes: -instant.getTimezoneOffset(),
-        confident: true,
-        confidence: "anchored",
-        anchorAgeSeconds: 0,
-      };
-    },
-    anchor: () => {
-      throw new Error("issuance-pass.test: anchor() is not used by recordSale");
-    },
-    currentAnchor: () => null,
-  };
-}
 
 beforeAll(() => {
   clock = systemClock();

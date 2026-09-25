@@ -281,15 +281,6 @@ describe("validateSnapshot", () => {
     return { f, c, snapshot: classifyLine(c, f.products.mojito) };
   }
 
-  function refusal(fn: () => void) {
-    try {
-      fn();
-    } catch (error) {
-      return error;
-    }
-    throw new Error("validateSnapshot accepted the snapshot");
-  }
-
   it("accepts the snapshot classifyLine built (the control)", async () => {
     const { f, c, snapshot } = await classified();
 
@@ -309,7 +300,7 @@ describe("validateSnapshot", () => {
     const { f, c, snapshot } = await classified();
 
     expect(
-      refusal(() => validateSnapshot(c, f.products.mojito, corrupt(f, snapshot))),
+      await captureError(() => validateSnapshot(c, f.products.mojito, corrupt(f, snapshot))),
     ).toMatchObject({
       code: "sale_classification.invalid",
       params: { productId: f.products.mojito, reason: "unknown_id" },
@@ -328,7 +319,9 @@ describe("validateSnapshot", () => {
   ])("refuses %s", async (_case, corrupt) => {
     const { f, c, snapshot } = await classified();
 
-    expect(refusal(() => validateSnapshot(c, f.products.mojito, corrupt(snapshot)))).toMatchObject({
+    expect(
+      await captureError(() => validateSnapshot(c, f.products.mojito, corrupt(snapshot))),
+    ).toMatchObject({
       code: "sale_classification.invalid",
       params: { productId: f.products.mojito, reason: "empty_name" },
     });
@@ -339,7 +332,7 @@ describe("validateSnapshot", () => {
     const [drinks, alcoholic, cocktails] = snapshot.reporting;
 
     expect(
-      refusal(() =>
+      await captureError(() =>
         validateSnapshot(c, f.products.mojito, {
           ...snapshot,
           reporting: [drinks!, alcoholic!, drinks!, alcoholic!, cocktails!],
@@ -365,7 +358,7 @@ describe("validateSnapshot", () => {
     const { f, c, snapshot } = await classified();
 
     expect(
-      refusal(() => validateSnapshot(c, f.products.mojito, corrupt(f, snapshot))),
+      await captureError(() => validateSnapshot(c, f.products.mojito, corrupt(f, snapshot))),
     ).toMatchObject({
       code: "sale_classification.invalid",
       params: { productId: f.products.mojito, reason: "wrong_leaf" },
@@ -376,7 +369,7 @@ describe("validateSnapshot", () => {
     const { f, c } = await classified();
 
     expect(
-      refusal(() =>
+      await captureError(() =>
         validateSnapshot(c, f.products.water, { reporting: chain(f, "en", "extras"), labels: [] }),
       ),
     ).toMatchObject({
