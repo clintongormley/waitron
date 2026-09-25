@@ -5214,7 +5214,10 @@ the 12-character minimum also took that reuse path and was refused with
 `backup.recovery_key_too_short`, so such a box could never turn archives on from the dashboard; fixed,
 for a box whose backup settings its environment does not own, in #649: the status now says `recoveryKeyTooShort`,
 the form then makes and sends a new key with a note that it replaces the short one, and `apply`
-writes it in the short key's place (a key long enough to use is still never replaced there). The edit-settings form can also meet
+writes it in the short key's place (a key long enough to use is still never replaced there). Left by
+#649: the bucket copy panel's own refusal for a too-short key (`stream.error.recovery_key_too_short`)
+still says only that the key must be replaced with a longer one; it could point the operator at
+turning backups on in the section above, which now does that. The edit-settings form can also meet
 `backup.recovery_key_exists`, when a rotate (from another tab or admin) lands after it fetched the
 key. Left open: the
 "key rotated" date `rotate` writes is dropped by a later `apply`, because `readApplyBody` always
