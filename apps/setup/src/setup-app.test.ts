@@ -150,10 +150,11 @@ function cloudRecoveryAction(
   el: SetupApp,
   action: "start" | "status" | "start-again" | "restore",
   pointId?: string,
+  oldBoxGone?: boolean,
 ): void {
   wizard(el).dispatchEvent(
     new CustomEvent("cloud-restore-action", {
-      detail: { action, pointId },
+      detail: { action, pointId, oldBoxGone },
       bubbles: true,
       composed: true,
     }),
@@ -593,7 +594,7 @@ describe("setup-app", () => {
     expect((await screenHost(el, "cloud-restore")).shadowRoot!.textContent).toContain("2026-09-24");
     cloudRecoveryAction(el, "restore", pointId);
     await flush(el);
-    expect(restoreFromCloud).toHaveBeenCalledWith(pointId);
+    expect(restoreFromCloud).toHaveBeenCalledWith(pointId, false);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
   });
 
@@ -634,7 +635,7 @@ describe("setup-app", () => {
     restore.click();
     restore.click();
     expect(restoreFromCloud).toHaveBeenCalledTimes(1);
-    expect(restoreFromCloud).toHaveBeenCalledWith(pointId);
+    expect(restoreFromCloud).toHaveBeenCalledWith(pointId, false);
     finishRestore({ restoreStaged: true, restarting: true });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
@@ -2088,6 +2089,176 @@ describe("restoring a backup file whose old server may still be running", () => 
     expect({ liveUnknown: screen.liveUnknown, request: screen.request }).toEqual({
       liveUnknown: false,
       request: undefined,
+    });
+  });
+});
+
+describe("restoring a Cloud snapshot whose old server may still be running", () => {
+  const pointId = "3a1d5560-c5bd-407a-b596-e63fbe2600d5";
+  const approved = (id = pointId) => ({
+    requestId: "b6cbaee9-ee8b-4da5-b023-900547debb94",
+    code: "12345678",
+    openCloudUrl: "https://cloud.example.test/recover#request=b6cbaee9-ee8b-4da5-b023-900547debb94",
+    expiresAt: "2026-09-24T12:00:00.000Z",
+    state: "approved" as const,
+    point: {
+      id,
+      venueId: "a7f570e8-e510-49eb-b1a7-096ff72171f5",
+      capturedAt: "2026-09-24T10:00:00.000Z",
+      modules: { core: 1 },
+    },
+  });
+  const live = {
+    code: "restore.stream_source_live",
+    params: { lastChangeAt: "2026-09-23T11:58:00.000Z" },
+    status: 409,
+  };
+  const unchecked = {
+    code: "restore.stream_source_unchecked",
+    params: { reason: "bucket" },
+    status: 409,
+  };
+
+  async function approvedCloudApp(overrides: Partial<Record<keyof SetupApi, unknown>>) {
+    const el = await mountSetupApp(
+      stubApi({ cloudRecoveryStatus: vi.fn().mockResolvedValue(approved()), ...overrides }),
+    );
+    goto(el, "cloud-restore");
+    await flush(el);
+    cloudRecoveryAction(el, "status");
+    await flush(el);
+    return el;
+  }
+
+  async function cloudScreen(el: SetupApp): Promise<SetupCloudRestoreScreen> {
+    return (await screenHost(el, "cloud-restore")) as SetupCloudRestoreScreen;
+  }
+
+  it.each([
+    [live, { liveSince: "2026-09-23T11:58:00.000Z", liveUnknown: false }],
+    [unchecked, { liveSince: undefined, liveUnknown: true }],
+    [
+      { code: "restore.stream_source_live", params: {}, status: 409 },
+      { liveSince: undefined, liveUnknown: true },
+    ],
+  ])("returns to the Cloud screen asking about the old server (%o)", async (refusal, expected) => {
+    const restoreFromCloud = vi
+      .fn()
+      .mockRejectedValueOnce(refusal)
+      .mockResolvedValueOnce({ restoreStaged: true, restarting: true });
+    const el = await approvedCloudApp({ restoreFromCloud });
+    cloudRecoveryAction(el, "restore", pointId, false);
+    await flush(el);
+    const screen = await cloudScreen(el);
+    expect({ liveSince: screen.liveSince, liveUnknown: screen.liveUnknown }).toEqual(expected);
+    expect(screen.errorMessage).toBeUndefined();
+    expect(screen.shadowRoot!.querySelector("[data-test=live-warning]")).not.toBeNull();
+    cloudRecoveryAction(el, "restore", pointId, true);
+    await flush(el);
+    expect(restoreFromCloud.mock.calls).toEqual([
+      [pointId, false],
+      [pointId, true],
+    ]);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+  });
+
+  it.each([[{ code: "server.internal", status: 500 }], [undefined]])(
+    "keeps the Cloud-unavailable sentence for any other refusal of the restore (%o)",
+    async (refusal) => {
+      const el = await approvedCloudApp({
+        restoreFromCloud: vi.fn().mockRejectedValue(refusal),
+      });
+      cloudRecoveryAction(el, "restore", pointId, false);
+      await flush(el);
+      const screen = await cloudScreen(el);
+      expect({ liveSince: screen.liveSince, liveUnknown: screen.liveUnknown }).toEqual({
+        liveSince: undefined,
+        liveUnknown: false,
+      });
+      expect(screen.errorMessage).toBe(
+        "Cloud recovery is unavailable. Check the connection or request expiry, then try again.",
+      );
+    },
+  );
+
+  it("shows only the latest old-server refusal on the Cloud path", async () => {
+    const restoreFromCloud = vi
+      .fn()
+      .mockRejectedValueOnce(live)
+      .mockRejectedValueOnce(unchecked)
+      .mockRejectedValueOnce(live);
+    const el = await approvedCloudApp({ restoreFromCloud });
+    cloudRecoveryAction(el, "restore", pointId, false);
+    await flush(el);
+    cloudRecoveryAction(el, "restore", pointId, true);
+    await flush(el);
+    let screen = await cloudScreen(el);
+    expect({ liveSince: screen.liveSince, liveUnknown: screen.liveUnknown }).toEqual({
+      liveSince: undefined,
+      liveUnknown: true,
+    });
+    cloudRecoveryAction(el, "restore", pointId, true);
+    await flush(el);
+    screen = await cloudScreen(el);
+    expect({ liveSince: screen.liveSince, liveUnknown: screen.liveUnknown }).toEqual({
+      liveSince: "2026-09-23T11:58:00.000Z",
+      liveUnknown: false,
+    });
+  });
+
+  it("keeps the question while the same snapshot is approved and drops it for another", async () => {
+    const cloudRecoveryStatus = vi
+      .fn()
+      .mockResolvedValueOnce(approved())
+      .mockResolvedValueOnce(approved())
+      .mockResolvedValueOnce(approved("3a1d5560-c5bd-407a-b596-e63fbe2600d6"));
+    const el = await approvedCloudApp({
+      cloudRecoveryStatus,
+      restoreFromCloud: vi.fn().mockRejectedValue(unchecked),
+    });
+    cloudRecoveryAction(el, "restore", pointId, false);
+    await flush(el);
+    cloudRecoveryAction(el, "status");
+    await flush(el);
+    expect((await cloudScreen(el)).liveUnknown).toBe(true);
+    cloudRecoveryAction(el, "status");
+    await flush(el);
+    const screen = await cloudScreen(el);
+    expect({ liveSince: screen.liveSince, liveUnknown: screen.liveUnknown }).toEqual({
+      liveSince: undefined,
+      liveUnknown: false,
+    });
+  });
+
+  it("forgets the old-server question once the owner leaves the screen", async () => {
+    const el = await approvedCloudApp({ restoreFromCloud: vi.fn().mockRejectedValue(live) });
+    cloudRecoveryAction(el, "restore", pointId, false);
+    await flush(el);
+    goto(el, "restore");
+    await flush(el);
+    goto(el, "cloud-restore");
+    await flush(el);
+    const screen = await cloudScreen(el);
+    expect({ liveSince: screen.liveSince, liveUnknown: screen.liveUnknown }).toEqual({
+      liveSince: undefined,
+      liveUnknown: false,
+    });
+  });
+
+  it("writes nothing for an old-server refusal that arrives after the element is detached", async () => {
+    const pending = deferred();
+    const el = await approvedCloudApp({
+      restoreFromCloud: vi.fn().mockReturnValue(pending.promise),
+    });
+    cloudRecoveryAction(el, "restore", pointId, false);
+    await el.updateComplete;
+    el.remove();
+    pending.reject(live);
+    await flush(el);
+    expect(readState(el, ["screen", "cloudLiveSince", "cloudRecoveryError"])).toEqual({
+      screen: "provisioning",
+      cloudLiveSince: undefined,
+      cloudRecoveryError: undefined,
     });
   });
 });

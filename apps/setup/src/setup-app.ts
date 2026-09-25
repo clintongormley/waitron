@@ -285,6 +285,9 @@ export class SetupApp extends LitElement {
   @state() private cloudRecoveryView?: CloudRecoveryView;
   @state() private cloudRecoveryError?: string;
   @state() private cloudRecoveryBusy = false;
+  /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the Cloud path. */
+  @state() private cloudLiveSince?: string;
+  @state() private cloudLiveUnknown = false;
   @state() private configurationError?: string;
   @state() private configurationPreview?: ConfigurationPreview;
   @state() private fiscalTestStatus?: "accepted" | "rejected" | "uncertain";
@@ -412,6 +415,8 @@ export class SetupApp extends LitElement {
     this.bucketLiveUnknown = false;
     this.bucketVenue = undefined;
     this.bucketRequest = undefined;
+    this.cloudLiveSince = undefined;
+    this.cloudLiveUnknown = false;
     this.configurationError = undefined;
     this.screen = event.detail.screen;
   }
@@ -648,6 +653,7 @@ export class SetupApp extends LitElement {
     event: CustomEvent<{
       action: "start" | "status" | "start-again" | "restore";
       pointId?: string;
+      oldBoxGone?: boolean;
     }>,
   ): Promise<void> {
     event.stopPropagation();
@@ -655,24 +661,45 @@ export class SetupApp extends LitElement {
     this.cloudRecoveryBusy = true;
     this.cloudRecoveryError = undefined;
     try {
-      const { action, pointId } = event.detail;
+      const { action, pointId, oldBoxGone } = event.detail;
       if (action === "restore") {
         if (!pointId || pointId !== this.cloudRecoveryView?.point?.id) throw new Error();
         this.screen = "provisioning";
-        await this.api.restoreFromCloud(pointId);
+        await this.api.restoreFromCloud(pointId, oldBoxGone === true);
         if (this.isConnected) this.screen = "done";
       } else {
+        const shown = this.cloudRecoveryView?.point?.id;
         this.cloudRecoveryView =
           action === "start"
             ? await this.api.startCloudRecovery()
             : action === "start-again"
               ? await this.api.startCloudRecoveryAgain()
               : await this.api.cloudRecoveryStatus();
+        // The server answered the old-server question for the snapshot it was sent, not for another.
+        if (this.cloudRecoveryView.point?.id !== shown) {
+          this.cloudLiveSince = undefined;
+          this.cloudLiveUnknown = false;
+        }
       }
-    } catch {
+    } catch (error) {
       if (this.isConnected) {
-        this.cloudRecoveryError =
-          "Cloud recovery is unavailable. Check the connection or request expiry, then try again.";
+        const { code, params } = (error ?? {}) as {
+          code?: unknown;
+          params?: { lastChangeAt?: unknown };
+        };
+        if (code === "restore.stream_source_live" && typeof params?.lastChangeAt === "string") {
+          this.cloudLiveSince = params.lastChangeAt;
+          this.cloudLiveUnknown = false;
+        } else if (
+          code === "restore.stream_source_live" ||
+          code === "restore.stream_source_unchecked"
+        ) {
+          this.cloudLiveSince = undefined;
+          this.cloudLiveUnknown = true;
+        } else {
+          this.cloudRecoveryError =
+            "Cloud recovery is unavailable. Check the connection or request expiry, then try again.";
+        }
         this.screen = "cloud-restore";
       }
     } finally {
@@ -771,7 +798,7 @@ export class SetupApp extends LitElement {
         void this.#onRestoreRequested(e)}
       @bucket-restore-requested=${(e: CustomEvent<{ request: BucketRestoreRequestDetail }>) =>
         void this.#onBucketRestoreRequested(e)}
-      @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string }>) => void this.#onCloudRestoreAction(e)}
+      @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string; oldBoxGone?: boolean }>) => void this.#onCloudRestoreAction(e)}
       @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
         void this.#onConfigurationRequested(e)}
       @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
@@ -815,6 +842,8 @@ export class SetupApp extends LitElement {
           .view=${this.cloudRecoveryView}
           .errorMessage=${this.cloudRecoveryError}
           .busy=${this.cloudRecoveryBusy}
+          .liveSince=${this.cloudLiveSince}
+          .liveUnknown=${this.cloudLiveUnknown}
         ></setup-cloud-restore-screen>`;
       case "live-source":
         return html`<setup-live-source-screen

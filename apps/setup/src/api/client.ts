@@ -189,8 +189,13 @@ export class SetupApi {
     return this.#request("/setup-api/cloud-recovery/start-again", "POST", {});
   }
 
-  restoreFromCloud(pointId: string): Promise<RestoreOutcome> {
-    return this.#request("/setup-api/cloud-recovery/restore", "POST", { pointId });
+  /** `oldBoxGone` answers `restore.stream_source_live`/`restore.stream_source_unchecked`. */
+  restoreFromCloud(pointId: string, oldBoxGone = false): Promise<RestoreOutcome> {
+    return this.#request(
+      "/setup-api/cloud-recovery/restore",
+      "POST",
+      oldBoxGone ? { pointId, oldBoxGone } : { pointId },
+    );
   }
 
   /** `oldBoxGone` answers `restore.stream_source_live`/`restore.stream_source_unchecked`. */

@@ -5,11 +5,15 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { CloudRecoveryView } from "../api/client.js";
 import { dispatchSetupGoto } from "../events.js";
+import { errorStyles, fieldStyles } from "../form-styles.js";
+import { oldBoxQuestion } from "./old-box-question.js";
 
 @customElement("setup-cloud-restore-screen")
 export class SetupCloudRestoreScreen extends LitElement {
   static override styles = [
     baseStyles,
+    fieldStyles,
+    errorStyles,
     css`
       :host {
         display: block;
@@ -28,7 +32,12 @@ export class SetupCloudRestoreScreen extends LitElement {
   @property({ attribute: false }) view?: CloudRecoveryView;
   @property() errorMessage?: string;
   @property({ type: Boolean }) busy = false;
+  /** Set by the shell from `restore.stream_source_live`: when the old server last wrote to its bucket. */
+  @property() liveSince?: string;
+  /** Set by the shell from `restore.stream_source_unchecked`. */
+  @property({ type: Boolean }) liveUnknown = false;
   @state() private acknowledged = false;
+  @state() private oldBoxGone = false;
   @state() private showError = false;
   #approvalBinding?: string;
 
@@ -42,9 +51,18 @@ export class SetupCloudRestoreScreen extends LitElement {
     const binding = this.#currentApprovalBinding();
     if (binding !== this.#approvalBinding) {
       this.acknowledged = false;
+      this.oldBoxGone = false;
       this.showError = false;
       this.#approvalBinding = binding;
     }
+  }
+
+  get #askingOldBox(): boolean {
+    return this.liveSince !== undefined || this.liveUnknown;
+  }
+
+  get #oldBoxUnanswered(): boolean {
+    return this.#askingOldBox && !this.oldBoxGone;
   }
 
   #action(action: "start" | "status" | "start-again" | "restore"): void {
@@ -52,6 +70,7 @@ export class SetupCloudRestoreScreen extends LitElement {
     if (
       action === "restore" &&
       (!this.acknowledged ||
+        this.#oldBoxUnanswered ||
         this.view?.state !== "approved" ||
         !this.view.point ||
         this.#currentApprovalBinding() !== this.#approvalBinding)
@@ -62,7 +81,12 @@ export class SetupCloudRestoreScreen extends LitElement {
     this.showError = false;
     this.dispatchEvent(
       new CustomEvent("cloud-restore-action", {
-        detail: { action, ...(action === "restore" ? { pointId: this.view!.point!.id } : {}) },
+        detail: {
+          action,
+          ...(action === "restore"
+            ? { pointId: this.view!.point!.id, oldBoxGone: this.#askingOldBox && this.oldBoxGone }
+            : {}),
+        },
         bubbles: true,
         composed: true,
       }),
@@ -137,6 +161,15 @@ export class SetupCloudRestoreScreen extends LitElement {
                           losing changes after this snapshot.</label
                         >
                         ${this.showError && !this.acknowledged ? html`<p role="alert">Confirm before restoring.</p>` : nothing}
+                        ${oldBoxQuestion({
+                          liveSince: this.liveSince,
+                          liveUnknown: this.liveUnknown,
+                          checked: this.oldBoxGone,
+                          invalid: this.showError && this.#oldBoxUnanswered,
+                          onChange: (checked) => {
+                            this.oldBoxGone = checked;
+                          },
+                        })}
                         <p>
                           <wt-button
                             variant="primary"

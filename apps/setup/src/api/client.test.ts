@@ -389,6 +389,19 @@ describe("SetupApi", () => {
     ]);
   });
 
+  it("sends the old-server answer with a Cloud restore only when the owner gave it", async () => {
+    const staged = { restoreStaged: true, restarting: true };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(staged, true, 202));
+    const api = new SetupApi("", fetchImpl);
+    const pointId = "e8722eb0-3f02-4f35-920b-9b5f6bfb05e8";
+    expect(await api.restoreFromCloud(pointId, true)).toEqual(staged);
+    await api.restoreFromCloud(pointId, false);
+    expect(fetchImpl.mock.calls.map(([, init]) => (init as RequestInit).body)).toEqual([
+      JSON.stringify({ pointId, oldBoxGone: true }),
+      JSON.stringify({ pointId }),
+    ]);
+  });
+
   it("rejects a refused restore with the envelope's code and the HTTP status", async () => {
     const fetchImpl = vi
       .fn()

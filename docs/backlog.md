@@ -5534,17 +5534,15 @@ takes the recovery kit (pasted or read from a file) and the environment, and pos
 `stageStreamRestore` (`apps/server/src/restore-request.ts`) for the entrypoint to place after the
 restart. The old-server question ("the old server is switched off for good") and "This is my
 business" (the copy's legal name, tax id and location) are asked on the screen and sent back with
-the same kit; an answer given for one kit or backup file is dropped when the owner changes it. The
+the same kit; an answer given for one kit, backup file or Cloud snapshot is dropped when the owner changes it. The
 archive restore asks the same old-server question (header `x-waitron-old-box-gone: 1`) when its
-database holds bucket settings. A copy with an empty tax id is never confirmed, on the wizard or the
+database holds bucket settings, and so does the Cloud recovery restore (`oldBoxGone` in its request
+body). A copy with an empty tax id is never confirmed, on the wizard or the
 command line (`confirmsVenue`, `apps/server/src/restore-stream.ts`). Every object-store call the
 setup restores make gives up after 60 seconds (`boundObjectStore`); the Litestream download has
 its own stall and ceiling limits. The archive and Cloud recovery routes
 now release the setup lock when their staging is refused; before, a refused restore held it until
 the process restarted. Left open:
-- A Cloud recovery restore whose database holds bucket settings runs the old-server check with no
-  way to answer it, so a live or unreachable bucket refuses it for good; the owner still has the
-  bucket and archive restores. A decision stated at the call site in `apps/server/src/setup-api.ts`.
 - The bucket route answers a wrong key (`recovery.passphrase_invalid`) and a damaged copy
   (`backup.artifact_invalid`, `backup.archive_invalid`) with different codes; the wizard shows one
   sentence for all three, as the command line does. Whoever holds the kit already holds the key.
