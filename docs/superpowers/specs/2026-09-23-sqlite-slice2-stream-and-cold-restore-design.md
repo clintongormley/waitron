@@ -398,6 +398,12 @@ which a design spec lists as unverified); a device opened at an IP address, and 
 another computer given an IP address, need a person to point them at the new address. The wizard's
 last screen says so.
 
+> 2026-09-25: as built (Task 9c), the option is a third card on the wizard's "Join or recover an
+> existing restaurant" screen, not beside the archive restore. Step 3 also stops when the check
+> cannot be made (`restore.stream_source_unchecked`), not only after a change in the last 10
+> minutes, and the owner confirms whose business the copy belongs to before it is staged
+> (`restore.stream_venue_unconfirmed`). See `docs/backlog.md`'s Task 9c entry.
+
 ### 5.2 Command line
 
 `waitron-restore --from-bucket <kit>` runs the same steps, for development and support. One restore
