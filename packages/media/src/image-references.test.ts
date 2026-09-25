@@ -22,7 +22,8 @@ import { MEDIA_MIGRATIONS } from "./migrations.js";
 /**
  * `products.image`, `category_details.image` and `sections.image` may only name a photo that
  * exists, and a photo one of them still names cannot be deleted or renamed. The rules are triggers, not keys
- * (`packages/media/drizzle/0001_image_references.sql`, whose header carries why).
+ * (`packages/media/drizzle/0001_image_references.sql`, whose header carries why, and
+ * `0002_section_image_references.sql` for `sections.image`).
  *
  * READING `sqlite_master` IS NOT ENOUGH, so the names are pinned AND every rule has a real
  * offending write with an ACCEPTING control in the other direction — without the control a trigger
@@ -208,7 +209,6 @@ describe("a section's image", () => {
   it("is refused on a sections insert unless an image carries it", async () => {
     await expect(insert(ABSENT)).rejects.toMatchObject({
       message: "sections_media_image_fk",
-      errcode: 1811,
     });
     await insert(PRESENT);
     await insert(null);

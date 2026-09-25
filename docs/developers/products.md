@@ -167,9 +167,11 @@ an options label's customer-facing name are what the printed receipt puts under 
 (`customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts`), which is also where
 the fallback to the staff name happens, so a missing one still is not a gap. An extras list's own
 name reaches no order or receipt surface at all — a pick becomes its own line carrying the picked
-PRODUCT's names, and nothing copies the list's name onto it. The other kinds the
-query reports — `category`, `unit` and `section` — have no optional customer-facing name to fall
-back from and stay required. An options list contributes two of the report's kinds and not one, both
+PRODUCT's names, and nothing copies the list's name onto it. A library section's customer names
+(`sections.names`, kind `library_section`) are optional too, and only a partly filled map is
+reported. Only library sections are read: a menu's own lists in `sections` are left out. The other
+kinds the query reports — `category`, `unit` and `section`, which is a `menu_sections` heading —
+have no optional customer-facing name to fall back from and stay required. An options list contributes two of the report's kinds and not one, both
 of them in the optional group: the list's own name (`option_list`) and each of its labels
 (`option_label`), each with its own table. An extras list contributes one kind, `extra_list`, and no
 second one: each of its items names a product and carries no name of its own, so `extra_list_items`

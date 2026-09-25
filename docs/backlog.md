@@ -210,7 +210,18 @@ demo-seeded by `main` at `f19d556d4`, upgraded by this branch through `applyMigr
 catalogue and one media migration and changed no row count in the fourteen tables compared, and the
 upgraded file refused a section naming a missing image — so this task needs no venue reset. Left for
 Task 2 (the sections library screen): the image library names a section using a photo without a
-link, because no sections screen exists yet. Next in the lane: menus Task 2. The owner lifted the
+link, because no sections screen exists yet; `docs/content-and-images.md` tells readers the
+dashboard cannot edit a reusable section's names or remove its photo, and must point them at the
+sections screen once it exists; and `packages/catalogue/src/section-types.ts` holds a runtime
+constant (`SECTION_ROLES`), so it cannot join the type-only list in
+`scripts/dashboard-browser-purity.test.ts` as its siblings `menu-types.ts` and
+`modifier-list-types.ts` do — before the dashboard imports it, split the constant out or give the
+guard a way to admit it. A follow-up that is not Task 2's: each table that can hold a photo is
+named by hand in several places in `packages/media` (the triggers, `listImageUsages`,
+`countUsages`, the live-query dependencies, the `before` lists in `module.ts`, the `ImageUsage`
+unions), and only a comment keeps `countUsages` and `listImageUsages` in step; one list of
+photo-holding tables that those derive from, checked against the triggers, would make the next
+such table one edit. Next in the lane: menus Task 2. The owner lifted the
 wait: the dependency upgrades are finished, and the work does not wait for SQLite slice 2. The
 menus plan's decisions D1–D23 settle the spec's open integration points; D6, D9, D10, D11, D12,
 D13 and D22 are the ones flagged for the owner. Menus Task 3 wipes existing venues (it rebuilds

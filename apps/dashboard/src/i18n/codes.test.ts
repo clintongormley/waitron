@@ -246,3 +246,19 @@ it("has a sentence for each label code and the category reassignment refusal", (
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
   }
 });
+
+it("has English and Spanish copy for each menu section code", () => {
+  for (const code of [
+    "menu_section.not_found",
+    "menu_section.invalid",
+    "menu_section.translation_required",
+    "menu_section.member_cycle",
+    "menu_section.member_duplicate",
+    "menu_section.not_library",
+    "menu_section.membership_invalid",
+  ]) {
+    expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
+  }
+});

@@ -56,6 +56,44 @@ reporting category nor the kitchen route it follows (the sections case in
 sections while it has exactly one main category. The design is the
 [menus plan](../superpowers/plans/2026-09-25-menus-categories-home-layouts.md)'s decisions D1–D4.
 
+### Section routes
+
+`mountSectionRoutes` in `apps/server/src/catalogue-api.ts` serves them, behind the same manager
+session and permission as the category routes below. A body of the wrong shape is refused with
+`management.request_invalid`, naming the field, and an invalid id is refused. `LibrarySection` is
+`{ id, internalName, names, image, color, members }`, and a member is
+`{ id, position, ref }`, where `ref` is `{ kind: "product", productId }` or
+`{ kind: "section", sectionId }`.
+
+| Route | Body → success | Refusals |
+| --- | --- | --- |
+| `GET /management-api/sections` | → 200, `LibrarySection[]`: library sections only, by internal name | |
+| `POST /management-api/sections` | `{ internalName, names?, image?, color? }` → 201, `LibrarySection` | `invalid`, `translation_required`, `content.language_invalid` |
+| `GET /management-api/sections/:id` | → 200, `LibrarySection`; a menu's own list is readable too | `not_found` |
+| `PATCH /management-api/sections/:id` | Any supplied fields from create → 200, `LibrarySection` | `not_found`, `not_library`, `invalid`, `translation_required`, `content.language_invalid` |
+| `DELETE /management-api/sections/:id` | → 204; every list holding it loses it | `not_found`, `not_library` |
+| `GET /management-api/sections/:id/members` | → 200, the members in order | `not_found` |
+| `POST /management-api/sections/:id/members` | `{ ref, position? }` → 201, the new member | `not_found`, `not_library`, `invalid`, `membership_invalid`, `member_duplicate`, `member_cycle` |
+| `POST /management-api/sections/:id/members/products` | `{ productIds }` → 200, `{ added }`; a product the list already holds is skipped | `not_found`, `not_library`, `membership_invalid` |
+| `DELETE /management-api/sections/:id/members/:memberId` | → 204 | `not_found`, `not_library` |
+| `PUT /management-api/sections/:id/members/:memberId/position` | `{ to }` → 200, the members in order | `not_found`, `not_library`, `invalid` |
+| `POST /management-api/sections/:id/members/:memberId/replace` | `{ ref }` → 200, the member | `not_found`, `not_library`, `membership_invalid`, `member_duplicate`, `member_cycle` |
+| `POST /management-api/sections/:id/duplicate` | `{ internalName, memberIds, replaceIn?: { sectionId, memberId } }` → 201, `LibrarySection` | `not_found`, `not_library`, `invalid`, `membership_invalid`, `member_cycle` |
+| `GET /management-api/sections/:id/usages` | → 200, `{ menus, sections }` that a delete would touch | `not_found` |
+
+A code without a prefix in the table is a `menu_section.*` code. Besides those, a malformed id
+answers `shared.invalid_id` (400), a malformed body `management.request_invalid` (400), and a
+`names` key that is not a language code `content.language_invalid` (400). `not_found` (404) is an
+unknown section, member, or section named in `ref`. `not_library` (409) is a write to a menu's home layout, a `ref` naming a
+section outside the library, and, for `PATCH`, `DELETE` and the source of `duplicate`, any section
+outside the library. `invalid` (400) is a blank internal name, a
+colour that is not lower-case `#rrggbb`, an image the library does not hold, or a `position` or
+`to` that is not a whole number of zero or more. `translation_required` (400) is a non-empty
+`names` with no text in the default content language. `membership_invalid` (400) is a `ref` or
+`productIds` entry that is not a top-level product, a repeated `productIds` entry, or a `memberIds`
+entry that is repeated or not a member of the source. `member_duplicate` (409) is a `ref` the list
+already holds, and `member_cycle` (409) one that would make a section contain itself.
+
 ## Moving and deleting
 
 Moving a category to a new parent, or a product to a new main category, is always allowed. Sale
