@@ -573,6 +573,9 @@ describe("a menu's own switch for a product", () => {
         updateMenuItem(tx, f.lunch, item.id, { grossPrice: "1.00" }),
       (tx: Transaction) => deactivateMenuItem(tx, f.lunch, item.id),
       (tx: Transaction) => updateMenuItem(tx, f.dinner, item.id, { grossPrice: "1.00" }),
+      (tx: Transaction) =>
+        setMenuVariants(tx, item.id, [{ variantId: f.large, price: "1.00", offered: true }]),
+      (tx: Transaction) => setMenuItemExtraLists(tx, item.id, []),
     ])
       await expect(app(write)).rejects.toMatchObject({ code: "menu_item.not_found" });
     expect(await app((tx) => settingsOf(tx, f.lunch, f.lemonade))).toMatchObject({
