@@ -350,8 +350,8 @@ describe("recordTillSale", () => {
       { ...names, unit_price_gross: 410 },
       { ...names, unit_price_gross: null },
     ]);
-    // The open order's line names the variant as its product; the filed line keeps the frozen
-    // names and no catalogue reference, so neither table has a `variant_id` column.
+    // The open order's line names the variant as its product, and neither table has a
+    // `variant_id` column.
     const orderLines = await suite.db.execute<{ product_id: string }>(
       sql`select product_id from working_order_lines`,
     );

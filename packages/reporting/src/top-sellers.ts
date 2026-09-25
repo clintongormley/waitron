@@ -14,10 +14,9 @@ import type { TopSeller, TopSellersInput } from "./types.js";
 
 /**
  * The dashboard's top-N products over a closed business-day range, ranked by summed line quantity,
- * each with its variants nested underneath. A filed line carries no catalogue reference,
- * so the frozen STAFF names are the buckets: a parent row is every line whose `name` matches —
- * including lines sold as the product itself, with no variant — and a nested row is one non-blank
- * `variant_name` within it. `limit` counts parent rows. The customer-facing text is never read.
+ * each with its variants nested underneath. The frozen STAFF names are the buckets: a parent row is
+ * every line whose `name` matches — including lines sold as the product itself, with no variant —
+ * and a nested row is one non-blank `variant_name` within it. `limit` counts parent rows. The customer-facing text is never read.
  *
  * Same predicates as the VAT roll-up (`issuedSalesClause`, `reversedSalesClause`); corrections are
  * NOT excluded — their negative lines net quantity and total down.

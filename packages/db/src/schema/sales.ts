@@ -147,7 +147,7 @@ export const sales = table(
   ],
 );
 
-/** Snapshotted values, never catalogue references (architecture §6). */
+/** Snapshotted values, never catalogue keys (architecture §6). */
 export const saleLines = table(
   "sale_lines",
   {

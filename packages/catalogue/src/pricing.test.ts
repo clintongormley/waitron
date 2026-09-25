@@ -64,7 +64,6 @@ describe("priceBasket — difference method", () => {
     };
     const live = priceBasket([{ product, quantity: "1" }]);
     expect(live.lines[0]).toMatchObject(expected);
-    // A filed line keeps frozen names and no catalogue reference (spec decision 11).
     expect(live.lines[0]).not.toHaveProperty("variantId");
     const locked = priceLockedLines([
       {

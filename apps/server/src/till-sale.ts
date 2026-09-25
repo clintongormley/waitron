@@ -869,7 +869,8 @@ async function finalizeCapture(
  * The charge was `total + tip`, so the tip is reconstructed as `captured.amount − priced.total`; the
  * fiscal `total` stays ex-tip. A charge below the locked total means there is no honest figure to
  * file: file NOTHING and throw a plain `Error`, leaving the captured payment unassociated for
- * reconciliation (§5).
+ * reconciliation (§5). The issuance pass refusing with `sale_classification.invalid` likewise files
+ * nothing and leaves the payment unassociated.
  */
 async function finalizeRecovery(
   deps: IntegratedPayDeps,

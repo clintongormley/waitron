@@ -14,7 +14,7 @@ import type { PricedOrder } from "./working-order.js";
 /**
  * The issuance pass: what each line of the sale about to be filed records about its product at the
  * moment the record is issued — the product sold, a variant's parent, the menu it was sold from and
- * its reporting chain and labels. Every filing path calls it on the priced lines it files, in the
+ * its reporting chain and labels. Every till filing path calls it on the priced lines it files, in the
  * pass that issues the record (spec 2026-09-25-sales-classification §3), and a replay or reprint
  * never does.
  *
@@ -58,8 +58,7 @@ export async function issuancePass(
         parentProductId: productId === null ? null : parentProductOf(classification, productId),
         menuId: menuByLine.get(id) ?? null,
         menuVersionId: null,
-        // A line with no product is still a line filed after this change, so it reads as
-        // Uncategorised rather than as the null of a line filed before it.
+        // Empty, not null: a null classification means the line was filed without one.
         classification:
           productId === null
             ? { reporting: [], labels: [] }

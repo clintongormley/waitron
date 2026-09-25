@@ -134,6 +134,9 @@ from the conversation, that is called out so the reviewer can veto it.
     frozen name, exactly as the top-sellers report groups products. The **open-order** line
     (`working_order_lines`) does reference the catalogue, and its extra child line carries `product_id`
     in place of today's `option_group_item_id`.
+    _2026-09-25: superseded — a filed line now records the product sold in `product_id`, a plain
+    value with no foreign key
+    ([sales classification spec](2026-09-25-sales-classification-and-category-reports-design.md) §3)._
 
 12. **Branch 1 before the flip (if engine-neutral); branch 2 after.** Branch 1's new tables are
     written engine-neutral (see §7) so they ride through the SQLite flip's baseline regeneration like
@@ -311,6 +314,9 @@ parent/child expansion in `apps/server/src/working-order.ts` and `packages/core/
 - **Filed sale** (`sale_lines`): the child line carries the three frozen names, quantity, price and
   VAT — and **no `product_id`** (decision 11; the standing architecture §6 rule). The parent line no
   longer needs an extras entry in a JSON snapshot: the child lines *are* the record.
+  _2026-09-25: superseded — a filed line now records the product sold in `product_id`, a plain value
+  with no foreign key
+  ([sales classification spec](2026-09-25-sales-classification-and-category-reports-design.md) §3)._
 
 Allergens and dietary information for an extra are **resolved live from the product** at display time
 (the till basket, kitchen and expo screens), never stored on the line — the same posture the current

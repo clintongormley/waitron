@@ -637,11 +637,6 @@ describe("sales — corrective link and negative total", () => {
   });
 });
 
-/**
- * The "carries no catalogue identifier" test above is weaker than its name: it matches
- * sale_lines' column NAMES against a regex, so a catalogue reference added under a name that does
- * not end in one of those words is invisible to it.
- */
 describe("sale_lines — parent line self-link", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
   let saleId = "";

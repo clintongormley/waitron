@@ -350,7 +350,7 @@ Six things it is worth knowing about that payload:
 
 ## On the filed sale
 
-A filed sale is a snapshot and never a catalogue reference (`packages/db/src/schema/sales.ts`,
+A filed sale is a snapshot and never holds a catalogue key (`packages/db/src/schema/sales.ts`,
 architecture §6), so the two kinds of answer land differently:
 
 - An options answer is copied onto the DISH's own `sale_lines.option_snapshots` — the same six names
