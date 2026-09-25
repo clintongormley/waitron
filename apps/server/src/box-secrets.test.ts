@@ -3,19 +3,24 @@ import { X509Certificate, createPrivateKey } from "node:crypto";
 import { mkdtemp, readFile, readdir, stat, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createSecureContext } from "node:tls";
 import forge from "node-forge";
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { writeFile, mkdir } from "node:fs/promises";
 import { ensureBoxSecrets, mintedBoxLeaf, reissueBoxLeaf } from "./box-secrets.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
-// `access` alone is wrapped so one test can inject a non-ENOENT failure for a single path; every
-// other call forwards to the real implementation.
-const { accessMock } = vi.hoisted(() => ({ accessMock: vi.fn() }));
+// `access` and `rename` are wrapped so a test can inject a failure for a single path; every other
+// call forwards to the real implementation.
+const { accessMock, renameMock } = vi.hoisted(() => ({
+  accessMock: vi.fn(),
+  renameMock: vi.fn(),
+}));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   accessMock.mockImplementation(actual.access);
-  return { ...actual, access: accessMock };
+  renameMock.mockImplementation(actual.rename);
+  return { ...actual, access: accessMock, rename: renameMock };
 });
 
 let kp: forge.pki.rsa.KeyPair;
@@ -243,6 +248,33 @@ describe("reissueBoxLeaf", () => {
       expect(leftover).toEqual([]);
     },
   );
+
+  it("keeps a pair the listener can load when renaming the new key into place fails", async () => {
+    const d = await newDir();
+    await ensureBoxSecrets(deps(d));
+    const before = await pairOf(d);
+    const passthrough = renameMock.getMockImplementation()!;
+    renameMock.mockImplementation(async (from: string, to: string) => {
+      if (to === join(d, "tls", "server.key")) {
+        throw Object.assign(new Error("injected rename failure"), { code: "EIO" });
+      }
+      return passthrough(from, to);
+    });
+    try {
+      await expect(reissue(d)).rejects.toMatchObject({ code: "EIO" });
+    } finally {
+      renameMock.mockImplementation(passthrough);
+    }
+    const after = await pairOf(d);
+    expect(() => createSecureContext(after)).not.toThrow();
+    expect(after).toEqual(before);
+    expect((await readdir(join(d, "tls"))).sort()).toEqual([
+      "ca.crt",
+      "ca.key",
+      "server.crt",
+      "server.key",
+    ]);
+  });
 });
 
 describe("mintedBoxLeaf", () => {

@@ -5352,10 +5352,16 @@ only a peer that answers during the same start (see the first item below). A mir
 node re-issues and signs nothing; the marker stays and the copy is held. An adoption-pending box
 returns from boot before the first start, so it neither runs nor defers it: it keeps serving the old
 certificate and the marker stays. The new certificate and key are written under working names and
-renamed into place only when both are written, so a failed write keeps the old matching pair; a
+renamed into place only when both are written, so a failed write keeps the old matching pair and
+a failed rename of the key puts the old certificate back; a
 crash between the two renames leaves a mismatched pair, which the next start replaces before the
 listener reads it, because the marker is still there — unless that start defers the first start
-(fenced, mirror or adoption-pending), when the listener refuses the pair. Left open:
+(fenced, mirror or adoption-pending), when the listener refuses the pair. A retroactive Codex review
+of #630 found two defects, both fixed: a failed key rename left the new certificate beside the old
+key, which Node's TLS refused (`key values mismatch`), and the new membership document dropped this
+node's endorsement, so a restored node adopted as a standby and later promoted published a document
+that devices trusting only its endorser refused (`untrusted_signer`); it now carries the stored
+endorsement as mirror promotion does (`apps/server/src/promote.ts`). Left open:
 - A restored box whose cloud peer does not answer during its first start signs the next term and
   removes the marker; a fencing document the peer serves later at that same term reads as not
   newer, so the box is never fenced. This task's review reproduced it with a temporary two-boot case in

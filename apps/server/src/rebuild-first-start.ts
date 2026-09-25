@@ -2,7 +2,12 @@ import { access, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { KeyRing } from "@waitron/credentials";
-import { persistNodeMembershipIfNewer, readNodeMembership, type Database } from "@waitron/db";
+import {
+  persistNodeMembershipIfNewer,
+  readNodeEndorsement,
+  readNodeMembership,
+  type Database,
+} from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
 import { AppError, isAppError } from "@waitron/shared";
 import {
@@ -74,12 +79,16 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
   // Never below the bucket's pointer: the stream supervisor refuses to replace a pointer naming a
   // higher term (slice-2 spec §5.1 step 7).
   const pointerTerm = (await deps.pointerTerm?.()) ?? null;
+  // As mirror promotion does (promote.ts): a node adopted as a standby is trusted by the other
+  // devices only through the primary's endorsement of its key.
+  const endorsement = await readNodeEndorsement(deps.db, deps.nodeId);
   const next = await mintNextMembershipDocument(
     { db: deps.db, ring: deps.ring },
     {
       heldDocument: held,
       nodes,
       signerNodeId: deps.nodeId,
+      endorsements: endorsement === null ? [] : [endorsement],
       ...(pointerTerm === null ? {} : { minTerm: pointerTerm + 1 }),
     },
   );

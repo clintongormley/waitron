@@ -1,4 +1,4 @@
-import { mkdir, access, readFile, rename, rm } from "node:fs/promises";
+import { mkdir, access, copyFile, readFile, rename, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
@@ -194,8 +194,8 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
  * Replace the leaf with one naming THIS machine's addresses, signed by the authority already in
  * `<stateDir>/tls`, which stays untouched. The listener refuses a certificate whose key does not
  * match, so both new files are written under working names first and renamed into place only when
- * both are written; a failed write removes the working files and leaves the old pair. What is left
- * is the moment between the two renames.
+ * both are written; a failed write removes the working files and leaves the old pair, and a failed
+ * key rename puts the old certificate back. What is left is a crash between the two renames.
  */
 export async function reissueBoxLeaf(deps: {
   stateDir: string;
@@ -215,11 +215,24 @@ export async function reissueBoxLeaf(deps: {
     { path: files.certFile, pem: leaf.serverCertPem },
     { path: files.keyFile, pem: leaf.serverKeyPem },
   ];
+  const discardStaged = async () => {
+    for (const { path } of pair) await rm(stagedPath(path), { force: true }).catch(() => {});
+  };
   try {
     for (const { path, pem } of pair) await stageFile(path, pem, 0o600);
   } catch (error) {
-    for (const { path } of pair) await rm(stagedPath(path), { force: true }).catch(() => {});
+    await discardStaged();
     throw error;
   }
-  for (const { path } of pair) await rename(stagedPath(path), path);
+  const previousCert = `${files.certFile}.previous`;
+  await copyFile(files.certFile, previousCert);
+  await rename(stagedPath(files.certFile), files.certFile);
+  try {
+    await rename(stagedPath(files.keyFile), files.keyFile);
+  } catch (error) {
+    await rename(previousCert, files.certFile);
+    await discardStaged();
+    throw error;
+  }
+  await rm(previousCert, { force: true });
 }
