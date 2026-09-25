@@ -16,7 +16,7 @@ function failedMigration(errcode: number): Error {
   return Object.assign(new Error("Failed query"), { cause: driver });
 }
 
-/** A REAL refusal from the engine, for the one case that must not rest on a number I chose. */
+/** A REAL refusal from the engine, so one case does not rest on a chosen number. */
 function realRefusal(build: (db: DatabaseSync) => void): unknown {
   const dir = mkdtempSync(join(tmpdir(), "dev-hint-"));
   try {
@@ -45,21 +45,13 @@ const hint = (errcode: number): Line => ({
 });
 
 describe("MIGRATION_CONSTRAINT_RESULT_CODES", () => {
-  // Pinned LITERALLY, not by iterating the export: a test that reads the implementation's own list
-  // loses a case the moment someone deletes one, and reports nothing. Proven by mutation on the
-  // list this replaces — dropping an entry from the module left the old iterating test passing.
-  //
-  // Every number here was taken from a real refusal, 2026-09-22 on Node v26.7.0: a CHECK (275), a
-  // foreign key (787), a NOT NULL (1299), a primary key (1555) and a unique index (2067).
+  // Pinned literally: a test iterating the export would not notice an entry deleted from it.
   it("is exactly the constraint result codes, and nothing wider", () => {
     expect([...MIGRATION_CONSTRAINT_RESULT_CODES].sort((a, b) => a - b)).toEqual([
       275, 787, 1299, 1555, 2067,
     ]);
   });
 
-  // The module claims it shares no code with `classifyBootFailure`'s list, and nothing else would
-  // fail if a later edit put one in both. It matters because the two give OPPOSITE advice: this file
-  // offers a wipe, and a boot classification sends the operator to restore.
   it("never names a code `boot-failure.ts` classifies", () => {
     const theirs = new Set(UNREACHABLE_RESULT_CODES);
     expect(MIGRATION_CONSTRAINT_RESULT_CODES.filter((code) => theirs.has(code))).toEqual([]);
@@ -67,8 +59,6 @@ describe("MIGRATION_CONSTRAINT_RESULT_CODES", () => {
 });
 
 describe("withDevMigrationHint", () => {
-  // A REAL refusal, so the hint is proven against what a migration on this engine actually throws
-  // rather than against a number chosen to match the implementation.
   it("names the remedy for a real refusal from the engine", async () => {
     const refusal = realRefusal((db) => {
       db.exec("create table categories (id integer primary key, name text not null)");
@@ -89,8 +79,7 @@ describe("withDevMigrationHint", () => {
     }
   });
 
-  // The walk starts at the OUTERMOST error, so a driver error that was never wrapped is a live
-  // shape here too — the sibling (`boot-failure.test.ts`) asserts both for exactly that reason.
+  // The walk starts at the OUTERMOST error, so an unwrapped driver error is a live shape too.
   it("names the remedy when the code is on the error itself, not under `cause`", async () => {
     const { lines, log } = recorder();
     const bare = Object.assign(new Error("NOT NULL constraint failed: categories.name"), {
@@ -112,12 +101,7 @@ describe("withDevMigrationHint", () => {
   });
 
   it("still re-throws the original failure when the log sink itself throws", async () => {
-    // No sink this process builds today is known to throw: `createRotatingFileSink` catches its own
-    // IO failures and degrades to a no-op, and `boot.ts`'s stdout sink discards its write's return
-    // value and passes no callback. But `tee` does not catch, so ANY sink that ever throws
-    // propagates from here — and
-    // reporting a logging failure in place of the migration failure would send the reader after
-    // entirely the wrong problem. Cheap insurance on the one error that must survive.
+    // `tee` does not catch, so any sink that throws would otherwise replace the migration failure.
     const failure = failedMigration(1299);
     const throwing: Logger = () => {
       throw new Error("EPIPE: broken pipe");
@@ -135,10 +119,7 @@ describe("withDevMigrationHint", () => {
     expect(lines).toEqual([]);
   });
 
-  // The direct control for "a pinned list, never a low-byte match": every constraint code on this
-  // engine is `SQLITE_CONSTRAINT` (19) plus a reason in the high byte, so a test of the low byte
-  // alone would fire on 19 itself and on a trigger's own `raise(abort)` (1811), which is a
-  // deliberate refusal rather than rows failing a new constraint.
+  // A low-byte match would fire on a trigger's `raise(abort)` (1811), a deliberate refusal.
   it("says nothing for a constraint code that is not on the list", async () => {
     const { lines, log } = recorder();
     const failure = failedMigration(1811);

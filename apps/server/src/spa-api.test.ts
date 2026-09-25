@@ -13,8 +13,6 @@ import { assertBuiltApp, mountSpa, safeResolve } from "./spa-api.js";
 
 const noopLog: Logger = () => {};
 
-/** Records every line so the non-ENOENT read-failure branch can be asserted, mirroring
- * the logger shape used by route tests. */
 const capturingLog = () => {
   const lines: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
   const log: Logger = (level, event, fields) => {
@@ -32,17 +30,15 @@ describe("mountSpa", () => {
     mkdirSync(join(root, "assets"));
     writeFileSync(join(root, "assets", "app-abc123.js"), "console.log(1)");
     writeFileSync(join(root, "favicon.svg"), "<svg/>");
-    // An unknown extension exercises the `application/octet-stream` content-type fallback.
     writeFileSync(join(root, "data.unknownext"), "blob");
   });
 
   afterAll(() => {
-    if (root !== undefined) rmSync(root, { recursive: true, force: true }); // guarded teardown (CLAUDE.md §4)
+    if (root !== undefined) rmSync(root, { recursive: true, force: true });
   });
 
   const mount = (basePath: string) => {
     const app = new Hono();
-    // a terminal API route registered BEFORE the SPA, to prove the catch-all does not shadow it
     app.get("/api/ping", (c) => c.json({ ok: true }));
     mountSpa(app, { root: root!, basePath }, noopLog);
     return app;
@@ -64,13 +60,9 @@ describe("mountSpa", () => {
     expect(await res.text()).toBe("console.log(1)");
   });
 
-  // Regression (finish-review Important): `safeResolve` compared the always-absolute resolved path
-  // against the UNRESOLVED `root` string, so a RELATIVE or trailing-slash `root` 404'd every asset
-  // while index.html (which bypasses safeResolve) still served. The plan's own smoke uses the
-  // relative `apps/till/dist`, so this is a realistic trigger the absolute-path fixtures all miss.
+  // index.html bypasses `safeResolve`, so only an asset shows a root that was not normalised.
   it("serves an asset when root is a RELATIVE path (resolve differs from the raw string)", async () => {
     const relRoot = relative(process.cwd(), root!);
-    // Guard the premise: a genuinely relative root whose `resolve` differs from the raw string.
     expect(isAbsolute(relRoot)).toBe(false);
     const app = new Hono();
     mountSpa(app, { root: relRoot, basePath: "" }, noopLog);
@@ -164,9 +156,7 @@ describe("mountSpa", () => {
   });
 
   it("answers 404 and logs when a read fails for a reason other than ENOENT", async () => {
-    // `assets` is a directory, so `readFile` throws EISDIR — the misconfiguration branch. It is still a
-    // bare 404 to the caller (this route never 500s or leaks fs detail), but it logs, unlike the
-    // ordinary missing-file ENOENT.
+    // `assets` is a directory, so `readFile` throws EISDIR.
     const { log, lines } = capturingLog();
     const app = new Hono();
     mountSpa(app, { root: root!, basePath: "" }, log);
@@ -175,14 +165,8 @@ describe("mountSpa", () => {
     expect(lines.some((l) => l.event === "spa.read_failed")).toBe(true);
   });
 
-  // The boot-time precondition, unit-tested here because reaching a throw inside the un-unit-testable
-  // full-boot path is otherwise hard (CLAUDE.md §4 / the task brief's Step 7). `boot.ts` calls this
-  // for each configured SPA dir BEFORE `mountSpa`, so a dir that was configured but never built (no
-  // index.html) fails the boot LOUDLY with the existing `server.config_invalid` code — naming the
-  // offending env var — rather than serving 404s for every page load.
   describe("assertBuiltApp", () => {
     it("returns without throwing when the dir holds index.html", () => {
-      // `root` (the suite fixture) has index.html — the success branch.
       expect(() => assertBuiltApp(root!, "WAITRON_TILL_APP_DIR")).not.toThrow();
     });
 
@@ -197,21 +181,19 @@ describe("mountSpa", () => {
         }
         expect(isAppError(caught)).toBe(true);
         expect(isAppError(caught) && caught.code).toBe("server.config_invalid");
-        // Names the env var the operator must fix and a reason CODE, never the path itself — the
-        // no-leak, name-the-variable discipline every other `server.config_invalid` follows.
+        // The variable's name and a reason code, never the path.
         expect(isAppError(caught) && caught.params).toEqual({
           variable: "WAITRON_DASHBOARD_APP_DIR",
           reason: "missing_index_html",
         });
       } finally {
-        rmSync(empty, { recursive: true, force: true }); // guarded teardown (CLAUDE.md §4)
+        rmSync(empty, { recursive: true, force: true });
       }
     });
   });
 
-  // Direct unit test of the traversal guard — the route-level `..%2f…` test above may be normalised by
-  // Hono before the handler sees it, so this is what makes "prove the guard by deletion" (CLAUDE.md §4)
-  // actually bite. Drop the containment check in `safeResolve` and this case flips to a non-null path.
+  // The route-level traversal test above may be normalised before the handler sees it, so the
+  // guard is pinned directly here.
   describe("safeResolve", () => {
     it("returns null for a relative path that escapes root", () => {
       expect(safeResolve(root!, "/assets/../../../etc/passwd")).toBeNull();
@@ -227,9 +209,6 @@ describe("mountSpa", () => {
       expect(safeResolve(root!, "favicon.svg")).toBe(join(root!, "favicon.svg"));
     });
 
-    // Self-contained normalisation: any caller may hand a relative or trailing-slash root, and the
-    // containment check must compare against the RESOLVED base, not the raw string (finish-review
-    // Important). Both must resolve to the same file the absolute root does.
     it("normalises a relative root before the containment check", () => {
       const relRoot = relative(process.cwd(), root!);
       expect(isAbsolute(relRoot)).toBe(false);
@@ -247,17 +226,8 @@ describe("mountSpa", () => {
 });
 
 /**
- * What `mountSpa` sees is not the raw bytes of the request line: `@hono/node-server` builds the
- * `Request` first, and for some paths it runs them through WHATWG `new URL(...)` on the way. The
- * traversal guard in `spa-api.ts` leans on that, so this suite pins it against the real adapter
- * rather than leaving it to a comment — the adapter is a dependency we upgrade, and version 2
- * rewrote exactly that code path.
- *
- * A real socket and the real `mountSpa`, not `app.request()`: `app.request()` builds the URL itself
- * and so cannot show what the adapter does with Node's raw `req.url`. Each case asserts both the
- * path the handler was given and the status the client got back, and the cases point in opposite
- * directions — a dot segment is collapsed, a percent-encoded slash is not — which is what lets the
- * suite tell the two answers apart.
+ * Pins what `@hono/node-server` hands `mountSpa` for a raw request line, which the traversal guard
+ * leans on. A real socket, because `app.request()` builds the URL itself.
  */
 describe("what mountSpa is handed when a request arrives through the Node adapter", () => {
   const seen: string[] = [];
@@ -274,7 +244,6 @@ describe("what mountSpa is handed when a request arrives through the Node adapte
     mkdirSync(join(root, "assets"));
     writeFileSync(join(root, "assets", "app-abc123.js"), "console.log(1)");
     const app = new Hono();
-    // Records the path the adapter produced and then lets the real SPA handler run on it.
     app.use("*", async (c, next) => {
       seen.push(c.req.path);
       await next();
@@ -289,8 +258,7 @@ describe("what mountSpa is handed when a request arrives through the Node adapte
   });
 
   afterAll(async () => {
-    // Guarded (CLAUDE.md §4): a beforeAll that threw part-way leaves one or both of these unset,
-    // and the directory goes even when closing the server reports an error.
+    // A beforeAll that threw part-way leaves one or both unset.
     try {
       if (server !== undefined) {
         await new Promise<void>((resolve, reject) => {
@@ -303,11 +271,8 @@ describe("what mountSpa is handed when a request arrives through the Node adapte
   });
 
   /**
-   * Writes one raw request line to the socket and returns the path the handler was given together
-   * with the response's status line. The recorded path is taken by INDEX, not from the tail of
-   * `seen`: the adapter answers some request lines itself — a Host header it rejects, and `GET *`,
-   * both measured — without ever calling the handler, and reading the tail would then silently hand
-   * back the previous case's path.
+   * The path is taken by INDEX, not from the tail of `seen`: the adapter answers some request lines
+   * itself without calling the handler, and the tail would then be the previous case's path.
    */
   const rawGet = async (
     requestTarget: string,
@@ -331,8 +296,7 @@ describe("what mountSpa is handed when a request arrives through the Node adapte
   };
 
   it("collapses an escaping dot segment before the handler sees it", async () => {
-    // `/etc/passwd`, not `/assets/../../etc/passwd`: resolved inside the SPA root, where no such
-    // file exists, so the request is refused with a 404 rather than reaching outside it.
+    // Resolved inside the SPA root, where no such file exists.
     expect(await rawGet("/assets/../../etc/passwd")).toEqual({
       path: "/etc/passwd",
       status: "HTTP/1.1 404 Not Found",
@@ -353,14 +317,8 @@ describe("what mountSpa is handed when a request arrives through the Node adapte
     });
   });
 
-  // The path that reaches `safeResolve`'s null branch: `//` is not the root path, so it is not
-  // served `index.html`, and it resolves to the root directory ITSELF, which the containment check
-  // rejects (`base.startsWith(base + sep)` is false). Found by a reviewer running the adapter
-  // against the branch, while the comment beside that branch still said nothing reached it.
-  //
-  // The 404 alone does not pin the guard — delete it and `sendFile` is handed `null`, `readFile`
-  // throws, the catch swallows it and the client still gets 404. What separates the two is the log:
-  // the guard refuses silently, the crash records `spa.read_failed`.
+  // `//` resolves to the root directory itself, which `safeResolve` refuses. The 404 alone does
+  // not pin the guard — a failed read also answers 404 — so the log is what separates them.
   it("refuses a path that resolves to the SPA root itself, without reading anything", async () => {
     expect(await rawGet("//")).toEqual({ path: "//", status: "HTTP/1.1 404 Not Found" });
     expect(lines.filter((line) => line.event === "spa.read_failed")).toEqual([]);

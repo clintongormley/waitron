@@ -8,11 +8,8 @@ import type { Logger } from "./logger.js";
 import "./errors.js";
 
 /**
- * Everything the SPA-serving route needs: the absolute directory a front-end was built into and the
- * URL prefix it is served under. No `db`, no session, no tenant — a built SPA bundle (index.html +
- * hashed assets) is not secret, and both the `till` and the `dashboard` are fetched by a browser with
- * plain `GET`s. Mounted so the box can serve those front-ends SAME-ORIGIN (slice 1a), which is what
- * lets the till/dashboard reach the API without a CORS or cross-origin cookie story.
+ * No session: a built SPA bundle is not secret. Served same-origin with the API so the front-ends
+ * need no CORS or cross-origin cookies.
  */
 export interface SpaDeps {
   /** Absolute path to the built SPA directory (holds index.html + assets/). */
@@ -31,21 +28,10 @@ const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 const REVALIDATE_CACHE_CONTROL = "no-cache";
 
 /**
- * Resolve a request's relative path to an absolute file inside `root`, or `null` if it would escape
- * `root`. THIS is the explicit path-traversal guard — the reason we serve files by a custom `fs`
- * handler and not `@hono/node-server/serve-static`: the refusal is written here, in code this repo
- * tests, rather than inherited from a dependency's own idea of containment.
- *
- * `root` is normalised with `resolve` FIRST, so the containment check compares two
- * canonical absolute paths: a relative root (`apps/till/dist`) or a trailing-slash root (`/srv/till/`)
- * would otherwise make `absolute.startsWith(<raw root> + sep)` always false and 404 every asset. The
- * request path is resolved against that same normalised `base`, and `resolve` collapses any `..`
- * segments; we then require the collapsed result to stay within `base`. Comparing against `base + sep`
- * (not a bare `startsWith(base)`) is deliberate: a sibling directory like `<base>-evil` shares the
- * prefix but must NOT pass, and a request resolving to `base` itself (`base.startsWith(base + sep)`
- * is false) returns `null` too. Self-contained (it normalises its own `root`) so any caller's
- * standalone use is correct. Exported so the guard is unit-testable on its own — `spa-api.test.ts`
- * proves it by deletion.
+ * The path-traversal guard: an absolute file inside `root`, or `null` if the path would escape it.
+ * Written here rather than inherited from `@hono/node-server/serve-static`, so the refusal is code
+ * this repo tests. Comparing against `base + sep` refuses a sibling like `<base>-evil` and `base`
+ * itself.
  */
 export function safeResolve(root: string, relPath: string): string | null {
   const base = resolve(root);
@@ -55,18 +41,9 @@ export function safeResolve(root: string, relPath: string): string | null {
 }
 
 /**
- * A configured SPA directory's ONE boot-time precondition: it must actually hold an `index.html`.
- * `boot.ts` calls this for each configured app dir BEFORE `mountSpa`, so a dir that was set but never
- * built (a wrong path, or the frontend build never ran) fails the boot LOUDLY here — the §8
- * "everything escapes" posture — rather than mounting a catch-all that answers 404 for every page
- * load, a failure an operator would only discover in the browser. `variable` is the env var that
- * supplied the dir (`WAITRON_TILL_APP_DIR` / `WAITRON_DASHBOARD_APP_DIR`), named in the error so the
- * operator knows which one to fix: `server.config_invalid` carries the variable NAME, never the path
- * value (this file's no-leak discipline, the same the rest of that code's throwers follow).
- *
- * Exported and split out of `boot.ts` deliberately: reaching a throw inside the full-boot path needs
- * a whole boot and a mis-built dir, so the guard lives here where `spa-api.test.ts` unit-tests
- * both branches directly and proves the throw by construction (the task brief's Step 7).
+ * A configured SPA directory that holds no `index.html` fails the boot, rather than mounting a
+ * catch-all that answers 404 to every page load. The error carries the env variable's NAME, never
+ * the path.
  */
 export function assertBuiltApp(dir: string, variable: string): void {
   if (!existsSync(join(dir, "index.html"))) {
@@ -75,20 +52,12 @@ export function assertBuiltApp(dir: string, variable: string): void {
 }
 
 /**
- * Mount the GET routes that serve a built SPA directory at `deps.basePath`. Must be called AFTER every
- * API route so a terminal API handler wins its own path; this catch-all only runs for paths nothing
- * else claimed (a Hono handler that returns without `next()` ends the chain, so `/api/ping` registered
- * earlier is never shadowed).
+ * Must be called AFTER every API route, so this catch-all runs only for paths nothing else claimed.
  *
- * The base path serves index.html; assets retain their file responses. Browser HTML requests under
- * navigationPath also serve index.html, so saved UI paths survive refresh. Root files and assets
- * stay outside navigation, and a till navigation prefix never claims unmatched API paths.
+ * Browser HTML requests under `navigationPath` serve index.html, so saved UI paths survive a
+ * refresh; root files and assets stay outside navigation.
  */
 export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
-  // Normalise the configured dir ONCE, so `index.html` and every asset are served from the same
-  // canonical absolute base whether the operator supplied an absolute path, a relative one
-  // (`apps/till/dist`, the plan's own smoke) or a trailing-slash one (`/srv/till/`). `safeResolve`
-  // normalises its own `root` again — cheap and idempotent — so it stays correct for any caller.
   const root = resolve(deps.root);
   const indexFile = join(root, "index.html");
 
@@ -105,19 +74,10 @@ export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
       return sendFile(c, indexFile, REVALIDATE_CACHE_CONTROL, log);
     }
     const abs = safeResolve(root, relPath);
-    // Defence-in-depth: `safeResolve` returns null on a path that escapes the root, and we 404 it.
-    // `@hono/node-server` collapses a dot segment on the way in, so an escaping `/../` is not what
-    // arrives here; what does is a path resolving to the root DIRECTORY itself, `//` among them.
-    // Both are pinned against the real adapter by the socket-level suite in `spa-api.test.ts`
-    // ("what mountSpa is handed when a request arrives through the Node adapter"), and `safeResolve`
-    // is unit-tested on its own in the same file, proven by deletion.
+    // The adapter collapses dot segments on the way in, so what reaches this in practice is a path
+    // resolving to the root directory itself, `//` among them.
     if (abs === null) return Promise.resolve(c.body(null, 404));
-    // Only hashed files under the `/assets/` prefix are safe to cache immutably; everything else is
-    // revalidated. A LEADING-segment check (not a `.includes`, which would also match a stray
-    // `/foo/assets/bar`): `relPath` here is the SPA-relative path — `/assets/app-<hash>.js` for the
-    // till (basePath ""), `/assets/d-<hash>.js` for the dashboard (basePath "/manage" already sliced
-    // off) — so both real cases start with `/assets/`, while a root file like `/favicon.svg` stays
-    // revalidated.
+    // Only hashed files under `/assets/` are cached immutably; `relPath` has `basePath` sliced off.
     const cache = relPath.startsWith("/assets/")
       ? IMMUTABLE_CACHE_CONTROL
       : REVALIDATE_CACHE_CONTROL;
@@ -134,10 +94,8 @@ export function mountSpa(app: Hono, deps: SpaDeps, log: Logger): void {
 }
 
 /**
- * Read a file and answer with it, or a bare 404. Any read failure is a 404 to the caller — this route
- * never 500s and never leaks filesystem detail — but a non-ENOENT failure (a misconfigured root, a
- * permission problem) is logged once. ENOENT is
- * the ordinary "no such file" and is left unlogged.
+ * Any read failure is a bare 404 to the caller, never a 500 or filesystem detail; a failure other
+ * than ENOENT is logged.
  */
 async function sendFile(
   c: Context,
@@ -146,20 +104,16 @@ async function sendFile(
   log: Logger,
 ): Promise<Response> {
   try {
-    // `readFile` returns a `Buffer` (`Uint8Array<ArrayBufferLike>`); `c.body` wants the narrower
-    // `Uint8Array<ArrayBuffer>`, so `new Uint8Array(…)` copies into a plainly-backed array of that type.
+    // `c.body` wants `Uint8Array<ArrayBuffer>`, narrower than the `Buffer` `readFile` returns.
     const bytes: Uint8Array<ArrayBuffer> = new Uint8Array(await readFile(absolutePath));
     return c.body(bytes, 200, {
-      // Hono ships an extension→Content-Type table for its own static server; reuse it rather than
-      // hand-maintaining a local map that silently drifts from it. Unknown extensions → octet-stream
-      // when getMimeType returns undefined.
       "Content-Type": getMimeType(absolutePath) ?? "application/octet-stream",
       "Cache-Control": cacheControl,
     });
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") return c.body(null, 404); // missing file → plain 404, no fallback
+    if (code === "ENOENT") return c.body(null, 404);
     log("error", "spa.read_failed", { path: absolutePath, code });
-    return c.body(null, 404); // Never expose filesystem details.
+    return c.body(null, 404);
   }
 }
