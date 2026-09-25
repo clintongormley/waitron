@@ -2844,6 +2844,26 @@ image constraints under *Detail → Box image*.
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
   #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621, #622, #623, #624, #625 and #629 and left for the package that owns each, all
   still OPEN:
+  - Found by the retroactive Codex reviews of #621–#626 and #629 (C3.18.12r, 2026-09-25; fixes
+    landed as #632, #633, #635, #637 and #639; #626 and #629 came back clean), outside the files
+    those fixes could change or not changeable in a comments-only PR:
+    `apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same
+    condition by construction", the claim #637 removed from `health.ts` (a duty can go stale between
+    passes: Codex got a 503 with no log line), and #637's review read its list of 503 causes (near
+    line 404) as naming one that answers 200 — read, not run. The degraded-pass spec and plan
+    (`docs/superpowers/specs/2026-07-27-degraded-pass-design.md`,
+    `docs/superpowers/plans/2026-07-27-degraded-pass.md`) and
+    `docs/superpowers/specs/2026-07-26-server-host-design.md` repeat that claim and want a dated
+    pointer. Test titles: `apps/server/src/spa-api.test.ts`'s two cache cases say hashed versus
+    non-hashed where the rule is the `/assets/` prefix, and `boot.mirror.test.ts`'s opt-in case
+    says "binds 0.0.0.0" while connecting only over loopback. `apps/server/src/rebuild-first-start.ts`
+    (near line 121, lane A's file) says "The log carries the error's code only", the overclaim #637
+    corrected in `health.ts` (`codeOf` logs `unknown` for a plain error carrying `code: "EIO"`).
+    `apps/server/src/backup-api.ts` (near line 335, from #557) says the rotate route rewrites "the
+    key alone"; it also writes the rotation time. "Empties every table" in
+    `packages/bookings/src/schema/bookings.test.ts` (near line 60) and
+    `packages/catalogue/src/migrations.test.ts` (near line 304) is wider than the reset, which
+    leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
   - Found by #629 (`apps/server` part x), for `boot.ts`'s own prune (c2, held back while the SQLite
     slice-2 plan changes it): the comment near line 1491 says a promoted primary has no
     `fiscal.aeat` cert "until the cert-distribution slice lands", which is plan history; the one
@@ -3450,7 +3470,7 @@ image constraints under *Detail → Box image*.
     claim false for printing and layouts (#615 removed `apps/server/src/errors.test.ts`'s copy). The shipped `packages/media/drizzle/0001_image_references.sql` says `canvas-store.ts`
     tells 787 from 1811; it reads only 1811 (`device-profile-store.ts` reads both). #609 removed
     the same claim from `packages/media/src/image-references.test.ts`. Both layouts database
-    suites create a manager session in `beforeAll`, while `useVenueDb` empties every table after
+    suites create a manager session in `beforeAll`, while `useVenueDb` empties every data table after
     each test by default (`resetPerTest`, `packages/db/src/testing/venue-db.ts`), so only a
     suite's first test can use that session; they pass today because only the first does.
   - Found by #581 (`packages/scheduler`). The nested `tx.transaction(...)` in `enqueueSuccessor`
