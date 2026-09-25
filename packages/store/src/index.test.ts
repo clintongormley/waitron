@@ -1,3 +1,4 @@
+import { AsyncResource } from "node:async_hooks";
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtempSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -788,5 +789,219 @@ describe("close", () => {
     watchdog!.once("exit", () => (ended = true));
     await store.close();
     expect(ended).toBe(true);
+  });
+});
+
+describe("onCommit", () => {
+  const setUp = async () => {
+    const { store, directory } = await open();
+    store.venue.run(sql`create table sales (id integer primary key, total integer)`);
+    const heard: true[] = [];
+    const stop = store.venue.onCommit(() => heard.push(true));
+    return { store, directory, heard, stop };
+  };
+
+  it("tells listeners once a write transaction has committed, and not when it rolled back", async () => {
+    const { store, directory, heard } = await setUp();
+    const outside = new DatabaseSync(join(directory, "venue.db"), { readOnly: true });
+    const seenFromOutside: number[] = [];
+    store.venue.onCommit(() => {
+      const row = outside.prepare("select count(*) as n from sales").get() as { n: number };
+      seenFromOutside.push(row.n);
+    });
+    await store.venue.withWriteLock(async () => {
+      store.venue.run(sql`insert into sales (total) values (1)`);
+    });
+    expect(heard).toHaveLength(1);
+    expect(seenFromOutside).toEqual([1]);
+    await expect(
+      store.venue.withWriteLock(async () => {
+        store.venue.run(sql`insert into sales (total) values (2)`);
+        throw new Error("deliberate");
+      }),
+    ).rejects.toThrow("deliberate");
+    expect(heard).toHaveLength(1);
+    outside.close();
+  });
+
+  // A transaction that only reads writes nothing to the side file, so there is nothing for a copy
+  // of the file to catch up with.
+  it("does not tell listeners about a write transaction that only reads", async () => {
+    const { store, heard } = await setUp();
+    await store.venue.withWriteLock(async () => {
+      store.venue.all(sql`select * from sales`);
+    });
+    expect(heard).toHaveLength(0);
+  });
+
+  it("tells listeners about a direct transaction's commit once, and not about its savepoints", async () => {
+    const { store, heard } = await setUp();
+    store.venue.transaction((tx) => {
+      tx.run(sql`insert into sales (total) values (1)`);
+      tx.transaction((inner) => {
+        inner.run(sql`insert into sales (total) values (2)`);
+      });
+    });
+    expect(heard).toHaveLength(1);
+  });
+
+  it("does not tell listeners about a direct transaction that changed no row", async () => {
+    const { store, heard } = await setUp();
+    store.venue.transaction((tx) => {
+      tx.all(sql`select * from sales`);
+    });
+    expect(heard).toHaveLength(0);
+  });
+
+  it("tells listeners about a write made outside any transaction, and not about a read", async () => {
+    const { store, heard } = await setUp();
+    store.venue.run(sql`insert into sales (total) values (1)`);
+    store.venue.all(sql`select * from sales`);
+    expect(heard).toHaveLength(1);
+  });
+
+  // The commit has already happened when listeners hear of it; a listener that throws must not
+  // turn a sale that committed into one the caller is told failed.
+  it("keeps a committed write reported as committed when a listener throws, and still tells the others", async () => {
+    const { store, heard } = await setUp();
+    store.venue.onCommit(() => {
+      throw new Error("listener broke");
+    });
+    const later: true[] = [];
+    store.venue.onCommit(() => later.push(true));
+    await expect(
+      store.venue.withWriteLock(async () => {
+        store.venue.run(sql`insert into sales (total) values (1)`);
+        return "sold";
+      }),
+    ).resolves.toBe("sold");
+    expect(heard).toHaveLength(1);
+    expect(later).toHaveLength(1);
+    expect(store.venue.get(sql`select count(*) as n from sales`)).toEqual({ n: 1 });
+  });
+
+  // Between the queue's `commit` and the end of its body, a write from outside the body is sent to
+  // the read connection, refused, and re-run on the writer, where no transaction is open any more.
+  it("tells listeners about a write that the read connection refused and the writer committed by itself", async () => {
+    const { store, heard } = await setUp();
+    const fromOutside = AsyncResource.bind(() => {
+      store.venue.run(sql`insert into sales (total) values (2)`);
+    });
+    let queued = false;
+    store.venue.onCommit(() => {
+      if (queued) return;
+      queued = true;
+      queueMicrotask(fromOutside);
+    });
+    await store.venue.withWriteLock(async () => {
+      store.venue.run(sql`insert into sales (total) values (1)`);
+    });
+    expect(store.venue.get(sql`select count(*) as n from sales`)).toEqual({ n: 2 });
+    expect(heard).toHaveLength(2);
+  });
+
+  it("keeps an async listener's rejection from escaping as an unhandled rejection", async () => {
+    const { store, heard } = await setUp();
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      store.venue.onCommit(async () => {
+        throw new Error("async listener broke");
+      });
+      store.venue.run(sql`insert into sales (total) values (1)`);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+    expect(unhandled).toEqual([]);
+    expect(heard).toHaveLength(1);
+  });
+
+  // An UPDATE setting a value the row already holds moves `total_changes()` and writes nothing to
+  // the side file, so a copy of the file never shows it (measured on Node v26.7.0: 0 bytes, against
+  // 4120 for a real change).
+  it("does not tell listeners about an update that sets a value the row already holds, on any path", async () => {
+    const { store, heard } = await setUp();
+    store.venue.run(sql`insert into sales (id, total) values (1, 5)`);
+    expect(heard).toHaveLength(1);
+    store.venue.run(sql`update sales set total = 5 where id = 1`);
+    await store.venue.withWriteLock(async () => {
+      store.venue.run(sql`update sales set total = 5 where id = 1`);
+    });
+    store.venue.transaction((tx) => {
+      tx.run(sql`update sales set total = 5 where id = 1`);
+    });
+    expect(heard).toHaveLength(1);
+    store.venue.run(sql`update sales set total = 6 where id = 1`);
+    await store.venue.withWriteLock(async () => {
+      store.venue.run(sql`update sales set total = 7 where id = 1`);
+    });
+    store.venue.transaction((tx) => {
+      tx.run(sql`update sales set total = 8 where id = 1`);
+    });
+    expect(heard).toHaveLength(4);
+  });
+
+  it("compares against the side file as it was when the first listener subscribed", async () => {
+    const { store } = await open();
+    store.venue.run(sql`create table sales (id integer primary key, total integer)`);
+    store.venue.run(sql`insert into sales (id, total) values (1, 5)`);
+    const heard: true[] = [];
+    store.venue.onCommit(() => heard.push(true));
+    store.venue.run(sql`update sales set total = 5 where id = 1`);
+    expect(heard).toHaveLength(0);
+  });
+
+  // After a checkpoint the next commit writes the side file from its beginning, so while it fits
+  // in the old length the file's size does not change; only its modification time does.
+  it("tells listeners about a commit that rewrites the side file from its beginning at the same size", async () => {
+    const { store, directory, heard } = await setUp();
+    for (let i = 0; i < 20; i += 1) store.venue.run(sql`insert into sales (total) values (${i})`);
+    store.venue.all(sql`pragma wal_checkpoint(passive)`);
+    const wal = join(directory, "venue.db-wal");
+    const before = statSync(wal).size;
+    heard.length = 0;
+    store.venue.run(sql`insert into sales (total) values (99)`);
+    expect(statSync(wal).size).toBe(before);
+    expect(heard).toHaveLength(1);
+  });
+
+  // The fold-back changes the side file without a commit; compared with the file as it was at the
+  // last report, a same-value update right after it would read as a change.
+  it("does not tell listeners about a same-value update right after the side file was folded back", async () => {
+    const { store, heard } = await setUp();
+    store.venue.run(sql`insert into sales (id, total) values (1, 5)`);
+    store.venue.run(sql`update sales set total = 5 where id = 1`);
+    expect(heard).toHaveLength(1);
+    expect(await store.venue.checkpointTruncate()).toEqual({ reclaimed: true });
+    store.venue.run(sql`update sales set total = 5 where id = 1`);
+    expect(heard).toHaveLength(1);
+    store.venue.run(sql`update sales set total = 6 where id = 1`);
+    expect(heard).toHaveLength(2);
+  });
+
+  // Stated at `reportIfChanged` in ./connections.ts: the side file is only looked at once rows have moved.
+  it("still tells listeners about a same-value update right after a commit that changed only the schema", async () => {
+    const { store, heard } = await setUp();
+    store.venue.run(sql`insert into sales (id, total) values (1, 5)`);
+    store.venue.run(sql`create table other (id integer primary key)`);
+    store.venue.run(sql`update sales set total = 5 where id = 1`);
+    expect(heard).toHaveLength(2);
+  });
+
+  it("tells listeners about the first commit after the side file was folded back to nothing", async () => {
+    const { store, heard } = await setUp();
+    store.venue.run(sql`insert into sales (total) values (1)`);
+    expect(await store.venue.checkpointTruncate()).toEqual({ reclaimed: true });
+    store.venue.run(sql`insert into sales (total) values (2)`);
+    expect(heard).toHaveLength(2);
+  });
+
+  it("stops telling a listener that unsubscribed", async () => {
+    const { store, heard, stop } = await setUp();
+    stop();
+    store.venue.run(sql`insert into sales (total) values (1)`);
+    expect(heard).toHaveLength(0);
   });
 });

@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { DatabaseSync } from "node:sqlite";
+import { statSync } from "node:fs";
+import type { DatabaseSync, StatementSync } from "node:sqlite";
 
 /**
  * An `async` body returns at its FIRST `await`, with its remaining work and its throw still ahead
@@ -29,6 +30,43 @@ export const settle = <T>(result: T, onOk: () => void, onFail: () => void): T =>
     },
   ) as T;
 };
+
+/** Called on each commit on a file's write connection that the store reports. */
+export type CommitListener = () => void;
+
+/**
+ * How many rows `connection` has inserted, updated or deleted since it opened. Prepared once per
+ * connection, because while a listener is registered it runs up to twice for each transaction the
+ * store opens and each statement issued outside one.
+ */
+const changeCounters = new WeakMap<DatabaseSync, StatementSync>();
+const totalChanges = (connection: DatabaseSync): number => {
+  let counter = changeCounters.get(connection);
+  if (counter === undefined) {
+    counter = connection.prepare("select total_changes() as n");
+    changeCounters.set(connection, counter);
+  }
+  return (counter.get() as { n: number }).n;
+};
+
+/** The write-ahead side file as last seen: its size and modification time, or why there is none. */
+export type WalMark = { size: bigint; mtimeNs: bigint } | "absent" | "unreadable";
+
+export const walMark = (path: string): WalMark => {
+  try {
+    const stat = statSync(path, { bigint: true, throwIfNoEntry: false });
+    return stat === undefined ? "absent" : { size: stat.size, mtimeNs: stat.mtimeNs };
+  } catch {
+    return "unreadable";
+  }
+};
+
+export const sameWal = (a: WalMark, b: WalMark): boolean =>
+  a === "unreadable" || b === "unreadable"
+    ? false
+    : a === "absent" || b === "absent"
+      ? a === b
+      : a.size === b.size && a.mtimeNs === b.mtimeNs;
 
 /**
  * The connections one database file is opened on, and the rule deciding where a statement goes.
@@ -61,6 +99,41 @@ export interface Connections {
   asTransactionBody: <T>(body: () => T) => T;
   /** Which connection a statement issued at this moment belongs on. */
   forStatement: () => DatabaseSync;
+  /**
+   * Registers `listener` for the commits the store reports; returns the unsubscribe. See
+   * `StoreHandle.onCommit` in `./index.ts` for which commits those are. The first listener
+   * registered while none is takes the side file as it is now as the comparison point.
+   */
+  onCommit: (listener: CommitListener) => () => void;
+  /**
+   * The writer's count of changed rows, taken before a transaction or a statement outside one;
+   * null when no listener is registered, so a node nobody listens on runs no extra query. The first
+   * listener, registered after a null mark, does not hear of that commit.
+   */
+  changeMark: () => number | null;
+  /**
+   * Call once the work `mark` was taken before has committed, and not after a rollback: the count
+   * does not go back down when rows are rolled back. `commit` and `release` do not move it (both
+   * measured on `node:sqlite`, Node v26.7.0, 2026-09-25).
+   *
+   * Tells every listener, if the count moved since `mark`, unless the file's side file is
+   * unchanged since the last commit reported: such a commit (an UPDATE to the value a row already
+   * holds) wrote nothing a copy of the file could show. The commit is already durable, so a
+   * listener that throws, or returns a promise that rejects, is skipped rather than allowed to
+   * reach the caller, who would otherwise be told a committed write failed.
+   *
+   * The side file is compared by size and modification time. After a checkpoint a commit rewrites
+   * it from its beginning, at an unchanged size while it fits, so a commit landing in the same
+   * modification-time tick as the one before is not reported. Measured on macOS APFS only, not on
+   * the box's filesystem. A commit that changes the side file but no row (DDL) is not reported and does not move the comparison either, so a
+   * same-value update right after one IS reported.
+   */
+  reportIfChanged: (mark: number | null) => void;
+  /**
+   * Takes the side file as it is now as the comparison point: for the store's own checkpoint,
+   * which changes the file without a commit.
+   */
+  sideFileReset: () => void;
 }
 
 /**
@@ -96,6 +169,10 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
    * "is one running" alone but "is THIS one still running".
    */
   const running = new Set<symbol>();
+  const listeners = new Set<CommitListener>();
+  const location = write.location();
+  const walPath = location === null ? null : `${location}-wal`;
+  let lastWal: WalMark = "unreadable";
   return {
     write,
     read,
@@ -118,6 +195,33 @@ export function connectionPair(write: DatabaseSync, read: DatabaseSync): Connect
       if (running.size === 0) return write;
       const token = context.getStore();
       return token !== undefined && running.has(token) ? write : read;
+    },
+    onCommit: (listener) => {
+      if (listeners.size === 0 && walPath !== null) lastWal = walMark(walPath);
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    changeMark: () => (listeners.size === 0 ? null : totalChanges(write)),
+    sideFileReset: () => {
+      if (walPath !== null) lastWal = walMark(walPath);
+    },
+    reportIfChanged: (mark) => {
+      if (mark === null || totalChanges(write) === mark) return;
+      if (walPath !== null) {
+        const wal = walMark(walPath);
+        if (sameWal(wal, lastWal)) return;
+        lastWal = wal;
+      }
+      for (const listener of listeners) {
+        try {
+          const returned: unknown = listener();
+          if (isPending(returned)) returned.then(undefined, () => {});
+        } catch {
+          // See `reportIfChanged` on the interface.
+        }
+      }
     },
   };
 }

@@ -3933,8 +3933,9 @@ it` still passes, so it is a smoke test rather than a control, and it says so at
 transaction opened by RUNNING `begin` as an ordinary statement is not one the store is told about —
 Drizzle's own migrator opens one that way — so a read concurrent with it still lands on the writer.
 A write issued from outside a running body while one is open is re-run on the writer, where it joins
-that transaction and commits or rolls back with it, which is what one connection did; nothing
-refuses it. And `readOnly: true` refuses a write to the database FILE, not every write: measured
+that transaction if it is still open and commits or rolls back with it, which is what one connection
+did; in the moment after the queue's `commit` and before the body has ended, none is open and the
+write commits by itself. Nothing refuses it. And `readOnly: true` refuses a write to the database FILE, not every write: measured
 2026-09-23 on Node v26.7.0, `create temp table` SUCCEEDS on such a connection, so a temporary table
 written from outside a running body would land on the reader and stay there — and the same holds
 for an `ATTACH` of a file that exists (one of a missing file is refused, errcode 14 — measured by
@@ -5039,11 +5040,10 @@ core table `node_sealed_state`, one row per node, `local`, kept off the dashboar
 and encrypts it exactly as the archive is; the backup sweep and the row build their entries through
 `apps/server/src/archive-entries.ts`), landed as #560. The row is rewritten at every start, after
 `backupSupervisor.reload()`, and straight after every `backup.env` write the backup routes make,
-refused requests included. Left open by #560, the owner's call: (1) a failed refresh is only logged
-(`backup.sealed_state_failed`), with no dashboard alert, while a stale row would leave a box rebuilt
-from the stream without the secrets it carries — default: decide when Task 7 builds the stream's
-alerts; (2) every node writes its own row at every start, standby and mirror nodes included, while
-the backup job runs only on the primary — default: keep it. Nothing outside the backup routes
+refused requests included. Left open by #560, both since decided by the owner: (1) a failed refresh
+was only logged (`backup.sealed_state_failed`); Task 7 now raises it as a dashboard alert too;
+(2) every node writes its own row at every start, standby and mirror nodes included, while the
+backup job runs only on the primary — kept by design (owner, 2026-09-24). Nothing outside the backup routes
 rewrites a sealed file while the server keeps running (#560's per-task review traced each writer:
 promotion rewrites `trading.env` and then restarts; `modules.json`, `secrets.env` and the TLS files
 are written in setup or by the command line, before a restart); Tasks 8a and 9a must call the one
@@ -5090,8 +5090,9 @@ store sends S3's multi-object delete, 1000 keys a request, falling back to one r
 when the store answers the batch 501. Which real providers lack the multi-object delete, and what
 each answers, is not established; a provider that refuses it with any other status fails the day's
 prune, which is logged as `stream.prune_failed`. `probeBucket` (`packages/stream/src/probe.ts`),
-which the supervisor runs before opening a generation and the settings screen's Test button is to
-run, deletes one object at a time, so neither can reveal such a provider. Open: having the bucket check
+which the supervisor runs before opening a generation, again while streaming (at most every ten
+minutes after a failed bucket read or while a bucket problem is flagged, otherwise once a day), and
+which the settings screen's Test button is to run, deletes one object at a time, so neither can reveal such a provider. Open: having the bucket check
 delete its test object through `deleteMany` would reveal one. The other
 choice #569 left, one code for a listed file outside the folder asked for, is taken: the S3 store
 now reports it as `backup.stream_name_invalid` with `field: "listedKey"`, the code and field
@@ -5121,7 +5122,7 @@ pinned in the box image and in `pnpm setup:litestream`), LANDED as #590 on 2026-
 continues after a pause, after measurement 1 was repeated at the 256 MiB side-file limit (results
 note §1b: the restore after the restart held every sale, and Litestream uploaded a full copy of the
 database at level 0). Left for later tasks: `/health` must treat the supervisor's
-`supervisor_failed` stop as a problem, not as streaming switched off (Task 7); the settings route
+`supervisor_failed` stop as a problem, not as streaming switched off (done by Task 7); the settings route
 must reload the stream only after its save commits, and word the refusal of a bucket name holding
 capitals or `_` (Task 8a). Left open by #590's review, the owner's call (the PR description has the
 detail): (1) no S3 call has a request timeout, so a pointer write that never gets an answer holds up the
@@ -5143,6 +5144,32 @@ bench rig keeps its own Litestream download script (its version is pinned beside
 `scripts/litestream-pin.test.ts`). `scripts/setup-litestream.mjs` is measured by the root project's coverage
 table through `scripts/setup-litestream.test.mjs`, which injects the download and the platform; the
 full box image was not built locally, only its `litestream` stage.
+Task 7, how current the bucket copy is and the alerts about it, is done on
+`feat/sqlite-slice2-stream-freshness` (#619). The store reports each commit that changed rows
+and the side file; the supervisor reads the newest file in the bucket about once a minute and
+reports how long the oldest change not yet there has waited. `/health`, the box status and the
+backup status show the bucket copy, and `/health` never fails because of it. The dashboard gains
+alerts for a copy that is behind by fifteen minutes, paused, stopped by another box, refused by its
+bucket, unable to use its settings, or stopped by itself, and for a failed refresh of the sealed
+state row; the `backup.disabled` alert now fires only when there is neither a scheduled backup nor a
+bucket copy that is on and current. Left open:
+- A bucket read given up after five minutes is not cancelled, because the bucket client's list
+  takes no way to stop it; the same root as #590's item (1), no request timeout on bucket calls.
+- A commit that changes no row but writes to the side file, such as a schema change or a pragma
+  such as `user_version`, is not reported, so the lag can read low.
+- An update that writes the same value, straight after a schema-only commit, is still reported,
+  although it adds nothing for the bucket (a test pins it).
+- The check that the side file changed was measured on the Mac's filesystem only, not the box's
+  Linux one; a commit landing in the same file-time tick after a side-file restart is missed.
+- A sale whose write transaction began before the supervisor first subscribed after boot (no
+  listener registered when it began) is not counted, so the lag reads low for it.
+- Whether Litestream uploads anything while the side file is unchanged is not measured; Task 10's
+  loop test is the natural place.
+- The alerts send the owner to the Backups page for the bucket's settings, which Task 8b adds; the
+  status gained a third shape, a copy set up but not started, which Task 8b's panel must show.
+- Of the four places boot hands the copy's state to, three are held by the compiler, which refuses
+  a boot call that leaves the key out, and `/health` by a boot test. A boot test also pins the
+  sealed-state alert's registration.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence

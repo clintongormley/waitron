@@ -31,6 +31,7 @@ import {
   backupAlertSource,
   batteryAlertSource,
   printingAlertSource,
+  sealedStateAlertSource,
 } from "./alert-sources.js";
 import { createTtlCache } from "./ttl-cache.js";
 
@@ -345,9 +346,10 @@ const cardRuntimeDeps = (): CardProviderRuntimeDeps => ({
 });
 
 /**
- * The four server-owned ongoing sources, wired as boot does, so a route test exercises the real
- * registry composition. By default the two in-memory sources are quiet (backup configured with no
- * destinations, certificate present) and only the two DB sources — printing and
+ * The server-owned ongoing sources, wired as boot does, so a route test exercises the real
+ * registry composition. By default the in-memory sources are quiet (backup configured with no
+ * destinations and no bucket copy, sealed state refreshed, certificate present) and only the two DB
+ * sources — printing and
  * card-reader battery — can fire; flip `backupDisabled`/`awaitingCert` to make those two fire too.
  */
 function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolean } = {}) {
@@ -359,7 +361,9 @@ function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolea
           opts.backupDisabled ? { configured: false } : { configured: true, destinations: [] },
         outcomes: { failed: new Map() },
         now: () => NOW,
+        readStream: () => ({ state: "off" }),
       }),
+      sealedStateAlertSource({ failedSince: null }),
       awaitingCertAlertSource({ current: opts.awaitingCert ?? false }),
       printingAlertSource(),
       batteryAlertSource({

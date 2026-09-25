@@ -11,7 +11,8 @@ import {
   type BucketConfig,
   type ObjectStore,
   type SpawnFn,
-  type StreamStatus,
+  type StreamNotStarted,
+  type StreamView,
 } from "@waitron/stream";
 import type { Logger } from "./logger.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -91,6 +92,8 @@ export interface StreamHostDeps {
 export class StreamHost {
   readonly #deps: StreamHostDeps;
   #supervisor: StreamSupervisor | undefined;
+  /** Set when the settings are stored but no supervisor could start, so the alerts can say so. */
+  #notStarted: StreamNotStarted | undefined;
   #reloading = false;
   #stopped = false;
   #retiring: Promise<void> = Promise.resolve();
@@ -101,6 +104,7 @@ export class StreamHost {
 
   async start(): Promise<void> {
     if (this.#stopped || this.#supervisor !== undefined) return;
+    this.#notStarted = undefined;
     const { db, ring, log } = this.#deps;
     if (!this.#deps.isPrimary()) {
       log("info", "stream.not_primary", {});
@@ -115,6 +119,7 @@ export class StreamHost {
       const membership = await readNodeMembership(db);
       if (membership === null) {
         log("warn", "stream.no_membership", {});
+        this.#notStartedFor("no_membership");
         return;
       }
       // A supervisor still stopping may still have Litestream running; and a stop() or an
@@ -138,12 +143,21 @@ export class StreamHost {
         log,
         spawn: this.#deps.spawn,
         store: this.#deps.store,
+        onCommit: (listener) => db.onCommit(listener),
       });
       this.#supervisor = supervisor;
       await supervisor.start();
     } catch (error) {
+      // Absent settings read as null (`tryGetCredential`, packages/credentials/src/store.ts), so a
+      // throw here comes from stored settings, from a later step, or from the database failing to
+      // answer.
       log("error", "stream.start_failed", { errorCode: codeOf(error) });
+      this.#notStartedFor("start_failed");
     }
+  }
+
+  #notStartedFor(reason: string): void {
+    this.#notStarted = { state: "off", reason, stateSince: this.#deps.now().toISOString() };
   }
 
   /**
@@ -183,8 +197,8 @@ export class StreamHost {
     }
   }
 
-  status(): StreamStatus | { state: "off" } {
-    return this.#supervisor?.status() ?? { state: "off" };
+  status(): StreamView {
+    return this.#supervisor?.status() ?? this.#notStarted ?? { state: "off" };
   }
 }
 

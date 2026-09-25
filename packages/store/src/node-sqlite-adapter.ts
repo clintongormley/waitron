@@ -46,10 +46,12 @@ export function adaptNodeSqlite(connections: Connections) {
      *
      * **A statement the read connection refuses because it is read-only is re-run on the write
      * connection.** That case is a write issued from an asynchronous context outside a transaction
-     * while some other transaction is open; re-run there, it joins that transaction and commits or
-     * rolls back with it, rather than meeting a refusal no caller in this tree is written to
-     * expect. It is safe to re-run because the refusal arrives before any work — see
-     * `SQLITE_READONLY` in `./connections.ts`. Nothing else is retried.
+     * while some other transaction body is running. Re-run there, it joins that transaction if it
+     * is still open, and commits or rolls back with it; in the moment after the queue's `commit`
+     * and before the body has ended, none is open and the write commits by itself. Either way it
+     * does not meet a refusal no caller in this tree is written to expect. It is safe to re-run
+     * because the refusal arrives before any work — see `SQLITE_READONLY` in `./connections.ts`.
+     * Nothing else is retried.
      */
     prepare(query: string) {
       let asArrays = false;
@@ -58,13 +60,26 @@ export function adaptNodeSqlite(connections: Connections) {
         if (asArrays) stmt.setReturnArrays(true);
         return stmt;
       };
+      /**
+       * A statement on the writer with no transaction open commits by itself. Whether it changed a
+       * row is read off SQLite's own counter, so a read, or DDL, which the counter does not count,
+       * tells nobody.
+       */
+      const onWriter = <T>(use: (stmt: StatementSync) => T): T => {
+        const write = connections.write;
+        const mark = write.isTransaction ? null : connections.changeMark();
+        const result = use(compile(write));
+        if (!write.isTransaction) connections.reportIfChanged(mark);
+        return result;
+      };
       const issue = <T>(use: (stmt: StatementSync) => T): T => {
         const target = connections.forStatement();
+        if (target === connections.write) return onWriter(use);
         try {
           return use(compile(target));
         } catch (error) {
-          if (target !== connections.read || !isReadOnlyRefusal(error)) throw error;
-          return use(compile(connections.write));
+          if (!isReadOnlyRefusal(error)) throw error;
+          return onWriter(use);
         }
       };
       const api = {
@@ -120,6 +135,7 @@ export function adaptNodeSqlite(connections: Connections) {
             const write = connections.write;
             const savepoint = write.isTransaction ? nextSavepoint() : undefined;
             write.exec(savepoint === undefined ? `begin ${behaviour}` : `savepoint ${savepoint}`);
+            let mark: number | null = null;
             /**
              * Finish the transaction — and undo it if FINISHING is what fails. A refused `commit`
              * (a foreign key deferred with `pragma defer_foreign_keys` is checked AT COMMIT) leaves
@@ -137,6 +153,7 @@ export function adaptNodeSqlite(connections: Connections) {
                 }
                 throw error;
               }
+              connections.reportIfChanged(mark);
             };
             const undo = () => {
               if (savepoint === undefined) write.exec("rollback");
@@ -147,6 +164,7 @@ export function adaptNodeSqlite(connections: Connections) {
             };
             let result: R;
             try {
+              if (savepoint === undefined) mark = connections.changeMark();
               result = fn(...args);
             } catch (error) {
               undo();

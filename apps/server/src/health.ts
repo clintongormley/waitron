@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { isVenueHolderFresh, readVenueHolderAsync } from "@waitron/db";
+import type { StreamView } from "@waitron/stream";
 import { DEFAULT_MAX_TICK_MS } from "./config.js";
 import { ALL_DUTIES, DRAIN_DUTY, RECONCILE_DUTY, type Duty, type PassReport } from "./pass.js";
 import type { Logger } from "./logger.js";
@@ -63,6 +64,9 @@ export interface HealthState {
   startedAt: Date;
   lastPassAt: Date | null;
   duties: Record<string, DutyHealth>;
+  /** Reported, never judged: `/health` failing on an external bucket would stall an install or an
+   * update on someone else's outage (`deploy/waitron.sh` waits for a healthy container). */
+  readStream: () => StreamView;
 }
 
 /**
@@ -75,7 +79,7 @@ export function createHealthState(startedAt: Date): HealthState {
   for (const duty of ALL_DUTIES) {
     duties[duty] = { lastOkAt: null, consecutiveFailures: 0, skipped: 0, parked: 0 };
   }
-  return { startedAt, lastPassAt: null, duties };
+  return { startedAt, lastPassAt: null, duties, readStream: () => ({ state: "off" }) };
 }
 
 /** What `recordPass` just recorded for one duty, returned so a caller can log it at a level the
@@ -247,7 +251,24 @@ export function healthSnapshot(
       startedAt: state.startedAt.toISOString(),
       lastPassAt: state.lastPassAt?.toISOString() ?? null,
       duties,
+      stream: streamHealth(state.readStream()),
     },
+  };
+}
+
+/** Named field by field: the generation's name carries the node id and term, which stay off this
+ * unauthenticated route. */
+function streamHealth(view: StreamView): Record<string, unknown> {
+  if (!("reason" in view)) return { state: view.state };
+  if (!("lagMs" in view))
+    return { state: view.state, reason: view.reason, stateSince: view.stateSince };
+  return {
+    state: view.state,
+    reason: view.reason,
+    stateSince: view.stateSince,
+    bucketProblem: view.bucketProblem,
+    lagMs: view.lagMs,
+    lastConfirmedUploadAt: view.lastConfirmedUploadAt,
   };
 }
 

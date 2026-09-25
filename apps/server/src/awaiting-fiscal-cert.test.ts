@@ -103,6 +103,7 @@ function buildApp(nodeId: string, awaitingCert: { current: boolean }): Hono {
       now: () => NOW,
       tlsCertPath: undefined,
       readBackup: undefined,
+      readStream: () => ({ state: "off" }),
       readMode: () => "primary",
       readSingletonRole: () => "primary",
       readAwaitingFiscalCertificate: () => awaitingCert.current,

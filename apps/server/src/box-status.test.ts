@@ -10,6 +10,7 @@ const base: BoxStatusReaders = {
   awaitingFiscalCertificate: () => false,
   chain: async () => ({ height: 7, lastAt: "2026-08-29T10:00:00.000Z" }),
   backup: undefined,
+  stream: () => ({ state: "off" }),
   duties: () => ({ "fiscal.drain": { stale: false } }),
 };
 
@@ -25,8 +26,23 @@ describe("collectBoxStatus", () => {
       awaitingFiscalCertificate: false,
       chain: { height: 7, lastAt: "2026-08-29T10:00:00.000Z" },
       backup: { configured: false },
+      stream: { state: "off" },
       duties: { "fiscal.drain": { stale: false } },
     });
+  });
+
+  it("passes the bucket copy through from its reader", async () => {
+    const stream = {
+      state: "streaming",
+      generation: "gen-0-node-a-20260829T100000Z",
+      reason: null,
+      stateSince: "2026-08-29T10:00:00.000Z",
+      bucketProblem: null,
+      lagMs: 0,
+      lastConfirmedUploadAt: "2026-08-29T10:00:01.000Z",
+    } as const;
+    const status = await collectBoxStatus({ ...base, stream: () => stream });
+    expect(status.stream).toEqual(stream);
   });
 
   it("passes singletonRole through from its reader", async () => {

@@ -1,6 +1,7 @@
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CREDENTIALS_MIGRATIONS,
@@ -33,6 +34,7 @@ const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 const NODE_ID = "node-a";
+const AT = new Date("2026-09-15T11:00:00.000Z");
 const SETTINGS = {
   venueId: "venue-1",
   endpoint: "-",
@@ -177,12 +179,21 @@ describe("the live copy's wiring", () => {
 
     // The generation name and the pointer carry the membership term, so without a document there is
     // no term to stream under.
+    // Off, but not "not set up": the settings are stored, so the reason reaches the alerts.
     it("starts nothing, and says so, before this node holds a membership document", async () => {
       logs = [];
       const litestream = new FakeLitestream();
-      const rt = runtime({ spawn: litestream.spawn, store: new SwitchableStore(() => new Date()) });
+      const rt = runtime({
+        spawn: litestream.spawn,
+        store: new SwitchableStore(() => new Date()),
+        now: () => AT,
+      });
       await rt.start();
-      expect(rt.status()).toEqual({ state: "off" });
+      expect(rt.status()).toEqual({
+        state: "off",
+        reason: "no_membership",
+        stateSince: AT.toISOString(),
+      });
       expect(litestream.children).toHaveLength(0);
       expect(logs).toContain("stream.no_membership");
     });
@@ -194,10 +205,32 @@ describe("the live copy's wiring", () => {
         WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xe).toString("base64"),
         WAITRON_CREDENTIALS_KEY_VERSION: "1",
       });
-      const rt = runtime({ ring: otherRing, spawn: new FakeLitestream().spawn });
+      const rt = runtime({ ring: otherRing, spawn: new FakeLitestream().spawn, now: () => AT });
       await expect(rt.start()).resolves.toBeUndefined();
-      expect(rt.status()).toEqual({ state: "off" });
+      expect(rt.status()).toEqual({
+        state: "off",
+        reason: "start_failed",
+        stateSince: AT.toISOString(),
+      });
       expect(logs).toContain("stream.start_failed");
+    });
+
+    it("forgets why it could not start once a later start has nothing to start", async () => {
+      let primary = true;
+      const otherRing = loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xe).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      });
+      const rt = runtime({
+        ring: otherRing,
+        spawn: new FakeLitestream().spawn,
+        isPrimary: () => primary,
+      });
+      await rt.start();
+      expect(rt.status()).toMatchObject({ state: "off", reason: "start_failed" });
+      primary = false;
+      await rt.reload();
+      expect(rt.status()).toEqual({ state: "off" });
     });
 
     describe("and a membership document", () => {
@@ -421,6 +454,35 @@ describe("the live copy's wiring", () => {
         } finally {
           await rt.stop();
           await rm(venueDir, { recursive: true, force: true });
+        }
+      });
+
+      // Starting never waits for a bucket that never answers, and every commit still reaches the
+      // supervisor. The fake Litestream puts nothing on the commit path, so this does NOT show a sale
+      // keeping its normal time against the real binary. The 1,000 ms bound catches a write that
+      // takes a second or more; one that never finishes is caught by the test's timeout instead.
+      it("returns from start() at once while the bucket never answers, and hears every commit", async () => {
+        db.run(sql`create table if not exists stream_probe (n integer)`);
+        const store = new SwitchableStore(() => new Date());
+        store.hang = true;
+        const rt = runtime({ spawn: new FakeLitestream().spawn, store });
+        try {
+          await rt.start();
+          await vi.waitFor(() => expect(rt.status().state).toBe("opening"), { timeout: 10_000 });
+          const durations: number[] = [];
+          for (let i = 0; i < 200; i += 1) {
+            const started = performance.now();
+            await withTransaction(db, (tx) =>
+              tx.run(sql`insert into stream_probe (n) values (${i})`),
+            );
+            durations.push(performance.now() - started);
+          }
+          expect(db.get(sql`select count(*) as n from stream_probe`)).toEqual({ n: 200 });
+          expect(Math.max(...durations)).toBeLessThan(1_000);
+          // The commits reached the supervisor: they wait, because nothing reached the bucket.
+          await vi.waitFor(() => expect((rt.status() as StreamStatus).lagMs).toBeGreaterThan(0));
+        } finally {
+          await rt.stop();
         }
       });
     });

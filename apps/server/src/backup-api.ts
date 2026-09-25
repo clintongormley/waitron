@@ -3,6 +3,7 @@ import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
+import type { StreamView } from "@waitron/stream";
 import { AppError, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import { loadBackupConfig, loadRecoveryKey, type BackupSchedule } from "./backup-config.js";
@@ -33,6 +34,7 @@ export interface BackupApiDeps {
   /** Rewrites this node's sealed state row, which carries `backup.env` and is locked with the recovery
    * key. */
   sealedState: SealedStateRefresher;
+  readStream: () => StreamView;
 }
 
 /**
@@ -257,6 +259,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   const statusBody = async (keySet?: boolean) => ({
     ...projectStatus(await deps.supervisor.status()),
     recoveryKeySet: keySet ?? (await keyPresent()),
+    stream: deps.readStream(),
   });
 
   // `apply` and `rotate` each read the held key and then write one. Run concurrently, one could write

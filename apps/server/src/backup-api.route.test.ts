@@ -16,6 +16,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
+import type { StreamView } from "@waitron/stream";
 import { mountBackupApi } from "./backup-api.js";
 import { loadBackupConfig, loadRecoveryKey, type BackupConfig } from "./backup-config.js";
 import { writeBackupEnv, writeRecoveryKey } from "./backup-env-writer.js";
@@ -121,6 +122,7 @@ function buildApp(
   readRecoveryKey = async (): Promise<string | undefined> =>
     loadRecoveryKey(await loadBoxEnv(base, stateDir)),
   sealedState: SealedStateRefresher = { refresh: async () => "sealed" },
+  readStream: () => StreamView = () => ({ state: "off" }),
 ): Hono {
   const app = new Hono();
   mountManagementApi(
@@ -142,6 +144,7 @@ function buildApp(
       stateDir,
       readRecoveryKey,
       sealedState,
+      readStream,
     },
     () => {},
   );
@@ -263,6 +266,49 @@ describe("backup admin routes", () => {
     // Minting stored nothing: backups are still off.
     const status = await app.request("/api/backup/status", { headers: { cookie } });
     expect((await status.json()).enabled).toBe(false);
+  });
+
+  it("status carries the bucket copy's state beside the archive's, off when no reader is given", async () => {
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    const stream: StreamView = {
+      state: "off",
+      reason: "start_failed",
+      stateSince: "2026-09-15T11:00:00.000Z",
+    };
+    const app = buildApp(sup, sc.stateDir, {}, undefined, undefined, () => stream);
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/status", { headers: { cookie } });
+    expect(res.status).toBe(200);
+    expect((await res.json()).stream).toEqual(stream);
+    const without = buildApp(sup, sc.stateDir);
+    const plain = await without.request("/api/backup/status", { headers: { cookie } });
+    expect((await plain.json()).stream).toEqual({ state: "off" });
+  });
+
+  // The dashboard replaces its status with a write's answer, so that answer carries the copy too.
+  it("apply's answer carries the bucket copy's state", async () => {
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    const stream: StreamView = {
+      state: "off",
+      reason: "no_membership",
+      stateSince: "2026-09-15T11:00:00.000Z",
+    };
+    const app = buildApp(sup, sc.stateDir, {}, undefined, undefined, () => stream);
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinationDir: makeDestDir(),
+        recoveryKey: KEY_1,
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).stream).toEqual(stream);
   });
 
   it("apply enables backups and hot-reloads (no restart), then reports enabled", async () => {

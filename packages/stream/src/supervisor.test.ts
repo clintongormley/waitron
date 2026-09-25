@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { claimGeneration, generationPrefix, markerKey } from "./generations.js";
 import { generationName } from "./names.js";
 import { pointerKey, readPointer, writePointer, type SignedPointer } from "./pointer.js";
+import { CommitLog } from "./freshness.js";
+import { PROBE_PREFIX } from "./probe.js";
 import type { BucketConfig } from "./s3-store.js";
 import { FakeLitestream } from "./testing/fake-litestream.js";
 import { SwitchableStore } from "./testing/switchable-store.js";
@@ -35,17 +37,29 @@ const BUCKET: BucketConfig = {
 /**
  * Time that moves only when a test says so. Every wait in the supervisor is one of these sleeps,
  * so `next()` wakes the earliest sleeper and moves the clock to its wake time.
+ *
+ * Three readings: `now()` is this box's time of day, which `step()` corrects without time passing;
+ * `monotonic()` counts time passing and nothing else; `trueNow()` is the time of day the bucket
+ * keeps, which a box's correction does not move.
  */
 class ManualClock {
+  readonly #start: number;
   #t: number;
+  /** Starts far from any time of day, so a reading used as one shows. */
+  #m = 5_000;
   #sleeping: { at: number; ms: number; wake: () => void }[] = [];
   readonly slept: number[] = [];
 
   constructor(start: string) {
-    this.#t = Date.parse(start);
+    this.#start = Date.parse(start);
+    this.#t = this.#start;
   }
 
   readonly now = (): Date => new Date(this.#t);
+
+  readonly monotonic = (): number => this.#m;
+
+  readonly trueNow = (): Date => new Date(this.#start + this.#m - 5_000);
 
   readonly sleep = (ms: number, signal: AbortSignal): Promise<void> =>
     new Promise((resolve) => {
@@ -53,7 +67,7 @@ class ManualClock {
         resolve();
         return;
       }
-      const entry = { at: this.#t + ms, ms, wake: () => resolve() };
+      const entry = { at: this.#m + ms, ms, wake: () => resolve() };
       this.#sleeping.push(entry);
       signal.addEventListener(
         "abort",
@@ -66,6 +80,12 @@ class ManualClock {
     });
 
   advance(ms: number): void {
+    this.#t += ms;
+    this.#m += ms;
+  }
+
+  /** This box's time of day corrected by `ms`, as time sync does; no time passes. */
+  step(ms: number): void {
     this.#t += ms;
   }
 
@@ -101,7 +121,9 @@ class ManualClock {
     this.#sleeping.sort((a, b) => a.at - b.at);
     const entry = this.#sleeping.shift();
     if (entry === undefined) return false;
-    this.#t = Math.max(this.#t, entry.at);
+    const passed = Math.max(0, entry.at - this.#m);
+    this.#m += passed;
+    this.#t += passed;
     this.slept.push(entry.ms);
     entry.wake();
     return true;
@@ -116,6 +138,7 @@ afterEach(async () => {
 const fullCopyOf = (generation: string) =>
   `${generationPrefix(VENUE, generation)}0000/0000000000000001-0000000000000001.ltx`;
 const markerOf = (generation: string) => markerKey(VENUE, generation);
+const hex16 = (n: number) => n.toString(16).padStart(16, "0");
 
 interface HarnessOptions {
   term?: number;
@@ -135,12 +158,33 @@ interface HarnessOptions {
   replicateThrows?: boolean;
   litestreamBin?: string;
   stopWaitMs?: number;
+  /** How far the bucket's clock runs ahead of this box's; negative when behind. */
+  bucketAheadMs?: number;
 }
 
 async function harness(options: HarnessOptions = {}) {
   const events: string[] = [];
   const clock = new ManualClock(START);
-  const store = new SwitchableStore(clock.now, events);
+  const store = new SwitchableStore(
+    () => new Date(clock.trueNow().getTime() + (options.bucketAheadMs ?? 0)),
+    events,
+  );
+  /** Every prefix a listing was answered for, in order. */
+  const listed: string[] = [];
+  const list = store.list.bind(store);
+  store.list = async (prefix) => {
+    const answer = await list(prefix);
+    listed.push(prefix);
+    return answer;
+  };
+  /** Writes the bucket check attempted, answered or not. */
+  let probeWrites = 0;
+  const put = store.put.bind(store);
+  store.put = async (key, body, cond) => {
+    if (key.startsWith(PROBE_PREFIX)) probeWrites += 1;
+    return put(key, body, cond);
+  };
+  let listener: (() => void) | undefined;
   const litestream = new FakeLitestream(events);
   if (options.version !== undefined) litestream.version = options.version;
   if (options.versionExitCode !== undefined) litestream.versionExitCode = options.versionExitCode;
@@ -182,6 +226,7 @@ async function harness(options: HarnessOptions = {}) {
     },
     walLimitBytes: LIMIT,
     now: clock.now,
+    monotonic: clock.monotonic,
     log: (level, event, fields) => logs.push({ level, event, fields }),
     spawn: (bin, args, env) => {
       if (options.replicateThrows === true && args[0] === "replicate") {
@@ -191,6 +236,12 @@ async function harness(options: HarnessOptions = {}) {
     },
     store,
     sleep: clock.sleep,
+    onCommit: (next) => {
+      listener = next;
+      return () => {
+        listener = undefined;
+      };
+    },
     ...(options.stopWaitMs === undefined ? {} : { stopWaitMs: options.stopWaitMs }),
     ...(options.readCommandLine === undefined ? {} : { readCommandLine: options.readCommandLine }),
   };
@@ -226,6 +277,11 @@ async function harness(options: HarnessOptions = {}) {
     failWal: (fails = true) => {
       walFails = fails;
     },
+    /** The venue database committing now. */
+    commit: () => listener?.(),
+    listening: () => listener !== undefined,
+    listed,
+    probeWrites: () => probeWrites,
   };
 }
 
@@ -855,8 +911,7 @@ describe("while streaming", () => {
 
   // Review Focus 4: the bucket's key is revoked (or the bucket deleted) while the venue trades, and
   // Litestream exits at once every time it is started. It is restarted at a widening interval that
-  // settles at one minute — never in a tight loop — and nothing else waits on it. (Naming the
-  // refusal once, as `backup.stream_bucket_unusable`, needs the bucket reads Task 7 adds.)
+  // settles at one minute — never in a tight loop — and nothing else waits on it.
   it("restarts a Litestream that keeps exiting at once no faster than the backoff, settling at a minute", async () => {
     const h = await streaming();
     h.store.denied = true;
@@ -1364,6 +1419,534 @@ describe("a Litestream left running by a server that died", () => {
   });
 });
 
+const MINUTE = 60_000;
+
+describe("freshness", () => {
+  const l0 = (generation: string, n: number) =>
+    `${generationPrefix(VENUE, generation)}0000/${hex16(n)}-${hex16(n)}.ltx`;
+  const l1 = (generation: string, n: number) =>
+    `${generationPrefix(VENUE, generation)}0001/${hex16(1)}-${hex16(n)}.ltx`;
+  const listingsOf = (h: { listed: string[] }, level: string) =>
+    h.listed.filter((prefix) => prefix.endsWith(`/${level}/`)).length;
+
+  // The failing case this exists for: a Litestream that is up and says nothing wrong while nothing
+  // reaches the bucket must read as behind, because freshness is read from the bucket.
+  it("reads a running Litestream that uploads nothing as behind", async () => {
+    const h = await streaming();
+    h.commit();
+    for (let tick = 0; tick < 16; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBeGreaterThanOrEqual(16));
+    expect(h.litestream.running()).toBeDefined();
+    expect(h.supervisor.status().lagMs).toBeGreaterThanOrEqual(15 * MINUTE);
+  });
+
+  it("reads zero once the bucket holds a file newer than the last commit", async () => {
+    const h = await streaming();
+    h.commit();
+    h.clock.advance(1_000);
+    h.store.upload(l0(h.generation, 2));
+    const uploadedAt = h.clock.trueNow().toISOString();
+    await h.clock.next();
+    await vi.waitFor(() => expect(h.supervisor.status().lagMs).toBe(0));
+    expect(h.supervisor.status().lastConfirmedUploadAt).toBe(uploadedAt);
+  });
+
+  it("is zero at open once the first full copy is in, whatever was committed before it", async () => {
+    const h = await harness();
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.commit();
+    h.clock.advance(2_000);
+    expect(h.supervisor.status().lagMs).toBe(2_000);
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+    expect(h.supervisor.status().lagMs).toBe(0);
+  });
+
+  // A generation abandoned before the pointer named it is not the copy a restore reads, so what it
+  // holds says nothing about the next one.
+  it("does not count a commit as uploaded because a generation it abandoned held it", async () => {
+    const h = await harness();
+    const put = h.store.put.bind(h.store);
+    h.store.put = async (key, body, cond) => {
+      if (key.endsWith("current.json")) throw new Error("offline");
+      return put(key, body, cond);
+    };
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.commit();
+    h.clock.advance(1_000);
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => h.logs.some((line) => line.event === "stream.pointer_write_failed"));
+    expect(h.supervisor.status().lagMs).toBe(0);
+    h.failWal();
+    await h.clock.until(() => h.logs.some((line) => line.event === "stream.open_failed"));
+    h.failWal(false);
+    await h.clock.until(() => h.litestream.replicas().length === 2);
+    expect(h.supervisor.status().lagMs).toBeGreaterThan(0);
+  });
+
+  // Level 0 keeps a file five minutes after it is compacted; a change older than that can only be
+  // confirmed from level 1.
+  it("reads level 1 only once a change has waited longer than level 0 keeps a file", async () => {
+    const h = await streaming();
+    h.commit();
+    h.clock.advance(30_000);
+    h.store.upload(l1(h.generation, 2)); // compacted, and level 0 already tidied
+    for (let tick = 0; tick < 5; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(5));
+    expect(listingsOf(h, "0001")).toBe(0);
+    expect(h.supervisor.status().lagMs).toBe(5 * MINUTE);
+    await h.clock.next();
+    await vi.waitFor(() => expect(h.supervisor.status().lagMs).toBe(0));
+    expect(listingsOf(h, "0001")).toBe(1);
+  });
+
+  it("counts an upload stamped by a bucket whose clock runs behind as holding the commit before it", async () => {
+    const h = await streaming({ bucketAheadMs: -10 * MINUTE });
+    h.commit();
+    h.clock.advance(1_000);
+    h.store.upload(l0(h.generation, 2));
+    await h.clock.next();
+    await vi.waitFor(() => expect(h.supervisor.status().lagMs).toBe(0));
+  });
+
+  it("does not count changes as uploaded because the bucket's clock is ahead", async () => {
+    const h = await streaming({ bucketAheadMs: 10 * MINUTE });
+    h.commit();
+    for (let tick = 0; tick < 16; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBeGreaterThanOrEqual(16));
+    expect(h.supervisor.status().lagMs).toBeGreaterThanOrEqual(15 * MINUTE);
+  });
+
+  it("logs a marker it cannot read, keeps its last measure of the bucket's clock, and streams", async () => {
+    const h = await harness();
+    h.store.failNext({
+      operation: "list",
+      key: markerOf(generationName(2, NODE, new Date(START))),
+      error: new Error("connection reset"),
+    });
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    expect(h.logs).toContainEqual({
+      level: "warn",
+      event: "stream.freshness_unreadable",
+      fields: { errorCode: "unknown" },
+    });
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+  });
+
+  it("takes the bucket's clock as this box's when the listing does not show the marker", async () => {
+    const h = await harness();
+    const list = h.store.list.bind(h.store);
+    h.store.list = async (prefix) => (prefix.endsWith("opened.json") ? [] : list(prefix));
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+    h.commit();
+    for (let tick = 0; tick < 16; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBeGreaterThanOrEqual(16));
+    expect(h.supervisor.status().lagMs).toBeGreaterThanOrEqual(15 * MINUTE);
+    expect(h.logs.some((line) => line.event === "stream.freshness_unreadable")).toBe(false);
+  });
+
+  it("names a bucket that stops honouring the safe write, on its daily check", async () => {
+    const h = await streaming();
+    h.store.honoursConditions = false;
+    h.clock.advance(24 * 60 * MINUTE);
+    await h.clock.next();
+    await vi.waitFor(() =>
+      expect(h.supervisor.status().bucketProblem).toMatchObject({ reason: "create_only_ignored" }),
+    );
+  });
+
+  // Review Focus 4, the half that needs this task's bucket reads: a key revoked (or a bucket
+  // deleted) while streaming is named once — `bucketProblem`, which the backups alert source turns
+  // into one `backup.stream_bucket_unusable` — however many reads it fails, and checked for it no
+  // more than every ten minutes.
+  it("names a key revoked while streaming once, however many reads it fails", async () => {
+    const h = await streaming();
+    h.store.denied = true;
+    const writesBefore = h.probeWrites();
+    h.commit();
+    for (let tick = 0; tick < 30; tick += 1) await h.clock.next();
+    await vi.waitFor(() =>
+      expect(h.supervisor.status().bucketProblem).toMatchObject({ reason: "access_denied" }),
+    );
+    expect(h.logs.filter((line) => line.event === "stream.bucket_unusable")).toHaveLength(1);
+    // Refused at its first write: one write per check, at minutes 1, 11 and 21.
+    expect(h.probeWrites() - writesBefore).toBe(3);
+  });
+
+  it("clears a named bucket problem once the bucket works again, without waiting a day", async () => {
+    const h = await streaming();
+    h.store.denied = true;
+    await h.clock.next();
+    await vi.waitFor(() => expect(h.supervisor.status().bucketProblem).not.toBeNull());
+    h.store.denied = false;
+    for (let tick = 0; tick < 11; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(h.supervisor.status().bucketProblem).toBeNull());
+  });
+
+  it("reads a bucket that does not answer as behind, not as unusable", async () => {
+    const h = await streaming();
+    h.store.down = true;
+    h.commit();
+    for (let tick = 0; tick < 16; tick += 1) await h.clock.next();
+    await vi.waitFor(() =>
+      expect(h.logs).toContainEqual({
+        level: "warn",
+        event: "stream.bucket_unreachable",
+        fields: { errorCode: "backup.stream_request_failed" },
+      }),
+    );
+    expect(h.logs).toContainEqual({
+      level: "warn",
+      event: "stream.freshness_unreadable",
+      fields: { errorCode: "backup.stream_request_failed" },
+    });
+    expect(h.supervisor.status().bucketProblem).toBeNull();
+    expect(h.supervisor.status().lagMs).toBeGreaterThanOrEqual(15 * MINUTE);
+  });
+
+  // The recovery page shows the log's tail: an outage is logged when it starts and every ten
+  // minutes while it lasts, not on every tick.
+  it("logs a bucket it cannot read when that starts and every ten minutes after, not every minute", async () => {
+    const h = await streaming();
+    const unreadable = () =>
+      h.logs.filter((line) => line.event === "stream.freshness_unreadable").length;
+    h.store.down = true;
+    for (let tick = 0; tick < 16; tick += 1) await h.clock.next();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(unreadable()).toBe(2);
+    h.store.down = false;
+    await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(1));
+    h.store.down = true;
+    await h.clock.next();
+    await vi.waitFor(() => expect(unreadable()).toBe(3));
+  });
+
+  // Review Focus 1 across a correction: time sync steps this box's clock back after the
+  // generation opened, and the bucket holds nothing after the commit.
+  it("reads as behind when this box's clock is stepped back after the generation opened", async () => {
+    const h = await streaming();
+    h.clock.advance(MINUTE);
+    h.store.upload(l0(h.generation, 2));
+    h.clock.advance(MINUTE);
+    h.clock.step(-5 * MINUTE);
+    h.commit();
+    for (let tick = 0; tick < 16; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBeGreaterThanOrEqual(16));
+    expect(h.supervisor.status().lagMs).toBeGreaterThanOrEqual(15 * MINUTE);
+  });
+
+  // A box that booted with a stale clock and then synced: its clock jumps forward while the bucket
+  // keeps up with every commit.
+  it("reads as current when this box's clock is stepped forward after the generation opened", async () => {
+    const h = await streaming();
+    h.clock.step(5 * MINUTE);
+    for (let tick = 0; tick < 16; tick += 1) {
+      h.commit();
+      h.clock.advance(1_000);
+      h.store.upload(l0(h.generation, tick + 2));
+      await h.clock.next();
+      await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(tick + 1));
+      expect(h.supervisor.status().lagMs).toBe(0);
+    }
+  });
+
+  it("forgets the commits the bucket holds", async () => {
+    const pending = vi.spyOn(CommitLog.prototype, "pending");
+    try {
+      const h = await streaming();
+      h.commit();
+      h.clock.advance(1_000);
+      h.store.upload(l0(h.generation, 2));
+      await h.clock.next();
+      await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(1));
+      h.supervisor.status();
+      expect(pending.mock.results.at(-1)?.value).toEqual([]);
+    } finally {
+      pending.mockRestore();
+    }
+  });
+
+  it("changes nothing when a read answers after stop, and checks no bucket", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let release!: () => void;
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    let held = false;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/")) {
+        held = true;
+        await answered;
+      }
+      return list(prefix);
+    };
+    await h.clock.next();
+    await vi.waitFor(() => expect(held).toBe(true));
+    await h.supervisor.stop();
+    const writes = h.probeWrites();
+    h.store.denied = true;
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(h.probeWrites()).toBe(writes);
+    expect(h.logs.some((line) => line.event === "stream.freshness_unreadable")).toBe(false);
+  });
+
+  it("does not name a bucket problem from a check that answers after stop", async () => {
+    const h = await streaming();
+    const put = h.store.put.bind(h.store);
+    let release!: () => void;
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    let probing = false;
+    h.store.put = async (key, body, cond) => {
+      if (key.startsWith(PROBE_PREFIX)) {
+        probing = true;
+        await answered;
+      }
+      return put(key, body, cond);
+    };
+    h.store.down = true;
+    await h.clock.next();
+    await vi.waitFor(() => expect(probing).toBe(true));
+    await h.supervisor.stop();
+    h.store.down = false;
+    h.store.denied = true;
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(h.supervisor.status().bucketProblem).toBeNull();
+    expect(h.logs.some((line) => line.event === "stream.bucket_unusable")).toBe(false);
+  });
+
+  // A read given up on at the deadline answers with what the bucket held when it was asked, after
+  // a newer read has already seen more.
+  it("does not let a read given up on overwrite a newer read's answer", async () => {
+    const h = await streaming();
+    h.clock.advance(5_000);
+    h.store.upload(l0(h.generation, 2));
+    const u2 = h.clock.trueNow().toISOString();
+    await h.clock.next();
+    await vi.waitFor(() => expect(h.supervisor.status().lastConfirmedUploadAt).toBe(u2));
+    const list = h.store.list.bind(h.store);
+    let release!: () => void;
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    let hold = true;
+    h.store.list = async (prefix) => {
+      if (!prefix.endsWith("/0000/") || !hold) return list(prefix);
+      hold = false;
+      const snapshot = await list(prefix);
+      await answered;
+      return snapshot;
+    };
+    await h.clock.next();
+    await vi.waitFor(() => expect(hold).toBe(false));
+    h.store.upload(l0(h.generation, 3));
+    const u3 = h.clock.trueNow().toISOString();
+    for (let tick = 0; tick < 5; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(h.supervisor.status().lastConfirmedUploadAt).toBe(u3));
+    expect(u3).not.toBe(u2);
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(h.supervisor.status().lastConfirmedUploadAt).toBe(u3);
+  });
+
+  it.each([
+    { late: "a refusal", fail: "denied", event: "stream.bucket_unusable" },
+    { late: "no answer", fail: "down", event: "stream.bucket_unreachable" },
+  ] as const)(
+    "does not let a bucket check from a read given up on, answering $late, overwrite a newer check's answer",
+    async ({ fail, event }) => {
+      const h = await streaming();
+      const list = h.store.list.bind(h.store);
+      h.store.list = async (prefix) => {
+        if (prefix.endsWith("/0000/")) throw new Error("the listing was refused");
+        return list(prefix);
+      };
+      const put = h.store.put.bind(h.store);
+      let release!: () => void;
+      const answered = new Promise<void>((resolve) => (release = resolve));
+      let settle!: () => void;
+      const settled = new Promise<void>((resolve) => (settle = resolve));
+      let held = false;
+      h.store.put = async (key, body, cond) => {
+        if (!key.startsWith(PROBE_PREFIX) || held) return put(key, body, cond);
+        held = true;
+        try {
+          await answered;
+          return await put(key, body, cond);
+        } finally {
+          settle();
+        }
+      };
+      await h.clock.next();
+      await vi.waitFor(() => expect(held).toBe(true));
+      const writes = h.probeWrites();
+      // Replaced at five minutes; the replacing reads may check the bucket again from ten.
+      for (let tick = 0; tick < 12; tick += 1) await h.clock.next();
+      await vi.waitFor(() => expect(h.probeWrites()).toBeGreaterThan(writes));
+      expect(h.supervisor.status().bucketProblem).toBeNull();
+      h.store[fail] = true;
+      release();
+      await settled;
+      // The rest of the late check runs on promises alone, so it has finished by the next turn.
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(h.supervisor.status().bucketProblem).toBeNull();
+      expect(h.logs.some((line) => line.event === event)).toBe(false);
+    },
+  );
+
+  // The read that replaces a daily check's read starts no check of its own: its listing succeeds,
+  // no problem is named, and the day is counted from the check given up on.
+  it("names a bucket problem from a check whose read was given up on, when no newer check has started", async () => {
+    const h = await streaming();
+    const put = h.store.put.bind(h.store);
+    let release!: () => void;
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    let settle!: () => void;
+    const settled = new Promise<void>((resolve) => (settle = resolve));
+    let held = false;
+    h.store.put = async (key, body, cond) => {
+      if (!key.startsWith(PROBE_PREFIX) || held) return put(key, body, cond);
+      held = true;
+      try {
+        await answered;
+        return await put(key, body, cond);
+      } finally {
+        settle();
+      }
+    };
+    h.clock.advance(24 * 60 * MINUTE);
+    await h.clock.next();
+    await vi.waitFor(() => expect(held).toBe(true));
+    const writes = h.probeWrites();
+    const listings = listingsOf(h, "0000");
+    for (let tick = 0; tick < 7; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBeGreaterThan(listings));
+    expect(h.logs).toContainEqual({
+      level: "warn",
+      event: "stream.freshness_unreadable",
+      fields: { errorCode: "timeout" },
+    });
+    expect(h.probeWrites()).toBe(writes);
+    h.store.denied = true;
+    release();
+    await settled;
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(h.supervisor.status().bucketProblem).toMatchObject({ reason: "access_denied" });
+  });
+
+  it("starts a new read once one has waited five minutes without an answer", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    const held: (() => void)[] = [];
+    let holding = true;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/") && holding) {
+        await new Promise<void>((resolve) => held.push(resolve));
+      }
+      return list(prefix);
+    };
+    h.commit();
+    h.clock.advance(1_000);
+    h.store.upload(l0(h.generation, 2));
+    for (let tick = 0; tick < 5; tick += 1) await h.clock.next();
+    await h.clock.asleep();
+    expect(held).toHaveLength(1);
+    expect(h.supervisor.status().lagMs).toBeGreaterThan(0);
+    await h.clock.next();
+    await vi.waitFor(() => expect(held).toHaveLength(2));
+    expect(h.logs).toContainEqual({
+      level: "warn",
+      event: "stream.freshness_unreadable",
+      fields: { errorCode: "timeout" },
+    });
+    // The read given up on answers late: the one that replaced it is still the one in flight.
+    held[0]!();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await h.clock.next();
+    await h.clock.asleep();
+    expect(held).toHaveLength(2);
+    holding = false;
+    held[1]!();
+    await vi.waitFor(() => expect(h.supervisor.status().lagMs).toBe(0));
+  });
+
+  // A bucket that never answers must not hold the tick: the side-file limit is checked there.
+  it("does not wait for the freshness read: a bucket that never answers still lets the tick pause at the limit", async () => {
+    const h = await streaming();
+    h.store.hang = true;
+    await h.clock.next(); // this tick starts a freshness read that never returns
+    h.setWal(LIMIT);
+    await h.clock.until(() => h.supervisor.status().state === "paused");
+  });
+
+  it("reads the bucket once at a time: a tick while a read is still waiting starts no second one", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let reads = 0;
+    let release!: () => void;
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/")) {
+        reads += 1;
+        await answered;
+      }
+      return list(prefix);
+    };
+    for (let tick = 0; tick < 3; tick += 1) await h.clock.next();
+    await h.clock.asleep();
+    expect(reads).toBe(1);
+    release();
+    await new Promise((resolve) => setImmediate(resolve));
+    await h.clock.next();
+    await vi.waitFor(() => expect(reads).toBe(2));
+  });
+
+  it("stops hearing commits once stopped", async () => {
+    const h = await streaming();
+    expect(h.listening()).toBe(true);
+    await h.supervisor.stop();
+    expect(h.listening()).toBe(false);
+  });
+});
+
+// Addendum 1: a supervisor that has stopped for good is a problem, never "nothing waiting".
+describe("freshness once the supervisor has stopped by itself", () => {
+  it.each([
+    [
+      "supervisor_failed",
+      async () => {
+        const h = await streaming();
+        h.failWal();
+        await h.clock.until(() => h.supervisor.status().state === "off");
+        return h;
+      },
+    ],
+    [
+      "litestream_unavailable",
+      async () => {
+        const h = await harness({ version: "0.5.18" });
+        await h.supervisor.start();
+        await vi.waitFor(() => expect(h.supervisor.status().reason).toBe("litestream_unavailable"));
+        return h;
+      },
+    ],
+  ])("keeps reading a growing lag after commits when off with %s", async (reason, reach) => {
+    const h = await reach();
+    expect(h.supervisor.status().reason).toBe(reason);
+    h.commit();
+    h.clock.advance(5 * MINUTE);
+    expect(h.supervisor.status().lagMs).toBe(5 * MINUTE);
+    h.clock.advance(10 * MINUTE);
+    expect(h.supervisor.status().lagMs).toBe(15 * MINUTE);
+  });
+});
+
 describe("constructed without test seams", () => {
   it("reads off until started", () => {
     const supervisor = new StreamSupervisor({
@@ -1380,6 +1963,7 @@ describe("constructed without test seams", () => {
       walLimitBytes: LIMIT,
       now: () => new Date(START),
       log: () => {},
+      onCommit: () => () => {},
     });
     expect(supervisor.status()).toEqual({
       state: "off",
@@ -1387,6 +1971,8 @@ describe("constructed without test seams", () => {
       reason: null,
       stateSince: new Date(START).toISOString(),
       bucketProblem: null,
+      lagMs: 0,
+      lastConfirmedUploadAt: null,
     });
   });
 });

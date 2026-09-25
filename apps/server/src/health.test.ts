@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { lockVenueDatabase } from "@waitron/db";
+import type { StreamStatus, StreamView } from "@waitron/stream";
 import { DEFAULT_MAX_TICK_MS } from "./config.js";
 import { DRAIN_DUTY, RECONCILE_DUTY, type DutyReport, type PassReport } from "./pass.js";
 import type { Logger } from "./logger.js";
@@ -192,6 +193,7 @@ describe("health state", () => {
           stale: false,
         },
       },
+      stream: { state: "off" },
     });
   });
 
@@ -615,5 +617,95 @@ describe("/health reports who holds the venue folder", () => {
     expect(
       (await healthApp(unhealthy, () => AT, { venueDir: dir }).request("/health")).status,
     ).toBe(503);
+  });
+});
+
+describe("the bucket copy on /health", () => {
+  const refused: StreamStatus = {
+    state: "refused",
+    generation: "gen-0-node-a-20260726T075000Z",
+    reason: "pointer_changed",
+    stateSince: AT.toISOString(),
+    bucketProblem: { reason: "create_only_ignored", since: AT.toISOString() },
+    lagMs: 3_600_000,
+    lastConfirmedUploadAt: null,
+  };
+
+  it("reports the bucket copy's state, lag and last upload, but not the generation's name", () => {
+    const state = createHealthState(BOOT);
+    recordPass(state, report(true, true), AT);
+    state.readStream = () => refused;
+    expect(healthSnapshot(state, AT).body.stream).toEqual({
+      state: "refused",
+      reason: "pointer_changed",
+      stateSince: AT.toISOString(),
+      bucketProblem: { reason: "create_only_ignored", since: AT.toISOString() },
+      lagMs: 3_600_000,
+      lastConfirmedUploadAt: null,
+    });
+  });
+
+  it("reports the bucket copy as off before anything set it", () => {
+    const state = createHealthState(BOOT);
+    expect(healthSnapshot(state, AT).body.stream).toEqual({ state: "off" });
+  });
+
+  it("reports a copy that is set up but could not start as it is", () => {
+    const state = createHealthState(BOOT);
+    const notStarted: StreamView = {
+      state: "off",
+      reason: "no_membership",
+      stateSince: AT.toISOString(),
+    };
+    state.readStream = () => notStarted;
+    expect(healthSnapshot(state, AT).body.stream).toEqual(notStarted);
+  });
+
+  it("names the fields of a copy that is off, so a field added later stays off this route", () => {
+    const state = createHealthState(BOOT);
+    const since = AT.toISOString();
+    const extra = { nodeId: "node-a" };
+    state.readStream = () =>
+      ({ state: "off", reason: "no_membership", stateSince: since, ...extra }) as StreamView;
+    expect(healthSnapshot(state, AT).body.stream).toEqual({
+      state: "off",
+      reason: "no_membership",
+      stateSince: since,
+    });
+    state.readStream = () => ({ state: "off", ...extra }) as StreamView;
+    expect(healthSnapshot(state, AT).body.stream).toEqual({ state: "off" });
+  });
+
+  // A bucket is external. /health failing on it would stall an install or an update
+  // (`deploy/waitron.sh` waits for a healthy container) on someone else's outage.
+  const badCopies: [string, StreamView][] = [
+    ["behind", { ...refused, state: "streaming", reason: null, bucketProblem: null }],
+    ["refused", refused],
+    ["stopped", { ...refused, state: "off", reason: "supervisor_failed" }],
+    ["not started", { state: "off", reason: "start_failed", stateSince: AT.toISOString() }],
+  ];
+  for (const [name, view] of badCopies) {
+    it(`keeps a healthy box at 200 with a bucket copy that is ${name}`, async () => {
+      const state = createHealthState(BOOT);
+      recordPass(state, report(true, true), AT);
+      state.readStream = () => view;
+      const res = await healthApp(state, () => AT).request("/health");
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
+    });
+  }
+
+  it("keeps an unhealthy box at 503 however current its bucket copy is", async () => {
+    const state = createHealthState(BOOT);
+    state.readStream = () => ({
+      ...refused,
+      state: "streaming",
+      reason: null,
+      bucketProblem: null,
+      lagMs: 0,
+    });
+    const res = await healthApp(state, () => AT).request("/health");
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as { ok: boolean }).ok).toBe(false);
   });
 });

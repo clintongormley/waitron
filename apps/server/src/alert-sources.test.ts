@@ -12,6 +12,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { AlertSource } from "@waitron/module";
+import type { StreamStatus, StreamView } from "@waitron/stream";
 import {
   cardReaders,
   type CardProviderContribution,
@@ -28,6 +29,8 @@ import {
   BATTERY_WARN,
   printingAlertSource,
   recordBackupOutcome,
+  sealedStateAlertSource,
+  STREAM_BEHIND_AFTER_MS,
 } from "./alert-sources.js";
 import type { BackupStatus } from "./backup-status.js";
 import { createTtlCache } from "./ttl-cache.js";
@@ -35,9 +38,31 @@ import { createTtlCache } from "./ttl-cache.js";
 const NOW = new Date("2026-09-15T12:00:00Z");
 const ctx = { tx: {} as never, now: NOW };
 
-function src(status: BackupStatus, outcomes: BackupOutcomeHolder) {
-  return backupAlertSource({ listStatus: async () => status, outcomes, now: () => NOW });
+const OFF: () => StreamView = () => ({ state: "off" });
+
+function src(
+  status: BackupStatus,
+  outcomes: BackupOutcomeHolder,
+  readStream: () => StreamView = OFF,
+) {
+  return backupAlertSource({
+    listStatus: async () => status,
+    outcomes,
+    now: () => NOW,
+    readStream,
+  });
 }
+
+const stream = (overrides: Partial<StreamStatus>): StreamStatus => ({
+  state: "streaming",
+  generation: "gen-0-node-a-20260915T110000Z",
+  reason: null,
+  stateSince: "2026-09-15T11:00:00.000Z",
+  bucketProblem: null,
+  lagMs: 0,
+  lastConfirmedUploadAt: "2026-09-15T11:59:00.000Z",
+  ...overrides,
+});
 
 describe("backupAlertSource", () => {
   it("raises backup.disabled when not configured", async () => {
@@ -92,6 +117,230 @@ describe("backupAlertSource", () => {
     recordBackupOutcome(outcomes, "local", true, NOW.toISOString());
     alerts = await src(status, outcomes).read(ctx);
     expect(alerts).toEqual([]);
+  });
+});
+
+describe("backupAlertSource and the bucket copy", () => {
+  const none = { failed: new Map() };
+  const configured: BackupStatus = { configured: true, destinations: [] };
+  const codesAndSince = async (view: StreamView, status: BackupStatus = configured) =>
+    (await src(status, none, () => view).read(ctx)).map((a) => [a.code, a.since]);
+
+  it("does not raise backup.disabled while the bucket copy is on and current", async () => {
+    const alerts = await src({ configured: false }, none, () => stream({})).read(ctx);
+    expect(alerts).toEqual([]);
+  });
+
+  it("raises backup.stream_behind at fifteen minutes, and backup.disabled with it", async () => {
+    const lagMs = 20 * 60_000 + 59_999;
+    const alerts = await src({ configured: false }, none, () => stream({ lagMs })).read(ctx);
+    expect(alerts.map((a) => a.code)).toEqual(["backup.stream_behind", "backup.disabled"]);
+    expect(alerts[0]).toEqual({
+      key: "backup.stream_behind",
+      code: "backup.stream_behind",
+      params: { minutes: 20 },
+      severity: "error",
+      since: new Date(NOW.getTime() - lagMs).toISOString(),
+      screen: "backup",
+    });
+  });
+
+  it("raises backup.stream_behind at exactly fifteen minutes", async () => {
+    const alerts = await src(configured, none, () =>
+      stream({ lagMs: STREAM_BEHIND_AFTER_MS }),
+    ).read(ctx);
+    expect(alerts.map((a) => [a.code, a.params])).toEqual([
+      ["backup.stream_behind", { minutes: 15 }],
+    ]);
+  });
+
+  it("does not raise backup.stream_behind just under fifteen minutes", async () => {
+    const alerts = await src(configured, none, () => stream({ lagMs: 15 * 60_000 - 1 })).read(ctx);
+    expect(alerts).toEqual([]);
+  });
+
+  it("raises paused, refused and bucket-unusable from the copy's state, since when each began", async () => {
+    expect(
+      await codesAndSince(
+        stream({
+          state: "paused",
+          reason: "side_file_limit",
+          stateSince: "2026-09-15T11:30:00.000Z",
+        }),
+      ),
+    ).toEqual([["backup.stream_paused", "2026-09-15T11:30:00.000Z"]]);
+    expect(
+      await codesAndSince(
+        stream({
+          state: "refused",
+          reason: "pointer_changed",
+          stateSince: "2026-09-15T11:40:00.000Z",
+        }),
+      ),
+    ).toEqual([["backup.stream_refused", "2026-09-15T11:40:00.000Z"]]);
+    expect(
+      await codesAndSince(
+        stream({
+          bucketProblem: { reason: "create_only_ignored", since: "2026-09-15T11:50:00.000Z" },
+        }),
+      ),
+    ).toEqual([["backup.stream_bucket_unusable", "2026-09-15T11:50:00.000Z"]]);
+  });
+
+  it("words a refusal by its reason: another box, or settings it cannot use", async () => {
+    const since = "2026-09-15T11:40:00.000Z";
+    expect(
+      await codesAndSince(
+        stream({ state: "refused", reason: "pointer_newer_term", stateSince: since }),
+      ),
+    ).toEqual([["backup.stream_refused", since]]);
+    expect(
+      await codesAndSince(stream({ state: "refused", reason: "config_unsafe", stateSince: since })),
+    ).toEqual([["backup.stream_settings_unusable", since]]);
+  });
+
+  it("raises backup.stream_stopped, naming the reason, for a refusal it has no wording for", async () => {
+    const alerts = await src(configured, none, () =>
+      stream({ state: "refused", reason: "something_new", stateSince: "2026-09-15T11:40:00.000Z" }),
+    ).read(ctx);
+    expect(alerts).toEqual([
+      {
+        key: "backup.stream_stopped",
+        code: "backup.stream_stopped",
+        params: { reason: "something_new" },
+        severity: "error",
+        since: "2026-09-15T11:40:00.000Z",
+        screen: "backup",
+      },
+    ]);
+  });
+
+  for (const reason of ["supervisor_failed", "litestream_unavailable"]) {
+    it(`raises backup.stream_stopped for a copy that stopped itself (${reason}), which is not current`, async () => {
+      const failed = stream({ state: "off", reason, stateSince: "2026-09-15T11:45:00.000Z" });
+      const alerts = await src({ configured: false }, none, () => failed).read(ctx);
+      expect(alerts).toEqual([
+        {
+          key: "backup.stream_stopped",
+          code: "backup.stream_stopped",
+          params: { reason },
+          severity: "error",
+          since: "2026-09-15T11:45:00.000Z",
+          screen: "backup",
+        },
+        expect.objectContaining({ code: "backup.disabled" }),
+      ]);
+    });
+  }
+
+  // Its own alert already says why nothing reaches the bucket; "behind" would point the owner at
+  // the internet connection instead.
+  const explained: [string, Partial<StreamStatus>, string][] = [
+    ["stopped itself", { state: "off", reason: "supervisor_failed" }, "backup.stream_stopped"],
+    [
+      "refused for another box",
+      { state: "refused", reason: "pointer_changed" },
+      "backup.stream_refused",
+    ],
+    [
+      "refused its settings",
+      { state: "refused", reason: "config_unsafe" },
+      "backup.stream_settings_unusable",
+    ],
+    [
+      "refused for no named reason",
+      { state: "refused", reason: "something_new" },
+      "backup.stream_stopped",
+    ],
+  ];
+  for (const [name, overrides, code] of explained) {
+    it(`raises only its own alert, not backup.stream_behind, for a copy that ${name}`, async () => {
+      const view = stream({ ...overrides, lagMs: 16 * 60_000 });
+      expect((await src(configured, none, () => view).read(ctx)).map((a) => a.code)).toEqual([
+        code,
+      ]);
+    });
+  }
+
+  it("raises backup.stream_behind beside a pause or a refusing bucket, which do not say it", async () => {
+    const lagMs = 16 * 60_000;
+    const paused = stream({ state: "paused", reason: "side_file_limit", lagMs });
+    expect((await src(configured, none, () => paused).read(ctx)).map((a) => a.code)).toEqual([
+      "backup.stream_behind",
+      "backup.stream_paused",
+    ]);
+    const refusing = stream({
+      lagMs,
+      bucketProblem: { reason: "access_denied", since: "2026-09-15T11:50:00.000Z" },
+    });
+    expect((await src(configured, none, () => refusing).read(ctx)).map((a) => a.code)).toEqual([
+      "backup.stream_behind",
+      "backup.stream_bucket_unusable",
+    ]);
+  });
+
+  it("raises backup.stream_stopped for a copy set up here that could not start", async () => {
+    const notStarted: StreamView = {
+      state: "off",
+      reason: "no_membership",
+      stateSince: "2026-09-15T11:20:00.000Z",
+    };
+    const alerts = await src({ configured: false }, none, () => notStarted).read(ctx);
+    expect(alerts.map((a) => [a.code, a.params, a.since])).toEqual([
+      ["backup.stream_stopped", { reason: "no_membership" }, "2026-09-15T11:20:00.000Z"],
+      ["backup.disabled", {}, null],
+    ]);
+  });
+
+  it("raises nothing for a copy that was stopped on purpose, and backup.disabled with no archive", async () => {
+    for (const reason of ["stopped", null]) {
+      const off = stream({ state: "off", reason });
+      expect(await codesAndSince(off)).toEqual([]);
+      expect(await codesAndSince(off, { configured: false })).toEqual([["backup.disabled", null]]);
+    }
+  });
+
+  it("raises nothing for a copy that is not set up, and backup.disabled with no archive", async () => {
+    const alerts = await src({ configured: false }, none, OFF).read(ctx);
+    expect(alerts.map((a) => a.code)).toEqual(["backup.disabled"]);
+  });
+
+  it("keeps the archive's alerts beside the copy's", async () => {
+    const status: BackupStatus = {
+      configured: true,
+      destinations: [
+        { id: "local", lastBackupAt: "2026-09-10T00:00:00Z", ageSeconds: 999999, stale: true },
+      ],
+    };
+    const alerts = await src(status, none, () =>
+      stream({ state: "paused", reason: "side_file_limit" }),
+    ).read(ctx);
+    expect(alerts.map((a) => a.code)).toEqual([
+      "backup.stream_paused",
+      "backup.destination_overdue",
+    ]);
+  });
+});
+
+describe("sealedStateAlertSource", () => {
+  it("raises backup.sealed_state_failed while the last refresh failed, and clears after", async () => {
+    const holder = { failedSince: null as string | null };
+    const source = sealedStateAlertSource(holder);
+    expect(source).toMatchObject({ area: "backup", permission: "system.manage" });
+    expect(await source.read(ctx)).toEqual([]);
+    holder.failedSince = "2026-09-15T11:00:00.000Z";
+    expect(await source.read(ctx)).toEqual([
+      {
+        key: "backup.sealed_state_failed",
+        code: "backup.sealed_state_failed",
+        params: {},
+        severity: "error",
+        since: "2026-09-15T11:00:00.000Z",
+        screen: "backup",
+      },
+    ]);
+    holder.failedSince = null;
+    expect(await source.read(ctx)).toEqual([]);
   });
 });
 

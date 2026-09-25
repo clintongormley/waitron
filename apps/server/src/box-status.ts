@@ -8,6 +8,7 @@ import {
   type SingletonRole,
 } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
+import type { StreamView } from "@waitron/stream";
 import type { BackupStatus } from "./backup-status.js";
 import { readCertExpiry, type CertExpiry } from "./cert-expiry.js";
 import { readChainHeight, type ChainHeight } from "./chain-height.js";
@@ -38,6 +39,7 @@ export type BoxStatus = {
   chain: ChainHeight;
   singletonRole: SingletonRole;
   backup: BackupStatus;
+  stream: StreamView;
   duties: Record<string, unknown>;
 };
 
@@ -52,6 +54,7 @@ export type BoxStatusReaders = {
   chain: () => Promise<ChainHeight>;
   singletonRole: () => Promise<SingletonRole>;
   backup: (() => Promise<BackupStatus>) | undefined;
+  stream: () => StreamView;
   duties: () => Record<string, unknown>;
 };
 
@@ -91,6 +94,7 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     chain,
     singletonRole,
     backup,
+    stream: readers.stream(),
     duties: readers.duties(),
   };
 }
@@ -103,6 +107,7 @@ export type BoxStatusDeps = {
   now: () => Date;
   tlsCertPath: string | undefined;
   readBackup: (() => Promise<BackupStatus>) | undefined;
+  readStream: () => StreamView;
   readMode: () => DeploymentMode;
   readSingletonRole: () => SingletonRole;
   /** Reads the awaiting-fiscal-certificate cell the fiscal pass writes (pass.ts's `AwaitingCertStatus`),
@@ -155,6 +160,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         awaitingFiscalCertificate: () => deps.readAwaitingFiscalCertificate(),
         chain: async () => chain,
         backup: deps.readBackup,
+        stream: deps.readStream,
         duties: () =>
           healthSnapshot(deps.health, deps.now()).body.duties as Record<string, unknown>,
       });

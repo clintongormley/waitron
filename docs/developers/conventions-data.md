@@ -1101,8 +1101,10 @@ case is now pinned as `keeps to the writer for a transaction opened as an ordina
 **Three exposures left open deliberately**, all recorded in `docs/backlog.md`. A transaction opened
 by running `begin` is not one the store is told about, so a read concurrent with it still lands on
 the writer and sees its rows. A write issued from outside a running body while one is open is
-refused by the reader and re-run on the writer, where it joins that transaction and commits or rolls
-back with it — which is what one connection did, and nothing refuses it. And `readOnly: true`
+refused by the reader and re-run on the writer, where it joins that transaction if it is still open
+and commits or rolls back with it — which is what one connection did, and nothing refuses it; in the
+moment after the queue's `commit` and before the body has ended, none is open and the write commits
+by itself. And `readOnly: true`
 refuses a write to the database FILE rather than every write: measured 2026-09-23 on Node v26.7.0, a
 `create temp table` succeeds on such a connection, because SQLite keeps a temporary table outside
 that file.

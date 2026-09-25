@@ -51,14 +51,18 @@ export function createWriteQueue(connections: Connections) {
       return enqueue(() =>
         connections.asTransactionBody(async () => {
           connections.write.exec("begin immediate");
+          let result: T;
+          let mark: number | null;
           try {
-            const result = await body();
+            mark = connections.changeMark();
+            result = await body();
             connections.write.exec("commit");
-            return result;
           } catch (error) {
             connections.write.exec("rollback");
             throw error;
           }
+          connections.reportIfChanged(mark);
+          return result;
         }),
       );
     },
