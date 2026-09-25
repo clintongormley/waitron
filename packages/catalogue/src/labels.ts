@@ -95,12 +95,13 @@ export async function readProductLabels(tx: Transaction, productId: string): Pro
   return rows.map((row) => row.labelId);
 }
 
-/** Replace a product's labels with `labelIds`. A variant has none of its own, so it is refused. */
+/** Replace a product's labels with `labelIds`, answering the ids written, sorted. A variant has none
+ * of its own, so it is refused. */
 export async function setProductLabels(
   tx: Transaction,
   productId: string,
   labelIds: string[],
-): Promise<void> {
+): Promise<string[]> {
   const product = await readProductRow(tx, productId);
   if (product.parentId !== null)
     throw new AppError("product.variant_invalid", { field: "labelIds" });
@@ -122,4 +123,5 @@ export async function setProductLabels(
     await tx
       .insert(productLabels)
       .values(ids.map((labelId) => ({ productId: product.id, labelId })));
+  return ids.sort();
 }

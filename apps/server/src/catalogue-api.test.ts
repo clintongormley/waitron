@@ -771,10 +771,17 @@ describe("mountCatalogueApi — labels", () => {
     expect(label).toEqual({ id: label.id, name });
     const productId = await createNamedProductVia(app, "Cerveza");
     const labelsPath = `/management-api/products/${productId}/labels`;
-    const set = await send(app, "PUT", labelsPath, { body: { labelIds: [label.id] } });
+    const other = await createLabelVia(app, `Otra ${crypto.randomUUID()}`);
+    const both = [label.id, other].sort();
+    const set = await send(app, "PUT", labelsPath, {
+      body: { labelIds: [both[1]!.toUpperCase(), both[0]] },
+    });
     expect(set.status).toBe(200);
-    expect(await set.json()).toEqual({ labelIds: [label.id] });
-    expect(await (await send(app, "GET", labelsPath)).json()).toEqual({ labelIds: [label.id] });
+    expect(await set.json()).toEqual({ labelIds: both });
+    expect(await (await send(app, "GET", labelsPath)).json()).toEqual({ labelIds: both });
+    expect(
+      await (await send(app, "PUT", labelsPath, { body: { labelIds: [label.id] } })).json(),
+    ).toEqual({ labelIds: [label.id] });
     const listed = (await (await send(app, "GET", "/management-api/labels")).json()) as {
       id: string;
     }[];

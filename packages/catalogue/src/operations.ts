@@ -12,7 +12,7 @@ import {
 import { catalogues, categories, locationCatalogues, locations, now, products } from "@waitron/db";
 import { productLabels } from "./schema/labels.js";
 import { readContentLanguages } from "./content-languages.js";
-import { setMainReportingCategory } from "./categories.js";
+import { readCategory, setMainReportingCategory } from "./categories.js";
 import { labelIdArray } from "./labels.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
@@ -831,31 +831,29 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
   // derivations — computed as `republishOverlays` would.
   const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
   const dietOverride = validateDietOverride(input.dietOverride ?? null);
-  const [row] = await tx
-    .insert(products)
-    .values({
-      catalogueId: input.catalogueId,
-      categoryId: null,
-      name: input.name,
-      customerName: input.customerName ?? null,
-      description: input.description ?? null,
-      kitchenName: input.kitchenName?.trim() || null,
-      dietaryDeclarations: validateDietaryDeclarations(input.dietaryDeclarations ?? []),
-      pricingUnit: selectedUnit === null ? "each" : legacyPricingUnit(selectedUnit),
-      unitPrice: stringToCents(input.unitPrice),
-      vatClass: input.vatClass,
-      active: input.active ?? true,
-      available: input.available ?? true,
-      soldAlone: input.soldAlone ?? true,
-      manualAllergens: allergens,
-      allergens: republish(allergens, null),
-      dietOverride,
-      diet: overlayDietProfile(deriveDietProfile({ origins: [], pending: true }), dietOverride),
-      image: input.image ?? null,
-    })
-    .returning({ id: products.id });
+  const values = {
+    catalogueId: input.catalogueId,
+    categoryId: input.categoryId,
+    name: input.name,
+    customerName: input.customerName ?? null,
+    description: input.description ?? null,
+    kitchenName: input.kitchenName?.trim() || null,
+    dietaryDeclarations: validateDietaryDeclarations(input.dietaryDeclarations ?? []),
+    pricingUnit: selectedUnit === null ? "each" : legacyPricingUnit(selectedUnit),
+    unitPrice: stringToCents(input.unitPrice),
+    vatClass: input.vatClass,
+    active: input.active ?? true,
+    available: input.available ?? true,
+    soldAlone: input.soldAlone ?? true,
+    manualAllergens: allergens,
+    allergens: republish(allergens, null),
+    dietOverride,
+    diet: overlayDietProfile(deriveDietProfile({ origins: [], pending: true }), dietOverride),
+    image: input.image ?? null,
+  };
+  if (input.categoryId !== null) await readCategory(tx, input.categoryId);
+  const [row] = await tx.insert(products).values(values).returning({ id: products.id });
   if (selectedUnit !== null) await assignProductUnit(tx, row!.id, selectedUnit.id);
-  if (input.categoryId !== null) await setMainReportingCategory(tx, row!.id, input.categoryId);
   const [created] = await tx
     .select(PRODUCT_COLUMNS)
     .from(products)

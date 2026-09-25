@@ -112,6 +112,20 @@ describe("labels", () => {
     expect((await app((tx) => listLabels(tx))).map((l) => l.id)).toEqual([alcoholic.id, other.id]);
   });
 
+  it("treats names differing only in letter case as different labels", async () => {
+    await fixture();
+    const upper = await app((tx) => createLabel(tx, "Alcoholic"));
+    const lower = await app((tx) => createLabel(tx, "alcoholic"));
+    await expect(app((tx) => createLabel(tx, "Alcoholic"))).rejects.toMatchObject({
+      code: "label.name_taken",
+      params: { name: "Alcoholic" },
+    });
+    expect(await app((tx) => listLabels(tx))).toEqual([
+      { id: upper.id, name: "Alcoholic", productCount: 0 },
+      { id: lower.id, name: "alcoholic", productCount: 0 },
+    ]);
+  });
+
   it("refuses a rename or delete of an unknown label", async () => {
     await fixture();
     await app((tx) => createLabel(tx, "Taken"));
@@ -133,7 +147,9 @@ describe("labels", () => {
     const f = await fixture();
     const a = await app((tx) => createLabel(tx, "A"));
     const b = await app((tx) => createLabel(tx, "B"));
-    await app((tx) => setProductLabels(tx, f.beer, [b.id, a.id]));
+    expect(await app((tx) => setProductLabels(tx, f.beer, [b.id, a.id]))).toEqual(
+      [a.id, b.id].sort(),
+    );
     expect(await app((tx) => readProductLabels(tx, f.beer))).toEqual([a.id, b.id].sort());
     const missing = crypto.randomUUID();
     for (const [labelIds, error] of [
@@ -148,9 +164,9 @@ describe("labels", () => {
       ).rejects.toMatchObject(error);
       expect(await app((tx) => readProductLabels(tx, f.beer))).toEqual([a.id, b.id].sort());
     }
-    await app((tx) => setProductLabels(tx, f.beer, [b.id.toUpperCase()]));
+    expect(await app((tx) => setProductLabels(tx, f.beer, [b.id.toUpperCase()]))).toEqual([b.id]);
     expect(await app((tx) => readProductLabels(tx, f.beer))).toEqual([b.id]);
-    await app((tx) => setProductLabels(tx, f.beer, []));
+    expect(await app((tx) => setProductLabels(tx, f.beer, []))).toEqual([]);
     expect(await app((tx) => readProductLabels(tx, f.beer))).toEqual([]);
   });
 

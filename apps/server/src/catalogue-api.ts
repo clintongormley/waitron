@@ -110,6 +110,12 @@ async function requireLabelName(c: Context): Promise<string> {
   return body.name;
 }
 
+function nullOrUuid(value: unknown, field: string): string | null {
+  if (value !== null && (typeof value !== "string" || !isUuid(value)))
+    throw new AppError("management.request_invalid", { field });
+  return value;
+}
+
 async function requireTopLevelProduct(tx: Transaction, productId: string): Promise<void> {
   const [row] = await tx
     .select({ id: products.id })
@@ -130,11 +136,7 @@ function categoryInput(body: Record<string, unknown>, creating: boolean): Partia
       throw new AppError("management.request_invalid", { field: "name" });
     result.name = body.name as Record<string, string>;
   }
-  if (body.parentId !== undefined) {
-    if (body.parentId !== null && (typeof body.parentId !== "string" || !isUuid(body.parentId)))
-      throw new AppError("management.request_invalid", { field: "parentId" });
-    result.parentId = body.parentId as string | null;
-  }
+  if (body.parentId !== undefined) result.parentId = nullOrUuid(body.parentId, "parentId");
   if (body.image !== undefined) {
     if (body.image !== null && typeof body.image !== "string")
       throw new AppError("management.request_invalid", { field: "image" });
@@ -851,11 +853,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const body = await readJsonBody<Record<string, unknown>>(c);
       const reassign: CategoryReassignment = {};
       for (const field of ["productsTo", "childrenTo"] as const) {
-        const value = body[field];
-        if (value === undefined) continue;
-        if (value !== null && (typeof value !== "string" || !isUuid(value)))
-          throw new AppError("management.request_invalid", { field });
-        reassign[field] = value;
+        if (body[field] !== undefined) reassign[field] = nullOrUuid(body[field], field);
       }
       await gated(session, (tx) => deleteCategory(tx, id, reassign));
       return c.body(null, 204);
@@ -906,12 +904,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const session = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "ProductId");
       const body = await readJsonBody<{ primaryCategoryId?: unknown }>(c);
-      if (
-        body.primaryCategoryId !== null &&
-        (typeof body.primaryCategoryId !== "string" || !isUuid(body.primaryCategoryId))
-      )
-        throw new AppError("management.request_invalid", { field: "primaryCategoryId" });
-      const categoryId = body.primaryCategoryId;
+      const categoryId = nullOrUuid(body.primaryCategoryId, "primaryCategoryId");
       return c.json(await gated(session, (tx) => setMainReportingCategory(tx, id, categoryId)));
     }),
   );
@@ -973,8 +966,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       return c.json(
         await gated(session, async (tx) => {
           await requireTopLevelProduct(tx, id);
-          await setProductLabels(tx, id, labelIds);
-          return { labelIds: await readProductLabels(tx, id) };
+          return { labelIds: await setProductLabels(tx, id, labelIds) };
         }),
       );
     }),
