@@ -33,14 +33,13 @@ const jamon: TillProduct = {
 
 const products: TillProduct[] = [cafe, jamon];
 
-// The venue's active courses, in display order (KDS-2 §5b) — the picker options + fire id→name source.
 const courses = [
   { id: "entrantes", name: "Entrantes", displayOrder: 0 },
   { id: "postres", name: "Postres", displayOrder: 1 },
 ];
 
-// Two dos-café lines locked at add-time (1.50 each): line 1 still to serve, line 2 already served. Both
-// have a null course fired immediately (KDS-2 fields), so they surface no waiter-fire action by default.
+// Two café lines locked at add-time (1.50 each): line 1 still to serve, line 2 already served. Both have
+// a null course fired immediately, so they surface no waiter-fire action by default.
 const pendingLine: TabLine = {
   lineNo: 1,
   productId: "cafe",
@@ -74,13 +73,11 @@ const mount = (over: Partial<TillTableOrderScreen> = {}) =>
     ...over,
   });
 
-/** The product-grid nested in the screen's shadow (the round-scoped picker). */
 const grid = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!;
-/** The embedded pay widget (only present while the drawer is open). */
+/** Only present while the drawer is open. */
 const tender = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
-/** Opens the pull-out tab drawer via its badged handle. */
 async function openDrawer(el: TillTableOrderScreen): Promise<void> {
   el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
   await el.updateComplete;
@@ -105,7 +102,6 @@ describe("till-table-order-screen", () => {
     expect(productGrid.store).toBe(basket.store);
   });
 
-  // ── Menu diet filter (dietary-classification, Task 7) ────────────────────────────────────────
   it("shows NO diet filter when no product carries a published diet", async () => {
     const { el } = await mount(); // cafe only — no diet
     expect(el.shadowRoot!.querySelector("till-diet-filter")).toBeNull();
@@ -205,7 +201,6 @@ describe("till-table-order-screen", () => {
     // The un-served line carries a Servido tick; the served one does not.
     expect(el.shadowRoot!.querySelector('[data-serve="1"]')).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[data-serve="2"]')).toBeNull();
-    // Both sections are labelled with the Spanish copy the brief prescribes.
     const text = el.shadowRoot!.textContent ?? "";
     expect(text).toContain(t("table.pending_title"));
     expect(text).toContain(t("table.served_title"));
@@ -262,8 +257,6 @@ describe("till-table-order-screen", () => {
   });
 
   it("hides the pay section when settlement is disabled (an order-only handheld)", async () => {
-    // A handheld takes and fires orders but never settles payment (the server firewall is the real
-    // guarantee; this is the honest UI). With `canSettle=false` the pay section is gone.
     const { el } = await mount({ lines: [pendingLine], canSettle: false });
     await openDrawer(el);
     expect(el.shadowRoot!.querySelector("section.pay")).toBeNull();
@@ -279,8 +272,7 @@ describe("till-table-order-screen", () => {
 
   it("renders the embedded pay widget with the Card button (a handheld settles cash or manual card)", async () => {
     // The table-order screen threads no `cashOnly`/`cardProvider`, so the embedded pay widget offers
-    // BOTH tenders — cash and the manual (datáfono) card. A handheld settles either on `POST /api/sales`;
-    // only the INTEGRATED reader (`/api/pay`) is fenced server-side.
+    // BOTH tenders — cash and the manual (datáfono) card.
     const { el } = await mount({ lines: [pendingLine], canSettle: true });
     await openDrawer(el);
     const widget = tender(el);
@@ -316,10 +308,8 @@ describe("till-table-order-screen", () => {
     const { el } = await mount({ lines: [pendingLine] });
     await openDrawer(el);
     const trigger = el.shadowRoot!.querySelector("[data-move-split]")!;
-    // The old disabled "Move · Split" placeholder is now a live control reading "Table actions".
     expect(trigger.textContent).toContain(t("table.actions_title"));
     expect(trigger.hasAttribute("disabled")).toBe(false);
-    // Tapping it opens the in-drawer action menu.
     expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
     (trigger as HTMLElement).click();
     await el.updateComplete;
@@ -335,9 +325,6 @@ describe("till-table-order-screen", () => {
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
   });
-
-  // --- Embedded chrome seam (SP-B2.2): a card host supplies the title + Back; the pending-round
-  // drawer handle is body FUNCTION and survives in the always-present actions bar (spec §7). ---
 
   it("suppresses its own header + Back when embedded, keeping the drawer handle", async () => {
     const { el } = await mount({ embedded: true });
@@ -364,9 +351,6 @@ describe("till-table-order-screen", () => {
     );
   });
 
-  // ── KDS-2 (§5b): the per-line course picker + the waiter-fire actions ──────────────────────────────
-
-  /** Rings one café into the current round (the grid tile) and returns the per-line course selects. */
   async function ringAndPickers(el: TillTableOrderScreen): Promise<HTMLSelectElement[]> {
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
     await el.updateComplete;
@@ -484,13 +468,8 @@ describe("till-table-order-screen", () => {
     ]);
   });
 
-  // Per-line note (order-line customisation, Task 4b): the round bar reuses `till-basket`, so its
-  // per-line Note affordance is available on the table-order screen too (parity with the counter). A
-  // note set on a round line via that affordance reaches the round store and is forwarded by
-  // `send-round` (via `toWireLineExtras`), the same wire path as the counter's sale lines.
   it("forwards a per-line note set through the round basket's Note affordance on send-round (parity)", async () => {
     const { el } = await mount();
-    // Ring a café into the current round through the grid (a plain fast-add, no picker).
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
     await el.updateComplete;
 
@@ -528,17 +507,13 @@ describe("till-table-order-screen", () => {
     expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
   });
 
-  // ── Coursing editing (A3): the round bar's per-line HOLD toggle ─────────────────────────────────────
-
-  /** Rings one café into the current round (the grid tile) and returns the per-line hold switches. */
   async function ringAndHolds(el: TillTableOrderScreen): Promise<HTMLElement[]> {
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
     await el.updateComplete;
     return [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-round-hold]")];
   }
 
-  /** Toggles a round line's hold `wt-switch` by clicking its inner native checkbox — the same pattern
-   * `tender-pay.test.ts`/`wt-switch.test.ts` use (a real `click()` flips `checked` before `change`). */
+  /** Clicks the inner native checkbox: a real `click()` flips `checked` before `change`. */
   async function toggleHold(el: TillTableOrderScreen, sw: HTMLElement): Promise<void> {
     await (sw as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
     sw.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
@@ -615,7 +590,6 @@ describe("till-table-order-screen", () => {
     await openDrawer(el);
     const fire = el.shadowRoot!.querySelector<HTMLElement>('[data-fire-course="postres"]');
     expect(fire).not.toBeNull();
-    // The action names the course (Marchar Postres).
     expect(fire!.textContent).toContain(t("table.fire_course"));
     expect(fire!.textContent).toContain("Postres");
 
@@ -641,8 +615,6 @@ describe("till-table-order-screen", () => {
     await openDrawer(el);
     expect(el.shadowRoot!.querySelector("[data-fire-section]")).toBeNull();
   });
-
-  // ── Coursing editing (A1): moving a NOT-yet-fired tab line into a different course ──────────────────
 
   it("renders an editable course picker for a NOT-yet-fired tab line, bound to its current course", async () => {
     // heldLine: firedAt null, current course Postres ⇒ an editable select bound to it.
@@ -713,13 +685,12 @@ describe("till-table-order-screen", () => {
     expect(el.shadowRoot!.querySelector('[data-line-course-static="3"]')).toBeNull();
   });
 
-  // ── Coursing corrections (C5): per-line Send / Recall / Cancel, gated on the line's kitchen state ───
   describe("send / recall / cancel line actions (C5)", () => {
     // A line the kitchen has already STARTED (fired + preparing/ready) — the cancel-only case.
     const preparingLine: TabLine = { ...pendingLine, lineNo: 1, state: "preparing" };
     const readyLine: TabLine = { ...pendingLine, lineNo: 1, state: "ready" };
     // A CHILD EXTRAS line, in the shape the tab wire really sends one: it carries the PICKED product
-    // (spec §3.4) and names its parent dish by line number, which is the ONLY field telling the two
+    // and names its parent dish by line number, which is the ONLY field telling the two
     // apart. It has no ticket item of its own, so firedAt AND state are both null — the shape whose
     // null firedAt would wrongly fall into the HELD/Send branch, and whose held shape would paint an
     // editable course picker, if the child guard were absent. A fixture with `productId: null` would
@@ -905,9 +876,7 @@ describe("till-table-order-screen", () => {
     });
   });
 
-  // ── TS-3/TS-4: the in-drawer move / join / merge / transfer table-action flow ──────────────────────
   describe("table actions (TS-3/TS-4)", () => {
-    /** A TableState with sane defaults (all required fields) — override only what a case needs. */
     const tableState = (over: Partial<TableState> = {}): TableState => ({
       id: "t1",
       label: "1",
@@ -929,7 +898,6 @@ describe("till-table-order-screen", () => {
       ...over,
     });
 
-    /** Opens the drawer and taps the Table-actions trigger, leaving the action menu open. */
     async function toMenu(el: TillTableOrderScreen): Promise<void> {
       await openDrawer(el);
       el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
@@ -1245,9 +1213,7 @@ describe("till-table-order-screen", () => {
     });
 
     it("transfer line-picker offers dishes only, never a child extras row", async () => {
-      // The server REFUSES a directly named child: `carveOffLines` throws `tab.transfer_modifier_line`
-      // for a line whose `parent_line_id` is set (apps/server/src/working-order.ts), and cascades a
-      // dish's children with the dish instead. So offering the row at all only buys a refusal.
+      // The server REFUSES a directly named child and cascades a dish's children with the dish instead.
       const child = { ...pendingLine, lineNo: 2, parentLineNo: 1, quantity: "1.000" };
       const other = tableState({ id: "t3", state: "open-tab", hasOpenTab: true, tabId: "wo-9" });
       const { el } = await mount({
@@ -1356,7 +1322,6 @@ describe("till-table-order-screen", () => {
 
     it("filters the round grid to the selected menu; removing the filter shows every menu's products", async () => {
       const { el } = await mount({ ...bothMenus, selectedMenuId: "cat-food" });
-      // Guard-by-deletion: drop `filterProductsByMenu`'s `.filter` and this drops "Cerveza" in beside Bocadillo.
       expect(gridNames(el)).toEqual(["Bocadillo"]);
       expect(switcherButtons(el).map((b) => b.textContent?.trim())).toEqual(["Comida", "Bebidas"]);
 

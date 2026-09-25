@@ -3418,9 +3418,9 @@ describe("till-app", () => {
 
     // FP-2 privilege propagation, canvas model (SP-B): the on-till floor editor is now a permission-locked
     // `table-layout-editor` card, gated at the CELL by the grid's `canConfigureTill` (permission→locked,
-    // SP-B2.1). So the end-to-end assertion is that the operator's server-computed `till.configure` reaches
-    // the floor tab's card grid as `canConfigureTill` — the input that unlocks/locks that card. (The card's
-    // own lock rendering is covered by card-grid's suite.)
+    // SP-B2.1). So the end-to-end assertion is that the operator's server-computed `canConfigureTill`
+    // (the `venue.configure` check) reaches the floor tab's card grid — the input that unlocks/locks that
+    // card. (The card's own lock rendering is covered by card-grid's suite.)
     const gridConfigurable = (el: TillApp) =>
       (activeTabGrid(el) as unknown as { canConfigureTill: boolean }).canConfigureTill;
 
@@ -3430,7 +3430,7 @@ describe("till-app", () => {
         listZones: vi.fn().mockResolvedValue([floorZone]),
       });
       await flush(el);
-      // The lock screen sends the server-computed capability; a manager holds `till.configure`.
+      // The lock screen sends the server-computed capability; a manager holds `venue.configure`.
       emit(lock(el)!, "logged-in", {
         personId: "p1",
         displayName: "Marta",

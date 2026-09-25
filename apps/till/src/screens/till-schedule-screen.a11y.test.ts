@@ -4,9 +4,8 @@ import "./till-schedule-screen.js";
 import type { TillScheduleScreen } from "./till-schedule-screen.js";
 import type { MyAbsence, MyShift, MySwap, StaffMember, TillApi } from "../api/client.js";
 
-// One row of each list (a shift, an acceptable swap offered to me, an absence) plus the two request
-// forms and their pickers, so every control the screen renders is under axe at once — in BOTH themes,
-// where the color-contrast check means what it means in the deployed app.
+// One row of each list (a shift, an acceptable swap offered to me, an absence), so each list's rows
+// are under axe.
 const shifts: MyShift[] = [
   {
     id: "s1",

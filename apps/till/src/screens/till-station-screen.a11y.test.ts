@@ -10,10 +10,8 @@ const stations: Station[] = [
   { id: "st-2", name: "Barra", displayOrder: 1, isDefault: false, active: true },
 ];
 
-// The station's KDS order-timing thresholds (design §4/§6) — the shipped DB defaults. No fixture below
-// injects `now`, so every ticket ages off the real wall clock against a `queuedAt` far in the past — the
-// queue always sweeps in its `forgotten` (flashing) state, which is exactly the state the a11y sweep
-// exercises for the header's overdue-count badge too.
+// No fixture below injects `now`, so every ticket ages off the real wall clock against a `queuedAt` far
+// in the past and the queue always sweeps in its `forgotten` (flashing) state.
 const DEFAULT_THRESHOLDS: StationThresholds = {
   warmAfterMinutes: 5,
   overdueAfterMinutes: 10,
@@ -21,9 +19,8 @@ const DEFAULT_THRESHOLDS: StationThresholds = {
 };
 
 // One order with a line in each kitchen state + a second order carrying a HELD later course, so axe sees
-// the queued/preparing/ready cells, the active + inactive picker tabs, the toggle and Back, both a
-// labelled and an unlabelled ticket, a course header, a greyed (held) line and — under `fire_control =
-// 'kitchen'` — the "Empezar curso" fire button, all in a single mount.
+// every cell state, a course header, a greyed (held) line and — under `fire_control = 'kitchen'` — the
+// fire button, all in a single mount.
 const groups: StationQueueGroup[] = [
   {
     orderId: "wo-1",
@@ -90,7 +87,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getStationQueue: vi.fn().mockResolvedValue(groups),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     advanceTicket: vi.fn().mockResolvedValue(undefined),
-    // Operator mode shows the per-order Reprint wt-button on each rail card (KDS-4) — swept below.
     reprintOrder: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as TillApi;
@@ -149,8 +145,6 @@ describe.each(["light", "dark"] as const)("till-station-screen a11y (%s theme)",
   });
 });
 
-/** A device-mode `TillApi`: the enrolled display's probe/advance verbs (device-identity-1 §5a). The enrol
- * front door now lives outside this screen (device-enrolment §3.1), so no enrol verb rides here. */
 function deviceStubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
     getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: groups } }),

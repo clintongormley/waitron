@@ -23,18 +23,12 @@ import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
 import { StoreChangeController } from "../state/store-controller.js";
-// Side-effect imports register the reused widgets this screen composes — the round-scoped product
-// picker + basket, and the tab-pay tender — exactly as `till-counter-screen` registers its widgets.
-// The screen names them only as tags below, so the reuse (not a fork) is what lives here.
 import "../widgets/product-grid.js";
 import "../widgets/basket.js";
 import "../widgets/tender-pay.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";
-// The multi-menu switcher shown above the round grid — renders nothing for a single-menu location.
 import "../widgets/menu-switcher.js";
-// The menu DIET filter above the round grid (dietary-classification, Task 7) — narrows the tiles to a
-// dietary lens via `filterProductsByDiet`. Rendered only when some product carries a published diet.
 import "../widgets/diet-filter.js";
 import type {
   RoundLine,
@@ -49,18 +43,12 @@ import type {
 import type { ConfirmPaymentDetail } from "../widgets/tender-pay.js";
 import type { FireControlMode } from "../widgets/station-queue.js";
 
-// The Estado picker's option type is the shape `GET /api/statuses` returns (`{ id, label, color }`),
-// defined once in the API client and re-exported here so the screen's `.statuses` element type — and
-// the existing test/app imports of `TableServiceStatus` from this module — stay stable.
 export type { TableServiceStatus };
 
 /**
- * A read-only store whose total + line count are the tab's LOCKED figures, computed ONCE from the tab
- * lines and NEVER re-priced. It is fed to the embedded `tender-pay` so the operator's change is
- * computed against the exact total the server will file from the stored locks (design H2: a tab does
- * not re-price — the add-time `unit_price_gross` is authoritative, never a catalogue recompute). It
- * overrides ONLY the two getters `tender-pay` reads, so the base's `priceBasket` path (the re-price
- * hazard) is never reached — the whole point of not loading tab lines into a normal store.
+ * The tab's LOCKED total and line count, fed to the embedded `tender-pay`. A tab never re-prices: the
+ * add-time `unit_price_gross` is authoritative, which is why the tab lines are not loaded into a normal
+ * store.
  */
 class TabPayStore extends WorkingOrderStore {
   readonly #total: Decimal;
@@ -79,37 +67,15 @@ class TabPayStore extends WorkingOrderStore {
 }
 
 /**
- * The TILL table-ordering screen (FP-1, design §5b): one open table's tab. Three regions —
+ * The TILL table-ordering screen: one open table's tab. The round bar holds the CURRENT round only,
+ * never the whole tab.
  *
- *  - a full-width **product grid** (reused `till-product-grid`) whose taps accumulate the CURRENT
- *    round into a round-scoped `WorkingOrderStore`, shown by a reused `till-basket` in a bottom bar;
- *    **Enviar ronda** emits `send-round` with the picked lines and clears the round (the round bar is
- *    the current round ONLY, never the whole tab);
- *  - a right-edge **drawer**, its handle badged with the count of lines still to serve, listing
- *    **Pendiente de servir** (each a `Servido` tick → `serve-line`), **Servido**, the tab **total**
- *    (summed from the LOCKED add-time prices — never a catalogue recompute), **Cobrar** (the reused
- *    `till-tender-pay`, whose terminal tender the screen re-emits as `pay-tab`), **Estado** (a status
- *    picker → `set-status`) and **Acciones de mesa** — an in-drawer move/join/merge/transfer/split flow
- *    whose target/item picks dispatch `move-tab`/`join-table`/`merge-tabs`/`transfer-lines`/
- *    `split-lines` upward for the app to persist.
+ * FISCAL FIREWALL. The screen owns NO fiscal path: every write is dispatched upward for the app to
+ * persist. Pay reuses `tender-pay` against the {@link TabPayStore}, and the screen re-emits its
+ * `confirm-payment` as `pay-tab`, so the app settles the whole tab through the existing `recordSale`
+ * verb, never a new fiscal verb and never a re-price.
  *
- * FISCAL FIREWALL (H2). The screen owns NO fiscal path. Rounds, served ticks and status are pre-fiscal
- * signals the app turns into `addTabRound`/`markLineServed`/`setTableStatus`. Pay is the one
- * fiscally-adjacent spot and is handled entirely by REUSE: the embedded `tender-pay` computes change
- * against the {@link TabPayStore} (the LOCKED tab total), and the screen catches its `confirm-payment`
- * and re-emits it as `pay-tab` — so the app settles the whole tab through the EXISTING `recordSale`
- * verb (which files the tab's stored locked lines and ignores the sent basket), never a new fiscal
- * verb and never a re-price. The Hold/`park-order` a `tender-pay` also offers is meaningless for an
- * already-persisted tab, so the screen SWALLOWS it rather than misrouting it to the counter's basket.
- *
- * COPY. Every user-facing label goes through `t()` (`table.*`, plus `label.total`), rendered in the
- * active locale — English by default ("Send round", "To serve", "Served", "Charge", "Status",
- * "Table actions"), Spanish for a Spanish venue ("Enviar ronda", "Pendiente de servir", "Servido",
- * "Cobrar", "Estado", "Acciones de mesa"). Lit + `@waitron/ui` `baseStyles` + theme tokens only — no
- * hardcoded chrome (the status swatch is DATA colour, like the floor screen's badge).
- *
- * DISCONNECT SAFETY: every handler only writes reactive state or dispatches upward — Lit never paints a
- * detached element — so no `isConnected` guard is needed (the sibling screens' reasoning).
+ * Every handler only writes reactive state or dispatches upward, so no `isConnected` guard is needed.
  */
 @customElement("till-table-order-screen")
 export class TillTableOrderScreen extends LitElement {
@@ -381,190 +347,105 @@ export class TillTableOrderScreen extends LitElement {
     `,
   ];
 
-  /** The open tab's lines (locked add-time prices + per-line served marker). The APP owns them —
-   * loaded via `getTabLines` and reloaded after each round/serve — and threads them in; the drawer,
-   * total and badge render from these, never a re-price. */
+  /** The APP owns and reloads them; the drawer, total and badge render from these, never a re-price. */
   @property({ attribute: false }) lines: TabLine[] = [];
-  /** ALL sellable products across the zone's menus. The round grid shows only the SELECTED
-   * menu's (via {@link filterProductsByMenu}); a tab line's name is resolved against the FULL set
-   * ({@link #nameFor}), because a tab may span several menus and every line must still render its name
-   * whatever menu is shown. */
+  /** ALL sellable products across the zone's menus: a tab may span several menus, and every line must
+   * still render its name whatever menu is shown. */
   @property({ attribute: false }) products: TillProduct[] = [];
-  /** The zone's menus, handed to the menu switcher above the round grid. With one menu (or
-   * none) the switcher renders nothing. */
   @property({ attribute: false }) menus: TillMenu[] = [];
-  /** The menu (catalogue) the round grid currently shows — narrows the grid via {@link filterProductsByMenu}
-   * and marks the active switcher option. Owned by the app; a switcher pick bubbles up as `menu-selected`. */
+  /** Owned by the app; a switcher pick bubbles up as `menu-selected`. */
   @property() selectedMenuId = "";
-  /** The table service statuses the Estado picker offers (the app derives + threads them). */
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
-  /** The venue's ACTIVE kitchen courses (KDS-2 §5b), from `GET /api/till` — the per-line course picker's
-   * options (in `displayOrder`) and the id→name source for the waiter-fire actions. */
+  /** The venue's ACTIVE kitchen courses, in `displayOrder`. */
   @property({ attribute: false }) courses: TillCourse[] = [];
-  /** Who owns the per-course fire — the `fire_control` venue setting (KDS-2 §2c), threaded from the app.
-   * `waiter` surfaces the tab's per-held-course "Fire <course>" actions; `kitchen` hides them (the
-   * station display owns the fire then). */
   @property() fireControl: FireControlMode = "waiter";
-  /** The tab's working-order id (the app owns the writes; this rides along for reference/parity with
-   * the FP-D placeholder it replaces). */
   @property() orderId?: string;
-  /** A tab settlement is in flight (the app's `submitting`), threaded to the embedded pay widget so it
-   * disables its confirm affordance — the visible half of the app's single-flight fiscal guard. */
+  /** The visible half of the app's single-flight fiscal guard. */
   @property({ type: Boolean }) busy = false;
-  /** Whether this face may SETTLE the tab. Both the counter/fixed till and the handheld pay, so this
-   * DEFAULTS to `true` and the app leaves it unset — the embedded pay section renders with BOTH the cash
-   * and manual-card tenders (the handheld screen threads no `cardProvider`, so Card stays the manual
-   * datáfono path). A caller that passes `false` (a future non-settling face) hides the pay section
-   * entirely. UI honesty only: the server firewall (`/api/sales` node-keyed sale) is the real guarantee —
-   * it permits a handheld cash or manual-card tender and fences only the INTEGRATED reader (`/api/pay`).
-   * The tab total stays visible either way. */
+  /** `false` hides the pay section. The server accepts a handheld's cash or manual-card tender on
+   * `/api/sales` and fences only the integrated reader (`/api/pay`). */
   @property({ type: Boolean }) canSettle = true;
-  /**
-   * Whether this screen is mounted INSIDE a card host (SP-B2.2) rather than as a standalone screen.
-   * When embedded, it drops its own `<header class="head">` (the `<h1 class="title">` + the `.back`
-   * button) — the card host supplies that chrome — but KEEPS the pending-round `.drawer-handle` (with
-   * its pending `.badge`), which is table BODY function (the waiter still opens the tab drawer from
-   * inside a card, spec §7), rendered in the always-present `.head-actions` bar. Mirrors the floor and
-   * station screens' `embedded` seam. Default `false` keeps the standalone screen fully functional —
-   * its own header + Back, drawer handle, and pending badge. NOTE the standalone DOM is NOT byte-identical
-   * to before this seam: `.head-actions` (drawer handle + Back) moved OUT of the `<header>` to a sibling
-   * so the drawer handle survives embedding, the same restructure floor/station carry — every existing
-   * table-order test still passes because none asserted those controls' container.
-   */
+  /** Mounted inside a card host, which supplies the header; the drawer handle and its badge stay. */
   @property({ type: Boolean }) embedded = false;
-  /** The live-floor occupancy read-model (FP-1), threaded from the app — the SAME `getTablesState` rows
-   * the floor screen renders. The move/join/merge/transfer action flow (TS-3/TS-4) reads it for its
-   * target lists: FREE tables to move/join onto, and OTHER open tabs to merge/transfer with. Empty until
-   * the app supplies it; an empty list simply yields the picker's "no targets" empty-state. */
+  /** The target lists of the move/join/merge/transfer flow read this. */
   @property({ attribute: false }) tables: TableState[] = [];
 
-  /** Whether the pull-out tab drawer is open (its handle toggles it). */
   @state() private drawerOpen = false;
 
-  /** The session's dietary selection; null shows every dish in the selected menu. */
+  /** null shows every dish in the selected menu. */
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
 
-  /** The FIRED-and-STARTED line the operator is about to CANCEL (coursing corrections C5), captured when
-   * they tap its Cancel action so the consequence-naming confirm can name the dish; `null` when no confirm
-   * is open. Cancelling a started dish bins food, so — unlike Send/Recall — the void only fires once this
-   * is confirmed ({@link #confirmCancel}); dismissing ({@link #dismissCancel}) clears it and dispatches
-   * nothing. Held/queued lines Send/Recall with no confirm. */
+  /** Cancelling a STARTED dish bins food, so — unlike Send/Recall — the void fires only once confirmed. */
   @state() private cancelLine: TabLine | null = null;
 
-  /** Which step of the in-drawer table-action flow (TS-3/TS-4) is showing — `closed` is the resting
-   * state (only the "Table actions" trigger visible). The trigger opens the `menu`; a verb pick moves to
-   * the target `pick` step (free tables for move/join, other open tabs for merge/transfer — the two are
-   * told apart by {@link actionVerb}); a transfer then advances to `transfer-lines` to choose which lines
-   * to move. */
   @state() private actionStep: "closed" | "menu" | "pick" | "transfer-lines" | "split-lines" =
     "closed";
-  /** The verb the operator picked in the action menu — decides which target list the picker shows and
-   * which event a target pick dispatches. `null` while the flow is closed or on the menu. */
   @state() private actionVerb: "move" | "join" | "merge" | "transfer" | "split" | null = null;
-  /** The destination tab's working-order id for an in-flight transfer, captured when the operator picks
-   * it in the `pick` step; the `transfer-lines` step dispatches `transfer-lines` against it. `null`
-   * otherwise. */
   @state() private transferToTabId: string | null = null;
-  /** The lines selected for a transfer, by `lineNo` (v1 moves whole lines only, so no per-line quantity
-   * is stored). A NEW Set is assigned on every mutation so Lit re-renders (a Set is not deeply reactive). */
+  /** A NEW Set is assigned on every mutation so Lit re-renders (a Set is not deeply reactive). */
   @state() private transferLineNos = new Set<number>();
-  /** Selected split lines and the quantity each new check will receive. Kept separate from the
-   * whole-line transfer picker so quantity choices cannot change that established flow. */
+  /** Kept separate from the whole-line transfer picker so quantity choices cannot change that flow. */
   @state() private splitQuantities = new Map<number, string>();
-  /** Set by a split confirmation attempt so invalid weight fields reveal both inline and summary copy. */
   @state() private splitAttempted = false;
 
-  /** The CURRENT round the product grid rings into and the round basket shows — its own store, distinct
-   * from the tab (which is server-side). Cleared by {@link #sendRound}. */
   readonly #roundStore = new WorkingOrderStore();
-  /** Per-round-line course OVERRIDES the waiter picked (KDS-2 §5b), keyed by the round line's stable
-   * object identity — a `WorkingOrderStore` line object is pushed once and kept by reference until the
-   * round clears, so a `WeakMap` survives re-renders and reorders and auto-drops its entries when the
-   * round is sent (the line objects become unreachable). A line ABSENT here takes its product's default
-   * course server-side (`<override> ?? product.course_id`); the picker offers no explicit "no course"
-   * option, so a value here is always a real course id, never null. */
+  /**
+   * Keyed by the round line's object identity: a store line is kept by reference until the round
+   * clears, so a `WeakMap` survives re-renders and drops its entries once the round is sent. A line
+   * ABSENT here takes its product's default course server-side.
+   */
   #roundCourses = new WeakMap<OrderLine, string>();
-  /** Per-round-line HOLD flags the waiter toggled (coursing editing A3), keyed by the round line's stable
-   * object identity — a sibling of {@link #roundCourses} with the same lifecycle: a `WeakMap` survives
-   * re-renders and reorders and auto-drops its entries when the round is sent (the line objects become
-   * unreachable). A line ABSENT here (the toggle's default) fires on send by the normal course rule; an
-   * entry set to `true` inserts the line HELD (`fired_at NULL`) regardless of its course. Only ever `true`
-   * — {@link #toggleHold} DELETES the entry when the toggle goes back off, never stores `false`. */
+  /** Same lifecycle as {@link #roundCourses}. Only ever `true`: {@link #toggleHold} DELETES the entry
+   * rather than storing `false`, so a plain line's wire is `hold`-free. */
   #roundHolds = new WeakMap<OrderLine, boolean>();
-  /** The pay store fed to `tender-pay` — rebuilt from {@link lines} on every change (see {@link willUpdate}). */
   #payStore?: TabPayStore;
-  /** Per-line locked gross, keyed by `lineNo`, memoised from {@link lines} in the SAME
-   * {@link willUpdate} guard that rebuilds {@link #payStore} — so a render triggered by the unrelated
-   * `#roundStore` subscription (a product tap while building a round) reuses these instead of
-   * recomputing `unitPriceGross × quantity` for every pending + served line. `lineNo` is unique per tab,
-   * so it is a safe key; the map is fully populated for the current {@link lines} before any render. */
+  /** Memoised so a render triggered by a round change does not recompute every line's gross. */
   #lineGrossByLineNo = new Map<number, Decimal>();
 
   constructor() {
     super();
     new ContentLanguageController(this);
-    // Re-render on any round change (add/remove/clear) so the round basket and the Enviar-ronda
-    // disabled state track the store; the controller owns the subscription lifecycle.
     new StoreChangeController(this, () => this.#roundStore);
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    // The per-line locked grosses and the tab total the pay widget settles against are both memoised
-    // once per lines change — never a catalogue recompute (H2). Built on the first update too, before
-    // the first render reads them. The gross map is filled BEFORE `#tabTotal` sums it below.
+    // The gross map is filled BEFORE `#tabTotal` sums it below.
     if (changed.has("lines") || this.#payStore === undefined) {
       this.#lineGrossByLineNo = new Map(
         this.lines.map((line) => [line.lineNo, grossOf(line.unitPriceGross, line.quantity)]),
       );
       this.#payStore = new TabPayStore(this.#tabTotal(), this.lines.length);
     }
-    // A tab switch (the app re-points `orderId` at a different working order) must not carry a half-open
-    // action flow across — its target lists and captured transfer destination belong to the OLD tab. Reset
-    // to the trigger. Guarded on a real change (not the first update, where the old value is undefined and
-    // there is nothing open to reset).
+    // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
     if (changed.has("orderId") && changed.get("orderId") !== undefined) {
       this.#closeActions();
     }
   }
 
-  /** The line's LOCKED gross (`unitPriceGross × quantity` at money scale, via the shared `grossOf`
-   * primitive), read from the {@link #lineGrossByLineNo} memo built in {@link willUpdate} — the SAME
-   * arithmetic the server files with, so a drawer row can never round differently from the tab total or
-   * the filed ticket. */
   #lineGross(line: TabLine): Decimal {
     return this.#lineGrossByLineNo.get(line.lineNo)!;
   }
 
-  /** The tab's gross total — Σ of the locked line grosses, at money scale (`0.00` for an empty tab). */
   #tabTotal(): Decimal {
     return toScale(sumDecimals(this.lines.map((line) => this.#lineGross(line))), MONEY_SCALE);
   }
 
-  /** The lines still to serve (`served_at IS NULL`) — the badge count and the Pendiente section. */
   #pending(): TabLine[] {
     return this.lines.filter((line) => line.servedAt === null);
   }
 
-  /** The lines already served — the Servido section (no tick; the marker is set). */
   #served(): TabLine[] {
     return this.lines.filter((line) => line.servedAt !== null);
   }
 
-  /** A line's display name: the STAFF label the server froze onto it and resolved, falling back to the
-   * live catalogue when a payload carries none. That catalogue fallback in turn falls back to the raw
-   * id for a product deactivated since the line was added (mirroring the retrieve path's
-   * productId-only philosophy). A null `productId` resolves to `""` — a total-safety fallback for a
-   * payload carrying neither a frozen name nor a product; it is NOT a child test (a child carries the
-   * picked product — see {@link #isChild}). */
+  /** The STAFF label the server froze onto the line, falling back to the live catalogue, then to the raw
+   * id for a product deactivated since the line was added. */
   #nameForLine(line: TabLine): string {
     return line.name ?? this.#nameFor(line.productId);
   }
 
-  /** Whether `line` is a CHILD extras row — a pick hanging off a dish — rather than a top-level dish.
-   * The tab wire marks it with `parentLineNo`, the parent dish's line number (`TabLine.parentLineNo`,
-   * `../api/client.ts`); `productId` cannot, because a child carries the PICKED product (spec §3.4).
-   * An absent `parentLineNo` reads as a dish: the server sets the field on every line it sends, so
-   * absent means a fixture that predates it. */
+  /** `productId` cannot tell a child extras row from a dish, because a child carries the PICKED
+   * product. */
   #isChild(line: TabLine): boolean {
     return (line.parentLineNo ?? null) !== null;
   }
@@ -575,20 +456,13 @@ export class TillTableOrderScreen extends LitElement {
     return product ? productName(product) : productId;
   }
 
-  /** Trim a three-place quantity's trailing zeros for display ("2.000" → "2", "0.320" → "0.32") —
-   * the shared {@link trimQuantity} the kitchen queue uses too. */
   #displayQty(quantity: string): string {
     return trimQuantity(quantity);
   }
 
-  /** Emit the current round's picked lines — each with its course OVERRIDE when the waiter picked one
-   * (KDS-2 §5b) and the answers the picker collected — and clear the round bar for the next round. An
-   * unoverridden line OMITS `courseId`, so the server applies the product's default course
-   * (`<override> ?? product.course_id`); a line that answered nothing carries neither `extras` nor
-   * `options`. The answers name lists, products and labels by id alone — the server re-resolves every
-   * price, VAT class and name. A HELD line (the waiter left its toggle ON, coursing editing A3) carries
-   * `hold: true`, inserting it without firing; an un-held line OMITS `hold` (never `false`), so the
-   * line fires by the normal course rule. */
+  /** An unoverridden line OMITS `courseId`, so the server applies the product's default course. The
+   * answers name lists, products and labels by id alone: the server re-resolves every price, VAT class
+   * and name. */
   #sendRound(): void {
     const lines = this.#roundStore.lines.map((line) => {
       const roundLine: RoundLine = {
@@ -612,16 +486,12 @@ export class TillTableOrderScreen extends LitElement {
     this.#roundStore.clear();
   }
 
-  /** A round line's PRE-SELECTED course id: the waiter's override if any, else the product's default
-   * course, else `""` (the "use the product default" placeholder — never a "no course" option). */
   #selectedCourseId(line: OrderLine): string {
     return this.#roundCourses.get(line) ?? line.product.courseId ?? "";
   }
 
-  /** The `<option>` list every course select shares (the round builder AND the tab-line drawer, coursing
-   * editing A1): a leading placeholder then one option per ACTIVE venue course in `displayOrder`, the
-   * `selected` value pre-marked. The placeholder's meaning is the CALLER's — "use the product default"
-   * for a round line (never sent as a course), "no course" for a tab line (the explicit `null`). */
+  /** The placeholder's meaning is the CALLER's: "use the product default" for a round line (never sent
+   * as a course), "no course" for a tab line (the explicit `null`). */
   #courseOptions(selected: string, placeholder: string): TemplateResult {
     return html`<option value="" .selected=${selected === ""}>${placeholder}</option>
       ${this.courses.map(
@@ -632,38 +502,25 @@ export class TillTableOrderScreen extends LitElement {
       )}`;
   }
 
-  /** Record a per-line course pick. `""` (the default placeholder) clears any override so the line falls
-   * back to the product default server-side; any other value is an explicit override. `requestUpdate`
-   * because {@link #roundCourses} is a `WeakMap`, not a reactive property — the picker must re-render to
-   * reflect the new selection (and a store-triggered re-render reads the same map). */
+  /** `requestUpdate` because {@link #roundCourses} is a `WeakMap`, not a reactive property. */
   #pickCourse(line: OrderLine, courseId: string): void {
     if (courseId === "") this.#roundCourses.delete(line);
     else this.#roundCourses.set(line, courseId);
     this.requestUpdate();
   }
 
-  /** Whether a round line is currently HELD — the waiter's toggle if set, else `false` (the default: a
-   * round line fires on send). Read by the per-line hold switch to reflect its state across re-renders. */
   #isHeld(line: OrderLine): boolean {
     return this.#roundHolds.get(line) === true;
   }
 
-  /** Record a per-line hold toggle. `true` holds the line (inserted but not fired on send); `false` clears
-   * the entry so the line falls back to firing by its course rule — the map only ever stores `true`, never
-   * `false`, so a plain line's wire is `hold`-free. `requestUpdate` because {@link #roundHolds} is a
-   * `WeakMap`, not a reactive property — the switch must re-render to reflect the new state (a
-   * store-triggered re-render reads the same map). Mirrors {@link #pickCourse}. */
+  /** `requestUpdate` because {@link #roundHolds} is a `WeakMap`, not a reactive property. */
   #toggleHold(line: OrderLine, held: boolean): void {
     if (held) this.#roundHolds.set(line, true);
     else this.#roundHolds.delete(line);
     this.requestUpdate();
   }
 
-  /** The tab's HELD courses (KDS-2 §5b), in `displayOrder` — each course that has at least one line whose
-   * kitchen item is still held (`firedAt === null`) and that is still an ACTIVE venue course (so it has a
-   * name and can be fired). A null-course line fires immediately, so it is never held; a course
-   * deactivated since it was rung drops off (firing it would be `course.not_found`, Task 4's accepted
-   * edge). The waiter-fire section renders one "Fire <course>" action per entry. */
+  /** A course deactivated since it was rung drops off: firing it would be refused `course.not_found`. */
   #heldCourses(): TillCourse[] {
     const heldIds = new Set(
       this.lines
@@ -673,9 +530,6 @@ export class TillTableOrderScreen extends LitElement {
     return this.courses.filter((course) => heldIds.has(course.id));
   }
 
-  /** Announce a waiter fire of one held course (KDS-2 §5b) — the app releases it via `fireCourse` and
-   * reloads the tab. Carries the tab's order id + the course id, the SAME `{ orderId, courseId }` shape
-   * the station display's kitchen-fire uses. */
   #fire(courseId: string): void {
     this.dispatchEvent(
       new CustomEvent("fire-course", {
@@ -686,17 +540,12 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** Announce that one pending line went out (the app marks it served, then reloads the tab). */
   #serve(lineNo: number): void {
     this.dispatchEvent(
       new CustomEvent("serve-line", { detail: { lineNo }, bubbles: true, composed: true }),
     );
   }
 
-  /** Announce a NOT-yet-fired tab line's course move (coursing editing A1) — the app re-files it via
-   * `setLineCourse` then reloads the tab (the SAME dispatch-up-then-`getTabLines` pattern as `serve-line`
-   * and `fire-course`). `courseId` is `string | null` (`null` clears the line to no course), the SAME
-   * shape the client verb takes; keyed by the line's `lineNo`. NON-FISCAL. */
   #setLineCourse(lineNo: number, courseId: string | null): void {
     this.dispatchEvent(
       new CustomEvent("set-line-course", {
@@ -707,34 +556,16 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** Whether `line` has a LIVE, unfired ticket item worth SENDING — the shared predicate the Send button
-   * ({@link #lineAction}) and the Send-all gate ({@link #anyHeld}) both key on, so the two stay in
-   * lockstep. Three exclusions: a CHILD extras row ({@link #isChild}) is part of its dish and never
-   * gets a kitchen ticket item of its own; a ticket-item-less PARENT (`state === null` — a moved/merged
-   * line or an openTab-initial line) has nothing to send (`sendLines` would match no ticket item and
-   * no-op); and an already-FIRED line (`firedAt !== null`) is past sending.
-   *
-   * The child exclusion is belt AND braces on today's wire: the server gives a child no `ticket_items`
-   * row at all (`fireLines` keeps only `parent_line_id IS NULL`, `apps/server/src/working-order.ts`),
-   * so `state === null` already refuses it. Stated in its own right because a reader has to be able to
-   * see WHY a child is not sendable without going to the server for it. */
+  /** Shared by the Send button ({@link #lineAction}) and the Send-all gate ({@link #anyHeld}) so the two
+   * stay in lockstep. A ticket-item-less parent (`state === null` — a moved/merged line or an
+   * openTab-initial line) has nothing to send. The child exclusion is stated in its own right although
+   * the server gives a child no ticket item, so `state === null` already refuses it. */
   #isSendable(line: TabLine): boolean {
     return !this.#isChild(line) && line.firedAt === null && line.state !== null;
   }
 
-  /** The ONE kitchen action a tab line offers (coursing corrections C5), gated on its kitchen state:
-   *  - HELD (`firedAt === null`) → **Send** (`send-lines` with `[lineNo]`), releasing it to the kitchen;
-   *  - FIRED + not started (`firedAt !== null && state === "queued"`) → **Recall** (`recall-lines` with
-   *    `[lineNo]`), un-sending it before the kitchen begins;
-   *  - FIRED + started (`state === "preparing"` / `"ready"`) → **Cancel**, behind the consequence-naming
-   *    confirm (a started dish is binned, so {@link #requestCancel} opens the dialog rather than voiding).
-   *
-   * A CHILD extras row ({@link #isChild}) is skipped FIRST: it is part of its dish, so it must offer
-   * no kitchen action of its own. The HELD branch also requires a LIVE ticket item (`state !== null`): a parent line can
-   * carry `firedAt === null && state === null` when it has no ticket item to send — a line opened with a
-   * tab's initial round or one moved/merged between tabs (re-inserted under a new id without re-firing).
-   * `sendLines` would match no ticket item for such a line and no-op, so Send would be dead; that shape
-   * falls through to the trailing `nothing` instead. */
+  /** HELD → Send; FIRED + not started → Recall; FIRED + started → Cancel, behind a confirm because a
+   * started dish is binned. A CHILD extras row is part of its dish and offers no action of its own. */
   #lineAction(line: TabLine): TemplateResult | typeof nothing {
     if (this.#isChild(line)) return nothing;
     const name = this.#nameForLine(line);
@@ -777,16 +608,10 @@ export class TillTableOrderScreen extends LitElement {
     return nothing;
   }
 
-  /** Whether any TOP-LEVEL dish line is still HELD with a LIVE ticket item — gates the tab-level Send-all
-   * affordance. Keyed on the SAME {@link #isSendable} predicate the per-line Send button uses, so the two
-   * stay in lockstep: counting a line no per-line Send would offer would surface a dead Send-all on a tab
-   * with no genuinely-held line. */
   #anyHeld(): boolean {
     return this.lines.some((line) => this.#isSendable(line));
   }
 
-  /** Announce a fire of ONE held line (coursing corrections C5) — the app releases it via `sendLines` then
-   * reloads the tab (the SAME dispatch-up-then-`getTabLines` pattern as `serve-line`/`fire-course`). */
   #sendLine(lineNo: number): void {
     this.dispatchEvent(
       new CustomEvent("send-lines", {
@@ -797,15 +622,13 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** Announce a SEND-ALL — release every held line at once. An empty `lineNos` is the server's send-all
-   * (`sendLines(orderId, [])`), so the detail carries `[]`, not the list of held line numbers. */
+  /** An empty `lineNos` is the server's send-all, so the detail carries `[]`, not the held line numbers. */
   #sendAll(): void {
     this.dispatchEvent(
       new CustomEvent("send-lines", { detail: { lineNos: [] }, bubbles: true, composed: true }),
     );
   }
 
-  /** Announce a recall of ONE not-yet-started line — the app un-sends it via `recallLines` then reloads. */
   #recallLine(lineNo: number): void {
     this.dispatchEvent(
       new CustomEvent("recall-lines", {
@@ -816,13 +639,10 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** Open the consequence-naming cancel confirm for a STARTED line (nothing is dispatched yet). */
   #requestCancel(line: TabLine): void {
     this.cancelLine = line;
   }
 
-  /** Confirm the cancel: announce the void of the captured line (the app calls `voidLine` then reloads),
-   * then close the dialog. A no-op if nothing is captured (the dialog cannot confirm while closed). */
   #confirmCancel(): void {
     const line = this.cancelLine;
     if (line === null) return;
@@ -836,16 +656,12 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** Dismiss the cancel confirm without voiding — the line stays exactly as it was. */
   #dismissCancel(): void {
     this.cancelLine = null;
   }
 
-  /** The cancel confirmation dialog (coursing corrections C5), reusing the shared `wt-dialog` primitive
-   * (the same one the allergen detail + modifier picker use) — NEVER a hand-rolled dialog. Always present,
-   * driven by {@link cancelLine}, so escape/backdrop flows back through `wt-close` into the state rather
-   * than fighting the `.open` binding (the allergen screen's pattern). Names the consequence and the dish;
-   * the destructive Cancel button confirms, "Keep it" dismisses. */
+  /** Always present, driven by {@link cancelLine}, so escape/backdrop flows back through `wt-close` into
+   * the state rather than fighting the `.open` binding. */
   #cancelDialog(): TemplateResult {
     const line = this.cancelLine;
     return html`<wt-dialog
@@ -885,28 +701,19 @@ export class TillTableOrderScreen extends LitElement {
     </wt-dialog>`;
   }
 
-  /** A course id's display name for the READ-ONLY (fired-line) course cell: the "No course" placeholder for
-   * a `null` course, else the active venue course's name, else the raw id for a course DEACTIVATED since the
-   * line was rung (the retrieve path's productId-only philosophy — never blank). */
+  /** Falls back to the raw id for a course DEACTIVATED since the line was rung — never blank. */
   #courseName(courseId: string | null): string {
     if (courseId === null) return t("table.course_none");
     return this.courses.find((course) => course.id === courseId)?.name ?? courseId;
   }
 
-  /** A tab-line course select's value → the wire course id: the `""` placeholder is the explicit
-   * no-course `null`, any other value a real course id (mirrors the client verb's `string | null`). */
   #courseValue(value: string): string | null {
     return value === "" ? null : value;
   }
 
-  /** The per-line COURSE control on a tab line (coursing editing A1), reusing the round builder's course
-   * options ({@link #courseOptions}). A NOT-yet-fired line (`firedAt === null`) gets the EDITABLE picker
-   * bound to its current course (`null` shows the "No course" placeholder); its change re-files the line via
-   * {@link #setLineCourse}. A FIRED line shows its course READ-ONLY — a fired line's course is corrected via
-   * recall (C5), not moved here. Renders nothing when the venue has no courses to pick between, exactly as
-   * the round-builder strip hides itself then — and nothing for a CHILD extras row
-   * ({@link #isChild}), which has no course of its own and whose null `firedAt` would otherwise paint
-   * an editable picker on it. A child is cooked with its dish and moves course with it. */
+  /** A FIRED line shows its course READ-ONLY: its course is corrected via recall, not moved here. A
+   * CHILD extras row has no course of its own, and its null `firedAt` would otherwise paint an editable
+   * picker on it. */
   #lineCourse(line: TabLine): TemplateResult | typeof nothing {
     if (this.courses.length === 0 || this.#isChild(line)) return nothing;
     if (line.firedAt !== null) {
@@ -933,50 +740,40 @@ export class TillTableOrderScreen extends LitElement {
     this.drawerOpen = !this.drawerOpen;
   }
 
-  /** Announce a status pick (a status id, or `null` to clear) — the app keys it by TABLE id. */
   #pickStatus(statusId: string | null): void {
     this.dispatchEvent(
       new CustomEvent("set-status", { detail: { statusId }, bubbles: true, composed: true }),
     );
   }
 
-  /** Return to the live floor (the app reloads occupancy so a just-paid table shows free). */
   #back(): void {
     this.dispatchEvent(new CustomEvent("back-to-floor", { bubbles: true, composed: true }));
   }
 
-  /** Apply the diet-filter widget's pick (`diet-filter-selected`) — a predicate or `null` (cleared). */
   #pickDiet(predicate: DietPredicate | null): void {
     this.selectedDiet = predicate;
   }
 
-  /** The tiles the round grid shows: the selected menu's products ({@link filterProductsByMenu}), then
-   *  narrowed to the active diet lens ({@link filterProductsByDiet}) when one is set. A tab line's name
-   *  still resolves against the FULL set ({@link #nameFor}), so a filtered grid never blanks a line. */
+  /** A tab line's name still resolves against the FULL set ({@link #nameFor}), so a filtered grid never
+   * blanks a line. */
   #gridProducts(): TillProduct[] {
     return visibleProducts(this.products, this.selectedMenuId, this.selectedDiet);
   }
 
-  /** Whether to show the diet filter at all — only when some product carries a published diet, so a
-   *  venue with no dietary data adds no filter chrome above the round grid. */
   #hasDietData(): boolean {
     return hasDietData(this.products);
   }
 
-  /**
-   * Re-emit the embedded `tender-pay`'s terminal tender as `pay-tab` so the APP settles the tab through
-   * the EXISTING `recordSale` path (design H2). `stopPropagation` keeps the inner `confirm-payment` from
-   * reaching the app's counter `#onConfirmPayment`, which would `#syncIfDirty` → re-price the tab's
-   * locked lines. The detail (the cash/card tender) rides through verbatim.
-   */
+  /** `stopPropagation` keeps the inner `confirm-payment` from reaching the app's counter
+   * `#onConfirmPayment`, which would `#syncIfDirty` → re-price the tab's locked lines. */
   #onTenderConfirm(event: Event): void {
     event.stopPropagation();
     const detail = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     this.dispatchEvent(new CustomEvent("pay-tab", { detail, bubbles: true, composed: true }));
   }
 
-  /** Swallow a Hold/`park-order` from the embedded pay widget: a persisted tab cannot be parked, so this
-   * meaningless affordance must never reach the app's counter `#onParkOrder`. */
+  /** A persisted tab cannot be parked, so the pay widget's Hold must never reach the app's counter
+   * `#onParkOrder`. */
   #onTenderPark(event: Event): void {
     event.stopPropagation();
   }
@@ -1067,10 +864,7 @@ export class TillTableOrderScreen extends LitElement {
     `;
   }
 
-  /** The round bar's per-line COURSE PICKER (KDS-2 §5b): one select per current-round line, defaulting to
-   * the product's course, overridable to any active venue course. Rendered only when a round is being
-   * built AND the venue has courses to pick — with none, there is nothing to choose and the strip stays
-   * hidden. The `""` placeholder means "use the product default", not "no course" (no such option). */
+  /** The `""` placeholder means "use the product default", not "no course" (no such option). */
   #roundCoursesSection(): TemplateResult | typeof nothing {
     const lines = this.#roundStore.lines;
     if (lines.length === 0 || this.courses.length === 0) return nothing;
@@ -1082,10 +876,8 @@ export class TillTableOrderScreen extends LitElement {
   #roundCourseRow(line: OrderLine, index: number): TemplateResult {
     const name = lineProductName(line.product);
     const selected = this.#selectedCourseId(line);
-    // The course name + its select live in their own `<label>` (kept `display: contents` so the row's flex
-    // is unchanged); the hold switch is a SIBLING, not nested in that label — a `<label>` may wrap only its
-    // one control, and the switch carries its own inner label/for. `table.hold_label` names the switch
-    // (product appended, matching the course select's aria-label) so a screen reader can tell the rows apart.
+    // The hold switch is a SIBLING of the course `<label>`, not nested in it: a `<label>` may wrap only
+    // its one control, and the switch carries its own inner label.
     return html`<div class="round-course">
       <label class="round-course-field">
         <span class="round-course-name">${name} ×${this.#displayQty(line.quantity)}</span>
@@ -1206,9 +998,6 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  /** The waiter-fire section (KDS-2 §5b): under `fire_control = 'waiter'`, one "Fire <course>" action per
-   * HELD course of the tab (in `displayOrder`). Hidden entirely under `kitchen` (the station display owns
-   * the fire then) and when nothing is held. */
   #fireSection(): TemplateResult | typeof nothing {
     if (this.fireControl !== "waiter") return nothing;
     const held = this.#heldCourses();
@@ -1260,17 +1049,12 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  // ── Table actions (TS-3/TS-4): move / join / merge / transfer ─────────────────────────────────────
-
-  /** The FREE tables a move/join can target — the read-model rows in the `free` state. */
   #freeTables(): TableState[] {
     return this.tables.filter((table) => table.state === "free");
   }
 
-  /** The OTHER open tabs a merge/transfer can target — every row with an open tab whose working-order id
-   * is present and is NOT this tab's own (a tab cannot merge/transfer with itself). Deduplicated BY TAB:
-   * a joined tab spans several `dining_tables` rows all pointing at one `tabId`, and the picker chooses a
-   * BILL, not a table — so it shows one entry per tab (the first covering row's label). */
+  /** Deduplicated BY TAB: a joined tab spans several table rows pointing at one `tabId`, and the picker
+   * chooses a BILL, not a table. */
   #otherTabs(): TableState[] {
     const seen = new Set<string>();
     return this.tables.filter((table) => {
@@ -1281,7 +1065,6 @@ export class TillTableOrderScreen extends LitElement {
     });
   }
 
-  /** Reset the whole action flow to its resting state (only the trigger visible). */
   #closeActions(): void {
     this.actionStep = "closed";
     this.actionVerb = null;
@@ -1291,13 +1074,10 @@ export class TillTableOrderScreen extends LitElement {
     this.splitAttempted = false;
   }
 
-  /** Emit one composed, bubbling CustomEvent — the same event shape as this screen's other dispatch sites
-   * (`send-round`, `serve-line`, `set-status`, …), factored here because the action flow has several. */
   #dispatch(type: string, detail: unknown): void {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
-  /** A relocation verb advances to a target picker; split advances directly to its item picker. */
   #chooseVerb(verb: "move" | "join" | "merge" | "transfer" | "split"): void {
     this.actionVerb = verb;
     if (verb === "split") {
@@ -1307,8 +1087,6 @@ export class TillTableOrderScreen extends LitElement {
     this.actionStep = verb === "split" ? "split-lines" : "pick";
   }
 
-  /** A target pick in the picker. Move/join/merge dispatch immediately and close; transfer captures the
-   * destination tab and advances to the line-picker step (nothing is dispatched until the lines are chosen). */
   #pickTarget(table: TableState): void {
     switch (this.actionVerb) {
       case "move":
@@ -1330,8 +1108,6 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
-  /** Toggle a whole line into/out of the transfer selection (v1 moves whole lines only). A NEW Set is
-   * assigned so Lit re-renders. */
   #toggleTransferLine(line: TabLine): void {
     const next = new Set(this.transferLineNos);
     if (next.has(line.lineNo)) next.delete(line.lineNo);
@@ -1339,10 +1115,7 @@ export class TillTableOrderScreen extends LitElement {
     this.transferLineNos = next;
   }
 
-  /** Build the `transfers` list from the selected lines and dispatch `transfer-lines`, then close. v1 moves
-   * whole lines only, so every entry is `{ lineNo }` with no `quantity`; when a partial-quantity stepper is
-   * added, reintroduce the split (a `quantity` < the line's) there. No-op with nothing selected or no
-   * destination captured. */
+  /** Moves whole lines only, so every entry is `{ lineNo }` with no `quantity`. */
   #confirmTransfer(): void {
     if (this.transferToTabId === null || this.transferLineNos.size === 0) return;
     const transfers: TabTransfer[] = this.lines
@@ -1352,8 +1125,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#closeActions();
   }
 
-  /** Select or deselect a top-level line for the detached check. A new selection starts at its full
-   * ordered quantity; the operator can then lower a plain dish to a partial quantity. */
   #toggleSplitLine(line: TabLine): void {
     const next = new Map(this.splitQuantities);
     if (next.has(line.lineNo)) next.delete(line.lineNo);
@@ -1368,7 +1139,6 @@ export class TillTableOrderScreen extends LitElement {
     this.splitQuantities = next;
   }
 
-  /** Step a whole-quantity dish by one, bounded to 1..the line's ordered quantity. */
   #stepSplitQuantity(line: TabLine, delta: -1 | 1): void {
     const current = decimal(
       this.splitQuantities.get(line.lineNo) ?? this.#displayQty(line.quantity),
@@ -1380,15 +1150,10 @@ export class TillTableOrderScreen extends LitElement {
     this.#setSplitQuantity(line.lineNo, next);
   }
 
-  /** The decimal places a split of `line` may take: the precision the line froze when it was rung,
-   * else the storage limit of three places. */
   #splitPrecision(line: TabLine): number {
     return line.unitPrecision ?? 3;
   }
 
-  /** Return localized field copy when a selected quantity cannot be sent. The line's frozen unit
-   * precision sets the decimal places. Every value is bounded by the exact ordered quantity using
-   * shared decimal arithmetic. */
   #splitQuantityError(line: TabLine): string {
     const value = this.splitQuantities.get(line.lineNo) ?? "";
     const precision = this.#splitPrecision(line);
@@ -1426,9 +1191,8 @@ export class TillTableOrderScreen extends LitElement {
       .filter((error) => error !== "");
   }
 
-  /** Create a detached check from selected dishes. Full quantities omit `quantity`, preserving the
-   * existing whole-line wire shape; partial plain dishes carry their exact selected decimal. Modifier
-   * children are absent from the picker and move with a whole parent on the server. */
+  /** Full quantities omit `quantity`; partial plain dishes carry their exact selected decimal. Modifier
+   * children are absent from the picker and move with their whole parent on the server. */
   #confirmSplit(): void {
     if (this.splitQuantities.size === 0) return;
     this.splitAttempted = true;
@@ -1446,8 +1210,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#closeActions();
   }
 
-  /** The Back control: from the menu it closes the flow; from the picker it returns to the menu; from the
-   * transfer line-picker it returns to the picker. */
   #actionBack(): void {
     switch (this.actionStep) {
       case "menu":
@@ -1471,7 +1233,6 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
-  /** The in-drawer action flow (TS-3/TS-4). Renders the trigger when resting, else the active step. */
   #actionSection(): TemplateResult {
     switch (this.actionStep) {
       case "closed":

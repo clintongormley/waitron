@@ -15,7 +15,7 @@ const products: TillProduct[] = [
     vatClass: "general",
     category: null,
     allergens: null,
-    // A default course so the round-course picker pre-selects it (KDS-2).
+    // A default course so the round-course picker pre-selects it.
     courseId: "c1",
   },
 ];
@@ -69,7 +69,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       { products, lines, statuses, courses, fireControl: "waiter", orderId: "wo-1" },
       theme,
     );
-    // Ring a café into the current round so the per-line COURSE PICKER (KDS-2 §5b) renders and is scanned.
+    // Ring a café into the current round so the per-line COURSE PICKER renders and is scanned.
     el.shadowRoot!.querySelector<TillProductGrid>("till-product-grid")!
       .shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!
       .click();

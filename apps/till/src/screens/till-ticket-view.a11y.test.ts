@@ -14,9 +14,7 @@ const result: TillSaleResult = {
     { rate: "21.00", base: "2.48", tax: "0.52" },
     { rate: "10.00", base: "5.82", tax: "0.58" },
   ],
-  // The FILED line list the receipt renders (server's `TillSaleResult.lines`), not a client basket.
-  // "Jamón" carries a selected option (ordering modifiers, Task 14) — the indented `.option` row is
-  // swept here for both themes alongside the plain "Café" line.
+  // "Jamón" carries a selected option, so the indented `.option` row is swept too.
   lines: [
     { descriptions: { "es-ES": "Café" }, quantity: "2", gross: "3.00" },
     { descriptions: { "es-ES": "Jamón" }, quantity: "0.32", gross: "6.40", parentLineNo: null },
@@ -65,8 +63,7 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  // Card tender (design §3b) — tipped and manual-reference branches render different markup, so both
-  // need their own a11y pass alongside the cash block above.
+  // Tipped and manual-reference card branches render different markup, so each gets its own pass.
   it("has no violations on a tipped card receipt", async () => {
     const { host } = await mountWidget<TillTicketView>(
       "till-ticket-view",

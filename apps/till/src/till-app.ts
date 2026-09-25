@@ -531,10 +531,9 @@ export class TillApp extends LitElement {
    * Owned and refreshed by the app, like {@link heldOrders}. */
   @state() private tables: TableState[] = [];
   /**
-   * Whether the logged-in operator may edit the spatial floor plan (FP-2) — true iff they hold
-   * `till.configure` (a manager/admin, spec §3). Threaded to `till-floor-screen.canEdit` to gate its
-   * "Editar plano" toggle. Client hiding is convenience only; the on-till placement route re-checks the
-   * gate server-side (FP-2 Task 4).
+   * Whether the logged-in operator holds `venue.configure`. Passed to
+   * `<till-card-grid .canConfigureTill>`, which locks the table-layout-editor card without it. Client
+   * hiding is convenience only; the on-till placement routes re-check `venue.configure` server-side.
    *
    * Set at login from the session's SERVER-COMPUTED `canConfigureTill` capability ({@link #onLoggedIn}),
    * so the client never re-derives it from a role (which would drift from the server's
@@ -815,7 +814,7 @@ export class TillApp extends LitElement {
    * `till.locale` (the venue default), while `invoiceLocale` takes the SEPARATE `till.invoiceLocale`
    * (the fiscal `cfg.locale`): they drive different things, come from different server fields, and
    * are threaded separately — the receipt uses its `invoiceLocale` PROP and must never follow the
-   * operator UI (see `till-ticket-view`'s INVOICE LOCALE note).
+   * operator UI (see `till-ticket-view`'s class doc).
    *
    * A FAILED `getTill` at start-up — the server unreachable, OR a non-2xx answer the client surfaces as a
    * rejected `{ code }` such as `server.internal` (see `api/client.ts`'s `!res.ok` branch) — must be a
@@ -1039,8 +1038,8 @@ export class TillApp extends LitElement {
     this.#selectDiet(null);
     this.operatorName = displayName;
     this.operatorPersonId = personId;
-    // FP-2: gate the on-till floor editor on the server-computed `till.configure` capability handed down
-    // in the session response. Convenience only — the placement route re-checks server-side.
+    // `canConfigureTill` is the server's `venue.configure` check, handed down in the session response.
+    // Convenience only — the placement routes re-check server-side.
     this.canEdit = canConfigureTill;
     this.errorKey = offerLoadFailed ? "service_zone.load_error" : undefined;
     // An operator is now logged in — hold the screen awake and arm the idle-logout timer (Task 9).

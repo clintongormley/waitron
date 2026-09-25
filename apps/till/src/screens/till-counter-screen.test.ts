@@ -20,9 +20,6 @@ const cafe: TillProduct = {
 
 const products: TillProduct[] = [cafe];
 
-// The `counter` tab the app supplies from the device canvas (SP-B). It carries the sale-critical cards
-// the counter must always yield: product-grid, basket, total, tender-pay. The region/widget model is
-// gone — the screen renders solely through this tab, delegating its body to `till-card-grid`.
 const counterTab: TabDef = {
   key: "counter",
   title: "Counter",
@@ -62,8 +59,6 @@ const mount = (over: Partial<TillCounterScreen> = {}) =>
     ...over,
   });
 
-/** The card grid the counter delegates its body to (SP-B4). Typed loosely enough to read the props the
- * counter threads into it without importing the class. */
 const cardGrid = (el: TillCounterScreen) =>
   el.shadowRoot!.querySelector<
     HTMLElement & {
@@ -171,10 +166,7 @@ describe("till-counter-screen", () => {
     expect(spy.mock.calls[0]![0].detail).toEqual({ zoneId: "downstairs" });
   });
 
-  // SALE-PATH GUARD (SP-B4): a counter tab must ALWAYS yield the four sale-critical cards. The screen
-  // delegates the body to `till-card-grid`, so pierce the grid's own shadow root and prove product-grid,
-  // basket, total and tender-pay all render. Removing any card from the grid (or breaking the delegation)
-  // fails this — the regression the region-model test guarded, carried over to the grid path.
+  // A counter tab must ALWAYS yield the four sale-critical cards.
   it("renders the counter tab's sale-critical cards (product-grid/basket/total/tender-pay) via the card grid", async () => {
     const { el } = await mount();
     const grid = cardGrid(el)!;
@@ -274,7 +266,6 @@ describe("till-counter-screen", () => {
     expect(cardGrid(el)!.products).toBe(products);
   });
 
-  // ── Menu diet filter (dietary-classification, Task 7) ────────────────────────────────────────
   const veganDish: TillProduct = {
     ...cafe,
     id: "vegan",
@@ -404,7 +395,6 @@ describe("till-counter-screen", () => {
     expect(el.shadowRoot!.querySelector("wt-button.allergens")!.textContent).toContain(
       t("allergens.open"),
     );
-    // Default: the sale body (the grid), not the allergen screen.
     expect(el.shadowRoot!.querySelector(".body")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-card-grid")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-allergen-screen")).toBeNull();
@@ -416,17 +406,13 @@ describe("till-counter-screen", () => {
     await el.updateComplete;
     const screen = el.shadowRoot!.querySelector<TillAllergenScreen>("till-allergen-screen");
     expect(screen).not.toBeNull();
-    // The sale body (the grid) is gone — the allergen screen replaces it.
     expect(el.shadowRoot!.querySelector(".body")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-card-grid")).toBeNull();
-    // The three inputs the screen needs are threaded through.
     expect(screen!.products).toBe(products);
     expect(screen!.locale).toBe(currentLocale());
     expect(screen!.invoiceLocale).toBe("en");
   });
 
-  // Per-user-language-preference (Task 9): the header carries the language chooser. The screen only
-  // RENDERS it — the chooser's composed `locale-selected` bubbles past to `till-app`, which persists.
   it("renders the language chooser in the header session row", async () => {
     const { el } = await mount();
     const session = el.shadowRoot!.querySelector(".session")!;
@@ -462,7 +448,6 @@ describe("till-counter-screen", () => {
   it("suppresses its own header when embedded (chrome lives in the shell)", async () => {
     const { el } = await mount({ embedded: true });
     expect(el.shadowRoot!.querySelector(".header")).toBeNull();
-    // The sale body still renders — only the header relocates to the shell.
     expect(el.shadowRoot!.querySelector(".body")).not.toBeNull();
   });
 });

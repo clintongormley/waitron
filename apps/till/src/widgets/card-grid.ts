@@ -40,8 +40,8 @@ import type { CardOutcome, CardProvider } from "./tender-pay.js";
 /**
  * SP-B1 renderer: lays a canvas TAB's cards on a fluid grid (`repeat(columns, 1fr)`), each
  * card spanning colSpan×rowSpan. Every card is handed the SAME `store` (or an app-owned list), exactly
- * as the counter screen threads them today (`till-counter-screen.ts:267-307`); card events bubble past
- * this host to `till-app` unchanged — this host installs no listeners on them.
+ * as the counter screen threads them today (`till-counter-screen.ts`'s `#gridBody`); card events
+ * bubble past this host to `till-app` unchanged — this host installs no listeners on them.
  *
  * All three visibility axes are honoured here (SP-B2.1): capability→absent (`#capable`),
  * permission→locked (`#locked`, a dimmed `?inert` cell), and `visibleWhen` (data-condition show/hide,
@@ -279,7 +279,8 @@ export class TillCardGrid extends LitElement {
         // The tab (table-order) screen (SP-B2.2), mounted EMBEDDED like the floor/expo/station screens.
         // The app owns every write and reload; the grid host only threads the props through. `canSettle`
         // is left the screen's DEFAULT `true` — a card-mounted tab settles like the standalone screen
-        // (cash + manual-card tenders), the server firewall being the real guarantee — so it is not passed.
+        // (cash + manual-card tenders; the server fences only the integrated reader, `/api/pay`) — so it
+        // is not passed.
         return html`<till-table-order-screen
           embedded
           .lines=${this.tabLines}

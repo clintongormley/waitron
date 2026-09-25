@@ -12,8 +12,7 @@ const stations: Station[] = [
   { id: "st-2", name: "Barra", displayOrder: 1, isDefault: false, active: true },
 ];
 
-// The station's KDS order-timing thresholds (design §4/§6) — the shipped DB defaults, reused across
-// every fixture in this file (none of these tests are about ageing; they only need a valid shape).
+// None of these tests are about ageing; they only need a valid shape.
 const DEFAULT_THRESHOLDS: StationThresholds = {
   warmAfterMinutes: 5,
   overdueAfterMinutes: 10,
@@ -64,11 +63,6 @@ const barraQueue: StationQueueGroup[] = [
   },
 ];
 
-/**
- * A fake `TillApi` exposing only the four kitchen methods the station screen calls. `listStations`
- * defaults to the two-station venue and `getStationQueue` to the default station's queue for any id; a
- * test overrides either. Cast through `unknown` because the screen touches only this surface.
- */
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
     listStations: vi.fn().mockResolvedValue(stations),
@@ -82,7 +76,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   } as unknown as TillApi;
 }
 
-/** Settles the in-flight listStations/getStationQueue promises and re-renders. */
 async function flush(el: TillStationScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -103,7 +96,6 @@ describe("till-station-screen", () => {
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
     expect(api.listStations).toHaveBeenCalledOnce();
-    // The default station (Cocina) is the one whose queue is loaded.
     expect(api.getStationQueue).toHaveBeenCalledWith("st-1");
     expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
   });
@@ -301,8 +293,6 @@ describe("till-station-screen", () => {
     expect(spy).toHaveBeenCalledOnce();
   });
 
-  // --- Reprint (KDS-4 §3d, R-K) — operator mode shows it; device mode hides it (that test is below) ---
-
   it("operator mode shows the per-order Reprint button in the rail (deviceMode === false, R-K)", async () => {
     const api = stubApi();
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
@@ -481,9 +471,6 @@ describe("till-station-screen", () => {
     expect(api.getStationQueue).toHaveBeenCalledTimes(2);
   });
 
-  // --- Embedded chrome seam (SP-B2.2): a card host supplies the title + Back; the view toggle is
-  // board FUNCTION and survives in the always-present .actions bar (mirrors the floor screen). ---
-
   it("suppresses its own header + Back when embedded, keeping the view toggle", async () => {
     const api = stubApi();
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
@@ -521,10 +508,8 @@ describe("till-station-screen", () => {
 describe("till-station-screen device mode (device-identity-1 §5a)", () => {
   const boundStation = { id: "st-dev", queue: cocinaQueue };
 
-  /**
-   * A fake `TillApi` for the ENROLLED-display path: the three device verbs plus the session verbs the
-   * screen must NEVER reach in device mode (present so a stray call is observable, not silently absent).
-   */
+  /** Carries the session verbs the screen must NEVER reach in device mode, so a stray call is
+   * observable. */
   function deviceApi(overrides: Record<string, unknown> = {}): TillApi {
     return {
       getDeviceStation: vi.fn().mockResolvedValue({ station: boundStation }),
@@ -533,7 +518,6 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       getStationQueue: vi.fn().mockResolvedValue(cocinaQueue),
       advanceTicketItem: vi.fn().mockResolvedValue(undefined),
       advanceTicket: vi.fn().mockResolvedValue(undefined),
-      // The session reprint verb — present so a stray call in device mode is OBSERVABLE, not silently absent.
       reprintOrder: vi.fn().mockResolvedValue(undefined),
       ...overrides,
     } as unknown as TillApi;
@@ -547,7 +531,6 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     });
     await flush(el);
     expect(api.getDeviceStation).toHaveBeenCalledOnce();
-    // The bound station's queue is threaded to the widget the SAME way the operator path threads it.
     expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
     expect(queueWidget(el)!.stationId).toBe("st-dev");
     // The station is fixed by enrolment: NO picker nav, and the session station-list/queue are never read.
@@ -557,11 +540,8 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
   });
 
   it("cold boot adopts initialDeviceStation and does NOT re-fetch getDeviceStation (fast-path, §5a)", async () => {
-    // The app already probed the device station at boot and hands it in as `initialDeviceStation`; the
-    // screen must ADOPT it and NOT fetch `GET /api/device/station` a second time — one authenticated queue
-    // read per enrolled-display boot, not two. getDeviceStation here returns a DISTINCT queue (barraQueue),
-    // so losing the fast-path would BOTH re-fetch AND render the wrong queue. Proven by deletion: remove the
-    // `initialDeviceStation` branch in #loadDevice and this goes red on the call count (and the groups).
+    // getDeviceStation returns a DISTINCT queue, so losing the fast path would both re-fetch AND render
+    // the wrong queue.
     const api = deviceApi({
       getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: barraQueue } }),
     });
@@ -588,10 +568,6 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
   });
 
   it("a 401 device probe (revoked cookie) emits device-unauthorized and shows no enrol sub-view", async () => {
-    // The station screen holds no enrol sub-view of its own any more (device-enrolment §3.1): a revoked/
-    // expired device cookie surfaces as a 401, which it turns into a `device-unauthorized` event so the
-    // app re-boots through the unified front door to the two-step enrol screen. It never calls the old
-    // bare-code enrol.
     // The composed event fires from `#loadDevice` (connectedCallback) during mount, so listen at the
     // document BEFORE mounting — attaching after would miss it.
     const reboot = vi.fn();
@@ -606,7 +582,6 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       });
       await flush(el);
       expect(reboot).toHaveBeenCalledOnce();
-      // No bespoke enrol code field — the screen has none.
       expect(el.shadowRoot!.querySelector("[data-enrol-code]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-enrol-submit]")).toBeNull();
     } finally {
@@ -615,8 +590,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
   });
 
   it("a NON-401 device probe failure keeps the queue chrome and does NOT emit device-unauthorized", async () => {
-    // A transient 5xx/network blip must not tear the kiosk down to the enrol front door — only a genuine
-    // 401 does. The screen keeps its (empty) queue surface and recovers on the next reload/reboot.
+    // A transient 5xx/network blip must not tear the kiosk down — only a genuine 401 does.
     const reboot = vi.fn();
     document.addEventListener("device-unauthorized", reboot);
     try {
@@ -652,7 +626,6 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     await flush(el);
     expect(api.deviceAdvance).toHaveBeenCalledWith("ti-1", "preparing");
     expect(api.advanceTicketItem).not.toHaveBeenCalled();
-    // Reloaded through the DEVICE probe: once on connect, once after the bump.
     expect(api.getDeviceStation).toHaveBeenCalledTimes(2);
   });
 
@@ -721,9 +694,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
   });
 
   it("device mode hides the Reprint button (session-guarded route, no device session — R-K)", async () => {
-    // The reprint route is session-guarded and a device holds no session, so the R-K ruling hides the
-    // per-order reprint in device mode (`showReprint` is off). Switch to the rail lens (where reprint would
-    // live) and assert it is absent from the widget's shadow — the ABSENT half of the R-K guard.
+    // Switch to the rail lens, where reprint would live.
     const api = deviceApi();
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -773,16 +744,13 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     expect(
       (api as unknown as { fireCourse: ReturnType<typeof vi.fn> }).fireCourse,
     ).not.toHaveBeenCalled();
-    // The R-K guard: a stray reprint-order in device mode never reaches the session reprint verb.
     expect(api.reprintOrder).not.toHaveBeenCalled();
     // Only the initial probe ran — a guarded stray event triggers no reload.
     expect(api.getDeviceStation).toHaveBeenCalledOnce();
   });
 
   it("a failed device reload after a bump leaves the last-known queue in place (degrade gracefully)", async () => {
-    // The probe succeeds on connect, then the post-bump reload rejects (e.g. a mid-session revocation):
-    // the display keeps its last-known queue rather than blanking — the kitchen display touches no fiscal
-    // path, and a reload recovers.
+    // The post-bump reload rejects: the display keeps its last-known queue rather than blanking.
     const getDeviceStation = vi
       .fn()
       .mockResolvedValueOnce({ station: boundStation }) // connect

@@ -10,20 +10,16 @@ import type { ExpoItem, ExpoOrder, TillApi } from "../api/client.js";
 
 const FIRED = "2026-08-17T10:00:00.000Z";
 
-// The station's KDS order-timing thresholds (KDS order-timing alerts, design §4/§6) — the shipped DB
-// defaults. The lever/course fixtures below (threeCourseOrder, firedNotReadyOrder, withAwayCourse)
-// don't test bands, so every item just carries this + a fixed `queuedAt`/`band`; the DEDICATED
-// age-band fixtures further down (bandOrder) vary `queuedAt` against an injected `now` instead.
+// The lever/course fixtures below don't test bands; the age-band fixtures further down (bandOrder)
+// vary `queuedAt` against an injected `now` instead.
 const DEFAULT_THRESHOLDS: StationThresholds = {
   warmAfterMinutes: 5,
   overdueAfterMinutes: 10,
   forgottenAfterMinutes: 15,
 };
 
-/** An order with THREE courses — the null (auto-fired) course first, a FIRED all-ready course
- *  (Entrantes → the "En camino" away lever), and a HELD later course (Principales → the "Marchar"
- *  fire lever, shown only under `fire_control = 'expo'`). Each item carries a distinct station so the
- *  cross-station labelling is visible. */
+/** The null (auto-fired) course, a FIRED all-ready course (the away lever) and a HELD later course (the
+ *  fire lever). Each item carries a distinct station so the cross-station labelling is visible. */
 const threeCourseOrder: ExpoOrder = {
   orderId: "wo-1",
   orderNumber: 5,
@@ -97,8 +93,6 @@ const threeCourseOrder: ExpoOrder = {
   ],
 };
 
-/** A single FIRED-but-not-all-ready course — one item still `preparing` — so the pass offers the
- *  "Curso listo" (bumpCourseReady) lever, never the away lever. */
 const firedNotReadyOrder: ExpoOrder = {
   orderId: "wo-2",
   orderNumber: 6,
@@ -129,8 +123,6 @@ const firedNotReadyOrder: ExpoOrder = {
   ],
 };
 
-/** An order whose FIRST course is fully AWAY (dispatched) beside a still-live course — the away one
- *  must drop off the board, the live one stay. */
 const withAwayCourse: ExpoOrder = {
   orderId: "wo-3",
   orderNumber: 8,
@@ -182,11 +174,6 @@ const withAwayCourse: ExpoOrder = {
   ],
 };
 
-/**
- * A fake `TillApi` exposing only the expo methods the screen calls. `getExpoQueue` defaults to the
- * three-course order; a test overrides it. Cast through `unknown` because the screen touches only
- * this surface.
- */
 function stubApi(queue: ExpoOrder[] = [threeCourseOrder], overrides: Record<string, unknown> = {}) {
   return {
     getExpoQueue: vi.fn().mockResolvedValue(queue),
@@ -198,7 +185,6 @@ function stubApi(queue: ExpoOrder[] = [threeCourseOrder], overrides: Record<stri
   } as unknown as TillApi;
 }
 
-/** Settles the in-flight getExpoQueue promise and re-renders. */
 async function flush(el: TillExpoScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -377,7 +363,6 @@ describe("till-expo-screen", () => {
   });
 
   describe("ordering modifiers (Task 14): selected options as indented sub-text under the item", () => {
-    // The wire shape `listExpoQueue` already returns (Task 7) — a fired dish with TWO selected options.
     const orderWithModifiers: ExpoOrder = {
       orderId: "wo-9",
       orderNumber: 9,
@@ -430,7 +415,6 @@ describe("till-expo-screen", () => {
   });
 
   describe("per-line customisation (Task 5): the snapshotted note as sub-text under the item", () => {
-    // The wire shape `listExpoQueue` surfaces — a fired dish carrying the snapshotted note.
     const orderWithCustomisation: ExpoOrder = {
       orderId: "wo-c",
       orderNumber: 12,
@@ -507,8 +491,6 @@ describe("till-expo-screen", () => {
   });
 
   describe("as-served allergens: the dish's own contains chips + not-reviewed note", () => {
-    // A fired pass item carrying the server-attached OWN allergen profile: CONTAINS milk — the exact
-    // shape `listExpoQueue` returns, which the pass renders as the chips this suite asserts below.
     const orderWithAllergens: ExpoOrder = {
       orderId: "wo-a",
       orderNumber: 11,
@@ -634,8 +616,6 @@ describe("till-expo-screen", () => {
     });
   });
 
-  // --- Per-course lever by state -------------------------------------------------------------
-
   it("a HELD course under fire_control='expo' shows the Fire lever", async () => {
     const el = await mount({ api: stubApi(), fireControl: "expo" });
     const fire = el.shadowRoot!.querySelector<HTMLElement>('[data-fire="co-2"]');
@@ -681,8 +661,6 @@ describe("till-expo-screen", () => {
     expect(card.querySelector('[data-course="co-5"]')).not.toBeNull(); // live → shown
   });
 
-  // --- Actions call the routes, then reload --------------------------------------------------
-
   it("clicking Fire calls fireCourse(orderId, courseId) then reloads the queue", async () => {
     const api = stubApi();
     const el = await mount({ api, fireControl: "expo" });
@@ -719,8 +697,6 @@ describe("till-expo-screen", () => {
     await flush(el);
     expect(api.getExpoQueue).toHaveBeenCalledTimes(2);
   });
-
-  // --- Reprint (KDS-4 §3d) — always shown, since the pass always has a session ----------------
 
   it("shows a per-order Reprint button on every card (the pass always has a session)", async () => {
     const el = await mount({ api: stubApi([threeCourseOrder, firedNotReadyOrder]) });
@@ -771,17 +747,7 @@ describe("till-expo-screen", () => {
     expect(alert!.textContent).toContain(codeMessage("server.internal"));
   });
 
-  // --- Age / timing bands (KDS order-timing alerts, design §7.2) ------------------------------
-  //
-  // The old two-band 5/10-minute `#ageBucket` (fresh/warm/hot, driven by the server's static
-  // `openedMinutes`) is gone. The card's accent is now `classifyBand` (`@waitron/shared`) applied
-  // to EACH item's own `queuedAt`/`thresholds` (an expo order's items can span several stations,
-  // each with its own thresholds), reduced to the worst band across the card's visible items —
-  // deterministic here via the injected `now`, never the real wall clock.
-
-  /** A single-item, single-course order whose card's worst band is driven entirely by that one
-   *  item's `classifyBand(queuedAt, now, thresholds)` — never `openedMinutes`, which is set to an
-   *  unrelated value here to prove it is no longer consulted for the accent. */
+  /** `openedMinutes` is set to an unrelated value so the accent is shown not to consult it. */
   function bandOrder(
     orderId: string,
     orderNumber: number,
@@ -932,8 +898,6 @@ describe("till-expo-screen", () => {
     expect(api.getExpoQueue).toHaveBeenCalledOnce(); // still just the initial connect fetch
   });
 
-  // --- Empty / degrade / back -----------------------------------------------------------------
-
   it("shows the empty message when the pass has no open orders", async () => {
     const el = await mount({ api: stubApi([]) });
     expect(el.shadowRoot!.textContent).toContain(t("expo.empty"));
@@ -955,9 +919,6 @@ describe("till-expo-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-back]")!.click();
     expect(spy).toHaveBeenCalledOnce();
   });
-
-  // --- Embedded chrome seam (SP-B2.1): mounted inside a card host, the screen drops its own
-  // standalone header + Back so the card supplies the chrome; standalone (default) keeps them.
 
   it("suppresses its own header + back button when embedded", async () => {
     const el = await mount({ embedded: true });

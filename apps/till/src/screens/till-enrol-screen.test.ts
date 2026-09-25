@@ -5,12 +5,6 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillEnrolScreen } from "./till-enrol-screen.js";
 import type { TillApi } from "../api/client.js";
 
-/**
- * A fake `TillApi` exposing only the verbs the join screen calls (`join`, `joinStatus`) plus
- * `getLocales` (the language chooser's lazy source). Each defaults to a benign value a test overrides.
- * Cast through `unknown` because the screen touches only these verbs, never the rest of the class
- * surface (the screen-test pattern).
- */
 type JoinVerbs = "join" | "joinStatus" | "getLocales";
 function stubApi(overrides: Partial<Record<JoinVerbs, unknown>> = {}): TillApi {
   return {
@@ -28,7 +22,6 @@ async function flush(el: TillEnrolScreen): Promise<void> {
   await el.updateComplete;
 }
 
-/** The fake-timer twin of {@link flush} — the poll runs on `setInterval`, so its tests drive the clock. */
 async function flushFake(el: TillEnrolScreen): Promise<void> {
   await vi.advanceTimersByTimeAsync(0);
   await el.updateComplete;
@@ -38,7 +31,6 @@ function query(el: TillEnrolScreen, selector: string): HTMLElement | null {
   return el.shadowRoot!.querySelector<HTMLElement>(selector);
 }
 
-/** Sets the name field's live `.value` AND fires the `wt-change` the render binds. */
 function typeName(el: TillEnrolScreen, value: string): void {
   const input = query(el, "[data-name]") as HTMLElement & { value: string };
   input.value = value;
@@ -47,7 +39,6 @@ function typeName(el: TillEnrolScreen, value: string): void {
   );
 }
 
-/** Names the device and knocks, settling the join. */
 async function knock(el: TillEnrolScreen, name = "Front counter"): Promise<void> {
   typeName(el, name);
   await el.updateComplete;
@@ -74,8 +65,6 @@ it("centres the width-constrained enrolment form", async () => {
 });
 
 it("asks only for a name — no key field, no profile picker, no binding picker", async () => {
-  // The profile and the binding are chosen in the dashboard's accept dialog, so an unapproved device
-  // reads no catalogue: there is nothing here for it to learn about the venue.
   const getLocales = vi.fn().mockResolvedValue({ locales: [] });
   const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
     api: stubApi({ getLocales }),
@@ -121,7 +110,6 @@ it("posts only the name and shows the two-digit number, announced, with 'waiting
   await knock(el, "Front counter");
   expect(join).toHaveBeenCalledWith("Front counter");
   expect(join).toHaveBeenCalledTimes(1);
-  // The name field is gone; the number is up.
   expect(query(el, "[data-name]")).toBeNull();
   const number = query(el, "[data-number]")!;
   expect(number.textContent!.trim()).toBe("47");
@@ -245,7 +233,6 @@ it("shows 'not approved' with a Try again that knocks afresh", async () => {
     // The refusal stops the poll — the answer is final until the operator knocks again.
     await vi.advanceTimersByTimeAsync(10_000);
     expect(joinStatus).toHaveBeenCalledTimes(1);
-    // Try again knocks afresh with the retained name and gets a NEW number.
     query(el, "[data-retry]")!.click();
     await flushFake(el);
     expect(join).toHaveBeenCalledTimes(2);
@@ -265,8 +252,7 @@ it("tells the operator to ask for pairing mode when the server says pairing_clos
   await knock(el);
   const banner = query(el, "[data-error]")!;
   expect(banner.textContent!.trim()).toBe(codeMessage("device.pairing_closed"));
-  // And it is a DIFFERENT sentence from the generic one, naming the dashboard toggle — the point of the
-  // branch. Without this, the assertion above passes by degrading with the resolver's table.
+  // Without this, the assertion above passes by degrading with the resolver's table.
   expect(banner.textContent!.trim()).not.toBe(codeMessage("server.internal"));
   expect(banner.textContent).toContain("Allow new devices");
   expect(banner.getAttribute("role")).toBe("alert");

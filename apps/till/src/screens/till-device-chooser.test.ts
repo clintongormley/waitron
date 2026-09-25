@@ -6,11 +6,6 @@ import { TillDeviceChooser } from "./till-device-chooser.js";
 import type { DevDeviceList, TillApi } from "../api/client.js";
 import type { TillEnrolScreen } from "./till-enrol-screen.js";
 
-/**
- * A fake `TillApi`. `getDevDevices` feeds the chooser's list; `join`/`joinStatus`/`getLocales` feed the
- * embedded `till-enrol-screen` the "Set up a new device" section mounts. Cast through `unknown` — the
- * chooser + its embedded screen touch only these verbs.
- */
 type ChooserVerbs = "getDevDevices" | "join" | "joinStatus" | "getLocales";
 function stubApi(overrides: Partial<Record<ChooserVerbs, unknown>> = {}): TillApi {
   return {
@@ -133,7 +128,6 @@ describe("till-device-chooser", () => {
     expect(el.shadowRoot!.querySelector("[data-setup-new]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-enrol-screen")).toBeNull();
     expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
-    // Open it as a modal.
     el.shadowRoot!.querySelector<HTMLElement>("[data-setup-new]")!.click();
     await el.updateComplete;
     const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("wt-dialog")!;
@@ -142,8 +136,7 @@ describe("till-device-chooser", () => {
     expect(join).not.toBeNull();
     await join.updateComplete;
     await flush(el);
-    // It starts where a fresh browser starts — a name and nothing else. There is no dev shortcut: an
-    // admin opens pairing mode and accepts the number, exactly as in a venue.
+    // It starts where a fresh browser starts — a name and nothing else.
     expect(join.shadowRoot!.querySelector("[data-name]")).not.toBeNull();
     expect(join.shadowRoot!.querySelector("[data-number]")).toBeNull();
     // Both form actions share one row, with Cancel immediately before the primary action.
@@ -151,7 +144,6 @@ describe("till-device-chooser", () => {
     const submit = join.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!;
     expect(cancel.assignedSlot?.getAttribute("slot")).toBe("cancel");
     expect(submit.assignedSlot?.parentElement?.classList.contains("primary")).toBe(true);
-    // Cancel dismisses the modal without adopting a device.
     cancel.click();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull();
@@ -194,7 +186,6 @@ describe("till-device-chooser", () => {
         .shadowRoot!.querySelector("wt-dialog")!
         .querySelector<TillEnrolScreen>("till-enrol-screen")!;
       await screen.updateComplete;
-      // Name it and knock.
       const name = screen.shadowRoot!.querySelector<HTMLElement & { value: string }>(
         "[data-name]",
       )!;
@@ -206,10 +197,8 @@ describe("till-device-chooser", () => {
       screen.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
       await vi.advanceTimersByTimeAsync(0);
       await screen.updateComplete;
-      // The admin approves; the next poll carries it.
       await vi.advanceTimersByTimeAsync(2_000);
       await el.updateComplete;
-      // The chooser adopted the fresh device for THIS tab (its id, not the cookie) and booted into it.
       expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBe("fresh-99");
       expect(navigate).toHaveBeenCalledWith("/");
     } finally {
@@ -224,7 +213,6 @@ describe("till-device-chooser", () => {
     await flush(el);
     expect(el.shadowRoot!.textContent).toContain("Couldn't load devices");
     expect(el.shadowRoot!.textContent).toContain("WAITRON_ENV=dev");
-    // The device list + setup section are absent when the load failed.
     expect(el.shadowRoot!.querySelector("[data-setup-new]")).toBeNull();
   });
 });

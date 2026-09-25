@@ -10,10 +10,8 @@ import type { ReceiptConfig } from "../layout.js";
 // narrow no-break U+202F on some ICU builds); normalise both to a plain space before asserting.
 const norm = (s: string): string => s.replace(/[\u00A0\u202F]/g, " ");
 
-// The FILED line list as the server returns it (`TillSaleResult.lines`) — the receipt renders THESE,
-// never a client basket. A mixed-rate ticket with a weighed line: café 2 → 3,00 (21 %), jamón 0,320 kg
-// → 6,40 (10 %). Total 9,40; €10 cash tendered → 0,60 change. The quantity and unit label are
-// snapshotted with the filed line.
+// A mixed-rate ticket with a weighed line: café 2 → 3,00 (21 %), jamón 0,320 kg → 6,40 (10 %).
+// Total 9,40; €10 cash tendered → 0,60 change.
 const result: TillSaleResult = {
   orderLabel: "Mesa 6",
   orderNumber: 41,
@@ -44,11 +42,8 @@ const mount = (over: Partial<TillSaleResult> = {}, receipt?: ReceiptConfig) =>
   mountWidget<TillTicketView>("till-ticket-view", {
     result: { ...result, ...over },
     issuer,
-    // The receipt renders in its INVOICE locale prop (fed from server config), never the operator UI.
-    // Pin it explicitly so the "operator UI is English, ticket stays Spanish" test is unambiguous.
+    // Pinned so the "operator UI is English, ticket stays Spanish" test is unambiguous.
     invoiceLocale: "es-ES",
-    // The non-fiscal trim (design §8) — omitted (undefined) by default so the fiscal-core tests above
-    // exercise the receipt-less ticket; the trim suite below passes it explicitly.
     ...(receipt ? { receipt } : {}),
   });
 
@@ -115,9 +110,6 @@ describe("till-ticket-view", () => {
   });
 
   it("identifies each good from the FILED lines: name (invoice locale), quantity and per-line gross (art. 7.1.e)", async () => {
-    // The rows come from `result.lines` (the server's filed composition), NOT a client basket — so the
-    // printed line list is the invoiced one. Name resolves in the invoice locale, quantity is the filed
-    // display string and frozen unit label, gross is the filed per-line total.
     const { el } = await mount();
     const rows = el.shadowRoot!.querySelectorAll(".line");
     expect(rows).toHaveLength(2);
@@ -130,10 +122,7 @@ describe("till-ticket-view", () => {
   });
 
   it("renders the SERVER's filed lines, not any client basket — a diverging line list follows result.lines", async () => {
-    // Finding 2, at the render seam: the receipt has no access to the client basket — it renders
-    // whatever `result.lines` carries. Overriding `lines` to a DIFFERENT composition (a single "Agua"
-    // line) proves the rows track the filed result, so a local basket edit can never diverge the printed
-    // list from the invoice.
+    // Overriding `lines` to a DIFFERENT composition shows the rows track the filed result.
     const { el } = await mount({
       lines: [{ descriptions: { "es-ES": "Agua" }, quantity: "3", gross: "6.00" }],
     });
@@ -147,9 +136,6 @@ describe("till-ticket-view", () => {
   });
 
   it("groups a filed dish's option lines under it — dish at its price, options indented at their delta (ordering modifiers, Task 14)", async () => {
-    // A filed sale carrying ordering modifiers: the dish is a PARENT line (`parentLineNo` absent/null)
-    // and each selected option is a CHILD line (`parentLineNo` = the dish's `lineNo`) — the same shape
-    // `formatReceipt`'s `groupByParent` groups on the printed paper (`apps/server/src/receipt-ticket.ts`).
     // A PAID option (+0.50) and a FREE option (0.00), both children of the dish (lineNo 1).
     const { el } = await mount({
       lines: [
@@ -165,12 +151,10 @@ describe("till-ticket-view", () => {
     });
     const rows = el.shadowRoot!.querySelectorAll(".line");
     expect(rows).toHaveLength(3);
-    // The dish renders as a normal goods row: name, quantity, its OWN gross.
     expect(rows[0]!.textContent).toContain("Hamburguesa");
     expect(rows[0]!.classList.contains("option")).toBe(false);
     expect(norm(rows[0]!.textContent!)).toContain("10,00 €");
-    // Each option renders INDENTED beneath the dish (carrying `.option`) at its delta — the free option
-    // shows 0,00 €, never omitted.
+    // The free option shows 0,00 €, never omitted.
     expect(rows[1]!.classList.contains("option")).toBe(true);
     expect(rows[1]!.textContent).toContain("Extra queso");
     expect(norm(rows[1]!.textContent!)).toContain("0,50 €");
@@ -180,10 +164,7 @@ describe("till-ticket-view", () => {
   });
 
   it("shows a ×N badge for an option taken more than once per dish, and none for a plain option (per-option quantity)", async () => {
-    // FILED lines carry the COMBINED count on the child (dishQty × optionQty). Here the dish is ×2 and the
-    // "Extra chupito" is taken ×2 per dish → filed child quantity 4, per-dish = 4 / 2 = 2 → "×2". The plain
-    // option's filed child quantity equals the dish quantity (2 / 2 = 1) → no badge. Mirrors the server
-    // receipt's `×` badge (`apps/server/src/receipt-ticket.ts`).
+    // FILED lines carry the COMBINED count on the child (dishQty × optionQty).
     const { el } = await mount({
       lines: [
         {
@@ -232,9 +213,6 @@ describe("till-ticket-view", () => {
     expect(t).toContain("0,60 €");
   });
 
-  // -----------------------------------------------------------------------------------------------
-  // Card tender (receipt/payment-slip design §4.1), mirroring the paper fiscal ticket.
-  // -----------------------------------------------------------------------------------------------
   describe("card tender (design §3b)", () => {
     it("keeps card identity off the fiscal ticket while retaining the card tender", async () => {
       const { el } = await mount({
@@ -332,8 +310,6 @@ describe("till-ticket-view", () => {
   });
 
   it("emits a composed, bubbling reprint event when Reprint is pressed (no API call from the view)", async () => {
-    // The view is PRESENTATIONAL: it dispatches the intent and never touches the API or the working-order
-    // id (till-app owns both). The event must bubble + compose so the app shell's `@reprint` catches it.
     const { el } = await mount();
     let captured: Event | undefined;
     el.addEventListener("reprint", (e) => (captured = e));
@@ -410,10 +386,7 @@ describe("till-ticket-view", () => {
   });
 
   it("labels the reprint + open-drawer buttons in the operator-UI locale, flipping with the UI language", async () => {
-    // UNLIKE the fiscal ticket body (invoice-locale Spanish constants), these two OPERATOR actions read
-    // the operator-UI `t()`, so they flip with the UI language — the i18n keys are English identifiers
-    // (`action.reprint`/`action.open_drawer`), the values are localised copy. Set es-ES explicitly (the
-    // shipped default is en-GB) to observe the Spanish side, then switch to English.
+    // UNLIKE the fiscal ticket body, these OPERATOR actions read the operator-UI `t()`.
     setLocale("es-ES");
     const { el } = await mount();
     expect(el.shadowRoot!.querySelector("[data-test=reprint]")!.textContent).toContain(
@@ -431,8 +404,6 @@ describe("till-ticket-view", () => {
   });
 
   it("renders the fiscal labels in the INVOICE locale (Spanish) even when the operator UI is English", async () => {
-    // The receipt is a legal document issued in Spain: its labels are the invoice locale's, NOT the
-    // operator's UI language. An English-speaking operator still hands over a Spanish ticket.
     setLocale("en");
     const { el } = await mount();
     const t = text(el);
@@ -444,11 +415,6 @@ describe("till-ticket-view", () => {
     expect(t).not.toContain("Coffee");
   });
 
-  // -----------------------------------------------------------------------------------------------
-  // Receipt trim (non-fiscal, design §8): the owner-authored headerSubtitle + footerMessage render
-  // AROUND the immutable art. 7.1 core — under the venue name and under the VERI*FACTU legend — never
-  // inside or reordering it. The fiscal-core-cannot-be-suppressed test is the load-bearing guard.
-  // -----------------------------------------------------------------------------------------------
   describe("receipt trim (design §8)", () => {
     const following = (a: Element, b: Element) =>
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -492,9 +458,7 @@ describe("till-ticket-view", () => {
     });
 
     it("FISCAL-SAFETY: a receipt config cannot suppress or reorder any mandated art. 7.1 element, the QR or the legend", async () => {
-      // The load-bearing guard (design §8): the trim only ADDS content in its two designated slots; the
-      // whole immutable core must still render, in its fixed positions, even WITH both trim fields set.
-      // A future editor extension that let ReceiptConfig remove or reorder a mandated element fails here.
+      // The whole immutable core must still render, in its fixed positions, even WITH both trim fields set.
       const { el } = await mount({}, { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias" });
       const t = text(el);
       // 7.1.d issuer venue + NIF

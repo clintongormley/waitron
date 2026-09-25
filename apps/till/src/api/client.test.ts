@@ -1836,7 +1836,7 @@ describe("TillApi", () => {
 
   it("join POSTs only { name } to /api/device/join and returns the id + the number", async () => {
     // ONLY the name goes up, and nothing about the venue comes back: the profile and the binding are
-    // chosen in the dashboard's accept dialog, so an unapproved device reads no catalogue.
+    // chosen in the dashboard's accept dialog, so the join call reads no catalogue.
     const result = { joinId: "jr-1", verificationNumber: "47" };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(result));
 

@@ -29,8 +29,7 @@ const products: TillProduct[] = [
       gluten: { presence: "contains", source: "wheat" },
       milk: { presence: "may_contain" },
     },
-    // A published diet (dietary-classification, Task 7) so the detail dialog's diet badges — a
-    // vegetarian success-toned badge and a contains-meat chip — are under axe in both themes.
+    // A published diet so the detail dialog's diet badges are under axe too.
     diet: { vegan: "no", vegetarian: "yes", contains: ["meat"] },
   },
   {
