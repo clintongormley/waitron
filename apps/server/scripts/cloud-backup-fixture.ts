@@ -161,7 +161,6 @@ if (request.command === "capture") {
   await mkdir(join(root, "venue"), { mode: 0o700 });
   await writeValidated(managed, {
     ...validation,
-    artifact,
     venueDir: join(root, "venue"),
     log: (_level, code, params) => {
       if (code === "restore.hook.done") hooks.push(String(params?.module));

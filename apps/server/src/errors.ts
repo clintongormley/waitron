@@ -805,6 +805,32 @@ declare module "@waitron/shared" {
      * returning series) and `code` the inner code, so the CLI's `restore.*` reporting shows both
      * without learning any module's namespaces. A non-`AppError` throw is not wrapped. */
     "restore.hook_failed": { module: string; code: string };
+    /** The owner's bucket holds no `current.json` for the kit's venue: nothing to rebuild from. */
+    "restore.stream_pointer_missing": Record<string, never>;
+    /** `current.json` was not signed by the key the recovery kit carries (`signature`), or names a
+     * different venue (`venue_mismatch`). The key in the bucket is never the one trusted (slice-2
+     * spec §5.1 step 3). */
+    "restore.stream_pointer_unverified": { reason: "signature" | "venue_mismatch" };
+    /** The live generation received a change within the last ten minutes on the bucket's own
+     * clock, so the old box may still be selling; refused until the operator confirms it is gone
+     * (slice-2 spec §5.1 step 4). `lastChangeAt` is an ISO time on the bucket's clock. */
+    "restore.stream_source_live": { lastChangeAt: string };
+    /** Whether the old box is still writing could not be checked: the difference between this
+     * box's clock and the bucket's could not be measured (`clock`), or — an archive whose database
+     * holds bucket settings — the bucket could not be read (`bucket`). Refused until the operator
+     * confirms the old box is gone. */
+    "restore.stream_source_unchecked": { reason: "clock" | "bucket" };
+    /** The restored copy is a venue the operator has not confirmed: its legal name, tax id and
+     * location name, which the operator must recognise before anything is staged. */
+    "restore.stream_venue_unconfirmed": { legalName: string; taxId: string; locationName: string };
+    /** SQLite's `integrity_check` found the restored copy damaged, or could not open it. Carries no
+     * SQLite text, which can name paths. */
+    "restore.stream_integrity_failed": Record<string, never>;
+    /** The restored copy holds no sealed state row for the node the pointer names, so the box's
+     * vault key and certificate authority cannot come back with it. */
+    "restore.stream_state_missing": { nodeId: string };
+    /** The disk filled while the copy was being downloaded from the bucket. */
+    "restore.stream_disk_full": Record<string, never>;
     // The server's working-order paths throw these contributed venue-service codes directly.
     "order.service_context_missing": { workingOrderId: string };
     "service_zone.mode_incompatible": {

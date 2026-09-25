@@ -694,6 +694,21 @@ describe("restoreDatabase places a REAL venue file (the two silent failures)", (
     expect(await markersIn(venueDir)).toEqual(["FROM-ARCHIVE"]);
   });
 
+  it("removes Litestream's own folder beside the replaced database, so a stale record cannot describe it", async () => {
+    const ltx = join(venueDir, ".venue.db-litestream", "ltx", "0");
+    await mkdir(ltx, { recursive: true });
+    await writeFile(join(ltx, "0000000000000005-0000000000000005.ltx"), "from the old database");
+    await restoreDatabase({
+      dumpBytes: await archiveBytes("FROM-ARCHIVE"),
+      venueDir,
+      log: noopLog,
+    });
+    await expect(stat(join(venueDir, ".venue.db-litestream"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    expect(await markersIn(venueDir)).toEqual(["FROM-ARCHIVE"]);
+  });
+
   it("UNLINKS the venue file rather than renaming over it, so an open connection cannot undo the restore", async () => {
     const live = await openVenueDatabase(venueDir);
     live.venue.run(sql`create table marker (id integer primary key, v text)`);

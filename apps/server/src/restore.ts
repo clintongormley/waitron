@@ -19,6 +19,7 @@ import {
   type VenueLock,
 } from "@waitron/db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
+import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { orderedMigrationSets, type ProvisionedNode, type WaitronModule } from "@waitron/module";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { writeFileAtomic } from "./fs-atomic.js";
@@ -161,8 +162,21 @@ export interface ValidatedArtifact {
  */
 export async function validateArtifact(deps: ValidationDeps): Promise<ValidatedArtifact> {
   const plaintext = decryptArtifact(deps.artifact, deps.recoveryKey);
-  const entries = unpackArchive(plaintext);
+  return validateEntries(unpackArchive(plaintext), deps);
+}
 
+/** What {@link validateEntries} reads: it starts from entries already opened, so it needs neither
+ * the ciphertext nor its key. */
+export type EntryValidationDeps = Omit<ValidationDeps, "artifact" | "recoveryKey">;
+
+/**
+ * {@link validateArtifact} after its decrypt and unpack, so every source of opened entries runs the
+ * same GATE and GUARD rather than a copy of them.
+ */
+export async function validateEntries(
+  entries: ArchiveEntry[],
+  deps: EntryValidationDeps,
+): Promise<ValidatedArtifact> {
   // Rejection precedence is the statement order below: missing manifest → missing dump →
   // compatibility gate → unexpected entry → path guard / duplicate destination → identity
   // completeness. `??=` only fixes which entry a repeated name is classified as; a repeated
@@ -236,7 +250,10 @@ export async function validateArtifact(deps: ValidationDeps): Promise<ValidatedA
  * {@link restoreDatabase} writes its incoming file beside the target and removes it itself on a
  * failed write.
  */
-async function placeValidated(validated: ValidatedArtifact, deps: RestoreDeps): Promise<void> {
+async function placeValidated(
+  validated: ValidatedArtifact,
+  deps: Omit<RestoreDeps, "artifact" | "recoveryKey">,
+): Promise<void> {
   const { log } = deps;
   if (!deps.skipSecrets) await setAsideExistingIdentity(deps.stateDir, log);
   await restoreDatabase({
@@ -285,7 +302,7 @@ async function placeValidated(validated: ValidatedArtifact, deps: RestoreDeps): 
  */
 export async function writeValidated(
   validated: ValidatedArtifact,
-  deps: RestoreDeps,
+  deps: Omit<RestoreDeps, "artifact" | "recoveryKey">,
 ): Promise<void> {
   const lock = await (deps.lockVenue ?? lockRestoreTarget)(deps.venueDir);
   try {
@@ -375,8 +392,8 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
  * observed half-written.
  *
  * **`node.db` IS LEFT ALONE, and that differs from the wipe — deliberately recorded rather than
- * discovered.** `db-wipe.ts` removes both files of the venue directory; this replaces `venue.db` and
- * its two sidecars only. The node file is created empty and holds no table (`applyMigrations` sends
+ * discovered.** `db-wipe.ts` removes both files of the venue directory; this replaces `venue.db`,
+ * its two sidecars and Litestream's folder beside it, and nothing else. The node file is created empty and holds no table (`applyMigrations` sends
  * every set to the venue handle, `packages/migrations/src/apply.ts`), and slice 2 keeps it that way:
  * a node's own rows are keyed by node id inside `venue.db` (slice-2 spec §2). A slice that puts
  * tables into `node.db` has to decide here whether a restore carries, clears or keeps them.
@@ -397,6 +414,8 @@ export async function restoreDatabase(args: {
     for (const suffix of ["", ...VENUE_SIDECARS]) {
       await rm(`${target}${suffix}`, { force: true });
     }
+    // Litestream's record of what it uploaded describes the database being replaced.
+    await rm(litestreamMetaDir(target), { recursive: true, force: true });
     await rename(incoming, target);
   } catch (error) {
     await rm(incoming, { force: true });

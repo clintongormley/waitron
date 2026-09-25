@@ -1,5 +1,6 @@
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 
 /**
  * The two database files `openVenueStore` opens in a venue directory
@@ -57,6 +58,9 @@ const SIDECARS = ["", "-wal", "-shm"] as const;
  * success and not an `ENOENT`. What this costs is stated in `rejoin.ts`: nothing confirms that the
  * rows this node originated reached the carrier before the wipe, so the caller wipes without that
  * confirmation.
+ *
+ * Litestream's own folder beside `venue.db` goes too: it records what was uploaded from the
+ * database this removes (slice-2 plan, Reconciliation L3).
  */
 export async function wipeVenueDatabases(venueDir: string): Promise<void> {
   for (const file of VENUE_FILES) {
@@ -64,4 +68,5 @@ export async function wipeVenueDatabases(venueDir: string): Promise<void> {
       await rm(join(venueDir, `${file}${suffix}`), { force: true });
     }
   }
+  await rm(litestreamMetaDir(join(venueDir, "venue.db")), { recursive: true, force: true });
 }

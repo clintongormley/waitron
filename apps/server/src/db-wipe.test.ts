@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -82,6 +82,15 @@ describe("wipeVenueDatabases", () => {
     } finally {
       await fresh.close();
     }
+  });
+
+  it("removes Litestream's own folder beside venue.db too", async () => {
+    open = await venueWithBothFilesWritten();
+    const ltx = join(venueDir, ".venue.db-litestream", "ltx", "0");
+    await mkdir(ltx, { recursive: true });
+    await writeFile(join(ltx, "0000000000000001-0000000000000001.ltx"), "from the wiped database");
+    await wipeVenueDatabases(venueDir);
+    expect(await exists(".venue.db-litestream")).toBe(false);
   });
 
   it("leaves the migration lock file alone", async () => {
