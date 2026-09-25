@@ -2857,6 +2857,8 @@ image constraints under *Detail → Box image*.
   whole guard" note from `tables.ts`, `management-api.ts` (five copies) and `till-api.ts`. Then
   `apps/server`'s `box-status.ts` and `awaiting-fiscal-cert.test.ts`, two held-back files the
   SQLite slice-2 plan's remaining tasks no longer name, part x (#629, 91 to 16 comment lines).
+  (2026-09-25: slice 2's last task has landed, so c2, e2, f2 and h2 no longer wait on it; they
+  are still to do.)
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
@@ -5104,6 +5106,17 @@ already read as filed) rather than a record filed twice. The fence-before-ship r
 now in topology design §5.2. The tag `pre-sqlite-migration` (`c9d80c59`) marks the last commit before
 any of this code, so you can still read how something worked under PostgreSQL.
 
+**Slice 2, stream and cold restore, is COMPLETE as of 2026-09-25**
+([spec](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
+[plan](superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md); PRs, in the order the
+tasks landed: #513, #540, #543, #548, #554, #557, #560, #566, #569, #590, #619, #627, #628, #630,
+#642, #646 and this change, with follow-ups #573, #576, #594, #599, #608, #643, #647, #649 and #650).
+A venue streams `venue.db` continuously to an S3-compatible bucket the owner supplies, a dead box is
+rebuilt from that bucket with one recovery kit and carries on under a fresh fiscal chain, and staff
+see how current the copy is. What each task built, and what it left open, is in the slice-2 entry
+below. **Next: slice 3, seats and promotion. Its first task is already decided: credentials move to
+a venue key** stored in `venue.db` only in locked form (slice-2 spec §3.3) — do not reopen it.
+
 **What the gate left open (index; the receipts are in the results note):**
 
 - **Validate every supported object store.** Cloud owns its production-provider checks in the
@@ -5111,6 +5124,11 @@ any of this code, so you can still read how something worked under PostgreSQL.
   Waitron retains the engine's required semantics and checks for claimed self-host targets.
   Every store result in the prototype note is MinIO's. Topology §12.2's real-store gate remains
   open; the conditional-write promotion tie-break must be demonstrated on each target (risk 11).
+  **Since slice 2 (2026-09-25),** each owner's bucket is checked by the Backups screen's Test and
+  Save (`probeBucket`, `packages/stream/src/probe.ts`), which refuse a bucket that does not refuse
+  a stale conditional write. The same check is the first assertion of
+  `apps/server/src/stream-loop.e2e.test.ts`, run against versitygw 1.8.0 whenever CI runs
+  `apps/server`'s tests. Waitron Cloud's production store still needs its own run.
 - **The restart reset is built (2026-09-23), and so is its precondition (#566).** `resetInFlightClaims`
   (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising
   `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it before a
@@ -5132,29 +5150,29 @@ any of this code, so you can still read how something worked under PostgreSQL.
   deleted the paragraph).** `apps/server/src/awaiting-fiscal-cert.test.ts` ("This suite is RED") —
   run 2026-09-23, 1 of 1 passed. (#624 deleted `boot.promote.test.ts`'s matching "One case below is
   RED".)
-- **Bounding the offline write-ahead log is an open design question, and the lever risk 9 names is not
-  one.** Measured: while a litestream daemon is attached AND cannot reach its store, the log's space
-  cannot be reclaimed at all — `PRAGMA wal_checkpoint(TRUNCATE)` blocks for seconds and shrinks
-  nothing, and dropping `wal_autocheckpoint = 0` changes nothing either. So whatever bounds that log
-  has to stop or detach the daemon, and doing that on the sale path is what risk 9 forbids.
-  2026-09-23: slice 2 measured that a restarted Litestream uploads the sales made while it was
-  stopped, and drove an offline side file past Litestream's documented emergency-checkpoint threshold
-  for a few seconds (it did not shrink; what the checkpoint does over longer was not measured) —
-  [results note, Slice 2 measurements](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
-- **The promoted generation and store pointer remain unproven.** The prototype does not stream a
-  promoted node's generation or restore by following `current.json`. The guided Cloud snapshot path
-  does not close continuous recovery. Its orchestration is tracked in the
-  [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md); Waitron retains
-  the engine behaviour and integration proof.
+- **Bounding the offline write-ahead log — ANSWERED in slice 2 (#590).** The box alerts first
+  (`backup.stream_behind`, after fifteen minutes). At a 256 MiB limit it stops Litestream, folds
+  the side file back with a checkpoint that does not wait on a busy database
+  (`checkpointTruncate`, `packages/store/src/index.ts`) and raises `backup.stream_paused`, and it
+  restarts Litestream when the bucket answers (slice-2 spec §4.5). The measurements behind it are in
+  the [results note, Slice 2 measurements](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
+- **The store pointer and a new generation are exercised for a rebuild, not for a promotion.**
+  Slice 2's loop test (`apps/server/src/stream-loop.e2e.test.ts`) streams one box, rebuilds another
+  from the pointer `current.json` names, and has it open its own generation and move the pointer. A
+  promoted node's generation, and Cloud's recovery orchestration (tracked in the
+  [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)), remain;
+  settle the Waitron ↔ Waitron Cloud contract before assigning them.
 - **250 sales a day is still an assumption** nothing in this repository measures, so the days-per-GiB
   figure rescales but does not hold.
 - **Three scenarios have no mutation receipts (S1, S6, `smoke`), two branches of the litestream
   wrapper are driven by no scenario, and the runner's own `main()` is undriven** — a later task should
   pin them or delete them.
 
-**SQLite slice 2 — in progress** ([spec](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
+**SQLite slice 2 — COMPLETE (2026-09-25)** ([spec](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
 [plan](superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md)): the venue streams
-its database to a bucket the owner supplies, and a dead box is rebuilt from it. Landed so far:
+its database to a bucket the owner supplies, and a dead box is rebuilt from it. Every task below has
+landed, the last one (Task 10) in this change. The items each paragraph calls open, left open, still
+open or an open question are still open after slice 2 unless a later line marks them done. Landed:
 Task 3b, the restart reset (#513); Task 4, the five measurements Litestream's behaviour decides
 (#540) — the values later tasks read are under "What later
 tasks read" in [the results note](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
@@ -5298,8 +5316,9 @@ named it, so it is the first `backup.stream_*` parameter a bucket supplies: the 
 these codes (Tasks 7 and 8b) must not put it in front of anyone as trusted text. Also left: `@waitron/store` is missing from the
 English-only guard's `GENERIC_PACKAGES` (`packages/db/src/english-only.ts`), so it is never scanned
 — I believe this predates #569 (the package dates from #489); and nothing in the package has been
-run against a real bucket — the unit tests drive the real S3 client over a scripted network, and
-Task 10's loop test is the first run against a real S3-compatible server.
+run against a real provider's bucket — the unit tests drive the real S3 client over a scripted
+network, and since Task 10 (this change) the loop test drives it against versitygw 1.8.0, a real
+S3-compatible server run on the test machine.
 `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
 closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
 `[""]` it still passes 18 of 18 (the assertions predate #548: aabdde6a8, #489). The wipe's
@@ -5370,7 +5389,7 @@ bucket copy that is on and current. Left open:
 - A sale whose write transaction began before the supervisor first subscribed after boot (no
   listener registered when it began) is not counted, so the lag reads low for it.
 - Whether Litestream uploads anything while the side file is unchanged is not measured; Task 10's
-  loop test is the natural place.
+  loop test (this change) does not measure it either.
 - The alerts send the owner to the Backups page for the bucket's settings, which Task 8b added; the
   status gained a third shape, a copy set up but not started, which Task 8b's panel shows as "Not
   running".
@@ -5591,6 +5610,31 @@ the process restarted. Left open:
 - After a refused Cloud restore the owner has to tick the Cloud screen's "old server and surviving
   peers are stopped" confirmation again: the shell shows the progress screen while the request runs
   and then draws a new Cloud screen, which starts unticked.
+
+Task 10, the loop test against a real S3-compatible server and the documentation sweep (this
+change). `apps/server/src/stream-loop.e2e.test.ts` runs the whole slice with the real pinned
+Litestream against versitygw 1.8.0, run as a plain child process
+(`apps/server/src/testing/s3-test-server.ts`, installed by `scripts/setup-s3-test-server.mjs`
+against a pinned SHA-256): box A streams and dies, box B is rebuilt from the recovery kit, sells
+under a fresh installation number, streams into its own generation and moves the pointer, and a
+restore of that generation equals B's database; ten sales timed while the S3 server is frozen must
+keep their normal time. Every `test-server` shard in CI installs both binaries first, and
+`scripts/ci-workflow.test.mjs` checks that. The sweep brought `CLAUDE.md`, the developer guides,
+`deploy/README.md`, `apps/server/README.md`, the topology design and the prototype results note in
+line with what slice 2 built. Left open:
+- Locally the test is skipped without its binaries, and Vitest's default reporter shows that only as
+  `1 skipped`; the reason shows under `--reporter=verbose`
+  ([testing-guide.md](developers/testing-guide.md), "The stream loop test").
+- A change to `scripts/setup-litestream.mjs` or `scripts/setup-s3-test-server.mjs` alone runs no
+  `test-server` shard, on its pull request or on its merge to `main`, because neither is in
+  `ROOT_SCOPE_CONSUMERS` ([ci-and-gates.md](developers/ci-and-gates.md)); the next run that tests
+  `apps/server` is the first real download through the changed script.
+- versitygw had not run on Linux before this change's CI run, and the time the two downloads add to
+  each shard has not been measured.
+- The frozen-server stage never reaches the 256 MiB side-file limit, so the supervisor's pause runs
+  only against a fake Litestream in the test suites (`packages/stream/src/supervisor.test.ts`
+  among them); the real binary at that limit was measured by the bench rig (results note, 1b), not
+  through the supervisor.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence
@@ -6009,7 +6053,9 @@ conflict.
   httpOnly cookie. A native agent is built for hardware only, printing first.
 - **No relay.** Remote access is the cloud instance forwarding the box's name down the box↔instance
   WireGuard link without terminating TLS. (The PostgreSQL replication that used to ride this link was
-  deleted 2026-09-19; its SQLite + Litestream replacement is future work — see *Afterwards*.)
+  deleted 2026-09-19. Since slice 2 (2026-09-25) Litestream streams the venue database to the
+  owner's bucket, not over this link; a promoted node following that stream is future work — see
+  *Afterwards*.)
 - **Handheld kiosk mode is optional, never required** (owner, 2026-09-08) — the baseline is an
   installed home-screen web app plus the till's staff PIN. **The venue OWNS the handhelds** (owner,
   2026-09-18, reversing "most waiters use their own phones"): a member of staff's broken phone is the
