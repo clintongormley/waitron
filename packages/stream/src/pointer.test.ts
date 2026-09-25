@@ -7,6 +7,7 @@ import {
   pointerKey,
   pointerMessage,
   readPointer,
+  SentPointers,
   signPointer,
   verifyPointer,
   writePointer,
@@ -225,5 +226,19 @@ describe("writePointer", () => {
       reason: "shape",
     });
     expect(store.calls).toEqual([]);
+  });
+});
+
+describe("SentPointers", () => {
+  it("holds the exact bytes writePointer stored, and not a pointer that differs only in its signature", async () => {
+    const store = createMemoryObjectStore();
+    const mine = signPointer(body(), KEYS.privateKey);
+    const sent = new SentPointers();
+    sent.add(mine);
+    await writePointer(store, VENUE, mine, null);
+    expect(sent.includes((await store.get(pointerKey(VENUE)))!.body)).toBe(true);
+    const twin = signPointer(body(), OTHER_KEYS.privateKey);
+    await writePointer(store, VENUE, twin, (await readPointer(store, VENUE))!.etag);
+    expect(sent.includes((await store.get(pointerKey(VENUE)))!.body)).toBe(false);
   });
 });

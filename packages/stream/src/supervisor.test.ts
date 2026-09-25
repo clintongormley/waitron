@@ -7,7 +7,13 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { claimGeneration, generationPrefix, markerKey } from "./generations.js";
 import { generationName } from "./names.js";
-import { pointerKey, readPointer, writePointer, type SignedPointer } from "./pointer.js";
+import {
+  pointerKey,
+  readPointer,
+  SentPointers,
+  writePointer,
+  type SignedPointer,
+} from "./pointer.js";
 import { CommitLog } from "./freshness.js";
 import { PROBE_PREFIX } from "./probe.js";
 import type { BucketConfig } from "./s3-store.js";
@@ -160,6 +166,8 @@ interface HarnessOptions {
   stopWaitMs?: number;
   /** How far the bucket's clock runs ahead of this box's; negative when behind. */
   bucketAheadMs?: number;
+  /** False gives each supervisor its own record of the pointers sent, as when none is passed. */
+  shareSentPointers?: boolean;
 }
 
 async function harness(options: HarnessOptions = {}) {
@@ -242,16 +250,25 @@ async function harness(options: HarnessOptions = {}) {
         listener = undefined;
       };
     },
+    ...(options.shareSentPointers === false ? {} : { sentPointers: new SentPointers() }),
     ...(options.stopWaitMs === undefined ? {} : { stopWaitMs: options.stopWaitMs }),
     ...(options.readCommandLine === undefined ? {} : { readCommandLine: options.readCommandLine }),
   };
   const supervisor = new StreamSupervisor(deps);
+  const successors: StreamSupervisor[] = [];
   cleanups.push(async () => {
+    for (const next of successors) await next.stop();
     await supervisor.stop();
     await rm(directory, { recursive: true, force: true });
   });
   return {
     supervisor,
+    /** The next supervisor on the same box and bucket, as a reload builds it. */
+    successor: () => {
+      const next = new StreamSupervisor(deps);
+      successors.push(next);
+      return next;
+    },
     store,
     litestream,
     clock,
@@ -484,6 +501,23 @@ describe("opening a generation", () => {
     expect(h.supervisor.status().reason).toBe("pointer_changed");
     expect(h.litestream.replicas().every((child) => child.killed)).toBe(true);
     expect((await readPointer(h.store, VENUE))?.pointer.body.nodeId).toBe("node-b");
+  });
+
+  it("stops and refuses when the pointer was deleted after it was read", async () => {
+    const h = await harness();
+    await writePointer(
+      h.store,
+      VENUE,
+      pointerFrom("node-b", 2, "gen-2-node-b-20260923T110000Z"),
+      null,
+    );
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    await h.store.delete(pointerKey(VENUE));
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => h.supervisor.status().state === "refused");
+    expect(h.supervisor.status().reason).toBe("pointer_changed");
+    expect(h.store.has(pointerKey(VENUE))).toBe(false);
   });
 
   it("treats its own pointer write as done when only the answer was lost", async () => {
@@ -879,6 +913,82 @@ describe("opening a generation", () => {
     await new Promise((resolve) => setImmediate(resolve));
     expect(h.events.slice(before)).toEqual([`put ${pointerKey(VENUE)}`]);
   });
+
+  /**
+   * The first supervisor's pointer write is held in flight, the supervisor is stopped with it still
+   * unanswered, and the write lands just after the successor has read the pointer: the order that
+   * makes the successor's own conditional write be refused.
+   */
+  async function reloadWithLateWrite(options: HarnessOptions = {}) {
+    const h = await harness(options);
+    const put = h.store.put.bind(h.store);
+    const get = h.store.get.bind(h.store);
+    let release: (() => void) | undefined;
+    let armed = false;
+    h.store.put = async (key, body, cond) => {
+      if (key === pointerKey(VENUE) && release === undefined) {
+        await new Promise<void>((resolve) => (release = resolve));
+      }
+      return put(key, body, cond);
+    };
+    h.store.get = async (key) => {
+      const answer = await get(key);
+      if (key === pointerKey(VENUE) && armed) release?.();
+      return answer;
+    };
+    await h.supervisor.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => release !== undefined);
+    await h.supervisor.stop();
+    armed = true;
+    const next = h.successor();
+    await next.start();
+    await h.clock.until(() => h.litestream.running() !== undefined);
+    await vi.waitFor(() => expect(h.store.has(pointerKey(VENUE))).toBe(true));
+    return { ...h, next };
+  }
+
+  it("takes a pointer its predecessor sent before a reload, landing late, as this box's own, and streams on", async () => {
+    const h = await reloadWithLateWrite();
+    const first = (await readPointer(h.store, VENUE))!.pointer.body.generation;
+    const second = h.next.status().generation!;
+    expect(first).not.toBe(second);
+    h.store.upload(fullCopyOf(second));
+    await h.clock.until(() => ["streaming", "refused"].includes(h.next.status().state));
+    expect(h.next.status()).toMatchObject({ state: "streaming", reason: null, generation: second });
+    expect((await readPointer(h.store, VENUE))?.pointer.body.generation).toBe(second);
+  });
+
+  it("takes a predecessor's late pointer as another box's when the two share no record of what was sent", async () => {
+    const h = await reloadWithLateWrite({ shareSentPointers: false });
+    h.store.upload(fullCopyOf(h.next.status().generation!));
+    await h.clock.until(() => ["streaming", "refused"].includes(h.next.status().state));
+    expect(h.next.status()).toMatchObject({ state: "refused", reason: "pointer_changed" });
+  });
+
+  // The pointers a rebuilt twin or a later term would write: the same node id is not this box.
+  it.each([
+    { who: "another node at the same term", nodeId: "node-b", term: 2 },
+    {
+      who: "this node's id at the same term, from bytes this box never sent",
+      nodeId: NODE,
+      term: 2,
+    },
+    { who: "this node's id at a higher term", nodeId: NODE, term: 3 },
+  ])(
+    "still refuses, after a reload, a pointer from $who written over the late one",
+    async ({ nodeId, term }) => {
+      const h = await reloadWithLateWrite();
+      const late = await readPointer(h.store, VENUE);
+      const foreign = pointerFrom(nodeId, term, `gen-${term}-${nodeId}-20260923T115959Z`);
+      await writePointer(h.store, VENUE, foreign, late!.etag);
+      h.store.upload(fullCopyOf(h.next.status().generation!));
+      await h.clock.until(() => ["streaming", "refused"].includes(h.next.status().state));
+      expect(h.next.status()).toMatchObject({ state: "refused", reason: "pointer_changed" });
+      expect((await readPointer(h.store, VENUE))?.pointer).toEqual(foreign);
+    },
+  );
 
   it("does nothing more when started twice, and nothing at all when stopped before it started", async () => {
     const h = await harness();

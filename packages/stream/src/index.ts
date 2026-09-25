@@ -13,6 +13,7 @@ export {
   pointerKey,
   pointerMessage,
   readPointer,
+  SentPointers,
   signPointer,
   verifyPointer,
   writePointer,

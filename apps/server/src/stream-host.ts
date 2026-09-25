@@ -7,6 +7,7 @@ import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import {
   DEFAULT_WAL_LIMIT_BYTES,
+  SentPointers,
   StreamSupervisor,
   type BucketConfig,
   type ObjectStore,
@@ -97,6 +98,8 @@ export class StreamHost {
   #reloading = false;
   #stopped = false;
   #retiring: Promise<void> = Promise.resolve();
+  /** A stopped supervisor's pointer write can still land after the next one reads the pointer. */
+  readonly #sentPointers = new SentPointers();
 
   constructor(deps: StreamHostDeps) {
     this.#deps = deps;
@@ -144,6 +147,7 @@ export class StreamHost {
         spawn: this.#deps.spawn,
         store: this.#deps.store,
         onCommit: (listener) => db.onCommit(listener),
+        sentPointers: this.#sentPointers,
       });
       this.#supervisor = supervisor;
       await supervisor.start();

@@ -114,6 +114,24 @@ export async function readPointer(
 }
 
 /**
+ * The exact bytes of every pointer a process has sent, so a refusal caused by one of them landing
+ * after a later read is told from another box's write. Byte-exact, not "this node id and term": a
+ * rebuild reuses the dead box's node id and can sign the same term (spec §4.4). Never pruned: a
+ * supervisor adds one entry per generation it opens.
+ */
+export class SentPointers {
+  readonly #sent = new Set<string>();
+
+  add(pointer: SignedPointer): void {
+    this.#sent.add(Buffer.from(encode(pointer)).toString("base64"));
+  }
+
+  includes(bytes: Uint8Array): boolean {
+    return this.#sent.has(Buffer.from(bytes).toString("base64"));
+  }
+}
+
+/**
  * Replace `current.json` only if it is still the version this box read (`previousEtag`), or create it
  * only if there is none (`null`). A refusal is another box writing this venue, and is thrown
  * (`backup.stream_precondition_failed`) — unless the pointer now holds exactly these bytes, which is

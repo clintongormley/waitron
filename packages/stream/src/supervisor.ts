@@ -22,8 +22,10 @@ import {
 import { generationName } from "./names.js";
 import type { ListedObject, ObjectStore } from "./object-store.js";
 import {
+  pointerKey,
   pointerMessage,
   readPointer,
+  SentPointers,
   writePointer,
   type SignedPointer,
   type StreamPointer,
@@ -112,6 +114,11 @@ export interface SupervisorDeps {
   readCommandLine?: (pid: number) => Promise<string | null>;
   /** Subscribes to the venue database's commits; returns the unsubscribe. */
   onCommit(listener: () => void): () => void;
+  /**
+   * Shared by every supervisor one process starts for this venue, so a pointer an earlier one sent
+   * that lands late is not read as another box's. Default: this supervisor's own.
+   */
+  sentPointers?: SentPointers;
 }
 
 /** How often, while streaming, the side file is measured. */
@@ -250,6 +257,7 @@ export class StreamSupervisor {
   readonly #sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   readonly #stopWaitMs: number;
   readonly #monotonic: () => number;
+  readonly #sentPointers: SentPointers;
   #status: StreamCore;
   #controller: AbortController | undefined;
   #run: Promise<void> = Promise.resolve();
@@ -281,6 +289,7 @@ export class StreamSupervisor {
     this.#sleep = deps.sleep ?? abortableSleep;
     this.#stopWaitMs = deps.stopWaitMs ?? STOP_WAIT_MS;
     this.#monotonic = deps.monotonic ?? steadyMs;
+    this.#sentPointers = deps.sentPointers ?? new SentPointers();
     this.#status = {
       state: "off",
       generation: null,
@@ -511,22 +520,31 @@ export class StreamSupervisor {
 
   /**
    * Replaces `current.json` only if it is unchanged since `previousEtag` was read; false when
-   * refused. `writePointer` already counts a refusal of this box's own landed write as success, so a
-   * refusal here is another box.
+   * refused. `writePointer` already counts a refusal of this box's own landed write as success. A
+   * refusal because the pointer now holds a pointer this process sent earlier, landing after the
+   * read, is retried against that version; any other refusal is another box.
    */
   async #movePointer(
     pointer: SignedPointer,
     previousEtag: string | null,
     signal: AbortSignal,
   ): Promise<boolean> {
+    let expected = previousEtag;
+    this.#sentPointers.add(pointer);
     for (;;) {
       signal.throwIfAborted();
       try {
-        await writePointer(this.#store, this.#deps.venueId, pointer, previousEtag);
+        await writePointer(this.#store, this.#deps.venueId, pointer, expected);
         return true;
       } catch (error) {
         signal.throwIfAborted();
-        if (isPreconditionFailure(error)) return false;
+        if (isPreconditionFailure(error)) {
+          const current = await this.#store.get(pointerKey(this.#deps.venueId));
+          signal.throwIfAborted();
+          if (current === null || !this.#sentPointers.includes(current.body)) return false;
+          expected = current.etag;
+          continue;
+        }
         this.#deps.log("warn", "stream.pointer_write_failed", { errorCode: codeOf(error) });
       }
       await this.#sleep(OPEN_RETRY_MS, signal);
