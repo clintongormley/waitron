@@ -289,9 +289,10 @@ describe("completeRebuild", () => {
     expect((await readNodeMembership(suite.db))!.body.nodes).toEqual([other]);
   });
 
-  // A node promoted from a mirror is trusted by the other devices only through the primary's
-  // endorsement of its key, which adopt stored on its node row and promotion put on its document.
-  it("carries this node's endorsement forward, so a device trusting only the endorser accepts the new term", async () => {
+  // A node promoted from a mirror is trusted by the other peers only through the endorsement of its
+  // key by the primary that adopted it, which adopt stored on its node row and promotion put on its
+  // document.
+  it("carries this node's endorsement forward, so a peer trusting only the endorser accepts the new term", async () => {
     const stateDir = await rebuiltStateDir("archive");
     const endorser = generateNodeKeyPair();
     const ownKey = (await readMembershipTrustSet(suite.db))[NODE]!;
@@ -309,12 +310,12 @@ describe("completeRebuild", () => {
         },
       );
       await writeNodeMembership(suite.db, promoted);
-      const deviceTrust = { [OTHER_NODE]: endorser.publicKey };
-      expect(verifyMembershipDocument(promoted, deviceTrust)).toMatchObject({ valid: true });
+      const peerTrust = { [OTHER_NODE]: endorser.publicKey };
+      expect(verifyMembershipDocument(promoted, peerTrust)).toMatchObject({ valid: true });
       await completeRebuild(deps(stateDir));
       const after = (await readNodeMembership(suite.db))!;
       expect(after.body.term).toBe(promoted.body.term + 1);
-      const verdict = verifyMembershipDocument(after, deviceTrust);
+      const verdict = verifyMembershipDocument(after, peerTrust);
       expect(verdict.valid ? "valid" : verdict.reason).toBe("valid");
     } finally {
       await suite.db.update(nodes).set({ endorsement: null }).where(eq(nodes.id, NODE));

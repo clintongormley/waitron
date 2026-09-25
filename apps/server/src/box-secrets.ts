@@ -195,7 +195,9 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
  * `<stateDir>/tls`, which stays untouched. The listener refuses a certificate whose key does not
  * match, so both new files are written under working names first and renamed into place only when
  * both are written; a failed write removes the working files and leaves the old pair, and a failed
- * key rename puts the old certificate back. What is left is a crash between the two renames.
+ * key rename puts the old certificate back unless that rename fails too, when the old certificate
+ * is kept as `server.crt.previous` until the next reissue overwrites it. What is left is a crash
+ * between the two renames, or the key rename and the put-back both failing.
  */
 export async function reissueBoxLeaf(deps: {
   stateDir: string;
@@ -225,13 +227,22 @@ export async function reissueBoxLeaf(deps: {
     throw error;
   }
   const previousCert = `${files.certFile}.previous`;
-  await copyFile(files.certFile, previousCert);
-  await rename(stagedPath(files.certFile), files.certFile);
+  let certReplaced = false;
   try {
+    await copyFile(files.certFile, previousCert);
+    await rename(stagedPath(files.certFile), files.certFile);
+    certReplaced = true;
     await rename(stagedPath(files.keyFile), files.keyFile);
   } catch (error) {
-    await rename(previousCert, files.certFile);
+    let putBackFailed = false;
+    if (certReplaced) {
+      await rename(previousCert, files.certFile).catch(() => {
+        putBackFailed = true;
+      });
+    }
     await discardStaged();
+    // A failed put-back leaves the copy as the only one of the old certificate.
+    if (!putBackFailed) await rm(previousCert, { force: true }).catch(() => {});
     throw error;
   }
   await rm(previousCert, { force: true });

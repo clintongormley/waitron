@@ -79,8 +79,8 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
   // Never below the bucket's pointer: the stream supervisor refuses to replace a pointer naming a
   // higher term (slice-2 spec §5.1 step 7).
   const pointerTerm = (await deps.pointerTerm?.()) ?? null;
-  // As mirror promotion does (promote.ts): a node adopted as a standby is trusted by the other
-  // devices only through the primary's endorsement of its key.
+  // As mirror promotion does (promote.ts): the endorsement lets a peer that trusts only the
+  // endorser (the primary that adopted this node) trust this document.
   const endorsement = await readNodeEndorsement(deps.db, deps.nodeId);
   const next = await mintNextMembershipDocument(
     { db: deps.db, ring: deps.ring },
