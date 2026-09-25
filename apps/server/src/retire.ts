@@ -68,10 +68,6 @@ export async function retireSelf(deps: RetireDeps): Promise<RetireResult> {
   return { evicted: true, term: document.body.term };
 }
 
-/**
- * Exported so the superseded branch is testable: a real race has no seam between the held read and
- * the write.
- */
 export async function persistEvictionOrThrow(
   db: Database,
   document: SignedMembershipDocument,

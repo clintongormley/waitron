@@ -44,7 +44,7 @@ beforeAll(() => {
   db = suite.db;
 });
 
-// Called from each case rather than a `beforeAll`, because the per-test reset empties every table.
+// Called from each case rather than a `beforeAll`: the per-test reset empties every data table.
 async function fencedNode(): Promise<{
   nodeId: string;
   deps: (log: RetireDeps["log"]) => RetireDeps;
