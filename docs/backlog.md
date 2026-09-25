@@ -4302,17 +4302,15 @@ comment #609 deleted as partly false, so that is untested; the label filter, the
 no scan at all. **Next action:** move the non-search path back into SQL; how far to push the search
 path is a separate decision.
 
-**`sale_voids` has no index on `voided_at` — OPEN (found 2026-09-24 by #605).**
-Besides its primary key's, its only index is the unique one on `sale_id`
-(`packages/db/src/schema/sale-voids.ts`). Four reads select voids by `voided_at` range: the void
-count in `packages/reporting/src/counts.ts` and, since #605, the reversal half of the daily
-VAT summary, the period VAT summary and top sellers.
-An `EXPLAIN QUERY PLAN` of the count's shape on node v26.7.0, over empty stand-in `sales` and
-`sale_voids` tables carrying only these keys, printed `SCAN s` then a `sale_id` lookup per sale;
-with an index on `voided_at` added it printed a range search on that index. The real schema and
-real row counts were not measured. Adding the index needs a migration, which #605 was
-specified without. **Next action:** add the index and re-read the plan on the real schema —
-queued 2026-09-25 as lane A's A33, with the owner's leave to add the migration.
+**`sale_voids` has no index on `voided_at` — DONE (2026-09-26, lane A's A33, branch `feat/sale-voids-voided-at-index`; found 2026-09-24 by #605).**
+Core migration `0011_sale_voids_voided_at_idx` adds `sale_voids_voided_at_idx`, declared in
+`packages/db/src/schema/sale-voids.ts`. Measured on the real core schema (node v26.7.0, an empty
+migrated venue, no `ANALYZE` statistics): before, the void count scanned `sales` (one node) or
+`sale_voids` (whole venue), and the reversal half of the daily VAT summary, the period VAT summary
+and top sellers scanned `sales`, `sale_voids` or `sale_lines`; with the index all four, for one node
+and for the whole venue, print `SEARCH sv USING INDEX sale_voids_voided_at_idx (voided_at>? AND
+voided_at<?)`. The void count's plan is pinned by `packages/reporting/src/counts.test.ts`; the other
+three were read once, not pinned. Plans over real row counts were not measured.
 
 **Cash handed back for a voided cash sale is recorded nowhere — OPEN (found 2026-09-24 by #605).**
 A void writes no payment or refund row, so if staff give a customer cash back, the void's day shows
