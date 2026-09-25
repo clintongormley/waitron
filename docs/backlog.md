@@ -236,7 +236,21 @@ usages although the batch read already holds them; and `wt-data-table` searches 
 value when it has no search value, so a number column matches typed digits unless it opts out as
 the Items column now does — changing that default needs a check of every table that searches
 prices or counts.
-Next in the lane after Task 2: menus Task 3. The owner lifted the wait: the dependency upgrades are
+**Menus Task 3 (menus are built from sections), landed as #659 (2026-09-25):** every menu owns one
+top-level list (a menu-owned `sections` row, pointed at by `menu_details`); `menu_sections` is
+dropped and `menu_items` rebuilt to hang off the menu; an offer carries every section path that
+reaches it (`placements`); the menu's own price, switch, variant prices and extras for a product
+reset when the menu stops reaching it. New routes: `GET /management-api/catalogues/:id/structure`
+and `POST /management-api/catalogues/:id/items`. Left by #659, none blocking: the 390 px offers
+table on Venue operations → Menus scrolls sideways (that tab goes in Task 5); the Menus tab fails to
+load for a menu with no `menu_details` row (every menu created now gets one); the image library
+links a menu-owned section's photo to the sections screen, though nothing puts a photo on one yet;
+`DELETE /management-api/catalogues/:id/items/:itemId` (`deactivateMenuItem`) still switches a
+product off but the dashboard no longer calls it, since `PATCH` now carries `active`; and
+`sections_owner_menu_fk` still has no delete rule (Task 1's note stands) — nothing deletes a menu
+today, so it bites only when something does. A product reached through a section offers no extras
+list; that was already so before #659 (checked at `002b79f69`).
+Next in the lane: menus Task 4 (the Menus screen). The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
