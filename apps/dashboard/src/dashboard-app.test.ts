@@ -281,6 +281,7 @@ const NAV_SCREENS = [
   "overview",
   "sales",
   "catalogue",
+  "menus",
   "sections",
   "floor",
   "statuses",
@@ -3739,6 +3740,7 @@ describe("dashboard-app: remaining faces and shell controls", () => {
   it.each([
     ["categories", "dashboard-categories-screen"],
     ["sections", "dashboard-sections-screen"],
+    ["menus", "dashboard-menus-screen"],
     ["location-settings", "dashboard-location-settings-screen"],
     ["device-profiles", "dashboard-device-profiles-screen"],
     ["diagnostics", "dashboard-diagnostics-screen"],

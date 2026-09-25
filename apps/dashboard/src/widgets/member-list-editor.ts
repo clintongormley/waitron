@@ -30,6 +30,28 @@ export function memberKindLabel(ref: MemberRef): string {
   return t(ref.kind === "product" ? "members.kind_product" : "members.kind_section");
 }
 
+/** The section and every library section holding it, however deep: adding any of them to it would
+ * make a loop. The server refuses one anyway; this keeps a picker from offering it. */
+export function sectionsHolding(
+  sections: readonly { id: string; members: readonly SectionMember[] }[],
+  sectionId: string,
+): string[] {
+  const parents = new Map<string, string[]>();
+  for (const section of sections)
+    for (const { ref } of section.members)
+      if (ref.kind === "section")
+        parents.set(ref.sectionId, [...(parents.get(ref.sectionId) ?? []), section.id]);
+  const found = new Set([sectionId]);
+  const pending = [sectionId];
+  while (pending.length > 0)
+    for (const parent of parents.get(pending.pop()!) ?? [])
+      if (!found.has(parent)) {
+        found.add(parent);
+        pending.push(parent);
+      }
+  return [...found];
+}
+
 /**
  * One ordered list of products and sections. The host owns the list and every write: each action
  * leaves as an event, and a move is shown at once so a keyboard user's focus stays on the row.
@@ -109,6 +131,8 @@ export class MemberListEditor extends LitElement {
   @property({ type: Boolean }) busy = false;
   /** The accessible name of the list, such as the section's own name. */
   @property() label = "";
+  /** When set, a removal names the list it takes the member out of. */
+  @property() listName = "";
   /** The members in display order, which a move rewrites before the host confirms it. */
   @state() private order: SectionMember[] = [];
   @state() private choice = "";
@@ -255,7 +279,14 @@ export class MemberListEditor extends LitElement {
             ref.kind === "section"
               ? this.#action(member, "open", t("members.open"), { sectionId: ref.sectionId })
               : nothing
-          }${this.#action(member, "remove", t("members.remove"), { memberId: member.id })}</wt-row-actions
+          }${this.#action(
+            member,
+            "remove",
+            this.listName
+              ? t("members.remove_from").replace("{list}", this.listName)
+              : t("members.remove"),
+            { memberId: member.id },
+          )}</wt-row-actions
         >
       </td>
     </tr>`;

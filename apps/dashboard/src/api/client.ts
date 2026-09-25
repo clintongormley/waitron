@@ -41,6 +41,19 @@ import type {
 } from "@waitron/catalogue/src/section-types.js";
 export type { LibrarySection, MemberRef, SectionInput, SectionMember, SectionUsages };
 
+/** One member of a menu's structure (`readMenuStructure`, packages/catalogue/src/menu-structure.ts);
+ * `children` is present exactly when the member is a section. */
+export interface MenuStructureNode {
+  memberId: string;
+  ref: MemberRef;
+  children?: MenuStructureNode[];
+}
+
+export interface MenuStructure {
+  rootSectionId: string;
+  nodes: MenuStructureNode[];
+}
+
 export type {
   ExtraList,
   ExtraListDependants,
@@ -1351,6 +1364,14 @@ export class DashboardApi {
     return this.#request<CatalogueSummary>("/management-api/catalogues", "POST", { name });
   }
 
+  renameCatalogue(id: string, name: string): Promise<void> {
+    return this.#request<void>(`/management-api/catalogues/${id}`, "PATCH", { name });
+  }
+
+  getMenuStructure(id: string): Promise<MenuStructure> {
+    return this.#request<MenuStructure>(`/management-api/catalogues/${id}/structure`, "GET");
+  }
+
   // ── Location menus (which catalogues a location sells) ─────────────────────────────────────────
 
   listLocationCatalogues(locationId: string): Promise<LocationCatalogueSummary[]> {
@@ -1618,9 +1639,14 @@ export class DashboardApi {
       to,
     });
   }
+  /** With `replaceIn`, the copy also takes that member's place, in the same transaction. */
   duplicateSection(
     id: string,
-    input: { internalName: string; memberIds: string[] },
+    input: {
+      internalName: string;
+      memberIds: string[];
+      replaceIn?: { sectionId: string; memberId: string };
+    },
   ): Promise<LibrarySection> {
     return this.#request(`/management-api/sections/${id}/duplicate`, "POST", input);
   }

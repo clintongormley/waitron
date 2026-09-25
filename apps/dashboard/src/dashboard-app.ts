@@ -41,6 +41,7 @@ import "./screens/catalogue-screen.js";
 import "./screens/categories-screen.js";
 import "./screens/modifiers-screen.js";
 import "./screens/sections-screen.js";
+import "./screens/menus-screen.js";
 import "./screens/units-screen.js";
 import "./screens/receipt-screen.js";
 import "./screens/location-settings-screen.js";
@@ -89,6 +90,7 @@ type CoreScreen =
   | "catalogue"
   | "modifiers"
   | "sections"
+  | "menus"
   | "units"
   | "receipt"
   | "location-settings"
@@ -137,6 +139,7 @@ const NAV_GROUPS: NavGroup[] = [
     headerKey: "nav.group.menu",
     items: [
       { screen: "catalogue", labelKey: "nav.catalogue" },
+      { screen: "menus", labelKey: "nav.menus", requiresManager: true },
       { screen: "sections", labelKey: "nav.section_library", requiresManager: true },
       { screen: "categories", labelKey: "nav.categories" },
       { screen: "modifiers", labelKey: "nav.modifiers", requiresManager: true },
@@ -1463,6 +1466,8 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-modifiers-screen .api=${this.api}></dashboard-modifiers-screen>`;
       case "sections":
         return html`<dashboard-sections-screen .api=${this.api}></dashboard-sections-screen>`;
+      case "menus":
+        return html`<dashboard-menus-screen .api=${this.api}></dashboard-menus-screen>`;
       case "catalogue":
         return html`<dashboard-catalogue-screen .api=${this.api}></dashboard-catalogue-screen>`;
       case "units":

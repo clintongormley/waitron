@@ -10,7 +10,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "../widgets/image-upload.js";
-import { memberKindLabel, memberName } from "../widgets/member-list-editor.js";
+import { memberKindLabel, memberName, sectionsHolding } from "../widgets/member-list-editor.js";
 import "../widgets/section-add-products.js";
 import { colorField, colorFieldStyles } from "../widgets/color-field.js";
 import { optionalTextFields, textField, type FieldContext } from "../widgets/form-fields.js";
@@ -287,7 +287,8 @@ export class SectionsScreen extends LitElement {
       this.#productNames = new Map(this.products.map(({ id, name }) => [id, name]));
       this.#addable = this.products.filter((product) => product.active);
     }
-    if (changed.has("sections") || changed.has("editorId")) this.#excluded = this.#holders();
+    if (changed.has("sections") || changed.has("editorId"))
+      this.#excluded = this.editorId === null ? [] : sectionsHolding(this.sections, this.editorId);
   }
 
   async #load(): Promise<void> {
@@ -342,26 +343,6 @@ export class SectionsScreen extends LitElement {
     };
     for (const section of this.sections) walk(section, [], null);
     return out;
-  }
-
-  /** The open section and every section holding it, however deep: adding any of them would make a
-   * loop. The server refuses one anyway; this keeps the picker from offering it. */
-  #holders(): string[] {
-    if (this.editorId === null) return [];
-    const parents = new Map<string, string[]>();
-    for (const section of this.sections)
-      for (const { ref } of section.members)
-        if (ref.kind === "section")
-          parents.set(ref.sectionId, [...(parents.get(ref.sectionId) ?? []), section.id]);
-    const found = new Set([this.editorId]);
-    const pending = [this.editorId];
-    while (pending.length > 0)
-      for (const parent of parents.get(pending.pop()!) ?? [])
-        if (!found.has(parent)) {
-          found.add(parent);
-          pending.push(parent);
-        }
-    return [...found];
   }
 
   #usagesOf(id: string): SectionUsages {

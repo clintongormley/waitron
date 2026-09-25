@@ -1,0 +1,1112 @@
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { customElement, property, state } from "lit/decorators.js";
+import {
+  baseStyles,
+  setContentLanguages,
+  submitOnEnter,
+  UrlStateController,
+  type DataTableColumn,
+} from "@waitron/ui";
+import "@waitron/ui/src/components/wt-data-table.js";
+import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-modal.js";
+import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-tabs.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
+import "../widgets/member-list-editor.js";
+import { sectionsHolding } from "../widgets/member-list-editor.js";
+import "../widgets/menu-structure-tree.js";
+import "../widgets/section-add-products.js";
+import type {
+  CatalogueSummary,
+  CategorySummary,
+  DashboardApi,
+  LibrarySection,
+  MemberRef,
+  MenuStructure,
+  MenuStructureNode,
+  Product,
+  SectionMember,
+  SectionUsages,
+} from "../api/client.js";
+import { DashboardQueries } from "../api/query-controller.js";
+import { dashboardPath } from "../navigation.js";
+import { t } from "../i18n/t.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
+
+const TABS = ["structure"] as const;
+
+/** Where a refusal goes: beside `field` when the error names it, otherwise the summary alone. */
+function refusal(error: unknown, field: string): Record<string, string> {
+  const params = (error as { params?: { field?: unknown } }).params;
+  return { [params?.field === field ? field : "_form"]: codeMessage(codeOf(error)) };
+}
+
+function reachableProducts(nodes: MenuStructureNode[]): string[] {
+  const found = new Set<string>();
+  const walk = (list: MenuStructureNode[]): void => {
+    for (const node of list)
+      if (node.ref.kind === "product") found.add(node.ref.productId);
+      else walk(node.children ?? []);
+  };
+  walk(nodes);
+  return [...found];
+}
+
+/**
+ * The menus, and one menu's editor. Its Structure tab edits one list at a time, the menu's own top
+ * level or a section reached from it, and each change to that list is its own request, sent in
+ * order through one queue, because a move leaves the list's focus on the row.
+ */
+@customElement("dashboard-menus-screen")
+export class MenusScreen extends LitElement {
+  static override styles = [
+    baseStyles,
+    css`
+      :host {
+        display: block;
+      }
+      h1 {
+        margin: 0 0 var(--wt-space-4);
+        font-size: var(--wt-font-size-xl);
+      }
+      h2 {
+        margin: 0;
+        font-size: var(--wt-font-size-lg);
+      }
+      .page-actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: var(--wt-space-4);
+      }
+      .back {
+        margin-bottom: var(--wt-space-3);
+      }
+      .structure {
+        display: grid;
+        gap: var(--wt-space-6);
+        grid-template-columns: repeat(
+          auto-fit,
+          minmax(min(100%, calc(var(--wt-tap-min) * 7)), 1fr)
+        );
+        align-items: start;
+      }
+      .panel,
+      .fields {
+        display: grid;
+        gap: var(--wt-space-3);
+        min-width: 0;
+      }
+      .breadcrumb ol {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .breadcrumb li {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-1);
+        overflow-wrap: anywhere;
+      }
+      .breadcrumb [aria-current] {
+        font-weight: var(--wt-font-weight-bold);
+        padding-inline: var(--wt-space-2);
+      }
+      .sep,
+      .note,
+      .help {
+        color: var(--wt-color-text-muted);
+      }
+      .note,
+      .help,
+      .error {
+        margin: 0;
+      }
+      .help {
+        font-size: var(--wt-font-size-sm);
+      }
+      .error {
+        color: var(--wt-color-danger);
+      }
+      .list-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      wt-data-table::part(name) {
+        overflow-wrap: anywhere;
+        text-align: start;
+      }
+    `,
+  ];
+
+  @property({ attribute: false }) api!: DashboardApi;
+  @state() private menus: CatalogueSummary[] = [];
+  @state() private sections: LibrarySection[] = [];
+  @state() private products: Product[] = [];
+  @state() private categories: CategorySummary[] = [];
+  @state() private loading = true;
+  @state() private loadError = false;
+
+  /** The menu being edited; null on the list. */
+  @state() private menuId: string | null = null;
+  @state() private structure: MenuStructure | null = null;
+  @state() private structureError = false;
+  /** The member ids followed from the menu's top level to the list being edited. */
+  @state() private path: string[] = [];
+  @state() private usages: SectionUsages | null = null;
+  @state() private usagesError = false;
+  @state() private busy = false;
+  @state() private memberError: string | null = null;
+
+  /** Null while closed; `id` is null while creating. */
+  @state() private menuForm: { id: string | null; name: string } | null = null;
+  @state() private menuFormName = "";
+  @state() private menuFormErrors: Record<string, string> = {};
+
+  @state() private duplicating: {
+    sourceId: string;
+    sourceName: string;
+    listId: string;
+    listName: string;
+    memberId: string;
+    memberIds: string[];
+  } | null = null;
+  @state() private duplicateName = "";
+  @state() private duplicateErrors: Record<string, string> = {};
+
+  @state() private creatingSection = false;
+  @state() private newSectionName = "";
+  @state() private newSectionErrors: Record<string, string> = {};
+
+  @state() private addingProducts = false;
+  @state() private addProductsError: string | null = null;
+
+  readonly #queries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.loadError = true;
+    },
+  );
+  readonly #structureQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.structureError = true;
+    },
+  );
+
+  /** An unknown menu or tab is replaced rather than pushed, so Back still leaves the screen. */
+  readonly #url = new UrlStateController(this, () => this.#restore(), dashboardPath);
+
+  /** Built once: `dashboard-app.ts` renders each screen under `keyed(currentLocale(), …)`, so a
+   * language change builds a new screen. */
+  readonly #columns: DataTableColumn<CatalogueSummary>[] = this.#buildColumns();
+  #sectionNames = new Map<string, string>();
+  /** The nodes along {@link path}, one per member id. */
+  #trail: MenuStructureNode[] = [];
+  #listId: string | null = null;
+  #listMembers: SectionMember[] = [];
+  #inSection: string[] = [];
+  #onMenu: string[] = [];
+  #excluded: string[] = [];
+  #memberProducts: Product[] = [];
+  #addable: Product[] = [];
+  #usagesFor: string | null = null;
+  #usagesGeneration = 0;
+
+  /** Member writes run one after another, in the order asked. */
+  #chain: Promise<void> = Promise.resolve();
+  #pending = 0;
+  /** Bumped when a move is refused: the moves queued behind it were made against an order the
+   * server never reached, so they are dropped. */
+  #moveGeneration = 0;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    void this.#load();
+  }
+
+  protected override willUpdate(changed: PropertyValues): void {
+    if (changed.has("sections"))
+      this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
+    if (changed.has("structure") || changed.has("path")) this.#resolvePath();
+    if (changed.has("structure") || changed.has("path") || changed.has("sections"))
+      this.#excluded = this.path.length === 0 ? [] : sectionsHolding(this.sections, this.#listId!);
+    if (changed.has("products") || changed.has("structure") || changed.has("path")) {
+      const held = new Set(this.#inSection);
+      this.#memberProducts = this.products.filter(
+        (product) => product.active || held.has(product.id),
+      );
+    }
+    if (changed.has("products")) this.#addable = this.products.filter((product) => product.active);
+    const usagesFor = this.path.length === 0 ? null : this.#listId;
+    if (usagesFor !== this.#usagesFor) {
+      this.#usagesFor = usagesFor;
+      this.#readUsages(usagesFor);
+    }
+  }
+
+  /** Keeps the longest part of the path the structure still has, and derives the list it names. */
+  #resolvePath(): void {
+    const trail: MenuStructureNode[] = [];
+    let nodes = this.structure?.nodes ?? [];
+    for (const memberId of this.path) {
+      const node = nodes.find((candidate) => candidate.memberId === memberId);
+      if (node?.ref.kind !== "section") break;
+      trail.push(node);
+      nodes = node.children ?? [];
+    }
+    if (trail.length < this.path.length) this.path = this.path.slice(0, trail.length);
+    this.#trail = trail;
+    const last = trail.at(-1);
+    this.#listId =
+      last?.ref.kind === "section" ? last.ref.sectionId : (this.structure?.rootSectionId ?? null);
+    this.#listMembers = nodes.map(({ memberId, ref }, position) => ({
+      id: memberId,
+      position,
+      ref,
+    }));
+    this.#inSection = nodes.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : []));
+    this.#onMenu = reachableProducts(this.structure?.nodes ?? []);
+  }
+
+  // ── Loading and the address ─────────────────────────────────────────────────────────────────
+
+  async #load(): Promise<void> {
+    this.loadError = false;
+    try {
+      await Promise.all([
+        this.#queries.watch("listCatalogues", [], (value) => {
+          this.menus = value;
+        }),
+        this.#watchSections(),
+        this.#queries.watch("listLibraryProducts", [], (value) => {
+          this.products = value;
+        }),
+        this.#queries.watch("listCategories", [], (value) => {
+          this.categories = value;
+        }),
+        this.#queries.watch("getContentLanguages", [], (value) => {
+          setContentLanguages(value);
+        }),
+      ]);
+    } catch {
+      this.loadError = true;
+    } finally {
+      this.loading = false;
+    }
+    this.#checkAddress();
+  }
+
+  #watchSections(): Promise<void> {
+    return this.#queries.watch("listSections", [], (value) => {
+      this.sections = value;
+    });
+  }
+
+  async #watchStructure(): Promise<void> {
+    const menuId = this.menuId;
+    if (menuId === null) return;
+    this.structureError = false;
+    try {
+      await this.#structureQueries.watch("getMenuStructure", [menuId], (value) => {
+        if (this.menuId === menuId) this.structure = value;
+      });
+    } catch {
+      if (this.menuId === menuId) this.structureError = true;
+    }
+  }
+
+  /** A write that succeeded is never reported as a failed one: a failure here is a load failure. */
+  async #refresh(): Promise<void> {
+    await Promise.all([this.#watchStructure(), this.#watchSections().catch(() => undefined)]);
+  }
+
+  #restore(): void {
+    if (this.#url.read("dashboard") !== "menus") return;
+    this.#select(this.#url.read("menu"));
+    this.#checkAddress();
+  }
+
+  #select(menuId: string | null): void {
+    if (menuId === this.menuId) return;
+    this.menuId = menuId;
+    this.path = [];
+    this.structure = null;
+    this.structureError = false;
+    this.memberError = null;
+    if (menuId === null) this.#structureQueries.release("getMenuStructure");
+    else void this.#watchStructure();
+  }
+
+  /** Replaces an address naming a menu that does not exist, or a tab the editor does not have. */
+  #checkAddress(): void {
+    if (this.#url.read("dashboard") !== "menus") return;
+    if (this.menuId === null) {
+      if (this.#url.read("view") !== null) this.#url.write({ view: null }, true);
+      return;
+    }
+    if (!this.loading && !this.loadError && !this.menus.some(({ id }) => id === this.menuId)) {
+      this.#select(null);
+      this.#url.write({ menu: null, view: null }, true);
+      return;
+    }
+    const view = this.#url.read("view");
+    if (!TABS.includes(view as (typeof TABS)[number])) this.#url.write({ view: TABS[0] }, true);
+  }
+
+  #open(menuId: string): void {
+    this.#select(menuId);
+    this.#url.write({ dashboard: "menus", menu: menuId, view: TABS[0] });
+  }
+
+  #backToList(): void {
+    this.#select(null);
+    this.#url.write({ dashboard: "menus", menu: null, view: null });
+  }
+
+  #menuName(): string {
+    return this.menus.find(({ id }) => id === this.menuId)?.name ?? "";
+  }
+
+  /** The staff name of a node on the path, every one of which is a section. */
+  #nodeName(node: MenuStructureNode): string {
+    const name =
+      node.ref.kind === "section" ? this.#sectionNames.get(node.ref.sectionId) : undefined;
+    return name ?? t("members.missing");
+  }
+
+  #listName(): string {
+    const last = this.#trail.at(-1);
+    return last ? this.#nodeName(last) : this.#menuName();
+  }
+
+  /** The list holding the section being edited: the section before it on the path, or the root. */
+  #parent(): { id: string; name: string } {
+    const parent = this.#trail.at(-2);
+    if (parent?.ref.kind === "section")
+      return { id: parent.ref.sectionId, name: this.#nodeName(parent) };
+    return { id: this.structure!.rootSectionId, name: this.#menuName() };
+  }
+
+  #readUsages(sectionId: string | null): void {
+    const generation = ++this.#usagesGeneration;
+    this.usages = null;
+    this.usagesError = false;
+    if (sectionId === null) return;
+    this.api.getSectionUsages(sectionId).then(
+      (usages) => {
+        if (generation === this.#usagesGeneration) this.usages = usages;
+      },
+      () => {
+        if (generation === this.#usagesGeneration) this.usagesError = true;
+      },
+    );
+  }
+
+  // ── Menus ────────────────────────────────────────────────────────────────────────────────────
+
+  #openMenuForm(menu: CatalogueSummary | null): void {
+    this.menuForm = { id: menu?.id ?? null, name: menu?.name ?? "" };
+    this.menuFormName = menu?.name ?? "";
+    this.menuFormErrors = {};
+  }
+
+  async #saveMenu(): Promise<void> {
+    const form = this.menuForm;
+    if (form === null || this.busy) return;
+    const name = this.menuFormName.trim();
+    if (name === "") {
+      this.menuFormErrors = { name: t("menus.name_required") };
+      return;
+    }
+    this.busy = true;
+    this.menuFormErrors = {};
+    try {
+      if (form.id === null) await this.api.createCatalogue(name);
+      else await this.api.renameCatalogue(form.id, name);
+    } catch (error) {
+      this.menuFormErrors = refusal(error, "name");
+      this.busy = false;
+      return;
+    }
+    this.busy = false;
+    this.menuForm = null;
+    await this.#load();
+  }
+
+  // ── The list being edited ────────────────────────────────────────────────────────────────────
+
+  #enqueue(task: () => Promise<void>): void {
+    this.#pending++;
+    this.#chain = this.#chain.then(task).finally(() => {
+      this.#pending--;
+    });
+  }
+
+  /** Adds and removes hold `busy`, which disables the list until the menu is read again. */
+  #listWrite(write: (listId: string) => Promise<unknown>): void {
+    const listId = this.#listId!;
+    this.memberError = null;
+    this.busy = true;
+    this.#enqueue(async () => {
+      try {
+        await write(listId);
+      } catch (error) {
+        this.memberError = codeMessage(codeOf(error));
+        this.busy = false;
+        return;
+      }
+      await this.#refresh();
+      this.busy = false;
+    });
+  }
+
+  /** Not `busy`: that would disable the handle the keyboard user is on and drop their focus. */
+  #move(memberId: string, to: number): void {
+    const listId = this.#listId!;
+    const generation = this.#moveGeneration;
+    this.memberError = null;
+    this.#enqueue(async () => {
+      if (generation !== this.#moveGeneration) return;
+      try {
+        await this.api.moveSectionMember(listId, memberId, to);
+      } catch (error) {
+        this.#moveGeneration++;
+        this.memberError = codeMessage(codeOf(error));
+        await this.#refresh();
+        return;
+      }
+      // An earlier answer is already out of date when more moves wait behind it.
+      if (this.#pending === 1) await this.#refresh();
+    });
+  }
+
+  #openSection(sectionId: string): void {
+    const member = this.#listMembers.find(
+      ({ ref }) => ref.kind === "section" && ref.sectionId === sectionId,
+    );
+    if (member) this.#edit([...this.path, member.id]);
+  }
+
+  #edit(path: string[]): void {
+    this.path = path;
+    this.memberError = null;
+  }
+
+  #openDuplicate(): void {
+    const node = this.#trail.at(-1)!;
+    if (node.ref.kind !== "section") return;
+    const parent = this.#parent();
+    const sourceName = this.#listName();
+    this.duplicating = {
+      sourceId: node.ref.sectionId,
+      sourceName,
+      listId: parent.id,
+      listName: parent.name,
+      memberId: node.memberId,
+      memberIds: (node.children ?? []).map(({ memberId }) => memberId),
+    };
+    this.duplicateName = t("sections.copy_name").replace("{name}", sourceName);
+    this.duplicateErrors = {};
+  }
+
+  #duplicate(): void {
+    const duplicating = this.duplicating;
+    if (duplicating === null || this.busy) return;
+    const internalName = this.duplicateName.trim();
+    if (internalName === "") {
+      this.duplicateErrors = { internalName: t("sections.internal_name_required") };
+      return;
+    }
+    this.busy = true;
+    this.duplicateErrors = {};
+    this.#enqueue(async () => {
+      try {
+        await this.api.duplicateSection(duplicating.sourceId, {
+          internalName,
+          memberIds: duplicating.memberIds,
+          replaceIn: { sectionId: duplicating.listId, memberId: duplicating.memberId },
+        });
+      } catch (error) {
+        this.duplicateErrors = refusal(error, "internalName");
+        this.busy = false;
+        return;
+      }
+      this.duplicating = null;
+      await this.#refresh();
+      this.busy = false;
+    });
+  }
+
+  #openNewSection(): void {
+    this.creatingSection = true;
+    this.newSectionName = "";
+    this.newSectionErrors = {};
+  }
+
+  /** Two requests: the section, then its place in the list. A section left out of the list by a
+   * refused second request is still in the library, and offered by the list's own picker. */
+  #createSection(): void {
+    if (!this.creatingSection || this.busy) return;
+    const internalName = this.newSectionName.trim();
+    if (internalName === "") {
+      this.newSectionErrors = { internalName: t("sections.internal_name_required") };
+      return;
+    }
+    const listId = this.#listId!;
+    this.busy = true;
+    this.newSectionErrors = {};
+    this.memberError = null;
+    this.#enqueue(async () => {
+      let created: LibrarySection;
+      try {
+        created = await this.api.createSection({ internalName });
+      } catch (error) {
+        this.newSectionErrors = refusal(error, "internalName");
+        this.busy = false;
+        return;
+      }
+      this.creatingSection = false;
+      try {
+        await this.api.addSectionMember(listId, { kind: "section", sectionId: created.id });
+      } catch {
+        this.memberError = t("menus.section_not_added").replace("{name}", created.internalName);
+      }
+      await this.#refresh();
+      this.busy = false;
+    });
+  }
+
+  #addProducts(productIds: string[]): void {
+    const listId = this.#listId!;
+    this.busy = true;
+    this.addProductsError = null;
+    this.#enqueue(async () => {
+      try {
+        await this.api.addSectionProducts(listId, productIds);
+      } catch (error) {
+        this.addProductsError = codeMessage(codeOf(error));
+        this.busy = false;
+        return;
+      }
+      this.addingProducts = false;
+      await this.#refresh();
+      this.busy = false;
+    });
+  }
+
+  // ── Rendering ────────────────────────────────────────────────────────────────────────────────
+
+  #buildColumns(): DataTableColumn<CatalogueSummary>[] {
+    return [
+      {
+        key: "name",
+        label: t("menus.name"),
+        sortValue: (menu) => menu.name,
+        searchValue: (menu) => menu.name,
+        cell: (menu) =>
+          html`<wt-button
+            variant="ghost"
+            part="name"
+            data-test=${`open-${menu.id}`}
+            @click=${() => this.#open(menu.id)}
+            >${menu.name}</wt-button
+          >`,
+      },
+      {
+        key: "actions",
+        label: t("menus.actions"),
+        cell: (menu) =>
+          html`<wt-row-actions label=${`${t("menus.actions")}: ${menu.name}`}
+            ><wt-button
+              align="start"
+              variant="ghost"
+              data-test=${`edit-${menu.id}`}
+              @click=${() => this.#open(menu.id)}
+              >${t("menus.open")}</wt-button
+            ><wt-button
+              align="start"
+              variant="ghost"
+              data-test=${`rename-${menu.id}`}
+              @click=${() => this.#openMenuForm(menu)}
+              >${t("menus.rename")}</wt-button
+            ></wt-row-actions
+          >`,
+      },
+    ];
+  }
+
+  #summary(errors: Record<string, string>) {
+    return html`<wt-form-error-summary
+      heading=${t("form.error_heading")}
+      .errors=${Object.values(errors)}
+    ></wt-form-error-summary>`;
+  }
+
+  #guardEscape = (event: KeyboardEvent): void => {
+    if (this.busy && event.key === "Escape") event.preventDefault();
+  };
+
+  #nameInput(options: {
+    name: string;
+    label: string;
+    value: string;
+    error: string;
+    save: string;
+    change: (value: string) => void;
+  }) {
+    return html`<wt-input
+      name=${options.name}
+      required
+      label=${options.label}
+      .value=${options.value}
+      .error=${options.error}
+      .disabled=${this.busy}
+      @keydown=${(event: KeyboardEvent) =>
+        submitOnEnter(
+          event,
+          this.shadowRoot!.querySelector<HTMLElement>(`[data-test="${options.save}"]`),
+        )}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        options.change(event.detail.value);
+      }}
+    ></wt-input>`;
+  }
+
+  #formModal(options: {
+    test: string;
+    open: boolean;
+    heading: string;
+    body: unknown;
+    save: string;
+    saveLabel: string;
+    close: () => void;
+    submit: () => void;
+  }) {
+    return html`<wt-modal
+      data-test=${options.test}
+      .open=${options.open}
+      heading=${options.heading}
+      @keydown=${this.#guardEscape}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (!this.busy) options.close();
+      }}
+    >
+      ${options.open ? options.body : nothing}
+      <wt-form-actions slot="footer"
+        ><wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test=${`${options.test}-cancel`}
+          .disabled=${this.busy}
+          @click=${() => {
+            if (!this.busy) options.close();
+          }}
+          >${t("action.cancel")}</wt-button
+        ><wt-button
+          variant="primary"
+          data-test=${options.save}
+          .disabled=${this.busy}
+          @click=${options.submit}
+          >${options.saveLabel}</wt-button
+        ></wt-form-actions
+      >
+    </wt-modal>`;
+  }
+
+  #renderMenuForm() {
+    const form = this.menuForm;
+    const errors = this.menuFormErrors;
+    return this.#formModal({
+      test: "menu-form",
+      open: form !== null,
+      heading:
+        form?.id == null
+          ? t("menus.create")
+          : t("menus.rename_heading").replace("{name}", form.name),
+      body: html`<div class="fields">
+        ${this.#summary(errors)}
+        ${this.#nameInput({
+          name: "name",
+          label: t("menus.name"),
+          value: this.menuFormName,
+          error: errors.name ?? "",
+          save: "menu-save",
+          change: (value) => {
+            this.menuFormName = value;
+            this.menuFormErrors = {};
+          },
+        })}
+      </div>`,
+      save: "menu-save",
+      saveLabel: t("action.save"),
+      close: () => {
+        this.menuForm = null;
+      },
+      submit: () => void this.#saveMenu(),
+    });
+  }
+
+  #renderList() {
+    return html`<h1>${t("menus.title")}</h1>
+      ${this.#renderLoadState()}
+      ${
+        !this.loading && !this.loadError
+          ? html`<div class="page-actions">
+                <wt-button
+                  data-test="add-menu"
+                  variant="primary"
+                  @click=${() => this.#openMenuForm(null)}
+                  >${t("menus.add")}</wt-button
+                >
+              </div>
+              <wt-data-table
+                data-test="menus"
+                aria-label=${t("menus.title")}
+                viewKey="waitron.menus.table"
+                sortKey="name"
+                sortDirection="ascending"
+                .rows=${this.menus}
+                .columns=${this.#columns}
+                .rowKey=${(menu: CatalogueSummary) => menu.id}
+                .emptyMessage=${t("menus.empty")}
+              ></wt-data-table>`
+          : nothing
+      }
+      ${this.#renderMenuForm()}`;
+  }
+
+  #renderLoadState() {
+    return html`${
+      this.loading ? html`<p role="status" data-test="loading">${t("menus.loading")}</p>` : nothing
+    }
+    ${
+      this.loadError
+        ? html`<p class="error" role="alert" data-test="load-error">${t("menus.load_error")}</p>
+            <wt-button data-test="retry" variant="secondary" @click=${() => void this.#load()}
+              >${t("menus.retry")}</wt-button
+            >`
+        : nothing
+    }`;
+  }
+
+  #renderBreadcrumb() {
+    const crumbs = [this.#menuName(), ...this.#trail.map((node) => this.#nodeName(node))];
+    const last = crumbs.length - 1;
+    return html`<nav class="breadcrumb" aria-label=${t("menus.breadcrumb")} data-test="breadcrumb">
+      <ol>
+        ${crumbs.map((name, index) =>
+          index === last
+            ? html`<li>
+                <span aria-current="location" data-test=${`crumb-${index}`}>${name}</span>
+              </li>`
+            : html`<li>
+                <wt-button
+                  variant="ghost"
+                  data-test=${`crumb-${index}`}
+                  @click=${() => this.#edit(this.path.slice(0, index))}
+                  >${name}</wt-button
+                >
+                <span class="sep" aria-hidden="true">›</span>
+              </li>`,
+        )}
+      </ol>
+    </nav>`;
+  }
+
+  #renderShared() {
+    if (this.path.length === 0) return nothing;
+    const duplicate = html`<div>
+      <wt-button
+        data-test="duplicate-here"
+        variant="secondary"
+        .disabled=${this.busy}
+        @click=${() => this.#openDuplicate()}
+        >${t("menus.duplicate_here")}</wt-button
+      >
+    </div>`;
+    if (this.usagesError)
+      return html`<p class="error" role="alert" data-test="usages-error">
+          ${t("sections.usages_error")}
+        </p>
+        ${duplicate}`;
+    const usages = this.usages;
+    if (usages === null)
+      return html`<p class="note" role="status">${t("sections.usages_loading")}</p>
+        ${duplicate}`;
+    const parent = this.#trail.at(-2);
+    const parentId = parent?.ref.kind === "section" ? parent.ref.sectionId : null;
+    const elsewhere = [
+      ...usages.menus.filter(({ id }) => id !== this.menuId).map(({ name }) => name),
+      ...usages.sections
+        .filter(({ id }) => id !== parentId)
+        .map(({ internalName }) => internalName),
+    ];
+    if (elsewhere.length === 0)
+      return html`<p class="note" data-test="not-shared">${t("menus.not_shared")}</p>
+        ${duplicate}`;
+    return html`<p class="note" data-test="shared">
+        ${t("menus.shared").replace("{list}", elsewhere.join(", "))}
+      </p>
+      <p class="help">${t("menus.shared_note")}</p>
+      ${duplicate}`;
+  }
+
+  #renderListEditor() {
+    const listName = this.#listName();
+    return html`<section class="panel" aria-labelledby="list-heading">
+      ${this.#renderBreadcrumb()}
+      <h2 id="list-heading">${listName}</h2>
+      ${this.#renderShared()}
+      <p class="help">${t("sections.members_saved_note")}</p>
+      ${
+        this.memberError
+          ? html`<p class="error" role="alert" data-test="member-error">${this.memberError}</p>`
+          : nothing
+      }
+      <dashboard-member-list-editor
+        .members=${this.#listMembers}
+        .products=${this.#memberProducts}
+        .sections=${this.sections}
+        .excludeSectionIds=${this.#excluded}
+        .busy=${this.busy}
+        label=${t("sections.members_label").replace("{name}", listName)}
+        listName=${listName}
+        @wt-member-add=${(event: CustomEvent<{ ref: MemberRef }>) => {
+          event.stopPropagation();
+          const { ref } = event.detail;
+          this.#listWrite((id) => this.api.addSectionMember(id, ref));
+        }}
+        @wt-member-remove=${(event: CustomEvent<{ memberId: string }>) => {
+          event.stopPropagation();
+          const { memberId } = event.detail;
+          this.#listWrite((id) => this.api.removeSectionMember(id, memberId));
+        }}
+        @wt-member-move=${(event: CustomEvent<{ memberId: string; to: number }>) => {
+          event.stopPropagation();
+          this.#move(event.detail.memberId, event.detail.to);
+        }}
+        @wt-member-open=${(event: CustomEvent<{ sectionId: string }>) => {
+          event.stopPropagation();
+          this.#openSection(event.detail.sectionId);
+        }}
+      ></dashboard-member-list-editor>
+      <div class="list-actions">
+        <wt-button
+          data-test="new-section"
+          variant="secondary"
+          .disabled=${this.busy}
+          @click=${() => this.#openNewSection()}
+          >${t("menus.new_section")}</wt-button
+        >
+        <wt-button
+          data-test="open-add-products"
+          variant="secondary"
+          .disabled=${this.busy}
+          @click=${() => {
+            this.addProductsError = null;
+            this.addingProducts = true;
+          }}
+          >${t("sections.add_products")}</wt-button
+        >
+      </div>
+    </section>`;
+  }
+
+  #renderStructure() {
+    const structure = this.structure;
+    const error = this.structureError
+      ? html`<p class="error" role="alert" data-test="structure-error">
+            ${t("menus.structure_error")}
+          </p>
+          <div>
+            <wt-button
+              data-test="structure-retry"
+              variant="secondary"
+              @click=${() => void this.#watchStructure()}
+              >${t("menus.retry")}</wt-button
+            >
+          </div>`
+      : nothing;
+    if (structure === null)
+      return html`${error}${
+        this.structureError
+          ? nothing
+          : html`<p role="status" data-test="structure-loading">${t("menus.structure_loading")}</p>`
+      }`;
+    return html`${error}
+      <div class="structure">
+        <section class="panel" aria-labelledby="tree-heading">
+          <h2 id="tree-heading">${t("menus.tree_heading")}</h2>
+          <dashboard-menu-structure-tree
+            .nodes=${structure.nodes}
+            .products=${this.products}
+            .sections=${this.sections}
+            .current=${this.path}
+            label=${this.#menuName()}
+            @wt-structure-edit=${(event: CustomEvent<{ path: string[] }>) => {
+              event.stopPropagation();
+              this.#edit(event.detail.path);
+            }}
+          ></dashboard-menu-structure-tree>
+        </section>
+        ${this.#renderListEditor()}
+      </div>`;
+  }
+
+  #renderDuplicate() {
+    const duplicating = this.duplicating;
+    const errors = this.duplicateErrors;
+    return this.#formModal({
+      test: "duplicate",
+      open: duplicating !== null,
+      heading: t("menus.duplicate_heading").replace("{name}", duplicating?.sourceName ?? ""),
+      body: html`<div class="fields">
+        ${this.#summary(errors)}
+        ${this.#nameInput({
+          name: "internalName",
+          label: t("sections.internal_name"),
+          value: this.duplicateName,
+          error: errors.internalName ?? "",
+          save: "duplicate-save",
+          change: (value) => {
+            this.duplicateName = value;
+            this.duplicateErrors = {};
+          },
+        })}
+        <p class="help">
+          ${t("menus.duplicate_note")
+            .replaceAll("{name}", duplicating?.sourceName ?? "")
+            .replace("{list}", duplicating?.listName ?? "")}
+        </p>
+      </div>`,
+      save: "duplicate-save",
+      saveLabel: t("menus.duplicate_save"),
+      close: () => {
+        this.duplicating = null;
+      },
+      submit: () => this.#duplicate(),
+    });
+  }
+
+  #renderNewSection() {
+    const errors = this.newSectionErrors;
+    return this.#formModal({
+      test: "new-section",
+      open: this.creatingSection,
+      heading: t("menus.new_section_heading").replace("{list}", this.#listName()),
+      body: html`<div class="fields">
+        ${this.#summary(errors)}
+        ${this.#nameInput({
+          name: "internalName",
+          label: t("sections.internal_name"),
+          value: this.newSectionName,
+          error: errors.internalName ?? "",
+          save: "new-section-save",
+          change: (value) => {
+            this.newSectionName = value;
+            this.newSectionErrors = {};
+          },
+        })}
+        <p class="help">${t("sections.internal_name_help")}</p>
+      </div>`,
+      save: "new-section-save",
+      saveLabel: t("action.save"),
+      close: () => {
+        this.creatingSection = false;
+      },
+      submit: () => this.#createSection(),
+    });
+  }
+
+  #renderAddProducts() {
+    return html`<wt-modal
+      data-test="add-products"
+      .open=${this.addingProducts}
+      heading=${t("sections.add_products_heading").replace("{name}", this.#listName())}
+      @keydown=${this.#guardEscape}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (!this.busy) this.addingProducts = false;
+      }}
+    >
+      ${
+        this.addingProducts
+          ? html`${
+                this.addProductsError
+                  ? html`<p class="error" role="alert" data-test="add-products-error">
+                      ${this.addProductsError}
+                    </p>`
+                  : nothing
+              }
+              <dashboard-section-add-products
+                .products=${this.#addable}
+                .categories=${this.categories}
+                .inSection=${this.#inSection}
+                .onMenu=${this.#onMenu}
+                .busy=${this.busy}
+                @wt-add-products=${(event: CustomEvent<{ productIds: string[] }>) => {
+                  event.stopPropagation();
+                  this.#addProducts(event.detail.productIds);
+                }}
+                ><wt-button
+                  slot="cancel"
+                  variant="secondary"
+                  data-test="add-products-cancel"
+                  .disabled=${this.busy}
+                  @click=${() => {
+                    this.addingProducts = false;
+                  }}
+                  >${t("action.cancel")}</wt-button
+                ></dashboard-section-add-products
+              >`
+          : nothing
+      }
+    </wt-modal>`;
+  }
+
+  #renderEditor() {
+    const name = this.#menuName();
+    return html`<div class="back">
+        <wt-button data-test="back" variant="ghost" @click=${() => this.#backToList()}
+          >${t("menus.back")}</wt-button
+        >
+      </div>
+      <h1>${name || t("menus.title")}</h1>
+      ${this.#renderLoadState()}
+      <wt-tabs
+        data-test="menu-tabs"
+        label=${name || t("menus.title")}
+        .value=${TABS[0]}
+        .items=${[{ key: "structure", label: t("menus.tab_structure") }]}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          if (event.target !== event.currentTarget) return;
+          this.#url.write({ view: event.detail.value });
+        }}
+      >
+        <div slot="structure">${this.#renderStructure()}</div>
+      </wt-tabs>
+      ${this.#renderDuplicate()} ${this.#renderNewSection()} ${this.#renderAddProducts()}`;
+  }
+
+  override render() {
+    return this.menuId === null ? this.#renderList() : this.#renderEditor();
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "dashboard-menus-screen": MenusScreen;
+  }
+}

@@ -292,6 +292,17 @@ it("removes a member and opens a section member, stopping the click that asked",
   );
 });
 
+it("names the list a removal takes the member out of, when it is given one", async () => {
+  const unnamed = await mount();
+  expect(q(unnamed, '[data-test="remove-m-lemonade"]').textContent!.trim()).toBe(
+    t("members.remove"),
+  );
+  const named = await mount({ listName: "Drinks" });
+  expect(q(named, '[data-test="remove-m-lemonade"]').textContent!.trim()).toBe(
+    t("members.remove_from").replace("{list}", "Drinks"),
+  );
+});
+
 it("while busy, disables every control and reports nothing", async () => {
   const el = await mount({ busy: true });
   const seen: string[] = [];
