@@ -2716,16 +2716,31 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
-- **`scripts/waitron-sh.test.mjs`'s "when the pull fails" case fails whenever its temporary
-  folder's random name contains "up".** It asserts the recorded docker calls do not match
-  `/docker compose .*up/`, and the pull it does expect, `docker compose -f "$WAITRON_DIR/compose.yml"
-  pull` (`deploy/waitron.sh`), carries the sandbox's `mkdtemp` path. It failed that way on `main`'s
-  CI run for `47ee3a7ba` (the `lint` job's root suite) and passed on the next commit. Reproduced
-  2026-09-25 by lane A: `TMPDIR=/tmp/probe-up-dir pnpm exec vitest run scripts/waitron-sh.test.mjs -t
-  'when the pull fails'` fails with CI's message; the same run with `TMPDIR=/tmp/probe-ab-dir`
-  passes. The fix is to match the `up` subcommand as a word rather than two letters anywhere on the
-  line; nothing is changed yet. Other assertions in that file that match a short word against a
-  line carrying the sandbox path may share the shape (not checked).
+- **`scripts/waitron-sh.test.mjs` failed at random when its temporary folder's name held a word it
+  matched — DONE (2026-09-26, lane A's A31b, branch `test/waitron-sh-up-matcher`).** Two cases
+  matched a word anywhere on a recorded `docker compose` line, and the line carries the sandbox's
+  `mkdtemp` path: "when the pull fails" (`/docker compose .*up/`, red on `main`'s CI run for
+  `47ee3a7ba`) and "asks compose to remove orphans" (`\b(up -d|down)\b`). Reproduced 2026-09-25:
+  under `TMPDIR=/tmp/probe-up-dir` the first failed with CI's message, under
+  `TMPDIR=/tmp/probe-down-dir` the second failed with `expected [ …(6) ] to have a length of 2 but
+  got 6`, and under `/tmp/probe-ab-dir` all 32 passed. The docker stub now drops `compose` and one
+  leading `-f <file>`, takes the subcommand by position, and refuses (exit 97) a call whose next
+  word is not `pull`, `ps`, `logs`, `run`, `exec`, `up` or `down`; it logs a newline inside an argument as `\n`, so each call is one log line. Every check on
+  a compose subcommand — `pull`, `up`, `down` and `run` — reads the calls through `composeCalls`,
+  which removes the box's own `-f` by its exact path. The pull-failure case refuses `up` as a whole
+  word anywhere in a compose call, and the orphans case asserts one `down` then one `up`. Run
+  2026-09-26: all 32 pass with `TMPDIR` set to `/tmp/probe-up-dir`, `/tmp/probe-down-dir`,
+  `/tmp/probe-ab-dir` and `"/tmp/probe run dir"`, and each of four temporary breakages of
+  `deploy/waitron.sh` turned at least one case red under both `"/tmp/probe run dir"` and
+  `/tmp/probe-up-dir`: reset's reads switched from compose `run` to `exec`; reset's `up` replaced by
+  a second `down --remove-orphans`; an `up` (also `--env-file /dev/null up -d`) added after the
+  failed pull; the pull removed. Before the change, the `exec` breakage passed all 32 cases under
+  `"/tmp/probe run dir"`, and the reset-`up` breakage left the orphans case green (only the volumes
+  case caught it). The matchers still reading the raw log are `docker volume rm` and `docker build`,
+  whose lines carry no sandbox path, and the "aborts when a volume removal fails" case's negative
+  `/! -name tls/`, which the random part of a `mkdtemp` name cannot hold. `scripts/main-tag-guard.test.mjs` asserts on recorded
+  stub arguments (for example `expect(result.dockerArgs).toContain(IMAGE)`), which are image names
+  and API paths carrying no sandbox path.
 
 - **A pull request that changes only `scripts/bundle-node.mjs` builds no bundle — DONE (the
   owner's answer (a), 2026-09-24, to the note lane B's campaign queue item B8 raised about #580 —
