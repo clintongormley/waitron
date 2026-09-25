@@ -260,8 +260,11 @@ step (`apps/dashboard/src/widgets/add-to-menus.ts`); a failed placement leaves t
 says which places failed. Left, none blocking: `POST /management-api/catalogues` accepts a blank
 name (read, not run; the rename route refuses one), so the screen's own check is the only guard on
 create; "New section here" asks only for the internal name, so a section's customer names, image
-and colour are still edited on the Sections screen; and which section is being edited is not in the
-address, only the menu and the tab.
+and colour are still edited on the Sections screen; which section is being edited is not in the
+address, only the menu and the tab; and opening "Add to menus" sends one `getMenuStructure` request
+per menu, each of which reads the whole section graph on the server (`readMenuStructure`,
+`packages/catalogue/src/menu-structure.ts`) — one server read returning every menu's structure, as
+`librarySectionUsages` does for usages, would make it one.
 Next in the lane: menus Task 5 (menu prices, and the old Menus tab goes). The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the

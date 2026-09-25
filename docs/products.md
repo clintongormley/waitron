@@ -141,6 +141,15 @@ Recipes and ingredient origins no longer author product declarations in the supp
 workflow. Existing purchasing data and recorded order facts remain available, but you maintain live
 product allergens and dietary suitability in **Products**.
 
+## Put a new product on your menus
+
+When you save a new product, the editor closes and a window such as **Add Flat white to menus** asks where it goes. It
+lists each menu's **Top level** and the sections inside it: tick the places you want and choose
+**Add to menus**, or choose **Skip** and place it later. The product is already saved by then, so a
+place that refuses it does not undo the save — the window names the places that failed and keeps them
+ticked so you can try again. A menu's sections themselves are built under **Products and recipes →
+Menus**.
+
 ## Keep choices reusable
 
 Create reusable extras lists and options lists on the two tabs of **Modifiers**, then attach them in
