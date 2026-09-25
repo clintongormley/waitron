@@ -123,7 +123,7 @@ function failureOf(error: unknown): Failure {
  * The bucket copy on the Backups screen: the bucket settings, Test, how current the copy is, and
  * the recovery kit. When a later read of the settings brings a different key fingerprint, the key
  * was changed, so the kit is fetched again with a banner, because copies made before the change
- * still need the old kit.
+ * still need the old kit. A failed fetch is tried again on the next read.
  */
 @customElement("dashboard-stream-settings")
 export class StreamSettingsPanel extends LitElement {
@@ -234,9 +234,11 @@ export class StreamSettingsPanel extends LitElement {
   @state() private errors: Partial<Record<Field, string>> = {};
   @state() private submitting = false;
   @state() private testPassed = false;
-  /** A refusal of something the owner did; it stays until the owner acts again. */
+  /** A refusal of something the owner did; `#clearMessages` takes it away. */
   @state() private failure: Failure | null = null;
-  /** A failed read of the settings; the next successful read takes it away. */
+  /** A failed read of the settings, or of the kit after a key change. The next successful read of
+   * the settings takes it away, unless that read retries a failed kit fetch: then the fetch
+   * succeeding takes it away, so the alert does not vanish and return on every retry. */
   @state() private readFailure: Failure | null = null;
   @state() private kit: string | null = null;
   @state() private kitFingerprint: string | null = null;
@@ -247,6 +249,12 @@ export class StreamSettingsPanel extends LitElement {
 
   /** Applied in `updated`, so the message beside the field is on screen when focus lands. */
   #focusField: Field | null = null;
+  /** The key fingerprint the panel last accepted. While the copy is on, a read bringing a different
+   * key is accepted only once the kit has been fetched again, so the next read retries a failed
+   * fetch. */
+  #knownFingerprint: string | null | undefined = undefined;
+  #reissuing = false;
+  #reissueFailed = false;
   #blobUrls = new Map<string, string>();
 
   override connectedCallback(): void {
@@ -279,19 +287,41 @@ export class StreamSettingsPanel extends LitElement {
 
   /** The first key the panel sees is no change; a later different one is. */
   #arrived(value: StreamSettingsView): void {
-    const before = this.settings?.keyFingerprint;
     this.settings = value;
-    this.readFailure = null;
+    if (!value.configured) this.turnOffArmed = false;
+    const known = this.#knownFingerprint;
     const after = value.keyFingerprint;
-    if (
-      value.configured &&
-      before !== undefined &&
-      before !== null &&
-      after !== null &&
-      after !== before
-    ) {
+    const reissue = value.configured && known != null && after !== null && after !== known;
+    if (!reissue || !this.#reissueFailed) this.readFailure = null;
+    if (reissue) {
+      void this.#reissueKit(after);
+    } else {
+      this.#knownFingerprint = after;
+      this.#reissueFailed = false;
+    }
+  }
+
+  /** Through the background client, so an unattended screen stays passive. A fetch that settles
+   * after the copy was turned off shows nothing. */
+  async #reissueKit(fingerprint: string): Promise<void> {
+    if (this.#reissuing) return;
+    this.#reissuing = true;
+    try {
+      const { kit, keyFingerprint } = await (this.api.background ?? this.api).getRecoveryKit();
+      if (!this.settings!.configured) return;
+      this.kit = kit;
+      this.kitFingerprint = keyFingerprint;
       this.kitReissued = true;
-      void this.#loadKit(this.api.background ?? this.api);
+      this.#knownFingerprint = fingerprint;
+      this.#reissueFailed = false;
+      this.readFailure = null;
+    } catch (error) {
+      if (!this.settings!.configured) return;
+      this.readFailure = failureOf(error);
+      this.kitReissued = false;
+      this.#reissueFailed = true;
+    } finally {
+      this.#reissuing = false;
     }
   }
 
@@ -313,6 +343,7 @@ export class StreamSettingsPanel extends LitElement {
   #clearMessages(): void {
     this.failure = null;
     this.testPassed = false;
+    this.turnOffArmed = false;
   }
 
   #validate(): Partial<Record<Field, string>> {
@@ -371,7 +402,7 @@ export class StreamSettingsPanel extends LitElement {
       this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.editing = false;
       this.draft = { ...EMPTY };
-      await this.#loadKit(this.api);
+      await this.#loadKit();
     } catch (error) {
       this.#fail(error);
     } finally {
@@ -383,12 +414,12 @@ export class StreamSettingsPanel extends LitElement {
    * confirming tap. */
   async #turnOff(): Promise<void> {
     if (this.busy) return;
-    if (!this.turnOffArmed) {
+    const confirmed = this.turnOffArmed;
+    this.#clearMessages();
+    if (!confirmed) {
       this.turnOffArmed = true;
       return;
     }
-    this.turnOffArmed = false;
-    this.#clearMessages();
     this.busy = true;
     try {
       this.settings = await this.api.turnOffStream();
@@ -406,15 +437,15 @@ export class StreamSettingsPanel extends LitElement {
     this.#clearMessages();
     this.busy = true;
     try {
-      await this.#loadKit(this.api);
+      await this.#loadKit();
     } finally {
       this.busy = false;
     }
   }
 
-  async #loadKit(client: DashboardApi): Promise<void> {
+  async #loadKit(): Promise<void> {
     try {
-      const { kit, keyFingerprint } = await client.getRecoveryKit();
+      const { kit, keyFingerprint } = await this.api.getRecoveryKit();
       this.kit = kit;
       this.kitFingerprint = keyFingerprint;
     } catch (error) {
@@ -434,7 +465,6 @@ export class StreamSettingsPanel extends LitElement {
     };
     this.errors = {};
     this.#clearMessages();
-    this.turnOffArmed = false;
     this.editing = true;
   }
 
@@ -458,16 +488,24 @@ export class StreamSettingsPanel extends LitElement {
 
   override render(): TemplateResult {
     const s = this.settings;
-    const failure = this.failure ?? this.readFailure;
     return html`
       <section aria-labelledby="stream-title">
         <h2 id="stream-title">${t("stream.title")}</h2>
         <p class="hint">${t("stream.explanation")}</p>
         ${s === undefined ? nothing : this.#renderBody(s)}
         ${
-          failure === null
+          this.failure === null
             ? nothing
-            : html`<p class="error" role="alert">${this.#failureText(failure)}</p>`
+            : html`<p class="error" role="alert" data-test="refusal">
+                ${this.#failureText(this.failure)}
+              </p>`
+        }
+        ${
+          this.readFailure === null
+            ? nothing
+            : html`<p class="error" role="alert" data-test="read-failure">
+                ${this.#failureText(this.readFailure)}
+              </p>`
         }
       </section>
     `;

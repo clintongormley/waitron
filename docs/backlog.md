@@ -5297,9 +5297,10 @@ fetches the kit again and tells the owner to keep the old one for seven days. A 
 naming a bucket setting is shown beside that field; a failed Test names the failed check in words,
 and a check with no sentence of its own falls back to the refusal's own wording rather than the
 reason's text. The archive setup form no longer makes or sends a key when the box already holds one.
-The design system gained a `--wt-font-family-mono` token, which the Backups screen's key display
-and the panel's kit read; `apps/dashboard/src/screens/printers-screen.ts` already asked for it with
-a `monospace` fallback, and now gets it. Left open: the Backups screen's own card width is still a
+The design system gained a `--wt-font-family-mono` token, which the Backups screen's key display,
+the panel's kit, the diagnostics screen's log lines and the setup app's break-glass secret read;
+`apps/dashboard/src/screens/printers-screen.ts` already asked for it with a `monospace` fallback,
+and now gets it. Left open: the Backups screen's own card width is still a
 `34rem` literal, which the no-hardcoded-chrome rule forbids in a view and no guard reads.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The

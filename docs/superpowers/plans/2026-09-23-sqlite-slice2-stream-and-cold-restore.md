@@ -15781,13 +15781,20 @@ not as a refused setting."
 > `backup.stream_failed` needs none, as it is a log tag and the wire answer is `server.internal`. The
 > panel sits after the archive section's error line, not before it. Two Step 2 strings read
 > differently: `backup.key.existing` names "Change the recovery key" rather than "rotate the key", and
-> `backup.recovery_key_exists` says "turn backups on, then use “Change the recovery key”". After
-> review:
+> `backup.recovery_key_exists` says the box holds a different key from the one the page sent, to
+> reload and try again, and that “Change the recovery key” appears while backups are on: both the
+> setup form and the edit-settings form can meet it. After review:
 >
 > - The panel notices a key change from the fingerprint in its own settings read and fetches the kit
->   again; the Backups screen no longer passes it a fingerprint.
+>   again; the Backups screen no longer passes it a fingerprint. A failed fetch shows as a read
+>   alert and takes away the banner left by an earlier key change's fetch; the kit already on
+>   screen stays. Each later read tries the fetch again, and the alert stays on screen through
+>   those tries until one succeeds. A fetch that finishes after Turn off shows nothing.
 > - Save and the Backups screen's key change both invalidate `backup_status`.
-> - Turn off takes a second, confirming tap.
+> - Turn off takes a second, confirming tap. A tap on Show recovery kit or Change, or a read finding
+>   the copy turned off, cancels a first tap.
+> - A refusal and a failed read each show their own alert, so a failing read is not hidden behind an
+>   older refusal.
 > - `stream.status.minutes` became `stream.status.lag_minutes`, one sentence with a `{minutes}`
 >   placeholder.
 > - A refusal because the box's key is too short gets a panel sentence of its own.

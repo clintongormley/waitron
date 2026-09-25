@@ -45,6 +45,7 @@ const ON: StreamSettingsView = {
 };
 // A realistic kit is one long token with no spaces — the width case below depends on that.
 const KIT = `WAITRON-RECOVERY-KIT-1:${"eyJ2ZXJzaW9uIjoxLCJ2ZW51ZUlkIjoi".repeat(12)}`;
+const NEW_KIT = `WAITRON-RECOVERY-KIT-1:${"bmV3LWtleS1uZXcta2V5LW5ldy1rZXkt".repeat(12)}`;
 
 function stubApi(overrides: Partial<DashboardApi> = {}, settings = OFF): DashboardApi {
   const getStreamSettings = vi.fn().mockResolvedValue(settings);
@@ -551,6 +552,159 @@ describe("stream-settings-panel: once set up", () => {
     expect(text(el, "[data-test=kit-reissued]")).toBe(t("stream.kit.reissued"));
   });
 
+  it("says why an automatic re-issue failed, keeps the banner off the old kit, and a later read that fetches it takes the alert away", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    await press(el, "show-kit");
+    vi.mocked(api.getRecoveryKit).mockRejectedValue({ code: "connection.failed" });
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    expect(text(el, "[data-test=read-failure]")).toBe(codeMessage("connection.failed"));
+    expect(q(el, "[data-test=refusal]")).toBeNull();
+    expect(q(el, "[data-test=kit-reissued]")).toBeNull();
+    expect(text(el, "[data-test=kit]")).toBe(KIT);
+    vi.mocked(api.getRecoveryKit).mockResolvedValue({ kit: NEW_KIT, keyFingerprint: "ffee0011" });
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    expect(q(el, "[role=alert]")).toBeNull();
+    expect(text(el, "[data-test=kit-reissued]")).toBe(t("stream.kit.reissued"));
+    expect(text(el, "[data-test=kit]")).toBe(NEW_KIT);
+  });
+
+  it("tries a failed automatic re-issue again on each later read until it succeeds, and then stops", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    vi.mocked(api.getRecoveryKit).mockRejectedValue({ code: "connection.failed" });
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    expect(api.getRecoveryKit).toHaveBeenCalledTimes(2);
+    vi.mocked(api.getRecoveryKit).mockResolvedValue({ kit: NEW_KIT, keyFingerprint: "ffee0011" });
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    expect(api.getRecoveryKit).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not start a second re-issue while one is still being fetched", async () => {
+    type Kit = { kit: string; keyFingerprint: string };
+    let finish!: (value: Kit) => void;
+    const api = stubApi({ getRecoveryKit: vi.fn(() => new Promise<Kit>((r) => (finish = r))) }, ON);
+    const { el } = await mount(api);
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    expect(api.getRecoveryKit).toHaveBeenCalledOnce();
+    finish({ kit: NEW_KIT, keyFingerprint: "ffee0011" });
+    await flush(el);
+    expect(text(el, "[data-test=kit]")).toBe(NEW_KIT);
+  });
+
+  it("takes the banner away when a second key change's re-issue fails, so the first new kit is not offered as the one to download", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    vi.mocked(api.getRecoveryKit).mockResolvedValue({ kit: NEW_KIT, keyFingerprint: "ffee0011" });
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    expect(text(el, "[data-test=kit-reissued]")).toBe(t("stream.kit.reissued"));
+    vi.mocked(api.getRecoveryKit).mockRejectedValue({ code: "connection.failed" });
+    await refresh(el, api, { ...ON, keyFingerprint: "99887766" });
+    expect(text(el, "[data-test=read-failure]")).toBe(codeMessage("connection.failed"));
+    expect(q(el, "[data-test=kit-reissued]")).toBeNull();
+  });
+
+  it("keeps a failed re-issue's alert in place while a later read tries again, and takes it away once the kit arrives", async () => {
+    type Kit = { kit: string; keyFingerprint: string };
+    const changed = { ...ON, keyFingerprint: "ffee0011" };
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    vi.mocked(api.getRecoveryKit).mockRejectedValue({ code: "connection.failed" });
+    await refresh(el, api, changed);
+    const alert = q(el, "[data-test=read-failure]");
+    expect(alert).not.toBeNull();
+    let fail!: (error: unknown) => void;
+    vi.mocked(api.getRecoveryKit).mockImplementation(
+      () => new Promise<Kit>((_, reject) => (fail = reject)),
+    );
+    await refresh(el, api, changed);
+    expect(api.getRecoveryKit).toHaveBeenCalledTimes(2);
+    expect(q(el, "[data-test=read-failure]")).toBe(alert);
+    fail({ code: "connection.failed" });
+    await flush(el);
+    expect(q(el, "[data-test=read-failure]")).toBe(alert);
+    vi.mocked(api.getRecoveryKit).mockResolvedValue({ kit: NEW_KIT, keyFingerprint: "ffee0011" });
+    await refresh(el, api, changed);
+    expect(q(el, "[data-test=read-failure]")).toBeNull();
+  });
+
+  it.each([
+    ["fetched", { ...ON, keyFingerprint: "ffee0011" }, 3],
+    ["dropped by the copy being turned off", { ...OFF, keyFingerprint: "ffee0011" }, 2],
+  ] as const)(
+    "once a failed re-issue is %s, a failed read's alert goes with the next successful read, even one bringing another key change",
+    async (_, settled, fetches) => {
+      type Kit = { kit: string; keyFingerprint: string };
+      const api = stubApi({}, ON);
+      const { el } = await mount(api);
+      vi.mocked(api.getRecoveryKit).mockRejectedValue({ code: "connection.failed" });
+      await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+      vi.mocked(api.getRecoveryKit).mockResolvedValue({ kit: NEW_KIT, keyFingerprint: "ffee0011" });
+      await refresh(el, api, settled);
+      await refresh(el, api, { code: "authorization.not_permitted" });
+      expect(text(el, "[data-test=read-failure]")).toBe(codeMessage("authorization.not_permitted"));
+      vi.mocked(api.getRecoveryKit).mockImplementation(() => new Promise<Kit>(() => {}));
+      await refresh(el, api, { ...ON, keyFingerprint: "99887766" });
+      expect(api.getRecoveryKit).toHaveBeenCalledTimes(fetches);
+      expect(q(el, "[data-test=read-failure]")).toBeNull();
+    },
+  );
+
+  it("drops a failed re-issue's alert once a read finds the copy turned off elsewhere", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    vi.mocked(api.getRecoveryKit).mockRejectedValue({ code: "connection.failed" });
+    await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+    expect(q(el, "[data-test=read-failure]")).not.toBeNull();
+    await refresh(el, api, OFF);
+    expect(q(el, "[role=alert]")).toBeNull();
+  });
+
+  it.each(["arrives", "fails"] as const)(
+    "shows nothing of a re-issue that %s after the owner turned the copy off",
+    async (outcome) => {
+      type Kit = { kit: string; keyFingerprint: string };
+      let settle!: { resolve: (value: Kit) => void; reject: (error: unknown) => void };
+      const api = stubApi(
+        {
+          getRecoveryKit: vi.fn(
+            () => new Promise<Kit>((resolve, reject) => (settle = { resolve, reject })),
+          ),
+        },
+        ON,
+      );
+      const { el } = await mount(api);
+      await refresh(el, api, { ...ON, keyFingerprint: "ffee0011" });
+      await press(el, "turn-off");
+      await press(el, "turn-off");
+      expect(api.turnOffStream).toHaveBeenCalledOnce();
+      if (outcome === "arrives") settle.resolve({ kit: NEW_KIT, keyFingerprint: "ffee0011" });
+      else settle.reject({ code: "connection.failed" });
+      await flush(el);
+      expect(q(el, "[data-test=kit]")).toBeNull();
+      expect(q(el, "[data-test=kit-reissued]")).toBeNull();
+      expect(q(el, "[role=alert]")).toBeNull();
+    },
+  );
+
+  it("shows a failed read's alert beside an earlier refusal's, and the refusal stays once reads succeed again", async () => {
+    const api = stubApi({
+      testStreamBucket: vi.fn().mockRejectedValue({ code: "backup.stream_test_failed" }),
+    });
+    const { el } = await mount(api);
+    fillRequired(el);
+    await press(el, "test");
+    await refresh(el, api, { code: "connection.failed" });
+    expect(text(el, "[data-test=refusal]")).toBe(codeMessage("backup.stream_test_failed"));
+    expect(text(el, "[data-test=read-failure]")).toBe(codeMessage("connection.failed"));
+    await refresh(el, api, OFF);
+    expect(q(el, "[data-test=read-failure]")).toBeNull();
+    expect(text(el, "[data-test=refusal]")).toBe(codeMessage("backup.stream_test_failed"));
+  });
+
   it("fetches the kit the owner asks for through the ordinary client", async () => {
     const api = withBackground(stubApi({}, ON));
     const { el } = await mount(api);
@@ -686,6 +840,50 @@ describe("stream-settings-panel: once set up", () => {
     expect(text(el, "[data-test=turn-off]")).toBe(t("stream.turn_off"));
     await press(el, "turn-off");
     expect(api.turnOffStream).not.toHaveBeenCalled();
+  });
+
+  it("forgets a first Turn off tap when the owner asks for the recovery kit instead", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    await press(el, "turn-off");
+    await press(el, "show-kit");
+    expect(text(el, "[data-test=turn-off]")).toBe(t("stream.turn_off"));
+    await press(el, "turn-off");
+    expect(api.turnOffStream).not.toHaveBeenCalled();
+  });
+
+  it("forgets a first Turn off tap once a read finds the copy turned off elsewhere", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    await press(el, "turn-off");
+    await refresh(el, api, OFF);
+    await refresh(el, api, ON);
+    expect(text(el, "[data-test=turn-off]")).toBe(t("stream.turn_off"));
+    await press(el, "turn-off");
+    expect(api.turnOffStream).not.toHaveBeenCalled();
+  });
+
+  it("keeps a first Turn off tap across a read that finds the copy still on", async () => {
+    const api = stubApi({}, ON);
+    const { el } = await mount(api);
+    await press(el, "turn-off");
+    await refresh(el, api, ON);
+    await press(el, "turn-off");
+    expect(api.turnOffStream).toHaveBeenCalledOnce();
+  });
+
+  it("takes away a refused Turn off's alert when the owner taps Turn off again", async () => {
+    const api = stubApi(
+      { turnOffStream: vi.fn().mockRejectedValue({ code: "backup.reload_in_progress" }) },
+      ON,
+    );
+    const { el } = await mount(api);
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    expect(q(el, "[role=alert]")).not.toBeNull();
+    await press(el, "turn-off");
+    expect(q(el, "[role=alert]")).toBeNull();
+    expect(text(el, "[data-test=turn-off]")).toBe(t("stream.turn_off_confirm"));
   });
 
   it("holds Turn off while its request is running, so a further tap sends nothing", async () => {

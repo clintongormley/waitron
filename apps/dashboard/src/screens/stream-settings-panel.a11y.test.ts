@@ -1,7 +1,8 @@
 import { LiveData } from "@waitron/dashboard-kit";
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import type { DashboardApi, StreamSettingsView } from "../api/client.js";
+import { t } from "../i18n/t.js";
 import type { StreamSettingsPanel } from "./stream-settings-panel.js";
 import "./stream-settings-panel.js";
 
@@ -90,6 +91,11 @@ function fillRequired(el: StreamSettingsPanel): void {
   }
 }
 
+function fieldError(el: StreamSettingsPanel, name: string): string {
+  return (el.shadowRoot!.querySelector(`wt-input[name=${name}]`) as HTMLElement & { error: string })
+    .error;
+}
+
 describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)", (theme) => {
   async function mount(settings: StreamSettingsView, testPasses = false) {
     const mounted = await mountWidget<StreamSettingsPanel>(
@@ -110,6 +116,7 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
     const { el, host } = await mount(OFF);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
+    expect(fieldError(el, "bucket-name")).toBe(t("stream.form.bucket_required"));
     await expectNoA11yViolations(host);
   });
 
@@ -118,6 +125,7 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
     fillRequired(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
+    expect(fieldError(el, "bucket-name")).toBe(t("stream.field.bucket_characters"));
     await expectNoA11yViolations(host);
   });
 
@@ -126,6 +134,7 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
     fillRequired(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=test]")!.click();
     await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=refusal]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -137,6 +146,20 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
     });
     el.api.liveData.invalidate([{ type: "backup_status" }]);
     await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=kit-reissued]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("a refused Test's alert beside a failed read's", async () => {
+    const { el, host } = await mount(OFF);
+    fillRequired(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=test]")!.click();
+    await flush(el);
+    vi.mocked(el.api.getStreamSettings).mockRejectedValue({ code: "connection.failed" });
+    el.api.liveData.invalidate([{ type: "backup_status" }]);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=refusal]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=read-failure]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -144,6 +167,8 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
     const { el, host } = await mount(PAUSED);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=change]")!.click();
     await flush(el);
+    expect(el.shadowRoot!.querySelector("wt-input[name=bucket-name]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=cancel]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -153,6 +178,7 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=toggle-secret]")!.click();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=test]")!.click();
     await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=test-passed]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -165,6 +191,9 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
     const { el, host } = await mount(STREAMING);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=turn-off]")!.click();
     await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=turn-off]")!.textContent!.trim()).toBe(
+      t("stream.turn_off_confirm"),
+    );
     await expectNoA11yViolations(host);
   });
 

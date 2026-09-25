@@ -210,7 +210,7 @@ it("has English and Spanish copy for the two refusals that keep variants out of 
 // The bucket-copy routes' status map (`STATUS` in apps/server/src/stream-api.ts). Its fallback tag,
 // `backup.stream_failed`, is a log tag only: the error boundary answers an error that is not an
 // application error as `server.internal` (packages/server-kit/src/error-boundary.ts).
-it("has English and Spanish copy for every code the bucket-copy routes answer", () => {
+it("has English and Spanish copy for every code in the bucket-copy routes' status map", () => {
   for (const code of [
     "management_session.required",
     "management_session.expired",

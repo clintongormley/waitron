@@ -628,8 +628,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La clave guardada no se aplicó; inténtalo de nuevo",
   },
   "backup.recovery_key_exists": {
-    en: "This box already has a recovery key, and backups use it. To replace it, turn backups on, then use “Change the recovery key”.",
-    es: "Este equipo ya tiene una clave de recuperación y las copias la usan. Para sustituirla, activa las copias y después usa «Cambiar la clave de recuperación».",
+    en: "This box holds a different recovery key from the one this page sent. Reload the page and try again. To replace the key, use “Change the recovery key”, which appears while backups are on.",
+    es: "Este equipo tiene una clave de recuperación distinta de la que ha enviado esta página. Vuelve a cargar la página e inténtalo de nuevo. Para sustituir la clave, usa «Cambiar la clave de recuperación», que aparece mientras las copias están activadas.",
   },
   "backup.reload_in_progress": {
     en: "The box is still applying an earlier change. Wait a moment and try again.",
