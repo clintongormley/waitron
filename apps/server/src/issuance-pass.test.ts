@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   diningTables,
@@ -725,7 +725,7 @@ describe("issuancePass", () => {
     });
   });
 
-  it("records a line whose stored product is gone as Uncategorised with no product", async () => {
+  it("records a stored line with no product id as Uncategorised with no product", async () => {
     const v = await setupVenue();
     const id = await basketOrder(v, [
       { productId: v.products.negroni },
@@ -734,7 +734,7 @@ describe("issuancePass", () => {
     await suite.db
       .update(workingOrderLines)
       .set({ productId: null })
-      .where(eq(workingOrderLines.lineNo, 2));
+      .where(and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.lineNo, 2)));
 
     const issued = await withTransaction(suite.db, async (tx) =>
       issuancePass(tx, v.cfg, id, await priceStoredOrderForIssue(tx, id)),
@@ -753,7 +753,9 @@ describe("issuancePass", () => {
   it("leaves the menu empty on a line with no recorded selling context", async () => {
     const v = await setupVenue();
     const id = await basketOrder(v, [{ productId: v.products.negroni }]);
-    await suite.db.run(sql`delete from working_line_contexts`);
+    await suite.db.run(
+      sql`delete from working_line_contexts where working_order_line_id in (select id from working_order_lines where working_order_id = ${id})`,
+    );
 
     const issued = await withTransaction(suite.db, async (tx) =>
       issuancePass(tx, v.cfg, id, await priceStoredOrderForIssue(tx, id)),
