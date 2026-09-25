@@ -127,7 +127,11 @@ export function parseProductEditorInput(
   const description =
     body.description === null ? null : translations(body.description, "description");
   const unitId = nullableId(body.unitId, "unitId");
-  const categoryIds = ids(body.categoryIds, "categoryIds");
+  // A body still on the membership contract is refused rather than having its categories ignored.
+  if (body.categoryIds !== undefined) invalid("categoryIds");
+  const labelIds = ids(body.labelIds, "labelIds");
+  if (isVariant && labelIds.length > 0)
+    throw new AppError("product.variant_invalid", { field: "labelIds" });
   // The two fields the ordered `modifiers` list replaced. A body carrying either is refused rather
   // than having it ignored: ignoring would save a product with NO attachments and report success,
   // the one outcome a caller still on the old contract could not tell from having worked.
@@ -138,14 +142,7 @@ export function parseProductEditorInput(
     "modifiers",
     isVariant,
   );
-  const primaryCategoryId =
-    body.primaryCategoryId === null ? null : id(body.primaryCategoryId, "primaryCategoryId");
-  if (
-    categoryIds.length
-      ? primaryCategoryId !== null && !categoryIds.includes(primaryCategoryId)
-      : primaryCategoryId !== null
-  )
-    invalid("primaryCategoryId");
+  const primaryCategoryId = nullableId(body.primaryCategoryId, "primaryCategoryId");
   const tax = inheritable(body.vatClass, "vatClass", isVariant, vatClass);
   if (!Array.isArray(body.variants)) invalid("variants");
   const listed = emptyOnVariant(body.variants, "variants", isVariant);
@@ -193,7 +190,7 @@ export function parseProductEditorInput(
     available: boolean(body.available, "available"),
     vatClass: tax,
     variants,
-    categoryIds,
+    labelIds,
     primaryCategoryId,
     modifiers: attachments,
     allergens,

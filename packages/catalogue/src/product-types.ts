@@ -75,7 +75,8 @@ export interface ListedVariant extends ProductVariant {
     unitPrice: string;
     vatClass: VatClass;
     primaryCategoryId: string | null;
-    categoryIds: string[];
+    /** The parent's: a variant carries no labels of its own. */
+    labelIds: string[];
   };
 }
 
@@ -90,9 +91,11 @@ export interface Product {
   /** The ordered extras and options lists attached to this product. */
   modifiers: ProductModifierRef[];
   catalogueId: string;
+  /** The main reporting category, or null for Uncategorised. `primaryCategoryId` is the same value. */
   categoryId: string | null;
-  categoryIds: string[];
   primaryCategoryId: string | null;
+  /** The product's label ids, sorted. */
+  labelIds: string[];
   /** The plain staff-facing name — what the dashboard, the till buttons and the sales reports show.
    * NOT NULL, so nothing downstream needs a fallback for it. */
   name: string;
@@ -137,8 +140,8 @@ export interface Product {
  * routing (`stationId`/`courseId`) is NOT here — it rides in {@link ProductRouting} and the two combine
  * as {@link ProductEditorBody}, the complete body the editor sends.
  *
- * On a VARIANT every inherited field may be blank — `null`, or an empty category list — and a blank
- * reads as the parent's value (spec §4.4, §9.1). On a product with no parent, `unitPrice`, `vatClass`
+ * On a VARIANT every inherited field may be blank — `null` — and a blank reads as the parent's value
+ * (spec §4.4, §9.1). On a product with no parent, `unitPrice`, `vatClass`
  * and `dietaryDeclarations` are required.
  */
 export interface ProductEditorInput {
@@ -161,7 +164,10 @@ export interface ProductEditorInput {
   vatClass: VatClass | null;
   /** Empty on a variant, which has no variants of its own. */
   variants: ProductVariantInput[];
-  categoryIds: string[];
+  /** Replaces the product's labels. Empty on a variant, which reads its parent's. */
+  labelIds: string[];
+  /** The main reporting category: any category, or null — Uncategorised on a product, "follow the
+   * parent's" on a variant. */
   primaryCategoryId: string | null;
   /** The ordered extras and options lists to attach, replacing whatever the product carries today.
    * Empty on a variant, which offers its parent's (spec §4.4). */
@@ -187,7 +193,7 @@ export interface InheritedValues {
   unitPrice: string;
   vatClass: VatClass;
   unitId: string | null;
-  categoryIds: string[];
+  labelIds: string[];
   primaryCategoryId: string | null;
   stationId: string | null;
   courseId: string | null;

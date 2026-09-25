@@ -5,6 +5,7 @@ const unitId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const categoryId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const extrasListId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const optionsListId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const labelId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const input: ProductEditorInput = {
   name: "Coffee",
   customerName: { en: "Coffee", es: "Café" },
@@ -19,7 +20,7 @@ const input: ProductEditorInput = {
   available: false,
   vatClass: "zero",
   variants: [],
-  categoryIds: [],
+  labelIds: [],
   primaryCategoryId: null,
   modifiers: [],
   allergens: null,
@@ -36,7 +37,7 @@ const inheriting = {
   unitId: null,
   unitPrice: null,
   vatClass: null,
-  categoryIds: [],
+  labelIds: [],
   primaryCategoryId: null,
   allergens: null,
   dietaryDeclarations: null,
@@ -184,35 +185,39 @@ it.each([
   ["description", undefined],
   ["kitchenName", 42],
   ["image", false],
-  ["categoryIds", [categoryId, categoryId.toUpperCase()]],
+  ["labelIds", [labelId, labelId.toUpperCase()]],
+  ["labelIds", undefined],
+  ["labelIds", ["not-an-id"]],
   ["primaryCategoryId", undefined],
+  ["primaryCategoryId", "not-an-id"],
+  // The retired membership list is refused, not ignored: ignoring it would report a save the
+  // caller meant differently as a success.
+  ["categoryIds", []],
 ] as const)("rejects malformed %s (%j)", (field, value) => {
   expect(() => parse({ ...input, [field]: value })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field } }),
   );
 });
-it("allows memberships with no reporting category but rejects a primary outside the set", () => {
-  const other = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-  // A non-empty set with a null reporting category is accepted.
-  expect(
-    parse({ ...input, categoryIds: [categoryId], primaryCategoryId: null }).primaryCategoryId,
-  ).toBeNull();
-  // A non-null primary must be one of the selected categories.
-  expect(() => parse({ ...input, categoryIds: [categoryId], primaryCategoryId: other })).toThrow(
-    expect.objectContaining({ code: "product.invalid", params: { field: "primaryCategoryId" } }),
-  );
-  // An empty set with a non-null primary stays invalid.
-  expect(() => parse({ ...input, categoryIds: [], primaryCategoryId: categoryId })).toThrow(
-    expect.objectContaining({ code: "product.invalid", params: { field: "primaryCategoryId" } }),
-  );
-  // A non-null primary that IS in the set is normalized to lower case.
+it("takes any category as the main one, with labels independent of it, lower-cased", () => {
   expect(
     parse({
       ...input,
-      categoryIds: [categoryId],
+      labelIds: [labelId.toUpperCase()],
       primaryCategoryId: categoryId.toUpperCase(),
-    }).primaryCategoryId,
-  ).toBe(categoryId);
+    }),
+  ).toEqual({ ...input, labelIds: [labelId], primaryCategoryId: categoryId });
+  expect(parse({ ...input, labelIds: [labelId], primaryCategoryId: null })).toMatchObject({
+    labelIds: [labelId],
+    primaryCategoryId: null,
+  });
+});
+it("refuses labels of a variant's own, and takes its own main category", () => {
+  expect(() => parseVariant({ ...inheriting, labelIds: [labelId] })).toThrow(
+    expect.objectContaining({ code: "product.variant_invalid", params: { field: "labelIds" } }),
+  );
+  expect(parseVariant({ ...inheriting, primaryCategoryId: categoryId }).primaryCategoryId).toBe(
+    categoryId,
+  );
 });
 it("normalizes optional text and prices without mutating caller or copied allergen text", () => {
   const original = {

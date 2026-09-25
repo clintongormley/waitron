@@ -51,7 +51,7 @@ export const products = table(
     parentId: id("parent_id"),
     // A variant's position among its parent's variants; unused with no parent.
     variantOrder: count("variant_order").notNull().default(0),
-    // The primary category; catalogue replaces it together with the complete membership set.
+    // The main reporting category; null is Uncategorised, and on a variant means its parent's.
     /* v8 ignore start */
     categoryId: id("category_id").references(() => categories.id),
     /* v8 ignore stop */

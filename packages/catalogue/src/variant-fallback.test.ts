@@ -26,7 +26,7 @@ import { createExtraList } from "./extras.js";
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductEditor } from "./product-editor.js";
 import { writeProductModifiers } from "./product-modifiers.js";
-import { productCategories } from "./schema/categories.js";
+import { labels, productLabels } from "./schema/labels.js";
 import { menuItems } from "./schema/menu.js";
 import { productUnits } from "./schema/units.js";
 import { createUnit } from "./units.js";
@@ -69,6 +69,7 @@ interface Fixture {
   otherCatalogueId: string;
   wines: string;
   bottles: string;
+  label: string;
   glass: string;
   largeGlass: string;
   stationId: string;
@@ -152,7 +153,7 @@ beforeEach(async () => {
         dietaryDeclarations: null,
       })
       .returning({ id: products.id });
-    // Its own value for every inherited field, and its own names, unit row and category row.
+    // Its own value for every inherited field, and its own names and unit row.
     const [wine175] = await tx
       .insert(products)
       .values({
@@ -180,7 +181,9 @@ beforeEach(async () => {
       })
       .returning({ id: products.id });
     await tx.insert(productUnits).values({ productId: wine175!.id, unitId: largeGlass.id });
-    await tx.insert(productCategories).values({ productId: wine175!.id, categoryId: bottles.id });
+    // Labels belong to the parent alone; a variant stores none of its own.
+    const [red] = await tx.insert(labels).values({ name: "Red" }).returning({ id: labels.id });
+    await tx.insert(productLabels).values({ productId: parent.id, labelId: red!.id });
     await assignCatalogueToLocation(tx, venue.locationId, catalogue.id);
     return {
       locationId: venue.locationId,
@@ -188,6 +191,7 @@ beforeEach(async () => {
       otherCatalogueId: other.id,
       wines: wines.id,
       bottles: bottles.id,
+      label: red!.id,
       glass: glass.id,
       largeGlass: largeGlass.id,
       stationId: station!.id,
@@ -211,7 +215,8 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
       kitchenName: "WINE",
       unitPrice: "4.00",
       vatClass: "reduced",
-      categoryIds: [f.wines],
+      categoryId: f.wines,
+      labelIds: [f.label],
       unitId: f.glass,
     });
   });
@@ -233,7 +238,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
           unitPrice: "4.00",
           vatClass: "reduced",
           primaryCategoryId: f.wines,
-          categoryIds: [f.wines],
+          labelIds: [f.label],
         },
       },
       {
@@ -249,7 +254,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
           unitPrice: "5.50",
           vatClass: "general",
           primaryCategoryId: f.bottles,
-          categoryIds: [f.bottles],
+          labelIds: [f.label],
         },
       },
     ]);
@@ -268,7 +273,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
           unitPrice: "4.00",
           vatClass: "reduced",
           primaryCategoryId: f.wines,
-          categoryIds: [f.wines],
+          labelIds: [f.label],
         },
       },
       {
@@ -278,7 +283,7 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
           unitPrice: "5.50",
           vatClass: "general",
           primaryCategoryId: f.bottles,
-          categoryIds: [f.bottles],
+          labelIds: [f.label],
         },
       },
     ]);
@@ -378,11 +383,8 @@ describe("listMenuOffers reads a variant's blanks from its parent", () => {
   });
 });
 
-describe("a variant's reporting category comes from the product whose category rows apply", () => {
-  // Having no `product_categories` row is how a variant stores "inherit the parent's categories",
-  // so the reporting category follows the same owner as the list. A variant with rows of its
-  // own and no reporting category reads its OWN null, never the parent's category outside its list.
-  it("reads its own blank reporting category beside category rows of its own", async () => {
+describe("a variant's main category is its own if it has one, otherwise its parent's", () => {
+  it("reads its parent's category for a variant that sets none", async () => {
     const wine250 = await run(async (tx) => {
       const [row] = await tx
         .insert(products)
@@ -398,7 +400,6 @@ describe("a variant's reporting category comes from the product whose category r
           variantOrder: 2,
         })
         .returning({ id: products.id });
-      await tx.insert(productCategories).values({ productId: row!.id, categoryId: f.bottles });
       const section = await createMenuSection(tx, { menuId: f.menuId, name: { en: "Wine" } });
       await tx.insert(menuItems).values({
         menuId: f.menuId,
@@ -410,7 +411,9 @@ describe("a variant's reporting category comes from the product whose category r
     });
 
     const offers = await run((tx) => listMenuOffers(tx, [f.menuId]));
-    expect(offers[0]!.variants.find((v) => v.id === wine250)!.category).toBeNull();
+    const variants = offers[0]!.variants;
+    expect(variants.find((v) => v.id === wine250)!.category).toBe("Wines");
+    expect(variants.find((v) => v.id === f.wine175)!.category).toBe("Bottles");
   });
 });
 
@@ -472,15 +475,15 @@ describe("readOfferedModifiers", () => {
 
 describe("readProductEditor", () => {
   // The editor shows a variant's OWN values, a blank field blank, and its parent's value for every
-  // inherited field beside them (spec §4.4, §9.1). Wine 125 has no unit or category row and so
-  // inherits both; Wine 175 has its own.
+  // inherited field beside them (spec §4.4, §9.1). Wine 125 has no unit row or category and so
+  // inherits both; Wine 175 has its own. Neither has labels of its own: those are the parent's.
   const parentValues = () => ({
     description: { en: "A dry white from Rueda" },
     image: "parent.jpg",
     unitPrice: "4.00",
     vatClass: "reduced",
     unitId: f.glass,
-    categoryIds: [f.wines],
+    labelIds: [f.label],
     primaryCategoryId: f.wines,
     stationId: f.stationId,
     courseId: f.courseId,
@@ -499,7 +502,7 @@ describe("readProductEditor", () => {
       unitPrice: null,
       vatClass: null,
       unitId: null,
-      categoryIds: [],
+      labelIds: [],
       primaryCategoryId: null,
       stationId: null,
       courseId: null,
@@ -520,7 +523,7 @@ describe("readProductEditor", () => {
       unitPrice: "5.50",
       vatClass: "general",
       unitId: f.largeGlass,
-      categoryIds: [f.bottles],
+      labelIds: [],
       primaryCategoryId: f.bottles,
       stationId: f.ownStationId,
       courseId: f.ownCourseId,
@@ -600,7 +603,8 @@ describe("createProduct", () => {
       vatClass: "general",
       image: "cava.jpg",
       unitId: f.largeGlass,
-      categoryIds: [f.bottles],
+      categoryId: f.bottles,
+      labelIds: [],
       primaryCategoryId: f.bottles,
     });
   });

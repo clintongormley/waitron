@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@w
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
-import { productCategories } from "./schema/categories.js";
+import { productLabels } from "./schema/labels.js";
 import { productUnits } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { racePair } from "../test/fixtures.js";
@@ -20,12 +20,8 @@ import {
 } from "./variants.js";
 import { staffPresentationName, customerPresentationText } from "./product-presentation.js";
 import { createUnit, EACH_UNIT } from "./units.js";
-import {
-  addProductsToCategory,
-  createCategory,
-  readProductCategories,
-  replaceProductCategories,
-} from "./categories.js";
+import { addProductsToCategory, createCategory, setMainReportingCategory } from "./categories.js";
+import { createLabel, readProductLabels, setProductLabels } from "./labels.js";
 
 /**
  * Variants against a real database, plus the pure selection core. A variant is a `products` row
@@ -152,16 +148,13 @@ describe("setProductVariants stores each variant as a product under its parent",
       { ...common, id: saved[0]!.id, variant_order: 0, unit_price: null },
       { ...common, id: saved[1]!.id, variant_order: 1, unit_price: 550 },
     ]);
-    // No unit or category row of their own: that is how a variant inherits both.
+    // No unit or label row of their own: that is how a variant inherits both.
     const ids = saved.map((variant) => variant.id);
     expect(
       await suite.db.select().from(productUnits).where(inArray(productUnits.productId, ids)),
     ).toEqual([]);
     expect(
-      await suite.db
-        .select()
-        .from(productCategories)
-        .where(inArray(productCategories.productId, ids)),
+      await suite.db.select().from(productLabels).where(inArray(productLabels.productId, ids)),
     ).toEqual([]);
     expect(await app((tx) => listProductVariants(tx, f.parentId))).toEqual(saved);
 
@@ -438,7 +431,7 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
           tx,
           f.variantId,
           f.catalogueId,
-          { ...parent, vatClass: "general", categoryIds: [], variants: [] },
+          { ...parent, vatClass: "general", variants: [] },
           "en",
         ),
       ),
@@ -466,31 +459,32 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
     ).resolves.toHaveLength(1);
   });
 
-  it("reads and writes a product's category membership, never a variant's", async () => {
+  it("sets a product's main category and labels, never a variant's own through their routes", async () => {
     const f = await variantOfParent();
-    const membership = { categoryIds: [f.categoryId], primaryCategoryId: f.categoryId };
-    await expect(app((tx) => readProductCategories(tx, f.variantId))).rejects.toMatchObject(
-      notFound(f.variantId),
-    );
+    const label = await app((tx) => createLabel(tx, "Wine"));
     await expect(
-      app((tx) => replaceProductCategories(tx, f.variantId, membership)),
+      app((tx) => setMainReportingCategory(tx, f.variantId, f.categoryId)),
     ).rejects.toMatchObject(notFound(f.variantId));
     await expect(
       app((tx) => addProductsToCategory(tx, f.categoryId, [f.variantId])),
     ).rejects.toMatchObject({ code: "category.membership_invalid" });
+    await expect(app((tx) => setProductLabels(tx, f.variantId, [label.id]))).rejects.toMatchObject({
+      code: "product.variant_invalid",
+      params: { field: "labelIds" },
+    });
     expect(
-      await suite.db
-        .select()
-        .from(productCategories)
-        .where(eq(productCategories.productId, f.variantId)),
+      await suite.db.select().from(productLabels).where(eq(productLabels.productId, f.variantId)),
     ).toEqual([]);
     expect((await storedVariants(f.parentId))[0]).toMatchObject({ category_id: null });
 
     await app((tx) => addProductsToCategory(tx, f.categoryId, [f.parentId]));
-    await expect(app((tx) => readProductCategories(tx, f.parentId))).resolves.toEqual(membership);
+    await app((tx) => setProductLabels(tx, f.parentId, [label.id]));
     await expect(
-      app((tx) => replaceProductCategories(tx, f.parentId, membership)),
-    ).resolves.toEqual(membership);
+      app((tx) => setMainReportingCategory(tx, f.parentId, f.categoryId)),
+    ).resolves.toEqual({ primaryCategoryId: f.categoryId });
+    // The variant still stores neither, and reads its parent's labels.
+    expect((await storedVariants(f.parentId))[0]).toMatchObject({ category_id: null });
+    expect(await app((tx) => readProductLabels(tx, f.variantId))).toEqual([label.id]);
   });
 });
 

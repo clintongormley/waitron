@@ -1,7 +1,7 @@
 import { and, eq, exists, isNull, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { alias, QueryBuilder } from "drizzle-orm/sqlite-core";
 import { products } from "@waitron/db";
-import { productCategories } from "./schema/categories.js";
+import { productLabels } from "./schema/labels.js";
 import { productUnits } from "./schema/units.js";
 
 /**
@@ -11,9 +11,8 @@ import { productUnits } from "./schema/units.js";
  *
  * A `products` row with a `parent_id` is a variant. Every field in the inherited set below that the
  * variant leaves NULL reads as its parent's value; one it sets reads as its own. The exceptions are
- * the category list, the reporting category and the unit, which a variant inherits by having NO
- * `product_categories` or `product_units` row of its own — see the owner joins at the end.
- * The three names are never inherited — a blank customer or kitchen name falls back to the
+ * the unit, which a variant inherits by having NO `product_units` row of its own, and the labels,
+ * which a variant never has of its own — see the owner joins at the end. The three names are never inherited — a blank customer or kitchen name falls back to the
  * variant's OWN staff name — nor is anything that says what the row
  * is (`id`, `catalogue_id`, `parent_id`, `variant_order`), whether it is sold (`active`,
  * `available`, `sold_alone`), or when it was written.
@@ -23,9 +22,8 @@ import { productUnits } from "./schema/units.js";
  * `effectiveProductColumns`: their callers see non-null types. A variant's own price is read raw, and
  * may be blank, in the variant list (`ProductVariant.unitPrice`) and in the menu price chain
  * (`readOfferVariants`), and the product editor (`readProductEditor`) reads a variant's own price,
- * VAT class and dietary declarations raw, blanks included. Reads keyed on CATEGORY MEMBERSHIP read
- * each product's OWN `product_categories` rows, so a variant that inherits its parent's categories is
- * not listed under them there.
+ * VAT class and dietary declarations raw, blanks included. Reads keyed on a product's main
+ * category (`listCategoryProducts`, `categoryDependants`) read each row's OWN `category_id`.
  */
 
 /** A `products` row with no parent: a product in its own right, never a variant. */
@@ -59,15 +57,6 @@ export const parentJoin = eq(parentProducts.id, products.parentId);
 
 const builder = new QueryBuilder();
 const ownUnit = alias(productUnits, "own_unit");
-const ownCategory = alias(productCategories, "own_category");
-
-/** Whether the `products` row being read has `product_categories` rows of its own. */
-const hasOwnCategories = exists(
-  builder
-    .select({ one: sql`1` })
-    .from(ownCategory)
-    .where(eq(ownCategory.productId, products.id)),
-);
 
 /**
  * `coalesce(product.x, parent.x)`, decoded as the column is: a bare `coalesce` loses the column's
@@ -91,15 +80,6 @@ function inherited<C extends AnyColumn>(
 }
 
 /**
- * The reporting category, taken from the SAME product as the category list
- * ({@link categoryOwnerJoin}) rather than by coalesce: a variant with category rows of its own and no
- * reporting category reads its own null, never a parent's category that is not in its list.
- */
-const reportingCategoryId = sql<string | null>`case
-  when ${products.parentId} is null or ${hasOwnCategories} then ${products.categoryId}
-  else ${parentProducts.categoryId} end`.mapWith(products.categoryId);
-
-/**
  * Each inherited field's EFFECTIVE value, keyed by the `products` property it replaces. Valid only
  * in a query that reads `products` unaliased and has `.leftJoin(parentProducts, parentJoin)`.
  */
@@ -108,7 +88,7 @@ export const effectiveProductColumns = {
   vatClass: owned(products.vatClass, parentProducts.vatClass),
   pricingUnit: owned(products.pricingUnit, parentProducts.pricingUnit),
   unitPrice: owned(products.unitPrice, parentProducts.unitPrice),
-  categoryId: reportingCategoryId,
+  categoryId: inherited(products.categoryId, parentProducts.categoryId),
   stationId: inherited(products.stationId, parentProducts.stationId),
   courseId: inherited(products.courseId, parentProducts.courseId),
   image: inherited(products.image, parentProducts.image),
@@ -143,13 +123,10 @@ export const unitOwnerJoin = eq(
 );
 
 /**
- * `.leftJoin(productCategories, categoryOwnerJoin)`: the same rule as {@link unitOwnerJoin}, for
- * category membership — the row's own `product_categories` rows when it has any, otherwise its
- * parent's.
+ * `.leftJoin(productLabels, labelOwnerJoin)`: the labels of the product whose labels apply — a
+ * top-level product's own, and a variant's parent's, since a variant stores none.
  */
-export const categoryOwnerJoin = eq(
-  productCategories.productId,
-  sql<
-    string | null
-  >`case when ${hasOwnCategories} then ${products.id} else ${products.parentId} end`,
+export const labelOwnerJoin = eq(
+  productLabels.productId,
+  sql<string>`coalesce(${products.parentId}, ${products.id})`,
 );

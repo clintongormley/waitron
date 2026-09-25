@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -9,8 +10,7 @@ import {
   readCategory,
   updateCategory,
   deleteCategory,
-  replaceProductCategories,
-  readProductCategories,
+  setMainReportingCategory,
   listCategoryProducts,
 } from "./categories.js";
 import { writeContentLanguages, listContentTranslationGaps } from "./content-languages.js";
@@ -42,7 +42,7 @@ async function fixture() {
   return { app, food, drinks, menu, product };
 }
 describe("category authoring", () => {
-  it("keeps translated names, direct membership and one stable product row", async () => {
+  it("keeps translated names, and gives a product a main category with no membership", async () => {
     const { app, food, drinks, product, menu } = await fixture();
     expect(food).toEqual({
       id: food.id,
@@ -51,101 +51,52 @@ describe("category authoring", () => {
       color: null,
       parentId: null,
     });
-    await app((tx) => replaceProductCategories(tx, product.id, { categoryIds: [food.id] }));
-    await app((tx) =>
-      replaceProductCategories(tx, product.id, { categoryIds: [drinks.id, food.id] }),
-    );
-    expect(await app((tx) => readProductCategories(tx, product.id))).toEqual({
-      categoryIds: [drinks.id, food.id].sort(),
+    expect(await app((tx) => setMainReportingCategory(tx, product.id, food.id))).toEqual({
       primaryCategoryId: food.id,
     });
-    expect((await app((tx) => listProducts(tx, menu.id))).map((p) => p.id)).toEqual([product.id]);
-    for (const category of [food, drinks])
-      expect(await app((tx) => listCategoryProducts(tx, category.id))).toEqual([
-        {
-          id: product.id,
-          name: product.name,
-          active: true,
-          primaryCategoryId: food.id,
-          categoryIds: [food.id, drinks.id].sort(),
-        },
-      ]);
+    // Moving it is a plain replacement: nothing is kept in the category it left.
+    await app((tx) => setMainReportingCategory(tx, product.id, drinks.id));
+    const [listed] = await app((tx) => listProducts(tx, menu.id));
+    expect(listed).toMatchObject({
+      id: product.id,
+      categoryId: drinks.id,
+      primaryCategoryId: drinks.id,
+      labelIds: [],
+    });
+    expect(listed).not.toHaveProperty("categoryIds");
+    expect(await app((tx) => listCategoryProducts(tx, food.id))).toEqual([]);
+    expect(await app((tx) => listCategoryProducts(tx, drinks.id))).toEqual([
+      {
+        id: product.id,
+        name: product.name,
+        active: true,
+        primaryCategoryId: drinks.id,
+        labelIds: [],
+      },
+    ]);
+    expect(await app((tx) => setMainReportingCategory(tx, product.id, null))).toEqual({
+      primaryCategoryId: null,
+    });
+    expect((await app((tx) => listProducts(tx, menu.id)))[0]!.categoryId).toBeNull();
     // Sorted by id: two rows written in one millisecond tie on `created_at`, and the random id then
     // decides their order (operations.test.ts, "settles a created_at tie").
     expect(byId(await app((tx) => listCategories(tx)))).toEqual(byId([food, drinks]));
   });
-  it("validates replacement primaries and rolls back invalid saves", async () => {
-    const { app, food, drinks, product } = await fixture();
-    await app((tx) =>
-      replaceProductCategories(tx, product.id, {
-        categoryIds: [food.id, drinks.id],
-        primaryCategoryId: food.id,
-      }),
+  it("refuses an unknown category or product, and leaves the main category as it was", async () => {
+    const { app, food, product } = await fixture();
+    await app((tx) => setMainReportingCategory(tx, product.id, food.id));
+    const missing = crypto.randomUUID();
+    await expect(
+      app((tx) => setMainReportingCategory(tx, product.id, missing)),
+    ).rejects.toMatchObject({ code: "category.not_found", params: { categoryId: missing } });
+    await expect(app((tx) => setMainReportingCategory(tx, missing, food.id))).rejects.toMatchObject(
+      { code: "product.not_found", params: { productId: missing } },
     );
-    for (const [input, code] of [
-      [{ categoryIds: [food.id, food.id] }, "category.membership_invalid"],
-      [{ categoryIds: [food.id], primaryCategoryId: drinks.id }, "category.membership_invalid"],
-      [{ categoryIds: [], primaryCategoryId: food.id }, "category.membership_invalid"],
-      [{ categoryIds: [crypto.randomUUID()], primaryCategoryId: food.id }, "category.not_found"],
-    ] as const) {
-      await expect(
-        app((tx) =>
-          replaceProductCategories(tx, product.id, {
-            ...input,
-            categoryIds: [...input.categoryIds],
-          }),
-        ),
-      ).rejects.toMatchObject({ code });
-      expect(await app((tx) => readProductCategories(tx, product.id))).toEqual({
-        categoryIds: [food.id, drinks.id].sort(),
-        primaryCategoryId: food.id,
-      });
-    }
-    await app((tx) =>
-      replaceProductCategories(tx, product.id, {
-        categoryIds: [drinks.id],
-        primaryCategoryId: drinks.id,
-      }),
-    );
-    await app((tx) => replaceProductCategories(tx, product.id, { categoryIds: [] }));
-    expect(await app((tx) => readProductCategories(tx, product.id))).toEqual({
-      categoryIds: [],
-      primaryCategoryId: null,
-    });
+    expect(await app((tx) => listCategoryProducts(tx, food.id))).toMatchObject([
+      { id: product.id, primaryCategoryId: food.id },
+    ]);
   });
-  it("resolves an omitted reporting category and allows an explicit null", async () => {
-    const { app, food, drinks, product } = await fixture();
-    // No memberships and an omitted primary -> null.
-    expect(
-      await app((tx) => replaceProductCategories(tx, product.id, { categoryIds: [] })),
-    ).toEqual({ categoryIds: [], primaryCategoryId: null });
-    // No current primary and an omitted primary -> the first submitted id.
-    expect(
-      await app((tx) =>
-        replaceProductCategories(tx, product.id, { categoryIds: [food.id, drinks.id] }),
-      ),
-    ).toEqual({ categoryIds: [food.id, drinks.id].sort(), primaryCategoryId: food.id });
-    // The current primary survives the new set and is omitted -> keep it.
-    expect(
-      await app((tx) =>
-        replaceProductCategories(tx, product.id, { categoryIds: [drinks.id, food.id] }),
-      ),
-    ).toEqual({ categoryIds: [food.id, drinks.id].sort(), primaryCategoryId: food.id });
-    // The current primary was removed and none is chosen -> null.
-    expect(
-      await app((tx) => replaceProductCategories(tx, product.id, { categoryIds: [drinks.id] })),
-    ).toEqual({ categoryIds: [drinks.id], primaryCategoryId: null });
-    // An explicit null with a non-empty set is allowed.
-    expect(
-      await app((tx) =>
-        replaceProductCategories(tx, product.id, {
-          categoryIds: [food.id, drinks.id],
-          primaryCategoryId: null,
-        }),
-      ),
-    ).toEqual({ categoryIds: [food.id, drinks.id].sort(), primaryCategoryId: null });
-  });
-  it("rejects deep cycles, and cascades a delete through children and memberships", async () => {
+  it("rejects deep cycles, and a delete moves children and products to the parent by default", async () => {
     const { app, food, drinks, product } = await fixture();
     const child = await app((tx) =>
       createCategory(tx, { name: { en: "Sandwiches" }, parentId: food.id }),
@@ -157,23 +108,28 @@ describe("category authoring", () => {
       await expect(app((tx) => updateCategory(tx, food.id, { parentId }))).rejects.toMatchObject({
         code: "category.parent_cycle",
       });
-    // Deleting a parent reparents its children rather than refusing; food's parent is null.
+    // A category below the deleted one takes the deleted one's place in the tree, and so do its
+    // products: `child`'s parent is `food`.
+    await app((tx) => setMainReportingCategory(tx, product.id, child.id));
+    await app((tx) => deleteCategory(tx, child.id));
+    expect((await app((tx) => readCategory(tx, leaf.id))).parentId).toBe(food.id);
+    expect(await app((tx) => listCategoryProducts(tx, food.id))).toMatchObject([
+      { id: product.id, primaryCategoryId: food.id },
+    ]);
+    // A top-level category's products become Uncategorised and its children top-level.
     await app((tx) => deleteCategory(tx, food.id));
-    expect((await app((tx) => readCategory(tx, child.id))).parentId).toBeNull();
-    // Deleting a category a product belongs to unassigns the product rather than refusing.
-    await app((tx) => replaceProductCategories(tx, product.id, { categoryIds: [leaf.id] }));
-    await app((tx) => deleteCategory(tx, leaf.id));
-    expect(await app((tx) => readProductCategories(tx, product.id))).toEqual({
-      categoryIds: [],
-      primaryCategoryId: null,
-    });
+    expect((await app((tx) => readCategory(tx, leaf.id))).parentId).toBeNull();
+    const { rows } = await fx.db.execute<{ category_id: string | null }>(
+      sql`select category_id from products where id = ${product.id}`,
+    );
+    expect(rows).toEqual([{ category_id: null }]);
     await app((tx) => deleteCategory(tx, drinks.id));
-    expect((await app((tx) => listCategories(tx))).map((c) => c.id)).toEqual([child.id]);
+    expect((await app((tx) => listCategories(tx))).map((c) => c.id)).toEqual([leaf.id]);
   });
-  it("rejects membership in an unknown category id", async () => {
+  it("rejects a main category naming an unknown category id", async () => {
     const { app, product } = await fixture();
     await expect(
-      app((tx) => replaceProductCategories(tx, product.id, { categoryIds: [crypto.randomUUID()] })),
+      app((tx) => setMainReportingCategory(tx, product.id, crypto.randomUUID())),
     ).rejects.toMatchObject({ code: "category.not_found" });
   });
   it("validates the default name and includes category gaps without dropping disabled translations", async () => {
@@ -194,25 +150,8 @@ describe("category authoring", () => {
   });
 });
 
-it("an old single-category editor cannot silently clear additional memberships", async () => {
+it("updateProduct's categoryId sets the main category, with no membership coupling", async () => {
   const { updateProduct } = await import("./operations.js");
-  const { app, food, drinks, product } = await fixture();
-  await app((tx) =>
-    replaceProductCategories(tx, product.id, {
-      categoryIds: [food.id, drinks.id],
-      primaryCategoryId: food.id,
-    }),
-  );
-  await expect(
-    app((tx) => updateProduct(tx, product.id, { categoryId: null })),
-  ).rejects.toMatchObject({ code: "category.primary_required" });
-  expect(await app((tx) => readProductCategories(tx, product.id))).toEqual({
-    categoryIds: [food.id, drinks.id].sort(),
-    primaryCategoryId: food.id,
-  });
-});
-
-it("returns each product's own membership set when reading the unfiltered library", async () => {
   const { app, food, drinks, product, menu } = await fixture();
   const second = await app((tx) =>
     createProduct(tx, {
@@ -224,21 +163,27 @@ it("returns each product's own membership set when reading the unfiltered librar
       vatClass: "general",
     }),
   );
-  await app((tx) => replaceProductCategories(tx, product.id, { categoryIds: [food.id] }));
+  await app((tx) => updateProduct(tx, product.id, { categoryId: food.id }));
+  await app((tx) => updateProduct(tx, product.id, { categoryId: drinks.id }));
   expect(
     byId(
-      (await app((tx) => listProducts(tx))).map(({ id, categoryIds, primaryCategoryId }) => ({
+      (await app((tx) => listProducts(tx))).map(({ id, categoryId, primaryCategoryId }) => ({
         id,
-        categoryIds,
+        categoryId,
         primaryCategoryId,
       })),
     ),
   ).toEqual(
     byId([
-      { id: product.id, categoryIds: [food.id], primaryCategoryId: food.id },
-      { id: second.id, categoryIds: [drinks.id], primaryCategoryId: drinks.id },
+      { id: product.id, categoryId: drinks.id, primaryCategoryId: drinks.id },
+      { id: second.id, categoryId: drinks.id, primaryCategoryId: drinks.id },
     ]),
   );
+  await app((tx) => updateProduct(tx, product.id, { categoryId: null }));
+  expect(await app((tx) => listCategoryProducts(tx, drinks.id))).toMatchObject([{ id: second.id }]);
+  await expect(
+    app((tx) => updateProduct(tx, product.id, { categoryId: crypto.randomUUID() })),
+  ).rejects.toMatchObject({ code: "category.not_found" });
 });
 
 it("rejects an image reference with a category error when media is not installed", async () => {
@@ -259,21 +204,4 @@ it("rejects an image reference with a category error when media is not installed
     ),
   ).rejects.toMatchObject({ code: "category.image_not_found" });
   expect((await app((tx) => readCategory(tx, food.id))).image).toBeNull();
-});
-
-it("the primary selector preserves memberships and clears only the final membership", async () => {
-  const { updateProduct } = await import("./operations.js");
-  const { app, food, drinks, product } = await fixture();
-  await app((tx) => updateProduct(tx, product.id, { categoryId: food.id }));
-  await app((tx) => updateProduct(tx, product.id, { categoryId: drinks.id }));
-  expect(await app((tx) => readProductCategories(tx, product.id))).toEqual({
-    categoryIds: [food.id, drinks.id].sort(),
-    primaryCategoryId: drinks.id,
-  });
-  await app((tx) => replaceProductCategories(tx, product.id, { categoryIds: [drinks.id] }));
-  await app((tx) => updateProduct(tx, product.id, { categoryId: null }));
-  expect(await app((tx) => readProductCategories(tx, product.id))).toEqual({
-    categoryIds: [],
-    primaryCategoryId: null,
-  });
 });

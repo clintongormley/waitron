@@ -13,7 +13,7 @@ import {
   createProduct,
   listAvailableProducts,
 } from "./operations.js";
-import { replaceProductCategories } from "./categories.js";
+import { createLabel, setProductLabels } from "./labels.js";
 import { createUnit } from "./units.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { priceBasket } from "./pricing.js";
@@ -99,11 +99,9 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
         unitPrice: "24.90",
         vatClass: "reduced",
       });
-      const breakfast = await createCategory(tx, { name: { en: "Breakfast" } });
-      await replaceProductCategories(tx, product.id, {
-        categoryIds: [food.id, breakfast.id],
-        primaryCategoryId: food.id,
-      });
+      // A label never implies a category: the sale line still records Food.
+      const breakfast = await createLabel(tx, "Breakfast");
+      await setProductLabels(tx, product.id, [breakfast.id]);
       await assignCatalogueToLocation(tx, locationId, cat.id);
 
       // The till's read → pricing → fiscal write, all from catalogue data. An `AvailableProduct` is

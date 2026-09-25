@@ -27,6 +27,7 @@ const CATALOGUE_FILES = [
   "packages/catalogue/src/schema/labels.ts",
   "packages/catalogue/src/options.ts",
   "packages/catalogue/src/extras.ts",
+  "packages/catalogue/src/labels.ts",
   "packages/catalogue/src/product-modifiers.ts",
 ] as const;
 
