@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import {
   chmod,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
@@ -1464,7 +1465,7 @@ describe("restoreDatabase keeps one whole database whatever step fails", () => {
     expect(logged).toContainEqual({
       level: "warn",
       event: "restore.db.aside_kept",
-      fields: { folder },
+      fields: { folder, errno: "EACCES" },
     });
   });
 
@@ -1481,6 +1482,115 @@ describe("restoreDatabase keeps one whole database whatever step fails", () => {
     await expect(stat(`${venueFile()}-shm`)).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(elsewhere, "utf8")).toBe("NOT-DATABASE-CONTENT");
     expect(await asideFolders()).toEqual([]);
+  });
+
+  it("removes a symlink at a side-file path even when the placement fails, so it is not put back", async () => {
+    await seedOldSet();
+    const elsewhere = join(stagingDir, "not-the-venue");
+    await writeFile(elsewhere, "NOT-DATABASE-CONTENT");
+    await rm(`${venueFile()}-shm`);
+    await symlink(elsewhere, `${venueFile()}-shm`);
+
+    await expect(
+      restoreDatabase({
+        dumpBytes: VENUE_BYTES,
+        venueDir,
+        log: noopLog,
+        fs: renameRefusing((from) => from === incomingFile()),
+      }),
+    ).rejects.toMatchObject({ code: "restore.placement_failed", params: { kept: "previous" } });
+
+    expect(await readFile(venueFile(), "utf8")).toBe(OLD[""]);
+    expect(await readFile(`${venueFile()}-wal`, "utf8")).toBe(OLD["-wal"]);
+    await expect(lstat(`${venueFile()}-shm`)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(elsewhere, "utf8")).toBe("NOT-DATABASE-CONTENT");
+    expect(await asideFolders()).toEqual([]);
+  });
+
+  it("puts the old database back and says so when the incoming copy cannot be removed either", async () => {
+    await seedOldSet();
+    await rm(`${venueFile()}-wal`);
+    await mkdir(`${venueFile()}-wal`);
+    const logged: { level: string; event: string; fields: unknown }[] = [];
+    let incomingRemovals = 0;
+
+    await expect(
+      restoreDatabase({
+        dumpBytes: VENUE_BYTES,
+        venueDir,
+        log: (level, event, fields) => logged.push({ level, event, fields }),
+        fs: {
+          rename,
+          rmdir,
+          rm: async (path, options) => {
+            if (path === incomingFile() && ++incomingRemovals === 2) throw injected("EACCES");
+            await rm(path, options);
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "restore.placement_failed", params: { kept: "previous" } });
+
+    expect(incomingRemovals).toBe(2);
+    expect(await readFile(venueFile(), "utf8")).toBe(OLD[""]);
+    expect(await readFile(`${venueFile()}-shm`, "utf8")).toBe(OLD["-shm"]);
+    expect(await asideFolders()).toEqual([]);
+    expect(logged).toContainEqual({
+      level: "error",
+      event: "restore.db.placement_failed",
+      fields: { kept: "previous", errorCode: "unknown", errno: "ERR_FS_EISDIR" },
+    });
+    expect(logged).toContainEqual({
+      level: "warn",
+      event: "restore.db.incoming_kept",
+      fields: { file: "venue.db.incoming", errno: "EACCES" },
+    });
+  });
+
+  it("throws the first failure, not the incoming copy's removal, when nothing had moved yet", async () => {
+    await seedOldSet();
+    let incomingRemovals = 0;
+
+    await expect(
+      restoreDatabase({
+        dumpBytes: VENUE_BYTES,
+        venueDir,
+        log: noopLog,
+        fs: {
+          rename,
+          rmdir,
+          rm: async (path, options) => {
+            if (path.endsWith(".venue.db-litestream")) throw injected("EIO");
+            if (path === incomingFile() && ++incomingRemovals === 2) throw injected("EACCES");
+            await rm(path, options);
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "EIO" });
+
+    expect(incomingRemovals).toBe(2);
+    for (const [suffix, bytes] of Object.entries(OLD)) {
+      expect(await readFile(`${venueFile()}${suffix}`, "utf8")).toBe(bytes);
+    }
+  });
+
+  it("logs which file could not go back, by name and errno", async () => {
+    await seedOldSet();
+    const logged: { level: string; event: string; fields: unknown }[] = [];
+
+    await expect(
+      restoreDatabase({
+        dumpBytes: VENUE_BYTES,
+        venueDir,
+        log: (level, event, fields) => logged.push({ level, event, fields }),
+        fs: renameRefusing((from, to) => from === incomingFile() || to === `${venueFile()}-wal`),
+      }),
+    ).rejects.toMatchObject({ params: { kept: "set_aside" } });
+
+    expect(logged).toContainEqual({
+      level: "warn",
+      event: "restore.db.put_back_failed",
+      fields: { file: "venue.db-wal", errno: "EIO" },
+    });
   });
 
   it("leaves no aside folder once the new database is placed over an old set", async () => {

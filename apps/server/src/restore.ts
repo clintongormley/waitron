@@ -427,7 +427,7 @@ export async function restoreDatabase(args: {
     await fs.rm(litestreamMetaDir(target), { recursive: true, force: true });
     aside = await mkdtemp(join(args.venueDir, ASIDE_PREFIX));
   } catch (error) {
-    await fs.rm(incoming, { force: true });
+    await removeIncoming(fs, incoming, args.log);
     throw error;
   }
   const moved: string[] = [];
@@ -446,20 +446,24 @@ export async function restoreDatabase(args: {
     }
     await fs.rename(incoming, target);
   } catch (error) {
-    await fs.rm(incoming, { force: true });
-    const putBack = await putBackMoved(fs, moved, aside);
+    const putBack = await putBackMoved(fs, moved, aside, args.log);
+    await removeIncoming(fs, incoming, args.log);
     if (moved.length === 0) throw error;
     const params =
       putBack === "all"
         ? ({ kept: "previous" } as const)
         : ({ kept: "set_aside", folder: basename(aside) } as const);
-    args.log("error", "restore.db.placement_failed", { ...params, errorCode: codeOf(error) });
+    args.log("error", "restore.db.placement_failed", {
+      ...params,
+      errorCode: codeOf(error),
+      errno: errnoOf(error),
+    });
     throw new AppError("restore.placement_failed", params);
   }
   try {
     await fs.rm(aside, { recursive: true, force: true });
-  } catch {
-    args.log("warn", "restore.db.aside_kept", { folder: basename(aside) });
+  } catch (error) {
+    args.log("warn", "restore.db.aside_kept", { folder: basename(aside), errno: errnoOf(error) });
   }
   args.log("info", "restore.db.placed", { bytes: args.dumpBytes.byteLength });
   return target;
@@ -481,11 +485,13 @@ async function putBackMoved(
   fs: PlacementFs,
   moved: readonly string[],
   aside: string,
+  log: Logger,
 ): Promise<"all" | "some_left"> {
   for (const member of [...moved].reverse()) {
     try {
       await fs.rename(join(aside, basename(member)), member);
-    } catch {
+    } catch (error) {
+      log("warn", "restore.db.put_back_failed", { file: basename(member), errno: errnoOf(error) });
       return "some_left";
     }
   }
@@ -495,6 +501,24 @@ async function putBackMoved(
     // An empty folder left behind costs nothing; the old database is back either way.
   }
   return "all";
+}
+
+/**
+ * Logged, not thrown, so the error that stopped the placement is the one reported. The next
+ * {@link restoreDatabase} removes a leftover incoming file, or stops, before writing its own.
+ */
+async function removeIncoming(fs: PlacementFs, incoming: string, log: Logger): Promise<void> {
+  try {
+    await fs.rm(incoming, { force: true });
+  } catch (error) {
+    log("warn", "restore.db.incoming_kept", { file: basename(incoming), errno: errnoOf(error) });
+  }
+}
+
+/** `codeOf` maps only AppErrors; the errno is a fixed symbol, never the path or message. */
+function errnoOf(error: unknown): string | undefined {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  return typeof code === "string" ? code : undefined;
 }
 
 /**
