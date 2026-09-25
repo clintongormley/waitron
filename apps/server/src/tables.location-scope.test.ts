@@ -17,14 +17,7 @@ import "./errors.js";
 
 const LOCALE = "es-ES";
 
-/**
- * The placement verbs' location predicate, on the engine the box now runs.
- *
- * What each of the four cases below asserts is that a verb's own `location_id` predicate refuses a
- * row belonging to another location of the SAME tenant, and that predicate is a `where` clause in
- * `./tables.ts`. Measured 2026-09-22: all four pass here, and the negative control in the fourth
- * case (a same-location place and clear, which must NOT be refused) still passes too.
- */
+// The placement verbs' own `location_id` predicate is the only thing refusing another location's row.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let db: Database;
 beforeAll(() => {
@@ -38,18 +31,11 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
   });
 }
 
-/** ONE tenant, TWO venues (locations A and B) — the cross-LOCATION, same-TENANT shape the placement
- *  verbs' own `location_id` predicate is the only guard against. Returns a full TillConfig scoped to
- *  each. */
 async function setupTwoVenues(): Promise<{ a: TillConfig; b: TillConfig }> {
   await seedTenant(db);
   const make = async (name: string): Promise<TillConfig> => {
-    // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
-    // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
-    // engine and a raw insert reaches none of them (all three columns are NOT NULL —
-    // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
-    // a text column, which is what refused the `array[...]` constructor that used to fill it
-    // (`near "['es-ES']": syntax error`).
+    // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are
+    // `$defaultFn` generators, which a raw insert does not reach.
     const [location] = await db
       .insert(locations)
       .values({
@@ -83,10 +69,8 @@ const P = { posX: 100, posY: 100, shape: "round" as const, rotation: 0 };
 describe("placement verbs are LOCATION-scoped (a same-tenant cross-location write is refused)", () => {
   it("setTablePlacement refuses a table that belongs to ANOTHER location of the same tenant", async () => {
     const { a, b } = await setupTwoVenues();
-    // A live table + a live zone, both in venue B.
     const { id: tableB } = await asApp(b, (tx) => createTable(tx, b, { label: "B-1" }));
     const { id: zoneB } = await asApp(b, (tx) => createZone(tx, b, { name: "Zona B" }));
-    // Called with venue A's cfg, table B is out of scope → table.not_found, never a silent write.
     await expect(
       asApp(a, (tx) => setTablePlacement(tx, a, tableB, { zoneId: zoneB, ...P })),
     ).rejects.toMatchObject({ code: "table.not_found", params: { tableId: tableB } });
@@ -96,8 +80,7 @@ describe("placement verbs are LOCATION-scoped (a same-tenant cross-location writ
     const { a, b } = await setupTwoVenues();
     const { id: tableA } = await asApp(a, (tx) => createTable(tx, a, { label: "A-1" }));
     const { id: zoneB } = await asApp(b, (tx) => createZone(tx, b, { name: "Zona B" }));
-    // Table A is in scope, but zone B is another venue's. The `dining_tables_zone_fk` is (zone)
-    // only, so without the explicit location predicate the cross-location zone would be accepted.
+    // `dining_tables_zone_fk` cannot see the location, so only the verb's predicate refuses this.
     await expect(
       asApp(a, (tx) => setTablePlacement(tx, a, tableA, { zoneId: zoneB, ...P })),
     ).rejects.toMatchObject({ code: "zone.not_found", params: { zoneId: zoneB } });
@@ -107,14 +90,12 @@ describe("placement verbs are LOCATION-scoped (a same-tenant cross-location writ
     const { a, b } = await setupTwoVenues();
     const { id: zoneB } = await asApp(b, (tx) => createZone(tx, b, { name: "Zona B" }));
     const { id: tableB } = await asApp(b, (tx) => createTable(tx, b, { label: "B-1" }));
-    // Place it legitimately from venue B first, so a location-BLIND clear WOULD find and null it.
+    // Placed first, so a location-blind clear would find and null it.
     await asApp(b, (tx) => setTablePlacement(tx, b, tableB, { zoneId: zoneB, ...P }));
-    // Clearing it with venue A's cfg must be refused (table out of scope) → table.not_found.
     await expect(asApp(a, (tx) => clearPlacement(tx, a, tableB))).rejects.toMatchObject({
       code: "table.not_found",
       params: { tableId: tableB },
     });
-    // …and the placement is STILL there — the cross-location clear did not null the four columns.
     const row = await db.execute<{ pos_x: number | null }>(
       sql`select pos_x from dining_tables where id = ${tableB}`,
     );
@@ -122,8 +103,6 @@ describe("placement verbs are LOCATION-scoped (a same-tenant cross-location writ
   });
 
   it("a table placed from its OWN location still succeeds (the scope does not over-refuse)", async () => {
-    // The positive control: with the location predicate in place, an in-scope place still works — the
-    // fix refuses the cross-location write without breaking the legitimate same-location one.
     const { a } = await setupTwoVenues();
     const { id: tableA } = await asApp(a, (tx) => createTable(tx, a, { label: "A-1" }));
     const { id: zoneA } = await asApp(a, (tx) => createZone(tx, a, { name: "Zona A" }));
@@ -132,7 +111,6 @@ describe("placement verbs are LOCATION-scoped (a same-tenant cross-location writ
       sql`select pos_x, zone_id from dining_tables where id = ${tableA}`,
     );
     expect(row.rows[0]).toMatchObject({ pos_x: P.posX, zone_id: zoneA });
-    // And clearing it from its own location works too.
     await asApp(a, (tx) => clearPlacement(tx, a, tableA));
     const cleared = await db.execute<{ pos_x: number | null }>(
       sql`select pos_x from dining_tables where id = ${tableA}`,

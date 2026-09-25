@@ -76,46 +76,16 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { collectOrder, payWorkingOrder } from "./till-sale.js";
 import "./errors.js";
 
-// `working-order.pay-and-dispatch.test.ts`: the working-order verbs driven on a venue provisioned
-// through `applyVenue`, with a real `VerifactuBackend` on the settle path, so a case here can
-// follow an order through pay/place/collect to the record it files and on to the kitchen queue.
-// That is what separates it from its sibling —
-// `grep -n 'payWorkingOrder\|collectOrder\|VerifactuBackend' apps/server/src/working-order.test.ts`
-// prints nothing (exit 1, run 2026-09-22): that file stubs the fiscal backend with a bare `{}` and
-// never settles an order, so it covers each verb up to the point of payment and no further.
+// The working-order verbs driven on a venue provisioned through `applyVenue`, with a real
+// `VerifactuBackend` on the settle path, so a case here can follow an order through
+// pay/place/collect to the record it files and on to the kitchen queue.
 //
-// This suite reached the SQLite engine as `useTemplateDb({ template: "manifest" })` — a per-file
-// clone of a shared PostgreSQL template, with `suite.pg.connect()` handing out extra backends. Both
-// are gone. There is ONE venue file and ONE handle, and `withTransaction` IS the write lock
-// (`packages/db/src/tenancy.ts` → `withWriteLock`, `packages/store/src/write-queue.ts`), so
-// two overlapping transactions on this handle queue rather than contend. Nothing here establishes
-// what any database role may read or write, because there are no roles.
-//
-// WHAT THE NINE "two backend" CASES NOW SHOW, AND WHAT THEY DO NOT. Each of them now starts both
-// halves on one handle. Every BEHAVIOURAL assertion each case made is unchanged; three assertions
-// were dropped, all of them the same one — `expect(new Set(pids).size).toBe(2)`, which read
-// `pg_backend_pid()` down two connections to prove the two halves were distinct backends. There is
-// one handle and no backend id to read, so that assertion has no counterpart here.
-//
-// What holds the nine cases up changed: on PostgreSQL it was `select … for update`, every one of
-// which is gone from `working-order.ts`; here it is the per-file write queue, which is wider than
-// any row lock was. MEASURED, with a control in the other direction (2026-09-22, this worktree):
-// two `withTransaction` bodies started on one handle without awaiting the first, with the first
-// held open for 50 ms — only the first body had begun at the end of the hold, and the second ran
-// to completion only after the first committed. The control, the same two bodies with no
-// `withTransaction` around them, had the second body finished inside that hold.
-//
-// So the OUTCOME property each case pins — one sale filed, one order parked, a fired line never
-// re-coursed, a held line never left without its RECALLED slip — is still under test, and the
-// second call still reaches its replay or refusal branch. What is LOST outright, and nothing on
-// one writer can restore: these cases no longer observe two writers that genuinely overlap in
-// time, so the interleave each was written to forbid can no longer be attempted and the assertion
-// that would catch it can no longer fire. The order is no longer decided by the engine either —
-// the queue runs the bodies in the order handed to it — so each of the three coursing cases now
-// reaches ONE of its two order-independent outcomes; which one is measured and stated at the case.
-// `packages/catalogue/test/fixtures.ts`'s `racePair` is the shape that proves the QUEUE keeps the
-// second body out; that is a different subject from the one these cases hold, and is not attempted
-// here.
+// The overlapping-call cases start both calls on one handle, and `withTransaction` IS the write
+// lock (`packages/db/src/tenancy.ts`), so the second body runs only after the first has committed.
+// They pin the OUTCOME (one sale filed, one order parked, a fired line never re-coursed, a held line
+// never left without its RECALLED slip) and that the second call reaches its replay or refusal
+// branch; they cannot observe two writers genuinely overlapping. The queue runs the bodies in the
+// order handed to it, so each coursing case reaches only ONE of its two outcomes.
 const LOCALE = "es-ES";
 // A filed line freezes the unit's ABBREVIATION as its printed label, not the unit's name — so the
 // legacy `each` unit files as its short form (`ea`/`ud`/`u`), matching `seedLegacySellingUnits`.
@@ -138,7 +108,7 @@ const suite = useVenueDb({
 let backend: FiscalBackend;
 let clock: TrustedClock;
 
-/** The system wall clock, reported confident/anchored — the identical stub `till-sale.test.ts` uses. */
+/** The system wall clock, reported confident/anchored. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -159,8 +129,7 @@ function systemClock(): TrustedClock {
 }
 
 // `tenants_country_tax_id_key` is unique (`packages/db/drizzle/0000_baseline.sql:38`), so each
-// provisioned venue takes its own NIF — the same shape `till-sale.test.ts`/`provision-till.test.ts`
-// use.
+// provisioned venue takes its own NIF.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -176,7 +145,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     locationId: brandLocationId(venue.locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    // No integrated card terminal for these working-order PostgreSQL suites.
     tipsEnabled: false,
     // The venue provisions with the DEFAULT `prepay` mode; a mode-specific test overrides both the
     // cfg field AND the location's `order_flow` column via `modeVenue` (below).
@@ -319,8 +287,6 @@ async function saleCount(workingOrderId: string): Promise<number> {
  * order files at the LOCKED price, not a re-price at pay.
  */
 async function filedSaleTotal(workingOrderId: string): Promise<string> {
-  // `sales.total` counts whole cents, read raw and converted by `rawCentsToDecimal`; the helper
-  // returns the AMOUNT, so its callers' assertions read the same decimal literals they always did.
   const { rows } = await suite.db.execute<{ total: string }>(sql`
     select cast(total as text) as total from sales where working_order_id = ${workingOrderId}
   `);
@@ -370,8 +336,6 @@ async function registroCount(workingOrderId: string): Promise<number> {
  * multi-tender assertion is stable.
  */
 async function tendersFor(workingOrderId: string): Promise<{ method: string; amount: string }[]> {
-  // `tenders.amount` counts whole cents, read raw and converted by `rawCentsToDecimal`; the
-  // helper hands back the amount its callers assert on.
   const { rows } = await suite.db.execute<{ method: string; amount: string }>(sql`
     select t.method, cast(t.amount as text) as amount
     from tenders t
@@ -460,9 +424,7 @@ async function collectedAtSet(id: string): Promise<boolean> {
  * where `verifyAmendmentChain` compares it against a boolean with `!==`
  * (`packages/db/src/order-amendment-hash.ts`), and `event_at` needs no projection at all — it is
  * a `tsString` column holding the exact ISO instant `appendOrderAmendment` truncated to whole
- * seconds, which a CHECK constraint pins (`packages/db/src/schema/order-amendments.ts`). The
- * `to_char(... at time zone 'UTC', ...)` this replaces existed to render a PostgreSQL `timestamptz`
- * back into that same string.
+ * seconds, which a CHECK constraint pins (`packages/db/src/schema/order-amendments.ts`).
  */
 async function readAmendments(id: string): Promise<VerifiableAmendment[]> {
   return suite.db
@@ -488,8 +450,7 @@ async function readAmendments(id: string): Promise<VerifiableAmendment[]> {
 /** The kitchen state of the ticket item fired for this SINGLE-line order, or null when none was
  *  fired. Placing (Modes I/T, inside `placeOrder`) and send-to-prep (Mode P) fire one
  *  `ticket_items` row per line (KDS-1); a walk-up never fires. The callers here fire SINGLE-line
- *  orders, so at most one row exists — the per-line `ticket_items` successor to the
- *  dropped-`order_prep` `prepStateOf`. */
+ *  orders, so at most one row exists. */
 async function ticketStateOf(id: string): Promise<string | null> {
   const { rows } = await suite.db.execute<{ state: string }>(sql`
     select state from ticket_items where working_order_id = ${id}
@@ -524,9 +485,8 @@ async function ticketItemIdsFor(orderId: string): Promise<string[]> {
 }
 
 /**
- * Run one of the tx-based KDS verbs (advanceTicketItem/advanceTicket/listStationQueue) under a cfg's
- * transaction scope. Unlike the old deps-based `advancePrep`, these verbs run on a CALLER-supplied
- * transaction, so the suite opens the `withTransaction` scope for them.
+ * Run one of the tx-based KDS verbs (advanceTicketItem/advanceTicket/listStationQueue) in a
+ * `withTransaction` scope — they run on a CALLER-supplied transaction.
  */
 async function asTenant<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
@@ -537,8 +497,7 @@ async function asTenant<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>)
 
 /**
  * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s node, series and location and
- * differs only in `till_id`. The row is inserted under `withTransaction`, exactly as `applyVenue`
- * writes a till. Proving cross-till retrieval needs a genuine second till row because both
+ * differs only in `till_id`. Proving cross-till retrieval needs a genuine second till row because both
  * `working_orders.till_id` and `sales.till_id` FK onto `tills` — a fabricated uuid would fail
  * those.
  */
@@ -558,8 +517,7 @@ async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
  * The deployment holds one tenant per database. A SECOND node under the SAME tenant + location —
  * a `cfg` differing only in `node_id`. It never sells here; it exists so reads run under it prove
  * they are venue-wide (till-reroute §3.6): a node reaches the venue's open tabs regardless of the
- * `node_id` they carry. Inserted under `withTransaction`, the way `applyVenue`'s create-node does;
- * `filing_module`/`tax_module` are nullable and unused for a listing-only node, so left out.
+ * `node_id` they carry. `filing_module`/`tax_module` are nullable and unused for a listing-only node, so left out.
  */
 async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
   const id = randomUUID();
@@ -636,7 +594,7 @@ describe("payWorkingOrder", () => {
     expect(res.total).toBe("1.50");
     expect(res.tender).toEqual({ method: "cash", change: "3.50" });
     expect(res.vatBreakdown).toEqual([{ rate: "21.00", base: "1.24", tax: "0.26" }]);
-    // The FILED line list the receipt renders (Finding 2): the priced walk-up composition — name, the
+    // The FILED line list the receipt renders: the priced walk-up composition — name, the
     // display quantity, and the GROSS the line was filed at. Σ(gross) == total.
     expect(res.lines).toEqual([
       {
@@ -663,7 +621,6 @@ describe("payWorkingOrder", () => {
     // Park café×1 + agua×1 — BOTH added, so both gross units are LOCKED onto their `working_order_lines`
     // rows (design §2, line-add snapshot). Then pay the SAME id with NO client basket (`lines: []`): a
     // retrieved order is filed from its STORED locked lines, not a re-price of anything the till sends.
-    // The old model re-priced the sent basket; this one cannot, which is the behaviour under test.
     await parkOrder({ db: suite.db }, cfg, {
       id,
       zoneId,
@@ -689,7 +646,7 @@ describe("payWorkingOrder", () => {
     expect(res.total).toBe("3.50");
     expect(res.total).toBe(parkedTotal);
     expect(res.tender).toEqual({ method: "cash", change: "1.50" });
-    // The receipt line list is the STORED lock (Finding 2), not any client basket the till sent (it
+    // The receipt line list is the STORED lock, not any client basket the till sent (it
     // sent none). A stored quantity reads back at three places ("1.000") and prints
     // trailing-zero-trimmed ("1").
     expect(res.lines).toEqual([
@@ -730,8 +687,8 @@ describe("payWorkingOrder", () => {
 
     // The operator EDITS the retrieved basket (café×1 → café×2); the till re-syncs it BEFORE paying
     // (`updateWorkingOrder` → `updateHeldOrder`), re-locking the new composition. WITHOUT this sync the
-    // retrieved-order pay path files the pre-edit lock and the edit is SILENTLY DROPPED — the 7c
-    // regression this closes (the till-app side is pinned by `retrieve → edit → pay re-syncs …`).
+    // retrieved-order pay path files the pre-edit lock and the edit is SILENTLY DROPPED (the till-app
+    // side is pinned by `retrieve → edit → pay re-syncs …`).
     await updateHeldOrder({ db: suite.db }, cfg, id, {
       lines: [{ menuItemId: cafe.menuItemId, quantity: "2" }],
     });
@@ -805,9 +762,7 @@ describe("payWorkingOrder", () => {
       zoneId,
       // A DIVERGENCE-PRONE basket at ONE rate (21%): café×1 (gross 1.50 → base 1.24) + agua×2 (gross
       // 4.00 → base 3.31). The FILED difference-method group is base 4.55, tax = 5.50 − 4.55 = 0.95;
-      // a naive base×rate recompute gives round(4.55 × 21%) = 0.96 — a DIFFERENT cent. So this basket
-      // proves the replay returns the FILED figures (Task 14), not the old reconstruction, which would
-      // have made the assertion below fail with 0.96 ≠ 0.95.
+      // a naive base×rate recompute gives round(4.55 × 21%) = 0.96 — a DIFFERENT cent.
       lines: [
         { menuItemId: cafe.menuItemId, quantity: "1" },
         { menuItemId: agua.menuItemId, quantity: "2" },
@@ -817,12 +772,11 @@ describe("payWorkingOrder", () => {
     const deps = { db: suite.db, backend, clock };
 
     const first = await payWorkingOrder(deps, cfg, req);
-    // The filed breakdown is the difference-method figure (0.95), the divergent value the old replay
-    // reconstruction (0.96) could not have produced.
+    // The filed breakdown is the difference-method figure (0.95).
     expect(first.total).toBe("5.50");
     expect(first.vatBreakdown).toEqual([{ rate: "21.00", base: "4.55", tax: "0.95" }]);
     expect(first.qr.length).toBeGreaterThan(0); // a genuine first filing carries the AEAT QR
-    // The FILED line list (Finding 2): café×1 (gross 1.50) + agua×2 (gross 4.00). Σ(gross) == 5.50.
+    // The FILED line list: café×1 (gross 1.50) + agua×2 (gross 4.00). Σ(gross) == 5.50.
     expect(first.lines).toEqual([
       {
         descriptions: { [LOCALE]: "Café" },
@@ -848,10 +802,9 @@ describe("payWorkingOrder", () => {
     expect(second.invoiceNumber).toBe(first.invoiceNumber);
     expect(second.total).toBe(first.total);
     expect(second.issuedAt).toBe(first.issuedAt);
-    // The replay now reads the EXACT filed desglose (Task 14), so it equals the original's — the
-    // divergence between the difference method and a recompute is gone.
+    // The replay reads the EXACT filed desglose, so it equals the original's.
     expect(second.vatBreakdown).toEqual(first.vatBreakdown);
-    // The replayed ticket's line list is read back from the order's stored lock (Finding 2), so it is
+    // The replayed ticket's line list is read back from the order's stored lock, so it is
     // byte-identical to the original's — filed lines both times, never a client basket the retry sent.
     expect(second.lines).toEqual(first.lines);
     // The replay reports the same persisted cash facts and filed QR without another drawer action.
@@ -860,8 +813,7 @@ describe("payWorkingOrder", () => {
     expect(second.qr).toBe(first.qr);
     expect(second.qr.length).toBeGreaterThan(0);
 
-    // The unrepairable double-file the whole task exists to prevent: STILL exactly one sale + one
-    // registro after the retry.
+    // No double filing: STILL exactly one sale + one registro after the retry.
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
   });
@@ -883,8 +835,7 @@ describe("payWorkingOrder", () => {
     };
     // Two overlapping pays of ONE order id, both started before either has finished. The write queue
     // admits the second only once the first has committed, so the second reads `settled` and REPLAYS
-    // — which is the branch this case exists to pin. Neither errors. (The lock that used to serialise
-    // them is gone from `working-order.ts`; the file header states what that costs.)
+    // — which is the branch this case exists to pin. Neither errors.
     const [resA, resB] = await Promise.all([
       payWorkingOrder({ db: suite.db, backend, clock }, cfg, req),
       payWorkingOrder({ db: suite.db, backend, clock }, cfg, req),
@@ -899,21 +850,9 @@ describe("payWorkingOrder", () => {
 
   it("concurrent double-pay of a WALK-UP (no prior row) files ONE sale — the 23505 backstop", async () => {
     const { cfg, cafe, zoneId } = await setupVenue();
-    // THE CASE NAME IS NOW WRONG AND THE CASE IS KEPT ANYWAY. On PostgreSQL the two overlapping
-    // backends both reached the create-then-file path and the loser collided on `working_orders`'
-    // primary key — the 23505 backstop the name records. On one handle the write queue admits the
-    // second body only once the first has committed, so the second call's status read
-    // (`till-sale.ts:418-428`) finds the row already `settled` and returns at step 2, exactly as the
-    // PARKED case above. MEASURED, not reasoned: re-run with the second call carrying an unsupported
-    // `voucher` tender, it still returned the winner's ticket — and the replay check runs BEFORE the
-    // tender guard (`till-sale.ts:442`), so nothing past step 2 was reached. Control in the other
-    // direction, same run: that same voucher tender on a fresh, not-yet-settled id was refused
-    // `sale.unsupported_tender`.
-    //
-    // So what is LOST here, and what nothing on one writer can restore: `payWorkingOrder`'s
-    // duplicate-key backstop for a WALK-UP is no longer exercised by any test. The assertions below
-    // are unchanged and still hold — a walk-up paid twice files one sale — but they now witness the
-    // settled-replay branch, the same branch the PARKED case witnesses.
+    // The case name is stale: the write queue admits the second call only once the first has
+    // committed, so it finds the row already `settled` and replays, as the PARKED case above does.
+    // `payWorkingOrder`'s duplicate-key catch for a walk-up is not reached here.
     const id = randomUUID();
 
     const req = {
@@ -941,7 +880,6 @@ describe("payWorkingOrder", () => {
       zoneId,
       lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
     });
-    // Abandon it (open → abandoned), then try to pay.
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(sql`update working_orders set status = 'abandoned' where id = ${id}`);
     });
@@ -970,10 +908,9 @@ describe("payWorkingOrder", () => {
     const UUID_NOT_IN_CAT = "00000000-0000-0000-0000-000000000000";
 
     // A retrieved order files from its STORED locked lines; `req.lines` is IGNORED entirely (design §2,
-    // line-add snapshot). Under the OLD re-price-at-pay model this garbage basket — an unknown offer —
-    // would have been refused; under the new one it is not even looked at, so the pay SUCCEEDS on the
-    // stored café×1. Divergent inputs, opposite outcomes (CLAUDE.md §1): this is the regression guard
-    // against anyone re-reading `req.lines` for a retrieved order.
+    // line-add snapshot), so this garbage basket — an unknown offer — is not looked at and the pay
+    // SUCCEEDS on the stored café×1. The guard against anyone re-reading `req.lines` for a retrieved
+    // order.
     const res = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id,
       lines: [{ menuItemId: UUID_NOT_IN_CAT, quantity: "1" }],
@@ -1001,7 +938,7 @@ describe("payWorkingOrder", () => {
       }),
     ).rejects.toMatchObject({ code: "sale.empty_basket" });
 
-    // cash and card are the supported tenders (slice 7a cash + this slice's manual card); every other
+    // cash and card are the supported tenders; every other
     // `tender_method` enum value is still refused with `sale.unsupported_tender`. The `as unknown` cast
     // is how an untrusted till can send one past the widened `"cash" | "card"` type at runtime.
     for (const method of ["voucher", "transfer", "other"] as const) {
@@ -1021,15 +958,11 @@ describe("parkOrder concurrent replay", () => {
   it("concurrent double-park of the same id parks ONE order — the 23505 replay backstop (two concurrent callers)", async () => {
     const { cfg, cafe, zoneId } = await setupVenue();
     // A fresh id with NO prior row, parked twice with both calls in flight at once. Unlike
-    // `payWorkingOrder`, `parkOrder` reads no existing row first — it goes straight to
-    // `createOpenOrder`'s insert (`working-order.ts:926-933`) — so the second call's insert DOES
-    // collide on `working_orders`' primary key and the duplicate-key catch below it
-    // (`working-order.ts:934-957`) is what returns the winner's committed `{ id, orderNumber }`.
-    // Those are the only two ways that function returns, and the loser cannot have taken the first,
-    // so the assertions below witness the catch. They also witness `isUniqueViolation` classifying
-    // THIS ENGINE's refusal: `working-order.ts:937` re-throws anything it fails to classify, so an
-    // unrecognised code would surface here as a rejection rather than a replay. The 23505 in the
-    // case name is the PostgreSQL code and is no longer what is raised.
+    // `payWorkingOrder`, `parkOrder` reads no existing row first, so the second call's insert
+    // collides on `working_orders`' primary key and `parkOrder`'s duplicate-key catch returns the
+    // winner's committed `{ id, orderNumber }`. The catch re-throws anything `isUniqueViolation` fails
+    // to classify, so an unrecognised refusal would surface here as a rejection. The 23505 in the case
+    // name is stale.
     const id = randomUUID();
     const lines = [{ menuItemId: cafe.menuItemId, quantity: "1" }];
 
@@ -1082,7 +1015,6 @@ describe("card tender (manual / datáfono)", () => {
     expect(await saleCount(id)).toBe(1);
     expect(await registroCount(id)).toBe(1);
 
-    // The filed tender is a CARD tender at the total.
     expect(await tendersFor(id)).toEqual([{ method: "card", amount: "1.50" }]);
 
     // A captured MANUAL payment linked to the filed sale — the ledger row the datáfono case adds
@@ -1130,7 +1062,7 @@ describe("card tender (manual / datáfono)", () => {
     const deps = { db: suite.db, backend, clock };
 
     const first = await payWorkingOrder(deps, cfg, req);
-    // The retry — same id, same body (a lost first response). The 7b `sales_working_order_id_key`
+    // The retry — same id, same body (a lost first response). The `sales_working_order_id_key`
     // idempotency replays the ORIGINAL ticket and files NOTHING: no second sale, no second registro,
     // and — the card-specific part — no second captured payment.
     const second = await payWorkingOrder(deps, cfg, req);
@@ -1301,8 +1233,7 @@ describe("cross-till end-to-end", () => {
 // cancelling a placed order (placed → abandoned) appends an `order_cancelled` amendment.
 // The append-only guarantee on `order_amendments` is a trigger this suite's database carries
 // (`installAppendOnlyTriggers`, applied per migration set by `useVenueDb`), so a rewrite is refused
-// by the trigger alone. This slice files NO fiscal doc at placing (Mode T / generic); Mode-I's
-// deferred file and the mode dispatch are Task 8.
+// by the trigger alone.
 describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
   it("placeOrder: open → placed, freezes composition, opens the log with a genesis order_placed entry", async () => {
     const { cfg, cafe, zoneId } = await setupVenue();
@@ -1317,8 +1248,8 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
 
-    // Composition freeze: a line write on the now-placed order is rejected. `updateHeldOrder` locks the
-    // row, reads status = 'placed' and refuses with `working_order.not_open` (its own app check); the
+    // Composition freeze: a line write on the now-placed order is rejected. `updateHeldOrder`
+    // reads status = 'placed' and refuses with `working_order.not_open` (its own app check); the
     // `require_open_parent` trigger is the DB backstop underneath — placing freezes for free (design §3).
     await expect(
       updateHeldOrder({ db: suite.db }, cfg, id, {
@@ -1354,8 +1285,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     });
     await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR, cfg.tillId);
 
-    // Placing is NOT idempotent in Task 7 (Mode-I double-place idempotency arrives with the mode
-    // dispatch, Task 8): a second place of the now-`placed` order is refused with
+    // Placing is NOT idempotent: a second place of the now-`placed` order is refused with
     // `working_order.not_open` (wrong status), before any transition or amendment — so the log still
     // holds exactly its one genesis entry.
     await expect(
@@ -1414,7 +1344,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 
     // `order_amendments` carries NO DB CHECK forcing a reason on `order_cancelled` (the column is
     // nullable — null is the genesis's own legitimate value), so the APP contract is the only thing
-    // stopping a reasonless cancel (7c carry-forward from Task 3's review). An empty string AND a
+    // stopping a reasonless cancel. An empty string AND a
     // whitespace-only reason are both refused, with `working_order.reason_required` — NOT `not_placed`,
     // because the order genuinely IS placed here (a false label is the §1 defect class).
     for (const reason of ["", "   "]) {
@@ -1427,9 +1357,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     }
 
     // The refusal is total: the order stays `placed` (no transition) and only the genesis entry exists
-    // (no reasonless `order_cancelled` was written). Deleting the reason guard makes this case SUCCEED —
-    // the order abandons and a reasonless amendment appends — which is how the guard is proven by
-    // deletion (CLAUDE.md §4): these two assertions flip to failing.
+    // (no reasonless `order_cancelled` was written).
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
     expect((await readAmendments(id)).map((r) => r.kind)).toEqual(["order_placed"]);
   });
@@ -1452,7 +1380,6 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
       code: "working_order.not_placed",
       params: { workingOrderId: openId },
     });
-    // The refused open order opened NO amendment log.
     expect(await readAmendments(openId)).toHaveLength(0);
 
     // A SETTLED (walk-up) order — also not placed.
@@ -1503,8 +1430,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 // config table). FISCAL-CRITICAL: each mode must fire the right issuance primitive at the right
 // point — a wrong dispatch files the wrong kind of unrepairable fiscal record (CLAUDE.md §5).
 // The idempotency proofs below run as two transactions on one handle; the file header states what
-// that shows and what it no longer does.
-// (CLAUDE.md §4). No primitive is reimplemented here: the dispatch ORCHESTRATES `recordSale`
+// that shows and what it does not. No primitive is reimplemented here: the dispatch ORCHESTRATES `recordSale`
 // (immediate + deferred), `settleSale` and `listOutstandingSales`.
 describe("prepare & collect — three-mode dispatch (order_flow)", () => {
   it("readOrderFlow reads the venue's configured mode from its location", async () => {
@@ -1512,7 +1438,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await readOrderFlow(suite.db, cfg)).toBe("invoice_first");
   });
 
-  // MODE P (prepay): pay + issue at ORDER — open → settled, no placed state. The unchanged
+  // MODE P (prepay): pay + issue at ORDER — open → settled, no placed state. The
   // walk-up/park-pay `payWorkingOrder`, asserted under an explicit `prepay` cfg so P's contract is
   // pinned beside I and T.
   it("Mode P (prepay): pay at order files an immediate sale, open → settled, nothing outstanding", async () => {
@@ -1556,9 +1482,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     const labels = await frozenUnitLabels(id);
     expect(labels.workingOrderLine).toEqual(abbreviation);
     expect(labels.saleLine).toEqual(abbreviation);
-    // Confirm the frozen label is the abbreviation, not the full unit name — the short form was
-    // frozen, not the name. The live "Each" unit is now the synthetic `EACH_UNIT` defined in code
-    // (there is no seeded "each" row any more), so its name comes from there.
+    // The live "Each" unit is the synthetic `EACH_UNIT` defined in code, so its name comes from there.
     expect(EACH_UNIT.name.en.toLowerCase()).toBe("each");
     expect(labels.saleLine).not.toEqual(EACH_UNIT.name);
   });
@@ -1608,8 +1532,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(collected.invoiceNumber).toBe("A/1"); // the SAME invoice, read back
     expect(collected.total).toBe("3.50");
     expect(collected.tender).toEqual({ method: "cash", change: "0.00" });
-    // The receipt line list is read back from the order's stored lock (Finding 2 — Mode-I collect
-    // returns the already-filed ticket), so it matches the deferred invoice's composition.
+    // The receipt line list is read back from the order's stored lock (Mode-I collect returns the
+    // already-filed ticket), so it matches the deferred invoice's composition.
     expect(collected.lines).toEqual([
       {
         descriptions: { [LOCALE]: "Café" },
@@ -1678,10 +1602,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(collected.tender.method).toBe("card");
     expect(await orderState(cardId)).toEqual({ status: "settled", settledAtSet: true });
 
-    // The card tender AND a captured manual `payments` row linked to the settled sale — the #62
-    // side-write, now symmetric with the immediate card paths. Deleting the card branch in
-    // `collectOrder` makes `paymentCount`/`paymentsFor` fail here (the invoice-first card collect would
-    // become invisible to reconciliation), the regression this fix closes.
+    // The card tender AND a captured manual `payments` row linked to the settled sale; without the row
+    // the invoice-first card collect would be invisible to reconciliation.
     expect(await tendersFor(cardId)).toEqual([{ method: "card", amount: "1.50" }]);
     expect(await paymentCount(cardId)).toBe(1);
     expect(await paymentsFor(cardId)).toEqual([
@@ -1797,8 +1719,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(collected.invoiceNumber).toBe("A/1"); // the FIRST filing is at collect
     expect(collected.total).toBe("1.50");
     expect(collected.tender).toEqual({ method: "cash", change: "0.00" });
-    // The receipt line list is the just-filed composition (Finding 2 — Mode-T files immediate at
-    // collect from the stored lock).
+    // The receipt line list is the just-filed composition (Mode-T files immediate at collect from
+    // the stored lock).
     expect(collected.lines).toEqual([
       {
         descriptions: { [LOCALE]: "Café" },
@@ -1845,7 +1767,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await saleCount(id)).toBe(1);
   });
 
-  // Task 6 — the counter COLLECT wires `working_orders.collected_at`, so a collected counter order
+  // The counter COLLECT wires `working_orders.collected_at`, so a collected counter order
   // leaves its station queue. The end-to-end proof through `collectOrder` (not a raw UPDATE): fire a
   // placed order to the default station, confirm it queues, collect it, and confirm it drops — with the
   // fiscal result byte-unchanged. Both modes are pinned: Mode T settles through `fileImmediateSale`,
@@ -1920,7 +1842,6 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await registroCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
 
-    // Set, and the default station drops the collected order.
     expect(await collectedAtSet(id)).toBe(true);
     expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
   });
@@ -1949,7 +1870,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     });
     expect(await saleCount(openId)).toBe(0);
 
-    // An ABSENT id → the FOR UPDATE locks nothing (the undefined branch), same fail-closed code.
+    // An ABSENT id (the undefined branch) → the same fail-closed code.
     const missing = randomUUID();
     await expect(
       collectOrder({ db: suite.db, backend, clock }, cfg, {
@@ -1983,12 +1904,9 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
 });
 
 // The ticket prep surface (KDS-1 §3c): the per-line advance state machine (`advanceTicketItem`), the
-// whole-ticket bump (`advanceTicket`) and the per-station queue read (`listStationQueue`) — over the
-// per-line/per-station `ticket_items` that replaced #63's one-row-per-order `order_prep`.
-// `sendToPrep` (Mode P) and
-// `placeOrder` (Modes I/T) are the FIRES that put items on the queue; their settled-only guard is
-// exercised here too. The verbs run through {@link asTenant} (a caller-supplied `withTransaction`
-// scope).
+// whole-ticket bump (`advanceTicket`) and the per-station queue read (`listStationQueue`) over
+// `ticket_items`. `sendToPrep` (Mode P) and `placeOrder` (Modes I/T) are the FIRES that put items on
+// the queue; their settled-only guard is exercised here too.
 describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surface)", () => {
   it("advanceTicketItem walks a line queued → preparing → ready; a skip, a repeat, a backwards move and to='queued' are all refused", async () => {
     const { cfg, cafe, zoneId } = await modeVenue("prepay");
@@ -2119,8 +2037,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     // COLLECT order 1 — the collect flow settles a placed order AND stamps `collected_at` in the one
     // legal placed → settled transition (the enforce_transition trigger forbids editing a placed row
     // any other way). The default-station display drops a collected order (§3e), so it leaves the queue.
-    // ONE clock reading bound twice: PostgreSQL's `now()` was transaction-start time, so the two
-    // columns this statement set always held the SAME instant. `nowIso()` called twice would not.
+    // ONE clock reading bound to both columns, so they hold the same instant.
     const settledNow = nowIso();
     await suite.db.execute(sql`
       update working_orders set status = 'settled', settled_at = ${settledNow}, collected_at = ${settledNow}
@@ -2130,8 +2047,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     ).toEqual([id2]);
 
     // CANCEL order 2 (placed → abandoned) — its ticket item is UNCHANGED (cancel never touches
-    // `ticket_items`), but `listStationQueue`'s `status != 'abandoned'` join retires it, exactly as
-    // `listPrepQueue` relied on the status join rather than a write the cancel makes.
+    // `ticket_items`), but `listStationQueue`'s `status != 'abandoned'` join retires it.
     await cancelPlacedOrder({ db: suite.db, backend, clock }, cfg, id2, "customer left", OPERATOR);
     expect(await ticketStateOf(id2)).toBe("queued"); // the ticket item itself is untouched by cancel
     expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
@@ -2139,8 +2055,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 
   it("listStationQueue is VENUE-WIDE: each node sees the venue's items, regardless of node (till-reroute §3.6)", async () => {
     const { cfg: nodeA, cafe, zoneId } = await modeVenue("ticket_then_pay");
-    // A second node under the SAME tenant + location — `addNode`'s established 7b shape: it differs
-    // only in `node_id`. Reads are venue-wide, so BOTH nodes fire a genuine order and BOTH queues show
+    // A second node under the SAME tenant + location, differing only in `node_id`. Reads are venue-wide, so BOTH nodes fire a genuine order and BOTH queues show
     // both — a measurement where each side holds two orders, not "one empty, one not" (CLAUDE.md §1).
     // Both nodes share the location's one default station.
     const nodeB = await addNode(nodeA, "Servidor 2");
@@ -2168,7 +2083,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     const queueB = await asTenant(nodeB, (tx) => listStationQueue(tx, station));
 
     // Same station on both sides, each holding BOTH orders (oldest-first: A fired before B) — the
-    // reads no longer separate by node.
+    // reads do not separate by node.
     expect(queueA.map((g) => g.orderId)).toEqual([idA, idB]);
     expect(queueB.map((g) => g.orderId)).toEqual([idA, idB]);
   });
@@ -2200,16 +2115,15 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
   });
 });
 
-// KDS-3 Task 3 (folded in per the Task-2 review) — the cross-station expo/pass read.
-// `listExpoQueue` gathers the venue's OPEN orders (with a not-yet-away item) across ALL stations; unlike
-// the per-station `listStationQueue` it takes NO station arg, and since till-reroute §3.6 it is not
-// node-scoped either. `working-order.test.ts` covers the join/grouping/exclusions; this case takes
-// the SAME venue-wide shape the `listStationQueue` test above uses, retargeted at `listExpoQueue`. The
-// reads run through {@link asTenant} (a `withTransaction` scope).
+// The cross-station expo/pass read. `listExpoQueue` gathers the venue's OPEN orders (with a
+// not-yet-away item) across ALL stations; unlike the per-station `listStationQueue` it takes NO
+// station arg, and it is not node-scoped either (till-reroute §3.6). `working-order.test.ts` covers
+// the join/grouping/exclusions; this case takes the SAME venue-wide shape the `listStationQueue` test
+// above uses.
 describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", () => {
   it("is VENUE-WIDE: each node's expo board shows the venue's orders, regardless of node (till-reroute §3.6)", async () => {
     const { cfg: nodeA, cafe, zoneId } = await modeVenue("ticket_then_pay");
-    // A second node under the SAME tenant + location (addNode's 7b shape). Reads are venue-wide, so
+    // A second node under the SAME tenant + location. Reads are venue-wide, so
     // BOTH nodes fire a genuine order and BOTH expo boards show both — a measurement where each side
     // holds two orders, not "one empty, one not" (CLAUDE.md §1).
     const nodeB = await addNode(nodeA, "Servidor 2");
@@ -2236,20 +2150,16 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
     const expoB = await asTenant(nodeB, (tx) => listExpoQueue(tx, nodeB));
 
     // Same tenant + location on both sides, each expo board holding BOTH orders (oldest-first: A
-    // fired before B) — the reads no longer separate by node.
+    // fired before B) — the reads do not separate by node.
     expect(expoA.map((o) => o.orderId)).toEqual([idA, idB]);
     expect(expoB.map((o) => o.orderId)).toEqual([idA, idB]);
   });
 });
 
 describe("markCollected (Mode-P kitchen-handover marker)", () => {
-  // The end-to-end proof the KDS-1 regression is closed. This RESTORES the base suite's "advancePrep
-  // walks queued → preparing → ready → collected" assertion on the new ticket model: the branch had
-  // rewritten it to stop at `ready` (CLAUDE.md §1 — a test rewritten to match the code hides the very
-  // regression it existed to catch). A Mode-P (prepay) order pays and fires at order,
-  // walks queued → preparing → ready, then is HANDED OVER — markCollected stamps `collected_at`, and it
-  // drops off listStationQueue. Before the fix that stamp was impossible (a settled order was immutable),
-  // so a fired Mode-P order's tickets lingered on the display forever.
+  // A Mode-P (prepay) order pays and fires at order, walks queued → preparing → ready, then is
+  // HANDED OVER — markCollected stamps `collected_at`, and it drops off listStationQueue. Until that
+  // stamp, a ready order stays on the queue.
   it("Mode P: fired → ready → markCollected stamps collected_at and drops the order off listStationQueue", async () => {
     const { cfg, cafe, zoneId } = await modeVenue("prepay");
     const station = await defaultStationId(cfg);
@@ -2277,7 +2187,7 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
     await asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "ready"));
     expect(await ticketStateOf(id)).toBe("ready");
     const readyQueue = await asTenant(cfg, (tx) => listStationQueue(tx, station));
-    // Still listed — a ready-but-uncollected order lingers (the bug was that it could NEVER leave) — and
+    // Still listed — a ready-but-uncollected order lingers — and
     // the group carries the order's `status`, so the till surfaces the collect action (collectable = settled).
     expect(readyQueue.map((g) => g.orderId)).toEqual([id]);
     expect(readyQueue[0]!.status).toBe("settled");
@@ -2285,7 +2195,6 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
     // Hand it over. NON-FISCAL — markCollected writes only collected_at (no sale/registro/tender/huella).
     await markCollected({ db: suite.db }, cfg, id);
     expect(await collectedAtSet(id)).toBe(true);
-    // GONE from the station queue — the regression is closed.
     expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
     // Its fiscal state is untouched — still settled with settled_at intact (only collected_at moved).
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
@@ -2363,18 +2272,13 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
   });
 });
 
-// Coursing editing verbs (Task B1) — the serialisation properties for the tab verbs
+// Coursing editing verbs — the serialisation properties for the tab verbs
 // `setLineCourse`/`sendLines`/`recallLines`. `working-order.test.ts` covers their LOGIC; the cases
 // below cover a `sendLines` racing a `recallLines` (or a `fireCourse`) on the SAME line ending in
-// one clean serial outcome with no lost update. What made that true on PostgreSQL was the tab
-// row's `FOR UPDATE` (and, for the `fireCourse` pair, the ticket item's); the file header states
-// what does now and what that costs. Every write runs through `withTransaction`; the read-backs
-// below use `suite.db` directly, which is the SAME handle — there is no outside to witness from
-// any more, only a read taken after the write committed.
+// one clean serial outcome with no lost update. The file header states what serialises them.
 
 /** Insert an active dining table in `zoneId` under `cfg`'s location and return its id — the `openTab`
- *  → `addTabRound` entry point. Written as an INSERT under `withTransaction`, the same shape
- *  `addTill`/`addNode` above use. */
+ *  → `addTabRound` entry point. */
 async function addTable(tx: Transaction, cfg: TillConfig, zoneId: string): Promise<string> {
   // Through the table, for the reason {@link addTill} gives — and here BOTH `dining_tables.id` and
   // `dining_tables.created_at` are `$defaultFn` columns, so a raw insert naming neither is refused
@@ -2386,7 +2290,7 @@ async function addTable(tx: Transaction, cfg: TillConfig, zoneId: string): Promi
   return rows[0]!.id;
 }
 
-/** An owner snapshot of a tab's lines joined to their ticket items, keyed by `line_no`: the tab line's
+/** A snapshot of a tab's lines joined to their ticket items, keyed by `line_no`: the tab line's
  *  `course_id`, the held item's `course_id` snapshot, whether the item has fired, and its kitchen state.
  *  The witness of the race's winner (fired or not). */
 async function tabSnapshot(tabId: string): Promise<
@@ -2488,10 +2392,8 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two 
     // interleave: the write queue runs whichever it admitted first to completion and commits it, then
     // runs the other against that committed result. Both verbs are legal on this line in either
     // order, so BOTH succeed. The queue takes them in the order handed to it, so only ONE of the
-    // invariant's two outcomes is now reached: measured over four runs, `sendLines` went first and
-    // `recallLines` second, leaving the line HELD with exactly one RECALLED slip. The invariant
-    // below is still written both ways because it is what must hold; what no longer happens is the
-    // other outcome being reached, so the assertion can no longer fail in that direction.
+    // invariant's two outcomes is reached here (`sendLines` first: the line ends HELD with one
+    // RECALLED slip); the invariant below is written both ways because it is what must hold.
     const results = await Promise.allSettled([
       withTransaction(suite.db, async (tx) => {
         await sendLines(tx, cfg, tabId, [1]);
@@ -2566,11 +2468,9 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
     // held line is in), both transactions started before either has finished. `fireCourse` makes no
     // open-tab check of its own; what keeps the two apart is the write queue, which runs whichever it
     // admitted first to completion before starting the other. It takes them in the order handed to
-    // it, so only ONE of the invariant's two outcomes is now reached: measured over four runs,
-    // `setLineCourse` went first, the line ended re-coursed to `otros` and still HELD, and
-    // `fireCourse` matched nothing. The invariant below is still written both ways because it is
-    // what must hold; what no longer happens is the other outcome being reached, so its
-    // `ticket.already_fired` half can no longer fail.
+    // it, so only ONE of the invariant's two outcomes is reached here (`setLineCourse` first: the line
+    // ends re-coursed to `otros` and still HELD); the invariant below is written both ways because it
+    // is what must hold.
     const [sc, fc] = await Promise.allSettled([
       withTransaction(suite.db, async (tx) => {
         await setLineCourse(tx, cfg, tabId, 1, otros.id);
@@ -2655,11 +2555,9 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     // started before either has finished. `fireCourse` makes no open-tab check of its own; what keeps
     // the two apart is the write queue, which runs whichever it admitted first to completion before
     // starting the other. Both are legal on this line in either order, so BOTH succeed. The queue
-    // takes them in the order handed to it, so only ONE of the invariant's two outcomes is now
-    // reached: measured over four runs, `recallLines` went first onto a still-held line (a no-op
-    // enqueueing no slip) and `fireCourse` then fired and printed it, leaving the line FIRED with
-    // zero RECALLED slips. The invariant below is still written both ways because it is what must
-    // hold; what no longer happens is the other outcome being reached.
+    // takes them in the order handed to it, so only ONE of the invariant's two outcomes is reached
+    // here (`recallLines` first: the line ends FIRED with zero RECALLED slips); the invariant below is
+    // written both ways because it is what must hold.
     const results = await Promise.allSettled([
       withTransaction(suite.db, async (tx) => {
         await recallLines(tx, cfg, tabId, [1]);
