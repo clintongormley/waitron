@@ -5,8 +5,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   createCatalogue,
   createProduct,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   listMenuOffers,
   listProducts,
 } from "./operations.js";
@@ -56,14 +55,9 @@ beforeEach(async () => {
       vatClass: "reduced",
     });
     productId = product.id;
-    const section = await createMenuSection(tx, {
-      menuId: menu.id,
-      name: { en: "Drinks" },
-    });
     offerId = (
-      await createMenuItem(tx, {
+      await addProductToMenu(tx, {
         menuId: menu.id,
-        sectionId: section.id,
         productId,
         grossPrice: "8.00",
       })

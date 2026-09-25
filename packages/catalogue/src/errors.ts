@@ -79,9 +79,10 @@ declare module "@waitron/shared" {
     /** Not thrown (`packages/media` refuses as `image.too_large`). Kept because a shipped code is
      * never removed. */
     "media.too_large": { size: number; limit: number };
-    /** A location-menu write names no catalogue. */
+    /** A location-menu write, or a read or write of a menu's structure, names no menu. */
     "catalogue.not_found": { catalogueId: string };
-    /** A menu offer operation names no active item; menuId is present when the route supplies it. */
+    /** A menu offer operation names no item the menu's structure reaches; menuId is present when
+     * the route supplies it. */
     "menu_item.not_found": { menuId?: string; menuItemId: string };
     /** A variant follows its parent onto every menu (spec §15.5) and is never offered on its
      * own. */

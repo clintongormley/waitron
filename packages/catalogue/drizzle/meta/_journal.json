@@ -57,6 +57,20 @@
       "when": 1790355483890,
       "tag": "0007_sections",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790365566791,
+      "tag": "0008_menu_details",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790365571708,
+      "tag": "0009_drop_menu_sections",
+      "breakpoints": true
     }
   ]
 }

@@ -19,10 +19,9 @@ export interface MenuItem {
   id: string;
   menuId: string;
   productId: string;
-  sectionId: string;
   /** The price this menu sets, or null when it sets none and the product's own price applies. */
   grossPrice: string | null;
-  displayOrder: number;
+  /** This menu's own switch for the product. */
   active: boolean;
 }
 
@@ -32,7 +31,9 @@ export interface MenuOffer extends MenuItem {
    * (`offer-price.ts`): `grossPrice` when set, else the product's own price. Never null. */
   unitPrice: string;
   menuName: string;
-  sectionName: Record<string, string>;
+  /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top
+   * level. */
+  placements: string[][];
   name: string;
   customerName: Record<string, string> | null;
   kitchenName: string | null;

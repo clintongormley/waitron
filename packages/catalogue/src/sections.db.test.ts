@@ -95,7 +95,10 @@ describe("sections_owner_ck", () => {
       message: expect.stringContaining("sections_role_ck"),
       errcode: 275,
     });
-    const count = await fx.db.execute<{ n: number }>(sql`select count(*) as n from sections`);
+    // The menu's own two lists are not among them: they were written by `createCatalogue`.
+    const count = await fx.db.execute<{ n: number }>(
+      sql`select count(*) as n from sections where internal_name = 'Row'`,
+    );
     expect(count.rows[0]!.n).toBe(3);
   });
 });

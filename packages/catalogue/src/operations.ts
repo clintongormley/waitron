@@ -29,7 +29,11 @@ import {
   type DietProfile,
 } from "./dietary.js";
 import type { PricingUnit, VatClass } from "./pricing.js";
-import { contentLanguages, menuItems, menuSections } from "./schema/menu.js";
+import { contentLanguages, menuItems } from "./schema/menu.js";
+import { sections } from "./schema/sections.js";
+import { createMenuShell, menuRoots, reachableMenuItem } from "./menu-structure.js";
+import { loadSectionGraph, placementsByProduct, reachableProducts } from "./section-graph.js";
+import { addMember } from "./sections.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
@@ -85,14 +89,6 @@ export interface Catalogue {
   active: boolean;
   /** The sync seam. Created at 1; nothing in the tree bumps it today. */
   version: number;
-}
-
-export interface MenuSection {
-  id: string;
-  menuId: string;
-  name: Record<string, string>;
-  displayOrder: number;
-  active: boolean;
 }
 
 export interface CreateProductInput {
@@ -274,6 +270,7 @@ function legacyPricingUnit(unit: SellableUnit): PricingUnit {
   return unit.hardwareUnit === null ? "each" : "weight";
 }
 
+/** A new menu, with the root and default home layout it owns (`createMenuShell`). */
 export async function createCatalogue(
   tx: Transaction,
   input: { name: string },
@@ -282,6 +279,7 @@ export async function createCatalogue(
     .insert(catalogues)
     .values({ name: input.name })
     .returning(CATALOGUE_COLUMNS);
+  await createMenuShell(tx, row!.id, row!.name);
   return row!;
 }
 
@@ -289,62 +287,25 @@ export async function listCatalogues(tx: Transaction): Promise<Catalogue[]> {
   return tx.select(CATALOGUE_COLUMNS).from(catalogues).orderBy(catalogues.createdAt, catalogues.id);
 }
 
-export async function createMenuSection(
-  tx: Transaction,
-  input: { menuId: string; name: Record<string, string>; displayOrder?: number },
-): Promise<MenuSection> {
-  const [row] = await tx.insert(menuSections).values(input).returning({
-    id: menuSections.id,
-    menuId: menuSections.menuId,
-    name: menuSections.name,
-    displayOrder: menuSections.displayOrder,
-    active: menuSections.active,
-  });
-  return row!;
-}
+const MENU_ITEM_COLUMNS = {
+  id: menuItems.id,
+  menuId: menuItems.menuId,
+  productId: menuItems.productId,
+  grossPrice: menuItems.grossPrice,
+  active: menuItems.active,
+};
 
-export async function listMenuSections(tx: Transaction, menuId: string): Promise<MenuSection[]> {
-  const [menu] = await tx
-    .select({ id: catalogues.id })
-    .from(catalogues)
-    .where(eq(catalogues.id, menuId));
-  if (menu === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
-  return tx
-    .select({
-      id: menuSections.id,
-      menuId: menuSections.menuId,
-      name: menuSections.name,
-      displayOrder: menuSections.displayOrder,
-      active: menuSections.active,
-    })
-    .from(menuSections)
-    .where(eq(menuSections.menuId, menuId))
-    .orderBy(menuSections.displayOrder, menuSections.id);
-}
-
-export async function updateMenuSection(
+/**
+ * Puts a top-level product on the menu's top level, and sets the menu's price for it when
+ * `grossPrice` is given. A product the menu already reaches elsewhere keeps its settings row.
+ */
+export async function addProductToMenu(
   tx: Transaction,
-  sectionId: string,
-  patch: { name: Record<string, string> },
-): Promise<void> {
-  const [row] = await tx
-    .update(menuSections)
-    .set(patch)
-    .where(eq(menuSections.id, sectionId))
-    .returning({ id: menuSections.id });
-  if (row === undefined) throw new AppError("menu_section.not_found", { sectionId });
-}
-
-export async function createMenuItem(
-  tx: Transaction,
-  input: {
-    menuId: string;
-    productId: string;
-    sectionId: string;
-    grossPrice: string | null;
-    displayOrder?: number;
-  },
+  input: { menuId: string; productId: string; grossPrice?: string | null },
 ): Promise<MenuItem> {
+  const rootSectionId = (await menuRoots(tx, [input.menuId])).get(input.menuId);
+  if (rootSectionId === undefined)
+    throw new AppError("catalogue.not_found", { catalogueId: input.menuId });
   const [product] = await tx
     .select({ parentId: products.parentId })
     .from(products)
@@ -354,76 +315,47 @@ export async function createMenuItem(
   // A variant follows its parent onto every menu (spec §15.5) and never has a menu row of its own.
   if (product.parentId !== null)
     throw new AppError("menu_item.variant_not_allowed", { productId: input.productId });
-  const [section] = await tx
-    .select({ id: menuSections.id })
-    .from(menuSections)
-    .where(and(eq(menuSections.menuId, input.menuId), eq(menuSections.id, input.sectionId)));
-  if (section === undefined) {
-    throw new AppError("menu_section.not_found", {
-      menuId: input.menuId,
-      sectionId: input.sectionId,
-    });
-  }
-  const grossPrice = input.grossPrice === null ? null : stringToCents(input.grossPrice);
+  await addMember(tx, rootSectionId, { kind: "product", productId: input.productId });
+  const [row] = await tx
+    .select({ id: menuItems.id })
+    .from(menuItems)
+    .where(and(eq(menuItems.menuId, input.menuId), eq(menuItems.productId, input.productId)));
+  if (input.grossPrice !== undefined)
+    await updateMenuItem(tx, input.menuId, row!.id, { grossPrice: input.grossPrice });
   const [written] = await tx
-    .insert(menuItems)
-    .values({ ...input, grossPrice })
-    .onConflictDoUpdate({
-      target: [menuItems.menuId, menuItems.productId],
-      set: {
-        sectionId: input.sectionId,
-        grossPrice,
-        displayOrder: input.displayOrder ?? 0,
-        active: true,
-      },
-    })
-    .returning({
-      id: menuItems.id,
-      menuId: menuItems.menuId,
-      productId: menuItems.productId,
-      sectionId: menuItems.sectionId,
-      grossPrice: menuItems.grossPrice,
-      displayOrder: menuItems.displayOrder,
-      active: menuItems.active,
-    });
+    .select(MENU_ITEM_COLUMNS)
+    .from(menuItems)
+    .where(eq(menuItems.id, row!.id));
   return { ...written!, grossPrice: priceOrNull(written!.grossPrice) };
 }
 
+/** Sets the menu's price for a product it reaches, or its own switch for it. */
 export async function updateMenuItem(
   tx: Transaction,
   menuId: string,
   menuItemId: string,
-  patch: { sectionId?: string; grossPrice?: string | null; displayOrder?: number },
+  patch: { grossPrice?: string | null; active?: boolean },
 ): Promise<void> {
-  const { grossPrice, ...rest } = patch;
-  const [row] = await tx
-    .update(menuItems)
-    .set({
-      ...rest,
-      ...(grossPrice === undefined
-        ? {}
-        : { grossPrice: grossPrice === null ? null : stringToCents(grossPrice) }),
-    })
-    .where(
-      and(eq(menuItems.menuId, menuId), eq(menuItems.id, menuItemId), eq(menuItems.active, true)),
-    )
-    .returning({ id: menuItems.id });
-  if (row === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
+  if ((await reachableMenuItem(tx, menuItemId, menuId)) === undefined)
+    throw new AppError("menu_item.not_found", { menuId, menuItemId });
+  const { grossPrice, active } = patch;
+  const values = {
+    ...(active === undefined ? {} : { active }),
+    ...(grossPrice === undefined
+      ? {}
+      : { grossPrice: grossPrice === null ? null : stringToCents(grossPrice) }),
+  };
+  if (Object.keys(values).length > 0)
+    await tx.update(menuItems).set(values).where(eq(menuItems.id, menuItemId));
 }
 
+/** Switches a product the menu reaches off on that menu alone. */
 export async function deactivateMenuItem(
   tx: Transaction,
   menuId: string,
   menuItemId: string,
 ): Promise<void> {
-  const [row] = await tx
-    .update(menuItems)
-    .set({ active: false })
-    .where(
-      and(eq(menuItems.menuId, menuId), eq(menuItems.id, menuItemId), eq(menuItems.active, true)),
-    )
-    .returning({ id: menuItems.id });
-  if (row === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
+  await updateMenuItem(tx, menuId, menuItemId, { active: false });
 }
 
 /**
@@ -495,10 +427,11 @@ function offerLineValues(row: OfferLineRow, defaultLanguage: string) {
 }
 
 /**
- * The Active offers on the given menus. Unavailable (sold-out) products are left out unless the
- * caller is a management read passing `includeUnavailable`: spec §15.6 lets Available hide an item
- * from the till, never from the dashboard. Only a top-level product is an offer; each Active
- * variant of it is nested under its offer, an Unavailable one listed as unavailable.
+ * The Active offers on the given menus: the products each menu's structure reaches, menus by name
+ * and each in its structure's order (`reachableProducts`). Unavailable (sold-out) products are left
+ * out unless the caller is a management read passing `includeUnavailable`: spec §15.6 lets Available
+ * hide an item from the till, never from the dashboard. Only a top-level product is an offer; each
+ * Active variant of it is nested under its offer, an Unavailable one listed as unavailable.
  */
 export async function listMenuOffers(
   tx: Transaction,
@@ -506,44 +439,63 @@ export async function listMenuOffers(
   options: { includeUnavailable?: boolean } = {},
 ): Promise<MenuOffer[]> {
   if (menuIds.length === 0) return [];
-  const rows = await tx
-    .select({
-      id: menuItems.id,
-      menuId: menuItems.menuId,
-      productId: menuItems.productId,
-      sectionId: menuItems.sectionId,
-      grossPrice: menuItems.grossPrice,
-      productPrice: products.unitPrice,
-      displayOrder: menuItems.displayOrder,
-      active: menuItems.active,
-      menuName: catalogues.name,
-      sectionName: menuSections.name,
-      name: products.name,
-      customerName: products.customerName,
-      kitchenName: products.kitchenName,
-      ...offerLineColumns,
-    })
-    .from(menuItems)
-    .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
-    .innerJoin(menuSections, eq(menuSections.id, menuItems.sectionId))
-    .innerJoin(products, eq(products.id, menuItems.productId))
-    .leftJoin(parentProducts, parentJoin)
-    .leftJoin(productUnits, unitOwnerJoin)
-    .leftJoin(units, eq(units.id, productUnits.unitId))
-    .leftJoin(categories, eq(categories.id, effective.categoryId))
-    .where(
-      and(
-        inArray(menuItems.menuId, menuIds),
-        eq(menuItems.active, true),
-        eq(menuSections.active, true),
-        eq(catalogues.active, true),
-        isTopLevelProduct,
-        eq(products.active, true),
-        options.includeUnavailable === true ? undefined : eq(products.available, true),
-      ),
-    )
-    .orderBy(catalogues.name, menuSections.displayOrder, menuItems.displayOrder, menuItems.id);
+  const roots = await menuRoots(tx, menuIds);
+  const graph = await loadSectionGraph(tx);
+  const rankOf = new Map(
+    [...roots].map(([menuId, rootSectionId]) => [
+      menuId,
+      new Map(reachableProducts(graph, rootSectionId).map((productId, rank) => [productId, rank])),
+    ]),
+  );
+  const placed = new Map(
+    [...roots].map(([menuId, rootSectionId]) => [
+      menuId,
+      placementsByProduct(graph, rootSectionId),
+    ]),
+  );
+  const rows = (
+    await tx
+      .select({
+        id: menuItems.id,
+        menuId: menuItems.menuId,
+        productId: menuItems.productId,
+        grossPrice: menuItems.grossPrice,
+        productPrice: products.unitPrice,
+        active: menuItems.active,
+        menuName: catalogues.name,
+        name: products.name,
+        customerName: products.customerName,
+        kitchenName: products.kitchenName,
+        ...offerLineColumns,
+      })
+      .from(menuItems)
+      .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
+      .innerJoin(products, eq(products.id, menuItems.productId))
+      .leftJoin(parentProducts, parentJoin)
+      .leftJoin(productUnits, unitOwnerJoin)
+      .leftJoin(units, eq(units.id, productUnits.unitId))
+      .leftJoin(categories, eq(categories.id, effective.categoryId))
+      .where(
+        and(
+          inArray(menuItems.menuId, menuIds),
+          eq(menuItems.active, true),
+          eq(catalogues.active, true),
+          isTopLevelProduct,
+          eq(products.active, true),
+          options.includeUnavailable === true ? undefined : eq(products.available, true),
+        ),
+      )
+      .orderBy(catalogues.name, catalogues.id)
+  ).filter((row) => rankOf.get(row.menuId)?.has(row.productId));
   if (rows.length === 0) return [];
+  // The query settles the menus' order; the structure settles the order within each menu.
+  const menuOrder = new Map<string, number>();
+  for (const row of rows) if (!menuOrder.has(row.menuId)) menuOrder.set(row.menuId, menuOrder.size);
+  rows.sort(
+    (a, b) =>
+      menuOrder.get(a.menuId)! - menuOrder.get(b.menuId)! ||
+      rankOf.get(a.menuId)!.get(a.productId)! - rankOf.get(b.menuId)!.get(b.productId)!,
+  );
   const content = await readContentLanguages(tx, FALLBACK_LOCALE);
   // The extras/options walk, keyed by MENU-ITEM id: on an offer each extras list is the version
   // this offer publishes (spec §3.2), while the order stays the product's own.
@@ -560,7 +512,6 @@ export async function listMenuOffers(
     id: row.id,
     menuId: row.menuId,
     productId: row.productId,
-    sectionId: row.sectionId,
     grossPrice: priceOrNull(row.grossPrice),
     unitPrice: resolveOfferPrice({
       variantMenuPrice: null,
@@ -569,10 +520,12 @@ export async function listMenuOffers(
       // Only a top-level product is an offer, so `products_top_level_owns_ck` sets its price.
       parentPrice: centsToDecimal(row.productPrice!),
     }),
-    displayOrder: row.displayOrder,
     active: row.active,
     menuName: row.menuName,
-    sectionName: row.sectionName,
+    placements: placed
+      .get(row.menuId)!
+      .get(row.productId)!
+      .map((path) => path.slice(1)),
     name: row.name,
     customerName: row.customerName,
     kitchenName: row.kitchenName,
@@ -674,6 +627,10 @@ export async function renameCatalogue(
     .where(eq(catalogues.id, catalogueId))
     .returning({ id: catalogues.id });
   if (row === undefined) throw new AppError("catalogue.not_found", { catalogueId });
+  // The root's internal name is the menu's name.
+  const rootSectionId = (await menuRoots(tx, [catalogueId])).get(catalogueId);
+  if (rootSectionId !== undefined)
+    await tx.update(sections).set({ internalName: name }).where(eq(sections.id, rootSectionId));
 }
 
 export async function deactivateCatalogue(tx: Transaction, id: string): Promise<void> {

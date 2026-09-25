@@ -97,13 +97,12 @@ async function fixture(): Promise<Fixture> {
   });
 }
 
-/** A list a menu owns, written directly: no write here creates one. */
+/** The root or default home layout `createCatalogue` gave the menu. */
 async function menuOwned(role: "menu_root" | "home_layout", menuId: string): Promise<string> {
-  const id = crypto.randomUUID();
-  await fx.db.execute(sql`
-    insert into sections (id, internal_name, names, role, owner_menu_id)
-    values (${id}, ${`${role} of ${menuId}`}, '{}', ${role}, ${menuId})`);
-  return id;
+  const { rows } = await fx.db.execute<{ id: string }>(sql`
+    select ${sql.raw(role === "menu_root" ? "root_section_id" : "default_home_layout_id")} as id
+      from menu_details where menu_id = ${menuId}`);
+  return rows[0]!.id;
 }
 
 /** A member written directly, for a list the generic writes refuse. */

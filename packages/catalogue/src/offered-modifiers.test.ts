@@ -7,8 +7,7 @@ import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
-  createMenuItem,
-  createMenuSection,
+  addProductToMenu,
   createProduct,
   listAvailableProducts,
   listMenuOffers,
@@ -88,7 +87,6 @@ beforeEach(async () => {
   await run(async (tx) => {
     const menu = await createCatalogue(tx, { name: "Deli" });
     catalogueId = menu.id;
-    const section = await createMenuSection(tx, { menuId: menu.id, name: { en: "Mains" } });
     for (const [key, fields] of Object.entries(products)) {
       const product = await createProduct(tx, {
         catalogueId: menu.id,
@@ -98,10 +96,9 @@ beforeEach(async () => {
       });
       ids[key as keyof typeof ids] = product.id;
     }
-    const offer = await createMenuItem(tx, {
+    const offer = await addProductToMenu(tx, {
       menuId: menu.id,
       productId: ids.burger,
-      sectionId: section.id,
       grossPrice: "9.50",
     });
     offerId = offer.id;

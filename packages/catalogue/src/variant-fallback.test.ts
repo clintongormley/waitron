@@ -14,9 +14,9 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
   assignCatalogueToLocation,
+  addProductToMenu,
   createCatalogue,
   createCategory,
-  createMenuSection,
   createProduct,
   listAvailableProducts,
   listMenuOffers,
@@ -27,7 +27,6 @@ import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductEditor } from "./product-editor.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { labels, productLabels } from "./schema/labels.js";
-import { menuItems } from "./schema/menu.js";
 import { productUnits } from "./schema/units.js";
 import { createUnit } from "./units.js";
 import {
@@ -332,12 +331,10 @@ describe("listMenuOffers reads a variant's blanks from its parent", () => {
   // inherits its price and is charged 4.00 was priced from the wrong step of the chain.
   it("resolves the effective values of each variant nested under the parent's offer", async () => {
     await run(async (tx) => {
-      const section = await createMenuSection(tx, { menuId: f.menuId, name: { en: "Wine" } });
-      await tx.insert(menuItems).values({
+      await addProductToMenu(tx, {
         menuId: f.menuId,
         productId: f.parentId,
-        sectionId: section.id,
-        grossPrice: 450,
+        grossPrice: "4.50",
       });
     });
     const offers = await run((tx) => listMenuOffers(tx, [f.menuId]));
@@ -400,12 +397,10 @@ describe("a variant's main category is its own if it has one, otherwise its pare
           variantOrder: 2,
         })
         .returning({ id: products.id });
-      const section = await createMenuSection(tx, { menuId: f.menuId, name: { en: "Wine" } });
-      await tx.insert(menuItems).values({
+      await addProductToMenu(tx, {
         menuId: f.menuId,
         productId: f.parentId,
-        sectionId: section.id,
-        grossPrice: 700,
+        grossPrice: "7.00",
       });
       return row!.id;
     });

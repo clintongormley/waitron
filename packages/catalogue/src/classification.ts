@@ -11,7 +11,6 @@ export const CATALOGUE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("unit_seed_states", "state", STATE),
   classify("units", "state", STATE),
   classify("product_units", "state", STATE),
-  classify("menu_sections", "state", STATE),
   classify("menu_items", "state", STATE),
   classify("menu_item_variant_overrides", "state", STATE),
   classify("option_lists", "state", STATE),
@@ -23,6 +22,7 @@ export const CATALOGUE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("product_modifiers", "state", STATE),
   classify("sections", "state", STATE),
   classify("section_members", "state", STATE),
+  classify("menu_details", "state", STATE),
 ];
 
 export const CATALOGUE_CHANGE_SOURCES: readonly ChangeSource[] = CATALOGUE_CLASSIFICATION.map(
