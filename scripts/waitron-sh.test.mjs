@@ -27,8 +27,12 @@ afterEach(() => {
 // Nothing in the bin is per-case state — the knobs travel as WT_* environment variables the stubs
 // read at run time.
 //
-// The docker stub inspects the WHOLE arg string ($*) rather than shifting, so a change to flag order
-// cannot silently break it. Set WT_TRADING_ENV to "__ABSENT__" to model an unprovisioned box whose
+// The docker stub reads a compose call only after dropping `compose` and one leading `-f <file>`,
+// because that file's path carries the sandbox's temporary folder, whose name the suite does not
+// choose. It takes the subcommand by position and matches flags and names anywhere in the rest, so
+// their order does not matter. A call whose first remaining word has no arm (an option ahead of the
+// subcommand, or a subcommand nothing here answers) lands in the refusing arm and exits 97.
+// Set WT_TRADING_ENV to "__ABSENT__" to model an unprovisioned box whose
 // state volume has no trading.env. WT_HANG is the one knob that changes the shared stub's behaviour
 // unconditionally: the `docker` stub sleeps that many seconds on EVERY invocation.
 // `systemctl` and `sudo` are stubbed so ensure_docker's `sudo -n systemctl enable --now docker` is a
@@ -41,11 +45,12 @@ afterAll(() => rmSync(STUB_BIN, { recursive: true, force: true }));
 // the `mv` stub.
 const REAL_MV = spawnSync("bash", ["-c", "command -v mv"], { encoding: "utf8" }).stdout.trim();
 
+// A newline inside an argument is logged as `\n`, so every call is exactly one line of the log.
 function stub(name, body) {
   const p = join(STUB_BIN, name);
   writeFileSync(
     p,
-    `#!/usr/bin/env bash\nprintf '%s ' "${name}" >> "$WT_LOG"; printf '%s\\n' "$*" >> "$WT_LOG"\n${body}\n`,
+    `#!/usr/bin/env bash\nnl=$'\\n'; esc='\\n'\nprintf '%s ' "${name}" >> "$WT_LOG"; printf '%s\\n' "\${*//$nl/$esc}" >> "$WT_LOG"\n${body}\n`,
   );
   chmodSync(p, 0o755);
 }
@@ -60,22 +65,25 @@ case "$args" in
 esac
 case "$1" in
   compose)
-    case "$args" in
-      *" pull "*|*" pull")
+    shift
+    [ "$1" = "-f" ] && shift 2
+    args="$*"
+    case "$1" in
+      pull)
         # Mimics real compose, which exits 0 on a failed pull when given --ignore-pull-failures
         # (probed on Compose v5.1.0). install must not pass the flag; if it does, this stub exits 0
         # and the pull-failure test fails.
         case "$args" in *--ignore-pull-failures*) exit 0 ;; esac
         [ "\${WT_PULL_FAIL}" = "1" ] && exit 1 ;;
-      *" ps "*|*" ps")
+      ps)
         # WT_DOCKER_PS_PENDING probes answer empty before the box reports WT_DOCKER_PS: a container
         # that has no health verdict yet. The counter is a file in the case's own directory, so cases
         # cannot see each other's, and it is what the probe-count assertions read.
         n=$(cat "\${WT_LOG}.probes" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "\${WT_LOG}.probes"
         if [ "$n" -le "\${WT_DOCKER_PS_PENDING:-0}" ]; then echo ""; else echo "\${WT_DOCKER_PS}"; fi ;;
-      *" logs "*)
+      logs)
         [ "\${WT_AHEAD_LOGS}" = "1" ] && echo "provisioning.database_ahead: the database is newer" ;;
-      *" run "*)
+      run)
         # Every throwaway container the script runs against the state volume is built from the APP
         # image, whose ENTRYPOINT is node /app/node-entry.js. An invocation that does not override it
         # has its arguments APPENDED to that entrypoint, which refuses them instead of reading the
@@ -90,7 +98,7 @@ case "$1" in
           *venue.db*) echo "\${WT_DB_STAMP}" ;;
           *trading.env*) echo "\${WT_TRADING_ENV}" ;;
         esac ;;
-      *" exec "*)
+      exec)
         # Nothing on a box answers psql any more — the storage is a file, and no cluster on it
         # carries a database named waitron. No shipped command reaches this arm; it is kept as a trap
         # for the one route back it can see: a stamp read rewritten as docker compose exec ... psql,
@@ -98,6 +106,8 @@ case "$1" in
         # catches — a client reintroduced as docker run postgres, or as compose run --entrypoint
         # psql, is taken by another arm or by none, and reads as a clean empty stamp.
         case "$args" in *psql*) exit 1 ;; esac ;;
+      up|down) ;;
+      *) echo "docker stub: no arm for compose $args" >&2; exit 97 ;;
     esac ;;
   volume)
     case "$2" in
@@ -213,14 +223,26 @@ function run(sb, args, extraEnv = {}, { timeoutMs = RUN_TIMEOUT_MS } = {}) {
   return result;
 }
 
+// Every recorded `docker compose` call, less that prefix and the box's own `-f <compose file>`, which
+// is removed by its exact path because the path carries the sandbox's temporary folder. A match
+// anchored at the start reads the subcommand only while nothing else precedes it, so a check that a
+// subcommand never ran looks for its word anywhere in the call.
+function composeCalls(sb) {
+  const boxFile = `-f ${join(sb.boxDir, "compose.yml")} `;
+  return readFileSync(sb.log, "utf8")
+    .split("\n")
+    .filter((line) => line.startsWith("docker compose "))
+    .map((line) => line.slice("docker compose ".length).replace(boxFile, ""));
+}
+
 describe("waitron.sh install (published main)", () => {
   it("pulls, starts, records no image override, and prints the links", () => {
     const sb = sandbox();
     const r = run(sb, ["install"]);
     expect(r.status).toBe(0);
-    const calls = readFileSync(sb.log, "utf8");
-    expect(calls).toMatch(/docker compose .*pull/);
-    expect(calls).toMatch(/docker compose .*up -d --remove-orphans/);
+    const compose = composeCalls(sb);
+    expect(compose).toContainEqual(expect.stringMatching(/^pull\b/));
+    expect(compose).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
     // No .env AT ALL: this path records no image override, so nothing asks install to write the file.
     expect(existsSync(join(sb.boxDir, ".env"))).toBe(false);
     expect(r.stdout).toContain("https://waitron.local/manage/email");
@@ -238,9 +260,9 @@ describe("waitron.sh install (published main) when the pull fails", () => {
     expect(r.stderr).toContain("could not pull the box's images");
     expect(r.stderr).toContain("registries");
     expect(r.stderr).toContain("architecture");
-    const calls = readFileSync(sb.log, "utf8");
-    expect(calls).toMatch(/docker compose .*pull/);
-    expect(calls).not.toMatch(/docker compose .*up/);
+    const compose = composeCalls(sb);
+    expect(compose).toContainEqual(expect.stringMatching(/^pull\b/));
+    expect(compose.filter((call) => call.split(/\s+/).includes("up"))).toEqual([]);
   });
 });
 
@@ -352,11 +374,10 @@ describe("waitron.sh reset", () => {
     installedBox(sb);
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).toBe(0);
-    const lifecycle = readFileSync(sb.log, "utf8")
-      .split("\n")
-      .filter((line) => /^docker compose .*\b(up -d|down)\b/.test(line));
-    // A reset runs both verbs, or the filter has gone blind and the loop below checks nothing.
-    expect(lifecycle).toHaveLength(2);
+    const lifecycle = composeCalls(sb).filter((call) => /^(up|down)\b/.test(call));
+    // A reset takes the box down once and brings it up once; this also keeps the loop below from
+    // checking nothing.
+    expect(lifecycle.map((call) => call.split(" ")[0])).toEqual(["down", "up"]);
     for (const call of lifecycle) expect(call).toContain("--remove-orphans");
   });
 
@@ -370,14 +391,12 @@ describe("waitron.sh reset", () => {
     installedBox(sb);
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).toBe(0);
-    const reads = readFileSync(sb.log, "utf8")
-      .split("\n")
-      .filter((line) => /trading\.env|-name tls/.test(line));
-    // Both reads, or the filter has gone blind and the loop below would check nothing.
-    expect(reads).toHaveLength(2);
     // `docker compose run`, not a bare `docker run`: compose resolves the image from the box's own
     // .env, so the helper is whichever image the box is actually running.
-    for (const read of reads) expect(read).toMatch(/^docker compose .* run .*--entrypoint /);
+    const reads = composeCalls(sb).filter((call) => /trading\.env|-name tls/.test(call));
+    // Both reads, or the filter has gone blind and the loop below would check nothing.
+    expect(reads).toHaveLength(2);
+    for (const read of reads) expect(read).toMatch(/^run\b.*--entrypoint /);
   });
 
   it("removes the transient volumes, empties state except tls, keeps .env", () => {
@@ -395,11 +414,14 @@ describe("waitron.sh reset", () => {
     // backwards-compatibility code before production (CLAUDE.md §3), and a stranded volume costs
     // disk and nothing else.
     expect(calls).not.toMatch(/docker volume rm .*waitron_db\b/);
-    expect(calls).toMatch(
-      /docker compose .* run .*--entrypoint sh app -c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls/,
+    const compose = composeCalls(sb);
+    expect(compose).toContainEqual(
+      expect.stringMatching(
+        /^run\b.*--entrypoint sh app -c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls/,
+      ),
     );
     expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toContain("WAITRON_IMAGE=waitron:pinned");
-    expect(calls).toMatch(/docker compose .*up -d/);
+    expect(compose).toContainEqual(expect.stringMatching(/^up -d\b/));
   });
 
   it("--all also removes the state volume", () => {
@@ -429,10 +451,8 @@ describe("waitron.sh reset", () => {
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/PRODUCTION/);
-    const calls = readFileSync(sb.log, "utf8");
-    // The reader is several lines long, so the two halves of this are on different lines of the log.
-    expect(calls).toMatch(/docker compose [\s\S]*? run [\s\S]*?venue\.db/);
-    expect(calls).not.toMatch(/docker volume rm/);
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^run\b.*venue\.db/));
+    expect(readFileSync(sb.log, "utf8")).not.toMatch(/docker volume rm/);
   });
 
   it("--force-production --yes proceeds on a production box", () => {
