@@ -10,8 +10,8 @@ import { readNodeIdentityKey } from "./node-identity.js";
 /**
  * Read THIS node's signing key and build and sign the next membership document. The signer's stored
  * endorsement, if any, is always carried, so a peer that trusts only the endorser's key can accept
- * the document when that endorsement is valid for the signer's key. It writes nothing: persisting
- * the document is the caller's job, so a signing failure leaves no effect.
+ * the document when that endorsement is valid for the signer's key. Persisting the document is the
+ * caller's job.
  */
 export async function mintNextMembershipDocument(
   deps: { db: Database; ring: KeyRing },

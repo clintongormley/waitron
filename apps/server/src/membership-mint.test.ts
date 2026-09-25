@@ -61,8 +61,10 @@ describe("mintNextMembershipDocument", () => {
         },
       );
       expect(doc.endorsements).toEqual([endorsement]);
-      const verdict = verifyMembershipDocument(doc, { "endorser-node": endorser.publicKey });
-      expect(verdict.valid ? "valid" : verdict.reason).toBe("valid");
+      const byEndorser = verifyMembershipDocument(doc, { "endorser-node": endorser.publicKey });
+      expect(byEndorser.valid ? "valid" : byEndorser.reason).toBe("valid");
+      const direct = verifyMembershipDocument(doc, { [nodeId]: ownKey });
+      expect(direct.valid ? "valid" : direct.reason).toBe("valid");
     } finally {
       await db.update(nodes).set({ endorsement: null }).where(eq(nodes.id, nodeId));
     }

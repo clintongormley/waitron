@@ -155,7 +155,8 @@ Closes §1.1. Three pieces:
    (parent wire-protocol §6 — still a replication source until drained), re-signed with this node's
    already-trusted key (no endorsement — parent §4 "a promotion needs no key ceremony").
    _(2026-09-25: `promoteLocalSecondaryToPrimary` now carries the signing node's stored endorsement,
-   if any, through `readSignerEndorsements` in `apps/server/src/membership-mint.ts`.)_
+   if any, because `mintNextMembershipDocument` in `apps/server/src/membership-mint.ts` reads it
+   itself.)_
 
 **Two design decisions (follow from the code + spec, not open):**
 - **The singleton flip and the document write commit in ONE owner transaction.** Both are owner-role

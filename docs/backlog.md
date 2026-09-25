@@ -5504,22 +5504,27 @@ document carries this node's stored endorsement, so a peer that trusts only the 
 primary that adopted this node) accepts it when the stored endorsement is valid for this node's
 key. Every signer carries the signing node's stored endorsement, because the shared signing
 function `mintNextMembershipDocument` (`apps/server/src/membership-mint.ts`) reads it itself and no
-caller passes one (A27b; before, each caller passed it and three had left it out, fixed by #643):
+caller passes one (before, each caller had to pass it; #643 fixed the three that needed it and did
+not):
 this first start, both promotions (`apps/server/src/promote.ts`), `retireSelf`
 (`apps/server/src/retire.ts`), the chart append in `apps/server/src/mirror-bundle-api.ts`, which
 signs as `designated.nodeId`, and the term-0 seed (`apps/server/src/membership-seed.ts`). The seed
 signs for a primary set up fresh, and the only product code that writes a node's stored endorsement
 is adopt's `insertReservedNodeTx` (`packages/db/src/reserved-identity.ts`), onto a standby's own row,
-so the seed's document carries none — pinned in `apps/server/src/membership-seed.test.ts`. The case
-"carries the signer's stored endorsement without the caller passing it"
-(`apps/server/src/membership-mint.test.ts`) holds the shared function to it. The cases "carries this node's stored endorsement, so a peer trusting only the
-endorser accepts the eviction" (`apps/server/src/retire.test.ts`), "… accepts the new term"
+so the seed's document carries none. The case "carries the signer's stored endorsement without the caller
+passing it" (`apps/server/src/membership-mint.test.ts`) holds the shared function to it. The cases
+"carries this node's stored endorsement, so a peer trusting only the endorser accepts the eviction"
+(`apps/server/src/retire.test.ts`), "… accepts the new term"
 (`apps/server/src/promote.test.ts`, local secondary) and "carries the primary's stored endorsement,
 so a peer trusting only the endorser accepts the appended chart"
 (`apps/server/src/mirror-bundle-api.test.ts`) each check that the stored document carries the
 endorsement and verifies both against the endorser's key alone and against the signer's own key
 held directly. A node row holding no endorsement still signs `endorsements: []`; one case each for
-retire, both promotions and the chart append asserts it, and no first-start case does. The chart
+retire, both promotions and the chart append asserts it, as do the mint case "carries no endorsement
+when the signer's row holds none" (`apps/server/src/membership-mint.test.ts`) and the term-0 seed
+case "seeds a signed term-0 document naming this node serving-primary"
+(`apps/server/src/membership-seed.test.ts`, on a node row that holds none), and no first-start case
+does. The chart
 append reads the endorsement again on each retry round: "signs a retried chart write with the
 endorsement stored when that round reads, not the first round's"
 (`apps/server/src/mirror-bundle-api.test.ts`). Left open:
