@@ -4204,7 +4204,14 @@ An `EXPLAIN QUERY PLAN` of the count's shape on node v26.7.0, over empty stand-i
 `sale_voids` tables carrying only these keys, printed `SCAN s` then a `sale_id` lookup per sale;
 with an index on `voided_at` added it printed a range search on that index. The real schema and
 real row counts were not measured. Adding the index needs a migration, which #605 was
-specified without. **Next action:** add the index and re-read the plan on the real schema.
+specified without. **Next action:** add the index and re-read the plan on the real schema —
+queued 2026-09-25 as lane A's A33, with the owner's leave to add the migration.
+
+**Cash handed back for a voided cash sale is recorded nowhere — OPEN (found 2026-09-24 by #605).**
+A void writes no payment or refund row, so if staff give a customer cash back, the void's day shows
+a drawer shortfall at cash-up. No till screen or server route calls `recordVoid` yet, so nothing
+can do this today. **Owner decision 2026-09-25:** keep it here and decide it when the till's void
+screen is designed.
 
 **Every read route now takes the venue's exclusive write lock and issues a DELETE — OPEN (found
 2026-09-23, task F1's review wave).** `withTransaction` (`packages/db/src/tenancy.ts`) runs its body
@@ -5579,11 +5586,12 @@ open:
     holds, so the box comes back in setup mode, and the code and which database was kept are only in
     the server's own output (`failureDetail`, `apps/server/src/node-entry.ts`). One option is to keep
     the staged request on `restore.placement_failed`, so repeated failed starts end on the recovery
-    page; that is an owner decision.
+    page. **Owner decision 2026-09-25: leave it as it is.**
   - A `.venue.db-replaced-` folder can be left in the venue folder whenever its removal fails
     (`restore.db.aside_kept` after a placed database, emptied after a full put-back), after a
     `set_aside` failure, or when the process is killed mid-placement. Nothing removes it, and
-    nothing refuses to start beside it.
+    nothing refuses to start beside it. **Owner decision 2026-09-25: clean them up** — queued as
+    lane A's A31.
 - The bucket client sets no time limit of its own: `createS3ObjectStore` (`packages/stream`) has
   none. The command line and the setup restores wrap it for every object-store call they make
   (`boundObjectStore`, which abandons a call but never cancels it),
