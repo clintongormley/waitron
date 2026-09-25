@@ -166,7 +166,8 @@ export const DEFAULT_WAL_LIMIT_BYTES = 256 * 1024 * 1024;
 /**
  * Litestream's exit as one word from a fixed list. Its output can carry the bucket, the endpoint and
  * the access key id, and the recovery page shows the log's tail unauthenticated
- * (`apps/server/src/recovery-surface.ts`), so the output itself is never logged.
+ * (`apps/server/src/recovery-surface.ts`), so the output itself is never logged. `disk_full` is Go's
+ * text for ENOSPC; no run has filled a disk under Litestream, so a real full disk may read otherwise.
  */
 export function exitCategory(code: number | null, output: string): string {
   if (/no space left on device/i.test(output)) return "disk_full";

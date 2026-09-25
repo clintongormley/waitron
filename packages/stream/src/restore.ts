@@ -4,6 +4,7 @@ import { AppError } from "@waitron/shared";
 import { litestreamConfig, litestreamEnv, replicaUrl } from "./litestream.js";
 import { spawnLitestream } from "./litestream-process.js";
 import type { BucketConfig } from "./s3-store.js";
+import { exitCategory } from "./supervisor.js";
 import "./errors.js";
 
 /**
@@ -31,13 +32,6 @@ export interface RestoreGenerationArgs {
   ceilingMs?: number;
   pollMs?: number;
 }
-
-/**
- * Go's text for ENOSPC, which Litestream's error output carries when a write fails for lack of
- * space. Read, not run: no run filled a disk under Litestream, so a real full disk may still report
- * `diskFull: false`.
- */
-const DISK_FULL = /no space left on device/i;
 
 async function sizeOf(path: string): Promise<number> {
   try {
@@ -127,7 +121,7 @@ export async function restoreGeneration(args: RestoreGenerationArgs): Promise<vo
   if (abandoned || exitCode !== 0) {
     throw new AppError("backup.stream_restore_failed", {
       exitCode: abandoned ? null : exitCode,
-      diskFull: DISK_FULL.test(child.output()),
+      diskFull: exitCategory(exitCode, child.output()) === "disk_full",
     });
   }
 }
