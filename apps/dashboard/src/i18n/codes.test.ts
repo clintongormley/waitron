@@ -237,7 +237,7 @@ it("has English and Spanish copy for every code in the bucket-copy routes' statu
 it("has a sentence for each label code and the category reassignment refusal", () => {
   for (const code of [
     "label.invalid",
-    "label.duplicate",
+    "label.name_taken",
     "label.not_found",
     "category.reassign_invalid",
   ]) {

@@ -822,7 +822,7 @@ describe("mountCatalogueApi — labels", () => {
     const duplicate = await send(app, "POST", "/management-api/labels", { body: { name } });
     expect(duplicate.status).toBe(409);
     expect(await duplicate.json()).toMatchObject({
-      error: { code: "label.duplicate", params: { name } },
+      error: { code: "label.name_taken", params: { name } },
     });
     expect((await send(app, "GET", "/management-api/labels", { cookie: null })).status).toBe(401);
     expect(

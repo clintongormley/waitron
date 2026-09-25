@@ -16,7 +16,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
 /** The refusals that are about the name the form holds, so they belong beside that field. */
-const NAME_CODES = new Set(["label.duplicate", "label.invalid"]);
+const NAME_CODES = new Set(["label.name_taken", "label.invalid"]);
 
 /**
  * The Categories screen's Labels tab: flat, staff-facing labels a product can carry any number of.

@@ -101,7 +101,7 @@ translation-gap check. Keep disabled translations in an edit payload: changing t
 does not delete them.
 
 `Label` is `{ id, name }`. A blank name is refused with `label.invalid` (400), a name another label
-already has with `label.duplicate` (409), and an unknown label id with `label.not_found` (404).
+already has with `label.name_taken` (409), and an unknown label id with `label.not_found` (404).
 
 `CategoryDependants` is `{ products, children, parentId, routes }`. `products` lists `{ id, name }`
 for every product, variants included, whose own main category is this one; `name` is the plain

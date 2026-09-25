@@ -167,8 +167,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "category.reassign_invalid": 400,
   "label.invalid": 400,
   "label.not_found": 404,
-  // 409: the body was well formed, and another stored label's name refused it.
-  "label.duplicate": 409,
+  "label.name_taken": 409,
   "menu_item.not_found": 404,
   // A menu offer asked for a variant, which follows its parent onto the menu instead.
   "menu_item.variant_not_allowed": 400,

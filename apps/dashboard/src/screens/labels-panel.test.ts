@@ -109,7 +109,7 @@ it("explains a blank name beside the field and in the summary, and sends nothing
   expect(api.createLabel).not.toHaveBeenCalled();
 });
 
-it.each(["label.duplicate", "label.invalid"])(
+it.each(["label.name_taken", "label.invalid"])(
   "puts a %s refusal beside the name and keeps what was typed",
   async (code) => {
     const { el, api } = await mount();

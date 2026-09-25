@@ -94,11 +94,11 @@ describe("labels", () => {
       params: { field: "name" },
     });
     await expect(app((tx) => createLabel(tx, " Alcoholic "))).rejects.toMatchObject({
-      code: "label.duplicate",
+      code: "label.name_taken",
       params: { name: "Alcoholic" },
     });
     await expect(app((tx) => renameLabel(tx, other.id, "Alcoholic"))).rejects.toMatchObject({
-      code: "label.duplicate",
+      code: "label.name_taken",
       params: { name: "Alcoholic" },
     });
     await expect(app((tx) => renameLabel(tx, other.id, ""))).rejects.toMatchObject({

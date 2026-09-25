@@ -36,7 +36,7 @@ async function assertNameFree(tx: Transaction, name: string, except: string | nu
     .select({ id: labels.id })
     .from(labels)
     .where(and(eq(labels.name, name), except === null ? undefined : ne(labels.id, except)));
-  if (clash) throw new AppError("label.duplicate", { name });
+  if (clash) throw new AppError("label.name_taken", { name });
 }
 
 /** Every label, ordered by name then id, with how many products carry each. */

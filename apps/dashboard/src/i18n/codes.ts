@@ -75,7 +75,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Enter a label name, and choose each label only once.",
     es: "Introduce un nombre de etiqueta y elige cada etiqueta una sola vez.",
   },
-  "label.duplicate": {
+  "label.name_taken": {
     en: "Another label already has this name.",
     es: "Ya hay otra etiqueta con este nombre.",
   },

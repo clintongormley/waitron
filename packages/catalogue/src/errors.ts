@@ -23,8 +23,7 @@ declare module "@waitron/shared" {
     /** A label name is blank or not text (`field` "name"), or a label selection is not a list of
      * distinct ids (`field` "labelIds"). */
     "label.invalid": { field: string };
-    /** Another label already has this name. */
-    "label.duplicate": { name: string };
+    "label.name_taken": { name: string };
     "label.not_found": { labelId: string };
     /** Not thrown: deleting a category cascades instead. Kept because a shipped code is never
      * removed. */
