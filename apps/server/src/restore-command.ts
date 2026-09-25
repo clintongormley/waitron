@@ -34,6 +34,8 @@ interface CommandDeps {
 }
 
 const CONFIRM_OLD_BOX_GONE = "--confirm-old-box-gone";
+const FROM_BUCKET = "--from-bucket";
+const CONFIRM_VENUE = "--confirm-venue";
 const clock = (): Date => new Date();
 
 /**
@@ -97,20 +99,15 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
  * value from outside the image; reporting a message carries whatever the thrower put in it.
  */
 export async function runRestore(deps: CommandDeps): Promise<number> {
-  const [cmd, artifactPath] = deps.argv;
-  const bucketFlag = deps.argv.indexOf("--from-bucket", 1);
-  const kitPath = bucketFlag === -1 ? undefined : deps.argv[bucketFlag + 1];
-  if (
-    cmd !== "restore" ||
-    artifactPath === undefined ||
-    (bucketFlag !== -1 && (kitPath === undefined || kitPath.startsWith("--")))
-  ) {
+  const args = parseArgs(deps.argv);
+  if (args === null) {
     deps.out(
       "usage: waitron-restore restore <artifact-path> [--confirm-old-box-gone] | restore --from-bucket <kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone]",
     );
     return 2;
   }
-  if (bucketFlag !== -1) return runBucketRestore(deps, kitPath!);
+  if ("kitPath" in args) return runBucketRestore(deps, args);
+  const { artifactPath, oldBoxGone } = args;
 
   const recoveryKey = deps.env.WAITRON_BACKUP_RECOVERY_KEY;
   if (isUnset(recoveryKey)) {
@@ -128,45 +125,20 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
     return 1;
   }
 
-  const stateDir = deps.env.WAITRON_STATE_DIR;
-  const migrationsDir = deps.env.WAITRON_MIGRATIONS_DIR;
-  // Computed once so `stagingDir` below joins onto the SAME resolved root the returned `stateDir`
-  // carries, exactly the reasoning `config.ts`'s `resolvedStateDir` documents for `logDir`.
-  const resolvedStateDir = resolveConfigDir(stateDir, DEFAULT_STATE_ROOT);
-
-  // `deploymentEnvironment` throws `server.config_invalid` for a bad `WAITRON_ENV`; caught here so
-  // runRestore never rejects with a raw error.
-  let environment: DeploymentEnvironment;
-  try {
-    environment = deploymentEnvironment(deps.env);
-  } catch (err) {
-    deps.out(`restore failed: ${(err as AppError).code}`);
-    return 1;
-  }
-
+  const target = resolveRestoreTarget(deps);
+  if (typeof target === "number") return target;
   const restoreDeps: RestoreDeps = {
+    ...target,
     artifact,
     recoveryKey,
-    // The same resolution `config.ts` does for `venueDir`, against the state root that won above:
-    // unset or EMPTY takes `<stateDir>/venue`, never `resolve("")` — which is the working directory.
-    venueDir: resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(resolvedStateDir, "venue")),
-    stateDir: resolvedStateDir,
-    stagingDir: join(resolvedStateDir, RESTORE_STAGING_DIR),
-    migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,
-    modules: ALL_MODULES,
-    environment,
     checkSourceLive: (validated) =>
       refuseIfArchiveSourceLive({
         validated,
-        stateDir: resolvedStateDir,
-        oldBoxGone: deps.argv.includes(CONFIRM_OLD_BOX_GONE),
+        stateDir: target.stateDir,
+        oldBoxGone,
         now: clock,
         openStore: boundedOpener(deps),
       }),
-    log: createLogger(
-      (line) => deps.out(line.trimEnd()),
-      () => new Date(),
-    ),
   };
 
   const restore = deps.restore ?? restoreFromArtifact;
@@ -184,17 +156,102 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
   return 0;
 }
 
+type ParsedArgs =
+  | { artifactPath: string; oldBoxGone: boolean }
+  | { kitPath: string; confirmedTaxId: string | undefined; oldBoxGone: boolean };
+
+/**
+ * Each form takes exactly its own flags, each once: `<artifact-path> [--confirm-old-box-gone]`, or
+ * `--from-bucket <kit-file> [--confirm-old-box-gone] [--confirm-venue <tax-id>]`, in any order.
+ * A flag's value may not itself start with `--`. Null for anything else.
+ */
+function parseArgs(argv: readonly string[]): ParsedArgs | null {
+  const [cmd, ...rest] = argv;
+  if (cmd !== "restore") return null;
+  const valued: Record<string, string | undefined> = {};
+  let artifactPath: string | undefined;
+  let oldBoxGone = false;
+  for (let i = 0; i < rest.length; i++) {
+    const arg = rest[i]!;
+    if (arg === CONFIRM_OLD_BOX_GONE) {
+      if (oldBoxGone) return null;
+      oldBoxGone = true;
+    } else if (arg === FROM_BUCKET || arg === CONFIRM_VENUE) {
+      const value = rest[++i];
+      if (value === undefined || value.startsWith("--") || arg in valued) return null;
+      valued[arg] = value;
+    } else if (arg.startsWith("--") || artifactPath !== undefined) {
+      return null;
+    } else {
+      artifactPath = arg;
+    }
+  }
+  const kitPath = valued[FROM_BUCKET];
+  const confirmedTaxId = valued[CONFIRM_VENUE];
+  if (kitPath !== undefined) {
+    return artifactPath === undefined ? { kitPath, confirmedTaxId, oldBoxGone } : null;
+  }
+  return artifactPath !== undefined && confirmedTaxId === undefined
+    ? { artifactPath, oldBoxGone }
+    : null;
+}
+
+type RestoreTarget = Pick<
+  RestoreDeps,
+  "stateDir" | "venueDir" | "stagingDir" | "migrationsRoot" | "modules" | "environment" | "log"
+>;
+
+/**
+ * Where the restore goes and under which environment, resolved as the module comment above
+ * describes; an exit code, with the reason printed, when `WAITRON_ENV` is invalid.
+ */
+function resolveRestoreTarget(deps: CommandDeps): RestoreTarget | number {
+  // `deploymentEnvironment` throws `server.config_invalid` for a bad `WAITRON_ENV`; caught here so
+  // runRestore never rejects with a raw error.
+  let environment: DeploymentEnvironment;
+  try {
+    environment = deploymentEnvironment(deps.env);
+  } catch (err) {
+    deps.out(`restore failed: ${(err as AppError).code}`);
+    return 1;
+  }
+  const migrationsDir = deps.env.WAITRON_MIGRATIONS_DIR;
+  // Computed once so `stagingDir` below joins onto the SAME resolved root the returned `stateDir`
+  // carries, exactly the reasoning `config.ts`'s `resolvedStateDir` documents for `logDir`.
+  const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
+  return {
+    stateDir,
+    // The same resolution `config.ts` does for `venueDir`, against the state root that won above:
+    // unset or EMPTY takes `<stateDir>/venue`, never `resolve("")` — which is the working directory.
+    venueDir: resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, "venue")),
+    stagingDir: join(stateDir, RESTORE_STAGING_DIR),
+    migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,
+    modules: ALL_MODULES,
+    environment,
+    log: createLogger(
+      (line) => deps.out(line.trimEnd()),
+      () => new Date(),
+    ),
+  };
+}
+
+/** The words for an old server that may still be running, `subject` naming it. */
+function sourceLiveRefusal(err: AppError, subject: string): string | null {
+  const goAhead = `if it is switched off for good, re-run with ${CONFIRM_OLD_BOX_GONE}`;
+  if (hasCode(err, "restore.stream_source_live")) {
+    return `restore failed: restore.stream_source_live — ${subject} wrote to its bucket at ${err.params.lastChangeAt} and may still be selling; ${goAhead}`;
+  }
+  if (hasCode(err, "restore.stream_source_unchecked")) {
+    return `restore failed: restore.stream_source_unchecked — whether ${subject} is still writing to its bucket could not be checked; ${goAhead}`;
+  }
+  return null;
+}
+
 /** The words for a refusal only the archive path words its own way; null for any other. */
 function archiveRefusal(err: AppError): string | null {
   if (DECRYPT_PHASE_CODES.has(err.code))
     return "restore failed: wrong recovery key or corrupt artifact";
-  if (hasCode(err, "restore.stream_source_live")) {
-    return `restore failed: restore.stream_source_live — the server this backup came from wrote to its bucket at ${err.params.lastChangeAt} and may still be selling; if it is switched off for good, re-run with ${CONFIRM_OLD_BOX_GONE}`;
-  }
-  if (hasCode(err, "restore.stream_source_unchecked")) {
-    return `restore failed: restore.stream_source_unchecked — whether the server this backup came from is still writing to its bucket could not be checked; if it is switched off for good, re-run with ${CONFIRM_OLD_BOX_GONE}`;
-  }
-  return null;
+  return sourceLiveRefusal(err, "the server this backup came from");
 }
 
 /**
@@ -225,14 +282,13 @@ const KEY_DOES_NOT_OPEN =
 /** The words for a refusal of the bucket path; null for one it reports as the archive path does. */
 function bucketRefusal(err: AppError): string | null {
   if (DECRYPT_PHASE_CODES.has(err.code)) return KEY_DOES_NOT_OPEN;
+  const sourceLive = sourceLiveRefusal(err, "the old server");
+  if (sourceLive !== null) return sourceLive;
   const failed = `restore failed: ${err.code} — `;
   if (hasCode(err, "restore.stream_venue_unconfirmed")) {
     return err.params.taxId === ""
       ? `${failed}the copy in the bucket names no business tax id, so it cannot be confirmed or restored`
       : `${failed}if ${err.params.legalName} (tax id ${err.params.taxId}) is your business, re-run with --confirm-venue ${err.params.taxId}`;
-  }
-  if (hasCode(err, "restore.stream_source_live")) {
-    return `${failed}the old server wrote to the bucket at ${err.params.lastChangeAt}; if it is switched off for good, re-run with ${CONFIRM_OLD_BOX_GONE}`;
   }
   if (hasCode(err, "restore.stream_pointer_unverified")) {
     return err.params.reason === "signature"
@@ -240,7 +296,6 @@ function bucketRefusal(err: AppError): string | null {
       : `${failed}the bucket's record of its newest copy names a different venue from this kit`;
   }
   const words: Partial<Record<string, string>> = {
-    "restore.stream_source_unchecked": `whether the old server is still writing to the bucket could not be checked; if it is switched off for good, re-run with ${CONFIRM_OLD_BOX_GONE}`,
     "restore.stream_disk_full":
       "the disk filled while the copy was downloading; nothing on this server changed. Free some space and run it again",
     "restore.stream_pointer_missing":
@@ -264,7 +319,11 @@ function bucketRefusal(err: AppError): string | null {
  * ({@link restoreFromStream}). The recovery key and the bucket's secret come from the kit, so the
  * environment holds neither, and no printed line carries the kit's text.
  */
-async function runBucketRestore(deps: CommandDeps, kitPath: string): Promise<number> {
+async function runBucketRestore(
+  deps: CommandDeps,
+  args: Extract<ParsedArgs, { kitPath: string }>,
+): Promise<number> {
+  const { kitPath, confirmedTaxId, oldBoxGone } = args;
   let kitText: string;
   try {
     kitText = await readFile(kitPath, "utf8");
@@ -284,30 +343,16 @@ async function runBucketRestore(deps: CommandDeps, kitPath: string): Promise<num
     );
     return 1;
   }
-  let environment: DeploymentEnvironment;
-  try {
-    environment = deploymentEnvironment(deps.env);
-  } catch (err) {
-    deps.out(`restore failed: ${(err as AppError).code}`);
-    return 1;
-  }
-  const venueFlag = deps.argv.indexOf("--confirm-venue");
-  const confirmedTaxId = venueFlag === -1 ? undefined : deps.argv[venueFlag + 1];
-  const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
-  const migrationsDir = deps.env.WAITRON_MIGRATIONS_DIR;
+  const target = resolveRestoreTarget(deps);
+  if (typeof target === "number") return target;
   deps.out(
     "cold restore from the bucket: use only when the old server is gone — two servers selling from one database cannot be reconciled",
   );
   try {
     await (deps.restoreStream ?? restoreFromStream)({
+      ...target,
       kit,
-      oldBoxGone: deps.argv.includes(CONFIRM_OLD_BOX_GONE),
-      environment,
-      stateDir,
-      venueDir: resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, "venue")),
-      stagingDir: join(stateDir, RESTORE_STAGING_DIR),
-      migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,
-      modules: ALL_MODULES,
+      oldBoxGone,
       litestreamBin: resolveLitestreamBin(deps.env),
       openStore: boundedOpener(deps),
       now: clock,
@@ -317,10 +362,6 @@ async function runBucketRestore(deps: CommandDeps, kitPath: string): Promise<num
         );
         return venue.taxId !== "" && confirmedTaxId === venue.taxId;
       },
-      log: createLogger(
-        (line) => deps.out(line.trimEnd()),
-        () => new Date(),
-      ),
     });
   } catch (err) {
     deps.out((err instanceof AppError && bucketRefusal(err)) || sharedRefusal(err));

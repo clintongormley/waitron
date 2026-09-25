@@ -487,7 +487,6 @@ describe("waitron-restore restore --from-bucket", () => {
   // --confirm-venue names that copy's tax id.
   it.each([
     [[], false],
-    [["--confirm-venue"], false],
     [["--confirm-venue", "B00000000"], false],
     [["--confirm-venue", "89890001k"], false],
     [["--confirm-venue", "89890001K"], true],
@@ -564,11 +563,11 @@ describe("waitron-restore restore --from-bucket", () => {
   it.each([
     [
       new AppError("restore.stream_source_live", { lastChangeAt: "2026-09-23T11:58:00.000Z" }),
-      "restore failed: restore.stream_source_live — the old server wrote to the bucket at 2026-09-23T11:58:00.000Z; if it is switched off for good, re-run with --confirm-old-box-gone",
+      "restore failed: restore.stream_source_live — the old server wrote to its bucket at 2026-09-23T11:58:00.000Z and may still be selling; if it is switched off for good, re-run with --confirm-old-box-gone",
     ],
     [
       new AppError("restore.stream_source_unchecked", { reason: "clock" }),
-      "restore failed: restore.stream_source_unchecked — whether the old server is still writing to the bucket could not be checked; if it is switched off for good, re-run with --confirm-old-box-gone",
+      "restore failed: restore.stream_source_unchecked — whether the old server is still writing to its bucket could not be checked; if it is switched off for good, re-run with --confirm-old-box-gone",
     ],
     [
       new AppError("restore.stream_disk_full", {}),
@@ -964,5 +963,46 @@ describe("waitron-restore restore <artifact> and the old server", () => {
     });
     expect(code).toBe(1);
     expect(out).toEqual([COLD_RESTORE_NOTICE, line]);
+  });
+});
+
+describe("waitron-restore restore, the arguments each form accepts", () => {
+  const ARTIFACT = "<artifact>";
+  const KIT_FILE = "<kit>";
+  it.each([
+    ["--confirm-venue with no value", ["--from-bucket", KIT_FILE, "--confirm-venue"]],
+    [
+      "--confirm-venue followed by another flag",
+      ["--from-bucket", KIT_FILE, "--confirm-venue", "--confirm-old-box-gone"],
+    ],
+    ["--confirm-venue on the archive form", [ARTIFACT, "--confirm-venue", "89890001K"]],
+    ["a misspelled flag on the archive form", [ARTIFACT, "--confirm-old-box-gon"]],
+    ["a misspelled flag on the bucket form", ["--from-bucket", KIT_FILE, "--confrim-venue", "X"]],
+    ["an artifact given with --from-bucket", [ARTIFACT, "--from-bucket", KIT_FILE]],
+    ["an artifact after the kit file", ["--from-bucket", KIT_FILE, ARTIFACT]],
+    ["a second artifact", [ARTIFACT, ARTIFACT]],
+    ["--from-bucket given twice", ["--from-bucket", KIT_FILE, "--from-bucket", KIT_FILE]],
+  ])("prints the one-line usage and runs nothing for %s", async (_label, args) => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-cli-args-"));
+    const artifactPath = await makeArtifact(dir);
+    const { kitPath } = await kitFile();
+    const argv = [
+      "restore",
+      ...args.map((a) => (a === ARTIFACT ? artifactPath : a === KIT_FILE ? kitPath : a)),
+    ];
+    const out: string[] = [];
+    const restore = vi.fn(async () => {});
+    const restoreStream = vi.fn<RestoreStreamFake>(async () => {});
+    const code = await runRestore({
+      argv,
+      env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY, WAITRON_STATE_DIR: dir },
+      out: (line) => out.push(line),
+      restore,
+      restoreStream,
+    });
+    expect(code).toBe(2);
+    expect(out).toEqual([expect.stringMatching(/^usage: /)]);
+    expect(restore).not.toHaveBeenCalled();
+    expect(restoreStream).not.toHaveBeenCalled();
   });
 });
