@@ -15,6 +15,7 @@
   --wt-radius-full: 9999px;
 
   --wt-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --wt-font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --wt-font-size-sm: 13px;
   --wt-font-size-md: 15px;
   --wt-font-size-lg: 19px;
