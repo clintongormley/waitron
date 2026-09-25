@@ -1,10 +1,17 @@
-import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { dirname, join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { hasCode, isAppError } from "@waitron/shared";
 import { replicaUrl } from "./litestream.js";
 import { restoreGeneration } from "./restore.js";
+
+const { writeFileMock } = vi.hoisted(() => ({ writeFileMock: vi.fn() }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  writeFileMock.mockImplementation(actual.writeFile);
+  return { ...actual, writeFile: writeFileMock };
+});
 
 let dir: string;
 let bin: string;
@@ -34,6 +41,10 @@ beforeAll(async () => {
       '  endless) while :; do printf x >> "$out.tmp"; sleep 0.05; done ;;',
       // Writes once, then goes quiet: must be abandoned once the output stops growing.
       '  stall) printf x > "$out.tmp"; exec sleep 30 ;;',
+      // Stalls like `stall`, but answers the polite kill by exiting with the code its name ends in.
+      '  trap*) trap "exit ${STUB_MODE#trap}" TERM; printf x > "$out.tmp"; while :; do sleep 0.05; done ;;',
+      // Leaves a larger leftover `.tmp` alone for a moment, then empties and refills it slowly.
+      '  refill) sleep 0.2; : > "$out.tmp"; i=0; while [ $i -lt 10 ]; do printf x >> "$out.tmp"; sleep 0.1; i=$((i+1)); done; mv "$out.tmp" "$out"; exit 0 ;;',
       "esac",
       "",
     ].join("\n"),
@@ -58,10 +69,16 @@ const GENERATION = "gen-3-n1-20260923T101500Z";
 
 type Bounds = { stallMs?: number; ceilingMs?: number; pollMs?: number };
 
-async function run(mode: string, bounds: Bounds = {}, bucket = BUCKET) {
+async function run(
+  mode: string,
+  bounds: Bounds = {},
+  bucket = BUCKET,
+  prepare?: (outPath: string) => Promise<void>,
+) {
   const out = await mkdtemp(join(dir, "case-"));
   await writeFile(join(dir, "control"), `STUB_OUT=${JSON.stringify(out)}\nSTUB_MODE=${mode}\n`);
   const outPath = join(out, "venue.db");
+  await prepare?.(outPath);
   const promise = restoreGeneration({
     litestreamBin: bin,
     bucket,
@@ -204,6 +221,80 @@ describe("restoreGeneration", () => {
     // The stub's `sleep 30` was ended, not waited out.
     expect(performance.now() - started).toBeLessThan(5_000);
   }, 10_000);
+
+  // Litestream's own exit code after the kill says nothing about the restore: whatever it answers
+  // with, the restore was abandoned and did not produce the database.
+  it.each(["trap0", "trap3"])(
+    "reports an abandoned restore with no exit code, even when the killed child exits %s",
+    async (mode) => {
+      const { promise } = await run(mode, { stallMs: 300, pollMs: 50 });
+      await expect(promise).rejects.toMatchObject({
+        code: "backup.stream_restore_failed",
+        params: { exitCode: null, diskFull: false },
+      });
+    },
+    10_000,
+  );
+
+  it("counts a shrinking output as progress, not only a growing one", async () => {
+    // A larger `.tmp` left by an earlier attempt is what the first check sees; the restore then
+    // empties it and never writes as much again.
+    const { outPath, promise } = await run("refill", { stallMs: 600, pollMs: 50 }, BUCKET, (path) =>
+      writeFile(`${path}.tmp`, "x".repeat(100)),
+    );
+    await promise;
+    expect((await readFile(outPath, "utf8")).length).toBe(10);
+  }, 10_000);
+
+  it("narrows a configuration file left by an earlier attempt to its owner", async () => {
+    const { out, promise } = await run("ok", {}, BUCKET, async (outPath) => {
+      const configDir = join(dirname(outPath), "litestream");
+      await mkdir(configDir, { recursive: true });
+      await writeFile(join(configDir, "restore.yml"), "left by an earlier attempt", {
+        mode: 0o644,
+      });
+    });
+    await promise;
+    const configPath = join(out, "litestream", "restore.yml");
+    expect((await stat(configPath)).mode & 0o777).toBe(0o600);
+    expect(await readFile(configPath, "utf8")).not.toContain("earlier attempt");
+  });
+
+  it("reports a disk too full to hold the restore's configuration as a full disk", async () => {
+    const passthrough = writeFileMock.getMockImplementation()!;
+    writeFileMock.mockImplementation(async (path: string, ...rest: unknown[]) => {
+      if (String(path).endsWith("restore.yml")) {
+        throw Object.assign(new Error("injected: no space left on device"), { code: "ENOSPC" });
+      }
+      return passthrough(path, ...rest);
+    });
+    try {
+      const { out, promise } = await run("ok");
+      await expect(promise).rejects.toMatchObject({
+        code: "backup.stream_restore_failed",
+        params: { exitCode: null, diskFull: true },
+      });
+      await expect(stat(join(out, "argv"))).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      writeFileMock.mockImplementation(passthrough);
+    }
+  });
+
+  it("passes on any other failure to write the configuration as it is", async () => {
+    const out = await mkdtemp(join(dir, "case-"));
+    // A file where the configuration's folder goes: the folder cannot be made.
+    await writeFile(join(out, "litestream"), "not a folder");
+    await expect(
+      restoreGeneration({
+        litestreamBin: bin,
+        bucket: BUCKET,
+        venueId: "v1",
+        generation: GENERATION,
+        outPath: join(out, "venue.db"),
+        configDir: join(out, "litestream"),
+      }),
+    ).rejects.toMatchObject({ code: "EEXIST" });
+  });
 
   it("abandons a restore that outlives the absolute ceiling even while it grows", async () => {
     const { promise } = await run("endless", { stallMs: 60_000, ceilingMs: 500, pollMs: 50 });

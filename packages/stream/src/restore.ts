@@ -22,7 +22,8 @@ export interface RestoreGenerationArgs {
   bucket: BucketConfig;
   venueId: string;
   generation: string;
-  /** Must not exist, or exist empty: Litestream refuses a non-empty output (bench litestream.ts). */
+  /** Must not exist, or exist empty, with no `-wal`, `-shm` or `-journal` beside it: Litestream
+   * 0.5.17 refuses either (`cmd/litestream/restore.go:279-289`, `prepareOutputPath`). */
   outPath: string;
   /** Where the restore's configuration is written; `.litestream-restore` beside `outPath` when absent. */
   configDir?: string;
@@ -66,11 +67,18 @@ export async function restoreGeneration(args: RestoreGenerationArgs): Promise<vo
     replicaUrl: replicaUrl(args.bucket, args.venueId, args.generation),
   });
   const env = litestreamEnv(args.bucket);
-  await mkdir(configDir, { recursive: true, mode: 0o700 });
   const configPath = join(configDir, "restore.yml");
-  // Removed first so the write creates the file and `mode` applies.
-  await rm(configPath, { force: true });
-  await writeFile(configPath, config, { mode: 0o600 });
+  try {
+    await mkdir(configDir, { recursive: true, mode: 0o700 });
+    // Removed first so the write creates the file and `mode` applies.
+    await rm(configPath, { force: true });
+    await writeFile(configPath, config, { mode: 0o600 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOSPC") {
+      throw new AppError("backup.stream_restore_failed", { exitCode: null, diskFull: true });
+    }
+    throw error;
+  }
   const child = spawnLitestream(
     args.litestreamBin,
     ["restore", "-config", configPath, "-o", args.outPath, namedPath],

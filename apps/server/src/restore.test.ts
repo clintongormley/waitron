@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -1276,6 +1276,25 @@ describe("restore steps — failures part-way", () => {
     await expect(stat(incomingFile())).rejects.toMatchObject({ code: "ENOENT" });
     expect((await stat(join(venueFile(), "held"))).isDirectory()).toBe(true);
     expect(logged).toEqual([]);
+  });
+
+  it("restoreDatabase keeps the OLD database when Litestream's folder cannot be removed", async () => {
+    await mkdir(venueDir, { recursive: true });
+    await writeFile(venueFile(), "THE-DATABASE-THAT-WAS-ALREADY-THERE");
+    // A folder its owner cannot write: the recursive removal cannot unlink the file inside it.
+    const locked = join(venueDir, ".venue.db-litestream", "ltx", "0");
+    await mkdir(locked, { recursive: true });
+    await writeFile(join(locked, "0000000000000005-0000000000000005.ltx"), "old");
+    await chmod(locked, 0o500);
+    try {
+      await expect(
+        restoreDatabase({ dumpBytes: VENUE_BYTES, venueDir, log: noopLog }),
+      ).rejects.toMatchObject({ code: "EACCES" });
+    } finally {
+      await chmod(locked, 0o700);
+    }
+    expect(await readFile(venueFile(), "utf8")).toBe("THE-DATABASE-THAT-WAS-ALREADY-THERE");
+    await expect(stat(incomingFile())).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("setAsideExistingIdentity rethrows a failure other than a missing identity, leaving the identity in place", async () => {

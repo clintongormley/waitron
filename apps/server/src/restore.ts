@@ -397,10 +397,11 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
  *
  * **`node.db` IS LEFT ALONE, and that differs from the wipe — deliberately recorded rather than
  * discovered.** `db-wipe.ts` removes both files of the venue directory; this replaces `venue.db`,
- * its two sidecars and Litestream's folder beside it, and nothing else. The node file is created empty and holds no table (`applyMigrations` sends
- * every set to the venue handle, `packages/migrations/src/apply.ts`), and slice 2 keeps it that way:
- * a node's own rows are keyed by node id inside `venue.db` (slice-2 spec §2). A slice that puts
- * tables into `node.db` has to decide here whether a restore carries, clears or keeps them.
+ * its two sidecars and Litestream's folder beside it, and nothing else. The node file is created
+ * empty and holds no table (`applyMigrations` sends every set to the venue handle,
+ * `packages/migrations/src/apply.ts`), and slice 2 keeps it that way: a node's own rows are keyed
+ * by node id inside `venue.db` (slice-2 spec §2). A slice that puts tables into `node.db` has to
+ * decide here whether a restore carries, clears or keeps them.
  */
 export async function restoreDatabase(args: {
   dumpBytes: Uint8Array;
@@ -415,11 +416,12 @@ export async function restoreDatabase(args: {
   await rm(incoming, { force: true });
   try {
     await writeFile(incoming, args.dumpBytes, { mode: VENUE_FILE_MODE, flag: "w" });
+    // Litestream's record of what it uploaded describes the database being replaced. Removed
+    // before that database, so a folder that cannot be removed leaves it in place.
+    await rm(litestreamMetaDir(target), { recursive: true, force: true });
     for (const suffix of ["", ...VENUE_SIDECARS]) {
       await rm(`${target}${suffix}`, { force: true });
     }
-    // Litestream's record of what it uploaded describes the database being replaced.
-    await rm(litestreamMetaDir(target), { recursive: true, force: true });
     await rename(incoming, target);
   } catch (error) {
     await rm(incoming, { force: true });
