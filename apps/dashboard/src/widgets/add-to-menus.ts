@@ -58,7 +58,7 @@ export function placementMenus(
       return [
         {
           id,
-          name: names.get(id) ?? t("editor.missing_choice"),
+          name: names.get(id) ?? t("members.missing"),
           sharedWith: menus.flatMap((menu, index) =>
             index !== menuIndex && reached[index]?.has(id) ? [menu.name] : [],
           ),
@@ -166,8 +166,13 @@ export class AddToMenus extends LitElement {
   @property({ attribute: false }) failures: PlacementFailure[] = [];
   @state() private selected: ReadonlySet<string> = new Set();
   @state() private noneChosen = false;
+  /** Every place in the order shown, each section once. */
+  #placeIds: string[] = [];
+  #places = new Map<string, { name: string; topLevel: boolean }>();
+  #hasShared = false;
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("menus")) this.#flatten();
     if (changed.has("open") && this.open) {
       this.selected = new Set();
       this.noneChosen = false;
@@ -176,39 +181,34 @@ export class AddToMenus extends LitElement {
       this.selected = new Set(this.failures.map(({ sectionId }) => sectionId));
   }
 
-  /** Every place in the order shown, each section once. */
-  #places(): string[] {
-    const ids = new Set<string>();
+  #flatten(): void {
+    const places = new Map<string, { name: string; topLevel: boolean }>();
+    let hasShared = false;
+    const add = (id: string, name: string, topLevel: boolean) => {
+      if (!places.has(id)) places.set(id, { name, topLevel });
+    };
     const walk = (sections: readonly PlacementSection[]) => {
       for (const section of sections) {
-        ids.add(section.id);
+        add(section.id, section.name, false);
+        hasShared ||= section.sharedWith.length > 0;
         walk(section.children);
       }
     };
     for (const menu of this.menus ?? []) {
-      ids.add(menu.rootSectionId);
+      add(menu.rootSectionId, menu.name, true);
       walk(menu.sections);
     }
-    return [...ids];
+    this.#places = places;
+    this.#placeIds = [...places.keys()];
+    this.#hasShared = hasShared;
   }
 
   #placeName(sectionId: string): string {
-    for (const menu of this.menus ?? []) {
-      if (menu.rootSectionId === sectionId)
-        return t("add_to_menus.place_top_level").replace("{menu}", menu.name);
-      const found = this.#find(menu.sections, sectionId);
-      if (found) return found.name;
-    }
-    return t("editor.missing_choice");
-  }
-
-  #find(sections: readonly PlacementSection[], id: string): PlacementSection | null {
-    for (const section of sections) {
-      if (section.id === id) return section;
-      const found = this.#find(section.children, id);
-      if (found) return found;
-    }
-    return null;
+    const place = this.#places.get(sectionId);
+    if (!place) return t("members.missing");
+    return place.topLevel
+      ? t("add_to_menus.place_top_level").replace("{menu}", place.name)
+      : place.name;
   }
 
   #toggle(event: Event, sectionId: string): void {
@@ -222,7 +222,7 @@ export class AddToMenus extends LitElement {
   #confirm(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
-    const sectionIds = this.#places().filter((id) => this.selected.has(id));
+    const sectionIds = this.#placeIds.filter((id) => this.selected.has(id));
     if (!sectionIds.length) {
       this.noneChosen = true;
       return;
@@ -299,11 +299,7 @@ export class AddToMenus extends LitElement {
       ></wt-form-error-summary>
       ${this.#failures()}
       <p>${t("add_to_menus.intro").replace("{name}", this.productName)}</p>
-      ${
-        this.menus.some((menu) => this.#hasShared(menu.sections))
-          ? html`<p class="notice">${t("add_to_menus.shared_note")}</p>`
-          : nothing
-      }
+      ${this.#hasShared ? html`<p class="notice">${t("add_to_menus.shared_note")}</p>` : nothing}
       ${this.menus.map(
         (menu) =>
           html`<fieldset
@@ -322,12 +318,6 @@ export class AddToMenus extends LitElement {
             </p>`
           : nothing
       }`;
-  }
-
-  #hasShared(sections: readonly PlacementSection[]): boolean {
-    return sections.some(
-      (section) => section.sharedWith.length > 0 || this.#hasShared(section.children),
-    );
   }
 
   override render() {
@@ -355,6 +345,7 @@ export class AddToMenus extends LitElement {
         >${
           choosing
             ? html`<wt-button
+                variant="primary"
                 data-test="add-to-menus"
                 .loading=${this.busy}
                 .disabled=${this.busy}

@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import type { SectionMember } from "@waitron/catalogue/src/section-types.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 // Value import: pulls the module in for its `@customElement` side effect.
-import { MemberListEditor } from "./member-list-editor.js";
+import { MemberListEditor, sectionParents, sectionsHolding } from "./member-list-editor.js";
 import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
@@ -357,4 +357,31 @@ it("keeps a choice that is still on offer when the list changes around it", asyn
   expect(q<HTMLSelectElement>(el, 'select[name="member-ref"]').value).toBe("section:s-desserts");
   q(el, '[data-test="add"]').click();
   expect(adds).toEqual([{ ref: { kind: "section", sectionId: "s-desserts" } }]);
+});
+
+it("finds the section and every section holding it however deep, even round a loop", () => {
+  const holds = (id: string, ...sectionIds: string[]) => ({
+    id,
+    members: sectionIds.map((sectionId, position) => ({
+      id: `${id}-${sectionId}`,
+      position,
+      ref: { kind: "section" as const, sectionId },
+    })),
+  });
+  const parents = sectionParents([
+    holds("s-fav", "s-drinks"),
+    holds("s-drinks", "s-beer"),
+    holds("s-bar", "s-beer"),
+    holds("s-beer"),
+    holds("s-a", "s-b"),
+    holds("s-b", "s-a"),
+  ]);
+  expect(sectionsHolding(parents, "s-beer").sort()).toEqual([
+    "s-bar",
+    "s-beer",
+    "s-drinks",
+    "s-fav",
+  ]);
+  expect(sectionsHolding(parents, "s-fav")).toEqual(["s-fav"]);
+  expect(sectionsHolding(parents, "s-a").sort()).toEqual(["s-a", "s-b"]);
 });

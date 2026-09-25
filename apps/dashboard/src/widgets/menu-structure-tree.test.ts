@@ -171,3 +171,10 @@ it("names a member it does not know as no longer available", async () => {
   });
   expect(nameOf(el, "m-gone")).toBe(t("members.missing"));
 });
+
+it("names the whole structure by its label, and leaves a nested list unnamed", async () => {
+  const el = await mount();
+  await toggle(el, "m-drinks");
+  const lists = [...el.shadowRoot!.querySelectorAll("ul")];
+  expect(lists.map((list) => list.getAttribute("aria-label"))).toEqual(["Lunch Menu", null]);
+});

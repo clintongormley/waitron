@@ -15,10 +15,16 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
-import "../widgets/member-list-editor.js";
-import { sectionsHolding } from "../widgets/member-list-editor.js";
+import {
+  memberName,
+  sectionParents,
+  sectionsHolding,
+  type SectionParents,
+} from "../widgets/member-list-editor.js";
 import "../widgets/menu-structure-tree.js";
 import "../widgets/section-add-products.js";
+import { textField } from "../widgets/form-fields.js";
+import { fieldOf, ListWriteQueue } from "../widgets/section-writes.js";
 import type {
   CatalogueSummary,
   CategorySummary,
@@ -38,10 +44,11 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 
 const TABS = ["structure"] as const;
 
-/** Where a refusal goes: beside `field` when the error names it, otherwise the summary alone. */
-function refusal(error: unknown, field: string): Record<string, string> {
-  const params = (error as { params?: { field?: unknown } }).params;
-  return { [params?.field === field ? field : "_form"]: codeMessage(codeOf(error)) };
+const NO_USAGES: SectionUsages = { menus: [], sections: [] };
+const NO_NAMES: ReadonlyMap<string, string> = new Map();
+
+function refusal(error: unknown): Record<string, string> {
+  return { [fieldOf(error)]: codeMessage(codeOf(error)) };
 }
 
 function reachableProducts(nodes: MenuStructureNode[]): string[] {
@@ -53,6 +60,35 @@ function reachableProducts(nodes: MenuStructureNode[]): string[] {
   };
   walk(nodes);
   return [...found];
+}
+
+/**
+ * The structure's nodes with every place `listId` appears in `ordered`'s order, or null when a
+ * place's members are not exactly the ones `ordered` names, which only a fresh read can resolve.
+ */
+function withOrder(
+  structure: MenuStructure,
+  listId: string,
+  ordered: readonly SectionMember[],
+): MenuStructureNode[] | null {
+  let mismatch = false;
+  const arrange = (nodes: MenuStructureNode[]): MenuStructureNode[] => {
+    const byId = new Map(nodes.map((node) => [node.memberId, node]));
+    if (byId.size !== ordered.length || ordered.some(({ id }) => !byId.has(id))) {
+      mismatch = true;
+      return nodes;
+    }
+    return ordered.map(({ id }) => byId.get(id)!);
+  };
+  const walk = (nodes: MenuStructureNode[]): MenuStructureNode[] =>
+    nodes.map((node) => {
+      if (node.ref.kind !== "section" || node.children === undefined) return node;
+      const children = walk(node.children);
+      return { ...node, children: node.ref.sectionId === listId ? arrange(children) : children };
+    });
+  const nodes = walk(structure.nodes);
+  const result = listId === structure.rootSectionId ? arrange(nodes) : nodes;
+  return mismatch ? null : result;
 }
 
 /**
@@ -160,7 +196,8 @@ export class MenusScreen extends LitElement {
   @state() private structureError = false;
   /** The member ids followed from the menu's top level to the list being edited. */
   @state() private path: string[] = [];
-  @state() private usages: SectionUsages | null = null;
+  /** Every section's wider use, by section id; null until first read. */
+  @state() private usages: Record<string, SectionUsages> | null = null;
   @state() private usagesError = false;
   @state() private busy = false;
   @state() private memberError: string | null = null;
@@ -202,6 +239,13 @@ export class MenusScreen extends LitElement {
       this.structureError = true;
     },
   );
+  readonly #usageQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    () => {
+      this.usagesError = true;
+    },
+  );
 
   /** An unknown menu or tab is replaced rather than pushed, so Back still leaves the screen. */
   readonly #url = new UrlStateController(this, () => this.#restore(), dashboardPath);
@@ -210,6 +254,7 @@ export class MenusScreen extends LitElement {
    * language change builds a new screen. */
   readonly #columns: DataTableColumn<CatalogueSummary>[] = this.#buildColumns();
   #sectionNames = new Map<string, string>();
+  #parents: SectionParents = new Map();
   /** The nodes along {@link path}, one per member id. */
   #trail: MenuStructureNode[] = [];
   #listId: string | null = null;
@@ -219,15 +264,7 @@ export class MenusScreen extends LitElement {
   #excluded: string[] = [];
   #memberProducts: Product[] = [];
   #addable: Product[] = [];
-  #usagesFor: string | null = null;
-  #usagesGeneration = 0;
-
-  /** Member writes run one after another, in the order asked. */
-  #chain: Promise<void> = Promise.resolve();
-  #pending = 0;
-  /** Bumped when a move is refused: the moves queued behind it were made against an order the
-   * server never reached, so they are dropped. */
-  #moveGeneration = 0;
+  readonly #writes = new ListWriteQueue();
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -235,11 +272,14 @@ export class MenusScreen extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues): void {
-    if (changed.has("sections"))
+    if (changed.has("sections")) {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
+      this.#parents = sectionParents(this.sections);
+    }
     if (changed.has("structure") || changed.has("path")) this.#resolvePath();
+    if (changed.has("structure")) this.#onMenu = reachableProducts(this.structure?.nodes ?? []);
     if (changed.has("structure") || changed.has("path") || changed.has("sections"))
-      this.#excluded = this.path.length === 0 ? [] : sectionsHolding(this.sections, this.#listId!);
+      this.#excluded = this.path.length === 0 ? [] : sectionsHolding(this.#parents, this.#listId!);
     if (changed.has("products") || changed.has("structure") || changed.has("path")) {
       const held = new Set(this.#inSection);
       this.#memberProducts = this.products.filter(
@@ -247,11 +287,6 @@ export class MenusScreen extends LitElement {
       );
     }
     if (changed.has("products")) this.#addable = this.products.filter((product) => product.active);
-    const usagesFor = this.path.length === 0 ? null : this.#listId;
-    if (usagesFor !== this.#usagesFor) {
-      this.#usagesFor = usagesFor;
-      this.#readUsages(usagesFor);
-    }
   }
 
   /** Keeps the longest part of the path the structure still has, and derives the list it names. */
@@ -275,18 +310,23 @@ export class MenusScreen extends LitElement {
       ref,
     }));
     this.#inSection = nodes.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : []));
-    this.#onMenu = reachableProducts(this.structure?.nodes ?? []);
   }
 
   // ── Loading and the address ─────────────────────────────────────────────────────────────────
 
   async #load(): Promise<void> {
     this.loadError = false;
+    this.usagesError = false;
+    // Kept apart from the load: a failure is reported beside the list it would describe.
+    void this.#usageQueries
+      .watch("listSectionUsages", [], (value) => {
+        this.usages = value;
+        this.usagesError = false;
+      })
+      .catch(() => undefined);
     try {
       await Promise.all([
-        this.#queries.watch("listCatalogues", [], (value) => {
-          this.menus = value;
-        }),
+        this.#watchMenus(),
         this.#watchSections(),
         this.#queries.watch("listLibraryProducts", [], (value) => {
           this.products = value;
@@ -304,6 +344,12 @@ export class MenusScreen extends LitElement {
       this.loading = false;
     }
     this.#checkAddress();
+  }
+
+  #watchMenus(): Promise<void> {
+    return this.#queries.watch("listCatalogues", [], (value) => {
+      this.menus = value;
+    });
   }
 
   #watchSections(): Promise<void> {
@@ -377,11 +423,9 @@ export class MenusScreen extends LitElement {
     return this.menus.find(({ id }) => id === this.menuId)?.name ?? "";
   }
 
-  /** The staff name of a node on the path, every one of which is a section. */
+  /** Every node on the path is a section, so no product name is needed. */
   #nodeName(node: MenuStructureNode): string {
-    const name =
-      node.ref.kind === "section" ? this.#sectionNames.get(node.ref.sectionId) : undefined;
-    return name ?? t("members.missing");
+    return memberName(node.ref, NO_NAMES, this.#sectionNames);
   }
 
   #listName(): string {
@@ -395,21 +439,6 @@ export class MenusScreen extends LitElement {
     if (parent?.ref.kind === "section")
       return { id: parent.ref.sectionId, name: this.#nodeName(parent) };
     return { id: this.structure!.rootSectionId, name: this.#menuName() };
-  }
-
-  #readUsages(sectionId: string | null): void {
-    const generation = ++this.#usagesGeneration;
-    this.usages = null;
-    this.usagesError = false;
-    if (sectionId === null) return;
-    this.api.getSectionUsages(sectionId).then(
-      (usages) => {
-        if (generation === this.#usagesGeneration) this.usages = usages;
-      },
-      () => {
-        if (generation === this.#usagesGeneration) this.usagesError = true;
-      },
-    );
   }
 
   // ── Menus ────────────────────────────────────────────────────────────────────────────────────
@@ -434,30 +463,24 @@ export class MenusScreen extends LitElement {
       if (form.id === null) await this.api.createCatalogue(name);
       else await this.api.renameCatalogue(form.id, name);
     } catch (error) {
-      this.menuFormErrors = refusal(error, "name");
+      this.menuFormErrors = refusal(error);
       this.busy = false;
       return;
     }
     this.busy = false;
     this.menuForm = null;
-    await this.#load();
+    // A write that succeeded is never reported as a failed one: a failure here is a load failure.
+    await this.#watchMenus().catch(() => undefined);
   }
 
   // ── The list being edited ────────────────────────────────────────────────────────────────────
-
-  #enqueue(task: () => Promise<void>): void {
-    this.#pending++;
-    this.#chain = this.#chain.then(task).finally(() => {
-      this.#pending--;
-    });
-  }
 
   /** Adds and removes hold `busy`, which disables the list until the menu is read again. */
   #listWrite(write: (listId: string) => Promise<unknown>): void {
     const listId = this.#listId!;
     this.memberError = null;
     this.busy = true;
-    this.#enqueue(async () => {
+    this.#writes.run(listId, async () => {
       try {
         await write(listId);
       } catch (error) {
@@ -473,21 +496,21 @@ export class MenusScreen extends LitElement {
   /** Not `busy`: that would disable the handle the keyboard user is on and drop their focus. */
   #move(memberId: string, to: number): void {
     const listId = this.#listId!;
-    const generation = this.#moveGeneration;
     this.memberError = null;
-    this.#enqueue(async () => {
-      if (generation !== this.#moveGeneration) return;
-      try {
-        await this.api.moveSectionMember(listId, memberId, to);
-      } catch (error) {
-        this.#moveGeneration++;
+    this.#writes.move(
+      listId,
+      () => this.api.moveSectionMember(listId, memberId, to),
+      async (ordered, last) => {
+        if (!last || this.structure === null) return;
+        const nodes = withOrder(this.structure, listId, ordered);
+        if (nodes === null) await this.#watchStructure();
+        else this.structure = { ...this.structure, nodes };
+      },
+      async (error) => {
         this.memberError = codeMessage(codeOf(error));
         await this.#refresh();
-        return;
-      }
-      // An earlier answer is already out of date when more moves wait behind it.
-      if (this.#pending === 1) await this.#refresh();
-    });
+      },
+    );
   }
 
   #openSection(sectionId: string): void {
@@ -529,7 +552,7 @@ export class MenusScreen extends LitElement {
     }
     this.busy = true;
     this.duplicateErrors = {};
-    this.#enqueue(async () => {
+    this.#writes.run(duplicating.listId, async () => {
       try {
         await this.api.duplicateSection(duplicating.sourceId, {
           internalName,
@@ -537,7 +560,7 @@ export class MenusScreen extends LitElement {
           replaceIn: { sectionId: duplicating.listId, memberId: duplicating.memberId },
         });
       } catch (error) {
-        this.duplicateErrors = refusal(error, "internalName");
+        this.duplicateErrors = refusal(error);
         this.busy = false;
         return;
       }
@@ -566,12 +589,12 @@ export class MenusScreen extends LitElement {
     this.busy = true;
     this.newSectionErrors = {};
     this.memberError = null;
-    this.#enqueue(async () => {
+    this.#writes.run(listId, async () => {
       let created: LibrarySection;
       try {
         created = await this.api.createSection({ internalName });
       } catch (error) {
-        this.newSectionErrors = refusal(error, "internalName");
+        this.newSectionErrors = refusal(error);
         this.busy = false;
         return;
       }
@@ -590,7 +613,7 @@ export class MenusScreen extends LitElement {
     const listId = this.#listId!;
     this.busy = true;
     this.addProductsError = null;
-    this.#enqueue(async () => {
+    this.#writes.run(listId, async () => {
       try {
         await this.api.addSectionProducts(listId, productIds);
       } catch (error) {
@@ -660,27 +683,24 @@ export class MenusScreen extends LitElement {
     name: string;
     label: string;
     value: string;
-    error: string;
+    errors: Record<string, string>;
     save: string;
     change: (value: string) => void;
   }) {
-    return html`<wt-input
-      name=${options.name}
-      required
-      label=${options.label}
-      .value=${options.value}
-      .error=${options.error}
-      .disabled=${this.busy}
+    const context = {
+      busy: this.busy,
+      locales: [],
+      error: (key: string) => options.errors[key] ?? "",
+    };
+    return html`<div
       @keydown=${(event: KeyboardEvent) =>
         submitOnEnter(
           event,
           this.shadowRoot!.querySelector<HTMLElement>(`[data-test="${options.save}"]`),
         )}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        options.change(event.detail.value);
-      }}
-    ></wt-input>`;
+    >
+      ${textField(context, options.name, options.label, options.value, options.change, true)}
+    </div>`;
   }
 
   #formModal(options: {
@@ -741,7 +761,7 @@ export class MenusScreen extends LitElement {
           name: "name",
           label: t("menus.name"),
           value: this.menuFormName,
-          error: errors.name ?? "",
+          errors,
           save: "menu-save",
           change: (value) => {
             this.menuFormName = value;
@@ -841,10 +861,10 @@ export class MenusScreen extends LitElement {
           ${t("sections.usages_error")}
         </p>
         ${duplicate}`;
-    const usages = this.usages;
-    if (usages === null)
+    if (this.usages === null)
       return html`<p class="note" role="status">${t("sections.usages_loading")}</p>
         ${duplicate}`;
+    const usages = this.usages[this.#listId!] ?? NO_USAGES;
     const parent = this.#trail.at(-2);
     const parentId = parent?.ref.kind === "section" ? parent.ref.sectionId : null;
     const elsewhere = [
@@ -978,7 +998,7 @@ export class MenusScreen extends LitElement {
           name: "internalName",
           label: t("sections.internal_name"),
           value: this.duplicateName,
-          error: errors.internalName ?? "",
+          errors,
           save: "duplicate-save",
           change: (value) => {
             this.duplicateName = value;
@@ -1012,7 +1032,7 @@ export class MenusScreen extends LitElement {
           name: "internalName",
           label: t("sections.internal_name"),
           value: this.newSectionName,
-          error: errors.internalName ?? "",
+          errors,
           save: "new-section-save",
           change: (value) => {
             this.newSectionName = value;

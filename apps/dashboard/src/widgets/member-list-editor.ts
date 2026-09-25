@@ -30,17 +30,23 @@ export function memberKindLabel(ref: MemberRef): string {
   return t(ref.kind === "product" ? "members.kind_product" : "members.kind_section");
 }
 
-/** The section and every library section holding it, however deep: adding any of them to it would
- * make a loop. The server refuses one anyway; this keeps a picker from offering it. */
-export function sectionsHolding(
+/** Each section's id mapped to the library sections that hold it directly. */
+export type SectionParents = ReadonlyMap<string, readonly string[]>;
+
+export function sectionParents(
   sections: readonly { id: string; members: readonly SectionMember[] }[],
-  sectionId: string,
-): string[] {
+): SectionParents {
   const parents = new Map<string, string[]>();
   for (const section of sections)
     for (const { ref } of section.members)
       if (ref.kind === "section")
         parents.set(ref.sectionId, [...(parents.get(ref.sectionId) ?? []), section.id]);
+  return parents;
+}
+
+/** The section and every library section holding it, however deep: adding any of them to it would
+ * make a loop. The server refuses one anyway; this keeps a picker from offering it. */
+export function sectionsHolding(parents: SectionParents, sectionId: string): string[] {
   const found = new Set([sectionId]);
   const pending = [sectionId];
   while (pending.length > 0)

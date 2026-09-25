@@ -10,10 +10,17 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "../widgets/image-upload.js";
-import { memberKindLabel, memberName, sectionsHolding } from "../widgets/member-list-editor.js";
+import {
+  memberKindLabel,
+  memberName,
+  sectionParents,
+  sectionsHolding,
+  type SectionParents,
+} from "../widgets/member-list-editor.js";
 import "../widgets/section-add-products.js";
 import { colorField, colorFieldStyles } from "../widgets/color-field.js";
 import { optionalTextFields, textField, type FieldContext } from "../widgets/form-fields.js";
+import { fieldOf, ListWriteQueue } from "../widgets/section-writes.js";
 import type {
   CategorySummary,
   DashboardApi,
@@ -48,15 +55,6 @@ function usedInText(usages: SectionUsages): string {
     ...usages.menus.map((menu) => menu.name),
     ...usages.sections.map((section) => section.internalName),
   ].join(", ");
-}
-
-/** The field a refusal belongs beside, by what the error carries (packages/catalogue/src/errors.ts):
- * `menu_section.translation_required` names a language, `menu_section.invalid` a field. */
-function fieldOf(error: unknown): string {
-  const params = (error as { params?: { field?: unknown; language?: unknown } }).params;
-  if (codeOf(error) === "menu_section.translation_required" && typeof params?.language === "string")
-    return `names-${params.language}`;
-  return typeof params?.field === "string" ? params.field : "_form";
 }
 
 /**
@@ -232,6 +230,7 @@ export class SectionsScreen extends LitElement {
   #columnsLocale = "";
   #byId = new Map<string, LibrarySection>();
   #sectionNames = new Map<string, string>();
+  #parents: SectionParents = new Map();
   #memberProducts: Product[] = [];
   #productNames = new Map<string, string>();
   #addable: Product[] = [];
@@ -242,14 +241,9 @@ export class SectionsScreen extends LitElement {
    * recognised and dropped. */
   #session = 0;
   #deleteGeneration = 0;
-  /** Member writes run one after another, in the order asked. */
-  #chain: Promise<void> = Promise.resolve();
-  #pending = 0;
-  /** Bumped when a move is refused: the moves queued behind it in the same editor session were made
-   * against an order the server never reached, so they are dropped. A move made in a later session
-   * starts from what that session loaded, so it is kept. */
-  #moveGeneration = 0;
-  #refusedSession = -1;
+  /** A move is scoped to its editor session: one made in a later session starts from what that
+   * session loaded, so a refusal in an earlier one does not drop it. */
+  readonly #writes = new ListWriteQueue();
   #membersChanged = false;
 
   override connectedCallback(): void {
@@ -262,6 +256,7 @@ export class SectionsScreen extends LitElement {
       this.#byId = new Map(this.sections.map((section) => [section.id, section]));
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
       this.#occurrences = this.#tree();
+      this.#parents = sectionParents(this.sections);
     }
     if (
       changed.has("usages") ||
@@ -288,7 +283,7 @@ export class SectionsScreen extends LitElement {
       this.#addable = this.products.filter((product) => product.active);
     }
     if (changed.has("sections") || changed.has("editorId"))
-      this.#excluded = this.editorId === null ? [] : sectionsHolding(this.sections, this.editorId);
+      this.#excluded = this.editorId === null ? [] : sectionsHolding(this.#parents, this.editorId);
   }
 
   async #load(): Promise<void> {
@@ -454,13 +449,6 @@ export class SectionsScreen extends LitElement {
     await this.#load();
   }
 
-  #enqueue(task: () => Promise<void>): void {
-    this.#pending++;
-    this.#chain = this.#chain.then(task).finally(() => {
-      this.#pending--;
-    });
-  }
-
   /** A write in another editor session leaves nothing to show here, but the list is stale. */
   #wrote(session: number): void {
     if (session === this.#session) this.#membersChanged = true;
@@ -483,23 +471,20 @@ export class SectionsScreen extends LitElement {
   #move(memberId: string, to: number): void {
     const sectionId = this.editorId!;
     const session = this.#session;
-    const generation = this.#moveGeneration;
     this.memberError = null;
-    this.#enqueue(async () => {
-      if (session === this.#refusedSession && generation !== this.#moveGeneration) return;
-      try {
-        const ordered = await this.api.moveSectionMember(sectionId, memberId, to);
+    this.#writes.move(
+      session,
+      () => this.api.moveSectionMember(sectionId, memberId, to),
+      (ordered, last) => {
         this.#wrote(session);
-        // An earlier answer is already out of date when more moves wait behind it.
-        if (session === this.#session && this.#pending === 1) this.editorMembers = ordered;
-      } catch (error) {
-        this.#moveGeneration++;
-        this.#refusedSession = session;
+        if (session === this.#session && last) this.editorMembers = ordered;
+      },
+      async (error) => {
         if (session !== this.#session) return;
         this.memberError = codeMessage(codeOf(error));
         await this.#reloadMembers(sectionId, session);
-      }
-    });
+      },
+    );
   }
 
   /** Adds and removes hold `busy`, which keeps the editor open, so the session cannot change. */
@@ -509,7 +494,7 @@ export class SectionsScreen extends LitElement {
     this.memberError = null;
     this.membersReloadError = false;
     this.busy = true;
-    this.#enqueue(async () => {
+    this.#writes.run(session, async () => {
       try {
         await write(sectionId);
       } catch (error) {

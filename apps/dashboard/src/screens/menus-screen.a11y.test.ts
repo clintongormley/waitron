@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type { DashboardApi, LibrarySection, MenuStructureNode, Product } from "../api/client.js";
+import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => sessionStorage.clear());
@@ -71,13 +72,17 @@ function api(state: State): DashboardApi {
             rootSectionId: "root-lunch",
             nodes: state === "empty-menu" ? [] : nodes,
           }),
-    getSectionUsages: vi.fn().mockResolvedValue({
-      menus: [
-        { id: "menu-dinner", name: "Dinner Menu" },
-        { id: "menu-lunch", name: "Lunch Menu" },
-      ],
-      sections: [],
+    listSectionUsages: vi.fn().mockResolvedValue({
+      "s-drinks": {
+        menus: [
+          { id: "menu-dinner", name: "Dinner Menu" },
+          { id: "menu-lunch", name: "Lunch Menu" },
+        ],
+        sections: [],
+      },
     }),
+    createSection: vi.fn(),
+    duplicateSection: vi.fn(),
   } as unknown as DashboardApi;
 }
 
@@ -101,6 +106,15 @@ const LUNCH = "/manage/menus/menu/menu-lunch/view/structure";
 
 function q(el: MenusScreen, selector: string): HTMLElement {
   return el.shadowRoot!.querySelector<HTMLElement>(selector)!;
+}
+
+/** Opens Lunch's Drinks for editing, and waits for its wider use. */
+async function editDrinks(el: MenusScreen): Promise<void> {
+  const tree = q(el, "dashboard-menu-structure-tree");
+  tree.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-m-drinks"]')!.click();
+  await vi.waitFor(() => {
+    if (!el.shadowRoot!.querySelector('[data-test="shared"]')) throw new Error("usages");
+  });
 }
 
 describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
@@ -139,6 +153,33 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     });
     await expectNoA11yViolations(host);
   });
+
+  it("accessible duplicate-and-use-here form", async () => {
+    const { el, host } = await mount("populated", theme, LUNCH);
+    await editDrinks(el);
+    q(el, '[data-test="duplicate-here"]').click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([false, true])(
+    "accessible new-section form, refusing a blank name: %s",
+    async (refused) => {
+      const { el, host } = await mount("populated", theme, LUNCH);
+      await editDrinks(el);
+      q(el, '[data-test="new-section"]').click();
+      await el.updateComplete;
+      if (refused) {
+        q(el, 'wt-modal[data-test="new-section"] [data-test="new-section-save"]').click();
+        await el.updateComplete;
+        const name = q(el, 'wt-modal[data-test="new-section"] wt-input[name="internalName"]');
+        expect((name as HTMLElementTagNameMap["wt-input"]).error).toBe(
+          t("sections.internal_name_required"),
+        );
+      }
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("accessible add-products picker", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);

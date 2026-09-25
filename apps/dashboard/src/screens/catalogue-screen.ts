@@ -428,14 +428,15 @@ export class CatalogueScreen extends LitElement {
     if (placing === null || this.placementBusy) return;
     this.placementBusy = true;
     this.placementFailures = [];
-    const failures: PlacementFailure[] = [];
-    for (const sectionId of event.detail.sectionIds) {
-      try {
-        await this.api.addSectionProducts(sectionId, [placing.id]);
-      } catch (error) {
-        failures.push({ sectionId, reason: codeMessage(codeOf(error)) });
-      }
-    }
+    const { sectionIds } = event.detail;
+    const settled = await Promise.allSettled(
+      sectionIds.map((sectionId) => this.api.addSectionProducts(sectionId, [placing.id])),
+    );
+    const failures = settled.flatMap((result, index): PlacementFailure[] =>
+      result.status === "rejected"
+        ? [{ sectionId: sectionIds[index]!, reason: codeMessage(codeOf(result.reason)) }]
+        : [],
+    );
     this.placementBusy = false;
     if (this.placing !== placing) return;
     if (failures.length) this.placementFailures = failures;

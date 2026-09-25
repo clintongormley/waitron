@@ -109,7 +109,7 @@ describe("placementMenus", () => {
   it("leaves out a menu with no structure, and marks a section the library list lacks", () => {
     const [lunch, ...rest] = placementMenus(menus, structures.slice(0, 1), sections.slice(1));
     expect(rest).toEqual([]);
-    expect(lunch!.sections[0]!.name).toBe(t("editor.missing_choice"));
+    expect(lunch!.sections[0]!.name).toBe(t("members.missing"));
   });
 });
 
@@ -220,6 +220,21 @@ describe("dashboard-add-to-menus", () => {
     expect(boxes(el, "m-lunch", "s-drinks")[0]!.checked).toBe(true);
     expect(boxes(el, "m-dinner", "root-dinner")[0]!.checked).toBe(true);
     expect(button(el, "skip")!.textContent!.trim()).toBe(t("action.close"));
+  });
+
+  it("names a refused place it no longer lists as no longer available", async () => {
+    const el = await mount();
+    el.failures = [{ sectionId: "s-gone", reason: "Try again." }];
+    await el.updateComplete;
+    expect(button(el, "placement-error")!.textContent).toContain(
+      `${t("members.missing")}: Try again.`,
+    );
+  });
+
+  it("marks adding as the main action and skipping as the other", async () => {
+    const el = await mount();
+    expect(button(el, "add-to-menus")!.getAttribute("variant")).toBe("primary");
+    expect(button(el, "skip")!.getAttribute("variant")).toBe("secondary");
   });
 
   it("shows loading, then a load failure that still says the product is saved", async () => {

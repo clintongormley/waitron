@@ -1209,6 +1209,49 @@ describe("catalogue-screen", () => {
       expect(editor(el).fieldErrors).toEqual({});
     });
 
+    it("sends every chosen section's addition at once, and lists refusals in the order the places are shown", async () => {
+      let refuseFirst!: (error: unknown) => void;
+      const api = stubApi({
+        addSectionProducts: vi.fn().mockImplementation((id: string) => {
+          if (id === "root-a") return new Promise((_, reject) => (refuseFirst = reject));
+          if (id === "s-drinks") return Promise.reject({ code: "server.internal" });
+          return Promise.resolve({ added: 1 });
+        }),
+      });
+      const el = await create(api);
+      await choose(el, ["cat-a", "root-a"], ["cat-a", "s-drinks"], ["cat-a", "s-beer"]);
+      control(el, "add-to-menus").click();
+      await flush(el);
+      expect(vi.mocked(api.addSectionProducts).mock.calls.map(([id]) => id)).toEqual([
+        "root-a",
+        "s-drinks",
+        "s-beer",
+      ]);
+      expect(step(el).busy).toBe(true);
+      refuseFirst({ code: "menu_section.membership_invalid" });
+      await flush(el);
+      expect(step(el).busy).toBe(false);
+      expect(step(el).failures).toEqual([
+        { sectionId: "root-a", reason: codeMessage("menu_section.membership_invalid") },
+        { sectionId: "s-drinks", reason: codeMessage("server.internal") },
+      ]);
+    });
+
+    it("asks for every menu's structure at once", async () => {
+      const api = stubApi({
+        getMenuStructure: vi
+          .fn()
+          .mockImplementation((id: string) =>
+            id === "cat-a" ? new Promise(() => {}) : Promise.resolve(structures[id]),
+          ),
+      });
+      await create(api);
+      expect(vi.mocked(api.getMenuStructure).mock.calls.map(([id]) => id)).toEqual([
+        "cat-a",
+        "cat-b",
+      ]);
+    });
+
     it("sends nothing and changes nothing when the step is skipped", async () => {
       const api = stubApi();
       const el = await create(api);

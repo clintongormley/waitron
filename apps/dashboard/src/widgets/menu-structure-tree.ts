@@ -166,8 +166,8 @@ export class MenuStructureTree extends LitElement {
     </li>`;
   }
 
-  #list(nodes: MenuStructureNode[], parent: string[]): TemplateResult {
-    return html`<ul>
+  #list(nodes: MenuStructureNode[], parent: string[], label?: string): TemplateResult {
+    return html`<ul aria-label=${label ?? nothing}>
       ${repeat(
         nodes,
         (node) => node.memberId,
@@ -179,13 +179,7 @@ export class MenuStructureTree extends LitElement {
   override render() {
     if (this.nodes.length === 0)
       return html`<p class="notice" data-test="empty">${t("menus.structure_empty")}</p>`;
-    return html`<ul aria-label=${this.label}>
-      ${repeat(
-        this.nodes,
-        (node) => node.memberId,
-        (node) => this.#item(node, []),
-      )}
-    </ul>`;
+    return this.#list(this.nodes, [], this.label);
   }
 }
 
