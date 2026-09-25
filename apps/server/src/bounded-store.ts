@@ -1,5 +1,7 @@
 import { AppError, type ErrorParams } from "@waitron/shared";
 import type { ObjectStore } from "@waitron/stream";
+// The registry of the code this file throws.
+import "@waitron/stream";
 
 type BucketOperation = ErrorParams["backup.stream_request_failed"]["operation"];
 
