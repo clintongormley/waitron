@@ -294,8 +294,8 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
         const held = await readHeldKey(heldKey);
-        // A held key under the length floor is replaced, not kept: every read of the held key goes
-        // through `loadRecoveryKey`, which refuses it, so nothing was ever locked with it.
+        // A held key under the length floor is replaced, not kept: `loadRecoveryKey` refuses it, so no
+        // archive, bucket copy or sealed state was locked with it.
         if (held.held && held.key === undefined && body.recoveryKey === undefined) {
           throw new AppError("backup.recovery_key_too_short", { min: MIN_PASSPHRASE_LENGTH });
         }
