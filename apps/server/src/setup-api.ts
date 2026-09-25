@@ -950,20 +950,22 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     provisioning = true;
     return runRestore(c, log, async () => {
       try {
-        const body = await readJsonBody<{ pointId?: unknown }>(c);
+        const body = await readJsonBody<{ pointId?: unknown; oldBoxGone?: unknown }>(c);
         if (
           typeof body.pointId !== "string" ||
           !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(body.pointId)
         )
           invalidRequest("pointId");
+        if (body.oldBoxGone !== undefined && typeof body.oldBoxGone !== "boolean") {
+          invalidRequest("oldBoxGone");
+        }
         const pointId = body.pointId;
+        const oldBoxGone = body.oldBoxGone === true;
         const binding = await deps.cloudRecovery!.binding();
         if (binding.pointId !== pointId) throw new AppError("setup.operation_conflict", {});
         const execute = async () => {
           await deps.cloudRecovery!.restore(
-            // No override for a Cloud snapshot: a refusal changes nothing on the box, and the
-            // owner still has the bucket and archive restores, which ask the old-box question.
-            (request) => deps.stageRestore!(request, { oldBoxGone: false }),
+            (request) => deps.stageRestore!(request, { oldBoxGone }),
             pointId,
           );
           const response = c.json({ restoreStaged: true, restarting: true }, 202);
@@ -976,6 +978,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           .update(binding.requestId)
           .update(":")
           .update(pointId)
+          .update(oldBoxGone ? ":confirmed" : "")
           .digest("hex");
         return await deps.operations.run("restore", requestHash, async (operation) => {
           if (operation.phase === "complete") {
