@@ -3,10 +3,14 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-form-error-summary.js";
 import type { CloudRecoveryView } from "../api/client.js";
 import { dispatchSetupGoto } from "../events.js";
 import { errorStyles, fieldStyles } from "../form-styles.js";
-import { oldBoxQuestion } from "./old-box-question.js";
+import { OLD_BOX_PROBLEM, oldBoxQuestion } from "./old-box-question.js";
+
+const ACKNOWLEDGE_PROBLEM =
+  "Confirm that the old server and surviving peers are stopped, and that you accept losing changes after this snapshot.";
 
 @customElement("setup-cloud-restore-screen")
 export class SetupCloudRestoreScreen extends LitElement {
@@ -65,18 +69,26 @@ export class SetupCloudRestoreScreen extends LitElement {
     return this.#askingOldBox && !this.oldBoxGone;
   }
 
+  #problems(): string[] {
+    return [
+      !this.acknowledged ? ACKNOWLEDGE_PROBLEM : "",
+      this.#oldBoxUnanswered ? OLD_BOX_PROBLEM : "",
+    ].filter(Boolean);
+  }
+
   #action(action: "start" | "status" | "start-again" | "restore"): void {
     if (this.busy) return;
-    if (
-      action === "restore" &&
-      (!this.acknowledged ||
-        this.#oldBoxUnanswered ||
+    if (action === "restore") {
+      if (
         this.view?.state !== "approved" ||
         !this.view.point ||
-        this.#currentApprovalBinding() !== this.#approvalBinding)
-    ) {
-      this.showError = true;
-      return;
+        this.#currentApprovalBinding() !== this.#approvalBinding
+      )
+        return;
+      if (this.#problems().length > 0) {
+        this.showError = true;
+        return;
+      }
     }
     this.showError = false;
     this.dispatchEvent(
@@ -95,6 +107,7 @@ export class SetupCloudRestoreScreen extends LitElement {
 
   override render() {
     const approved = this.view?.state === "approved" && this.view.point;
+    const acknowledgeInvalid = this.showError && !this.acknowledged;
     return html`
       <h1>Restore from Waitron Cloud</h1>
       <p>
@@ -148,10 +161,14 @@ export class SetupCloudRestoreScreen extends LitElement {
                         <h2>Approved snapshot</h2>
                         <p>Captured: <time>${approved.capturedAt}</time></p>
                         <p class="warning">Later changes will not be in this restored venue.</p>
-                        <label
+                        <label class="field"
                           ><input
+                            name="snapshot-accepted"
                             type="checkbox"
+                            required
                             data-test="acknowledge"
+                            aria-invalid=${acknowledgeInvalid ? "true" : "false"}
+                            aria-describedby=${acknowledgeInvalid ? "acknowledge-error" : nothing}
                             .checked=${this.acknowledged}
                             @change=${(event: Event) => {
                               this.acknowledged = (event.currentTarget as HTMLInputElement).checked;
@@ -160,7 +177,7 @@ export class SetupCloudRestoreScreen extends LitElement {
                           I confirm the old server and surviving peers are stopped, and I accept
                           losing changes after this snapshot.</label
                         >
-                        ${this.showError && !this.acknowledged ? html`<p role="alert">Confirm before restoring.</p>` : nothing}
+                        ${acknowledgeInvalid ? html`<p class="error" id="acknowledge-error">${ACKNOWLEDGE_PROBLEM}</p>` : nothing}
                         ${oldBoxQuestion({
                           liveSince: this.liveSince,
                           liveUnknown: this.liveUnknown,
@@ -170,6 +187,15 @@ export class SetupCloudRestoreScreen extends LitElement {
                             this.oldBoxGone = checked;
                           },
                         })}
+                        ${
+                          this.showError
+                            ? html`<wt-form-error-summary
+                                data-test="error"
+                                heading="There is a problem with this form"
+                                .errors=${this.#problems()}
+                              ></wt-form-error-summary>`
+                            : nothing
+                        }
                         <p>
                           <wt-button
                             variant="primary"
@@ -184,7 +210,7 @@ export class SetupCloudRestoreScreen extends LitElement {
                 }
               `
       }
-      ${this.errorMessage ? html`<p role="alert" data-test="server-error">${this.errorMessage}</p>` : nothing}
+      ${this.errorMessage && !this.showError ? html`<p class="error" role="alert" data-test="server-error">${this.errorMessage}</p>` : nothing}
       <wt-form-actions
         ><wt-button slot="cancel" variant="ghost" @click=${() => dispatchSetupGoto(this, "restore")}
           >Back to backup file</wt-button

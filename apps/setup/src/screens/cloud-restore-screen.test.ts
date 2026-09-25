@@ -26,6 +26,16 @@ const tick = async (el: SetupCloudRestoreScreen, selector: string, checked = tru
   box.dispatchEvent(new Event("change"));
   await el.updateComplete;
 };
+async function summaryItems(el: SetupCloudRestoreScreen): Promise<string[]> {
+  const summary = q(el, "[data-test=error]") as
+    (HTMLElement & { updateComplete: Promise<unknown> }) | null;
+  if (summary === null) return [];
+  await summary.updateComplete;
+  return [...summary.shadowRoot!.querySelectorAll("li")].map((li) => li.textContent!.trim());
+}
+const ACKNOWLEDGE_PROBLEM =
+  "Confirm that the old server and surviving peers are stopped, and that you accept losing changes after this snapshot.";
+
 describe("Cloud restore screen", () => {
   it("starts pairing and shows only the code, link and deadline", async () => {
     const { el, host } = await mountWidget<SetupCloudRestoreScreen>(
@@ -227,7 +237,7 @@ describe("Cloud restore screen", () => {
     await el.updateComplete;
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
-    expect(q(el, "[role=alert]")?.textContent).toContain("Confirm before restoring.");
+    expect(await summaryItems(el)).toEqual([ACKNOWLEDGE_PROBLEM]);
     el.view = { ...el.view, state: "awaiting_owner", point: undefined };
     await el.updateComplete;
     el.view = {
@@ -241,6 +251,7 @@ describe("Cloud restore screen", () => {
       },
     };
     await el.updateComplete;
+    expect(q(el, "[data-test=error]")).toBeNull();
     expect(q(el, "[role=alert]")?.textContent).toContain("Cloud recovery is unavailable");
     el.errorMessage = undefined;
     await el.updateComplete;
@@ -312,5 +323,50 @@ describe("Cloud restore screen asking whether the old server is gone", () => {
     await tick(el, "[data-test=acknowledge]");
     q(el, "[data-test=restore]")!.click();
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe("Cloud restore screen listing what is still unanswered", () => {
+  it("marks the acknowledgement beside the field and in one summary", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+    });
+    const acknowledge = q(el, "[data-test=acknowledge]") as HTMLInputElement;
+    expect(acknowledge.required).toBe(true);
+    expect(acknowledge.name).toBe("snapshot-accepted");
+    expect(acknowledge.getAttribute("aria-invalid")).toBe("false");
+    expect(acknowledge.hasAttribute("aria-describedby")).toBe(false);
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(await summaryItems(el)).toEqual([ACKNOWLEDGE_PROBLEM]);
+    expect(q(el, "wt-form-error-summary")!.getAttribute("heading")).toBe(
+      "There is a problem with this form",
+    );
+    expect(acknowledge.getAttribute("aria-invalid")).toBe("true");
+    expect(acknowledge.getAttribute("aria-describedby")).toBe("acknowledge-error");
+    expect(q(el, "#acknowledge-error")!.textContent).toBe(ACKNOWLEDGE_PROBLEM);
+  });
+
+  it("lists both questions when neither is answered, then only the one left, then nothing", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      liveUnknown: true,
+      errorMessage: "Cloud recovery is unavailable. Try again.",
+    });
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(await summaryItems(el)).toEqual([ACKNOWLEDGE_PROBLEM, OLD_BOX_PROBLEM]);
+    expect(q(el, "[data-test=server-error]")).toBeNull();
+    await tick(el, "[data-test=acknowledge]");
+    expect(await summaryItems(el)).toEqual([OLD_BOX_PROBLEM]);
+    expect(q(el, "#acknowledge-error")).toBeNull();
+    const acknowledge = q(el, "[data-test=acknowledge]")!;
+    expect(acknowledge.getAttribute("aria-invalid")).toBe("false");
+    expect(acknowledge.hasAttribute("aria-describedby")).toBe(false);
+    await tick(el, "[data-test=acknowledge]", false);
+    await tick(el, "[data-test=old-box-gone]");
+    expect(await summaryItems(el)).toEqual([ACKNOWLEDGE_PROBLEM]);
+    await tick(el, "[data-test=acknowledge]");
+    expect(await summaryItems(el)).toEqual([]);
   });
 });
