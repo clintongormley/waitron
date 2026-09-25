@@ -132,24 +132,14 @@ export async function syncMenuOffers(
         .values(batch.map((productId) => ({ menuId, productId })))
         .onConflictDoNothing({ target: [menuItems.menuId, menuItems.productId] });
     const held = new Set(reached);
-    const leaving =
+    const stale =
       before === undefined
-        ? undefined
-        : reachableProducts(before, rootSectionId).filter((productId) => !held.has(productId));
-    if (leaving?.length === 0) continue;
-    const candidates =
-      leaving === undefined
-        ? [eq(menuItems.menuId, menuId)]
-        : batches(leaving).map((batch) =>
-            and(eq(menuItems.menuId, menuId), inArray(menuItems.productId, batch)),
+        ? await rowsNotHeld(tx, menuId, held)
+        : await rowsOf(
+            tx,
+            menuId,
+            reachableProducts(before, rootSectionId).filter((productId) => !held.has(productId)),
           );
-    const stale: string[] = [];
-    for (const where of candidates)
-      for (const row of await tx
-        .select({ id: menuItems.id, productId: menuItems.productId })
-        .from(menuItems)
-        .where(where))
-        if (!held.has(row.productId)) stale.push(row.id);
     for (const batch of batches(stale)) {
       await tx
         .delete(menuItemVariantOverrides)
@@ -167,4 +157,31 @@ export async function syncMenuOffers(
         );
     }
   }
+}
+
+async function rowsNotHeld(
+  tx: Transaction,
+  menuId: string,
+  held: ReadonlySet<string>,
+): Promise<string[]> {
+  const rows = await tx
+    .select({ id: menuItems.id, productId: menuItems.productId })
+    .from(menuItems)
+    .where(eq(menuItems.menuId, menuId));
+  return rows.filter((row) => !held.has(row.productId)).map((row) => row.id);
+}
+
+async function rowsOf(
+  tx: Transaction,
+  menuId: string,
+  productIds: readonly string[],
+): Promise<string[]> {
+  const ids: string[] = [];
+  for (const batch of batches(productIds))
+    for (const row of await tx
+      .select({ id: menuItems.id })
+      .from(menuItems)
+      .where(and(eq(menuItems.menuId, menuId), inArray(menuItems.productId, batch))))
+      ids.push(row.id);
+  return ids;
 }

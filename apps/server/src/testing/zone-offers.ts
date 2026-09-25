@@ -2,14 +2,13 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { catalogues, categories, floorZones, kitchenStations, products } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
-  addProductToMenu,
+  addProducts,
   createCatalogue,
   menuItems,
   readMenuStructure,
   readProductModifiers,
   resolveAccessibleCatalogueIds,
   setMenuItemExtraLists,
-  updateMenuItem,
 } from "@waitron/catalogue";
 import type { ServiceMode } from "@waitron/module";
 import {
@@ -76,27 +75,16 @@ export async function offerProducts(
     .where(eq(zoneServicePolicies.zoneId, zoneId));
   await allowMenuInZone(tx, cfg, zoneId, menuId, { makeDefault: policy!.defaultMenuId === null });
 
-  const productIds = options.productIds ?? (await topLevelProducts(tx, cfg));
-  // A second `addProductToMenu` for a product already on the top level is refused
-  // (`menu_section.member_duplicate`), so a repeat call resets that product's row instead.
-  const onTopLevel = new Set(
-    (await readMenuStructure(tx, menuId)).nodes.flatMap(({ ref }) =>
-      ref.kind === "product" ? [ref.productId] : [],
-    ),
-  );
-  const offerByProduct = new Map<string, string>();
-  const modifiers = await readProductModifiers(tx, [...productIds]);
+  const productIds = [...new Set(options.productIds ?? (await topLevelProducts(tx, cfg)))];
+  const offerByProduct = await placeOnTopLevel(tx, menuId, productIds);
+  const modifiers = await readProductModifiers(tx, productIds);
   for (const productId of productIds) {
-    const item = onTopLevel.has(productId)
-      ? await existingOffer(tx, menuId, productId)
-      : await addProductToMenu(tx, { menuId, productId, grossPrice: null });
-    offerByProduct.set(productId, item.id);
     const extras = (modifiers.get(productId.toLowerCase()) ?? []).filter(
       (ref) => ref.kind === "extras",
     );
     await setMenuItemExtraLists(
       tx,
-      item.id,
+      offerByProduct.get(productId)!,
       extras.map((ref) => ({ listId: ref.id, items: [] })),
     );
   }
@@ -179,17 +167,30 @@ async function department(tx: Transaction, cfg: Cfg, serviceMode: ServiceMode): 
   ).id;
 }
 
-async function existingOffer(
+/**
+ * Puts every product on the menu's top level at its own price and switched on, and returns each
+ * one's menu-item id. A product already there keeps its membership and has its row reset, as a
+ * repeat call expects.
+ */
+async function placeOnTopLevel(
   tx: Transaction,
   menuId: string,
-  productId: string,
-): Promise<{ id: string }> {
-  const [row] = await tx
-    .select({ id: menuItems.id })
+  productIds: readonly string[],
+): Promise<Map<string, string>> {
+  if (productIds.length === 0) return new Map();
+  const { rootSectionId, nodes } = await readMenuStructure(tx, menuId);
+  const onTopLevel = new Set(
+    nodes.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : [])),
+  );
+  const missing = productIds.filter((productId) => !onTopLevel.has(productId));
+  if (missing.length > 0) await addProducts(tx, rootSectionId, missing);
+  const ofMenu = and(eq(menuItems.menuId, menuId), inArray(menuItems.productId, [...productIds]));
+  await tx.update(menuItems).set({ grossPrice: null, active: true }).where(ofMenu);
+  const rows = await tx
+    .select({ id: menuItems.id, productId: menuItems.productId })
     .from(menuItems)
-    .where(and(eq(menuItems.menuId, menuId), eq(menuItems.productId, productId)));
-  await updateMenuItem(tx, menuId, row!.id, { grossPrice: null, active: true });
-  return row!;
+    .where(ofMenu);
+  return new Map(rows.map((row) => [row.productId, row.id]));
 }
 
 async function ownMenu(tx: Transaction): Promise<string> {

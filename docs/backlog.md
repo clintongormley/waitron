@@ -667,7 +667,7 @@ needs `wa-wt reset demo <name>` (see above). What it left open:
   (`packages/catalogue/src/variant-fallback.ts`), used by the catalogue's by-id reads and writes,
   `apps/server/src/catalogue-api.ts`, `apps/server/src/kitchen.ts` and
   `packages/venue-service/src/operations.ts`; every route's answer is unchanged.
-  `createMenuItem` (its own `menu_item.variant_not_allowed`) and `setProductRecipe`
+  `addProductToMenu` (its own `menu_item.variant_not_allowed`) and `setProductRecipe`
   (`packages/recipes/src/recipes.ts`, which asks the opposite question) still write their own. Of
   the four writers that had no check: `applyRecipeDerivation` and `applyDietDerivation` now refuse
   a variant (`product.not_found`), because a variant has no recipe of its own, and when a parent's
