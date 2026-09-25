@@ -48,15 +48,12 @@ describe("the guessed device", () => {
   it.each(DEVICE_ORDER)("walks %s through remove, get, install, open", (device) => {
     const html = renderTrustPage({ ...base, device });
     const help = DEVICE_HELP[device];
-    // Removing an old certificate comes FIRST: installing over one that is still trusted does
-    // nothing visible, and the operator has no way to tell that is what happened.
     expect(html).toMatch(heading("1. Remove any old Waitron certificate"));
     expect(html).toContain(help.removal[0]);
     expect(html).toMatch(heading("2. Get the certificate"));
     expect(html).toMatch(heading(`3. ${help.heading}`));
     expect(html).toContain(help.install[0]);
     expect(html).toMatch(heading("4. Open Waitron"));
-    // Removal is a numbered step now, so the box that used to hold it is gone.
     expect(html).not.toContain("Already installed a Waitron certificate?");
     expect(html).toContain("Using a different device?");
     for (const other of DEVICE_ORDER.filter((d) => d !== device))
@@ -74,7 +71,6 @@ describe("the guessed device", () => {
     for (const device of DEVICE_ORDER)
       expect(html).not.toMatch(heading(`3. ${DEVICE_HELP[device].heading}`));
     expect(html).not.toContain("Using a different device?");
-    // With no device to name, step 1 still exists but points at the list rather than listing twice.
     expect(html).toMatch(heading("1. Remove any old Waitron certificate"));
     expect(html).toContain("Find your device in step 3");
     expect(html).toMatch(heading("3. Install it on your device"));
@@ -96,15 +92,9 @@ describe("the words at the top", () => {
     expect(html).toContain(
       "You need to install the Waitron secure certificate before entering passwords and sensitive information into this website:",
     );
-    // The tax-agency aside went: nothing on this page offers a tax-agency certificate to confuse it with.
     expect(html).not.toContain("tax-agency");
   });
 });
-
-// The "every operating system and browser" assertion that used to live here is DELETED, not moved:
-// it hardcoded eleven names, omitted Chromium and Samsung Internet, and so passed with either of
-// them deleted. The `it.each(DEVICE_ORDER)` block above asserts every device's own summary line,
-// derived from the list itself, which is the claim that one only looked like it was making.
 
 it("warns that a download may need confirming before it reaches the disk", () => {
   expect(renderTrustPage(base)).toMatch(/Keep/);
@@ -112,16 +102,12 @@ it("warns that a download may need confirming before it reaches the disk", () =>
 
 it("judges the page the link opens, not the one the operator is reading", () => {
   const html = renderTrustPage({ ...base, device: "windows" });
-  // The entry point the installer prints is HTTP — `deploy/waitron.sh`'s "Start here:
-  // http://waitron.local/setup/trust", served by the landing listener; the HTTPS "Secure help"
-  // address is the fallback for when HTTP is off. Installing a certificate authority does not turn
-  // an HTTP connection into an HTTPS one, so on that entry path THIS page reads "not secure"
-  // however well the install went. Only the page behind the Continue link can answer the question.
+  // `deploy/waitron.sh` prints an HTTP entry point, and installing a certificate authority does not
+  // make an HTTP page secure, so THIS page reads "not secure" however well the install went.
   expect(html).toContain(
     "Open Waitron with the link below, then check the address bar of the page it opens.",
   );
-  // Not a bare /reopen this page/i — seven device steps legitimately end with that phrase. What must
-  // not come back is the SENTENCE that told the operator to judge this page.
+  // Not a bare /reopen this page/i: every device's steps legitimately end with that phrase.
   expect(html).not.toContain("Reopen this page. If your address bar");
   expect(html).not.toContain("start again from the beginning of this page");
 });
@@ -132,11 +118,9 @@ it("shows the browser's own warning words when telling the operator to start aga
   expect(html).toContain("come back here and start again from step 1.");
 });
 
-// Every hand-copied token pair in the page's stylesheet, light then dark, against
-// packages/ui-core/src/tokens/colors.css. The page cannot import the tokens — `apps/server` has no
-// `@waitron/ui` dependency and the page must stay one self-contained string — so these literals are
-// the only copy, and the incident behind CLAUDE.md §4's render rule was a colour value nothing
-// checked. Guarding one pair and calling the comment satisfied is how that happens twice.
+// Every hand-copied token pair in the page's stylesheet, light then dark. Weaker than its name: the
+// expected values are literals here, not read from packages/ui-core/src/tokens/colors.css, so a token
+// changed there goes unseen.
 it.each([
   ["--wt-color-primary", "background: light-dark(#1f6feb, #4c8dff)"],
   ["--wt-color-on-primary", "color: light-dark(#ffffff, #06101f)"],
@@ -147,7 +131,6 @@ it.each([
 });
 
 it("drops the troubleshooting box the owner did not want", () => {
-  // The base page's own heading, so this goes red if the box comes back.
   expect(renderTrustPage(base)).not.toContain("If you cannot open or download");
 });
 
@@ -164,7 +147,6 @@ it("shows a QR only when one was rendered, and says nothing when there is none",
   const withQr = renderTrustPage({ ...base, qrSvg: "<svg id='qr'></svg>" });
   expect(withQr).toContain("<svg id='qr'></svg>");
   expect(withQr).toContain("Open this page on another device");
-  // The caption explained what a QR is to someone already holding a phone at it.
   expect(withQr).not.toContain("This QR opens the box address.");
 });
 
@@ -179,7 +161,6 @@ it("gives operator-certificate guidance without referring to missing instruction
   expect(html).not.toContain("4. Open Waitron");
   expect(html).not.toContain("The instructions above include replacement");
   expect(html).toContain("whoever installed");
-  // With no certificate to install there are no device steps to open or fold away.
   expect(html).not.toContain("Using a different device?");
   expect(html).not.toContain("Remove any old Waitron certificate");
 });

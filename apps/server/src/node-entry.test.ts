@@ -27,16 +27,13 @@ function deps(over: Partial<Parameters<typeof runEntry>[0]> = {}) {
     baseEnv: {},
     stateDir: "/state",
     venueDir: "/venue",
-    // Stubbed here, unlike `runStagedRestore` below it: the real default OPENS the venue directory,
-    // and these suites name one that does not exist. One test (`defaults the ahead check to the
-    // real one`) overrides this back to `undefined` on purpose; the `assertNotAhead` describe at
-    // the bottom of this file calls the real wrapper directly instead.
+    // Stubbed: the real default opens the venue directory, and these suites name one that does
+    // not exist.
     assertNotAhead: vi.fn(() => Promise.resolve()),
     loadBoxEnv: vi.fn((base: NodeJS.ProcessEnv) => Promise.resolve({ ...base })),
     readRecoveryState: vi.fn(() => Promise.resolve(FRESH)),
     writeRecoveryState: vi.fn(() => Promise.resolve()),
-    // A plain call: these suites name a state directory that does not exist, and the real lock
-    // opens a file in it. The lock's own cases below pass the real one or a recording one.
+    // A plain call: the real lock opens a file in a state directory these suites do not create.
     withRecoveryLock: <T>(_stateDir: string, body: () => Promise<T>) => body(),
     startServer: vi.fn<StartServer>(() => Promise.resolve({ close: () => Promise.resolve() })),
     serveRecovery: vi.fn(() => Promise.resolve()),
@@ -371,9 +368,6 @@ describe("runEntry", () => {
   });
 
   it("counts a boot that fails BEFORE the server — the escalation the recovery page depends on", async () => {
-    // Measured on the built bundle before this ordering existed: five failing boots (no bootstrap
-    // URL, then a dead database) each exited 1 and left the state volume EMPTY, so a box with an
-    // unreachable Postgres restart-looped for ever and never reached the page.
     for (const failing of [
       { runStagedRestore: vi.fn(() => Promise.reject(new Error("EACCES"))) },
       {
@@ -430,10 +424,8 @@ describe("runEntry", () => {
   });
 
   it("counts a boot that HANGS in the staged restore, which no failure handler can see", async () => {
-    // The pre-boot write's own unique job. The wide `try`/`catch` already records every boot step
-    // that THROWS, so a control that only moves this write down still passes on the throwing cases;
-    // a hang is what separates them. `runStagedRestore` is the boot step with an unbounded wait in
-    // it — it decrypts an archive and writes a whole database file before returning.
+    // The catch already records every boot step that throws, so only a hang shows that the counter
+    // is written before the first step.
     const d = deps({ runStagedRestore: vi.fn(() => new Promise<never>(() => {})) });
     void runEntry(d);
     await vi.waitFor(() =>
@@ -487,10 +479,7 @@ describe("runEntry", () => {
       }),
     });
     await runEntry(d);
-    // `null` is what fails a real container's first boot with `migrations.set_missing`. The two
-    // properties `boot.test.ts` pins on DEFAULT_MIGRATIONS_ROOT itself are asserted here too, so the
-    // entrypoint's two migration-set readers and the server it starts cannot read three different
-    // folders.
+    // `null` is what fails a real container's first boot with `migrations.set_missing`.
     expect(restoreRoot).toBe(aheadRoot);
     expect(aheadRoot).not.toBeUndefined();
     expect(isAbsolute(aheadRoot!)).toBe(true);
@@ -615,9 +604,6 @@ describe("runEntry", () => {
           writeRecoveryState,
           startServer: vi.fn<StartServer>(() =>
             Promise.reject(
-              // The shape the engine the box runs produces, wrapped the way drizzle wraps it: the
-              // result code and the message sit on the cause. A missing column used to arrive as
-              // SQLSTATE `42703`, which nothing can raise here any more.
               new Error("Failed query", {
                 cause: Object.assign(new Error("no such column: legal_name"), {
                   errcode: 1,
@@ -647,18 +633,11 @@ describe("runEntry", () => {
       ),
     ).rejects.toThrow();
     const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
-    // The control and the probe in one assertion pair: the message must arrive, minus the secret.
+    // The message must arrive, minus the secret.
     expect(reported).toContain("postgres://waitron:***@db:5432/waitron");
     expect(reported).not.toContain("hunter2");
   });
 
-  // Drizzle does not re-expose the driver's error: it wraps it, so the outer message is
-  // "Failed query: …" and the reason is only in `cause`. Measured against real PostgreSQL 18 with
-  // drizzle's own `db.execute(sql`select absent_column`)`:
-  //   outer message: Failed query: select absent_column\nparams:
-  //   cause message: column "absent_column" does not exist   (cause.code 42703)
-  // Reporting the outer error alone is what left the captured installer output with drizzle's query
-  // wrapper and no reason at all (spec §4.4 exists so the installer can read the real reason).
   it("walks the cause chain so a wrapped driver error's real reason reaches the installer", async () => {
     const reportFailure = vi.fn();
     await expect(
@@ -679,15 +658,12 @@ describe("runEntry", () => {
     ).rejects.toThrow();
     const reported = reportFailure.mock.calls.map((call) => String(call[0])).join("\n");
     expect(reported).toContain('column "absent_column" does not exist');
-    // The outer wrapper still travels — the query text is diagnostic too, and dropping it would be
-    // the same defect in the other direction.
+    // The outer wrapper still travels: the query text is diagnostic too.
     expect(reported).toContain("Failed query: select absent_column");
   });
 
-  // An `AppError`'s params ARE the diagnosis for the two codes this branch added:
-  // `migrations.incomplete`'s counts say how far a partly-applied set got, and `database_ahead`'s
-  // hashes name the migrations the image has no file for. Dropping them left the installer with a
-  // code they already had from the structured line.
+  // An `AppError`'s params are the diagnosis: `migrations.incomplete`'s counts say how far a
+  // partly-applied set got, and `database_ahead`'s hashes name the migrations the image lacks.
   it("carries an AppError's params to the installer, scrubbed like everything else", async () => {
     const reportFailure = vi.fn();
     await expect(
@@ -708,10 +684,8 @@ describe("runEntry", () => {
     expect(reported).toContain("15");
   });
 
-  // Proven by construction rather than reasoned about: a boot error whose params will not serialise
-  // must still report the error. Without the fallback the JSON throw becomes the boot's outcome and
-  // replaces the very reason this channel exists to carry. `as never` because the registry's typed
-  // params cannot express a cycle — the guard is for a value that reaches here regardless.
+  // Without the fallback the JSON throw would replace the boot's own error. `as never` because the
+  // registry's typed params cannot express a cycle.
   it("still reports a failure whose params will not serialise", async () => {
     const cyclic: Record<string, unknown> = { set: "core" };
     cyclic.self = cyclic;
@@ -731,8 +705,6 @@ describe("runEntry", () => {
     expect(reported).toContain("params: (not serialisable)");
   });
 
-  // A boot can throw a non-Error — a bare string from a dependency, a rejected promise with no
-  // reason. There is no chain to walk and no stack to print; the installer still gets the value.
   it("reports a non-Error throw rather than printing nothing", async () => {
     const reportFailure = vi.fn();
     await expect(
@@ -792,9 +764,9 @@ describe("runEntry", () => {
     expect(reported).toContain("loops on itself");
   });
 
-  // The page must stay exactly as it was: the cause chain and the params are the INSTALLER's
-  // channel, and spec §5 says neither may reach the unauthenticated page. Probe and control in one
-  // test, because a page that rendered nothing would pass the first half alone.
+  // The cause chain and the params are the installer's channel, and neither may reach the
+  // unauthenticated page. Probe and control in one test, because a page that rendered nothing would
+  // pass the first half alone.
   it("keeps the walked cause chain and the params off the page", async () => {
     const reportFailure = vi.fn();
     const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
@@ -829,9 +801,8 @@ describe("runEntry", () => {
     expect(reported).toContain("deadbeefhash");
   });
 
-  // The spec §5 probe, and the only place it can honestly live: the poisoned message has to be
-  // INJECTED as a real boot failure and then followed to BOTH channels. A test that renders a page
-  // the message never reached would pass against an implementation that leaks everywhere.
+  // The message is injected as a real boot failure and followed to both channels: a test rendering
+  // a page the message never reached would pass against an implementation that leaks everywhere.
   it("keeps a leaked connection string off the page while the installer's channel carries it", async () => {
     const message = "connect failed: postgres://waitron:hunter2@db:5432/waitron";
     const reportFailure = vi.fn();
@@ -901,18 +872,8 @@ describe("runEntry", () => {
     expect(order).toEqual(["runStagedRestore", "assertNotAhead:/venue", "startServer"]);
   });
 
-  // `assertNotAhead` used to default to `() => Promise.resolve()`. Not alone in defaulting to a
-  // no-op — `reportFailure` still does, deliberately — but it is the only one of this interface's
-  // optional dependencies that is a GUARD, and the guard-shaped one next to it defaults to the real
-  // implementation (`deps.runStagedRestore ?? runStagedRestore`). A no-op default loses the guard for
-  // any caller that forgets the dependency, and silently: nothing throws, nothing logs, the server
-  // just starts against a database the image cannot read.
-  //
-  // The probe: omit the dependency and name a venue directory that can never be created — a path
-  // UNDER a regular file, which `mkdir` refuses with ENOTDIR. The real default opens the directory,
-  // so the boot fails and the server is never started. What the FAILING case would print — a no-op
-  // default — is a resolved `runEntry` with `startServer` called, which is what this asserted
-  // before the default was changed.
+  // A venue directory under a regular file cannot be created, so the real default fails the boot;
+  // a no-op default would resolve with `startServer` called.
   it("defaults the ahead check to the real one, not to a no-op", async () => {
     const startServer = vi.fn<StartServer>(() =>
       Promise.resolve({ close: () => Promise.resolve() }),
@@ -927,16 +888,10 @@ describe("runEntry", () => {
 });
 
 /**
- * A venue directory with EVERY migration set applied, beside a migrations root that resolves to the
- * same files the image ships.
- *
- * `useVenueDb` cannot serve here: it owns the directory privately and exposes only the handle,
- * where the wrapper under test takes the DIRECTORY. The root is built by symlinking each set's
- * resolved folder under one parent, which is the layout `<root>/<set name>` that
- * `resolveExistingMigrationsFolder` expects and `apps/server`'s build produces by copying.
- *
- * Every set is migrated deliberately: a set whose journal table does not exist is a different path
- * through `journalHashes`, not the behind/ahead comparison these two cases are about.
+ * A venue directory with every migration set applied, beside a migrations root laid out as
+ * `<root>/<set name>`. Not `useVenueDb`, which exposes only the handle; the wrapper under test
+ * takes the directory. Every set is migrated because a set with no journal table takes a different
+ * path.
  */
 async function migratedVenue(): Promise<{ venueDir: string; migrationsRoot: string }> {
   const sets = manifestSets();
@@ -1227,10 +1182,8 @@ describe("a start refused the venue folder by a real second process", () => {
   }
 
   /** Starts a process that holds `venueDir` until killed. `kind` names it through the store's
-   *  holder file; `null` holds the bare engine lock and writes no holder file, as a process of an
-   *  image from before the holder file existed would. The timer references the bare connection
-   *  because a collected one closes and lets the lock go: with `--expose-gc`, one `gc()` in such a
-   *  holder let a second process take the lock (2026-09-24, Node v26.7.0). */
+   *  holder file; `null` holds the bare engine lock and writes no holder file. The timer references
+   *  the bare connection because a collected one closes and lets the lock go. */
   async function holdVenue(venueDir: string, kind: string | null): Promise<void> {
     const script =
       kind === null
@@ -1368,21 +1321,16 @@ setInterval(() => {}, 1000);`;
 describe("assertNotAhead", () => {
   const core = manifestSets().find((set) => set.name === "core")!;
 
-  // The entrypoint runs this check BEFORE anything migrates, so the database it judges is routinely
-  // one release BEHIND the image. `unknownHashes` compares in one direction only
-  // (`packages/provisioning/src/schema-ahead.ts`), and this is the case that breaks the moment it
-  // stops: measured by making that function two-directional, this rejects with
-  // `provisioning.database_ahead` naming the migration the image ships and the database lacks.
+  // The entrypoint runs this check before anything migrates, so the database it judges is routinely
+  // one release behind the image. Fails if `unknownHashes` stops comparing in one direction only.
   it("does not refuse a venue database BEHIND this image", async () => {
     const { venueDir, migrationsRoot } = await migratedVenue();
     await shipOneMigrationMoreThanTheDatabaseHas(migrationsRoot, core);
     await expect(assertNotAhead(venueDir, migrationsRoot)).resolves.toBeUndefined();
   });
 
-  // A first boot: the entrypoint checks before anything has migrated, so no set has a journal table
-  // yet. This is the case that made every first container start fail until 2026-09-22 —
-  // `journalHashes` keyed its absent-table case on PostgreSQL's `42P01` and rethrew SQLite's
-  // `no such table`. Failing here means a box restart-loops into recovery on its very first boot.
+  // A first boot: no set has a journal table yet. Failing here means a box restart-loops into
+  // recovery on its very first boot.
   it("a VIRGIN venue directory passes the ahead check", async () => {
     const { migrationsRoot } = await migratedVenue();
     const venueDir = await mkdtemp(join(tmpdir(), "wt-venue-virgin-"));
@@ -1426,9 +1374,8 @@ describe("serveRecovery's landing listener", () => {
   it("starts the landing listener beside the recovery server and closes it on teardown", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "wt-landing-"));
     const app = recoveryApp({ state: FRESH, logDir: stateDir, onRetry: () => Promise.resolve() });
-    // The wiring is asserted with an injected stand-in rather than a real port-80 bind: the wire under
-    // test is "recovery starts it and closes it", not the plain-HTTP socket startLandingListener owns
-    // (covered by boot's own suite).
+    // An injected stand-in rather than a real port-80 bind: under test is that recovery starts it
+    // and closes it.
     const close = vi.fn(() => Promise.resolve());
     const startLanding = vi.fn(() => ({ close }));
     const landing = {

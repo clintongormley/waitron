@@ -11,31 +11,17 @@ import {
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
-// Ruling C7. Deleting the pull worker deleted membership gossip; a box that died BEFORE it was fenced
-// would boot with a stale serving-primary chart and SELL while the promoted cloud is also primary (two
-// nodes filing under one NIF — CLAUDE.md §5, unrecoverable). `reconcileMembershipOnBoot` closes that hole
-// at boot: it best-effort fetches the peer's CURRENT signed chart and, when that chart VERIFIES, has a
-// HIGHER term, AND fences this node, persists it and reports `superseded: true` so the caller boots
-// read-only. Every other outcome — unreachable, equal/lower term, a chart that does not verify — reports
-// `superseded: false` and boot proceeds as primary (the "unreachable → proceed" rule: a box that cannot
-// reach the cloud cannot have been superseded without a reachable cloud AND a human promotion).
-//
-// These are pure unit tests over the decoupled function: the peer fetch and the accept-and-persist are
-// injected, so the fence LOGIC is exercised here without a database. The accept dep wraps the REAL
-// `acceptMembershipDocument` (real signature + trust-chain + strictly-newer check over real signed
-// fixtures) with a persist recorder — so "verifies", "higher term" and "equal term" are genuinely
-// exercised, not faked; the real DB persist is proven at boot in `boot.reconcile.test.ts`.
+// A box that died before it was fenced must not boot and sell beside the promoted cloud (two nodes
+// filing under one NIF — CLAUDE.md §5). The accept dep wraps the REAL `acceptMembershipDocument` over
+// real signed fixtures; the database persist is covered in `boot.reconcile.test.ts`.
 
 const PEER_KEY = generateNodeKeyPair();
 const UNTRUSTED_KEY = generateNodeKeyPair();
 const PEER_NODE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const THIS_NODE = "33333333-3333-4333-8333-333333333333";
-// This node trusts the peer's key (the promoted cloud signs the chart that fences this node); the
-// UNTRUSTED_KEY is deliberately absent so a chart signed by it fails verification.
 const TRUST: TrustSet = { [PEER_NODE]: PEER_KEY.publicKey };
 
-// This node's own stale chart: it still names ITSELF serving-primary at term N. Only `body.term` is read
-// by reconcile (as the accept fence's `currentTerm`), so its own signature need not be trusted here.
+// Only `body.term` is read by reconcile, so this chart's own signature need not be trusted.
 const HELD_TERM = 4;
 const held: SignedMembershipDocument = signedMembershipDoc(HELD_TERM, {
   signerNodeId: THIS_NODE,
@@ -58,7 +44,6 @@ function peerChart(
   });
 }
 
-/** The boot wiring's accept dep, over the REAL fence, recording every document it actually persists. */
 function acceptRecorder(persisted: SignedMembershipDocument[]) {
   return async (
     incoming: SignedMembershipDocument,
@@ -123,7 +108,6 @@ describe("reconcileMembershipOnBoot", () => {
 
   it("proceeds as primary for an equal-term chart (not strictly newer)", async () => {
     const persisted: SignedMembershipDocument[] = [];
-    // Same term as held, and it WOULD fence this node — but it is not newer, so the fence never engages.
     const sameTerm = peerChart(HELD_TERM, "sell-only");
 
     const result = await reconcileMembershipOnBoot({
@@ -141,8 +125,6 @@ describe("reconcileMembershipOnBoot", () => {
 
   it("ignores a higher-term chart that does not verify (untrusted signer)", async () => {
     const persisted: SignedMembershipDocument[] = [];
-    // Higher term AND it fences this node, but signed by a key absent from the trust set: verification
-    // fails, so the fence must NOT engage — an unsigned/forged chart can never send a node read-only.
     const forged = peerChart(HELD_TERM + 1, "sell-only", UNTRUSTED_KEY);
 
     const result = await reconcileMembershipOnBoot({
@@ -159,8 +141,6 @@ describe("reconcileMembershipOnBoot", () => {
   });
 
   it("treats a null held document as currentTerm null (a node that never adopted a chart)", async () => {
-    // A box that has never held a chart: `currentTerm` is null, so any verified chart is strictly newer.
-    // A fencing one from the peer supersedes it just the same.
     const seenTerms: (number | null)[] = [];
     const fencing = peerChart(1, "sell-only");
 
@@ -181,8 +161,6 @@ describe("reconcileMembershipOnBoot", () => {
   });
 
   it("persists a higher-term chart that does NOT fence this node but stays primary", async () => {
-    // A newer, verified chart that leaves this node serving-secondary is authoritative and worth
-    // persisting, but it does not fence this node — so the node keeps selling (not superseded).
     const persisted: SignedMembershipDocument[] = [];
     const lines: LogLine[] = [];
     const nonFencing = peerChart(HELD_TERM + 1, "serving-secondary");
@@ -212,7 +190,6 @@ describe("fetchPeerMembershipDocument (the best-effort HTTP peer read)", () => {
     }
   });
 
-  /** Start a one-off http server with the given handler, returning its base URL. */
   async function serve(
     handler: (respond: (status: number, body: string) => void) => void,
   ): Promise<string> {
@@ -250,7 +227,7 @@ describe("fetchPeerMembershipDocument (the best-effort HTTP peer read)", () => {
   });
 
   it("returns null when the peer is unreachable (transport error)", async () => {
-    // Port 1 is not listening — the fetch rejects, which the best-effort read swallows to null.
+    // Port 1 is not listening.
     expect(
       await fetchPeerMembershipDocument("http://127.0.0.1:1/management-api/membership"),
     ).toBeNull();

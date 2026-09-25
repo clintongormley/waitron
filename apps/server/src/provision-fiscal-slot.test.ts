@@ -3,9 +3,7 @@ import type { FiscalBackend, FiscalContribution } from "@waitron/fiscal";
 import type { WaitronModule } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
 
-// A minimal fiscal-slot contribution: the slot check reads only that the seat is present and
-// selects among the enabled members. The backend/drain seats are never invoked — the slot check
-// throws before any DB write, so this suite needs no database.
+// The slot check reads only that the seat is present, so the backend and drain seats are never run.
 const contribution = (id: string): FiscalContribution => ({
   id,
   activationReadiness: "not-applicable",
@@ -26,11 +24,8 @@ const mod = (
   ...seats,
 });
 
-// A SYNTHETIC composition list carrying TWO fiscal-slot members — the shape ALL_MODULES takes once
-// fiscal-none joins the slot (Task 9) — plus a provision-only module with NO fiscal seat, which the
-// provision-only gate (not the slot) still governs. Mocked so provisionVenue's slot wiring can be
-// proven against two members before that landing, and the gate proven for a non-slot member — the
-// real ALL_MODULES has only one fiscal member and no non-fiscal provision-only module.
+// The real ALL_MODULES has no provision-only module without a fiscal seat, so this synthetic list
+// adds one for the provision-only gate.
 vi.mock("./modules.js", () => ({
   ALL_MODULES: [
     mod("core", "mandatory"),
@@ -40,13 +35,11 @@ vi.mock("./modules.js", () => ({
   ],
 }));
 
-// Import AFTER the mock is registered so provisionVenue binds the synthetic list.
 const { provisionVenue } = await import("./provision.js");
 const { parseModuleConfig } = await import("@waitron/module");
 const { ALL_MODULES } = await import("./modules.js");
 
-/** An ownerDb Proxy that throws on ANY property access — the slot check must refuse before the DB is
- * ever reached, so touching it is the failure. */
+/** Throws on any access: every refusal here must happen before the database is reached. */
 const untouchableDb = new Proxy(
   {},
   {
@@ -89,7 +82,6 @@ function venueRequest() {
 
 describe("provisionVenue fiscal-slot resolution (synthetic two-member slot)", () => {
   it("refuses with fiscal_slot_ambiguous when BOTH fiscal-slot members are enabled — before any DB write", async () => {
-    // Both members enabled (the default sparse map) → two candidates fill the slot → ambiguous.
     const moduleConfig = parseModuleConfig({}, ALL_MODULES);
     const err = await provisionVenue(
       { ownerDb: untouchableDb, moduleConfig, database: "waitron", stateDir: "/unused" },
@@ -100,24 +92,17 @@ describe("provisionVenue fiscal-slot resolution (synthetic two-member slot)", ()
   });
 
   it("passes the slot check when exactly one fiscal-slot member is enabled (reaches the DB, then throws there)", async () => {
-    // Disabling fiscal-none leaves exactly one member → the slot resolves and the flow proceeds past
-    // the slot check to planVenue and the DB, where the untouchable Proxy throws. A NON-slot error
-    // (not fiscal_slot_*) is the proof the slot check let exactly-one through.
     const moduleConfig = parseModuleConfig({ modules: { "fiscal-none": false } }, ALL_MODULES);
     const err = await provisionVenue(
       { ownerDb: untouchableDb, moduleConfig, database: "waitron", stateDir: "/unused" },
       { environment: "preproduction", venue: venueRequest() as never },
     ).catch((e: unknown) => e);
-    // planVenue is pure (no DB) and validates first; either it accepts and the DB Proxy throws, or it
-    // rejects the fixture. Either way the code must NOT be a fiscal-slot refusal.
+    // planVenue may reject the fixture or the Proxy may throw; either way it is not a slot refusal.
     const code = isAppError(err) ? err.code : String(err);
     expect(code.startsWith("module.fiscal_slot_")).toBe(false);
   });
 
   it("refuses with provision_only_disabled when a NON-slot provision-only module is disabled — the gate, not the slot", async () => {
-    // Disabling a provision-only module with no fiscal seat trips the provision-only gate (step 0),
-    // which runs BEFORE the slot check, so the refusal is `module.provision_only_disabled` and the DB
-    // is never touched. This is the gate the fiscal slot does NOT subsume.
     const moduleConfig = parseModuleConfig({ modules: { "legacy-provision": false } }, ALL_MODULES);
     const err = await provisionVenue(
       { ownerDb: untouchableDb, moduleConfig, database: "waitron", stateDir: "/unused" },

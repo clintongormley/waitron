@@ -1,43 +1,5 @@
 /**
- * The join-request verbs — mint, cap, sweep, challenge, accept, deny, self-enrol — on the engine
- * the box now runs.
- *
- * ## What went with PostgreSQL, and is replaced by nothing
- *
- * 1. **The ROLE is gone.** SQLite has no roles and no grants: one process opens one file.
- *    **Nothing now checks that the deployment role cannot UPDATE a join request.**
- *
- * 2. **FOUR cases staged an interleave on two PostgreSQL backends, and none of them can any
- *    longer.** They are the two in `createJoinRequest — serialization of number allocation and the
- *    cap on the file` and the two `two concurrent accepts…` cases. Each called `suite.pg.connect()`
- *    twice; there is one handle now, and `withTransaction` runs its body inside `db.withWriteLock`,
- *    which issues `begin immediate` and does not let the next caller's `begin` run until the first
- *    `commit` has returned (`packages/store/src/write-queue.ts`). The two allocation cases went
- *    further and forced the interleave deterministically — a waiter holding its transaction open
- *    until the other creator's injected `numbers()` callback fired a signal from INSIDE its own
- *    reads. That machinery is deleted rather than translated: the signal can never fire while the
- *    first transaction is open, so leaving it would be scaffolding that proves nothing.
- *
- *    **LOST: the proof that overlapping creators are serialised at all**, in either direction.
- *    Each of the four cases keeps its assertions unchanged and they still hold — the cap is never
- *    exceeded, the loser is refused by name (`device.join_full`, `join_request.not_found`), no two
- *    reals collide, and no orphan register is left behind — but the reading is now of a queue that
- *    admits one writer, not of a guard inside `createJoinRequest`. There is no longer a clause to
- *    delete as a control either: `createJoinRequest`'s own transaction-scoped advisory lock went in
- *    `cd2838e4a`, whose SUBJECT is about the dev stack but whose body names this among its four
- *    conversions; `apps/server/src/join-requests.ts:66-72` states what replaced it.
- *
- *    The KEY-SCOPE half is split. That numbers and the cap are counted per node is pinned by
- *    "counts neither the cap nor the spoken-for numbers across nodes". That two locations on one
- *    node share them went with `join-requests.pg.test.ts`, deleted in `c6b5496c0`, and is covered
- *    by nothing.
- *
- * ## One correction to this file's own previous header
- *
- * It said THREE cases raced on two connections. There are four:
- * `git show c6b5496c0:apps/server/src/join-requests.test.ts | grep -n 'const a = await
- * suite.pg.connect()'` prints four lines — 287, 356, 701 and 751 — one per `it` body. Run
- * 2026-09-22.
+ * The join-request verbs — mint, cap, sweep, challenge, accept, deny, self-enrol.
  */
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
@@ -57,8 +19,6 @@ import {
   selfEnrolNodeAgent,
   type AcceptResult,
 } from "./join-requests.js";
-// `useVenueDb` is NOT on the `@waitron/db` barrel — the exports map is enumerated (CLAUDE.md §3),
-// so it comes from its own subpath below.
 import {
   deviceProfiles,
   devices,
@@ -81,18 +41,11 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// A device_profiles row of the given form factor, seeded directly rather than through a verb — this
-// table is fixture, not subject. Copied from device-api.test.ts:177-188 rather than shared, the
-// same call this file's sibling suites make (module state — the counter — resets per file).
 let profileCounter = 0;
 async function seedProfile(
   formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
 ): Promise<string> {
   profileCounter += 1;
-  // Through the table definition, as `apps/server/src/testing/fiscal-fixtures.ts` is:
-  // `device_profiles.id`, `created_at` and `updated_at` are `$defaultFn` generators a raw insert
-  // never reaches, and it is also what encodes `capabilities` — the `::jsonb` cast is a syntax
-  // error to this parser (`unrecognized token: ":"`).
   const [row] = await suite.db
     .insert(deviceProfiles)
     .values({ name: `Profile ${profileCounter}`, formFactor, capabilities: [] })
@@ -100,15 +53,12 @@ async function seedProfile(
   return row!.id;
 }
 
-// One `withTransaction` per call — the shape every verb here is exercised through.
 function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, async (tx) => {
     return fn(tx);
   });
 }
 
-// The `code` of the AppError `fn` throws, or undefined if it does not throw — lets a test assert the
-// domain code without a try/catch inside every case.
 async function codeOf(fn: () => Promise<unknown>): Promise<string | undefined> {
   try {
     await fn();
@@ -269,14 +219,8 @@ describe("createJoinRequest", () => {
       });
     });
     expect(first.verificationNumber).toBe("47");
-    // The first request's two DECOYS are random and are ALSO spoken for, so the second generator's
-    // fallback has to be a value they did not take: a generator that only ever yields one blocked
-    // number starves the pick loop into `device.join_full`, which is exactly the path the
-    // "real avoids issued decoys" test below demonstrates on purpose. Read them back and choose a
-    // free fallback, keeping this test about the REAL-number rule it is named for. Through the table
-    // definition rather than `unnest`: this column is a JSON array in a text column, so drizzle's
-    // decoding is what turns it into two values (`unnest` is a PostgreSQL set-returning function
-    // with no counterpart here).
+    // The first request's two DECOYS are random and ALSO spoken for, so the fallback must avoid
+    // them: a generator yielding only blocked numbers starves the pick loop into `device.join_full`.
     const taken = (
       await suite.db.select({ decoys: joinRequests.decoyNumbers }).from(joinRequests)
     ).flatMap((r) => r.decoys);
@@ -299,15 +243,9 @@ describe("createJoinRequest", () => {
 
   it("refuses a real number that is already someone else's DECOY (rule: real avoids issued decoys)", async () => {
     const venue = await setupVenue(suite.db);
-    // Seeded directly, bypassing createJoinRequest entirely — decoys
-    // are deliberately non-injectable (production always draws them from randomInt), so this is the
-    // only way to pin one to a known value. The seeded row's own REAL number is 77, unrelated to 13:
-    // if it were 13 too, a broken "real avoids existing reals" rule would make this pass for the
-    // wrong reason.
-    // Through the table definition: `join_requests.id` and `created_at` are `$defaultFn`
-    // generators, `kind` is a plain text column with a CHECK rather than a PostgreSQL enum TYPE (so
-    // the `::join_request_kind` cast has nothing to name), and `decoy_numbers` is a JSON array in a
-    // text column, not a `text[]`.
+    // Seeded directly: decoys are not injectable, so this is the only way to pin one. The seeded
+    // row's own REAL number is 77, not 13, or a broken "real avoids existing reals" rule would make
+    // this pass for the wrong reason.
     await suite.db.insert(joinRequests).values({
       nodeId: venue.cfg.nodeId,
       locationId: venue.cfg.locationId,
@@ -327,12 +265,8 @@ describe("createJoinRequest", () => {
   it("refuses to mint the second DECOY once every other value is already someone's real number (rule: decoys avoid existing reals)", async () => {
     const venue = await setupVenue(suite.db);
     // 98 of the 100 two-digit values are already reals, seeded under a DIFFERENT kind so the
-    // per-KIND cap (10) never trips on them — pendingNumbers reads across BOTH kinds
-    // (design §1.2 rule 3), so they still count toward this request's forbidden set. "00" and "01"
-    // are the only two values left free.
-    // The rows are built in JavaScript and inserted through the table definition. `generate_series`
-    // is a PostgreSQL set-returning function with no counterpart guaranteed here, `lpad` likewise,
-    // and the column notes on the seed above apply unchanged.
+    // per-KIND cap never trips on them while they still count toward this request's forbidden set.
+    // "00" and "01" are the only two values left free.
     await suite.db.insert(joinRequests).values(
       Array.from({ length: 98 }, (_, i) => i + 2).map((n) => ({
         nodeId: venue.cfg.nodeId,
@@ -383,18 +317,15 @@ describe("createJoinRequest", () => {
     const stale = await withTransaction(suite.db, async (tx) => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "stale" });
     });
-    // A fixture back-date, written straight to the column: no verb ages a request, and there is no
-    // `now()` to offset against — `created_at` is an ISO string column (`tsString`,
-    // `packages/db/src/schema/join-requests.ts:58`).
+    // A fixture back-date, written straight to the column: no verb ages a request.
     const lapsed = new Date(Date.now() - JOIN_TTL_MS - 60_000).toISOString();
     await suite.db.execute(
       sql`update join_requests set created_at = ${lapsed} where id = ${stale.joinId}`,
     );
     await withTransaction(suite.db, async (tx) => {
       await createJoinRequest(tx, venue.cfg, { kind: "device", label: "fresh" });
-      // Unscoped on purpose: `useVenueDb` empties the data tables after each test, so the only rows
-      // here are this case's own — which is what makes `["fresh"]` an exact list rather than a
-      // subset, and is the whole assertion (the lapsed row is GONE, not merely unreturned).
+      // Unscoped on purpose: `useVenueDb` empties the data tables after each test, so `["fresh"]` is
+      // an exact list and the lapsed row is GONE, not merely unreturned.
       const { rows } = await tx.execute<{ label: string }>(sql`select label from join_requests `);
       expect(rows.map((r) => r.label)).toEqual(["fresh"]);
     });
@@ -402,17 +333,10 @@ describe("createJoinRequest", () => {
 });
 
 describe("createJoinRequest — serialization of number allocation and the cap on the file", () => {
-  // Both creators are started together on the one handle and the write queue decides the order:
-  // `withTransaction` runs its body inside `db.withWriteLock`, which issues `begin immediate` and
-  // does not let the next caller's `begin` run until the first `commit` has returned
-  // (`packages/store/src/write-queue.ts`). So the SECOND creator always reads a snapshot that
-  // already holds the first's committed row — which is what the two cases below assert about.
-  //
-  // What is NOT staged here, and is recorded in this file's header: the stale-snapshot interleave
-  // the PostgreSQL version forced with a held-open transaction and a signal fired from the injected
-  // `numbers()` callback. Nothing on this engine can put a second reader inside the first's
-  // transaction, so neither case can any longer fail the way the advisory lock's absence made it
-  // fail.
+  // Both creators start together on the one handle; `withTransaction` runs each inside
+  // `db.withWriteLock` (`packages/db/src/tenancy.ts`), so the second always reads the first's
+  // committed row. These cases pin the outcome under that queue, not a guard inside
+  // `createJoinRequest`.
 
   it("two overlapping creations never mint the same real number, across BOTH kinds (rule 3)", async () => {
     const venue = await setupVenue(suite.db);
@@ -440,11 +364,8 @@ describe("createJoinRequest — serialization of number allocation and the cap o
     });
     await Promise.allSettled([first, second]);
 
-    // Read back EVERY committed request and assert the cross-surface exclusion. Through the table
-    // definition, so `decoy_numbers` arrives decoded. A raw read hands that column back as the JSON
-    // TEXT it is stored as, and the decoy loop below then iterates CHARACTERS: measured 2026-09-22
-    // with the raw read restored, this case still passes, because no single character is any
-    // request's two-digit real number. The raw shape does not fail here, it goes vacuous.
+    // Through the table definition, so `decoy_numbers` arrives decoded: a raw read returns the JSON
+    // text, and the decoy loop below would pass vacuously over its characters.
     const rows = await suite.db
       .select({ real: joinRequests.verificationNumber, decoys: joinRequests.decoyNumbers })
       .from(joinRequests);
@@ -491,8 +412,6 @@ describe("createJoinRequest — serialization of number allocation and the cap o
     });
     const outcomes = await Promise.allSettled([tenth, eleventh]);
 
-    // No `::int` here or in the three sibling counts below: `count(*)` already comes back as a
-    // JavaScript number, and the cast operator is a syntax error to this parser.
     const { rows } = await suite.db.execute<{ n: number }>(sql`
       select count(*) as n from join_requests
       where kind = 'device'
@@ -545,8 +464,7 @@ describe("readJoinStatus", () => {
     const made = await withTransaction(suite.db, async (tx) => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
     });
-    // A fixture back-date, written straight to the column, for the reason the sweep case above
-    // states.
+    // A fixture back-date, for the reason the sweep case above states.
     const lapsed = new Date(Date.now() - JOIN_TTL_MS - 60_000).toISOString();
     await suite.db.execute(
       sql`update join_requests set created_at = ${lapsed} where id = ${made.joinId}`,
@@ -693,12 +611,8 @@ describe("acceptDeviceJoinRequest", () => {
     });
     // Plant a devices row under the request's OWN id first: acceptDeviceJoinRequest reuses that id, so
     // its device INSERT collides on the primary key AFTER resolveDeviceBinding has already
-    // auto-created the till-form-factor register — the write order the "one transaction" comment
-    // depends on. `device_binding_rule` demands a till_id for this profile's form factor, so the
-    // blocker borrows the venue's own provisioned register — any live till satisfies the trigger.
-    // Through the table definition: `devices.enrolled_at` and `created_at` are NOT NULL columns
-    // whose values come from `$defaultFn` generators (`packages/db/src/schema/devices.ts:77-78`),
-    // which a raw statement never reaches.
+    // auto-created the till-form-factor register. The binding trigger demands a till_id for this
+    // profile's form factor, so the blocker borrows the venue's own provisioned register.
     await suite.db.insert(devices).values({
       id: made.joinId,
       locationId: venue.cfg.locationId,
@@ -774,21 +688,14 @@ describe("acceptDeviceJoinRequest", () => {
 
   it("two concurrent accepts of ONE request: exactly one wins, the loser gets join_request.not_found — never a raw devices_pkey 23505", async () => {
     const venue = await setupVenue(suite.db);
-    // A `kds` profile bound to an EXISTING station: resolveDeviceBinding only reads
-    // (requireLiveStation, a SELECT) rather than writing a named resource — a `till` profile's
-    // auto-created register would collide on ITS OWN name first (tills_tenant_location_name_key) and
-    // mask the race this test targets, since both racers would derive the same register name from
-    // the request's one label. This isolates the collision to the one write both racers actually
-    // contend for: the `devices` INSERT that reuses the request's id.
+    // A `kds` profile bound to an EXISTING station, so resolveDeviceBinding writes nothing and the
+    // one write both racers contend for is the `devices` INSERT that reuses the request's id.
     const profileId = await seedProfile("kds");
     const made = await withTransaction(suite.db, async (tx) => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Racer" });
     });
 
-    // Two accepts of the same request started together on the one handle. The write queue runs them
-    // one after the other (`packages/store/src/write-queue.ts`), so the second begins only once the
-    // first has committed its consuming delete — it reads the request GONE rather than reading it
-    // alongside the first, which is the difference recorded in this file's header.
+    // The write queue runs the two one after the other, so the second reads the request GONE.
     const attempt = (db: Database): Promise<AcceptResult> =>
       withTransaction(db, async (tx) => {
         return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
@@ -806,8 +713,7 @@ describe("acceptDeviceJoinRequest", () => {
     expect(winner).toBeDefined();
     expect(loser).toBeDefined();
     expect(winner!.value).toMatchObject({ ok: true });
-    // The Critical this test exists to catch: the loser must see the clean domain code, never a raw
-    // primary-key violation on `devices`.
+    // The loser must see the clean domain code, never a raw primary-key violation on `devices`.
     expect(loser!.reason).toMatchObject({ code: "join_request.not_found" });
 
     const { rows } = await suite.db.execute<{ n: number }>(sql`
@@ -819,12 +725,9 @@ describe("acceptDeviceJoinRequest", () => {
 
   it("two concurrent accepts of a TILL profile: exactly one wins, the loser never reaches register creation", async () => {
     const venue = await setupVenue(suite.db);
-    // A `till` profile: resolveDeviceBinding WRITES here (createRegister auto-creates a `tills` row
-    // named after the device before the device INSERT), the different failure mode from the `kds`
-    // race above — under the old plain-SELECT shape, the loser reached `createRegister` too, deriving
-    // the SAME name from the one request's label, and failed on `device.register_name_taken` (a
-    // clean-looking but WRONG code that masks the real defect) rather than ever reaching the
-    // `devices` INSERT. Delete-first must stop the loser before it writes anything at all.
+    // A `till` profile: resolveDeviceBinding WRITES a `tills` row named after the device before the
+    // device INSERT. A loser that reached it would fail on `device.register_name_taken`, the wrong
+    // code; delete-first must stop the loser before it writes anything at all.
     const profileId = await seedProfile("till");
     const made = await withTransaction(suite.db, async (tx) => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Till racer" });
@@ -846,9 +749,6 @@ describe("acceptDeviceJoinRequest", () => {
     expect(winner).toBeDefined();
     expect(loser).toBeDefined();
     expect(winner!.value).toMatchObject({ ok: true });
-    // The point: under delete-first the loser is refused BEFORE it ever calls createRegister, so
-    // it sees the same join_request.not_found every other losing race does — never
-    // device.register_name_taken, which would mean it got as far as writing a second register.
     expect(loser!.reason).toMatchObject({ code: "join_request.not_found" });
 
     const { rows: deviceRows } = await suite.db.execute<{ n: number }>(sql`
@@ -918,9 +818,7 @@ describe("acceptPrintAgentJoinRequest", () => {
       tx.select().from(printAgents).where(eq(printAgents.id, made.joinId)),
     );
     expect(agent).toMatchObject({ id: made.joinId, name: "kitchen-pi", active: true });
-    // At the VERB layer `token` IS the bare secret (createJoinRequest returns it un-composed);
-    // print_agents.token_hash was copied from the request, so verifySecret(secret, hash) holds. The
-    // route composes `${joinId}.${secret}` — that composition is Task 6's concern, not this one.
+    // At the VERB layer `token` IS the bare secret; the route composes `${joinId}.${secret}`.
     expect(verifySecret(made.token, agent!.tokenHash)).toBe(true);
 
     const gone = await asApp((tx) =>

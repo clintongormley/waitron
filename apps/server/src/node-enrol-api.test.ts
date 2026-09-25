@@ -19,22 +19,9 @@ import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
-/**
- * The loopback self-enrol route, on the engine the box now runs.
- *
- * ## What the conversion took away, and nothing replaces it
- *
- * **SQLite has no roles and no grants**: one process opens one file. Whether the deployment role
- * may write `print_agents` is no longer a question this file, or any file, asks.
- *
- * The six cases below are unaffected, because none of them was about the grant: five are gates
- * that refuse BEFORE any database work (loopback, absent address, non-primary, rate limit) and the
- * sixth checks that a minted token authenticates.
- */
 const noopLog: Logger = () => {};
 
-// `resetPerTest: false` because the tenant and its location are seeded ONCE in `beforeAll` below
-// and every case reads them; a per-test reset would empty both out from under the second case.
+// The tenant and its location are seeded once in `beforeAll` and every case reads them.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   resetPerTest: false,
@@ -45,8 +32,6 @@ interface Tenant {
   locationId: string;
 }
 
-// `tenants_country_tax_id_key` is unique, so a NIF is minted per call rather than written out. One
-// call is made today, from the `beforeAll` below; the counter is what keeps a second one honest.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -54,10 +39,6 @@ function nextNif(): string {
 }
 
 async function seedTenantWithLocation(): Promise<Tenant> {
-  // Both rows go in through their table definitions, the same change
-  // `packages/db/src/testing/seed.ts` took: `tenants.created_at` and `locations.id` are
-  // `$defaultFn` values on this engine rather than SQL DEFAULTs, which a raw insert never reaches,
-  // and `array['es-ES']` is PostgreSQL array syntax the engine refuses at prepare.
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
@@ -78,10 +59,8 @@ beforeAll(async () => {
   tenantA = await seedTenantWithLocation();
 });
 
-/** The FULL TillConfig for the seeded venue. Only locationId is read by `selfEnrolNodeAgent`
- * and nodeId is what the row is keyed by; the fiscal ids are unused, so branded random uuids stand in.
- * A FRESH nodeId per call keeps each mounted app's enrol row independent, which matters because
- * this suite does not reset between tests. */
+/** A fresh nodeId per call keeps each mounted app's enrol row independent, because this suite does
+ * not reset between tests. */
 function cfgOf(tenant: Tenant): TillConfig {
   return {
     tillId: brandTillId(randomUUID()),
@@ -95,7 +74,6 @@ function cfgOf(tenant: Tenant): TillConfig {
   };
 }
 
-/** The enrol route mounted over the venue handle, scoped to a fresh cfg. */
 function buildApp(opts: { isPrimary?: boolean; limiter?: EnrolRateLimiter } = {}): {
   app: Hono;
   cfg: TillConfig;
@@ -116,9 +94,8 @@ function buildApp(opts: { isPrimary?: boolean; limiter?: EnrolRateLimiter } = {}
   return { app, cfg };
 }
 
-/** Issue the POST, driving the peer address the way `getConnInfo` reads it — `c.env.incoming.socket.
- *  remoteAddress`, set here as the third `app.request` argument (Hono passes it through as `c.env`).
- *  This is the same channel `@hono/node-server` fills from the real socket at boot. */
+/** `getConnInfo` reads the peer address from `c.env.incoming.socket.remoteAddress`; the third
+ *  `app.request` argument becomes `c.env`. */
 async function post(
   app: Hono,
   body: unknown,
@@ -139,15 +116,15 @@ async function errorCodeOf(res: Response): Promise<string> {
   return ((await res.json()) as { error: { code: string } }).error.code;
 }
 
-/** Resolve a minted agent token to its row id under the tenant — the production auth path. */
+/** Resolve a minted agent token through the production auth path. */
 async function authenticate(token: string): Promise<{ agentId: string }> {
   return withTransaction(suite.db, async (tx) => {
     return authenticateAgent(tx, token);
   });
 }
 
-/** How many print_agents rows this node holds — read straight off the table, so the assertion is
- *  about what landed and not about what the route chose to return. */
+/** Read straight off the table, so the assertion is about what landed, not what the route
+ *  returned. */
 async function agentRowCount(cfg: TillConfig): Promise<number> {
   const { rows } = await suite.db.execute<{ n: number }>(
     sql`select cast(count(*) as int) as n from print_agents where node_id = ${cfg.nodeId}`,
@@ -162,7 +139,7 @@ describe("POST /api/node/enrol-self", () => {
     expect(res.status).toBe(201);
     const { token } = (await res.json()) as { token: string };
     expect(typeof token).toBe("string");
-    // The token authenticates as a real agent — the row was truly written.
+    // The token authenticates as a real agent, so the row was written.
     const auth = await authenticate(token);
     expect(auth.agentId).toBeDefined();
   });
@@ -172,19 +149,17 @@ describe("POST /api/node/enrol-self", () => {
     const res = await post(app, { name: "x" }, "192.168.1.50");
     expect(res.status).toBe(403);
     expect(await errorCodeOf(res)).toBe("node.enrol_not_local");
-    // Refused for the RIGHT reason — before any DB work, so no row exists (CLAUDE.md §1 control).
+    // Refused before any database work, so no row exists.
     expect(await agentRowCount(cfg)).toBe(0);
   });
 
   it("refuses a request with NO remote address with node.enrol_not_local (fails closed)", async () => {
-    // `getConnInfo` can hand back an undefined address (no socket, a proxy that dropped it); the gate
-    // (`address === undefined || !LOOPBACK.has(address)`) fails CLOSED to the manual path rather than
-    // treating an unknown origin as loopback (spec §2). No test pinned this branch before.
+    // An unknown origin fails closed rather than being treated as loopback.
     const { app, cfg } = buildApp();
     const res = await post(app, { name: "x" }, undefined);
     expect(res.status).toBe(403);
     expect(await errorCodeOf(res)).toBe("node.enrol_not_local");
-    // Refused before any DB work, so no row exists (CLAUDE.md §1 control).
+    // Refused before any database work, so no row exists.
     expect(await agentRowCount(cfg)).toBe(0);
   });
 
@@ -201,14 +176,12 @@ describe("POST /api/node/enrol-self", () => {
     const res = await post(app, { name: "x" }, "127.0.0.1");
     expect(res.status).toBe(409);
     expect(await errorCodeOf(res)).toBe("node.enrol_unavailable");
-    // The primary gate refuses before the write, so a mirror leaves no row behind.
     expect(await agentRowCount(cfg)).toBe(0);
   });
 
   it("rate-limits a flood BEFORE touching the DB", async () => {
-    // A limiter whose window is already full: `check()` throws on the very first call, standing in for
-    // the (N+1)th request of a flood. The refusal must precede the loopback gate, the primary gate and
-    // the write, so a valid loopback+primary request still draws a 429 and leaves no row.
+    // A limiter whose window is already full stands in for the request after a flood; a valid
+    // loopback request on the primary must still draw a 429 and leave no row.
     const limiter: EnrolRateLimiter = {
       check() {
         throw new AppError("device.join_rate_limited", {});

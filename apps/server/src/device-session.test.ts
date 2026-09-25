@@ -1,24 +1,9 @@
 /**
- * The device cookie and the three guards that read it, on the engine the box now runs.
+ * The device cookie and the three guards that read it.
  *
- * ## What this file does not check
- *
- * SQLite has no roles and no grants: one process opens one file. The grant half of every
- * database-backed case below is checked by nothing, here or elsewhere. What each case proves is the
- * guard's own logic — the cookie parse, the token verify, the `active` filter, the profile
- * capability set — which lives in `device-session.ts`, not in the database.
- *
- * Every fixture below writes through its TABLE DEFINITION rather than as raw SQL, the change
- * `apps/server/src/testing/fiscal-fixtures.ts` took. Two reasons, both fatal to the raw form on
- * this engine: each table's `id` (and `tills.created_at`, `canvases.created_at`,
- * `device_profiles.created_at`/`updated_at`, `devices.enrolled_at`) is a `$defaultFn` generator a
- * raw insert never reaches while the column is NOT NULL, and a JavaScript boolean cannot bind on
- * this driver. It is also what encodes the JSON and list columns, whose `::jsonb`, `::uuid` and
- * `array[...]` spellings are syntax this parser refuses (`unrecognized token: ":"`).
- *
- * The "(real Postgres)" in the five describes below is stale — there is one engine and it is
- * `node:sqlite`. Those are describe NAMES, so correcting them changes test names rather than a
- * comment, and it is left to a deliberate rename.
+ * Every fixture below writes through its TABLE DEFINITION rather than as raw SQL: each table's `id`
+ * (and its creation timestamps) is a `$defaultFn` generator raw SQL never reaches, and the table
+ * definition is what encodes the JSON and list columns.
  */
 import { randomUUID } from "node:crypto";
 import { type Context, Hono } from "hono";
@@ -124,8 +109,6 @@ async function enrolDeviceFixture(): Promise<{
   deviceProfileId: string;
 }> {
   const { cfg, stationId } = await setupStation();
-  // A device is DEFINED by its profile now (Task 7): a `kds` profile with NO capabilities — the
-  // station-bound kitchen screen the old station-only mint produced, its capability set empty.
   const deviceProfileId = await seedDeviceProfile("Pantalla profile", "kds", []);
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: "Pantalla",
@@ -135,10 +118,8 @@ async function enrolDeviceFixture(): Promise<{
   return { cfg, deviceId: dev.deviceId, token: dev.token, stationId, deviceProfileId };
 }
 
-/** The canvas/till/hardware bindings a device enrolled with NONE assigned surfaces — every binding is
- * the column default. A `kds_station` (like `enrolDeviceFixture`'s) binds no till, no canvas and no
- * hardware, so `tryReadDevice` carries these back verbatim. Spread into the expected binding so the new
- * SP-A.2 fields are pinned alongside the pre-existing `deviceId`/`kind`/`stationId`. */
+/** The bindings a device enrolled with NONE assigned surfaces: a `kds_station` (like
+ * `enrolDeviceFixture`'s) binds no till and no hardware, so every binding is the column default. */
 const NO_BINDINGS = {
   tillId: null,
   receiptPrinterId: null,
@@ -180,9 +161,8 @@ async function enrolTillDeviceFixture(): Promise<{
     .values({ name: "Front counter", definition: DEFAULT_CANVASES.till })
     .returning({ id: canvases.id });
   const canvasId = canvas!.id;
-  // This fixture explicitly grants reader and drawer access. Its canvas reference is the front-counter canvas —
-  // the device binds that canvas SOLELY through this profile (the direct device→canvas link was dropped
-  // in the Task 10 cutover). A `till` profile AUTO-CREATES the register the device rings against (Task 7).
+  // This fixture explicitly grants reader and drawer access. The device binds the canvas SOLELY
+  // through this profile, and a `till` profile AUTO-CREATES the register the device rings against.
   const deviceProfileId = await seedDeviceProfile(
     "Counter",
     "till",
@@ -211,7 +191,7 @@ async function enrolTillDeviceFixture(): Promise<{
 }
 
 /**
- * Deactivate the device on the admin connection for the revocation test.
+ * Deactivate the device for the revocation test.
  */
 async function revoke(deviceId: string): Promise<void> {
   await suite.db.execute(sql`update devices set active = false where id = ${deviceId}`);
@@ -230,11 +210,9 @@ async function lastSeenAt(deviceId: string): Promise<string | null> {
 type ProbeResult = { ok: true; binding: DeviceBinding } | { ok: false; code: string };
 
 /**
- * The shared one-route scaffold every guard probe runs behind (the `management-session.test.ts`
- * shape): a fresh Hono app whose sole `GET /probe` runs `handler` with the guard's `deps` + the request
- * `Context`, carrying the given cookie value (or none), with an `onError` that captures any throw. The
- * three probes below differ only in which guard they call and how they read the outcome — they supply
- * `handler` and interpret `{ res, thrown }`; the setup lives here once.
+ * The shared one-route scaffold every guard probe runs behind: a fresh Hono app whose sole
+ * `GET /probe` runs `handler`, carrying the given cookie value (or none), with an `onError` that
+ * captures any throw.
  */
 async function runProbe(
   cookieValue: string | null,
@@ -267,7 +245,7 @@ async function probe(cookieValue: string | null): Promise<ProbeResult> {
   return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
 }
 
-/** Enrol a REAL handheld device — no station (a handheld form factor binds none, Task 2) — so
+/** Enrol a REAL handheld device — no station (a handheld form factor binds none) — so
  * `tryReadDevice` resolves its cookie to a `handheld` binding. Same enrol path as `enrolDeviceFixture`,
  * with the order-only kind. */
 async function enrolHandheldFixture(): Promise<{
@@ -277,7 +255,7 @@ async function enrolHandheldFixture(): Promise<{
 }> {
   const { cfg } = await setupStation();
   // A handheld is defined by a `phone-portrait`/`tablet-landscape` profile and, being sale-capable,
-  // binds an EXISTING register at enrol — the venue's own till (SP-A.2 §16.4).
+  // binds an EXISTING register at enrol — the venue's own till.
   const deviceProfileId = await seedDeviceProfile("Waiter phone profile", "phone-portrait", []);
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: "Waiter phone",
@@ -298,8 +276,7 @@ async function probeTry(cookieValue: string | null): Promise<DeviceBinding | nul
 }
 
 /** Run `assertNotHandheld` behind the shared HTTP scaffold: `{ ok: true }` when it passes (no throw), or
- * the thrown code when it refuses. The one firewall guard left after the tender-split was removed, so the
- * scaffold is inlined here rather than factored across probes. */
+ * the thrown code when it refuses. */
 async function probeAssert(
   cookieValue: string | null,
 ): Promise<{ ok: true } | { ok: false; code: string }> {
@@ -326,8 +303,7 @@ async function enrolHandheldWithCanvasFixture(): Promise<{
     .values({ name: "Waiter phone", definition: DEFAULT_CANVASES["phone-portrait"] })
     .returning({ id: canvases.id });
   const canvasId = canvas!.id;
-  // The profile declares NO capabilities — the render/firewall source of truth after the Task 9 cutover.
-  // A handheld (`phone-portrait`) binds an EXISTING register at enrol — the venue's own till (§16.4).
+  // A handheld (`phone-portrait`) binds an EXISTING register at enrol — the venue's own till.
   const deviceProfileId = await seedDeviceProfile("Waiter", "phone-portrait", [], canvasId);
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: "Waiter phone",
@@ -372,7 +348,7 @@ describe("device cookie helpers", () => {
     expect(cookie).toMatch(/SameSite=Strict/i);
     expect(cookie).toMatch(/Secure/i);
     expect(cookie).toMatch(/Path=\//i);
-    // 60*60*24*365 — a full year, so a kitchen screen stays enrolled across reboots (§3c). The
+    // 60*60*24*365 — a full year, so a kitchen screen stays enrolled across reboots. The
     // session cookies deliberately carry NO Max-Age; this one deliberately does.
     expect(cookie).toMatch(/Max-Age=31536000/i);
   });
@@ -389,9 +365,6 @@ describe("device cookie helpers", () => {
     expect(cookie).not.toMatch(/Secure/i);
   });
 
-  // The optional `tenantDomain` (till-reroute §3.5): the helper resolves the effective `Domain` from
-  // it and the request host via `cookieDomainFor`, so a host UNDER the tenant domain carries
-  // `Domain=<it>` (see ServerConfig.tenantDomain) and a host outside it stays host-only (no `Domain`).
   it("setDeviceCookie writes Domain only when the host is under the tenant domain", async () => {
     const app = new Hono();
     app.get("/set", (c) => {
@@ -435,7 +408,7 @@ describe("device cookie helpers", () => {
   });
 
   // The clearing Set-Cookie must carry the SAME `Domain` the set one did — resolved from the same
-  // `tenantDomain` + host inputs (§3.5) — or the browser keeps the domain-scoped cookie alongside the
+  // `tenantDomain` + host inputs — or the browser keeps the domain-scoped cookie alongside the
   // host-only expiry (the `Path` reasoning, applied to `Domain`).
   it("clearDeviceCookie writes Domain only when the host is under the tenant domain", async () => {
     const app = new Hono();
@@ -503,10 +476,8 @@ describe("requireDevice (real Postgres)", () => {
 
   it("carries the device's assigned profile + till + hardware bindings back on the binding (SP-A.2 §16, device-profile §5)", async () => {
     const { deviceId, token, deviceProfileId, tillId } = await enrolTillDeviceFixture();
-    // A `till` device with a NON-NULL profile, till and hardware binding surfaces every column
-    // verbatim — the fields the boot reads (`/api/device/me`, `/api/till`) later echo. The canvas is no
-    // longer a device field; it resolves THROUGH the profile at `/api/till` (Task 10 cutover). The till
-    // is the register the `till` profile auto-created at enrol (Task 7).
+    // The canvas is not a device field; it resolves THROUGH the profile at `/api/till`. The till is the
+    // register the `till` profile auto-created at enrol.
     expect(await probe(`${deviceId}.${token}`)).toEqual({
       ok: true,
       binding: {
@@ -556,8 +527,7 @@ describe("requireDevice (real Postgres)", () => {
     const { deviceId, token } = await enrolDeviceFixture();
     // It authenticates while active…
     expect((await probe(`${deviceId}.${token}`)).ok).toBe(true);
-    // …and stops the instant it is revoked, with no token TTL to wait out. This is the differential
-    // proof of the `active = true` filter (proven by deletion in the task-4 report).
+    // …and stops the instant it is revoked, with no token TTL to wait out.
     await revoke(deviceId);
     const result = await probe(`${deviceId}.${token}`);
     expect(result).toEqual({ ok: false, code: "device.unauthorized" });
@@ -615,9 +585,7 @@ describe("tryReadDevice and assertNotHandheld (real Postgres)", () => {
 
 describe("assertDeviceCapability (real Postgres)", () => {
   it("refuses a device whose assigned PROFILE LACKS the capability, naming the action", async () => {
-    // The handheld's profile carries `capabilities: []` — it lacks BOTH fenced flags. Prove-by-
-    // deletion: drop the `!resolved.capabilities.includes(...)` check in `assertDeviceCapability` and
-    // these pass.
+    // The handheld's profile carries `capabilities: []` — it lacks BOTH fenced flags.
     const { deviceId, token } = await enrolHandheldWithCanvasFixture();
     expect(await probeCapability(`${deviceId}.${token}`, "integrated-card-payment", "pay")).toEqual(
       { ok: false, code: "device.forbidden_action", params: { action: "pay" } },
@@ -639,10 +607,8 @@ describe("assertDeviceCapability (real Postgres)", () => {
   });
 
   it("refuses a device whose assigned profile declares NO capabilities — fail-closed", async () => {
-    // A device is DEFINED by its profile now (Task 7: `device_profile_id` is NOT NULL), so the
-    // fail-closed case is a profile that declares an EMPTY capability set — `enrolDeviceFixture`'s kds
-    // profile has `capabilities: []`, so a device bound to it is refused every fenced action. Prove-by
-    // deletion: drop the `!resolved.capabilities.includes(capability)` guard and this returns ok.
+    // `device_profile_id` is NOT NULL, so the fail-closed case is a profile that declares an EMPTY
+    // capability set — `enrolDeviceFixture`'s kds profile has `capabilities: []`.
     const { deviceId, token } = await enrolDeviceFixture();
     expect(await probeCapability(`${deviceId}.${token}`, "integrated-card-payment", "pay")).toEqual(
       { ok: false, code: "device.forbidden_action", params: { action: "pay" } },
@@ -651,8 +617,7 @@ describe("assertDeviceCapability (real Postgres)", () => {
 
   it("passes when there is NO device cookie (an env-configured / legacy till)", async () => {
     // No `waitron_device` cookie ⇒ `tryReadDevice` → null ⇒ pass, exactly as `assertNotHandheld`.
-    // Nothing blocks a sale on a cookie-less till (CLAUDE.md §5). Prove-by-deletion: drop the
-    // `device === null` early return and this throws instead of passing.
+    // Nothing blocks a sale on a cookie-less till (CLAUDE.md §5).
     await enrolDeviceFixture();
     expect(await probeCapability(null, "integrated-card-payment", "pay")).toEqual({
       ok: true,
@@ -663,9 +628,8 @@ describe("assertDeviceCapability (real Postgres)", () => {
   });
 
   it("preserves the handheld firewall: a handheld (profile caps []) is still blocked from pay + drawer", async () => {
-    // The behaviour `assertNotHandheld` enforced by KIND is now enforced by CAPABILITY: a handheld's
-    // capability-less profile carries neither flag, so pay and drawer are refused exactly as before —
-    // but via the capability, not the device kind.
+    // A handheld's capability-less profile carries neither flag, so pay and drawer are refused by
+    // capability, not by device kind.
     const { deviceId, token } = await enrolHandheldWithCanvasFixture();
     expect(
       (await probeCapability(`${deviceId}.${token}`, "integrated-card-payment", "pay")).ok,
@@ -677,9 +641,8 @@ describe("assertDeviceCapability (real Postgres)", () => {
 });
 
 /**
- * Runs `tryReadDevice` inside a one-route Hono app, passing an optional dev-override header and/or
- * cookie. Mirrors the file's existing `runProbe`/`probeTry` helper but exposes an arbitrary header set
- * (the `probe` helpers only carry a cookie), so the SP-C override header can be driven directly.
+ * Runs `tryReadDevice` inside a one-route Hono app with an arbitrary header set (the `probe` helpers
+ * only carry a cookie), so the dev-override header can be driven directly.
  */
 async function readWithHeaders(
   deps: Parameters<typeof tryReadDevice>[0],
@@ -740,8 +703,7 @@ describe("dev-override header (real Postgres)", () => {
       { cookie: `${DEVICE_COOKIE}=${deviceACookie}`, [DEV_DEVICE_HEADER]: deviceBId },
     );
     expect(binding?.deviceId).toBe(deviceBId);
-    // Device B is a kds_station; its binding now carries the profile's form factor (a device is
-    // defined by its profile), from which the kind is derived.
+    // Device B is a kds_station; its binding carries the profile's form factor.
     expect(binding?.formFactor).toBe("kds");
   });
 

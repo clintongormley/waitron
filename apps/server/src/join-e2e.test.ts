@@ -1,20 +1,7 @@
 /**
- * The assembled device join-and-accept flow, across BOTH route modules on one app.
- *
- * This is the ONLY file that mounts `device-api` and `join-api` together sharing ONE `PairingMode`
- * holder, so it is the regression guard for the assembled flow: the device knocks (device-api), an
- * admin opens the window / reads the queue / challenges / accepts / denies (join-api), and the
- * window one surface opens is the window the other honours because it is the same holder instance.
- * That reason is engine-independent and is why the file survives the storage switch.
- *
- * **What went with PostgreSQL, and is replaced by nothing.** There are no roles and no grants on
- * this engine. Nothing now checks that the deployment role can reach these three tables and no
- * more.
- *
- * **A blocker this header used to declare is fixed.** The shared fixture seeded `persons` with raw
- * SQL, which reaches no `$defaultFn` generator, so every case here died on
- * `NOT NULL constraint failed: persons.id`. `apps/server/src/testing/venue-fixtures.ts` writes those
- * rows through the table definition now, and this file is green — run on its own, 2026-09-22.
+ * The assembled device join-and-accept flow, with `device-api` and `join-api` mounted on one app
+ * sharing ONE `PairingMode` holder, as `boot.ts` wires them: the window one surface opens is the
+ * window the other honours.
  */
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -30,18 +17,13 @@ import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
 
-// Each test provisions its OWN tenant, so its rows are that test's alone and order-independent.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
 const noopLog: Logger = () => {};
 
-/** Mount the device surface AND the management join surface on ONE Hono app, sharing ONE `db` and ONE
- *  `PairingMode` — the wiring `boot.ts` builds for a venue. Sharing the holder is the whole point: a
- *  window opened through `POST /management-api/pairing-mode` (join-api) must admit a knock on
- *  `POST /api/device/join` (device-api). `devMode` is left FALSE, so the real admin-approval flow runs
- *  rather than the dev auto-accept. */
+/** `devMode` is left unset, so the real admin-approval flow runs rather than the dev auto-accept. */
 function mountBoth(cfg: TillConfig, pairingMode: PairingMode = createPairingMode()): Hono {
   const app = new Hono();
   mountDeviceApi(app, { db: suite.db, cfg, secureCookies: false, pairingMode }, noopLog);
@@ -73,14 +55,11 @@ async function errorOf(res: Response): Promise<ErrorBody["error"]> {
   return ((await res.json()) as ErrorBody).error;
 }
 
-/** The `<name>=<value>` cookie pair the knock response set — the jar the device carries thereafter. */
 function deviceCookieFrom(res: Response): string {
   return res.headers.get("set-cookie")!.split(";")[0]!;
 }
 
-/** Open the venue's pairing window through the REAL management route (not `pairingMode.open()`), as the
- *  manager — so the e2e exercises the admin act that admits a knock, on the SAME holder the device mount
- *  reads. */
+/** Through the REAL management route, not `pairingMode.open()`. */
 async function openWindow(app: Hono, venue: Venue): Promise<void> {
   const res = await send(app, "POST", "/management-api/pairing-mode", {
     cookie: venue.managerCookie,
@@ -88,8 +67,6 @@ async function openWindow(app: Hono, venue: Venue): Promise<void> {
   expect(res.status).toBe(200);
 }
 
-/** Knock as a device on the REAL route, returning the join id, the number the device was shown, and the
- *  cookie jar the route set. The window must already be open. */
 async function knock(
   app: Hono,
   name: string,
@@ -105,14 +82,8 @@ async function knock(
 }
 
 let profileCounter = 0;
-/** Seed a `device_profiles` row of the given form factor and read back its id. The per-suite counter
- *  keeps two profiles seeded inside one test from colliding on the unique name. */
 async function seedProfile(formFactor: "till" | "kds" | "phone-portrait"): Promise<string> {
   profileCounter += 1;
-  // Through the table definition, as `apps/server/src/testing/fiscal-fixtures.ts` is:
-  // `device_profiles.id`, `created_at` and `updated_at` are `$defaultFn` generators a raw insert
-  // never reaches, and the table definition is also what encodes `capabilities`, whose `::jsonb`
-  // cast is a syntax error to this parser.
   const [row] = await suite.db
     .insert(deviceProfiles)
     .values({ name: `Profile ${profileCounter}`, formFactor, capabilities: [] })
@@ -120,12 +91,9 @@ async function seedProfile(formFactor: "till" | "kds" | "phone-portrait"): Promi
   return row!.id;
 }
 
-/** How many pending requests this tenant holds — read straight from the table, so the assertion is
- *  about what was written and not about what a route chose to show. */
+/** Read straight from the table: the assertion is about what is stored, not what a route shows. */
 async function pendingCount(): Promise<number> {
   const { rows } = await suite.db.execute<{ n: number }>(
-    // No `::int`: `count(*)` already comes back as a JavaScript number, and the cast operator is a
-    // syntax error to this parser (`unrecognized token: ":"`).
     sql`select count(*) as n from join_requests `,
   );
   return rows[0]!.n;
@@ -140,23 +108,19 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     // 1. The admin opens the venue's pairing window (join-api route).
     await openWindow(app, venue);
 
-    // 2. The device knocks with only a name (device-api route) — the shared window admits it because the
-    //    admin's open() above landed on the SAME holder. It is shown its number; the token rides only the
-    //    cookie.
+    // 2. The device knocks with only a name (device-api route); the token rides only the cookie.
     const { joinId, verificationNumber, jar } = await knock(app, "Bar till");
     expect(verificationNumber).toMatch(/^\d{2}$/);
     expect(jar).toContain(`${joinId}.`);
 
-    // 3. The pending queue lists the ask WITHOUT the number beside it — the admin must match a number they
-    //    can only get from the device, never from their own screen (design §1.2 rule 1).
+    // 3. The pending queue lists the ask WITHOUT the number: the admin must get it from the device.
     const listRes = await send(app, "GET", "/management-api/join-requests?kind=device", {
       cookie: venue.managerCookie,
     });
     expect(listRes.status).toBe(200);
     const list = (await listRes.json()) as unknown[];
-    // `toEqual`, not `toMatchObject`: a key never listed is a key never checked, so pinning the EXACT key
-    // set is what proves no number field rides beside the ask (a substring scan for the number itself is
-    // no good — a two-digit value collides with the id and the timestamp).
+    // `toEqual`, so the EXACT key set proves no number field rides beside the ask (a substring scan
+    // for a two-digit number would collide with the id and the timestamp).
     expect(list).toEqual([
       { id: joinId, kind: "device", label: "Bar till", createdAt: expect.any(String) },
     ]);
@@ -191,16 +155,13 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     });
     expect(await pendingCount()).toBe(0);
 
-    // 6. The device polls status on its ORIGINAL cookie and is now approved — the selector is the request
-    //    id accept carried onto the devices row, so the cookie is set once at the knock and never
-    //    re-issued: no Set-Cookie on the status response.
+    // 6. The device polls status on its ORIGINAL cookie and is approved; the cookie is never re-issued.
     const statusRes = await send(app, "GET", "/api/device/join/status", { cookie: jar });
     expect(statusRes.status).toBe(200);
     expect(await statusRes.json()).toEqual({ status: "approved" });
     expect(statusRes.headers.get("set-cookie")).toBeNull();
 
-    // 7. And it is a working device cookie: /me reports the device, carrying the register the accept
-    //    created (a till device rings its own — `tillId` is set).
+    // 7. And it is a working device cookie, carrying the register the accept created.
     const meRes = await send(app, "GET", "/api/device/me", { cookie: jar });
     expect(meRes.status).toBe(200);
     expect(await meRes.json()).toMatchObject({
@@ -231,15 +192,12 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     expect(acceptRes.status).toBe(400);
     expect((await errorOf(acceptRes)).code).toBe("device.join_mismatch");
 
-    // The wrong tap DENIED: the request is consumed (committed after the transaction, not rolled back),
-    // so the device's own status turns not_approved rather than staying pending for an unlimited retry.
+    // The wrong tap DENIED: the device's status turns not_approved rather than staying pending.
     const statusRes = await send(app, "GET", "/api/device/join/status", { cookie: jar });
     expect(statusRes.status).toBe(200);
     expect(await statusRes.json()).toEqual({ status: "not_approved" });
     expect(await pendingCount()).toBe(0);
 
-    // A follow-up knock starts afresh — the window is still open, and the new ask is a new pending row
-    // the admin can now approve.
     const again = await knock(app, "Bar till, second try");
     expect(again.joinId).not.toBe(joinId);
     expect(await pendingCount()).toBe(1);
@@ -256,23 +214,20 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     const venue = await setupVenue(suite.db);
     const app = mountBoth(venue.cfg);
 
-    // The window is never opened. First read the refused counter through the management route.
+    // The window is never opened.
     const before = await send(app, "GET", "/management-api/pairing-mode", {
       cookie: venue.managerCookie,
     });
     expect(before.status).toBe(200);
     expect(await before.json()).toMatchObject({ open: false, refusedRecently: 0 });
 
-    // The knock is refused before any DB work — nothing external may block a sale, so a flood on this
-    // unauthenticated route draws no connection and creates no row (CLAUDE.md §5).
     const knockRes = await send(app, "POST", "/api/device/join", { body: { name: "Bar till" } });
     expect(knockRes.status).toBe(403);
     expect((await errorOf(knockRes)).code).toBe("device.pairing_closed");
     expect(knockRes.headers.get("set-cookie")).toBeNull();
     expect(await pendingCount()).toBe(0);
 
-    // The refusal was COUNTED, not RECORDED: the shut window's refused tally, which the dashboard renders
-    // beside the toggle, went up by one, while the pending table stayed empty.
+    // COUNTED, not RECORDED: the refused tally went up while the pending table stayed empty.
     const after = await send(app, "GET", "/management-api/pairing-mode", {
       cookie: venue.managerCookie,
     });

@@ -12,16 +12,11 @@ import type { NodeId, TillId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { provisionNode } from "./provision-till.js";
 
-// `provisionNode` looks a node up by id and runs each module's seed. The fiscal seed one layer down
-// is covered in packages/fiscal-verifactu/src/provisioning.test.ts, as are stripe-account.test.ts
-// and aeat-transport.test.ts.
-
 // Well-formed but absent — the shape a mistyped argument actually takes, since a malformed one
 // never survives the `nodeId()` brand.
 const ABSENT = "00000000-0000-0000-0000-000000000000";
 
-// The full manifest (`manifestSets()`), not just [core, fiscal]: each module lands on top of its
-// dependencies in one ordered set — the production migration order.
+// The full manifest, so the migrations apply in the production order.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -33,10 +28,6 @@ interface Bootstrapped {
   nif: string;
 }
 
-// Tenants accumulate for the life of this suite and `tenants_country_tax_id_key` is unique, so each seeded
-// tenant needs its own NIF. A local counter rather than `@waitron/db`'s `freshNif`: this fixture
-// writes the deli's *shape* of row, and mixing two generators against one database is the exact
-// collision that helper's own comment warns about.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -44,29 +35,11 @@ function nextNif(): string {
 }
 
 /**
- * The pre-SIF state `provisionNode` has to register against: tenant → location → till → node →
- * node-keyed series, and NO SIF registration (node-id rekey, 2026-08-03: the SIF is the node, #33,
- * so a node is what `provisionNode` registers; the series is now keyed by node). `waitron-provision
- * venue` registers the SIF as it stands a venue up, so this bare-node shape is now what a REIMAGED
- * node (or one registered standalone) looks like before `provisionNode` runs.
- *
- * Written out rather than reusing `@waitron/fiscal-verifactu`'s fixtures, both of which were
- * considered: `seedTill` registers a SIF, which is the state this suite must start *without*, and
- * `seedNodesForSifContention` — the repo's only bare-node fixture — is named and documented for one
- * unrelated test ("Exists for exactly one test") and seeds a different locale and series code.
- * Borrowing it would mean either a misleading call site here or a rename reaching into
- * `chain.concurrency.test.ts`. The pre-SIF node state is what this module has to provision, so it is
- * what the fixture reproduces.
+ * The pre-SIF state: tenant → location → till → node → node-keyed series, and NO SIF registration.
+ * `@waitron/fiscal-verifactu`'s `seedTill` registers a SIF, which is why it is not reused here.
  */
 async function bootstrapTenant(): Promise<Bootstrapped> {
   const nif = nextNif();
-  // Every row goes in through its TABLE DEFINITION rather than as raw SQL, the same change
-  // `packages/db/src/testing/seed.ts` and `testing/fiscal-fixtures.ts` took. Two separate reasons,
-  // both measured against this fixture: the raw insert reached no `$defaultFn` generator, so it
-  // stopped at `NOT NULL constraint failed: tenants.created_at` and every id came back null; and
-  // `array['es-ES']` is PostgreSQL array syntax this engine refuses at prepare. `invoice_series`
-  // keeps naming only `node_id` and `code` — `next_number` is a SQL DEFAULT of 1 on both engines,
-  // so the series still opens at invoice number 1 (CLAUDE.md §5).
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nif, legalName: "Deli SL" })
@@ -106,7 +79,6 @@ describe("provisioning a node that has no SIF registration yet", () => {
     expect(seeded.map((s) => s.module)).toEqual(["catalogue", "venue-service", "fiscal-verifactu"]);
     expect(seeded[2]!.report).toMatch(/^SIF .* \(installation 1\)$/);
 
-    // The row `currentSif` would read back — the thing `recordSale` was missing.
     const live = await suite.db.execute<{
       nif: string;
       id_sistema_informatico: string;

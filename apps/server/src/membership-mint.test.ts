@@ -9,8 +9,6 @@ import type { NodeId } from "@waitron/shared";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 
-// Pure build/sign logic, exercised through the same `establishNodeIdentity` glue as
-// node-identity.test.ts.
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -29,10 +27,6 @@ describe("mintNextMembershipDocument", () => {
   beforeAll(async () => {
     db = suite.db;
     await seedTenant(db);
-    // Inserted through the table definition, the same change `packages/db/src/testing/seed.ts`
-    // took: `locations.id` is a `$defaultFn(newId)` value on this engine rather than a SQL
-    // DEFAULT, so a raw insert omitting it returns nothing to brand — and `array['es-ES']` is
-    // PostgreSQL array syntax the engine refuses at prepare (`near "['es-ES']": syntax error`).
     const [loc] = await db
       .insert(locations)
       .values({

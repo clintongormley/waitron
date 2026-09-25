@@ -69,10 +69,8 @@ describe("GET /api/node", () => {
   });
 
   it("answers the opaque server.internal 500 and logs under node.failed when the read throws", async () => {
-    // The probe's ONE failure mode is the membership read. Without the boundary this reached Hono's
-    // default handler: a 500 with no `{ error: { code } }` envelope and no log line at all, on the one
-    // route a till polls every few seconds. The response code is `server.internal` — `node.failed` is
-    // the boundary's LOG tag, not a wire code — and the driver's message never reaches either.
+    // `node.failed` is the boundary's log tag, not a wire code; the driver's message reaches
+    // neither.
     const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
     const res = await mount(
       { readMembership: () => Promise.reject(new Error("connection terminated: pw=hunter2")) },

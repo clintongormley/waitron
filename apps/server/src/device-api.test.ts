@@ -1,37 +1,11 @@
 /**
- * The device join, enrolment and management surface end to end, on the engine the box now runs.
- *
- * ## What this file does not check
- *
- * SQLite has no roles and no grants, so every call below runs on the one handle and nothing
- * here says anything about which identity the routes reach the database as. What each case names is
- * a route's behaviour.
- *
- * ## The two binding refusals, and the unit tests that used to sit beside them
+ * The device join, enrolment and management surface end to end.
  *
  * `rejects a nonexistent or absent profile — device untouched` and `rejects a receiptPrinterId
- * naming no printer of this tenant with device.binding_invalid` are the only cases left proving
- * that a device write naming a missing binding is refused as `device.binding_invalid` rather than
- * as a 500.
- *
- * A LOSS, from the storage swap: the crafted-error unit tests over `bindingFkField` went with that
- * function. It read the TABLE and COLUMN a foreign-key
- * refusal named to decide which of the two bindings was at fault, and pinned the deliberate
- * near-misses — another FK column of `devices`, the same column name on another table, a different
- * SQLSTATE, a refusal naming no key. This engine's foreign-key refusal is the whole message
- * `FOREIGN KEY constraint failed` and names no key at all (`packages/db/src/constraint-target.ts`),
- * so there is nothing left to read and nothing to tell apart: `device.ts`'s `requireDeviceBinding`
- * now reads the target row before the write instead. What is no longer checked: that a refusal on
- * one of the three OTHER foreign keys of `devices` — station, till, location — cannot be mistaken
- * for a binding fault. Those keys still refuse, and their refusals are now rethrown raw because
- * nothing inspects them at all.
- *
- * Measured here on 2026-09-22 before the change, driving each update directly and then the route:
- * the update is REFUSED with errcode 787, message `FOREIGN KEY constraint failed`, and the device
- * row is unchanged afterwards. The keys are in the SQLite baseline
- * (`packages/db/drizzle/0000_baseline.sql`: `device_profile_id` and `receipt_printer_id`, both
- * `REFERENCES … ON DELETE restrict`) and both are enforced — so what the pre-read restores is the
- * operator's error message, never the data integrity, which never left.
+ * naming no printer of this tenant with device.binding_invalid` are the only cases proving that a
+ * device write naming a missing binding is refused as `device.binding_invalid` rather than as a 500.
+ * A refusal on one of the OTHER foreign keys of `devices` is rethrown raw, and nothing here checks
+ * that it cannot be mistaken for a binding fault.
  */
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -69,14 +43,13 @@ const suite = useVenueDb({
 });
 const noopLog: Logger = () => {};
 
-// The accountable operator every placing amendment is attributed to (a plain uuid, no FK — the shape
-// working-order.pay-and-dispatch.test.ts uses).
+// The accountable operator every placing amendment is attributed to (a plain uuid, no FK).
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
 let backend: FiscalBackend;
 let clock: TrustedClock;
 
-/** The system wall clock, reported confident/anchored — the stub the sibling fiscal suites use. */
+/** The system wall clock, reported confident/anchored. */
 function systemClock(): TrustedClock {
   return {
     now: () => {
@@ -109,7 +82,7 @@ beforeAll(() => {
 });
 
 /** Park + place a two-line order (café, agua) so both lines FIRE to the default station, returning the
- *  ticket item ids in `line_no` order (owner read). The per-line bump / foreign-station targets. */
+ *  ticket item ids in `line_no` order. The per-line bump / foreign-station targets. */
 async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string[] }> {
   const orderId = randomUUID();
   const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
@@ -137,7 +110,7 @@ async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string
   return { orderId, items: rows.map((r) => r.id) };
 }
 
-/** Move a ticket item to a DIFFERENT station (owner SQL, fixture setup) — manufactures a "foreign
+/** Move a ticket item to a DIFFERENT station — manufactures a "foreign
  *  station" item the device bound to the default station may not bump. */
 async function moveItemToStation(itemId: string, stationId: string): Promise<void> {
   await suite.db.execute(
@@ -146,10 +119,8 @@ async function moveItemToStation(itemId: string, stationId: string): Promise<voi
 }
 
 /** Seed a `cloud_poll` printer for the venue — needs only a poll id, so no print agent has to be
- *  seeded to satisfy the transport CHECK. A real `(id)` a device binding can name.
- *  Through the table definition, never a raw insert: `printers.id` is a NOT NULL column with no SQL
- *  default (`packages/db/drizzle/0000_baseline.sql`), its value coming from a `$defaultFn` a raw
- *  statement never reaches. */
+ *  seeded to satisfy the transport CHECK. Through the table definition: `printers.id` comes from a
+ *  `$defaultFn` raw SQL never reaches. */
 async function seedPrinter(cfg: TillConfig): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
@@ -195,10 +166,8 @@ function mountApp(
 ): Hono {
   const app = new Hono();
   windows.set(app, pairingMode);
-  // `enrolRateLimiter` omitted → mountDeviceApi builds the DEFAULT (generous 30/min) limiter, which no
-  // ordinary suite trips. The rate-limit test below injects a limiter over a controllable clock (the cap
-  // is the baked-in `ENROL_RATE_MAX` — no longer injectable — so it pre-fills the window in-process).
-  // The window defaults to a FRESH shut holder, so a suite that never opens it cannot knock.
+  // `enrolRateLimiter` omitted → the default limiter, which no ordinary suite trips. The window
+  // defaults to a FRESH shut holder, so a suite that never opens it cannot knock.
   mountDeviceApi(
     app,
     { db: suite.db, cfg, secureCookies: false, enrolRateLimiter, pairingMode },
@@ -207,10 +176,7 @@ function mountApp(
   return app;
 }
 
-/** A device API mounted with an explicit `devMode` flag — the SP-C dev per-tab device switcher surface
- *  (`GET /api/dev/devices`) exists ONLY when `devMode === true`, and 404s otherwise. The plain
- *  `mountApp` above omits the flag (undefined → dev routes not mounted), which is the fail-closed
- *  production shape. */
+/** A device API mounted with an explicit `devMode` flag. */
 function mountDevApp(cfg: TillConfig, devMode: boolean): Hono {
   const app = new Hono();
   const pairingMode = createPairingMode();
@@ -220,8 +186,7 @@ function mountDevApp(cfg: TillConfig, devMode: boolean): Hono {
 }
 
 /** JSON request helper. `cookie: null` sends none; omitted sends none too (each caller is explicit).
- *  `host` overrides the request `Host` header — the enrol/reset Domain-scoping tests drive
- *  `cookieDomainFor(c.req.header("host"), …)` through it. */
+ *  `host` overrides the request `Host` header. */
 async function send(
   app: Hono,
   method: "GET" | "POST" | "PATCH",
@@ -245,20 +210,17 @@ function deviceCookieFrom(res: Response): string {
   return setCookie!.split(";")[0]!;
 }
 
-/** Seed a `device_profiles` row of the given FORM FACTOR (a device is DEFINED by its profile since Task
- *  7). A per-file counter keeps the unique name from colliding with the profiles a single test
- *  seeds alongside it. */
+/** A per-file counter keeps the unique name from colliding with the profiles a single test seeds
+ *  alongside it. */
 let profileCounter = 0;
 async function seedProfile(
   formFactor: "till" | "kds" | "phone-portrait" | "tablet-landscape",
   capabilities: string[] = [],
 ): Promise<string> {
   profileCounter += 1;
-  // Through the table definition, as `apps/server/src/testing/fiscal-fixtures.ts` is:
-  // `device_profiles.id`, `created_at` and `updated_at` are `$defaultFn` generators a raw insert
-  // never reaches, and it is also what encodes `capabilities` — the list is handed over as an array
-  // rather than pre-stringified, because the column's own write mapping is what serialises it, and
-  // the `::jsonb` cast it used to carry is a syntax error to this parser.
+  // Through the table definition: `device_profiles.id`, `created_at` and `updated_at` are
+  // `$defaultFn` generators raw SQL never reaches, and the column's own write mapping is what
+  // serialises `capabilities`.
   const [row] = await suite.db
     .insert(deviceProfiles)
     .values({ name: `Profile ${profileCounter}`, formFactor, capabilities })
@@ -269,8 +231,8 @@ async function seedProfile(
 /**
  * Knock on `app` with an OPEN window, then accept the request directly on `suite.db` with its own
  * number — the two halves of production enrolment, the first through the real route (so the cookie
- * under test is the one the route set) and the second through the verb, because the accept ROUTE is
- * Task 8's. Returns the joiner's cookie jar and the id the accept carried onto the `devices` row.
+ * under test is the one the route set) and the second through the verb, because the accept route is
+ * `join-api.ts`'s. Returns the joiner's cookie jar and the id the accept carried onto the `devices` row.
  */
 async function knockAndAccept(
   app: Hono,
@@ -349,11 +311,7 @@ describe("POST /api/device/join", () => {
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
       "device.pairing_closed",
     );
-    // The refusal happens before any DB work: no row, so a flood cannot fill the pending cap or the
-    // connection pool (CLAUDE.md §5 — nothing external may block a sale).
-    // No `::int` here or on the four sibling counts in this file: `count(*)` already comes back as
-    // a JavaScript number, and the cast operator is a syntax error to this parser
-    // (`unrecognized token: ":"`).
+    // The refusal happens before any DB work: no row, so a flood cannot fill the pending cap.
     const { rows } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from join_requests `,
     );
@@ -380,7 +338,7 @@ describe("POST /api/device/join", () => {
     expect(setCookie).toContain("HttpOnly");
     // The cookie's SELECTOR is the join request's id — the id accept carries onto the devices row.
     expect(deviceCookieFrom(res)).toContain(`${DEVICE_COOKIE}=${body.joinId as string}.`);
-    // The row is this tenant's, pending, and carries the number that came back.
+    // The row is pending and carries the number that came back.
     const { rows } = await suite.db.execute<{ label: string; verification_number: string }>(
       sql`select label, verification_number from join_requests
            where id = ${body.joinId as string}`,
@@ -1128,9 +1086,8 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
   it("lists the venue's active devices (kind derived), no option-sources, no token", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountDevApp(venue.cfg, true);
-    // Enrol through a NON-dev mount: a devMode knock now auto-accepts as a till (this task), so the full
-    // knock+accept helper — which enrols a KDS bound to a station — runs against a production mount. The
-    // dev list reads the same tenant's devices, so the route under test still sees the KDS device.
+    // Enrol through a NON-dev mount: a devMode knock auto-accepts as a till, and this case needs a KDS
+    // bound to a station.
     const { deviceId } = await enrolKds(mountApp(venue.cfg), venue, venue.defaultStationId);
 
     const res = await send(app, "GET", "/api/dev/devices");
@@ -1145,7 +1102,6 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
     });
     expect(device).not.toHaveProperty("token");
     expect(device).not.toHaveProperty("tokenHash");
-    // The mint option-sources the old chooser advertised are gone (the dev mint route was removed).
     expect(body).not.toHaveProperty("tills");
     expect(body).not.toHaveProperty("stations");
     expect(body).not.toHaveProperty("deviceProfiles");
@@ -1154,8 +1110,7 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
   it("lists only ACTIVE devices — a revoked device is omitted", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountDevApp(venue.cfg, true);
-    // Enrol through a non-dev mount (a devMode knock auto-accepts as a till now); the dev list reads the
-    // same tenant's devices.
+    // Enrol through a non-dev mount: a devMode knock auto-accepts as a till.
     const enrolApp = mountApp(venue.cfg);
     const live = await enrolKds(enrolApp, venue, venue.defaultStationId);
     const doomed = await enrolKds(enrolApp, venue, venue.defaultStationId);

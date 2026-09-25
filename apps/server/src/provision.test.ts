@@ -15,21 +15,15 @@ import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./pr
 import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 
-/** All modules enabled (an absent/empty modules.json) — the operator base a provision starts from. */
 const ALL_ENABLED = parseModuleConfig({}, ALL_MODULES);
-/** The fiscal-slot-resolved config a Spanish (ES-common → Veri*Factu) provision runs and persists —
- * what boot's `venueModuleConfig` builds from the request's territory before calling `provisionVenue`. */
 const ES_CONFIG = venueModuleConfig(ALL_ENABLED, "ES-common");
 
-// Each provisioned venue needs its own NIF (`tenants_country_tax_id_key` is unique); the shared database
-// draws from one generator, the same nextNif shape `till-sale.test.ts` uses.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(60_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** A valid ES-common venue with already-hashed admin secrets, mirroring `dev-setup.ts`'s fixture. */
 function venueRequest(taxId: string): VenueRequest {
   return {
     country: "ES",
@@ -60,8 +54,7 @@ function venueRequest(taxId: string): VenueRequest {
   };
 }
 
-/** A valid no-regime (`GB-vat`) venue: country GB, a country-prefixed territory, everything else the
- * same shape as the ES fixture. Its filing module resolves to `none`, so it registers no SIF. */
+/** `GB-vat` resolves to the no-regime filing module, so it registers no SIF. */
 function gbVenueRequest(taxId: string): VenueRequest {
   return {
     ...venueRequest(taxId),
@@ -70,7 +63,6 @@ function gbVenueRequest(taxId: string): VenueRequest {
   };
 }
 
-/** The row counts a duplicate provision would grow — each a fresh node = a fresh SIF/hash chain. */
 interface FiscalCounts {
   sif: number;
   series: number;
@@ -78,10 +70,6 @@ interface FiscalCounts {
   registros: number;
 }
 
-// `cast(count(*) as int)` throughout, in place of the PostgreSQL cast operator: this engine has no
-// cast OPERATOR and refuses the colons at prepare with `unrecognized token: ":"` (the same rewrite
-// `working-order.ts` took). Every one of these is a row COUNT, not an amount — CLAUDE.md §3's rule
-// that a raw read of a money, quantity or rate column casts to text does not reach any of them.
 async function fiscalCounts(db: Database): Promise<FiscalCounts> {
   const [sif, series, nodes, registros] = await Promise.all([
     db.execute<{ n: number }>(sql`select cast(count(*) as int) as n from registro_sif`),
@@ -100,8 +88,6 @@ async function fiscalCounts(db: Database): Promise<FiscalCounts> {
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 afterEach(() => clearProvisionFixture(suite.db));
-// A fresh state dir per test so `provisionVenue`'s `writeModuleConfig(stateDir, …)` has somewhere to
-// land and its `modules.json` can be read back and asserted.
 let stateDir: string;
 
 beforeEach(async () => {
@@ -126,7 +112,6 @@ describe("provisionVenue", () => {
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     );
 
-    // The four ids the trading boot needs, each a non-empty string.
     for (const id of [result.locationId, result.tillId, result.nodeId, result.seriesIds[0]]) {
       expect(typeof id).toBe("string");
       expect((id as string).length).toBeGreaterThan(0);
@@ -145,24 +130,16 @@ describe("provisionVenue", () => {
           where p.location_id = ${result.locationId}) as zone_menus`);
     expect(defaults.rows[0]).toEqual({ menus: 1, zone_menus: 1 });
 
-    // The box is now stamped for the requested environment.
     expect(await readDeploymentEnvironment(db)).toBe("preproduction");
 
-    // Exactly one SIF, one series set (standard + rectificative) and one node.
     expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
 
-    // The resolved slot was persisted: `fiscal-none` disabled so the trading boot resolves to
-    // Veri*Factu rather than failing `module.fiscal_slot_ambiguous` under the default-on set.
     const written = await readModuleConfig(stateDir);
     expect(written.overrides.get("fiscal-none")).toBe(false);
     expect(written.overrides.get("fiscal-verifactu")).toBe(true);
   });
 
   it("a GB (no-regime) venue mints no SIF/chain and persists modules.json disabling fiscal-verifactu", async () => {
-    // The `GB-vat` territory resolves `filing: "none"`, so `venueModuleConfig` selects `fiscal-none`
-    // and disables `fiscal-verifactu`. A no-regime node registers NO SIF and runs no fiscal seed —
-    // it still gets its two invoice series (a core concern, not fiscal). This is the first venue that
-    // provisions the second fiscal-slot member, the coexistence the whole slice exists to prove.
     const db = ownerDb();
     const config = venueModuleConfig(ALL_ENABLED, "GB-vat");
 
@@ -171,29 +148,17 @@ describe("provisionVenue", () => {
       { environment: "preproduction", venue: gbVenueRequest(nextNif()) },
     );
 
-    // The generic venue-service seed runs; the selected no-regime fiscal module contributes no seed.
     expect(result.seeded.map((s) => s.module)).toEqual(["catalogue", "venue-service"]);
     expect(result.seriesIds).toHaveLength(2);
-    // No registro_sif, no chain — but the node and its two series exist.
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 2, nodes: 1, registros: 0 });
 
-    // The persisted slot disables Veri*Factu and keeps `fiscal-none`.
     const written = await readModuleConfig(stateDir);
     expect(written.overrides.get("fiscal-verifactu")).toBe(false);
     expect(written.overrides.get("fiscal-none")).toBe(true);
   });
 
   it("refuses venue provisioning when the fiscal slot is emptied — before minting anything", async () => {
-    // A caller that hands `provisionVenue` a config with BOTH fiscal-slot members disabled empties the
-    // slot, so provisioning must REFUSE outright — never mint an unrecoverable SIF/hash chain with no
-    // regime to file it (CLAUDE.md §5). Both members carry a `fiscal` seat, so the provision-only gate
-    // no longer flags them (that set is governed by the slot's exactly-one rule); the slot check is what
-    // refuses, as step 0b, before planVenue/stampDeployment/applyVenue — nothing is validated, stamped
-    // or minted. Proven by an `ownerDb` Proxy that THROWS on ANY property access: a
-    // `module.fiscal_slot_empty` throw (rather than "ownerDb must not be touched") is the proof the slot
-    // check short-circuits before the DB is ever reached. (Normal callers reach `provisionVenue` through
-    // `venueModuleConfig`, which forces exactly one member on — the empty slot is the defensive branch a
-    // territory whose filing has no module would hit.)
+    // `ownerDb` throws on any access, so the slot check must refuse before the database is reached.
     const moduleConfig = parseModuleConfig(
       { modules: { "fiscal-verifactu": false, "fiscal-none": false } },
       ALL_MODULES,
@@ -225,7 +190,6 @@ describe("provisionVenue", () => {
     const afterFirst = await fiscalCounts(db);
     expect(afterFirst).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
 
-    // A second provision with the SAME NIF is refused BEFORE any fiscal write.
     const error = await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       request,
@@ -233,7 +197,6 @@ describe("provisionVenue", () => {
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && error.code).toBe("setup.already_provisioned");
 
-    // No second SIF, series or node — the guard prevented a duplicate hash chain.
     expect(await fiscalCounts(db)).toEqual(afterFirst);
   });
 
@@ -257,10 +220,6 @@ describe("provisionVenue", () => {
   });
 
   it("refuses a FOREIGN tenant in an occupied database and mints no second tenant (§5)", async () => {
-    // The production gap: `POST /setup-api/provision` reaches this function, and one tenant per
-    // database is the post-RLS isolation boundary — with row-level security gone a second
-    // `(country, tax_id)` would expose one business's rows to the other (§5). A DIFFERENT tenant in
-    // an occupied database is refused BEFORE stamping or applyVenue, exactly as the `venue` CLI does.
     const db = ownerDb();
     await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
@@ -272,7 +231,6 @@ describe("provisionVenue", () => {
     );
     expect(firstTenants.rows[0]!.n).toBe(1);
 
-    // A DIFFERENT business (a fresh NIF) against the SAME database is refused as a foreign tenant.
     const error = await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
@@ -280,7 +238,6 @@ describe("provisionVenue", () => {
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && error.code).toBe("provisioning.foreign_tenant");
 
-    // Still exactly one tenant — and no second SIF/series/node/chain.
     const tenants = await db.execute<{ n: number }>(
       sql`select cast(count(*) as int) as n from tenants`,
     );
@@ -289,24 +246,11 @@ describe("provisionVenue", () => {
   });
 
   it("refuses a re-provision of the SAME business in a DIFFERENT casing, BY NAME (§5)", async () => {
-    // A re-provision of an already-provisioned box must never mint a second node, because that is a
-    // second permanent, unmergeable SIF and hash chain (§5). This case sends the SECOND request in a
-    // NON-canonical casing — a lowercase country and a lowercase NIF, where `nextNif()` ends in an
-    // uppercase "K" — so it also pins that casing plays no part in the decision.
-    //
-    // WHICH layer refuses it, and what happens without that layer. The experiment: delete the
-    // `present.length > 0` throw in `provision.ts` and run this case — it then prints `expected
-    // 'provisioning.second_venue' to be 'setup.already_provisioned'`. So the double-provision guard
-    // asks whether the taxpayer row exists at all — `present.length > 0` on the identities it has
-    // already read — and throws `setup.already_provisioned`; without it, applyVenue's own
-    // existing-venue check still stops the second chain one layer deeper, and what this case pins
-    // is that the operator gets the SETUP code rather than the provisioning one. Both layers are in
-    // the diff; neither is redundant.
+    // The second request is in a non-canonical casing, so casing plays no part in the decision.
     const db = ownerDb();
-    const nif = nextNif(); // e.g. "60000001K" — canonical (uppercase)
+    const nif = nextNif();
     const env = "preproduction" as const;
 
-    // First: provision in the CANONICAL casing.
     await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: env, venue: venueRequest(nif) },
@@ -314,7 +258,6 @@ describe("provisionVenue", () => {
     const afterFirst = await fiscalCounts(db);
     expect(afterFirst).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
 
-    // Second: re-provision the SAME business in a NON-canonical casing (lowercase country + NIF).
     const nonCanonical = { ...venueRequest(nif), country: "es", taxId: nif.toLowerCase() };
     const error = await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
@@ -323,7 +266,6 @@ describe("provisionVenue", () => {
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && error.code).toBe("setup.already_provisioned");
 
-    // One taxpayer, one SIF/series set, one node — no duplicate chain.
     const tenants = await db.execute<{ n: number }>(
       sql`select cast(count(*) as int) as n from tenants`,
     );
@@ -333,10 +275,8 @@ describe("provisionVenue", () => {
 
   it("lets a deployment.already_stamped from a changed environment propagate and mints nothing", async () => {
     const db = ownerDb();
-    // The box is stamped production first ...
     await stampDeployment(db, "production");
 
-    // ... so provisioning it for preproduction is refused at the stamp step, before any venue mint.
     const error = await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
@@ -344,7 +284,6 @@ describe("provisionVenue", () => {
     expect(isAppError(error)).toBe(true);
     expect(isAppError(error) && error.code).toBe("deployment.already_stamped");
 
-    // The refused provision minted no venue.
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
   });
 });

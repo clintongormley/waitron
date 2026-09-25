@@ -14,8 +14,6 @@ import {
   type VenueHolder,
 } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
-// Aliased: this module exports its own `assertNotAhead` — the wrapper that opens the venue
-// directory — and `EntryDeps` has a field of the same name.
 import { assertNotAhead as assertDatabaseNotAhead } from "@waitron/provisioning";
 import {
   BOX_HOSTNAME,
@@ -63,10 +61,8 @@ import "./errors.js";
 const STAYED_UP_MS = 120_000;
 
 /**
- * The box's own leaf for the recovery page, or `undefined` when it has never minted one — the same
- * `mintedBoxLeaf` fallback the setup branch and the trading branches use, so all three present the
- * one leaf an already-trusting phone accepts. Kept as a named re-export because spec §9.3's "recovery
- * falls back to plain HTTP" limit is a fact about THIS surface, and `serveRecovery` below reads it.
+ * The box's own minted leaf for the recovery page, or `undefined` when it has never minted one, in
+ * which case the page is served over plain HTTP.
  */
 export function recoveryTlsFiles(stateDir: string): TlsFiles | undefined {
   return mintedBoxLeaf(stateDir);
@@ -76,11 +72,9 @@ export interface RecoveryServeOptions {
   stateDir: string;
   port: number;
   log: Logger;
-  /** The plain-HTTP trust/landing listener's config, when recovery should serve the trust page beside
-   * the HTTPS page (built by `landingConfigFrom` in the recovery path). Omitted → no landing listener,
-   * which is how the direct-bind tests keep to one socket. */
+  /** The plain-HTTP trust/landing listener's config. Omitted → no landing listener. */
   landing?: LandingListenerConfig;
-  /** Injected for tests; defaults to the real `startLandingListener`. */
+  /** Defaults to the real `startLandingListener`. */
   startLanding?: (
     config: LandingListenerConfig,
     log: Logger,
@@ -88,16 +82,13 @@ export interface RecoveryServeOptions {
 }
 
 /**
- * Bind the recovery page on the box's own HTTPS port, presented with the box's existing leaf so an
- * already-trusting phone reaches it at the same URL with no new trust step. Beside it, serve the same
- * plain-HTTP trust/landing page trading mode does (when `opts.landing` is given): a phone that does
- * NOT yet trust the box's self-signed leaf hits the browser's cert interstitial before any recovery JS
- * runs, so it needs the plain-HTTP page to fetch the CA and its trust steps.
+ * Bind the recovery page on the box's own HTTPS port with the box's existing leaf, so an
+ * already-trusting phone reaches it at the same URL. Beside it, when `opts.landing` is given and
+ * `startLandingListener` binds one, the plain-HTTP trust/landing page: a phone that does not yet
+ * trust the leaf hits the certificate interstitial before any recovery page loads.
  *
- * Resolves when the socket is actually bound (`serve`'s `listeningListener`, not source order —
- * `serve()` returns before the bind, as `boot.ts`'s `startListening` records), and rejects if the
- * bind fails: the caller lets that escape, so a port it cannot take exits non-zero and Docker
- * restarts into the same decision rather than leaving a silent, page-less container up.
+ * Resolves once the socket is bound and rejects if the bind fails; the caller lets that escape, so
+ * the process exits non-zero rather than leaving a page-less container up.
  */
 export function serveRecovery(
   app: Hono,
@@ -123,15 +114,11 @@ export function serveRecovery(
       buildServeOptions({ fetch: surface.fetch, port: opts.port }, tls),
       (info) => {
         opts.log("warn", "recovery.listening", { port: info.port, tls: tls !== undefined });
-        // Best-effort, exactly as in trading mode: `startLandingListener` swallows its own bind failure
-        // and returns undefined when there is nothing to serve (no minted leaf, or the port disabled),
-        // so a missing or unbindable landing page never takes the recovery page down. Started only after
-        // the HTTPS bind succeeds so the two do not race for the same port.
+        // Best-effort: `startLandingListener` logs its own bind failure rather than throwing, so an
+        // unbindable landing page never takes the recovery page down.
         const startLanding = opts.startLanding ?? startLandingListener;
         const landing = opts.landing ? startLanding(opts.landing, opts.log) : undefined;
         if (landing !== undefined) {
-          // The recovery server outlives everything until the process exits (production never closes it),
-          // so this fires only on a deliberate teardown — a test, or a future shutdown path.
           server.on("close", () => void landing.close().catch(() => {}));
         }
         resolve(server);
@@ -144,11 +131,10 @@ export function serveRecovery(
 }
 
 /**
- * The plain-HTTP trust/landing listener's config for the recovery path, built from throw-free env
- * reads (recovery never runs `loadConfig` — a broken config is what lands a box here). `tls` is always
- * undefined: recovery presents the box's OWN minted leaf (`recoveryTlsFiles`), never an operator cert,
- * so the trust page is warranted exactly when a minted leaf exists — the check `startLandingListener`
- * then makes.
+ * The landing listener's config for the recovery path, built from env reads that never throw:
+ * recovery never runs `loadConfig`, because a broken config is what lands a box here. `tls` is
+ * always undefined because recovery presents only the box's own minted leaf, never an operator
+ * certificate.
  */
 function landingConfigFrom(
   env: NodeJS.ProcessEnv,
@@ -163,8 +149,7 @@ function landingConfigFrom(
     boxAddresses = undefined;
   }
   const raw = env.WAITRON_HTTP_LANDING_PORT;
-  // `0` disables the listener (kept, unlike httpPort); an unset or out-of-range value takes the
-  // default rather than throwing, mirroring `httpPortFrom`.
+  // `0` is kept, unlike in `httpPortFrom`: it disables the listener.
   const landingPort = isUnset(raw) ? DEFAULT_HTTP_LANDING_PORT : Number.parseInt(raw, 10);
   return {
     landingPort:
@@ -185,31 +170,18 @@ export interface EntryDeps {
   /** The process environment, before the box's own env files are merged under it. */
   baseEnv: NodeJS.ProcessEnv;
   stateDir: string;
-  /** The directory holding `venue.db` and `node.db`: the same value `config.venueDir` resolves for
-   *  the server (`config.ts`). Resolved by the CALLER, because the entrypoint never runs
-   *  `loadConfig` — a box reaches recovery precisely when its configuration is what is broken. */
+  /** Resolved by the caller, because the entrypoint never runs `loadConfig`: a box reaches recovery
+   *  precisely when its configuration is what is broken. */
   venueDir: string;
-  /** Executes a staged restore before loadBoxEnv/startServer opens the venue files. */
   runStagedRestore?: (deps: StagedRestoreDeps) => Promise<boolean>;
-  /** Refuses a database migrated by a different image. Injected so `runEntry` stays unit-testable;
-   *  it defaults to the real `assertNotAhead` BELOW in this file, as `runStagedRestore` above
-   *  defaults to the real one — because it is a GUARD. A no-op default is lost by any caller that
-   *  forgets the dependency, and lost silently: nothing throws and nothing logs. (`reportFailure`
-   *  below does default to a no-op; its own doc says why that one is different.) */
+  /** Defaults to the real `assertNotAhead` below, never a no-op: it is a guard, and a no-op default
+   *  is lost silently by any caller that forgets the dependency. */
   assertNotAhead?: (venueDir: string, migrationsRoot: string) => Promise<void>;
   /**
-   * The INSTALLER's channel — the container's stdout, which is `docker logs`, never the
-   * `waitron.log` the recovery page tails. It is the one place the caught error's own words may
-   * appear, and only after `redactSecrets`. Injected so the failure path is unit-covered; a test
-   * that omits it gets the no-op below and asserts nothing about it.
-   *
-   * It keeps that no-op default, unlike `assertNotAhead` above, because it is diagnostic OUTPUT and
-   * not a guard: omitting it loses detail from `docker logs` and changes no outcome — the boot still
-   * throws, `main` at the bottom of this file still writes the structured `server.boot_failed` line,
-   * and the recovery page still shows the classified code. `main` is `runEntry`'s only non-test
-   * caller and wires the real stdout write. A real-stdout default would instead print a stack for
-   * every unit test that exercises a failing boot without supplying it: replacing the no-op with a
-   * marker write printed it twelve times from `node-entry.test.ts` alone (measured 2026-09-11).
+   * The installer's channel — the container's stdout (`docker logs`), never the `waitron.log` the
+   * recovery page tails. It is the one place the caught error's own words may appear, and only
+   * after `redactSecrets`. Its no-op default, unlike `assertNotAhead`'s, is safe because it is
+   * diagnostic output, not a guard: omitting it changes no outcome.
    */
   reportFailure?: (text: string) => void;
   loadBoxEnv: (base: NodeJS.ProcessEnv, stateDir: string) => Promise<NodeJS.ProcessEnv>;
@@ -229,28 +201,20 @@ export interface EntryDeps {
   /** Runs `onStayedUp` once the process has survived `ms` — see the counter rule in `runEntry`. */
   scheduleStayedUp: (ms: number, onStayedUp: () => void) => void;
   log: Logger;
-  /** Where the recovery page reads its log tail from; defaults to `config.ts`'s own default. */
+  /** Where the recovery page reads its log tail from. */
   logDir?: string;
   /**
-   * Where the migration sets live. Typed `string`, never `string | null`: null means "resolve from
-   * the bundle's own directory", which is exactly the value that fails a real container's first
-   * boot with `migrations.set_missing`.
-   *
-   * ONE folder, stated once here: the default is the same expression `startServer` passes, and
-   * `runEntry` hands this same value to BOTH of its own migration-set readers, so the staged
-   * restore, the ahead check and the server it starts can never read three different folders.
+   * Where the migration sets live. Never `null`: null means "resolve from the bundle's own
+   * directory", which fails a real container's first boot with `migrations.set_missing`. `runEntry`
+   * hands this one value to both the staged restore and the ahead check.
    */
   migrationsRoot?: string;
   exit?: (code: number) => void;
 }
 
 /**
- * `WAITRON_HTTP_PORT`, or `config.ts`'s own default — resolved here rather than through
- * `loadConfig`, because a box reaches recovery precisely when its configuration may be what is
- * broken and a config that throws would take the page down with it. The bounds are `config.ts`'s
- * too, imported not copied: an out-of-range value reaches `listen` as a raw `ERR_SOCKET_BAD_PORT`,
- * and a box whose `WAITRON_HTTP_PORT` is `999999` is exactly a box that fails `loadConfig` three
- * times and lands here. Zero is out of range for the same reason the rest are: to `listen` it means
+ * `WAITRON_HTTP_PORT`, or the default — resolved here rather than through `loadConfig`, whose throw
+ * on a broken config would take the page down with it. Zero is refused because to `listen` it means
  * "any free port", which puts the page somewhere the operator cannot find it.
  */
 function httpPortFrom(env: NodeJS.ProcessEnv): number {
@@ -282,12 +246,10 @@ function changeState(
 }
 
 /**
- * Persist the escalation state, REPORTING a write failure rather than letting it become the
- * outcome. Used everywhere the write is not the point of the moment: on the failure path the boot's
- * own error is what an operator needs, in the stayed-up callback a floating rejection would kill a
- * HEALTHY server two minutes after it booted, and in the retry a failed reset just means the page
- * comes back after the restart. The one write that is NOT routed through here is the pre-boot
- * counter, which is allowed to throw: a box whose count cannot be written can never escalate.
+ * Persist the escalation state, logging a write failure rather than letting it become the outcome:
+ * on the failure path the boot's own error is what matters, and in the stayed-up callback a
+ * floating rejection would kill a healthy server. The pre-boot counter is the one write not routed
+ * through here, and is allowed to throw: a box whose count cannot be written can never escalate.
  */
 async function persistState(
   deps: EntryDeps,
@@ -311,29 +273,9 @@ function paramsLine(params: unknown): string {
 
 /**
  * What the installer's channel gets for a failed boot: the outer error's name, message and stack,
- * then every wrapped `cause` below it by name and message, and an `AppError`'s params at whichever
- * level carries them — all through `redactSecrets`, because this is the one place the caught error's
- * own words may appear (spec §4.4) and it is `docker logs`, never the page.
- *
- * The chain is walked because the outer error is often not the whole reason — but it is NO LONGER
- * the query layer that makes it so. Measured on this tree, through `withTransaction` + `tx.execute`:
- * `select absent_column` arrives as a plain `Error` whose own message is
- * `no such column: absent_column`, with `cause` undefined. The wrapper the PostgreSQL driver added
- * — an outer `Failed query: …` with the real message in `cause` alone — is gone, so on this engine
- * the outer error IS the driver's words. What still nests is ours: an `AppError` raised over a
- * caught cause, and a boot path that re-throws one around another. Walking the chain costs nothing
- * when there is one level and is what reports the reason when there are several. Params travel for
- * the same reason: `migrations.incomplete`'s counts and
- * `provisioning.database_ahead`'s hashes ARE the diagnosis, and the code alone was already in the
- * structured `server.boot_failed` line.
- *
- * Only the outer stack is included. A stack per level triples the output for the frames of a driver
- * the installer cannot act on; the names and messages are what name the fault.
- *
- * Its own loop, but not its own bound: `MAX_CAUSE_DEPTH` is imported from `@waitron/shared`'s
- * `cause-chain.ts`.
- * `firstCodeInCauseChain` itself cannot serve here — it returns the FIRST accepted code and stops,
- * while this keeps every level.
+ * then every wrapped `cause` by name and message, and an `AppError`'s params at whichever level
+ * carries them — all through `redactSecrets`, because this is the one place the caught error's own
+ * words may appear, and it is `docker logs`, never the page.
  */
 function failureDetail(error: unknown): string {
   const lines: string[] = [];
@@ -355,10 +297,9 @@ function failureDetail(error: unknown): string {
   return redactSecrets(lines.join("\n"));
 }
 
-/** What the installer's channel gets for a start given arguments: the code, the first argument, how
- *  many followed, and the form that runs an operator command instead. The first argument is printed
- *  because it normally names the command, which tells the operator what to correct, though it too
- *  can carry a secret `redactSecrets` does not mask; the later ones are not printed. */
+/** What the installer's channel gets for a start given arguments. The first argument is printed
+ *  because it normally names the command, though it too can carry a secret `redactSecrets` does not
+ *  mask; the later ones are not printed. */
 function argumentsRefused(args: readonly string[]): string {
   const more = args.length - 1;
   const rest = more === 0 ? "" : ` and ${more} more argument${more === 1 ? "" : "s"}, not shown`;
@@ -372,29 +313,14 @@ function argumentsRefused(args: readonly string[]): string {
 }
 
 /**
- * Refuse a venue database carrying migrations this image does not ship: open the directory, compare
- * each set's journal against the migration files under `migrationsRoot`, close. The default for
- * `EntryDeps.assertNotAhead`, so it is the shape `runStagedRestore` already sets — the real
- * implementation, never a no-op that a caller could lose the guard to by forgetting the dependency.
+ * Refuse a venue database carrying migrations this image does not ship.
  *
- * Judging a database NOTHING has migrated yet is safe because the comparison runs in one direction
- * only: `unknownHashes` (`packages/provisioning/src/schema-ahead.ts`) reports hashes the DATABASE
- * carries and the image has no file for, so a journal that is a strict subset of the image's — an
- * ordinary upgrade — is not refused. Both directions are pinned by the `assertNotAhead` cases in
- * `node-entry.test.ts`.
+ * Judging a database nothing has migrated yet is safe because the comparison runs in one direction
+ * only: `unknownHashes` (`packages/provisioning/src/schema-ahead.ts`) reports hashes the database
+ * carries and the image has no file for, so an ordinary upgrade is not refused. A set whose journal
+ * table does not exist is skipped, so a virgin venue directory passes.
  *
- * The other half, which a first boot depends on: a set whose journal TABLE does not exist is
- * SKIPPED, not an error, so a virgin venue directory passes. `journalHashes` asks `sqlite_master`
- * for the table rather than catching a refusal (`packages/migrations/src/journal-hashes.ts`); it
- * caught PostgreSQL's `42P01` until 2026-09-22, which on this engine made every first boot throw.
- * Pinned by "a VIRGIN venue directory passes the ahead check" below.
- *
- * `migrationsRoot` is a parameter rather than a closure over the entrypoint's own, so this can BE
- * that default: the one folder both halves read is `EntryDeps.migrationsRoot`, which `runEntry`
- * passes in.
- *
- * Closed in a `finally`: this open exists only for the check, and `startServer` opens the same
- * directory for the life of the process.
+ * Closed in a `finally` because `startServer` opens the same directory for the life of the process.
  */
 export async function assertNotAhead(venueDir: string, migrationsRoot: string): Promise<void> {
   const store = await openVenueDatabase(venueDir);
@@ -409,54 +335,45 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
  * One container start: decide the level, bring the venue directory into shape, hand the server its
  * environment, and start it — or serve the recovery page instead.
  *
- * FOUR orderings carry the whole design, and each is invisible in production if it is wrong:
+ * Four orderings carry the design, and each is invisible in production if it is wrong:
  *
- * 1. The level is read FIRST, before anything opens the venue database. A database-side failure is
- *    exactly what puts a box in recovery, so deciding after the restore and the ahead check would
- *    make the page unreachable in most of the cases it exists for (spec §9.3).
- * 2. The failure counter is written BEFORE the boot's FIRST step, never only in a failure handler
- *    and never only around `startServer`: a boot that HANGS never throws, so a counter written
- *    later covers none of the steps before it, and a box that cannot boot restart-loops without
- *    ever reaching the page that exists for exactly that case. Pinned by "counts a boot that HANGS
- *    in the staged restore" and "increments the counter BEFORE the server starts".
- * 3. It CLEARS only from the stayed-up callback — `startServer` resolved AND the process then
- *    survived `STAYED_UP_MS`. Clearing on "started" alone is a measurement where pass and fail look
- *    alike: a module throwing five seconds in would reset the counter on every attempt.
- * 4. The ahead check runs AFTER `runStagedRestore`, which replaces the venue files, and BEFORE
- *    `startServer`, which migrates and then queries the schema. It runs against a database nothing
- *    has migrated yet — `startServer` owns the migration now (`boot.ts`) — and what makes that safe
- *    is the one-directional comparison this file's `assertNotAhead` documents. Pinned by "checks
- *    the VENUE DIRECTORY for an ahead database before the server starts".
+ * 1. The level is read first, before anything opens the venue database: a database-side failure is
+ *    exactly what puts a box in recovery.
+ * 2. The failure counter is written before the boot's first step, never only in a failure handler:
+ *    a boot that hangs never throws, and would restart-loop without ever reaching the page.
+ * 3. It clears only from the stayed-up callback — `startServer` resolved and the process then
+ *    survived `STAYED_UP_MS`. Clearing on "started" alone would let a module throwing seconds in
+ *    reset the counter on every attempt.
+ * 4. The ahead check runs after `runStagedRestore`, which replaces the venue files, and before
+ *    `startServer`, which migrates and then queries the schema. It judges a database nothing has
+ *    migrated yet, which the one-directional comparison in `assertNotAhead` makes safe.
  *
- * `startServer` resolving is the signal rather than a healthy `/health` probe because `/health` is
- * 503 on a setup box by design, so a health-gated reset would drive every unprovisioned box into
+ * `startServer` resolving is the signal rather than a healthy `/health`, because `/health` is 503
+ * on a setup box by design, so a health-gated reset would drive every unprovisioned box into
  * recovery.
  */
 export async function runEntry(deps: EntryDeps): Promise<void> {
   // `docker compose run app <command>` appends `<command>` here. Booting instead would start a
   // second server, and with the app stopped for a restore nothing holds the venue folder to refuse
-  // it. Before the level is read, so a box at the recovery level refuses too, and before the
-  // counter is written, so a mistyped command is not a failed start.
+  // it. Checked before the level is read, so a box at the recovery level refuses too, and before
+  // the counter is written, so a mistyped command is not a failed start.
   if (deps.args.length > 0) {
     (deps.reportFailure ?? (() => {}))(argumentsRefused(deps.args));
     throw new AppError("server.entry_arguments_refused", {});
   }
 
-  // A plain read, outside the lock: it decides only whether this start boots or serves the page,
-  // and `readRecoveryState` never throws, which the page path depends on. Every change below
-  // re-reads under the lock, so a write made since is kept rather than overwritten.
+  // Outside the lock: it decides only whether this start boots or serves the page. Every change
+  // below re-reads under the lock, so a write made since is kept rather than overwritten.
   const state = await deps.readRecoveryState(deps.stateDir);
   const logDir = deps.logDir ?? join(deps.stateDir, "logs");
   const exit = deps.exit ?? DEFAULT_EXIT;
   const now = deps.now ?? (() => new Date());
 
   if (state.level === "recovery") {
-    // The page's log tail is the SERVER's rotating file (`<logDir>/waitron.log`). A box escalated
-    // before the server ever started — a staged-restore or ahead-check failure — therefore
-    // shows its `lastErrorCode` above an empty tail, because the entrypoint's own log goes to stdout
-    // (`docker logs`) and nothing writes that file until `startServer` gets far enough. Stated, not
-    // fixed: a second sink in the entrypoint is more moving parts on the one path that must not
-    // fail, and the code plus `docker logs` carry the same information.
+    // A box escalated before the server ever started shows its `lastErrorCode` above an empty log
+    // tail: the entrypoint logs to stdout (`docker logs`), and nothing writes the server's log file
+    // until `startServer` gets far enough. Accepted rather than adding a second sink on the one
+    // path that must not fail.
     deps.log("warn", "recovery.serving", {
       failures: state.failures,
       lastErrorCode: state.lastErrorCode,
@@ -466,9 +383,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       recoveryApp({
         state,
         logDir,
-        // The level argument is not written: `readRecoveryState` DERIVES the level from the count,
-        // so a zero count IS "normal" and a hand-written level could not pin a box either way. The
-        // exit is the whole retry — Docker's restart policy performs the restart (spec §9.3).
+        // The exit is the whole retry: Docker's restart policy performs the restart.
         onRetry: async () => {
           await persistState(deps, cleared);
           exit(0);
@@ -484,17 +399,15 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     return;
   }
 
-  // The counter covers the WHOLE attempt, so it is written before the first step that can fail.
-  // Consequence, accepted: an attempt CUT SHORT counts too — three power-cycles during a long cold
-  // restore land a box on the page, where the retry button clears it. A counter that only counted
-  // completed failures could not count the boot that hangs, which is the case it exists for.
+  // Written before the first step that can fail, so a boot that hangs is counted. Accepted
+  // consequence: an attempt cut short counts too — three power-cycles during a long cold restore
+  // land a box on the page, where the retry button clears it.
   const attempt = await changeState(deps, (current) =>
     afterFailure(current, BOOT_INCOMPLETE, now()),
   );
 
   let server: { close(): Promise<void> };
   try {
-    // Resolved once, so the two steps below and the server cannot read different folders.
     const migrationsRoot = deps.migrationsRoot ?? DEFAULT_MIGRATIONS_ROOT;
 
     const recoveryOrigin = loadCloudOrigin(deps.baseEnv);
@@ -513,16 +426,14 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       },
     });
 
-    // AFTER the restore, which replaces the venue files, and BEFORE the server opens them: only the
-    // ahead direction is unrecoverable, and naming it here is the whole point — drizzle applies and
-    // reports nothing for an ahead journal, so the mismatch would otherwise surface as an
-    // unclassified driver error in whatever query first touched the changed schema (spec §4.2).
+    // Unchecked, an ahead database would surface as an unclassified driver error in whatever query
+    // first touched the changed schema.
     await (deps.assertNotAhead ?? assertNotAhead)(deps.venueDir, migrationsRoot);
 
     const env = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir);
-    // The RAW base env goes alongside the merged `env`: boot re-reads the box-env files off disk on
-    // every backup reload (so the wizard's `backup.env` takes effect without a restart) and needs the
-    // unmerged base to tell a file-sourced value from an env-sourced one (spec §3.2 provenance).
+    // The raw base env goes alongside the merged `env`: boot re-reads the box-env files on every
+    // backup reload and needs the unmerged base to tell a file-sourced value from an env-sourced
+    // one.
     server = await deps.startServer(env, deps.baseEnv);
     if (recoveryOrigin) {
       void createCloudRecoveryClient({
@@ -541,8 +452,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     if (code === "provisioning.database_in_use") {
       await recordRefusal(deps, attempt, at);
     } else {
-      // The count the pre-boot write made stands — one attempt is one failure, not two — now
-      // carrying the classified code.
+      // The pre-boot count stands — one attempt is one failure, not two — now with the code.
       await persistState(deps, (current) => withFailureCode(current, code, at));
     }
     throw error;
@@ -556,13 +466,9 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
  * Another process holds the venue folder. Its holder file (written by `@waitron/store` beside
  * `venue.lock`) says whether it is alive. A fresh heartbeat is a live holder, usually the running
  * server with this start a second copy beside it: this start's count comes back off. A stale,
- * missing or unreadable file counts, so a folder held by something stuck reaches the page.
- *
- * Missing counts because the holder writes its file in the same synchronous step that takes the
- * lock, and removes it just before letting the lock go (`packages/store/src/venue-lock.ts`). A live
- * holder without one includes a start refused within the instant of the take, a start refused
- * within the instant of the release (which counts once), a file deleted by hand (the next heartbeat
- * rewrites it), and a process of an image from before the file existed.
+ * missing or unreadable file counts, so a folder held by something stuck reaches the page. Missing
+ * counts because the holder writes its file in the step that takes the lock and removes it just
+ * before letting the lock go (`packages/store/src/venue-lock.ts`).
  *
  * Stale is `VENUE_HOLDER_STALE_MS`, shorter than the watchdog's `WATCHDOG_KILL_MS` on purpose; the
  * reason is at `WATCHDOG_KILL_MS` (`packages/store/src/venue-liveness.ts`).
@@ -591,16 +497,12 @@ async function recordRefusal(
    exercised by a container boot, not by a unit test — the shape `bin-recovery.ts` and
    `run-server.ts`'s `DEFAULT_DEPS` both use. */
 function bootThisProcess(): Promise<void> {
-  // A snapshot of `process.env` at start-up; `runEntry` passes it on as the unmerged base env.
   const env = { ...process.env };
   const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
   setVenueHolderIdentity("server", env, stateDir);
-  // `config.ts`'s own expression for `venueDir` (`config.ts:746`), repeated rather than reached
-  // through `loadConfig`: the entrypoint never loads the config, because a broken config is what
-  // lands a box here. `restore-command.ts` repeats it for the same reason.
+  // `loadConfig`'s own expressions for `venueDir` and `migrationsRoot`, repeated rather than read
+  // through `loadConfig`, because a broken config is what lands a box here.
   const venueDir = resolveConfigDir(env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
-  // `config.ts`'s own fallback, verbatim (it stores this one unresolved). The one-folder rule is
-  // stated on `EntryDeps.migrationsRoot`.
   const migrationsRoot = isUnset(env.WAITRON_MIGRATIONS_DIR)
     ? DEFAULT_MIGRATIONS_ROOT
     : env.WAITRON_MIGRATIONS_DIR;
@@ -630,20 +532,15 @@ function bootThisProcess(): Promise<void> {
     exit: DEFAULT_EXIT,
   }).catch((error: unknown) => {
     // `classifyBootFailure`, never the caught value: a driver failure's message can embed a path or
-    // a credential, and an unhandled rejection would print the whole stack. The scrubbed text has
-    // already gone to stdout from `runEntry`'s catch; this line stays structured.
+    // a credential. The scrubbed text has already gone to stdout from `runEntry`'s catch.
     log("error", "server.boot_failed", { errorCode: classifyBootFailure(error) });
     process.exit(1);
   });
 }
 
 /**
- * Run ONLY when this file is the process's own entry point (`node /app/node-entry.js`), never when
- * it is imported — its own unit test imports it for `runEntry` and for `assertNotAhead`, and an
- * unguarded call here would open the venue database and start a server from inside the test runner.
- * `realpathSync` because a symlinked bin resolves to a different path than `import.meta.url`. The
- * import direction is what a test can measure, and `node-entry.test.ts` measures it: it imports
- * this module and nothing boots.
+ * Run only when this file is the process's own entry point, never when it is imported.
+ * `realpathSync` because a symlinked bin resolves to a different path than `import.meta.url`.
  */
 if (
   process.argv[1] !== undefined &&
