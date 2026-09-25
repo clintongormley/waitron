@@ -92,18 +92,9 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 
-// This suite exercises working-order state, validation, foreign keys, triggers and node-scoped
-// reads. Concurrent order-number allocation is `working-order.pay-and-dispatch.test.ts`'s.
 const LOCALE = "es-ES";
 
-/**
- * An ISO timestamp `minutes` in the past, for backdating a `queued_at` that a band assertion reads.
- *
- * This replaces `now() - interval '12 minutes'`: SQLite has no interval type, and `queued_at` is a
- * `tsString` column (packages/db/src/schema/ticket-items.ts:62), so the arithmetic happens on a
- * JavaScript `Date` and the ISO string binds. The reading is the TEST process's clock rather than
- * the database's, which on this engine is the same process.
- */
+/** An ISO timestamp `minutes` in the past, for backdating a `queued_at` that a band assertion reads. */
 function minutesAgo(minutes: number): string {
   return new Date(Date.now() - minutes * 60_000).toISOString();
 }
@@ -143,12 +134,6 @@ interface SeededVenue {
  */
 async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promise<SeededVenue> {
   await seedTenant(db);
-  // Through the table definitions rather than raw SQL, the same change `testing/seed-units.ts`
-  // took: `units.id`, `locations.id` and `tills.id` are `$defaultFn` generators a raw insert never
-  // reaches, the `::jsonb` casts are `unrecognized token: ":"` on this engine, and
-  // `invoice_locales` is a JSON array in a text column (`labelList`), so there is no array
-  // constructor to write. The ids are minted here rather than read back from `returning`, which
-  // also drops the find-by-seed-key step the two-row insert needed.
   const eachUnitId = randomUUID();
   const kgUnitId = randomUUID();
   await db.insert(units).values([
@@ -225,9 +210,7 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
         grossPrice: "3.25",
       });
       // `departments.id`/`floor_zones.id` and both tables' `created_at` are `$defaultFn`
-      // generators a raw insert never reaches — it failed with
-      // `NOT NULL constraint failed: departments.id`. One clock reading for the two rows, which
-      // is what the transaction-start `now()` default gave them.
+      // generators a raw insert never reaches, so they are supplied here.
       const departmentId = randomUUID();
       const zoneId = randomUUID();
       const createdAt = nowIso();
@@ -238,19 +221,10 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
       await tx.execute(sql`
       insert into floor_zones (id, location_id, name, created_at)
       values (${zoneId}, ${locationId}, 'Counter', ${createdAt})`);
-      // Three statements where this fixture had two, because `zone_service_policies` and
-      // `zone_menus` point at each other: a policy's `default_menu_id` names a row of `zone_menus`,
-      // and a `zone_menus` row's `zone_id` names a row of `zone_service_policies`. The policy's
-      // half was DEFERRABLE INITIALLY DEFERRED on PostgreSQL, so one insert order satisfied both;
-      // sqlite-core has no deferrable option, both checks land at their own statement, and NEITHER
-      // order works. Both measured here, one run each with this fixture: policy-first with
-      // `default_menu_id = ${cat.id}` is refused AT THE POLICY INSERT, and zone_menus-first is
-      // refused AT THE `zone_menus` INSERT — `FOREIGN KEY constraint failed` either way, which is
-      // the only text SQLite gives for a key. The way through is the
-      // one recorded against the schema itself (packages/venue-service/src/schema/service.ts, above
-      // `zone_service_policies_default_menu_zone_fk`): insert the policy with a NULL default menu,
-      // insert the allowed menus, then name one of them. The end state is the row this fixture
-      // always wrote.
+      // Three statements, because `zone_service_policies` and `zone_menus` point at each other and
+      // neither key is deferrable: insert the policy with a NULL default menu, insert the allowed
+      // menus, then name one of them (packages/venue-service/src/schema/service.ts, above
+      // `zone_service_policies_default_allowed_fk`).
       await tx.execute(sql`
       insert into zone_service_policies
         (location_id, zone_id, department_id, default_menu_id, is_counter_default)
@@ -280,7 +254,6 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
     locationId: brandLocationId(locationId),
     locale: LOCALE,
     invoiceLocales: [LOCALE],
-    // No integrated card terminal; these park routes never read it.
     tipsEnabled: false,
     // Defaults to prepay (park/list/retrieve/update/abandon don't dispatch on the mode); the KDS fire
     // tests pass "ticket_then_pay" so placeOrder takes the non-fiscal placing path.
@@ -523,8 +496,7 @@ async function seedVariantOffer(
  * `apps/till/src/widgets/product-name.ts`), so it receives both halves.
  *
  * The fixture's three pairs are three different strings, so a reader that shows the wrong name fails
- * here rather than passing. All four readers run over the SAME fired order, so one revert on any
- * single reader fails this.
+ * here rather than passing. All four readers run over the SAME fired order.
  */
 describe("a sold line naming a variant is labelled by the variant's own name", () => {
   const STAFF = "Large";
@@ -662,8 +634,7 @@ describe("parkOrder", () => {
              variant_kitchen_name
       from working_order_lines where working_order_id = ${id} order by line_no`);
     // The two description columns hold JSON in a TEXT column, and a RAW read returns the stored
-    // text — the parse is drizzle's column mapping, which `db.execute` does not go through. Parsed
-    // here so the assertion below still names the maps it always named rather than a serialisation.
+    // text — the parse is drizzle's column mapping, which `db.execute` does not go through.
     const frozenRows = frozen.rows.map((row) => ({
       ...row,
       descriptions: JSON.parse(row.descriptions) as Record<string, string>,
@@ -705,9 +676,7 @@ describe("parkOrder", () => {
     // Read straight from the column, which counts whole cents: 325 is the locked 3.25. Nothing
     // converts here, so this asserts the stored COUNT. The cast is a no-op on this engine — the
     // column is already an integer and the driver hands it back as a number — and is kept only so
-    // the select list says which JavaScript type the assertion below is written against. The
-    // sentence this replaces claimed the cast would raise 22003 on an out-of-range value; that was
-    // PostgreSQL's four-byte `::int`, and SQLite's INTEGER is 64-bit, so nothing here refuses one.
+    // the select list says which JavaScript type the assertion below is written against.
     const line = await db.execute<{ unit_price_gross: number }>(sql`
       select cast(unit_price_gross as int) as unit_price_gross
       from working_order_lines where working_order_id = ${id}`);
@@ -957,10 +926,6 @@ describe("parkOrder", () => {
   });
 
   it("re-throws when the colliding id is no longer an open order", async () => {
-    // A CHARACTERIZATION test: its external behaviour (a rejection) is UNCHANGED by this fix, so it is
-    // not RED. It is proven to guard the new not-open branch BY DELETION (CLAUDE.md §4): replacing that
-    // branch's `throw error` with a fabricated `return { id: req.id, orderNumber: -1 }` makes this test
-    // FAIL (done, then restored) — confirming the assertion exercises the branch, not something else.
     const { cfg, cafeId } = await setupVenue();
     const id = randomUUID();
     const lines = [{ productId: cafeId, quantity: "1" }];
@@ -1159,7 +1124,7 @@ describe("openTab service context", () => {
 });
 
 /**
- * Read a working order and its lines back RAW (no tenant scope), for computing what
+ * Read a working order and its lines back RAW, for computing what
  * `listHeldOrders`/`getHeldOrder` should independently return. `openedAt` is the actual persisted
  * value, so a `toEqual` on the list carries every field rather than an `objectContaining` that
  * would let an unasserted key slip through (CLAUDE.md §4).
@@ -1174,8 +1139,6 @@ async function readOrder(id: string): Promise<{
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))
     .orderBy(workingOrderLines.lineNo);
-  // `line_total` stores a count of whole cents; the helper hands back the amounts, which is what
-  // the caller compares against a held-orders total.
   return { openedAt: wo!.openedAt, lineTotals: lines.map((l) => centsToDecimal(l.lineTotal)) };
 }
 
@@ -1184,8 +1147,8 @@ async function readOrder(id: string): Promise<{
  * through `priceBasket`, which is what the offers `offerProducts` publishes charge (each offer's
  * price is left blank, so it sells at its product's), then take its `.total`. This is
  * the number every other surface shows (the basket grand total, the printed ticket), and the
- * invariant a held-orders `total` MUST equal EXACTLY (Important review finding). Derived independently
- * of the persisted `line_total` column, so a held total computed from the NET base — the bug — fails
+ * invariant a held-orders `total` MUST equal EXACTLY. Derived independently
+ * of the persisted `line_total` column, so a held total computed from the NET base fails
  * against it (2 × 1.50 gross is 3.00 here, not the net 2.48 the fiscal line carries).
  */
 async function grossBasketTotal(
@@ -1236,8 +1199,6 @@ async function setStatus(id: string, status: "settled" | "abandoned"): Promise<v
   });
 }
 
-// `setStatus` needs the tenant of the venue it is acting on; each test assigns this before using it.
-
 /**
  * Insert an open order on ANOTHER node at the same location. The row exists to prove reads are
  * venue-wide (till-reroute §3.6): a promoted node inherits the venue's open tabs even though they are
@@ -1268,10 +1229,9 @@ describe("listHeldOrders", () => {
     await parkProducts(cfg, { id: idA, lines: linesA, label: "Mesa 4" });
     await parkProducts(cfg, { id: idB, lines: linesB });
 
-    // The Important review finding: the held `total` is the GROSS (VAT-inclusive) basket total the
-    // operator saw — `priceBasket(sameItems).total`, computed independently of the persisted column —
-    // NOT the summed net base. A: 1.50 × 2 = 3.00 gross (the old bug showed the net 2.48); B: 1.50 +
-    // 6.00 = 7.50. Both asserted as literals AND against the pricer, so the test fails if the held
+    // The held `total` is the GROSS (VAT-inclusive) basket total the operator saw —
+    // `priceBasket(sameItems).total`, computed independently of the persisted column — NOT the
+    // summed net base. A: 1.50 × 2 = 3.00 gross; B: 1.50 + 6.00 = 7.50. Both asserted as literals AND against the pricer, so the test fails if the held
     // total ever reverts to net (2.48 ≠ 3.00) or if the pricer itself drifts.
     const grossA = await grossBasketTotal(cfg, linesA);
     const grossB = await grossBasketTotal(cfg, linesB);
@@ -1377,8 +1337,7 @@ describe("getHeldOrder", () => {
       from working_order_lines
       where working_order_id = ${id}`);
     // `unit_name` holds JSON in a TEXT column, and a RAW read returns the stored text — the parse
-    // is drizzle's column mapping, which `db.execute` does not go through. Parsed here so the
-    // assertion still names the map it always named rather than a serialisation.
+    // is drizzle's column mapping, which `db.execute` does not go through.
     const storedRows = stored.rows.map((row) => ({
       ...row,
       unit_name: JSON.parse(row.unit_name) as Record<string, string>,
@@ -2172,12 +2131,11 @@ describe("abandonHeldOrder", () => {
 });
 
 // ---------------------------------------------------------------------------------------------------
-// KDS-1 Task 3 — fire → ticket items. `fireLines` resolves `product ?? category ?? default` and
+// Fire → ticket items. `fireLines` resolves `product ?? category ?? default` and
 // SNAPSHOTS the station onto each ticket item; the three fire points (placeOrder, sendToPrep, and a
 // tab's round-send via addTabRound) funnel through it. This suite proves the resolver, the snapshot
 // rule and the no-default refusal; the `ticket_items` schema's own
-// columns, unique and cascade are packages/db `ticket-items.test.ts`'s. Every
-// write runs through `withTransaction`.
+// columns, unique and cascade are packages/db `ticket-items.test.ts`'s.
 // ---------------------------------------------------------------------------------------------------
 
 /** The accountable operator a placing amendment is attributed to (a fixed fixture uuid — only ever
@@ -2468,11 +2426,8 @@ describe("basket-wide modifier resolution (perf)", () => {
   // The two THREE-LINE baskets below — the same dish twice, then a second dish — are what can see
   // that: a resolver moved inside the loop resolves three times instead of once. Behaviour alone
   // cannot tell the two apart (the same order comes out either way), so the resolver is spied on.
-  // Proven by mutation: moving the `resolveBasketModifiers` call in `priceOrderLines` inside the
-  // line loop takes those two from 1 to 3 ("expected resolveAttachedModifiers to be called 1
-  // times, but got 3 times").
   // The MIDDLE case is not one of them and does not cover the line loop at all: its basket is a
-  // SINGLE line, so it reads 1 either way, and it passed under that same mutation. What it pins is
+  // SINGLE line, so it reads 1 either way. What it pins is
   // a different thing — that a preserve check which cannot hold does not resolve the catalogue a
   // SECOND time on top of `priceOrderLines`.
   //
@@ -2652,7 +2607,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       expect(items.every((i) => i.state === "queued")).toBe(true);
 
       // Re-route the category AFTER firing. The already-fired item is SNAPSHOTTED, so it does NOT move —
-      // the load-bearing rule (re-categorising a product later never reroutes food already sent).
+      // the rule (re-categorising a product later never reroutes food already sent).
       await setCategoryStation(tx, cfg, drinks.id, cocina.id);
       const after = await ticketItemsFor(tx, orderId);
       expect(byProduct(after, cana).stationId).toBe(barra.id);
@@ -2700,7 +2655,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
   it("snapshots the line note at fire, and a later draft edit never moves the fired ticket (NON-FISCAL, spec §2/§3)", async () => {
     // The note counterpart of "Re-route the category AFTER firing" above: a fired ticket_items
     // row is a SNAPSHOT (like station_id/course_id), so editing the working_order_line afterwards must
-    // NOT rewrite food already sent to the pass. Task 2's tabs.test.ts already pins that fire CAPTURES
+    // NOT rewrite food already sent to the pass. tabs.test.ts pins that fire CAPTURES
     // the value; this pins that it stays FROZEN against a later edit — the immutability half.
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
@@ -2710,20 +2665,18 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         { productId: p, quantity: "1", note: "sin cebolla" },
       ]);
 
-      // Fire snapshotted the parent line's note onto the ticket item.
       const [before] = await tx
         .select({ note: ticketItems.note })
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderId, orderId));
       expect(before).toEqual({ note: "sin cebolla" });
 
-      // Edit the DRAFT working_order_line AFTER firing.
       await tx
         .update(workingOrderLines)
         .set({ note: "con cebolla" })
         .where(eq(workingOrderLines.workingOrderId, orderId));
 
-      // Self-contained guard (mirrors verify.test.ts's entorno test): confirm the DRAFT actually
+      // Self-contained guard: confirm the DRAFT actually
       // changed, so the ticket_items assertion below cannot pass merely because the update no-op'd.
       const [draft] = await tx
         .select({ note: workingOrderLines.note })
@@ -2777,9 +2730,8 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       return id;
     });
     // A SECOND fire of the same lines collides on `ticket_items`' per-line
-    // `(working_order_line_id)` unique. `fireLines` maps that 23505 to the domain code
-    // (naming the order) rather than leaking the raw constraint error as an opaque 500. The re-fire runs
-    // in its OWN transaction so the 23505 poisons that one and the mapped AppError rolls it back cleanly.
+    // `(working_order_line_id)` unique. `fireLines` maps that to the domain code
+    // (naming the order) rather than leaking the raw constraint error as an opaque 500.
     await expect(
       withTransaction(db, async (tx) => {
         const fired = await tx
@@ -2907,13 +2859,12 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
   });
 });
 
-// KDS-1 Task 4 — bump (advance) + per-station queue read. `advanceTicketItem` is the per-line
+// Bump (advance) + per-station queue read. `advanceTicketItem` is the per-line
 // conditional-UPDATE state machine (queued → preparing → ready, illegal moves refused via an empty
 // `returning` → `ticket.invalid_transition`); `advanceTicket` bumps every not-yet-`to` line of one
 // order at one station together; `listStationQueue` groups a station's items by order, dropping
 // collected and abandoned orders. This suite proves the transition logic, the whole-ticket fan-out
-// and the grouping/exclusion filters; the NODE scoping is
-// working-order.pay-and-dispatch.test.ts's. Every write runs through `withTransaction`.
+// and the grouping/exclusion filters.
 // ---------------------------------------------------------------------------------------------------
 
 /** The order's ticket items joined to their line, in line_no order — each item's id (the bump target),
@@ -3012,8 +2963,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const [item] = await ticketItemRows(tx, orderId);
 
       // A garbage `to` — not a key of TICKET_TRANSITIONS. The till route casts `body.to as TicketState`
-      // with no route-level screen, so this is reachable at runtime despite the narrower static type;
-      // this is the till-api.ts route comment's claim, exercised directly at the verb.
+      // with no route-level screen, so this is reachable at runtime despite the narrower static type.
       await expect(
         advanceTicketItem(tx, cfg, item!.id, "garbage" as unknown as TicketState),
       ).rejects.toMatchObject({
@@ -3046,7 +2996,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       const { id: order1 } = await placeOrderWith(tx, cfg, [line(cafe), line(cafe)]);
       const { id: order2 } = await placeOrderWith(tx, cfg, [line(cafe), line(copa)]);
 
-      // now() is constant inside this transaction; give the ordering fixture distinct times.
+      // Give the ordering fixture distinct times.
       await tx.execute(
         sql`update ticket_items set queued_at = '2026-07-20T10:00:00Z' where working_order_id = ${order1}`,
       );
@@ -3141,7 +3091,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         { descriptions: { [LOCALE]: "Leche avena" }, addAllergens: null, suitableFor: [] },
       ]);
 
-      // The expo queue attaches the same modifier sub-items to its item.
       const expo = await listExpoQueue(tx, cfg);
       const expoItem = expo[0]!.courses[0]!.items[0]!;
       expect(expoItem.modifiers).toEqual([
@@ -3151,7 +3100,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     });
   });
 
-  // Order-line customisation (spec §2/§3, Task 5): the station/expo reads surface the SNAPSHOTTED
+  // Order-line customisation (spec §2/§3): the station/expo reads surface the SNAPSHOTTED
   // per-line `note` so the cook sees it. Read off `ticket_items` (the snapshot frozen at fire), never
   // the live line — a later draft edit must not change what the kitchen already sees.
   it("surfaces a fired line's snapshotted note on listStationQueue and listExpoQueue", async () => {
@@ -3191,7 +3140,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   });
 
   // A plain line (no note) surfaces null — the belt-and-braces default so a cook never sees a phantom
-  // instruction, and a plain fixture reads exactly as before this task.
+  // instruction.
   it("surfaces a null note for a plain fired line", async () => {
     const { cfg, cafeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
@@ -3250,7 +3199,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       expect(item.asServed.allergens).toEqual({ gluten: { presence: "contains" } });
       expect(item.asServed.pending).toBe(false);
 
-      // The expo read attaches the same profile to its item.
       const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
       expect(expoItem.asServed.allergens).toEqual({ gluten: { presence: "contains" } });
       expect(expoItem.asServed.pending).toBe(false);
@@ -3292,7 +3240,6 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       expect(item.modifiers).toEqual([]);
       expect(item.asServed.pending).toBe(true);
       expect(item.asServed.allergens).toEqual({});
-      // The expo read attaches the same pending profile to its item.
       const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
       expect(expoItem.modifiers).toEqual([]);
       expect(expoItem.asServed.pending).toBe(true);
@@ -3300,8 +3247,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     });
   });
 
-  // An option that ADDS an allergen no longer merges it into the dish's profile — the dish shows its OWN
-  // allergens, and the option's added allergen is shown separately (later task).
+  // An option that ADDS an allergen is not merged into the dish's profile — the dish shows its OWN
+  // allergens, and the option's added allergen is shown separately.
   it("attaches the dish's own allergens, ignoring an added allergen from an option", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
@@ -3373,15 +3320,14 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
         .find((i) => i.workingOrderLineId === parentLineId)!;
       expect(item.asServedDiet).toEqual({ vegan: "yes", vegetarian: "yes", contains: [] });
 
-      // The expo read attaches the same profile.
       const expoItem = (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!;
       expect(expoItem.asServedDiet!.vegan).toBe("yes");
       expect(expoItem.asServedDiet).toEqual({ vegan: "yes", vegetarian: "yes", contains: [] });
     });
   });
 
-  // A selected option that invalidates no-meat used to withhold the dish's vegan/vegetarian claims. The
-  // fold is gone: the dish keeps its OWN declared claims, and the option's meat is shown separately.
+  // A selected option that invalidates no-meat does not withhold the dish's vegan/vegetarian claims:
+  // the dish keeps its OWN declared claims, and the option's meat is shown separately.
   it("keeps the dish's own vegan/vegetarian claims regardless of a selected invalidating option", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
@@ -3452,7 +3398,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
   });
 
   // KDS order-timing alerts (design §3/§6/§11) — the group carries the station's thresholds (Controller
-  // Ruling A), each item its own age band classified against them on the DB clock.
+  // Ruling A), each item its own age band classified against them.
   it("bands each item by the station's thresholds and carries them on the group", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
@@ -3490,8 +3436,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
 // Course hold/fire decisions, held-item refusal and fireCourse idempotency.
 
 /** The order's ticket items joined to their line, carrying the fields the hold-and-fire tests read:
- *  the item id (the bump target), its product (to key by line), its snapshotted course and — the
- *  load-bearing one — `fired_at` (NULL = held). */
+ *  the item id (the bump target), its product (to key by line), its snapshotted course and
+ *  `fired_at` (NULL = held). */
 async function courseItemsFor(
   tx: Transaction,
   orderId: string,
@@ -3545,12 +3491,10 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
         advanceTicketItem(tx, cfg, byLine(items, steak).id, "preparing"),
       ).rejects.toMatchObject({ code: "ticket.item_held" });
 
-      // Firing the held course releases its items.
       await fireCourse(tx, cfg, orderId, pri.id);
       const afterFire = await courseItemsFor(tx, orderId);
       expect(byLine(afterFire, steak).firedAt).not.toBeNull();
 
-      // Now advancing the (now fired) steak is allowed.
       await advanceTicketItem(tx, cfg, byLine(afterFire, steak).id, "preparing");
       const advanced = await courseItemsFor(tx, orderId);
       expect(byLine(advanced, steak).state).toBe("preparing");
@@ -3693,9 +3637,8 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
 
   it("releases a HELD course's items even after the course is DEACTIVATED (A2: existence, not liveness)", async () => {
     // The deactivated-course edge: a course deactivated WHILE it holds items must still be fireable, or
-    // its held items are stranded (can't fire, can't advance). `fireCourse` now requires only that the
-    // course EXISTS in this venue (active OR inactive) — the items already carry the `course_id` snapshot
-    // — so the release works; the former `requireLiveCourse` gate threw `course.not_found` here forever.
+    // its held items are stranded (can't fire, can't advance). `fireCourse` requires only that the
+    // course EXISTS in this venue (active OR inactive) — the items already carry the `course_id` snapshot.
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -3731,7 +3674,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
   });
 });
 
-// Coursing editing (A1) — `setLineCourse` moves a not-yet-fired tab line into another active course (or
+// Coursing editing — `setLineCourse` moves a not-yet-fired tab line into another active course (or
 // clears it to null), updating BOTH the open-tab line's `course_id` and its held ticket item's snapshot.
 // It refuses a line whose ticket item has already FIRED (`ticket.already_fired`) — a fired line is
 // corrected via recall, not a silent move — validates a non-null target with the same `requireLiveCourse`
@@ -3739,8 +3682,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
 // `tab.line_not_found` for a `line_no` not on the tab. Non-fiscal: it touches only `working_order_lines`
 // (open tab) and `ticket_items` (kitchen), never a filed record. This suite proves the update + the
 // guards; the serialisation of a concurrent send/recall/fire is
-// working-order.pay-and-dispatch.test.ts's. Every write runs through
-// `withTransaction`.
+// working-order.pay-and-dispatch.test.ts's.
 // ---------------------------------------------------------------------------------------------------
 describe("setLineCourse (A1: move a held line to another course)", () => {
   it("moves a HELD line to another course, updating both course_id snapshots", async () => {
@@ -3763,7 +3705,6 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       expect(byLine(before, main).firedAt).toBeNull(); // held — a later course
       expect(byLine(before, main).courseId).toBe(pri.id); // its snapshot sits on Principales
 
-      // Move the held line (line_no 2) onto Postres.
       await setLineCourse(tx, cfg, tabId, 2, post.id);
 
       // The open-tab line AND its held ticket item snapshot both moved to Postres…
@@ -3876,9 +3817,8 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
 // sendLines releases selected held items, refreshes queue time and enqueues their kitchen prints.
 // These cases exercise those writes and the skip of already-fired items.
 describe("sendLines (A2: fire specific held lines / send-all)", () => {
-  /** A fixed instant well in the past — an aged `queued_at` a same-tx `now()` refresh moves off, so the
-   *  refresh is observable (within one transaction `now()` is constant, so an un-aged held line rung and
-   *  sent in the same tx would read the identical stamp before and after). */
+  /** A fixed instant well in the past — an aged `queued_at` the send's refresh moves off, so the
+   *  refresh is observable. */
   const AGED = "2000-01-01T00:00:00.000Z";
 
   /** Read `(fired_at, queued_at)` for a tab's ticket items, keyed by the line's `line_no` (two lines can
@@ -3917,7 +3857,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
       // Ring three: starter (Entrantes, earliest) auto-fires as line 1; both Principales mains are HELD
       // — main1 is line 2, main2 is line 3.
       await addRound(tx, cfg, tabId, [line(starter), line(main1), line(main2)]);
-      // Age the held lines' queued_at so the send's now() refresh is distinguishable from the ring stamp.
+      // Age the held lines' queued_at so the send's refresh is distinguishable from the ring stamp.
       await tx
         .update(ticketItems)
         .set({ queuedAt: AGED })
@@ -3931,7 +3871,6 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
       expect(before.get(3)!.firedAt).toBeNull(); // main2 held
       expect(before.get(3)!.queuedAt).toBe(agedStamp); // both held lines aged identically
 
-      // Send ONLY line 2.
       await sendLines(tx, cfg, tabId, [2]);
 
       const after = await itemsByLineNo(tx, tabId);
@@ -4012,13 +3951,12 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
           ),
         );
 
-      // Read the stored aged stamps back (session-TZ rendering, not the ISO literal) as the baseline.
       const aged = await itemsByLineNo(tx, tabId);
       const agedFired = aged.get(1)!.firedAt;
       const agedQueued = aged.get(1)!.queuedAt;
 
       // Sending line 1 (already fired) matches no HELD row — its aged stamps stay put (the fired_at IS
-      // NULL predicate skips it), so the timestamps are not overwritten with now().
+      // NULL predicate skips it), so the timestamps are not overwritten.
       await sendLines(tx, cfg, tabId, [1]);
       const after = await itemsByLineNo(tx, tabId);
       expect(after.get(1)!.firedAt).toBe(agedFired);
@@ -4090,7 +4028,6 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       expect(before.firedAt).not.toBeNull();
       expect(before.state).toBe("queued");
 
-      // Recall line 1 — it un-fires back to held.
       await recallLines(tx, cfg, tabId, [1]);
 
       const after = byLine(await courseItemsFor(tx, tabId), starter);
@@ -4199,14 +4136,14 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
   });
 });
 
-// Coursing editing (A6) — a recall or void of a PREVIOUSLY-FIRED (printed) line tells the paper kitchen
+// Coursing editing — a recall or void of a PREVIOUSLY-FIRED (printed) line tells the paper kitchen
 // what changed via a correction slip (`enqueueCorrectionSlips` → `formatCorrectionSlip`). Only a line
 // whose ticket item had a NON-null `fired_at` produced paper, so ONLY it produces a slip: recalling or
 // voiding a HELD line (never printed) enqueues nothing. `recallLines` emits RECALLED for the items it
 // actually un-fires (fired-and-queued before the update); `voidTabLine` emits VOID for a fired line,
 // reading it BEFORE the ON DELETE CASCADE removes the line + its ticket item. Non-fiscal: only
 // `ticket_items`/`working_order_lines`/`print_jobs`. These cases prove the enqueue count + payload
-// in both directions; every write runs through `withTransaction`.
+// in both directions.
 // ---------------------------------------------------------------------------------------------------
 describe("correction slips on recall & void (A6)", () => {
   /** Create a sellable product with a KNOWN name (so the slip payload can be asserted for it), routed to
@@ -4349,12 +4286,12 @@ describe("correction slips on recall & void (A6)", () => {
   });
 });
 
-// Coursing editing (A3) — `hold` on send. A round line may carry `hold: true`; `addTabRound` correlates
+// Coursing editing — `hold` on send. A round line may carry `hold: true`; `addTabRound` correlates
 // that marker onto the priced PARENT row (parents come out of `priceOrderLines` in input order) and hands
 // it to `fireLines`, which inserts the held line with `fired_at NULL` REGARDLESS of its course — greyed on
 // the KDS, no kitchen print — until a later `sendLines`/`fireCourse` releases it. Transient: read at fire
-// time, never stored (no migration). These cases prove the hold short-circuit and the parent
-// correlation under modifier expansion; every write runs through `withTransaction`.
+// time, never stored. These cases prove the hold short-circuit and the parent
+// correlation under modifier expansion.
 // ---------------------------------------------------------------------------------------------------
 describe("addTabRound hold-on-send (A3)", () => {
   it("holds a line marked hold:true even when its course would auto-fire, printing only the fired line", async () => {
@@ -4396,7 +4333,7 @@ describe("addTabRound hold-on-send (A3)", () => {
   });
 
   it("correlates hold to the right PARENT when a modifier expands the row count (modifier line first)", async () => {
-    // The load-bearing correlation guard. The MODIFIED product is rung FIRST, so its child modifier row
+    // The correlation guard. The MODIFIED product is rung FIRST, so its child modifier row
     // sits BETWEEN the two parents in `priceOrderLines`'s output — a naive position map (one that did not
     // skip child rows) would slide hold onto the wrong parent and hold the modified dish instead of the
     // plain one. No courses, so both parents fire by the null-course rule and ONLY hold decides which stays
@@ -4441,13 +4378,12 @@ describe("addTabRound hold-on-send (A3)", () => {
   });
 });
 
-// KDS-3 Task 2 — the cross-station expo/pass read. `listExpoQueue` aggregates every OPEN order on the
-// node (with at least one not-yet-away item), gathers its ticket items ACROSS stations, and groups them
-// by course in display_order with per-course fired/away roll-ups. Unlike `listStationQueue` (one
-// station, no station name) it joins `kitchen_stations` to label each item's station. These cases
-// prove the join, the collected/abandoned/fully-away exclusions, the course grouping and the
-// roll-ups; the NODE scoping is working-order.pay-and-dispatch.test.ts's.
-// Every read/write runs through `withTransaction`.
+// The cross-station expo/pass read. `listExpoQueue` aggregates every order that is not abandoned or
+// collected and has an item not yet away (open, placed or settled), gathers its ticket items ACROSS
+// stations, and groups them by course in display_order with per-course fired/away roll-ups. Unlike
+// `listStationQueue` (one station, no station name) it joins `kitchen_stations` to label each
+// item's station. These cases prove the join, the collected/abandoned/fully-away exclusions, the
+// course grouping and the roll-ups.
 // ---------------------------------------------------------------------------------------------------
 describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   it("aggregates one order's two-station single-course lines into one course with station names, excluding collected/abandoned orders", async () => {
@@ -4520,7 +4456,6 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
 
       const order = (await listExpoQueue(tx, cfg))[0]!;
-      // Courses in display_order: Entrantes (0) then Principales (1).
       expect(order.courses.map((c) => c.courseName)).toEqual(["Entrantes", "Principales"]);
       const [c0, c1] = order.courses;
       expect(c0!.fired).toBe(true); // earliest course auto-fired
@@ -4683,15 +4618,13 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
   });
 });
 
-// KDS-3 Task 3 — the pass's two coordination verbs. `bumpCourseReady` is the whole-course "it's all
+// The pass's two coordination verbs. `bumpCourseReady` is the whole-course "it's all
 // plated" bump: {@link advanceTicket}'s set-based shape keyed on COURSE (order + course_id) not station,
 // advancing every FIRED, not-yet-ready item across ALL its stations straight to `ready` (skipping HELD
-// items and no-op when none match). `markCourseAway` stamps `away_at = now()` on every READY item of the
+// items and no-op when none match). `markCourseAway` stamps `away_at` on every READY item of the
 // course (dispatch what is plated), gated on the course EXISTING (`requireCourse` → course.not_found),
 // idempotent via `away_at IS NULL`. These cases prove the set-based logic, the held-skip and the
-// ready-only dispatch; the NODE scoping is
-// working-order.pay-and-dispatch.test.ts's (`listExpoQueue` node-symmetry). Every write runs
-// through `withTransaction`.
+// ready-only dispatch.
 // ---------------------------------------------------------------------------------------------------
 
 /** Fire ONE course of an order across TWO stations — two products in the SAME (earliest, so auto-fired)
@@ -4730,7 +4663,6 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
       items = await courseItemsFor(tx, orderId);
       expect(items.every((i) => i.state === "ready")).toBe(true);
 
-      // Dispatch the plated course — every ready item goes away.
       await markCourseAway(tx, cfg, orderId, courseId);
       items = await courseItemsFor(tx, orderId);
       expect(items.every((i) => i.awayAt !== null)).toBe(true);
@@ -4750,8 +4682,7 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
       const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
 
       // Principales is HELD (later course, fired_at null). bumpCourseReady on it advances NOTHING — the
-      // `fired_at IS NOT NULL` predicate skips held items (deletion-proof: drop it and the held main bumps
-      // to `ready`, failing the `queued` assertion below).
+      // `fired_at IS NOT NULL` predicate skips held items.
       await bumpCourseReady(tx, cfg, orderId, pri.id);
       let items = await courseItemsFor(tx, orderId);
       expect(byLine(items, main).state).toBe("queued"); // held → skipped
@@ -4769,8 +4700,7 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
       expect(byLine(items, starter).awayAt).not.toBeNull();
 
       // Now the ready-only guard: fire Principales (so its main is fired, still `queued`) and dispatch it.
-      // The main is fired but NOT ready, so it does NOT go away (deletion-proof: drop `state = 'ready'` and
-      // the queued main gets `away_at`, failing the assertion below).
+      // The main is fired but NOT ready, so it does NOT go away.
       await fireCourse(tx, cfg, orderId, pri.id);
       await markCourseAway(tx, cfg, orderId, pri.id);
       items = await courseItemsFor(tx, orderId);
@@ -4804,7 +4734,6 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
       await bumpCourseReady(tx, cfg, orderId, randomUUID());
       expect((await courseItemsFor(tx, orderId)).every((i) => i.state === "queued")).toBe(true);
 
-      // Plate then dispatch the course; capture each item's away stamp.
       await bumpCourseReady(tx, cfg, orderId, courseId);
       await markCourseAway(tx, cfg, orderId, courseId);
       const first = new Map((await courseItemsFor(tx, orderId)).map((i) => [i.id, i.awayAt]));
@@ -4818,16 +4747,6 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
   });
 });
 
-// KDS-2 A1 — the per-line `courseId` OVERRIDE is screened at the shared ring-time resolver
-// (`priceOrderLines`), the ONE course-write path that formerly skipped `requireLiveCourse`. A crafted
-// override — malformed, well-formed-but-unknown, a DIFFERENT venue's course in the same database (the
-// working_order_lines.course_id FK is by id only, not location-scoped), or a deactivated one —
-// is a clean `course.not_found` rather than an opaque 500 (22P02/23503) or a silently-accepted
-// cross-venue line. The product DEFAULT (`product.course_id`) is an already-valid stored FK and is NOT
-// re-screened (that would reject a legitimately-deactivated default). Exercised through `addTabRound`
-// (the round path that threads the override today); the screen lives in `priceOrderLines`, so the order
-// paths are covered by the SAME code — plain SQL plus the by-id FK.
-// ---------------------------------------------------------------------------------------------------
 describe("voidTabLine extras cascade (FIX 2)", () => {
   /** Attach an extras list whose one product may be picked TWICE, returning the ids the wire needs. A
    *  list that ACCEPTS a tally of two AND an item cap of two, so a doubled pick SUMS to a per-dish
@@ -5274,6 +5193,11 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
   });
 });
 
+// The per-line `courseId` OVERRIDE is screened at the shared ring-time resolver (`priceOrderLines`):
+// a malformed, unknown, other-venue (the working_order_lines.course_id FK is by id only, not
+// location-scoped) or deactivated override is a clean `course.not_found`. The product DEFAULT
+// (`product.course_id`) is NOT re-screened (that would reject a legitimately-deactivated default).
+// Exercised through `addTabRound`; the order paths run the same `priceOrderLines` code.
 describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   /** Open a fresh empty tab in the venue and return its id — the addTabRound host these cases fire on. */
   async function openEmptyTab(tx: Transaction, cfg: TillConfig): Promise<string> {
@@ -5315,9 +5239,7 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
       const tabId = await openEmptyTab(tx, cfg);
       // A second venue in the same database, and a course that lives there. The by-id FK on
       // working_order_lines.course_id would ACCEPT it, but requireLiveCourse is
-      // location-scoped, so the cross-venue override is refused — the exact silent-accept bug A1 closes.
-      // Through the table definition: `invoice_locales` is a JSON array in a text column here, so
-      // there is no array constructor to write, and `id` is a `$defaultFn` a raw insert misses.
+      // location-scoped, so the cross-venue override is refused.
       const location2Id = randomUUID();
       await tx.insert(locations).values({
         id: location2Id,
@@ -5352,7 +5274,7 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       // The product DEFAULT differs from the override — proving the override WINS and is snapshotted,
-      // and that a legitimate active override is not rejected by the new screen.
+      // and that a legitimate active override is not rejected by the screen.
       const def = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const override = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
@@ -5551,7 +5473,7 @@ it("does not let an omitted payload waive a required extras list the menu offer 
 });
 
 /**
- * Task 7 — the order path for the new model: a dish's OPTIONS answers freeze onto the dish line as
+ * The order path: a dish's OPTIONS answers freeze onto the dish line as
  * `option_snapshots`, and its EXTRAS picks become child lines carrying the picked PRODUCT.
  *
  * Every name in the fixture carries its own text, so a read of the wrong one of the six fails
@@ -5724,8 +5646,7 @@ describe("order path — extras and options", () => {
           )
       )[0]!.id,
     );
-    // The child IS the wine, by id — the whole point of the column that replaced
-    // `option_group_item_id`.
+    // The child IS the wine, by id.
     expect(child!.productId).toBe(seeded.wineId);
     // The wine's three names, frozen: staff on `name`, customer re-keyed onto the venue's invoice
     // locale, kitchen on `kitchen_name`.
@@ -6214,9 +6135,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
    * The body a till line sends is the same one an edit sends, so an edit that carries no `options`
    * key is refused exactly as a first order would be — `validateOptionSelections`
    * (`packages/catalogue/src/option-contract.ts`) walks the dish's ACTIVE lists and throws for the
-   * first one no answer names, whether the line is new or being changed. That is what a RETRIEVED
-   * till line used to send, because the server hands its answers back as six frozen names and no
-   * ids.
+   * first one no answer names, whether the line is new or being changed.
    *
    * The next case is the control: the same edit body against a dish carrying NO options list, which
    * succeeds — so the refusal below is the options list and not the shape of the edit.
@@ -6290,11 +6209,9 @@ describe("what a held-order edit preserves and what it replaces", () => {
 });
 
 // ---------------------------------------------------------------------------------------------------
-// Variants as products (plan `docs/superpowers/plans/2026-09-23-variants-as-products.md`, Task 5): a
-// variant is sold as the product it is. The line's `product_id` names the variant; the parent's three
+// Variants as products: a variant is sold as the product it is. The line's `product_id` names the variant; the parent's three
 // frozen names sit beside the variant's own; the price and VAT are the variant's EFFECTIVE values; and
-// the kitchen treats the line as its parent would (Review Focus 3), unless the variant overrides the
-// field.
+// the kitchen treats the line as its parent would, unless the variant overrides the field.
 // ---------------------------------------------------------------------------------------------------
 
 /**

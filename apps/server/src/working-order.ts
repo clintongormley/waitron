@@ -2,9 +2,8 @@ import { buildLineExtras, matchExtraChildren, sameOptionSelections } from "./mod
 import type { ExtraChild, ExtraProductFacts } from "./modifier-selection.js";
 import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
-// Side-effect only: keeps this host's `sale.*` codes (errors.ts) reachable from the file that throws
-// them — the reachability convention `till-sale.ts`/`till-config.ts` follow (a bare import, no value
-// used here). See the note atop `errors.ts`.
+// Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
+// its codes.
 import "./errors.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
@@ -104,59 +103,26 @@ export interface WorkingOrderDeps {
   db: Database;
 }
 
-/**
- * The fuller till dependency bundle — `db` plus the `backend`/`clock` a FISCAL FILE needs. `placeOrder`
- * (Mode-I deferred invoice) and `cancelPlacedOrder` (the amendment's trusted clock) take it here, and
- * every `till-sale.ts` filing path (`payWorkingOrder`, `collectOrder`, `fileImmediateSale`,
- * `recordTillSale`) takes it too. It lives in this lower-level module — beside {@link WorkingOrderDeps},
- * the `db`-only subset for the non-filing operations (park, list, retrieve, update, abandon, advance) —
- * so `till-sale.ts` imports it from here, keeping the module dependency ONE-directional (no import cycle).
- */
+/** `db` plus the fiscal backend and trusted clock that a path filing a sale needs. */
 export interface TillSaleDeps {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
 }
 
-/** The rows a park or an update writes into `working_order_lines`, as Drizzle types the insert. */
 type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
 
-/** `priceBasketWithOptions`'s authoritative result (`{ lines, total, vatBreakdown }`) — threaded out of
- * `priceOrderLines`/`createOpenOrder` so a caller that both persists the order AND files its sale in
- * the same transaction (a walk-up, `payWorkingOrder`) reuses this price rather than re-reading the
- * catalogue and re-pricing the identical basket a second time. Same shape as plain `priceBasket`'s
- * result (both return `PricedLines`); this alias just names the one `priceOrderLines` actually calls. */
+/** Threaded out so a caller that persists the order and files its sale in one transaction reuses
+ * this price rather than pricing the basket twice. */
 type PricedBasket = PricedLines;
 
-/**
- * Per-line customisation carried on the wire and threaded through every order path (spec §2/§3): a
- * free-text kitchen `note`. NON-FISCAL — validated and persisted server-side on the parent dish line
- * (and snapshotted onto its ticket item at fire), and NEVER threaded into any sale/fiscal projection
- * or huella. Intersected into each request/parameter line shape so the field (and this rationale) is
- * declared ONCE rather than re-copied per site.
- */
+/** `note` is a free-text kitchen note on the parent dish line: non-fiscal, never part of a sale. */
 export type LineExtras = { note?: string; variantId?: string };
 
 /**
  * Every extras and options definition the dishes in one basket offer, read ONCE before the line
- * loop. Reading them per line is the shape CLAUDE.md §3 forbids. Guard: "basket-wide modifier
- * resolution (perf)" in `apps/server/src/working-order.test.ts`.
- *
- * The LIST maps come from one body — `walkAttachedModifiers`
- * (`packages/catalogue/src/offered-modifiers.ts`). This path reaches it through
- * `resolveAttachedModifiers`, which is a wrapper over it and has no other caller in product code;
- * the two sell-side reads reach the SAME body through `readOfferedModifiers`
- * (`listAvailableProducts` and `listMenuOffers`, the one the till draws its picker from), not
- * through the wrapper.
- * Deliberate: what the till is OFFERED has to be the set the validators below answer, or a required
- * list the picker never drew refuses the order.
- *
- * The product facts are NOT shared, and two bodies read the `products` rows: this file's
- * {@link resolveBasketModifiers} and `readExtraProducts` (offered-modifiers.ts). Neither shape can
- * be had from the other — this one resolves customer text under the order's `defaultLanguage`,
- * which no sell-side caller supplies, and that one expands dietary declarations through
- * `validateDietaryDeclarations`, which throws `diet.declaration_invalid`. Sharing only the SELECT
- * would put two jsonb columns this path discards on the order path.
+ * loop (CLAUDE.md §3). The lists come from the same body the till's picker is drawn from, so what
+ * the till is offered is the set the validators answer. Receipt: docs/developers/modifiers.md.
  */
 interface BasketModifiers extends AttachedModifiers {
   /** Every product an ACTIVE list offers, by id — what {@link buildLineExtras} freezes onto a child.
@@ -165,24 +131,13 @@ interface BasketModifiers extends AttachedModifiers {
 }
 
 /**
- * Resolve {@link BasketModifiers} for one basket: a bounded number of queries whatever the number of
- * lines, and none of them inside the line loop.
+ * Only an ACTIVE list's products are read: only an active list can be answered at all
+ * (`validateExtraSelections`).
  *
- * Only an ACTIVE list's products are read, because only an active list can be answered at all
- * (`validateExtraSelections`, `packages/catalogue/src/extra-contract.ts`), so no other product can
- * reach a child line.
- *
- * `sellableOnly` is for pricing a basket afresh: a product that is Inactive or Unavailable (spec
- * §15.6) is then dropped from every list's items, so `validateExtraSelections` refuses a pick of it
- * exactly as it refuses one the list never offered (`extras.invalid`, field `productId`) — the till
- * was not offered it either (`readExtraProducts`, offered-modifiers.ts). The held-order edit that
- * keeps lines already rung passes `false`, so when every line of the edit is quantity-only, a line
- * kept at or below its stored quantity keeps a pick that has since sold out. For a line whose quantity rises {@link updateHeldOrder} checks the
- * dish's and its extras' states itself, and when one is not sellable sends the edit to the
- * replacement path, which passes `true`. The till never sends a pick that the dish's offer, as the
- * till last loaded it, no longer lists (`deriveExtraSelections`,
- * apps/till/src/state/held-extras.ts), so from the till an extra that sold out before that load
- * never reaches this path as a kept pick.
+ * `sellableOnly` drops Inactive and Unavailable products from every list, so a pick of one is
+ * refused exactly as a pick the list never offered. The held-order edit that keeps lines already
+ * rung passes `false`, so a line kept at or below its stored quantity keeps a pick that has since
+ * sold out; a raised line is checked by {@link updateHeldOrder}.
  */
 async function resolveBasketModifiers(
   tx: Transaction,
@@ -225,8 +180,6 @@ async function resolveBasketModifiers(
       extraProducts.set(row.id, {
         id: row.id,
         name: row.name,
-        // The dish's own customer text takes this same fallback a few lines below, from the one home
-        // of the blank-falls-back-to-the-staff-name rule.
         descriptions: customerPresentationText(
           {
             name: row.name,
@@ -265,20 +218,9 @@ async function priceOrderLines(
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
-  // KDS-2 (§2b): each line MAY carry an optional `courseId` OVERRIDE. Absent = fall to the offer's
-  // default course; present (incl. `null`) = the line-level override. Only the tab round-send threads a
-  // value today (a future course picker); park/update pass none, so their lines take the default.
-  // Extras and options (spec §2.3, §3.4): a line MAY carry `options` — one answer per ACTIVE options
-  // list its dish attaches, frozen onto the dish row as `option_snapshots` — and `extras`, whose picks
-  // each become a CHILD row carrying the picked PRODUCT, its three frozen names, the offer's resolved
-  // price and that product's vat class — its own, or its parent's where a variant leaves it blank,
-  // never the dish's. Absent/empty = a plain single line, except that an ACTIVE options list must
-  // still be answered.
-  //
-  // Per-line customisation (`LineExtras`, spec §2/§3): a line MAY carry a free-text `note`, which is
-  // NON-FISCAL. It is trimmed and length-capped (`working_order.note_too_long`), and attaches to the
-  // PARENT dish line only — a child modifier row carries none. Absent = NULL (not chosen); a
-  // whitespace-only note folds to NULL.
+  // `courseId` absent or null = the offer's default course; a string is an override.
+  // Each extras pick becomes a CHILD row taxed at the picked product's VAT class, never the dish's.
+  // An ACTIVE options list must be answered even when `options` is absent.
   requestedLines: ({
     menuItemId: string;
     quantity: string;
@@ -293,8 +235,7 @@ async function priceOrderLines(
   lineContexts: { workingOrderLineId: string; menuItemId: string }[];
 }> {
   if (requestedLines.length === 0) {
-    // priceBasket([]) is a pure call, so a lineless splitOffCheck / openTab / unjoin reads nothing.
-    // Callers passing [] persist no lines and ignore `priced`.
+    // A lineless call (splitOffCheck, openTab, unjoin) needs no zone and reads nothing.
     return { lineRows: [], priced: priceBasket([]), lineContexts: [] };
   }
   if (zoneId === undefined) {
@@ -317,27 +258,21 @@ async function priceOrderLines(
     return { ...line, offer };
   });
   const invoiceLocales = await readInvoiceLocales(tx, cfg.locationId);
-  // Read ONCE, before the line loop: the venue's default content language is what resolves a
-  // product's, a variant's and a modifier's text below, and what re-keys each line's customer text
-  // onto the invoice locales after pricing.
   const contentConfig = await readContentLanguages(tx, cfg.locale);
 
-  // ONE read per definition kind for the WHOLE basket, before the line loop below (CLAUDE.md §3).
+  // One read per definition kind for the whole basket, never per line (CLAUDE.md §3).
   const modifiers = await resolveBasketModifiers(
     tx,
     lines.map((line) => ({ productId: line.offer.productId, menuItemId: line.menuItemId })),
     contentConfig.defaultLanguage,
     true,
   );
-  // A product with an Active variant is never sold as itself (spec §15.1). A line's own variant is
-  // decided by `selectMenuVariant`; an extras pick cannot name a variant, so a pick of such a
-  // product is refused below. One read for every product the basket's extras lists offer.
+  // A product with an Active variant is never sold as itself, and an extras pick cannot name a
+  // variant, so a pick of such a product is refused below.
   const requiresVariant = await parentsWithActiveVariants(tx, [...modifiers.extraProducts.keys()]);
 
-  // Build the priceable basket AND, in lockstep, the per-PRICED-LINE metadata `priceBasketWithOptions`
-  // does not itself carry: which product/course a PARENT row takes, and which PICKED product a CHILD
-  // row is. `priceBasketWithOptions` expands each item to a parent row then its option rows IN THIS
-  // SAME ORDER (see its doc), so `lineMeta[i]` lines up with `priced.lines[i]` one-for-one below.
+  // `priceBasketWithOptions` expands each item to a parent row then its child rows in this same
+  // order, so `lineMeta[i]` lines up with `priced.lines[i]` one-for-one.
   type LineMeta =
     | {
         kind: "parent";
@@ -351,9 +286,6 @@ async function priceOrderLines(
   const lineMeta: LineMeta[] = [];
   for (const line of lines) {
     const { offer } = line;
-    // What this line sells, and the three names it freezes: `selectMenuVariant` refuses a variant
-    // not offered here now and returns the chosen row's effective selling values, which
-    // `product-presentation.ts` then resolves under the blank-falls-back-to-the-staff-name rule.
     const selection = selectMenuVariant(offer, line.variantId ?? null);
     const customerText = customerPresentationText(selection, contentConfig.defaultLanguage);
     const product = {
@@ -371,14 +303,8 @@ async function priceOrderLines(
       kitchenName: selection.kitchenName,
     };
 
-    // Per-line customisation (spec §2/§3), NON-FISCAL. Validate + normalise BEFORE pricing so a bad
-    // value aborts the whole basket rather than half-persisting. The wire type is a lie (JSON), so the
-    // note is TYPE-SCREENED first: a non-string (e.g. `123`) is refused `management.request_invalid`
-    // (a clean 400) rather than reaching `.trim()` as a `123.trim is not a function` TypeError → an
-    // opaque 500 — an absent (`undefined`) note stays "not chosen", the same as before. It is then
-    // trimmed (trailing whitespace never trips the cap) and capped at 200 chars; a note empty after
-    // trimming folds to NULL. It belongs to the PARENT dish line and is carried on its `lineMeta`
-    // entry below.
+    // Validated before pricing, so a bad note aborts the whole basket. The body is JSON, so a
+    // non-string is screened out before it can reach `.trim()` as a TypeError.
     const NOTE_LIMIT = 200;
     const screenedNote = line.note === undefined ? null : requireNullableString(line.note, "note");
     const trimmedNote = screenedNote?.trim() ?? "";
@@ -390,9 +316,6 @@ async function priceOrderLines(
     }
     const note = trimmedNote.length === 0 ? null : trimmedNote;
 
-    // Validate and freeze this dish's answers against the definitions resolved for the whole basket:
-    // the options answers become the dish row's `option_snapshots`, and each extras pick becomes a
-    // child row carrying the picked product. Extras are held by the offer, options by its product.
     const { extraChildren, optionSnapshots } = buildLineExtras(
       {
         extras: modifiers.extrasByHolder.get(line.menuItemId) ?? [],
@@ -408,10 +331,8 @@ async function priceOrderLines(
       }
     }
 
-    // A child is priced at `dishQuantity × pickQuantity` (`priceBasketWithOptions`), so a dish sold by
-    // WEIGHT would charge a fraction of each extra — 0.333 kg of fish carrying "one lemon" would bill
-    // 0.333 lemons. Only a pick makes a child, so an options answer on a weighed dish stays
-    // allowed.
+    // A child is priced at dish quantity × pick quantity, so a dish sold by weight would bill a
+    // fraction of each extra.
     if (extraChildren.length > 0 && product.pricingUnit !== "each") {
       throw new AppError("extras.unsupported_product", {
         productId: offer.productId,
@@ -422,31 +343,19 @@ async function priceOrderLines(
     items.push({
       product,
       quantity: line.quantity,
-      // The dish's frozen answers ride on the PRICED basket, which is the one carrier of them from
-      // here on: the `working_order_lines` row below reads them back off the priced line, and a
-      // WALK-UP is filed from this same `priced` result without re-reading the order it just wrote
-      // (`fileImmediateSale`, `apps/server/src/till-sale.ts`). Pricing copies the list through and
-      // does no arithmetic on it (`priceRows`, `packages/catalogue/src/pricing.ts`).
       optionSnapshots,
-      // The picked product's three frozen names travel as the child row's own: `name` is the staff
-      // name (`working_order_lines.name` is NOT NULL), `descriptions` the customer map re-keyed onto
-      // the invoice locales below, `kitchenName` what the kitchen reads.
       options: extraChildren.map((child) => ({
         name: child.name,
         descriptions: child.descriptions,
         kitchenName: child.kitchenName,
-        // Already the GROSS price of ONE of this extra, resolved by the projection.
+        // The GROSS price of ONE of this extra.
         priceDelta: child.price,
-        // The extra PRODUCT's own class, never the dish's (spec §3.3, decision 9) — never null, so
-        // the dish's rate is never inherited.
+        // Never null, so the dish's rate is never inherited.
         vatClass: child.vatClass,
-        // The per-dish pick count threads into `priceBasketWithOptions`, which prices the child at
-        // `dishQuantity × quantity` and stores that COMBINED quantity on the child line.
         quantity: child.quantity,
       })),
     });
-    // The parent row's course is the ring-time resolver `<override> ?? product.course_id` (§2b); a
-    // CHILD row inherits none (no ticket_item, KDS coursing is per dish).
+    // A CHILD row takes no course: kitchen coursing is per dish.
     lineMeta.push({
       kind: "parent",
       productId: selection.productId,
@@ -463,18 +372,8 @@ async function priceOrderLines(
     }
   }
 
-  // KDS-2 (A1): screen each non-null course OVERRIDE against the SAME live-course definition the config
-  // verbs use, so this — the ONE course-write path that skipped it — no longer accepts a crafted id. A
-  // malformed (non-uuid) override reaches `requireLiveCourse`'s own `id = $1` read, which neither
-  // objects to it nor matches it, so fold it to the SAME `course.not_found` first (the shape the fire
-  // route's `isUuid` screen uses);
-  // `requireLiveCourse` then refuses an absent / DIFFERENT-venue (its FK does not carry the venue) / retired
-  // id — location-scoped, `course.not_found`. Only the OVERRIDE is screened: the product DEFAULT
-  // (`product.course_id`, resolved below) is an already-valid stored FK, and re-validating it would
-  // wrongly reject a legitimately-deactivated product default. Living in this shared resolver, the screen
-  // covers every caller — the round path (`addTabRound`) and the order paths (`createOpenOrder` /
-  // `updateHeldOrder`) — uniformly. Deduped so a repeated override id costs one round trip; `null`
-  // (explicit clear / fire-earliest) and `undefined` (fall to the product default) skip.
+  // Only an OVERRIDE is screened: the product's default course is already a stored key, and
+  // re-validating it would refuse a product whose default course was since deactivated.
   const overrideCourseIds = new Set(
     lines
       .map((line) => line.courseId)
@@ -487,18 +386,11 @@ async function priceOrderLines(
     await requireLiveCourse(tx, cfg, courseId);
   }
 
-  // Price the basket authoritatively, expanding each dish into a PARENT row + one CHILD row per
-  // selected option (`priceBasketWithOptions`). With every line's `options` empty this is line-for-line
-  // identical to `priceBasket`, so the no-modifier callers (park/update/walk-up without options) are
-  // unchanged. Each child's `parentLineNo` names its dish, carried through to `RecordSaleLine` for the
-  // filed `sale_lines` (Task 4/5) — and through the working_order_lines self-FK built below.
   const priced = priceBasketWithOptions(items);
 
-  // New lines snapshot the location's receipt languages. Locked and issued lines keep their stored
-  // text. The VARIANT's customer text is re-keyed alongside the product's, because
-  // `working_order_lines_check_variant_locales` holds it to the same configured invoice locales, and
-  // a locale its text leaves blank takes the variant's own staff name — the name a variant line is
-  // printed under (spec §15.2), never the parent's.
+  // New lines snapshot the location's receipt languages; locked and issued lines keep their stored
+  // text. A locale a variant's text leaves blank takes the variant's own staff name, never the
+  // parent's.
   for (const line of priced.lines) {
     line.descriptions = toInvoiceLineDescriptions(
       line.descriptions,
@@ -517,77 +409,38 @@ async function priceOrderLines(
     }
   }
 
-  // Pre-generate the line ids so a CHILD row's `parent_line_id` can name its PARENT's id in the SAME
-  // insert (the self-referential FK is checked at statement end, so one `.values([...])` inserts parent
-  // and children together). `randomUUID` from `node:crypto`, the house pattern — not bare global
-  // `crypto`. Mirrors Task 5's id-resolution shape for the filed `sale_lines`.
+  // Pre-generated so a CHILD row's `parent_line_id` can name its parent's id in the same insert.
   const ids = priced.lines.map(() => randomUUID());
   const byLineNo = new Map(priced.lines.map((line, i) => [line.lineNo, ids[i]!]));
   const lineRows = priced.lines.map((line, i) => {
-    // `lineMeta[i]` lines up with `priced.lines[i]` (both in `priceBasketWithOptions`'s
-    // parent-then-children expansion order): a PARENT row carries the dish's product, its resolved
-    // course and no parent link; a CHILD row carries the PICKED product and its parent's id, and no
-    // course (KDS coursing is per dish).
     const meta = lineMeta[i]!;
     return {
       id: ids[i]!,
       workingOrderId,
       lineNo: line.lineNo,
-      // NULL for a top-level line; the parent dish's own pre-generated id for a child option line —
-      // resolved from `line.parentLineNo` (the parent's `lineNo`) via `byLineNo`.
       parentLineId: line.parentLineNo == null ? null : byLineNo.get(line.parentLineNo)!,
-      // A PARENT row's dish, a CHILD row's picked extra — both are products, and the child's is what
-      // the kitchen cooks and the diner is charged for (spec §3.4).
       productId: meta.productId,
       name: line.name,
       descriptions: line.descriptions,
-      // Read back off the priced line rather than kept a second time here, so the row this writes and
-      // the sale a walk-up files from the same `priced` result can never describe different answers.
-      // `priceBasketWithOptions` sets no answers on a child row, so a child stores `[]`.
+      // Read off the priced line, so this row and a walk-up's sale filed from the same `priced`
+      // result cannot describe different answers.
       optionSnapshots: line.optionSnapshots,
       unitName: line.unitName,
       unitPrecision: line.unitPrecision,
-      // This object is the `working_order_lines` insert, so it is where the pricer's decimal
-      // literals become the whole numbers those columns store — each at its own scale, which is why
-      // there are three converters and not one: an amount counts cents, `quantity` counts
-      // thousandths (0.005 kg is 5) and `vatRate` counts basis points (21.00% is 2100). The
-      // `priced` result this reads is untouched: the walk-up path files from it in decimal.
       quantity: stringToThousandths(line.quantity),
       unitPrice: stringToCents(line.unitPrice),
-      // The GROSS (VAT-inclusive) UNIT price LOCKED at add-time (line-add snapshot, 7c) — the
-      // AUTHORITATIVE input a retrieved order is FILED from without a re-price (`priceLockedLines`,
-      // @waitron/catalogue reads this straight back as its `grossUnitPrice`). `unit_price` above is the
-      // NET unit, informational only; this is the gross the line was priced from, so a later catalogue
-      // price change never moves the filed total. Stored from the pricer's `grossUnitPrices` — the
-      // per-UNIT gross at MONEY_SCALE, the exact figure `priceLockedLines` recomputes from — never
-      // `line_total ÷ quantity`, which is exact for `each` but DRIFTS for a weighed line. A child
-      // option's gross unit is its `price_delta`, re-priced from THIS locked column on retrieve exactly
-      // as the dish is. This is a durable lock, not a display cache.
+      // The gross unit price LOCKED at add time: a retrieved order is filed from it without a
+      // re-price, so a later catalogue price change never moves the filed total. Never derived as
+      // `line_total ÷ quantity`, which drifts for a weighed line.
       unitPriceGross: decimalToCents(priced.grossUnitPrices[i]!),
       vatRate: stringToBasisPoints(line.vatRate),
-      // The DRAFT line stores the GROSS (VAT-inclusive) line total, not `line.lineTotal`'s net base:
-      // `working_order_lines` is the counter's mutable display, and every other total the operator/
-      // customer sees is gross (the basket grand total, the per-line gross, the filed ticket), so the
-      // held-orders list `sum(line_total)` must be gross too. This deliberately DIVERGES from the FILED
-      // `sale_lines.line_total`, which keeps `line.lineTotal`'s net base for the fiscal record. The
-      // FILED line of a retrieved order now derives from the locked `unit_price_gross` unit above via
-      // `priceLockedLines`, NOT from `priced.lines`; a freshly-created walk-up still files from
-      // `priced.lines`. See `working_order_lines.line_total`'s schema comment and the pricer's
-      // `grossLineTotals`/`grossUnitPrices`.
+      // GROSS, unlike the filed `sale_lines.line_total`'s net base: every total the operator and
+      // customer see is gross, so the held-orders list's `sum(line_total)` must be too.
       lineTotal: decimalToCents(priced.grossLineTotals[i]!),
       category: line.category ?? null,
-      // KDS-2 ring-time course (§2b): the resolver `<override> ?? product.course_id` was computed into
-      // `lineMeta` when the basket was built (data already in hand — the input line's override and the
-      // resolved `product.courseId`); a CHILD row inherits no course.
       courseId: meta.kind === "parent" ? meta.courseId : null,
-      // Per-line customisation (spec §2/§3), NON-FISCAL: the validated + normalised note, on the
-      // PARENT dish line only — a child modifier row carries none (NULL). Snapshotted onto the
-      // ticket item at fire (`fireLines`), never onto the sale.
       note: meta.kind === "parent" ? meta.note : null,
-      // The whole name block comes from the priced row, never from the request: a PARENT carries its
-      // product's and its variant's names through `priceBasketWithOptions` and a CHILD's variant fields
-      // stay null, and the invoice re-key above rewrote the two customer maps on that row in place —
-      // so the priced row is the only copy holding the re-keyed text.
+      // From the priced row, never the request: only it holds the re-keyed customer text.
       variantName: line.variantName ?? null,
       variantDescriptions: line.variantDescriptions ?? null,
       variantKitchenName: line.variantKitchenName ?? null,
@@ -602,27 +455,12 @@ async function priceOrderLines(
 }
 
 /**
- * Read a persisted order's STORED lines in `line_no` order — the columns `priceLockedLines` prices
- * from (gross unit, quantity, rate) and the ones it copies through untouched (the frozen product
- * and variant names, the dish's frozen options answers, category), each snapshotted at add-time,
- * PLUS `id`,
- * `line_no` and `parent_line_id`, from which the returned `parentLineNo` is reconstructed so the
- * parent→child modifier linkage survives the lock round-trip (see below). THE ONE
- * reader shared by `payWorkingOrder` (a retrieved order), `placeOrder` (Mode-I's deferred file at
- * placing) and `collectOrder` (Mode-T's immediate file at collect), so all three file a persisted
- * order from the SAME locked composition and a catalogue price change after add never moves the filed
- * total (line-add snapshot, 7c).
+ * Read a persisted order's STORED lines, snapshotted at add time, so every path that files a
+ * persisted order files the same locked composition and a later catalogue price change never moves
+ * the filed total.
  *
- * Refuses a LINELESS order with `sale.empty_basket` (a domain 4xx → 400), never a raw Error. A
- * lineless persisted order IS a reachable state: `openTab` opens an EMPTY tab — a lineless `open`
- * working order (design §3a; tabs.test.ts "opens a tab with NO initial round") — so paying it
- * (`payWorkingOrder`), placing it (Mode-I `placeOrder`), or card-paying it
- * (`payWorkingOrderIntegrated`) all reach here through `priceStoredOrder`. A sale needs ≥1 line to
- * price and file, so an empty one is refused BEFORE any fiscal write (and before any card charge) —
- * the SAME `sale.empty_basket` guard the walk-up/park/round paths make at their own layer, surfaced
- * here as the actionable domain code the error boundary maps to 400, rather than the opaque
- * `server.internal` 500 a raw Error would become through `run`. This is the last line for the
- * empty-tab pay/place flow, which those earlier per-layer guards do not cover.
+ * Refuses a LINELESS order with `sale.empty_basket`: an empty tab is a reachable state, and this is
+ * the last check before its pay or place reaches a fiscal write or a card charge.
  */
 export async function readLockedLines(
   tx: Transaction,
@@ -653,34 +491,16 @@ export async function readLockedLines(
   if (stored.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
-  // Reconstruct each child modifier line's `parentLineNo` from its stored `parent_line_id` (an id), so
-  // the file path preserves parent→child linkage exactly as the live walk-up does — a child `sale_line`
-  // must not be orphaned (`parent_line_id` NULL) just because the order was locked and re-priced.
-  // Ordering modifiers (Task 6): the WALK-UP files the live `priced` (linkage intact), but EVERY
-  // persisted-order file (a retrieved counter order, a settled tab — the PRIMARY modifier path) reaches
-  // the fiscal record through this reader, so the link must survive the lock round-trip here.
-  //
-  // CRITICAL (FIX 1): reconstruct `parentLineNo` in the COMPACTED array-position space `priceRows` will
-  // renumber into — `lineNo = i + 1` by array position — NOT the stored `line_no` space. `stored` is
-  // `line_no`-ordered and `priceRows`/`priceLockedLines` preserve that array order, so position `i + 1`
-  // here equals the `lineNo` the emitted line (and `recordSale`'s `byLineNo` map, keyed on the EMITTED
-  // `lineNo`) will carry. The two spaces COINCIDE only when the stored `line_no`s are exactly `1..n`
-  // contiguous; a void (`voidTabLine`) or a subset transfer/move leaves them non-contiguous, and keying
-  // on the stored `line_no` would then resolve a child to the WRONG emitted line — self, null, or a
-  // sibling — filing a wrong `parent_line_id` into the immutable record. `id` is unique within the
-  // order and this batch is the whole order, so the map is total.
+  // `parentLineNo` is rebuilt in the array-position space `priceRows` renumbers into (`i + 1`), NOT
+  // the stored `line_no` space: a void or a transfer leaves stored numbers with gaps, and keying on
+  // them would file a child under the wrong parent in the immutable record.
   const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
   return stored.map((line) => ({
-    // The three scaled-integer columns become the decimal literals the pricer and everything above
-    // it work in, here at the row — each read by its own scale's converter, because a count of
-    // thousandths and a count of cents are different numbers for the same literal.
     grossUnitPrice: centsToDecimal(line.grossUnitPrice),
     quantity: thousandthsToDecimal(line.quantity),
     vatRate: basisPointsToDecimal(line.vatRate),
     name: line.name,
     descriptions: line.descriptions,
-    // The dish's frozen answers to its options lists, carried from the stored row onto the filed
-    // sale line. A child row stored `[]`.
     optionSnapshots: line.optionSnapshots,
     category: line.category,
     unitName: line.unitName,
@@ -693,14 +513,8 @@ export async function readLockedLines(
   }));
 }
 
-/**
- * Price a persisted order's STORED locked composition — `priceLockedLines` over {@link readLockedLines},
- * the one-liner every persisted-order file repeats (retrieved-order pay, Mode-I place, Mode-T collect,
- * and the settled-ticket read-back). `priceLockedLines` runs the SAME difference-method arithmetic over
- * the ADD-TIME locked gross (`unit_price_gross`) that `priceBasket` runs over a live catalogue, so a
- * catalogue price change after add never moves the filed total (line-add snapshot, 7c). Pure over
- * `readLockedLines`'s read; refuses a lineless order with `sale.empty_basket` (see there).
- */
+/** Price a persisted order from its add-time locked prices; refuses a lineless order (see
+ * {@link readLockedLines}). */
 export async function priceStoredOrder(
   tx: Transaction,
   workingOrderId: string,
@@ -708,13 +522,8 @@ export async function priceStoredOrder(
   return priceLockedLines(await readLockedLines(tx, workingOrderId));
 }
 
-/**
- * Read a filed sale's human-facing `NumSerieFactura` ("A/1") back from its `sales` row and series, in
- * the caller's transaction — the `FiscalRecordRef` is regime-opaque and carries neither, so both the
- * immediate-file (`fileImmediateSale`) and the Mode-I deferred place (`placeOrder`) read it back the
- * same way. `recordSale` guarantees exactly one `sales` row for the id, so the single-row read always
- * resolves (the non-null assertion holds for the same reason both call sites' did).
- */
+/** Read a filed sale's invoice number ("A/1"); the fiscal record reference is regime-opaque and
+ * carries none. */
 export async function readInvoiceNumber(tx: Transaction, saleId: SaleId): Promise<string> {
   const [issued] = await tx
     .select({ code: invoiceSeries.code, number: sales.invoiceNumber })
@@ -724,14 +533,8 @@ export async function readInvoiceNumber(tx: Transaction, saleId: SaleId): Promis
   return formatInvoiceNumber(issued!.code, issued!.number);
 }
 
-/**
- * Project a VAT desglose onto the ticket's `{ rate, base, tax }` shape — the one place the three result
- * builders express it: `placeOrder` here (Mode-I place), and `till-sale.ts`'s `readSettledTicket` (over a
- * FILED record's bands) and `fileImmediateSale` (over a freshly-`priced` basket). A pure per-band field
- * copy; the surcharge fields a `VatBreakdownLine` may also carry are deliberately dropped, exactly as
- * each inline `.map` did — the counter ticket carries base/tax only. Lives here (not in `till-sale.ts`)
- * so `till-sale.ts` imports it one-directionally, no cycle.
- */
+/** Surcharge fields a VAT band may carry are dropped deliberately: the counter ticket carries base
+ * and tax only. */
 export function toVatBreakdown(
   bands: readonly { rate: string; base: string; tax: string }[],
 ): { rate: string; base: string; tax: string }[] {
@@ -739,29 +542,16 @@ export function toVatBreakdown(
 }
 
 /**
- * A working order the counter parks to retrieve and pay later (park & retrieve, sub-project 7b). Like
- * `TillSaleRequest`, it carries NO price of any kind — the server reads the zone's menu offers and
- * prices authoritatively (`priceBasket`), so a browser cannot influence the snapshot the draft
- * carries.
+ * Carries NO price of any kind: the server prices from the zone's menu offers.
  *
- * `id` is client-supplied: the till mints the working-order uuid and holds it stable across a retry.
- * That id is what makes park IDEMPOTENT — a re-sent park (a lost-response retry) PK-collides on
- * `working_orders.id`, and `parkOrder` catches that refusal and REPLAYS the existing OPEN order's
- * `{ id, orderNumber }` rather than surfacing the collision, so at most one order is ever parked for the
- * id and the retry sees the original result. This mirrors PAY's own replay (`payWorkingOrder`, which
- * re-returns an already-settled order's ticket rather than filing a second chained record). The ONE
- * exception is a colliding id whose committed row is no longer `open` (abandoned/settled/placed) — a
- * pathological id reuse, not a held-order retry — which is re-thrown raw and unchanged.
- * `quantity` is a positive decimal string validated against the selected unit's snapshotted precision.
+ * `id` is client-supplied and held stable across a retry, which makes park IDEMPOTENT: a re-sent
+ * park collides on `working_orders.id` and replays the existing OPEN order's result. A colliding id
+ * whose row is no longer `open` is an id reuse, not a retry, and is re-thrown.
  *
- * `operatorId` is the person who parked the order, for later attribution. It is accepted here for the
- * caller's convenience and forward-compatibility with the session wiring (Task 5) but is NOT persisted
- * in this slice: `working_orders` carries no operator column yet, so there is nowhere to write it.
+ * `operatorId` is accepted but not persisted: `working_orders` has no operator column.
  */
 export interface ParkOrderRequest {
   id: string;
-  // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines` via
-  // `createOpenOrder`.
   lines: ({
     menuItemId: string;
     quantity: string;
@@ -779,29 +569,14 @@ export interface ParkOrderResult {
 }
 
 /**
- * Persist an OPEN working order plus its priced lines on the CALLER's transaction: read the zone's
- * menu offers, re-price `lines` with `priceBasket`, allocate the next per-node order number, and INSERT
- * the `working_orders` row (status `open`) and its `working_order_lines`. Returns the allocated order
- * number AND the authoritative `priceBasket` result its lines were priced from — so `payWorkingOrder`'s
- * walk-up path files the sale from the SAME price this creation computed, never a second offer
- * read of the identical basket. The server never trusts a browser-computed price; `lines` carry none.
- *
- * Shared by `parkOrder` (a counter parks an order to pay later, which uses only `orderNumber`) and
- * `payWorkingOrder` (a WALK-UP, which creates the order `open` and settles it in the same transaction,
- * reusing `priced`) — extracted so a walk-up order is IDENTICAL in shape to a parked one: same
- * allocated number, same priced lines, same triggers (`require_open_parent`/`check_locales` fire on
- * the inserted lines because their parent was inserted just above). The empty-basket refusal stays
- * with each caller (it is checked before any database work), as does the surrounding
- * `withTransaction` scope; this helper owns only the two inserts.
+ * Persist an OPEN working order and its priced lines on the CALLER's transaction, returning the
+ * price its lines were priced from so a walk-up files its sale from the same price. Shared so a
+ * walk-up order has the same shape as a parked one. The empty-basket refusal stays with each caller.
  */
 export async function createOpenOrder(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
-  // A line MAY carry `options` (ordering modifiers, Task 6) — passed straight to `priceOrderLines`,
-  // which validates them and expands the line into a parent dish row + child option rows.
-  // A line MAY also carry per-line `LineExtras` (NON-FISCAL) — likewise forwarded to `priceOrderLines`,
-  // which validates + persists them on the parent dish line.
   lines: ({
     menuItemId: string;
     quantity: string;
@@ -809,19 +584,15 @@ export async function createOpenOrder(
     options?: OptionSelection[];
   } & LineExtras)[],
   label: string | null,
-  // A counter delivery sets `deliveryTableId` (design §2b/§3c). Defaults to {}, so parkOrder, openTab
-  // and payWorkingOrder's walk-up path are unchanged (they omit it → a plain walk-up, column NULL). A
-  // TAB does NOT flow through here — its link is the `dining_tables.tab_id` back-pointer openTab sets,
-  // not an order column, so openTab passes no placement and this never stamps a delivery table on it.
+  // A tab's table link is `dining_tables.tab_id`, not `deliveryTableId`, so openTab passes none.
   placement: { deliveryTableId?: string | null; zoneId?: string } = {},
 ): Promise<{
   orderNumber: number;
   priced: PricedBasket;
   lineRows: WorkingOrderLineInsert[];
 }> {
-  // Check the delivery table exists before insertion so an unknown id produces
-  // table.not_found rather than a raw foreign-key failure. One tenant per database, so the id alone
-  // identifies the table. This permits an inactive table.
+  // Checked first so an unknown id is `table.not_found`, not a raw foreign-key failure. An inactive
+  // table is allowed.
   const deliveryTableId = placement.deliveryTableId ?? null;
   let effectiveZoneId = placement.zoneId;
   if (deliveryTableId !== null) {
@@ -836,9 +607,6 @@ export async function createOpenOrder(
     }
     effectiveZoneId = table.zoneId ?? effectiveZoneId;
   }
-  // Resolve + price the basket authoritatively (refusing an offer the zone does not list) into the
-  // line rows, keeping the raw price so the caller need not re-derive it — `priceOrderLines`'s own
-  // doc-comment explains the zip and why `priced` is threaded back out.
   const { lineRows, priced, lineContexts } = await priceOrderLines(
     tx,
     cfg,
@@ -855,16 +623,11 @@ export async function createOpenOrder(
     orderNumber,
     label,
     status: "open",
-    // Set ⇒ this counter order is DELIVERED to that table (metadata on the commercial row, NOT a
-    // fiscal field — the alta path never reads it, proven by the H2 huella-identity test). NULL for a
-    // walk-up/park/tab. The FK is enforced above by the app pre-check and by the DB as the backstop.
+    // Not a fiscal field.
     deliveryTableId,
   });
 
-  // The parent order was inserted just above, so the FK and the
-  // `require_open_parent`/`check_locales` triggers all resolve it. Guarded: an EMPTY tab (openTab with
-  // no initial round) has no lines to insert, and `tx.insert(...).values([])` errors. Existing callers
-  // always pass ≥1 line (they guard empty baskets before calling), so this never changes their path.
+  // An empty tab has no lines, and `tx.insert(...).values([])` throws.
   if (lineRows.length > 0) {
     await tx.insert(workingOrderLines).values(lineRows);
   }
@@ -876,58 +639,34 @@ export async function createOpenOrder(
   return { orderNumber, priced, lineRows };
 }
 
-/**
- * Park a working order: read the zone's menu offers, re-price with `priceBasket`, allocate the next
- * per-node order number, and persist an OPEN `working_orders` row plus its priced
- * `working_order_lines` — all inside ONE `withTransaction` transaction, so the order and every line
- * commit as a single unit (or roll back together, leaving nothing parked). The server never trusts
- * a browser-computed price; `req` carries none. The persisted line keeps `product_id` (a pricing
- * INPUT a later repricing re-resolves) alongside the frozen display snapshot (`descriptions`,
- * `unit_price`, `vat_rate`, `category`) from `priceBasket`, plus its GROSS `line_total`
- * (`priceBasket`'s `grossLineTotals`, not the net base the fiscal line carries — see
- * `priceOrderLines`). The persist itself is `createOpenOrder`, shared verbatim with
- * `payWorkingOrder`'s walk-up path.
- */
 export async function parkOrder(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   req: ParkOrderRequest,
 ): Promise<ParkOrderResult> {
-  // Refused before any database work: an empty basket has nothing to price and no order to open. Park
-  // always needs lines, so this refusal is unconditional here (the sale path's is not — `payWorkingOrder`
-  // scopes it to a walk-up, so a retrieved order files stored lines); the `lines` array is a network
-  // boundary, so the guard is real.
   if (req.lines.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
 
   try {
     return await withTransaction(deps.db, async (tx) => {
-      // Park needs only the allocated number; `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
       const { orderNumber } = await createOpenOrder(tx, cfg, req.id, req.lines, req.label ?? null, {
         zoneId: req.zoneId,
       });
       return { id: req.id, orderNumber };
     });
   } catch (error) {
-    // Anything but a unique violation is a real failure and surfaces unchanged — the transaction above
-    // already rolled back, so nothing half-parked persists.
     if (!isUniqueViolation(error)) {
       throw error;
     }
-    // A duplicate-key refusal on `working_orders`' primary key: a re-sent park (see `ParkOrderRequest`
-    // for the stable client id) collides on the id an EARLIER park already committed. That row is
-    // READABLE in a fresh transaction, because `packages/store/src/write-queue.ts` admits one write
-    // transaction on the venue file at a time — so the colliding row was committed before this
-    // transaction began, and there is no uncommitted writer to wait for. That is why
-    // `payWorkingOrder`'s duplicate-key backstop (`till-sale.ts`) replays in a fresh tx too. Replay the committed OPEN order's number, filing and inserting nothing.
+    // A re-sent park collided on the id an earlier park committed. One write transaction runs on the
+    // venue file at a time, so that row is readable in a fresh transaction: replay its number.
     return withTransaction(deps.db, async (tx) => {
       const [existing] = await tx
         .select({ orderNumber: workingOrders.orderNumber })
         .from(workingOrders)
         .where(and(eq(workingOrders.id, req.id), eq(workingOrders.status, "open")));
-      // Not a replayable held order — the colliding id is not `open` (abandoned/settled/placed, a
-      // pathological id reuse) — so re-throw the raw refusal unchanged per the docstring's exception, never fabricating a result.
+      // The colliding id is not `open`: an id reuse, not a retry.
       if (existing === undefined) {
         throw error;
       }
@@ -937,36 +676,13 @@ export async function parkOrder(
 }
 
 /**
- * Open the running tab on a table (design §3a).
+ * Open the running tab on a table. The link is the table's `tab_id` back-pointer; the order carries
+ * no tab column.
  *
- * ## One open tab per table, without a lock
- *
- * There is NO partial-unique index behind this rule — a single nullable `tab_id` gives
- * one-tab-per-table structurally, and what enforces it against a second caller is that the
- * check-then-set below runs without interruption. On PostgreSQL the `dining_tables` row was taken
- * `for update` to arrange that. What arranges it now is that a second `openTab` on the same table
- * cannot be running at the same time at all: one write transaction runs on the venue file at a
- * time. `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`) carries the mechanism and
- * the receipt for that; the call chain from here is `withTransaction`
- * (`packages/db/src/tenancy.ts`) → `StoreHandle.withWriteLock`
- * (`packages/store/src/index.ts`, `openVenueStore`) → `createWriteQueue(...).run`
- * (`packages/store/src/write-queue.ts`), which issues `begin immediate`, awaits the body and
- * only then `commit`s, so the next caller's `begin` has not run yet.
- *
- * The second `openTab` therefore runs after the first has committed, reads the now-set `tab_id`,
- * finds it points at an OPEN order, and is refused `tab.already_open` — the same outcome, reached
- * by waiting for the whole transaction rather than for one row. A STALE `tab_id` (pointing at a
- * settled/abandoned order) reads as free and is OVERWRITTEN, so the fiscal pay path needs no
- * settle-time write (design §2b).
- *
- * The read itself survives the lock: it is also the `table.not_found` / `table.inactive` check and
- * the source of `zoneId`.
- *
- * Then creates an `open` working order (reusing `createOpenOrder`, incl. the per-node order-number
- * allocation) and points the table's `tab_id` at it. The order carries NO tab column — the link is this
- * back-pointer. `lines?` opens the tab with an initial round; absent, the tab opens empty. Runs on the
- * CALLER's transaction. `table.not_found`/`table.inactive` guard the
- * table itself.
+ * One open tab per table needs no lock and no unique index: the check-then-set below cannot
+ * interleave with a second `openTab`, because `withTransaction` IS the venue file's write lock. A
+ * STALE `tab_id`, pointing at a settled or abandoned order, reads as free and is overwritten, so the
+ * pay path needs no settle-time write.
  */
 export async function openTab(
   tx: Transaction,
@@ -998,8 +714,6 @@ export async function openTab(
     }
   }
 
-  // A set tab_id blocks a second tab ONLY while it points at a STILL-OPEN order; the WHERE clause does
-  // the filtering, so a stale pointer (at a settled order) simply returns no row and is overwritten below.
   if (table.tabId !== null) {
     const [openTabRow] = await tx
       .select({ id: workingOrders.id })
@@ -1014,7 +728,7 @@ export async function openTab(
   const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null, {
     zoneId: table.zoneId ?? undefined,
   });
-  // TS-1 sets the back-pointer; TS-2 also clears any stale manual status as the new tab opens (§3b(2)).
+  // Also clears any stale manual status as the new tab opens.
   await tx
     .update(diningTables)
     .set({ tabId, statusId: null })
@@ -1023,23 +737,8 @@ export async function openTab(
 }
 
 /**
- * This working order is an open tab a dining table points at, else `tab.not_open`. The status half
- * is {@link assertTabOpen}; the back-pointer is what makes it a TAB rather than a detached CHECK (a
- * table-less open order a split minted), and it is the half `splitOffCheck` and `transferLines`
- * gate on.
- *
- * On PostgreSQL this also took the tab's `working_orders` row `for update`. That lock arranged
- * one thing: that a second writer on the same tab — another round, a void, a pay — could not
- * interleave with the caller's read-then-write. There is no second writer to interleave with. One
- * write transaction runs on the venue file at a time; `assertExtraListForWrite`
- * (`packages/catalogue/src/extras.ts`) carries the mechanism and the receipt, and the chain from
- * here is `withTransaction` (`packages/db/src/tenancy.ts`) → `StoreHandle.withWriteLock`
- * (`packages/store/src/index.ts`, `openVenueStore`) → `createWriteQueue(...).run`
- * (`packages/store/src/write-queue.ts`). What the name says now is all this function does: it
- * asserts, and every caller's subsequent statements were already safe from anyone else.
- *
- * The back-pointer read never held a lock even on PostgreSQL — it was a plain SELECT — so nothing
- * about it changed.
+ * This working order is an open tab a dining table points at, else `tab.not_open`. The back-pointer
+ * is what makes it a TAB rather than a detached CHECK (a table-less open order a split minted).
  */
 async function assertAnchoredTabOpen(
   tx: Transaction,
@@ -1057,50 +756,18 @@ async function assertAnchoredTabOpen(
 }
 
 /**
- * Fire an order's (or a tab round's) lines to the kitchen (KDS-1 §3b): insert one `ticket_items` row
- * per line, its station RESOLVED and SNAPSHOTTED at fire time. The shared primitive the three fire
- * points funnel through — `placeOrder` (placing = firing for Modes I/T), `sendToPrep` (Mode P's
- * pickup) and a tab's round-send ({@link addTabRound}) — so routing and the snapshot rule live in ONE
- * place, replacing #63's single `order_prep` row per order with a per-line/per-station model.
- *
- * An order with a frozen service context uses the venue-service route selected by zone, product and
- * category; `no_preparation` skips the line. A context-less legacy order uses the older product,
- * category and location-default station chain. The resolved station is WRITTEN onto the ticket item,
- * so later configuration changes never move an already-fired item.
- *
- * `node_id = cfg.nodeId` (node-scoped, as `order_prep` was); `working_order_id = orderId` is the
- * denormalised grouping key; `working_order_line_id` is the fired line, whose `(
- * working_order_line_id)` unique makes a double-fire collide rather than duplicate. Every read and
- * the insert run on the CALLER's transaction. An empty `lines` inserts nothing — the `values([])`
- * guard `createOpenOrder` uses.
- *
- * SIDE EFFECT (KDS-4 print-on-fire, §3b): after the insert, the newly-fired items (the insert's
- * `.returning()` filtered to `firedAt != null`) are handed to `enqueueKitchenTickets`, which INSERTs
- * kitchen print jobs into the outbox on this same tx — never blocking the fire (see `kitchen-print.ts`).
+ * Fire lines to the kitchen: one `ticket_items` row per line, its station and course RESOLVED and
+ * SNAPSHOTTED at fire time, so a later configuration change never moves an already-fired item. The
+ * one fire point every path funnels through. A zoned order routes by the venue-service route
+ * (`no_preparation` skips the line); a context-less order uses the product, category and
+ * location-default station chain. Also enqueues kitchen print jobs on the same transaction.
  */
 export async function fireLines(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
-  // A CHILD modifier line (ordering modifiers, Task 2/7) carries `parent_line_id` set and NO product —
-  // it is part of its parent dish, not its own kitchen ticket, so it must get NEITHER a `ticket_items`
-  // row NOR an independent station resolution (a modifier never routes to its own station, and a
-  // productless child would otherwise fall to the legacy default station or fail
-  // `station.no_default`). This is
-  // the SHARED fire chokepoint (placeOrder / sendToPrep / addTabRound all pass through here), so the
-  // parent-only filter lives HERE — keyed on `parent_line_id IS NULL`, the semantic "is a top-level
-  // line" — covering every caller by construction rather than being repeated at each. `productId` stays
-  // nullable in the row shape only so a caller can hand the whole line set through; after the filter it
-  // is non-null on every surviving parent.
-  // Per-line customisation (spec §2/§3): each parent line's `note` (NON-FISCAL) rides in on
-  // the same `lines` param — read back from `working_order_lines` by each caller's line-select, exactly
-  // as `courseId` is — and is SNAPSHOTTED onto the `ticket_items` row below (like `station_id`/
-  // `course_id`), so a later edit to the draft line never moves an already-fired ticket.
-  // Coursing editing (A3): a line MAY carry `hold: true` — the round-send's "insert but do NOT fire yet"
-  // marker (the tab screen's per-line hold toggle). It is TRANSIENT (read here to decide `fired_at`, never
-  // a stored column, so no migration): a held line inserts with `fired_at NULL` REGARDLESS of its course,
-  // so it is greyed on the KDS and prints nothing until a later `sendLines`/`fireCourse` releases it. Absent
-  // (`undefined`) = today's auto-fire-by-course rule, unchanged — placeOrder/sendToPrep omit it entirely.
+  // A CHILD modifier line is part of its parent dish and gets no ticket item of its own.
+  // `hold: true` inserts the line unfired whatever its course; it is not stored.
   lines: {
     id: string;
     productId: string | null;
@@ -1110,8 +777,6 @@ export async function fireLines(
     hold?: boolean;
   }[],
 ): Promise<void> {
-  // Keep only PARENT lines (`parent_line_id IS NULL`); child modifier lines fire nothing. Done first, so
-  // an all-children (impossible today) or empty set short-circuits before any catalogue read or insert.
   const parentLines = lines.filter((line) => line.parentLineId === null);
   if (parentLines.length === 0) {
     return;
@@ -1122,15 +787,11 @@ export async function fireLines(
     ...new Set(lines.map((line) => line.productId).filter((id): id is string => id !== null)),
   ];
 
-  // One batched venue-service route read per fire, before the line loop, so the map body below stays
-  // pure: the route depends only on (zone, product) and the zone is fixed for the order.
   const serviceRouteByProduct =
     serviceContext === null
       ? new Map<string, PreparationRoute>()
       : await VENUE_SERVICE.resolvePreparationRoutes(tx, cfg, serviceContext.zoneId, productIds);
 
-  // The lines the zone routes do not decide: every line of a context-less order, and on a zoned
-  // order a line naming no product. Only these read the legacy station chain below.
   const legacyLines = lines.filter(
     (line) => line.productId === null || !serviceRouteByProduct.has(line.productId),
   );
@@ -1140,13 +801,8 @@ export async function fireLines(
     { productStationId: string | null; categoryStationId: string | null }
   >();
   if (legacyLines.length > 0) {
-    // The venue's legacy fallback station (its `is_default` row, if any); a legacy line falls to it
-    // when neither the product nor its category names a route. The `active` filter is required:
-    // `deactivateStation` leaves `is_default=true` on a deactivated default, so without it a dead
-    // station is still resolved here and lines route to a queue the till/station display
-    // (active-only) never surface — food silently dropped. Requiring `active` makes a venue whose
-    // only default is deactivated resolve `null` → the fail-loud `station.no_default` below (§2b),
-    // until a new default is set.
+    // `active` is required: `deactivateStation` leaves `is_default` set on a deactivated default,
+    // and a line routed there would reach a queue no display shows. With it, the fire is refused.
     const [fallback] = await tx
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
@@ -1159,9 +815,8 @@ export async function fireLines(
       );
     defaultStationId = fallback?.id ?? null;
 
-    // The legacy product and category station overrides, in one batch. A missing category yields a
-    // null route. A variant line routes by its EFFECTIVE station and category, so it goes where its
-    // parent would unless it sets its own.
+    // A variant line routes by its EFFECTIVE station and category: where its parent would, unless it
+    // sets its own.
     const legacyProductIds = [
       ...new Set(
         legacyLines.map((line) => line.productId).filter((id): id is string => id !== null),
@@ -1180,32 +835,16 @@ export async function fireLines(
     routeByProduct = new Map(routes.map((route) => [route.productId, route]));
   }
 
-  // --- KDS-2 hold-and-fire (§3c): snapshot each line's course + decide fired-vs-held ---
-
-  // Each fired line's RESOLVED course — Task 3 stored it at ring time as `<override> ?? product.course_id`
-  // (null = no course). Threaded in on the `lines` param (keyed by line id, the same id this fire snapshots
-  // as `working_order_line_id`) rather than re-read here: every caller already holds it — placeOrder and
-  // sendToPrep add `course_id` to the line select they already run, and addTabRound reads it back on the
-  // insert's RETURNING — so the value is `working_order_lines.course_id` exactly as a re-read would give,
-  // one round trip cheaper.
   const courseByLine = new Map(lines.map((line) => [line.id, line.courseId ?? null]));
 
-  // Aggregate existing items per venue course: anyFired lets later rounds join food
-  // already cooking, and itemCount includes prior rounds when choosing the earliest
-  // course. The course list is location-scoped.
+  // `anyFired` lets a later round join a course already cooking; `itemCount` includes prior rounds
+  // when choosing the earliest course.
   const courseRows = await tx
     .select({
       id: kitchenCourses.id,
       displayOrder: kitchenCourses.displayOrder,
-      // `max(...)` over 0/1 in place of PostgreSQL's `bool_or`, which this engine does not have.
-      // `is not null` yields 1 or 0 here, so a group's maximum is 1 exactly when one of its items
-      // is fired. Measured 2026-09-22 on Node v26.7.0 over this same LEFT JOIN shape: a course with
-      // a fired item reads 1, one with only unfired items reads 0, and one with no items at all
-      // reads 0 rather than null — so the truthiness test below sorts all three the way `bool_or`
-      // did. The value arrives as a number; nothing here compares it with `===`.
+      // Arrives as the number 1 or 0, never a boolean: test its truthiness, never with `===`.
       anyFired: sql<boolean>`max(${ticketItems.firedAt} is not null)`,
-      // `cast(x as int)` in place of `x::int`: this engine has no cast OPERATOR and refuses the
-      // colons with `unrecognized token: ":"`.
       itemCount: sql<number>`cast(count(${ticketItems.id}) as int)`,
     })
     .from(kitchenCourses)
@@ -1216,14 +855,10 @@ export async function fireLines(
     .where(eq(kitchenCourses.locationId, cfg.locationId))
     .groupBy(kitchenCourses.id, kitchenCourses.displayOrder);
 
-  // Courses with an EXISTING fired item — a new item of one joins the already-cooking course and fires.
   const firedCourseIds = new Set(courseRows.filter((row) => row.anyFired).map((row) => row.id));
 
-  // The order's NON-NULL course set = venue courses the order already carries items of (`itemCount > 0`,
-  // prior rounds) ∪ this batch's non-null courses. A null course_id has no `display_order`, is treated as
-  // earliest — it fires immediately (§2b) — and never enters this set. The min `display_order` over it is
-  // the order's EARLIEST course, taken over prior rounds AND this batch. Empty set (all null courses) ⇒
-  // no minimum, and every line fires by the null rule below.
+  // The order's earliest course, over prior rounds and this batch. A line with no course never
+  // enters the set.
   const orderCourseIds = new Set<string>([
     ...courseRows.filter((row) => row.itemCount > 0).map((row) => row.id),
     ...[...courseByLine.values()].filter((id): id is string => id !== null),
@@ -1235,13 +870,9 @@ export async function fireLines(
   const earliestDisplayOrder =
     orderDisplayOrders.length === 0 ? null : Math.min(...orderDisplayOrders);
 
-  // One clock reading for the whole round, so every item of it carries the same `fired_at` — which
-  // is what PostgreSQL's `now()`, being transaction-start time, gave for free. `nowIso` because
-  // these are `tsString` columns, and that spelling is what makes a later comparison on them a
-  // correct time ordering (`packages/printing/src/runtime.ts` has the measurement).
+  // One clock reading for the whole round, so every item of it carries the same `fired_at`.
   const firedAt = nowIso();
-  // Resolve + snapshot each line's station AND course, refusing the whole fire if any line has nowhere
-  // to go.
+  // A line with nowhere to go refuses the whole fire.
   const values = lines
     .map((line) => {
       const route = line.productId === null ? undefined : routeByProduct.get(line.productId);
@@ -1258,17 +889,7 @@ export async function fireLines(
         throw new AppError("station.no_default", { locationId: cfg.locationId });
       }
       const courseId = courseByLine.get(line.id) ?? null;
-      // Fired NOW (§3c) if: no course (null fires earliest, §2b) OR its course is already fired for this
-      // order OR its course is the order's earliest (min display_order). Else HELD (`fired_at` NULL) until
-      // `fireCourse` stamps it. For a this-venue course (every A1-screened override, and the usual product
-      // default) `displayOrderByCourse.get` is defined and the three checks decide fire vs held as intended.
-      // A FOREIGN product-default course (the shared-catalogue corner above) is absent from the maps, so all
-      // three checks are false and the line holds — and is then unfireable (Debt → KDS-2); harmless in the
-      // incoherent state that alone produces it.
-      // Coursing editing (A3): `hold === true` short-circuits the whole course decision — the round-send
-      // asked for this line to be INSERTED but NOT fired, so it holds (`fired_at NULL`) even when its course
-      // is the order's earliest (or already fired). It is then released like any other held line, by
-      // `sendLines`/`fireCourse`. Absent `hold` falls through to the unchanged auto-fire-by-course rule.
+      // A line not fired now is HELD (`fired_at` NULL) until `fireCourse` or `sendLines` releases it.
       const fired =
         line.hold === true
           ? false
@@ -1281,9 +902,6 @@ export async function fireLines(
         workingOrderLineId: line.id,
         stationId,
         courseId,
-        // Per-line customisation (spec §2/§3), NON-FISCAL: snapshot the parent line's note onto the
-        // ticket item at fire — frozen here like `station_id`/`course_id`, so editing the draft line
-        // afterwards never moves this fired ticket.
         note: line.note,
         firedAt: fired ? firedAt : null,
         state: "queued" as const,
@@ -1293,30 +911,23 @@ export async function fireLines(
   if (values.length === 0) return;
   let inserted: { workingOrderLineId: string; stationId: string; firedAt: string | null }[];
   try {
-    // `.returning()` captures the newly-written ticket items so print-on-fire (KDS-4) can enqueue their
-    // kitchen tickets WITHOUT re-querying `ticket_items` — a re-query would sweep up EARLIER rounds'
-    // already-fired items (an order fires round by round) and reprint them (controller ruling R-D).
+    // Printing from `.returning()`, not a re-query: a re-query would sweep up earlier rounds'
+    // already-fired items and reprint them.
     inserted = await tx.insert(ticketItems).values(values).returning({
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       firedAt: ticketItems.firedAt,
     });
   } catch (error) {
-    // A line already fired collides on `ticket_items`' per-line `(working_order_line_id)`
-    // unique — a re-fire (the reachable case is a double `sendToPrep`). Map that refusal to the domain
-    // code naming the order, so the route surfaces a clean 409 instead of the raw constraint error
-    // becoming an opaque `server.internal` 500. Caught HERE, the shared fire choke point, so every fire
-    // path (placeOrder / sendToPrep / addTabRound) is covered by construction. Any other error re-throws.
+    // A re-fire collides on the per-line unique, e.g. a double `sendToPrep`.
     if (isUniqueViolation(error)) {
       throw new AppError("ticket.already_fired", { workingOrderId: orderId });
     }
     throw error;
   }
 
-  // Print-on-fire (KDS-4 §3c): enqueue a kitchen ticket at each printer attached to a firing station,
-  // for the lines that FIRED now — held items (`fired_at` null, a later course) print only when
-  // `fireCourse` releases them. Same-tx outbox INSERTs, so the enqueue rolls back with the fire and
-  // never blocks it (no hardware I/O).
+  // Held items print only when released. Outbox inserts on the same transaction: no hardware I/O
+  // blocks the fire.
   const firedItems = inserted
     .filter((row) => row.firedAt !== null)
     .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId }));
@@ -1337,8 +948,6 @@ export async function fireCourse(
   await requireCourse(tx, cfg, courseId);
   const firedItems = await tx
     .update(ticketItems)
-    // The clock is read in JavaScript and bound: `now()` is a PostgreSQL function this engine does
-    // not have. `nowIso` because `fired_at` is a `tsString` column.
     .set({ firedAt: nowIso() })
     .where(
       and(
@@ -1351,10 +960,8 @@ export async function fireCourse(
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
     });
-  // Print-on-fire (KDS-4 §3c): the `fired_at IS NULL` predicate matched EXACTLY the items that fired now
-  // (a held course being released), so `RETURNING` is precisely this round's newly-fired set — no earlier
-  // round is re-selected, and a re-fire of an already-fired course matches zero rows and enqueues
-  // nothing. Same-tx outbox INSERTs, so the enqueue rolls back with the fire and never blocks it.
+  // The `fired_at IS NULL` predicate makes `RETURNING` exactly the items that fired now, so a re-fire
+  // prints nothing.
   await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
 }
 
@@ -1369,11 +976,7 @@ export async function sendLines(
   lineNos: number[],
 ): Promise<void> {
   await assertAnchoredTabOpen(tx, cfg, tabId);
-  // Empty list ⇒ no line filter ⇒ every HELD line of the tab fires ("send all together"). A non-empty
-  // list restricts the fire to the ticket items whose line is in the set. The subquery selects from
-  // `working_order_lines` (its own FROM), so its bare `"id"` resolves inward and the outer
-  // `ticket_items."working_order_line_id"` stays qualified — verified with `.toSQL()`; not a correlated
-  // subquery, so the CLAUDE.md base-vs-join bare-column hazard does not apply.
+  // An empty list fires every HELD line of the tab.
   const lineFilter =
     lineNos.length === 0
       ? undefined
@@ -1389,8 +992,7 @@ export async function sendLines(
               ),
             ),
         );
-  // ONE clock reading for both stamps: `now()` was transaction time, so the two calls it replaces
-  // could not disagree, and `queued_at` is what every age on the boards is measured from.
+  // One clock reading for both stamps: `queued_at` is what every age on the boards is measured from.
   const firedNow = nowIso();
   const firedItems = await tx
     .update(ticketItems)
@@ -1406,9 +1008,7 @@ export async function sendLines(
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
     });
-  // Print-on-fire (KDS-4 §3c): the `fired_at IS NULL` predicate matched EXACTLY the lines that fired now,
-  // so `RETURNING` is precisely this send's newly-fired set — a re-send of an already-fired line matches
-  // zero rows and enqueues nothing. Same-tx outbox INSERTs, so the enqueue rolls back with the fire.
+  // As in `fireCourse`, a re-send of an already-fired line prints nothing.
   await enqueueKitchenTickets(tx, cfg, tabId, firedItems);
 }
 
@@ -1428,9 +1028,6 @@ export async function recallLines(
   if (lineNos.length === 0) {
     return;
   }
-  // Resolve every named line by `(working_order_id, line_no)` — an absent line_no yields no row for it
-  // (→ tab.line_not_found, the resolve-or-throw the sibling single-line tab verbs make, naming the first
-  // that matches nothing).
   const lines = await tx
     .select({ lineNo: workingOrderLines.lineNo, id: workingOrderLines.id })
     .from(workingOrderLines)
@@ -1444,24 +1041,7 @@ export async function recallLines(
     }
   }
   const lineIds = lines.map((r) => r.id);
-  // The named lines' ticket items, read for two things at once: the started check below, and the
-  // set of lines that had actually printed and so need a RECALLED slip.
-  //
-  // This read used to take `for update` on those rows (Copilot #191, twin of setLineCourse), and
-  // the hazard it was aimed at was specific: {@link fireCourse} stamps `fired_at` on `ticket_items`
-  // WITHOUT calling {@link assertAnchoredTabOpen}, so the tab-row lock this verb held did not
-  // serialise it — a concurrent `fireCourse` could fire and PRINT a held line between an unlocked
-  // read here and the un-fire below, leaving the line un-fired with no RECALLED slip while the
-  // ticket it printed is never pulled. That hazard needed two transactions overlapping. One write
-  // transaction runs on the venue file at a time ({@link assertAnchoredTabOpen} carries the chain
-  // and the receipt), so a `fireCourse` is either wholly before this recall or wholly after it, on
-  // every row in the file rather than on the ones a clause named.
-  //
-  // What the read still gives is unchanged: a line with NO ticket item yet (a pending line)
-  // contributes no row — not started, never fired, un-fire is a no-op — and
-  // `working_order_line_id` is unique on `ticket_items`, so each line contributes at most one. It
-  // stays BEFORE the un-fire so a STARTED (preparing/ready) line can be named in the refusal and
-  // `fired_at` reflects the pre-recall state.
+  // Read BEFORE the un-fire, so `fired_at` still says which lines printed and need a RECALLED slip.
   const items = await tx
     .select({
       ticketItemId: ticketItems.id,
@@ -1472,21 +1052,14 @@ export async function recallLines(
     })
     .from(ticketItems)
     .where(inArray(ticketItems.workingOrderLineId, lineIds));
-  // Refuse the WHOLE call if any named line has started (nothing is un-fired unless every line is
-  // recallable). A started line has a ticket item, so it appears in `items`.
   const started = items.find((r) => r.state === "preparing" || r.state === "ready");
   if (started !== undefined) {
     throw new AppError("ticket.already_started", { ticketItemId: started.ticketItemId });
   }
-  // A6: the correction set is the PREVIOUSLY-FIRED lines this recall actually un-fires — `fired_at`
-  // non-null AND `state = 'queued'` (the same rows the update below matches AND that had paper out). A
-  // held line (`fired_at` already null) never printed and is excluded, so it produces no slip. `fired_at`
-  // non-null implies a joined ticket-item row, so `stationId` is non-null there.
+  // A held line never printed, so it gets no slip.
   const recalled = items
     .filter((r) => r.firedAt !== null && r.state === "queued")
     .map((r) => ({ workingOrderLineId: r.workingOrderLineId, stationId: r.stationId! }));
-  // Un-fire only the queued items of the named lines — an already-held line (fired_at already null) is
-  // matched but its clear is a no-op, and a started line never reaches here (refused above).
   await tx
     .update(ticketItems)
     .set({ firedAt: null })
@@ -1497,7 +1070,6 @@ export async function recallLines(
         inArray(ticketItems.workingOrderLineId, lineIds),
       ),
     );
-  // Tell the paper kitchen to pull each previously-printed recalled line (no-op when `recalled` is empty).
   await enqueueCorrectionSlips(tx, cfg, tabId, recalled, "RECALLED");
 }
 
@@ -1539,7 +1111,6 @@ export async function markCourseAway(
   await requireCourse(tx, cfg, courseId);
   await tx
     .update(ticketItems)
-    // The clock is read in JavaScript and bound — see `fireCourse` above for why.
     .set({ awayAt: nowIso() })
     .where(
       and(
@@ -1552,31 +1123,16 @@ export async function markCourseAway(
 }
 
 /**
- * APPEND a priced round to an OPEN tab (design §3b) — the one genuinely new order primitive. It locks
- * each new line's `unit_price_gross` at add-time (via `priceOrderLines`) and assigns the NEXT `line_no`,
- * WITHOUT deleting or re-pricing existing lines. Contrast `updateHeldOrder`, which deletes and re-inserts
- * the whole basket (`:633-634`), re-locking every line at the current catalogue price — wrong for an
- * incremental tab.
+ * APPEND a priced round to an OPEN tab, locking each new line's gross unit price at add time, WITHOUT
+ * deleting or re-pricing existing lines: a tab does not re-price.
  *
- * Concurrency (this matters for QR ordering — multiple guests append to one shared tab at once):
- * the `max(line_no)+1` read-then-insert below must not interleave with another append, or both
- * compute the same `line_no` and the second collides on the `working_order_lines`
- * `(working_order_id, line_no)` unique. On PostgreSQL the tab's `working_orders` row was held
- * `for update` to arrange that. Nothing can interleave with it now: one write transaction runs on
- * the venue file at a time ({@link assertAnchoredTabOpen} carries the chain and the receipt), so
- * the two appends run one after the other and the second reads the first's committed maximum.
+ * The `max(line_no)+1` read-then-insert cannot interleave with another append, because
+ * `withTransaction` IS the venue file's write lock.
  */
 export async function addTabRound(
   tx: Transaction,
   cfg: TillConfig,
   tabId: string,
-  // KDS-2: each round line MAY carry an optional `courseId` override, threaded into `priceOrderLines`
-  // where the line's course resolves to `override ?? product.course_id` (§2b). Ordering modifiers
-  // (Task 6): a line MAY also carry `options`, expanded there into parent + child rows. Per-line
-  // customisation (`LineExtras`): a line MAY carry a `note` (NON-FISCAL), persisted on the
-  // parent dish line and snapshotted onto its ticket item at fire. Coursing editing (A3): a line MAY carry
-  // `hold: true` — insert it HELD (no fire, no print) regardless of course; the marker is correlated onto
-  // the priced PARENT row below and read by `fireLines`.
   lines: ({
     menuItemId: string;
     quantity: string;
@@ -1590,24 +1146,13 @@ export async function addTabRound(
   if (lines.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
-  // The next line_no. Two concurrent rounds cannot both read this max, because they cannot both be
-  // running (the docstring's concurrency note).
   const [{ maxLineNo }] = await tx
     .select({ maxLineNo: sql<number>`cast(coalesce(max(${workingOrderLines.lineNo}), 0) as int)` })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId));
-  // Price the round (locks each new gross unit at add-time), then APPEND: renumber from maxLineNo+1,
-  // never touching existing lines. `priceOrderLines` numbers its rows 1..n in `lines` order, so row i
-  // maps to maxLineNo + i + 1.
   const context = await VENUE_SERVICE.findOrderContext(tx, cfg, tabId);
   const { lineRows, lineContexts } = await priceOrderLines(tx, cfg, tabId, lines, context?.zoneId);
   const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
-  // TS-1 appends the round; KDS-1 fires it (design §3b, the tab round-send fire point) — insert the new
-  // lines and send each to the kitchen as a ticket item. `returning` gives the line ids (pre-generated
-  // by `priceOrderLines` so a child's `parent_line_id` resolves in the insert) that `fireLines`
-  // snapshots the resolved station onto, plus each line's `product_id` and resolved `course_id` that
-  // `fireLines` needs for routing + the hold-and-fire decision (§3c) — read back here instead of
-  // `fireLines` re-selecting it.
   const appendedLines = await tx.insert(workingOrderLines).values(appended).returning({
     id: workingOrderLines.id,
     productId: workingOrderLines.productId,
@@ -1617,16 +1162,8 @@ export async function addTabRound(
     lineNo: workingOrderLines.lineNo,
   });
   await VENUE_SERVICE.recordLineContexts(tx, cfg, tabId, lineContexts);
-  // Coursing editing (A3): correlate each input round line's `hold` onto the PARENT row `priceOrderLines`
-  // produced for it. `priceOrderLines` emits one PARENT row (`parentLineId === null`) per input line, in
-  // INPUT ORDER, each immediately followed by its option CHILD rows (verified at its source: a single loop
-  // over `lines` pushes the parent then its children into `lineMeta`, and `lineRows[i]` maps 1-for-1 to
-  // that parent-then-children expansion). `appended` stamps `line_no = maxLineNo + i + 1` in that same
-  // order, so the parents carry ASCENDING `line_no` in input-line order — the k-th parent by `line_no` is
-  // input line k. Correlate on that sorted `line_no` rather than on the `RETURNING` array position, so the
-  // hold-to-parent mapping does not depend on the INSERT emitting rows in VALUES order. A CHILD row is
-  // never held (it has no ticket item — `fireLines` filters it out anyway) → `hold: false`. Pinned
-  // end-to-end by the modifier-first correlation test, which fires the wrong dish on an off-by-one.
+  // The k-th parent row by `line_no` is input line k. Correlated on `line_no`, not on the
+  // `RETURNING` array position, so the mapping does not depend on the insert's row order.
   const holdByParentId = new Map<string, boolean>();
   appendedLines
     .filter((row) => row.parentLineId === null)
@@ -1636,29 +1173,12 @@ export async function addTabRound(
     ...row,
     hold: row.parentLineId === null ? (holdByParentId.get(row.id) ?? false) : false,
   }));
-  // Fire the round: `fireLines` fires only the PARENT dish lines and NEVER a child modifier line
-  // (`parent_line_id` set) — a modifier is part of its dish, not its own kitchen ticket. The parent-only
-  // filter lives in `fireLines` (the shared chokepoint), so this passes the whole set (parents AND
-  // children) straight through, exactly as placeOrder/sendToPrep do. `hold` rides through per parent.
   await fireLines(tx, cfg, tabId, withHold);
 }
 
 /**
- * Void ONE not-yet-paid line from an OPEN tab (design §3b) — pre-fiscal, so nothing is filed and there
- * is no fiscal record or amendment involved; it is a plain delete under the open parent (the
- * `require_open_parent` trigger is the DB backstop). {@link assertAnchoredTabOpen} confirms it is an
- * open tab — `tab.not_open` if it is not; `tab.line_not_found` if the `line_no` matches nothing on
- * it. It used to also hold the tab row `for update` so a concurrent round or pay could not race the
- * delete; there is no concurrent round or pay to race, because one write transaction runs on the
- * venue file at a time (that function carries the chain and the receipt).
- *
- * CORRECTION PRINT (A6): if the voided line had ALREADY FIRED (printed) — its ticket item carries a
- * non-null `fired_at` — a VOID correction slip tells the paper kitchen to bin it. The ticket item is read
- * BEFORE the delete (the `ON DELETE CASCADE` from `working_order_lines` removes both the line AND its
- * ticket item), capturing `{workingOrderLineId, stationId}`; a held line (`fired_at` null) or a directly
- * voided CHILD modifier (no ticket item of its own) captures nothing and prints nothing. The enqueue runs
- * BEFORE the delete — {@link enqueueCorrectionSlips} RE-READS the line's qty/name/modifiers from
- * `working_order_lines`, which the cascade is about to remove — and rides the same tx (rolls back with it).
+ * Void ONE not-yet-paid line from an OPEN tab: pre-fiscal, a plain delete. A line that had already
+ * fired gets a VOID correction slip.
  */
 export async function voidTabLine(
   tx: Transaction,
@@ -1667,17 +1187,9 @@ export async function voidTabLine(
   lineNo: number,
 ): Promise<void> {
   await assertAnchoredTabOpen(tx, cfg, tabId);
-  // FIX 2: a parent dish takes its modifiers with it (design §6). Resolve the named line's id first so
-  // its child modifier lines (`parent_line_id = <that id>`) can be removed in the SAME delete — the
-  // self-referential `working_order_lines_parent_fk` is NO ACTION (0080), checked at statement END, so
-  // deleting the parent alone would orphan its children and be refused by the foreign key (an opaque
-  // `server.internal` 500 on a normal tab edit). Deleting both in one statement satisfies the FK at statement end.
-  // Voiding a CHILD line directly matches only itself (a modifier has no children), so this is a plain
-  // one-row delete in that case — unchanged behaviour.
-  // A6: resolve the named line AND its (at most one) ticket item in ONE round trip via a LEFT JOIN, still
-  // BEFORE the delete (the `ON DELETE CASCADE` removes both). An absent line yields zero rows (→
-  // tab.line_not_found); a held line, or a directly voided CHILD modifier (no ticket item), joins to null
-  // ticket columns. `working_order_line_id` is unique on `ticket_items`, so at most one row.
+  // The delete below takes the line's child modifier lines in the same statement: the parent
+  // alone would be refused by the self-referencing foreign key. Read first, because the delete's
+  // cascade removes the ticket item too.
   const [target] = await tx
     .select({
       id: workingOrderLines.id,
@@ -1690,14 +1202,11 @@ export async function voidTabLine(
   if (target === undefined) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
-  // Only a PARENT that has fired carries a non-null `fired_at` (which implies a joined ticket-item row, so
-  // `stationId` is non-null there); a held line or a child modifier yields nothing to correct.
   const voided =
     target.firedAt !== null
       ? [{ workingOrderLineId: target.id, stationId: target.stationId! }]
       : [];
-  // Enqueue the VOID slip BEFORE the delete — enqueueCorrectionSlips re-reads the line from
-  // `working_order_lines`, which the cascade below is about to remove (no-op when `voided` is empty).
+  // Before the delete: the slip re-reads the line, which the delete removes.
   await enqueueCorrectionSlips(tx, cfg, tabId, voided, "VOID");
   await tx
     .delete(workingOrderLines)
@@ -1710,27 +1219,10 @@ export async function voidTabLine(
 }
 
 /**
- * Move ONE not-yet-fired line of an OPEN tab into another kitchen course, or clear its course to null
- * (coursing editing A1, design §3b). {@link assertAnchoredTabOpen} confirms it is an open tab a
- * `dining_tables.tab_id` points at (else `tab.not_open`); what used to serialise this re-course
- * against a concurrent round or void was its `for update`, and what does it now is that no such
- * transaction can be running (that function carries the chain and the receipt). A non-null target
- * is screened with
- * {@link requireLiveCourse} — the SAME live-course definition the config/fire verbs use, so an absent /
- * foreign / RETIRED course is `course.not_found` (a deactivated course is not a valid new target); a
- * malformed (non-uuid) id is screened to that same code at the ROUTE before it reaches this uuid cast.
- *
- * The named line is resolved by `(working_order_id, line_no)` — `tab.line_not_found` if none matches,
- * exactly as {@link voidTabLine}. A line whose ticket item has already FIRED (`fired_at IS NOT NULL`) is
- * REFUSED with `ticket.already_fired` (naming the order): once the kitchen has been told to cook a line,
- * it is corrected via a recall, never silently re-coursed underneath the pass. Otherwise BOTH the open-tab
- * line's `course_id` AND its held ticket item's `course_id` snapshot are updated — the ticket-item UPDATE
- * matches no row (a no-op) when the line has no held item yet, so a not-yet-fired line without a ticket
- * item re-courses cleanly too.
- *
- * PRE-FISCAL (design H2): `course_id` is a kitchen-routing field written only while the parent order is
- * open; it never enters `registros`/`computeHuella`/`recordSale` (the pay path rebuilds `sale_lines` from
- * the locked price snapshot), so this touches nothing filed.
+ * Move ONE not-yet-fired line of an OPEN tab into another kitchen course, or clear its course to null.
+ * A deactivated course is not a valid new target. A line that has already FIRED is refused
+ * `ticket.already_fired`: once the kitchen has been told to cook it, it is corrected by a recall,
+ * never re-coursed underneath the pass.
  */
 export async function setLineCourse(
   tx: Transaction,
@@ -1743,8 +1235,6 @@ export async function setLineCourse(
   if (courseId !== null) {
     await requireLiveCourse(tx, cfg, courseId);
   }
-  // Resolve the named line by `(working_order_id, line_no)` — `tab.line_not_found` if none matches, exactly
-  // as {@link voidTabLine}.
   const [line] = await tx
     .select({ id: workingOrderLines.id })
     .from(workingOrderLines)
@@ -1752,53 +1242,19 @@ export async function setLineCourse(
   if (line === undefined) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
-  // This line's held ticket item, read to decide whether the line has already fired.
-  //
-  // It used to be read `for update` (Copilot #191), against a specific hazard: {@link fireCourse}
-  // stamps `fired_at` on `ticket_items` WITHOUT calling {@link assertAnchoredTabOpen}, so the
-  // tab-row lock this verb held did not serialise it, and a concurrent `fireCourse` could fire this
-  // line after an unlocked read of `fired_at` and before the write below — re-coursing a line the
-  // pass is already cooking. That needed two transactions overlapping, and they cannot: one write
-  // transaction runs on the venue file at a time ({@link assertAnchoredTabOpen} carries the chain
-  // and the receipt). Either this verb re-courses the held line and it fires LATER under its new
-  // course (`fireCourse`'s `course_id` predicate re-reads the moved row and skips it), or
-  // `fireCourse` committed first and this read sees `fired_at` set and throws
-  // `ticket.already_fired`.
-  //
-  // It stays its own query rather than the LEFT JOIN the simplify pass folded it into, because the
-  // separate read is what the `ticket.already_fired` refusal is taken from; the sibling
-  // `voidTabLine`/`recallLines` folds keep theirs. A line with NO ticket item yet (a pending line)
-  // returns no row — the check below is skipped and the `ticket_items` update stays a 0-row no-op
-  // — and `working_order_line_id` is unique on `ticket_items`, so at most one row comes back.
   const [item] = await tx
     .select({ firedAt: ticketItems.firedAt })
     .from(ticketItems)
     .where(eq(ticketItems.workingOrderLineId, line.id));
-  // A line whose kitchen ticket has already fired is corrected via recall, not moved — refuse it here.
   if (item !== undefined && item.firedAt != null) {
     throw new AppError("ticket.already_fired", { workingOrderId: tabId });
   }
   await tx.update(workingOrderLines).set({ courseId }).where(eq(workingOrderLines.id, line.id));
-  // Update the HELD ticket item's course snapshot too — a no-op (0 rows) when the line has no item yet.
+  // The held ticket item's course snapshot too; no row when the line has no item yet.
   await tx.update(ticketItems).set({ courseId }).where(eq(ticketItems.workingOrderLineId, line.id));
 }
 
-/**
- * Set (or clear) ONE line's `served_at` on an OPEN tab — the shared body of {@link markLineServed} and
- * {@link unmarkLineServed}. {@link assertAnchoredTabOpen} confirms it is an open tab a
- * `dining_tables.tab_id` points at (else `tab.not_open`) — it no longer holds the row, for the
- * reason that function gives — then a single conditional UPDATE
- * writes the line: `served ? now() : null`. `now()` is the DATABASE clock (the venue's server time),
- * not a JS instant — the served marker is a floor-UI signal, so the write is stamped where every other
- * timestamp on this row is. A 0-row UPDATE (no such `line_no` on the tab) throws `tab.line_not_found`,
- * exactly as {@link voidTabLine}'s delete does.
- *
- * PRE-FISCAL (design H2, ruling R4): `served_at` is written only while the parent order is `open` and
- * is NEVER read into a filed record — the pay path rebuilds `sale_lines` from the locked price snapshot
- * (`priceLockedLines`), never this column, so this touches nothing filed. The
- * `working_order_lines_require_open_parent` trigger is the DB backstop that a served write cannot reach
- * a non-open parent even if this app guard were bypassed.
- */
+/** Set or clear ONE line's `served_at` on an OPEN tab. Pre-fiscal: never read into a filed record. */
 async function setLineServed(
   tx: Transaction,
   cfg: TillConfig,
@@ -1809,7 +1265,6 @@ async function setLineServed(
   await assertAnchoredTabOpen(tx, cfg, tabId);
   const updated = await tx
     .update(workingOrderLines)
-    // The clock is read in JavaScript and bound — see `fireCourse` above for why.
     .set({ servedAt: served ? nowIso() : null })
     .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)))
     .returning({ lineNo: workingOrderLines.lineNo });
@@ -1818,10 +1273,7 @@ async function setLineServed(
   }
 }
 
-/**
- * Mark one line of an open tab as served. The route requires an operator session;
- * setLineServed performs the shared update. The marker is operational data.
- */
+/** Mark one line of an open tab as served. */
 export async function markLineServed(
   tx: Transaction,
   cfg: TillConfig,
@@ -1831,11 +1283,7 @@ export async function markLineServed(
   await setLineServed(tx, cfg, tabId, lineNo, true);
 }
 
-/**
- * Clear ONE line's delivered marker on an OPEN tab — `served_at = NULL` (the inverse of
- * {@link markLineServed}, for a mis-tap). Same session gating, same `tab.not_open`/`tab.line_not_found`
- * guards, same shared body and H2 pre-fiscal note (see {@link setLineServed}).
- */
+/** Clear ONE line's served marker on an OPEN tab, for a mis-tap. */
 export async function unmarkLineServed(
   tx: Transaction,
   cfg: TillConfig,
@@ -1872,32 +1320,8 @@ async function assertServiceModesMatch(
 }
 
 /**
- * Move working-order lines from one OPEN tab to another (design §3) — the checked wrapper `mergeTabs`
- * calls with ALL lines. Reads the named lines (default all), moves them onto `toTab` at the next
- * `line_no`s while retaining every locked price column (a move NEVER re-prices — the
- * add-time `working_order_lines.unit_price_gross` column is what the filed sale is later rebuilt from),
- * their stable IDs, modifier links, service attribution and any fired preparation tickets.
- *
- * Refuses a self-transfer (`fromTabId === toTabId`) with `tab.merge_self` BEFORE any read or write. In
- * the "move all" shape (no `lineNos`) a self-transfer has no useful meaning and would make line-number
- * allocation collide with the rows being updated. `mergeTabs` already guards this at its own top, but
- * `moveTabLines` is an exported primitive, so the guard lives here too, reusing `tab.merge_self`.
- *
- * Both tabs' `working_orders` rows are read in ONE query and their status checked: a non-`open`
- * parent is refused `tab.not_open` (moving lines under a settled/abandoned order would violate
- * `working_order_lines_require_open_parent` anyway). That read survives unchanged.
- *
- * What is gone is the `for update` it carried, and with it a whole paragraph of lock-order
- * reasoning — an ascending-`id` discipline against a deadlock between two transactions holding
- * each other's rows. Two transactions cannot hold anything at the same time: one write transaction
- * runs on the venue file at a time ({@link assertAnchoredTabOpen} carries the chain and the
- * receipt), so there is no pair to order and no deadlock class to defend against. The `orderBy`
- * went with it — the two rows are picked out of the result by id with `.find` below, so the order
- * they arrive in has no effect at all. The `toTab` lock's second job, serialising `line_no`
- * allocation against a concurrent append, is covered by the same one-writer property
- * (`addTabRound` says the same about its own allocation).
- *
- * Runs on the CALLER's transaction.
+ * Move lines (default all) from one OPEN tab to another at the destination's next `line_no`s. A move
+ * NEVER re-prices, and keeps each line's id, modifier links and any fired ticket.
  */
 export async function moveTabLines(
   tx: Transaction,
@@ -1922,8 +1346,7 @@ async function moveOrderLines(
   lineNos: number[] | undefined,
   options: { modesChecked: boolean },
 ): Promise<void> {
-  // Refuse a self-transfer before any read/write; mergeTabs guards this too, but callers can use this
-  // primitive directly. Reuses tab.merge_self — one tab named as both ends.
+  // A self-transfer would allocate line numbers that collide with the rows being moved.
   if (fromTabId === toTabId) {
     throw new AppError("tab.merge_self", { tabId: fromTabId });
   }
@@ -1951,7 +1374,6 @@ async function moveOrderLines(
           inArray(workingOrderLines.lineNo, lineNos),
         );
 
-  // Stable ids keep modifier links and extension rows intact; only id and ordering are needed here.
   const source = await tx
     .select({
       id: workingOrderLines.id,
@@ -1961,18 +1383,14 @@ async function moveOrderLines(
     .where(sourceWhere)
     .orderBy(workingOrderLines.lineNo);
 
-  // The next free line_no on the destination. Nothing can append to it between this read and the
-  // updates below (the docstring's concurrency note).
   const [agg] = await tx
     .select({ next: sql<number>`cast(coalesce(max(${workingOrderLines.lineNo}), 0) as int)` })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, toTabId));
   const base = agg!.next;
 
-  // Move each row in place so its stable id, offer/department extension row, customisation, course and
-  // any fired ticket survive. Destination line numbers start beyond its current maximum, so each
-  // update is unique without a temporary renumbering pass. Parent-child links use stable ids and need
-  // no remap. A ticket item carries a denormalised order id for queue grouping, updated after its line.
+  // Moved in place so every row keyed on the line id survives. Destination numbers start beyond its
+  // current maximum, so no update collides on `(working_order_id, line_no)`.
   for (let index = 0; index < source.length; index++) {
     const line = source[index]!;
     await tx
@@ -1996,17 +1414,9 @@ async function moveOrderLines(
 }
 
 /**
- * Assert a working order is OPEN, else throw `tab.not_open` (design §3) — the one definition of
- * "this order is open", so the check cannot drift between the verbs that make it. A single status
- * read, and deliberately NOT {@link assertAnchoredTabOpen}: `moveTab`, `joinTable` and
- * `unjoinTable` all work on orders whose `dining_tables` back-pointer is exactly what they are
- * about to change, so requiring one up front would be wrong (see their docstrings).
- *
- * Two functions used to make this exact read, differing only by a `for update` on the row. With
- * that clause gone the two bodies were the same statement and the same refusal, so there is one
- * of them. What the lock arranged — that no other writer touches this order between
- * the read and the caller's write — the venue file's write queue arranges for every row at once
- * ({@link assertAnchoredTabOpen} carries the chain and the receipt).
+ * Assert a working order is OPEN, else `tab.not_open`. Deliberately NOT {@link assertAnchoredTabOpen}:
+ * `moveTab`, `joinTable` and `unjoinTable` work on orders whose table back-pointer is what they are
+ * about to change.
  */
 async function assertTabOpen(tx: Transaction, cfg: TillConfig, tabId: string): Promise<void> {
   void cfg;
@@ -2019,89 +1429,40 @@ async function assertTabOpen(tx: Transaction, cfg: TillConfig, tabId: string): P
   }
 }
 
-/** One line of an OPEN tab, for the table-order screen (FP-1, design §3b). `unitPriceGross` is the gross
- *  unit price LOCKED at add-time (`working_order_lines.unit_price_gross`), NOT a re-price; `servedAt` is
- *  the pre-fiscal served marker (`null` ⇒ "Pendiente de servir", a timestamp ⇒ "Servido"). Carries the
- *  frozen staff `name` as well as the `productId`: {@link readTabLines} resolves the line's staff name
- *  into it — the variant's on a variant line — so the screen has no catalogue lookup left to do for a
- *  name.
- *  `quantity` is a three-place decimal string and `unitPriceGross` a two-place one, each converted
- *  from the whole number its column stores by the mapping in {@link readTabLines}. */
+/** One line of an OPEN tab. `unitPriceGross` is the gross unit price LOCKED at add time, NOT a
+ *  re-price. */
 export interface TabLine {
-  /** The line's frozen STAFF label — `variant_name` on a variant line, else `working_order_lines.name`.
-   * A table tab's line list is what a waiter reads while serving, so it carries the same name the
-   * till's product buttons and basket carry, not the customer-facing text a receipt prints. */
+  /** The STAFF name (the variant's on a variant line): a waiter reads this list, not a diner. */
   name: string;
   /** The dish's frozen options answers; empty on a line that answered none and on every child. */
   optionSnapshots?: OptionSnapshot[];
   lineNo: number;
-  // `string | null` because the COLUMN is (`working_order_lines.product_id`,
-  // packages/db/src/schema/orders.ts), not because a tab line can lack a product: a PARENT row
-  // carries its dish — the variant itself on a line sold as a variant — and a CHILD row the picked
-  // extra product, which is what the kitchen cooks and the diner is charged for (spec §3.4). Every
-  // `insert(workingOrderLines)` in this file sets it.
+  // Nullable because the column is; a CHILD row carries the picked extra product.
   productId: string | null;
-  /** The `lineNo` of this row's PARENT dish when it is a CHILD extras line, else null on a top-level
-   * dish — the ONE field on this wire that tells the two apart. `productId` cannot: a child carries the
-   * PICKED product (see the note above it, spec §3.4). Named by LINE NUMBER, not by row id, so a screen
-   * groups a child under the dish it already has in hand — the same shape the settled-sale wire's
-   * `TillSaleLine.parentLineNo` uses (`apps/server/src/till-sale.ts`). {@link readTabLines} resolves it
-   * from the stored `parent_line_id` over the rows it has already read, so it costs no extra query. */
+  /** The PARENT dish's `lineNo` on a CHILD extras line, else null: the one field on this wire that
+   * tells the two apart. */
   parentLineNo: number | null;
   quantity: string;
-  /** How many decimal places the line's unit takes, frozen at add time
-   * (`working_order_lines.unit_precision`; 0 = sold by the unit), or null on an extras child. The
-   * till's split reads it: a line sold as a variant names the variant, which the till has no
-   * product for. */
+  /** Decimal places the line's unit takes, frozen at add time (0 = sold by the unit). */
   unitPrecision: number | null;
   unitPriceGross: string;
   servedAt: string | null;
-  /** The line's RESOLVED kitchen course (KDS-2 `working_order_lines.course_id`), or null when it has
-   * none (a null-course line fires immediately). The tab-order screen groups the waiter-fire actions by
-   * this; the course NAME comes from the venue course list the boot payload carries, not from here. */
   courseId: string | null;
-  /** When the line's kitchen ticket item was FIRED (`ticket_items.fired_at`), or null when no LIVE
-   * ticket item of the line's has fired. Null covers two overlapping cases: a line whose course is still
-   * HELD (the tab surfaces a "Fire <course>" action for each course with a held line under
-   * `fire_control = 'waiter'`, §5b), and — since this is LEFT-joined — a line with no ticket item at all,
-   * the same edge the adjacent `state` field documents. That no-item shape is reachable for a real PARENT
-   * line, e.g. a line {@link openTab} inserted with the tab's initial round (its `lines` go through
-   * {@link createOpenOrder}, which never fires). Course is independent:
-   * {@link setLineCourse} clears a HELD line's course to null (it refuses only a FIRED line), so a null
-   * `firedAt` says nothing about whether `courseId` is null. */
+  /** Null when the line is HELD or has no ticket item at all, which a parent line can lack too:
+   * `openTab` inserts its initial lines without firing them. */
   firedAt: string | null;
-  /** The line's kitchen ticket item's `state` (`ticket_items.state`), or null when the line has no
-   * ticket item — the same LEFT-join edge {@link firedAt} documents. A child modifier line ALWAYS lacks
-   * one ({@link fireLines} filters children out of the fire). A parent line normally has one once
-   * fired/held, but can also lack one — e.g. a line {@link openTab} inserted without firing (its
-   * initial `lines` go through {@link createOpenOrder}, which never calls {@link fireLines}). Treat null as "no LIVE
-   * ticket item", not as impossible for a parent. Coursing corrections (C1): distinguishes a RECALLABLE
-   * line (`firedAt` set, `state === "queued"`, not yet started) from a CANCEL-only one (`state`
-   * "preparing"/"ready") — the till reads this, not implemented here. */
+  /** Null when the line has no ticket item (always, on a child). */
   state: TicketState | null;
 }
 
-/**
- * Read an open tab's lines in line-number order, including their stored gross prices
- * and served markers. No catalogue re-price or write lock is taken.
- */
+/** Read an open tab's lines in line-number order, at their stored prices: no re-price. */
 export async function readTabLines(
   tx: Transaction,
   cfg: TillConfig,
   tabId: string,
 ): Promise<TabLine[]> {
   await assertTabOpen(tx, cfg, tabId);
-  // LEFT JOIN each line's kitchen ticket item (KDS-2) to carry its `fired_at` AND `state` (coursing
-  // corrections, C1) — one item per line at most (`ticket_items` is UNIQUE on
-  // `(working_order_line_id)`), so the join never multiplies rows. `course_id` is read from
-  // `working_order_lines` (the authoritative ring-time resolution), not the item snapshot, so a line with
-  // no ticket item still reports its course; `fired_at`/`state` have no home but the item, so both are
-  // null when the join finds none. A child modifier line ALWAYS has no ticket item (`fireLines` filters
-  // children out of the fire); a PARENT line normally has one once fired/held, but can also have none —
-  // e.g. `openTab`'s initial `lines` are inserted without firing. Treat null as "no LIVE ticket
-  // item", not as impossible for a parent. Both columns feed the tab's per-course waiter-fire (§5b) and
-  // the till's recall-vs-cancel-only distinction (`firedAt` set + `state === "queued"` ⇒ recallable,
-  // `state` "preparing"/"ready" ⇒ cancel-only); the existing pay/serve columns are unchanged.
+  // `ticket_items` is unique per line, so the join never multiplies rows.
   const rows = await tx
     .select({
       lineNo: workingOrderLines.lineNo,
@@ -2123,21 +1484,8 @@ export async function readTabLines(
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
-  // Resolve each child extras line's `parent_line_id` (a row id) to its parent's `line_no` over the
-  // rows ALREADY read — this query selects every line of the tab, so the parent of any child is in
-  // hand and no per-line lookup is needed (CLAUDE.md §3). The stored `line_no` is what this read
-  // returns as `lineNo`, so the two spaces are the same one here — UNLIKE `readLockedLines`, which
-  // renumbers into compacted array positions and must resolve into THAT space instead.
-  // `?? null` covers a parent this read did not see. `parent_line_id` references a line of the SAME
-  // working order and this read takes the whole order, so no such row is expected — an expectation
-  // from reading the inserts, not a case any test here reaches.
+  // The stored `line_no` is what this read returns, so, unlike `readLockedLines`, no renumbering.
   const lineNoById = new Map(rows.map((row) => [row.id, row.lineNo]));
-  // The tab shows one label per line, resolved from the line's two frozen staff names, and
-  // the two stored counts become the decimal strings every consumer of `TabLine` reads — cents for
-  // the amount, thousandths for the quantity. Neither row id belongs on this wire: `id` appears
-  // nowhere below, being only the KEY of `lineNoById` above, and `parent_line_id` is read once and
-  // only to look its parent's `lineNo` up in that map, because the tab screen addresses a line by
-  // `lineNo`.
   return rows.map((row) => ({
     lineNo: row.lineNo,
     name: staffPresentationName({ name: row.name, variantName: row.variantName }),
@@ -2155,12 +1503,8 @@ export async function readTabLines(
 }
 
 /**
- * Assert a move/join TARGET table exists, is `active`, and is FREE — the one occupancy predicate the
- * whole table-service feature rests on (design §3), shared by `moveTab`/`joinTable` so the three-way
- * check cannot drift between them. `table` is the row the caller already read (or undefined).
- * "Free" = `tab_id` null OR pointing at a settled/abandoned order (a stale pointer,
- * TS-1 §2b); a still-`open` pointed order throws `table.occupied` ("use merge"). Throws
- * `table.not_found`/`table.inactive`/`table.occupied`, each naming the caller-supplied `tableId`.
+ * Assert a move/join TARGET table exists, is `active`, and is FREE: its `tab_id` is null or a stale
+ * pointer at a settled or abandoned order.
  */
 async function assertTableAvailable(
   tx: Transaction,
@@ -2186,11 +1530,8 @@ async function assertTableAvailable(
   }
 }
 
-/**
- * Free every table currently covered by `tabId` — `tab_id` + `status_id → NULL` in one
- * statement. A turnover: the freed table's TS-2 manual status must not linger onto the next party
- * (design §4). Shared by `moveTab` (freeing the source) and `mergeTabs`'s consolidate branch.
- */
+/** Free every table covered by `tabId`. A turnover: the manual status must not linger onto the next
+ * party. */
 async function freeTablesCoveredBy(tx: Transaction, cfg: TillConfig, tabId: string): Promise<void> {
   void cfg;
   await tx
@@ -2200,35 +1541,8 @@ async function freeTablesCoveredBy(tx: Transaction, cfg: TillConfig, tabId: stri
 }
 
 /**
- * Relocate a party to a free table (design §3). Validates `tabId` is an `open` working order
- * (`tab.not_open`) and `toTableId` is `active` (`table.not_found`/`table.inactive`) and FREE — its
- * `tab_id` is null or points at a settled/abandoned order (a stale pointer, TS-1 §2b), else
- * `table.occupied` ("use merge"). Then frees the tab's current source table(s) and points the target at
- * the tab. NO line-move, no fiscal effect.
- *
- * Reads the involved `dining_tables` rows (target + the tab's current source table(s)) in one
- * query. That read survives: it is what `assertTableAvailable` judges, and it carries the target's
- * `zoneId`.
- *
- * It used to take them `for update`, in ascending `id` order. The target's lock was the
- * concurrency guard — a second concurrent move onto the same free table blocked, then re-read its
- * now-set `tab_id` and was refused `table.occupied` — and the ascending order was a defensive
- * discipline against a deadlock between two such movers. Neither is needed: one write transaction
- * runs on the venue file at a time ({@link assertAnchoredTabOpen} carries the chain and the
- * receipt), so the second move runs after the first has committed and is refused `table.occupied`
- * by the same read, and no two transactions hold rows to deadlock over. The `orderBy` went with
- * the lock — the target is picked out of the result by id with `.find` below, so the order the
- * rows arrive in has no effect.
- *
- * The tab's own `working_orders` row was never locked either (a move neither settles nor abandons
- * it — unlike merge).
- *
- * The freed source table(s) get `tab_id → NULL` AND `status_id → NULL` in one statement — a move is a
- * turnover for the source, so its TS-2 manual status must not linger onto the next party (design §4).
- * The TARGET table is turned over too: pointing the tab at it also clears its `status_id → NULL`, so a
- * stale status left from the target's PREVIOUS party does not linger onto the moved-in one — exactly as
- * `openTab` clears status when a fresh tab opens on a table (design §4). The TS-2 settle-trigger does
- * not fire on a move (the tab stays open), so both clears are EXPLICIT here.
+ * Relocate a party to a free table: no line moves, no fiscal effect. Both tables are turned over, and
+ * the clears are explicit because the settle trigger does not fire on a move (the tab stays open).
  */
 export async function moveTab(
   tx: Transaction,
@@ -2260,8 +1574,6 @@ export async function moveTab(
     await VENUE_SERVICE.retargetOrderContext(tx, cfg, tabId, target.zoneId);
   }
 
-  // Free the source table(s) the tab currently covers, then point the target — clearing ITS status_id
-  // too, since the moved-in party turns the target over (openTab parity, design §4).
   await freeTablesCoveredBy(tx, cfg, tabId);
   await tx
     .update(diningTables)
@@ -2269,15 +1581,7 @@ export async function moveTab(
     .where(eq(diningTables.id, toTableId));
 }
 
-/**
- * Join an active, free table to an open tab. The existing tab lines remain in place.
- *
- * The target row was read `for update` so that two concurrent joins onto one free table serialised
- * and the loser saw the winner's `tab_id` and was refused `table.occupied`. They still serialise,
- * and for a wider reason: one write transaction runs on the venue file at a time
- * ({@link assertAnchoredTabOpen} carries the chain and the receipt). The read itself is unchanged
- * — it is what `assertTableAvailable` judges and where the zone check below gets `zoneId`.
- */
+/** Join an active, free table to an open tab. The existing tab lines remain in place. */
 export async function joinTable(
   tx: Transaction,
   cfg: TillConfig,
@@ -2314,38 +1618,15 @@ export async function joinTable(
 }
 
 /**
- * Combine two tabs onto one bill (design §3). Validates both are DISTINCT (`tab.merge_self`) `open`
- * working orders (`tab.not_open`), then moves ALL of `fromTab`'s lines onto `intoTab`, re-points
- * `fromTab`'s table(s), and abandons the now-empty `fromTab`. The merged `intoTab` (holding every line)
- * files ONE sale on pay; `fromTab`, abandoned and empty, files nothing — no double-file (H2, §5).
+ * Combine two tabs onto one bill: move ALL of `fromTab`'s lines onto `intoTab`, re-point `fromTab`'s
+ * tables, and abandon the now-empty `fromTab`, which files nothing.
  *
- * `freeSourceTable = true` frees the source table (`tab_id` + `status_id → NULL` — the 2+2 CONSOLIDATE
- * case, the source turns over); `false` re-points it at `intoTab` (both tables now covered by the one
- * bill — the 4+4 JOIN case, and the joined table KEEPS its status, design §4).
+ * `freeSourceTable = true` frees the source table (it turns over); `false` re-points it at `intoTab`,
+ * and the joined table KEEPS its status.
  *
- * ## The lock-order argument is retired, and so is the second query it needed
- *
- * This verb used to take four locks in a pinned order — both `working_orders` rows `for update`
- * ascending by id FIRST, then the involved `dining_tables` rows ascending by id — to match the
- * class order the sale/settle/abandon path takes, so that a concurrent merge and pay could not
- * cross-lock and raise `40P01`. That whole argument is about two transactions holding rows at the
- * same time. They cannot: one write transaction runs on the venue file at a time
- * ({@link assertAnchoredTabOpen} carries the chain and the receipt). A merge and a pay on the same
- * tabs now run one wholly after the other, so there is no pair to order, no cross-lock, and no
- * deadlock class.
- *
- * Two things went with it. The `orderBy` on the `working_orders` read — the two rows are picked
- * out by id with `.find` below, so the order they arrive in has no effect. And the whole
- * `dining_tables` SELECT, which read nothing: it selected ids into no variable and existed only to
- * take the second set of locks.
- *
- * What survives is the status read: both orders must be `open`, else `tab.not_open`.
- *
- * ORDER MATTERS (Plan note 2): the re-point (step 2) precedes the abandon (step 3). The TS-2
- * `working_orders_clear_table_status` trigger fires on the `open → abandoned` transition and clears
- * `status_id` WHERE `tab_id = fromTabId`; because step 2 has already re-pointed every such table away
- * from `fromTabId`, that trigger matches nothing. Were the abandon first, it would clear the status on a
- * table that stays JOINED (`freeSourceTable:false`) — contradicting design §4.
+ * ORDER MATTERS: the re-point precedes the abandon. The `working_orders_clear_table_status` trigger
+ * clears the status of tables pointing at an abandoned order, so abandoning first would clear it on a
+ * table that stays joined.
  */
 export async function mergeTabs(
   tx: Transaction,
@@ -2371,13 +1652,9 @@ export async function mergeTabs(
   if (from === undefined || from.status !== "open") {
     throw new AppError("tab.not_open", { tabId: fromTabId });
   }
-  // 1. Move ALL of fromTab's lines onto intoTab (locked prices preserved), both still open.
-  //    moveTabLines re-reads and re-validates these two rows as open — a deliberate repeat of the
-  //    check above, because moveTabLines is an exported primitive and must
-  //    self-validate; the extra round trip is accepted rather than couple the two.
   await moveTabLines(tx, cfg, fromTabId, intoTabId);
 
-  // 2. Re-point fromTab's table(s) BEFORE the abandon (Plan note 2).
+  // Before the abandon (see the docstring).
   if (options.freeSourceTable) {
     await freeTablesCoveredBy(tx, cfg, fromTabId);
   } else {
@@ -2387,8 +1664,6 @@ export async function mergeTabs(
       .where(eq(diningTables.tabId, fromTabId));
   }
 
-  // 3. Abandon the now-empty fromTab (open → abandoned; the working_orders_enforce_transition state
-  //    machine permits it).
   await tx
     .update(workingOrders)
     .set({ status: "abandoned" })
@@ -2396,36 +1671,17 @@ export async function mergeTabs(
 }
 
 /**
- * The GROSS (VAT-inclusive) line total for `quantity` units at a LOCKED gross unit price, at
- * {@link MONEY_SCALE}, half away from zero — the SAME composition `@waitron/catalogue`'s `priceRows`
- * uses for a line's gross total (`toScale(multiplyDecimal(grossUnit, decimal(quantity)), MONEY_SCALE)`),
- * which is what `priceBasket` writes at add-time and `priceLockedLines` recomputes at file-time. Used by
- * {@link transferLines}' split path so a split line's `working_order_lines.line_total` is byte-identical
- * to an add-time line's — the identical helper composition, over the line's OWN locked
- * `working_order_lines.unit_price_gross`, never a catalogue re-read. This works in amounts, not in
- * the counts the two columns store: the caller converts each stored count at the row on the way
- * in, and converts the result back on the way into the write. `quantity` arrives as a decimal
- * string — a caller's requested transfer, or a remainder or a converted stored count; `decimal()`
- * validates each argument into the branded-`Decimal` helpers, and accepts an already-branded
- * `Decimal` unchanged.
+ * The same composition `priceRows` uses for a line's gross total, so a split line's `line_total` is
+ * identical to an add-time line's.
  */
 function grossLineTotal(grossUnit: string, quantity: string): Decimal {
   return toScale(multiplyDecimal(decimal(grossUnit), decimal(quantity)), MONEY_SCALE);
 }
 
 /**
- * Refuse a carve-off batch that names the same source `line_no` more than once, BEFORE any check,
- * mint or write (`tab.transfer_duplicate_line`, naming the FIRST line_no that repeats). A repeated line_no does
- * NOT conserve quantity: every entry is validated against the STATIC pre-batch snapshot of the line's
- * quantity (never updated between entries) and the split write sets the source to `original − q` (a plain
- * set, not a cumulative decrement), so two partial "1"s off a café×3 line both pass and the destination
- * gains 1.000+1.000 while the source only drops to 2.000 — 4 from an original 3. A whole-line + partial
- * pair on one line is worse and contradictory: the whole-line path DELETEs the line while the split's
- * `UPDATE … WHERE line_no=…` then matches zero rows and its INSERT still fabricates a destination line.
- * Neither shape folds into a cumulative decrement, so a duplicate is simply refused (a 400 request-shape
- * fault). Shared by {@link transferLines} (both ends tabs) and {@link splitOffCheck} (detached check); a
- * duplicate WHOLE-line pair — already harmless via `moveOrderLines`' `inArray` set semantics — is refused
- * too, which is fine/stricter.
+ * Refuse a batch naming the same source `line_no` twice: each entry is validated against the line's
+ * pre-batch quantity and the split sets the source to `original − q`, so two partial "1"s off a line
+ * of 3 would add 2 to the destination while the source dropped by 1.
  */
 function assertDistinctTransferLines(tabId: string, transfers: { lineNo: number }[]): void {
   const seenLineNos = new Set<number>();
@@ -2438,21 +1694,8 @@ function assertDistinctTransferLines(tabId: string, transfers: { lineNo: number 
 }
 
 /**
- * Transfer selected lines between two open tabs in the caller's transaction.
- * Whole-line transfers move the line; partial transfers preserve its stored unit
- * prices and divide its quantity. Validate the entire batch before any move. Each tab files its
- * own sale when paid.
- *
- * Both ends are checked with {@link assertAnchoredTabOpen}, which used to hold each
- * `working_orders` row `for update`; the ascending-id order the loop below takes them in was there
- * so that two opposite transfers took the same row first and could not deadlock. Two transfers
- * cannot run at the same time at all — one write transaction runs on the venue file at a time
- * (that function carries the chain and the receipt) — so there is no lock order left to keep.
- *
- * The sort STAYS, for the one effect it has left: when BOTH ends fail the check, the
- * `tab.not_open` that escapes names the lower id in string order rather than `fromTabId`. No test
- * pins that — each of the `tab.not_open` cases in `transfer-lines.test.ts` has exactly one bad end
- * — so the sort is kept because removing it would change an unpinned refusal for no reason.
+ * Transfer selected lines between two open tabs. Whole-line transfers move the line; partial transfers
+ * keep its stored unit prices and divide its quantity. The whole batch is validated before any move.
  */
 export async function transferLines(
   tx: Transaction,
@@ -2461,19 +1704,13 @@ export async function transferLines(
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
 ): Promise<void> {
-  // A tab cannot transfer to itself — refused before anything else: it is a no-op the caller did
-  // not mean, and the loop below would check the same row twice.
   if (fromTabId === toTabId) {
     throw new AppError("tab.transfer_self", { tabId: fromTabId });
   }
 
-  // A batch may name each source line_no AT MOST once — refused before any read or write (the same
-  // up-front rejection this verb has always made; see {@link assertDistinctTransferLines} for why
-  // a repeated line_no cannot conserve quantity).
   assertDistinctTransferLines(fromTabId, transfers);
 
-  // Both ends must be open tabs a dining table points at. Sorted for the reason the docstring
-  // gives, which is no longer a lock order.
+  // Sorted only so that, when both ends fail, the refusal names the lower id.
   for (const tabId of [fromTabId, toTabId].sort()) {
     await assertAnchoredTabOpen(tx, cfg, tabId);
   }
@@ -2484,21 +1721,9 @@ export async function transferLines(
 }
 
 /**
- * Carry `transfers` (whole lines and/or partial-quantity splits) from `fromTabId` onto `toTabId`, keeping
- * each unit's LOCKED price columns (no catalogue re-read) and CONSERVING quantity — the shared move/split
- * core of {@link transferLines} (TS-4) and {@link splitOffCheck} (TS-5). It makes no open-order
- * check of its own: the CALLER must already have made one on both orders (`transferLines` via its
- * `assertAnchoredTabOpen` loop, requiring both ends to be TABS; `splitOffCheck` on its origin, its
- * destination being a check it has just minted). Nor does it compare the two orders' service modes,
- * on either path: `transferLines` does, and `splitOffCheck`'s check is given its origin's context,
- * or none when the origin has none, before the carve. Every transfer is VALIDATED before any move or
- * split runs (`tab.line_not_found` for an absent `line_no`, `tab.transfer_quantity_invalid` for a
- * quantity outside `0 < q ≤ line.quantity` or a malformed literal, `tab.transfer_modifier_line` for a
- * modifier child named alone or a partial split of a dish carrying modifiers — ordering modifiers FIX
- * 2/4), so one bad entry leaves both orders untouched. The whole-line path delegates to
- * {@link moveOrderLines} (which accepts any OPEN destination, so a table-less check is a valid target —
- * unlike `assertAnchoredTabOpen`) and cascades a dish's modifier children along with it; the split
- * path appends new destination lines after the moves.
+ * Carry whole lines and partial splits between two orders, keeping each unit's LOCKED prices and
+ * CONSERVING quantity. It makes no open-order check and no service-mode check of its own: the
+ * CALLER must already have made both. Every transfer is validated before anything moves.
  */
 async function carveOffLines(
   tx: Transaction,
@@ -2507,10 +1732,7 @@ async function carveOffLines(
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
 ): Promise<void> {
-  // Read ALL of fromTab's lines ONCE into a map — not just the named ones: the
-  // parent↔child structure (FIX 2/4) needs the WHOLE tab to know which named lines are dishes carrying
-  // modifiers and which are modifier children. `id` and `parentLineId` come too. The per-unit locked
-  // values a split INHERITS also come from here — never a catalogue re-read.
+  // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
     .select({
       id: workingOrderLines.id,
@@ -2535,10 +1757,6 @@ async function carveOffLines(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, fromTabId))
     .orderBy(workingOrderLines.lineNo);
-  // The four scaled-integer columns become decimal literals here, at the row, and the split's
-  // insert below converts each back at its own scale. The round trip is exact — a stored count is
-  // an integer and every `…ToDecimal` renders its scale's fixed number of places — so a
-  // copied-through unit price, quantity or rate is byte-identical to the one add-time locked.
   const sourceLines = sourceRows.map((l) => ({
     ...l,
     quantity: thousandthsToDecimal(l.quantity),
@@ -2547,9 +1765,6 @@ async function carveOffLines(
     vatRate: basisPointsToDecimal(l.vatRate),
   }));
   const byLineNo = new Map(sourceLines.map((l) => [l.lineNo, l]));
-  // The `line_no`s of each dish's child modifier lines, keyed by the PARENT's `line_no` — so a
-  // whole-line move of a dish can cascade its modifiers along (FIX 2), and a partial split can refuse a
-  // dish that has any (FIX 4). Built from `parent_line_id → parent's line_no` over the same tab.
   const lineNoById = new Map(sourceLines.map((l) => [l.id, l.lineNo]));
   const childLineNosByParent = new Map<number, number[]>();
   for (const l of sourceLines) {
@@ -2565,12 +1780,8 @@ async function carveOffLines(
     childLineNosByParent.set(parentLineNo, siblings);
   }
 
-  // Validate EVERY transfer before moving/splitting anything (Task 5), then partition: a WHOLE-line
-  // move (`quantity` omitted, OR equal to the line's full quantity) vs a PARTIAL split (`quantity`
-  // given and strictly less). A quantity equal to the line's own quantity is routed to the whole-line
-  // path rather than the split path — splitting it would REDUCE the source to zero, which violates
-  // `working_order_lines_quantity_ck` (`quantity <> 0`). `compareDecimal` is value-wise across scales,
-  // so "2" == "2.000" and a weighed "0.320" == "0.320" both count as whole-line moves.
+  // A quantity equal to the line's own is a whole-line move: a split would leave a zero-quantity
+  // source, which `working_order_lines_quantity_ck` refuses.
   const wholeLineNos: number[] = [];
   const partials: { line: (typeof sourceLines)[number]; quantity: string }[] = [];
   for (const t of transfers) {
@@ -2578,24 +1789,16 @@ async function carveOffLines(
     if (line === undefined) {
       throw new AppError("tab.line_not_found", { tabId: fromTabId, lineNo: t.lineNo });
     }
-    // FIX 2: a modifier CHILD line may not be named directly — it transfers only WITH its dish (a
-    // parent whole-line move cascades its children below). Naming it alone would orphan it: the source
-    // child would reference a deleted parent (refused by the foreign key) or land ungrouped on the
-    // destination. Refuse.
+    // A modifier CHILD transfers only WITH its dish.
     if (line.parentLineId != null) {
       throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
     }
     const childLineNos = childLineNosByParent.get(t.lineNo) ?? [];
     if (t.quantity === undefined) {
-      // Whole-line move of a dish (or a plain line): cascade its modifier children so a parent takes
-      // them with it and `moveOrderLines` remaps the child→parent link onto the destination (FIX 2).
       wholeLineNos.push(t.lineNo, ...childLineNos);
       continue;
     }
-    // Validate the requested quantity: a well-formed decimal in `0 < quantity ≤ line.quantity`. A
-    // malformed literal makes `decimal()` throw `shared.invalid_decimal` — treated as invalid and
-    // reported as the SAME domain code as an out-of-range one (one throw site), so a bad quantity
-    // never surfaces as that raw code or as a `working_order_lines_quantity_ck`/other DB CHECK violation.
+    // A malformed literal is reported as the same domain code as an out-of-range one.
     let inRange: boolean;
     try {
       const q = decimal(t.quantity);
@@ -2611,14 +1814,11 @@ async function carveOffLines(
         quantity: t.quantity,
       });
     }
-    // Full quantity → a whole-line move (no zero remnant, Task 4), cascading any modifier children;
-    // otherwise a split. The quantity is now known valid, so this re-compare's `decimal()` cannot throw.
     if (compareDecimal(decimal(t.quantity), decimal(line.quantity)) === 0) {
       wholeLineNos.push(t.lineNo, ...childLineNos);
     } else {
-      // FIX 4: a PARTIAL split of a dish that carries modifiers has no coherent meaning this slice
-      // (there is no per-option quantity, so the children's quantity would desync from the split dish).
-      // Refuse rather than file an inconsistent draft; a plain line (no children) splits as before.
+      // A partial split of a dish with modifiers is refused: the children's quantities would no longer
+      // follow the dish's.
       if (childLineNos.length > 0) {
         throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
       }
@@ -2626,17 +1826,11 @@ async function carveOffLines(
     }
   }
 
-  // Whole lines first: `moveOrderLines` keeps each locked price and appends at the destination's next
-  // `line_no`(s).
   if (wholeLineNos.length > 0) {
     await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos, { modesChecked: true });
   }
 
-  // Then the splits. Allocate destination `line_no`s AFTER the moves (so they don't collide with moved
-  // rows): read the current max and hand out max+1, max+2, ... in order — the same per-tab allocation
-  // `addTabRound`/`moveOrderLines` make. It cannot collide on the `(working_order_id, line_no)` unique
-  // because no other writer can append to the destination between this read and these inserts: one
-  // write transaction runs on the venue file at a time ({@link assertAnchoredTabOpen}).
+  // Split line numbers are allocated after the moves, so they do not collide with moved rows.
   if (partials.length > 0) {
     const [{ maxLineNo }] = await tx
       .select({
@@ -2647,7 +1841,6 @@ async function carveOffLines(
     for (let i = 0; i < partials.length; i++) {
       const { line, quantity } = partials[i]!;
       const remaining = subtractDecimal(decimal(line.quantity), decimal(quantity));
-      // Source line: quantity drops, `line_total` recomputed from the SAME locked gross (no re-price).
       await tx
         .update(workingOrderLines)
         .set({
@@ -2660,23 +1853,16 @@ async function carveOffLines(
             eq(workingOrderLines.lineNo, line.lineNo),
           ),
         );
-      // Destination: a NEW line inheriting every per-unit value, `quantity = transferred`, `line_total`
-      // = round(transferred × locked gross). NEVER re-fetched from the catalogue.
       const splitLineId = randomUUID();
       await tx.insert(workingOrderLines).values({
         id: splitLineId,
         workingOrderId: toTabId,
         lineNo: maxLineNo! + i + 1,
         productId: line.productId,
-        // `parent_line_id` is deliberately NOT carried: the refusal above guarantees a splittable line
-        // is top-level (no parent, no children), so it is always NULL here; carrying the source's raw
-        // id would (were the refusal relaxed) point at a line on the SOURCE.
+        // No `parent_line_id`: only a top-level line with no children can be split.
         name: line.name,
         descriptions: line.descriptions,
         optionSnapshots: line.optionSnapshots ?? [],
-        // `quantity` is the caller's requested split, already validated as a decimal literal above;
-        // the other three were converted out of their columns at the source read and go back in at
-        // their own scales.
         quantity: stringToThousandths(quantity),
         unitPrice: decimalToCents(line.unitPrice),
         unitPriceGross: decimalToCents(line.unitPriceGross),
@@ -2696,27 +1882,9 @@ async function carveOffLines(
 }
 
 /**
- * Spin selected items off an OPEN tab into a NEW, separately-filing CHECK (split-bill, TS-5). A check
- * is an ordinary `open` working order — created lineless via `createOpenOrder` (inheriting the origin's
- * node/till and, at pay, `cfg.seriesId`) — that NO table points at: it is a payment unit, not a seat
- * (design §2), so unlike a tab there is no `dining_tables.tab_id` back-pointer to set. Because the check
- * is table-less, the items are carried over by {@link carveOffLines} directly (TS-4's whole/partial
- * move/split core, which delegates whole lines to `moveOrderLines`) rather than by `transferLines` — whose
- * `assertAnchoredTabOpen` loop requires BOTH ends to be tabs and would reject a detached check.
- * The move keeps each
- * unit's LOCKED `unit_price_gross` (no catalogue re-look-up) and CONSERVES quantity, so the check and the
- * origin remainder each stay internally consistent and each files its OWN correct desglose on its own pay
- * (design §4), and it raises TS-4's inherited `tab.transfer_quantity_invalid` / `tab.line_not_found`.
- *
- * Pay the check with the EXISTING `payWorkingOrder` (till-sale.ts) — there is NO new pay verb, and the
- * `sales_working_order_id_key` UNIQUE (working_order_id) makes it file AT MOST ONE sale.
- * Called once per check; the origin holds the remainder (emptied ⇒ abandon it with the existing
- * `abandonHeldOrder`, or pay it as the last check — design §3). Runs on the CALLER's tx.
- *
- * Refuses an EMPTY `transfers` array with `sale.empty_basket`, BEFORE minting the check: `carveOffLines`
- * renders `inArray(col, [])` as `false`, a no-op WHERE clause, so without this guard the call would
- * otherwise succeed and leave an orphan — a table-less `open` working order with zero lines and a
- * consumed order_number.
+ * Spin selected items off an OPEN tab into a NEW, separately-filing CHECK: an ordinary `open` working
+ * order that NO table points at, because it is a payment unit, not a seat. Being table-less, it is
+ * filled by {@link carveOffLines} directly, not `transferLines`, which requires both ends to be tabs.
  */
 export async function splitOffCheck(
   tx: Transaction,
@@ -2724,37 +1892,16 @@ export async function splitOffCheck(
   fromTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
 ): Promise<{ checkId: string }> {
-  // Refuse an EMPTY transfers array BEFORE minting anything. carveOffLines' `inArray(col, [])` renders
-  // `false` — a no-op WHERE clause — so without this guard the call below would SUCCEED after
-  // createOpenOrder had already minted a check: a table-less `open` working order, zero lines, a
-  // consumed order_number. An orphan. Same "nothing to work with" shape as the walk-up/park/round paths'
-  // `sale.empty_basket` (see this file's own doc comment at line ~221).
+  // Without this an empty batch would succeed and leave an empty check behind.
   if (transfers.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
 
-  // Refuse a batch naming a source line_no twice BEFORE checking, minting the check, or moving anything —
-  // the same up-front guard `transferLines` makes (a duplicate does not conserve quantity: two "1"s off a
-  // 3× line would leave 2 on the origin AND 2 on the check, 4 from an original 3). Reused so split-bill
-  // inherits it, naming the origin tab.
   assertDistinctTransferLines(fromTabId, transfers);
 
-  // Check the origin is an OPEN TAB (table-anchored) before minting the check — fail fast with the
-  // `tab.not_open` guard design §3 names, before the needless work of `createOpenOrder` (its
-  // catalogue read + `allocateOrderNumber`). The origin MUST be a tab, not merely any open order:
-  // the spec §3 and the `/api/tabs/:id/split` route require a table-anchored tab, so a detached
-  // CHECK (a table-less open order minted by a prior split) must NOT be a split origin.
-  // `assertAnchoredTabOpen` adds the is-a-tab `dining_tables` back-pointer assertion
-  // `assertTabOpen` (status-only) lacks. Ordering is about doing LESS WORK, not saving an order
-  // number: everything here runs on the caller's `tx`, so a later rollback undoes the mint AND the
-  // counter increment together (`allocateOrderNumber` is a transactional UPSERT into
-  // `working_order_counters`, `packages/db/src/allocate-order-number.ts` — a rolled-back allocation
-  // leaves no gap). A concurrent carve-off of the same tab, which this check's `for update` used to
-  // serialise, cannot be running ({@link assertAnchoredTabOpen}).
+  // The origin must be a TAB: a detached check minted by an earlier split is not a split origin.
   await assertAnchoredTabOpen(tx, cfg, fromTabId);
 
-  // Mint + create the DETACHED check: a lineless `open` working order (createOpenOrder's empty-lines
-  // guard, TS-1), with NO `dining_tables.tab_id` pointing at it. It inherits node/till from `cfg`.
   const { orderLabel } = await readReceiptOrder(tx, cfg, fromTabId);
   const checkId = randomUUID();
   await createOpenOrder(tx, cfg, checkId, [], orderLabel);
@@ -2762,46 +1909,14 @@ export async function splitOffCheck(
   // mode check on this path.
   await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
 
-  // Move the selected items (whole lines + partial splits) onto the check — TS-4's shared move/split
-  // core, which keeps the locked gross, conserves quantity, and raises the inherited
-  // `tab.transfer_quantity_invalid` / `tab.line_not_found` guards. A failure rolls back the whole
-  // tx, check included — no orphan.
   await carveOffLines(tx, cfg, fromTabId, checkId, transfers);
 
   return { checkId };
 }
 
 /**
- * Detach a table from a joined tab (TS-5, deferred from TS-3). WITH items: the table keeps running its
- * OWN bill — create a new `open` tab ANCHORED to it (its `tab_id` repointed) and move the items over
- * (TS-4's {@link transferLines}). WITHOUT items: just free it (`tab_id → NULL`) and clear its TS-2
- * manual `status_id` (a turnover — the same "clear on turnover" TS-3's `moveTab` applies at the move
- * boundary). Unlike a split-off CHECK, an un-joined table's new tab IS table-anchored: it is still a
- * seat, not a payment unit (design §2). Returns the new `tabId` (with items) or `{}` (freed). Runs on
- * the caller's tx scope.
- *
- * The two reads used to be two LOCKS in a pinned class order — the shared `working_orders` tab row
- * `for update` first (via {@link assertTabOpen}), then the `dining_tables[tableId]` row — matching
- * the order the sale/settle path takes, so that a concurrent unjoin and pay could not cross-lock
- * and raise `40P01`. That argument needed the two to overlap, and they cannot: one write
- * transaction runs on the venue file at a time ({@link assertAnchoredTabOpen} carries the chain
- * and the receipt).
- *
- * The ORDER of the two reads stays as it was, for a surviving effect: the tab's status is checked
- * before the table's join state, so a call that is wrong about both is refused `tab.not_open`
- * rather than `table.not_joined`. Nothing pins which — every tested scenario has exactly one bad
- * argument — so the order is kept because swapping it would change an unpinned refusal for no
- * reason.
- *
- * The with-items branch repoints the detached table BEFORE the move, so both `tabId` (still covered by
- * its origin table(s)) and `newTabId` (now covered by the detached table) are TABS when {@link
- * transferLines} runs — which is exactly why the reuse is `transferLines` here, not `splitOffCheck`'s
- * bare `carveOffLines`: `splitOffCheck`'s destination is table-LESS and would be rejected by
- * `transferLines`' `assertAnchoredTabOpen` back-pointer check, whereas an un-joined table's new tab
- * passes it. So
- * `transferLines` gives the correct is-a-tab validation, over a `newTabId` this verb has just
- * minted. `transferLines` re-checks `tabId` — a deliberate repeat of the check above, because it
- * is a standalone primitive that must self-validate.
+ * Detach a table from a joined tab. WITH items, the table keeps its OWN bill: a new tab ANCHORED to
+ * it, since it is still a seat, not a payment unit. WITHOUT items, the table is freed and turned over.
  */
 export async function unjoinTable(
   tx: Transaction,
@@ -2810,13 +1925,9 @@ export async function unjoinTable(
   tableId: string,
   transfers?: { lineNo: number; quantity?: string }[],
 ): Promise<{ tabId?: string }> {
-  // The shared tab must be OPEN — you cannot re-carve a settled/abandoned bill — else
-  // `tab.not_open`. Checked first for the reason the docstring gives.
+  // Checked before the table, so a call wrong about both is refused `tab.not_open`.
   await assertTabOpen(tx, cfg, tabId);
 
-  // Then the table row; it must currently be joined to THIS tab (else `table.not_joined` — an
-  // absent/foreign table, a free table, or one joined to a DIFFERENT tab all read as tab_id ≠ tabId
-  // and fail closed, design §3). `zoneId` comes from the same read.
   const [table] = await tx
     .select({ tabId: diningTables.tabId, zoneId: diningTables.zoneId })
     .from(diningTables)
@@ -2826,9 +1937,6 @@ export async function unjoinTable(
   }
 
   if (transfers === undefined || transfers.length === 0) {
-    // Free it: null the back-pointer AND the TS-2 status in ONE statement (turnover — the tab left this
-    // table, the same idiom `moveTab`/`openTab` use). Files nothing (pre-fiscal). Other tables joined to
-    // the tab keep pointing at it.
     await tx
       .update(diningTables)
       .set({ tabId: null, statusId: null })
@@ -2836,11 +1944,8 @@ export async function unjoinTable(
     return {};
   }
 
-  // With items: split them off onto a NEW tab. This only makes sense when `tableId` is one of ≥2 tables
-  // sharing `tabId` — you un-join a table FROM a join. If `tableId` is the SOLE table anchoring `tabId`,
-  // the repoint below would leave `tabId` anchorless and `transferLines`' `assertAnchoredTabOpen`
-  // back-pointer check would throw a MISLEADING `tab.not_open` on a tab that IS open. Reject honestly, before minting
-  // anything, when no OTHER table anchors this tab.
+  // If this is the SOLE table anchoring `tabId`, the repoint below would leave `tabId` anchorless and
+  // `transferLines` would refuse it with a misleading `tab.not_open`.
   const [otherAnchor] = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
@@ -2850,10 +1955,7 @@ export async function unjoinTable(
     throw new AppError("table.not_shared", { tableId, tabId });
   }
 
-  // Create a new lineless `open` tab, ANCHOR it to this table, then move the items onto it
-  // with `transferLines` — repointing FIRST makes `newTabId` a real tab (back-pointer set) so
-  // `transferLines`' is-a-tab check passes. It re-checks `tabId` too, a deliberate repeat of the
-  // check above.
+  // Repointed before the move, so `newTabId` is a tab when `transferLines` checks it.
   const newTabId = randomUUID();
   await createOpenOrder(tx, cfg, newTabId, [], null);
   await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, newTabId);
@@ -2871,15 +1973,9 @@ export interface HeldOrderSummary {
   orderNumber: number;
   /** The operator-supplied label ("Mesa 4"), or null when the order was parked without one. */
   label: string | null;
-  /** Number of lines on the order (`count(lines)`, so 0 for a lineless order), a whole number. */
+  /** Number of lines on the order, 0 for a lineless order. */
   itemCount: number;
-  /**
-   * Sum of the lines' `line_total`, which for a working-order DRAFT is the GROSS (VAT-inclusive)
-   * customer-facing total — EQUAL to the basket grand total the operator saw (`priceBasket(...).total`).
-   * A two-place decimal string, the codebase's money shape above the storage boundary. (The FILED
-   * `sale_lines.line_total` is net; the draft deliberately diverges — see
-   * `working_order_lines.line_total`'s schema comment.)
-   */
+  /** The GROSS total the operator saw; the filed `sale_lines.line_total` is net. */
   total: string;
   openedAt: string;
 }
@@ -2890,14 +1986,12 @@ export interface HeldOrder {
   orderNumber: number;
   label: string | null;
   /**
-   * PARENT rows only, in `line_no` order — {@link getHeldOrder} filters `parent_line_id IS NULL` and
-   * nests each dish's child extras lines under it as the `extras` array below, so this list needs no child
-   * marker of its own. Contextual parent rows carry their stored offer and
-   * display snapshot so retrieval does not depend on the offer still being active. A row with no
+   * PARENT rows only, each dish's child lines nested as `extras`. A row carries its stored offer and
+   * display snapshot, so retrieval does not depend on the offer still being active; a row with no
    * stored offer is returned by its product alone.
    */
   lines: {
-    /** The dish's frozen options answers — the six names per answered list, no ids (spec §2.3). */
+    /** The dish's frozen options answers: names, no ids. */
     optionSnapshots?: OptionSnapshot[];
     workingOrderLineId?: string;
     menuItemId?: string;
@@ -2906,9 +2000,8 @@ export interface HeldOrder {
     /** The variant the line was sold as, absent when it names none. */
     variantId?: string;
     quantity: string;
-    /** The dish's extras, one entry per CHILD line, each carrying what that line froze: the picked
-     * product, its three names, the price it was sold at and how many per dish. These are VALUES, not
-     * a re-sendable selection — the child holds no list id to name (spec §3.4). */
+    /** One entry per CHILD line: frozen VALUES, not a re-sendable selection (a child holds no list
+     * id). */
     extras?: {
       productId: string | null;
       name: string;
@@ -2923,12 +2016,11 @@ export interface HeldOrder {
       productId: string;
       menuItemId: string;
       variantId?: string;
-      /** The staff-facing name frozen onto the line at add time — what the till's basket renders. */
+      /** The staff name frozen at add time. */
       name: string;
       /** The line's frozen customer-facing text, locale -> text. */
       customerName: Record<string, string>;
-      /** The selected variant's frozen names, absent when the line names no variant. Each is carried
-       * SEPARATELY from the product's, so the retrieving surface joins the one it shows. */
+      /** Kept apart from the product's names, so the retrieving surface picks the one it shows. */
       variantName?: string;
       variantCustomerName?: Record<string, string> | null;
       variantKitchenName?: string | null;
@@ -2954,10 +2046,7 @@ export interface HeldOrder {
   }[];
 }
 
-/**
- * List the venue's open parked orders (venue-wide, till-reroute §3.6 — not node-scoped), ordered by
- * order number. Aggregate stored gross line totals and line counts, retaining orders with no lines.
- */
+/** List the venue's open parked orders, lineless ones included. */
 export async function listHeldOrders(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
@@ -2970,17 +2059,13 @@ export async function listHeldOrders(
         orderNumber: workingOrders.orderNumber,
         label: workingOrders.label,
         itemCount: sql<number>`cast(count(${workingOrderLines.id}) as int)`,
-        // A count of whole cents read raw, cast to text and converted by `rawCentsToDecimal` — see
-        // its doc comment for why it is text and not an integer cast. `cast(x as text)` is the
-        // spelling because this engine has no cast operator.
+        // Cast to text for `rawCentsToDecimal`; see its doc comment.
         total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
         openedAt: workingOrders.openedAt,
       })
       .from(workingOrders)
       .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
-      // Venue-wide, not node-scoped (till-reroute design §3.6): under warm standby one node sells at a time,
-      // and a promoted node inherits the venue's open tabs tagged with the dead node's id (swap spec §4.3).
-      // `node_id` is still written at create — the writer's id — and never filtered on here.
+      // Venue-wide: `node_id` records the writer and is never filtered on here.
       .where(eq(workingOrders.status, "open"))
       .groupBy(
         workingOrders.id,
@@ -2993,11 +2078,8 @@ export async function listHeldOrders(
   });
 }
 
-/**
- * Read an open parked order anywhere in the venue (venue-wide, till-reroute §3.6 — not node-scoped).
- * Return line snapshots in line-number order so the till can rebuild the agreed basket even when an
- * offer has since been deactivated. One tenant per database, so the id alone identifies the order.
- */
+/** Read an open parked order anywhere in the venue, with the snapshots the till rebuilds its basket
+ * from even when an offer has since been deactivated. */
 export async function getHeldOrder(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
@@ -3041,9 +2123,6 @@ export async function getHeldOrder(
       .leftJoin(products, eq(products.id, workingOrderLines.productId))
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    // `unit_price_gross` stores a count of whole cents and `quantity` a count of thousandths; both
-    // become decimal literals here, at the row, so nothing below this line handles a count — the
-    // `HeldOrder` this builds carries the same decimal strings the till has always received.
     const lineRows = storedLines.map(({ parentProductId, ...line }) => {
       // A child line's product is the pick itself, a variant or not, and is kept as it is.
       const variantId =
@@ -3082,9 +2161,7 @@ export async function getHeldOrder(
             ...(line.optionSnapshots.length ? { workingOrderLineId: line.id } : {}),
           };
         }
-        // Each child line's own frozen facts. The per-dish pick count is the child's stored quantity
-        // divided by the dish's, which is how it was written (`dishQuantity × pickQuantity`,
-        // `priceBasketWithOptions`).
+        // A child's stored quantity is dish quantity × pick count.
         const extras = (childrenByParent.get(line.id) ?? []).map((child) => ({
           productId: child.productId,
           name: child.name,
@@ -3106,9 +2183,6 @@ export async function getHeldOrder(
             id: line.productId,
             productId: line.productId,
             menuItemId: context.menuItemId,
-            // The three names the line froze at add time, each kept apart from the others and from
-            // the variant's: the till's basket shows the variant's STAFF name on a variant line, and
-            // a surface that shows customer text resolves the customer pair instead.
             name: line.name,
             customerName: line.descriptions,
             ...(line.variantId === null ? {} : { variantId: line.variantId }),
@@ -3145,7 +2219,6 @@ export async function getHeldOrder(
  * edits and from current definitions when selections change; the request never supplies a price.
  */
 export interface UpdateHeldOrderRequest {
-  // A line MAY carry per-line `LineExtras` (NON-FISCAL), forwarded to `priceOrderLines`.
   lines: ({
     workingOrderLineId?: string;
     menuItemId: string;
@@ -3156,13 +2229,7 @@ export interface UpdateHeldOrderRequest {
   label?: string;
 }
 
-/**
- * Update an open held order anywhere in the venue, preserving stored prices for quantity-only edits.
- * One transaction keeps the order and replacement lines together — and, because one write
- * transaction runs on the venue file at a time ({@link assertAnchoredTabOpen} carries the chain
- * and the receipt), also keeps every other writer out of the order for the whole edit, which is
- * what the `for update` on its status read used to do for this one row.
- */
+/** Update an open held order anywhere in the venue, preserving stored prices for quantity-only edits. */
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
@@ -3170,12 +2237,6 @@ export async function updateHeldOrder(
   req: UpdateHeldOrderRequest,
 ): Promise<void> {
   return withTransaction(deps.db, async (tx) => {
-    // Read the order's status. Absent or not-open → `working_order.not_open`; the DB triggers
-    // (enforce_transition on the label update, require_open_parent on the line delete/insert) are
-    // the backstop if this app check is ever wrong. Venue-wide (till-reroute §3.6 — any node's open
-    // tab is editable): an unknown id reads as absent here rather than reaching the line insert (a
-    // raw foreign-key refusal). `status` stays off the WHERE so a closed order is told from an
-    // absent one.
     const [order] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
@@ -3185,27 +2246,20 @@ export async function updateHeldOrder(
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
 
-    // Refused before any line is touched: an empty basket has nothing to price, and rewriting an
-    // order to zero lines is a discard, which is `abandonHeldOrder`'s job, not this one's. The same
-    // unconditional guard `parkOrder` makes.
+    // Rewriting an order to zero lines is a discard, which is `abandonHeldOrder`'s job.
     if (req.lines.length === 0) {
       throw new AppError("sale.empty_basket", {});
     }
 
-    // A quantity-only edit keeps the line's commercial lock and stable id. The client identifies the
-    // stored parent line explicitly; every line must still name the same product/offer, remain in the
-    // same order, and answer its dish's extras and options exactly as the stored line did, and a
-    // line whose quantity rises must have its dish's and its extras' product rows Active and
-    // Available, and neither the product it sold nor any extra may have an Active variant. Anything
-    // else takes the replacement path below and is priced from the current offer.
+    // A quantity-only edit keeps each line's locked price and stable id. Anything else takes the
+    // replacement path below and is priced from the current offer.
     const storedLineRows = await tx
       .select({
         id: workingOrderLines.id,
         optionSnapshots: workingOrderLines.optionSnapshots,
         parentLineId: workingOrderLines.parentLineId,
         productId: workingOrderLines.productId,
-        // Set when the line was sold as a variant: the dish is then the variant's parent, which
-        // holds the extras and options lists a variant offers (spec §4.4).
+        // Set on a variant line: the dish is then the parent, which holds the lists a variant offers.
         parentProductId: products.parentId,
         unitPriceGross: workingOrderLines.unitPriceGross,
         quantity: workingOrderLines.quantity,
@@ -3215,10 +2269,6 @@ export async function updateHeldOrder(
       .leftJoin(products, eq(products.id, workingOrderLines.productId))
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    // `unit_price_gross` stores a count of whole cents and `quantity` a count of thousandths; both
-    // become decimal literals here, at the row, so the comparison against the request's quantities
-    // and `matchExtraChildren` below both work in the decimal strings the request carries. The
-    // quantity-only updates convert each new quantity and recomputed total back.
     const storedRows = storedLineRows.map((line) => ({
       ...line,
       quantity: thousandthsToDecimal(line.quantity),
@@ -3241,11 +2291,9 @@ export async function updateHeldOrder(
     );
 
     /**
-     * The stored parent a requested line would keep, or `null` when it is not the same line at
-     * all. Every check here is free — the line's position, the id the client named, its note, and
-     * which product it sells — so an edit that changes any of them reaches the replacement path
-     * below without paying for the catalogue reads the ANSWERS comparison needs. `productId` in the
-     * result is the DISH, whose lists the answers are checked against.
+     * The stored parent a requested line would keep, or `null` when it is not the same line. These
+     * checks need no read, so an edit failing one skips the catalogue reads the answers comparison
+     * needs. `productId` in the result is the DISH.
      */
     const sameLines = req.lines.map((line, index) => {
       const stored = storedParents[index];
@@ -3273,18 +2321,9 @@ export async function updateHeldOrder(
       req.lines.length === storedParents.length && sameLines.every((entry) => entry !== null);
 
     /**
-     * What a requested line would freeze if it were re-priced now, or `null` when its frozen
-     * answers differ from the stored ones. An invalid selection answers `null` too: the
-     * replacement path below re-validates it and raises the authoritative refusal, so nothing is
-     * swallowed.
-     *
-     * Left EMPTY when the free checks above already ruled the edit out, which `sameBasket` below
-     * distinguishes from "every line was rebuilt and matched". The two reads it needs are the same
-     * two `priceOrderLines` makes on the replacement path, on the same transaction — over the
-     * STORED basket here and the REQUESTED one there — so an edit heading there would otherwise
-     * pay for them twice. Both are read once for the WHOLE basket,
-     * never per line. A preserved line is by definition one whose dish has not changed, so the
-     * stored line's own product and offer are the right holders to resolve against — no zone read.
+     * What a requested line would freeze if re-priced now, or `null` when its answers differ from the
+     * stored ones. An invalid selection answers `null` too: the replacement path re-validates it and
+     * raises the refusal, so nothing is swallowed.
      */
     let rebuilt: ({
       stored: StoredLine;
@@ -3333,14 +2372,12 @@ export async function updateHeldOrder(
         return paired === null ? null : { stored, paired };
       });
     }
-    // A line whose quantity RISES sells more of its dish and of every extra it carries, so each of
-    // their product rows must be Active and Available (spec §15.6), and neither what the line sold
-    // nor any extra may have gained an Active variant since (§15.1: such a product is never sold as
-    // itself). The dish is the variant's parent on a variant line; the variant's own Active and
-    // Available and the menu offer's own switches are not re-checked on a raise. A line that fails
-    // sends the edit to the replacement path, whose reads refuse it. A kept or lowered quantity is
-    // not re-checked: existing work is not cancelled (2026-09-20 spec §10). One read of each kind
-    // for the basket.
+    // A line whose quantity RISES sells more of its dish and its extras, so those products must be
+    // sellable now; failing that, the edit takes the replacement path, whose reads refuse it. The
+    // dish is the variant's parent on a variant line, and only the dish and its picks are
+    // re-checked: nothing else the replacement path's offer read refuses is, the variant's own
+    // Active and Available included. A kept or lowered quantity is not re-checked: existing work is
+    // not cancelled.
     const keepsEveryLine = sameBasket && rebuilt.every((entry) => entry !== null);
     const raised = keepsEveryLine
       ? rebuilt.flatMap((entry, index) =>
@@ -3381,9 +2418,8 @@ export async function updateHeldOrder(
           .where(
             and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.id, stored.id)),
           );
-        // Each child follows its dish: the same `dishQuantity × pickQuantity` the pricer applies,
-        // recomputed from the STORED gross so the price the line was sold at is untouched. Each
-        // child is taken with the pick `matchExtraChildren` paired it to, which is not its position.
+        // From the STORED gross, so the price the line was sold at is untouched. A child is paired
+        // with its pick by `matchExtraChildren`, not by position.
         for (const { pick, child } of paired) {
           const childQuantity = multiplyDecimal(
             decimal(requested.quantity),
@@ -3407,12 +2443,7 @@ export async function updateHeldOrder(
       return;
     }
 
-    // Price the new basket (refusing an offer the zone does not list) BEFORE deleting anything, so
-    // a bad line aborts the tx with the parked order still intact. Then swap the lines wholesale:
-    // the parent is open (checked above, and nothing else can have closed it since — the
-    // docstring's note), so the line delete and the re-insert both satisfy `require_open_parent`,
-    // and the re-numbered `line_no`s start from 1. An edit only rewrites the persisted lines;
-    // `priced` is `payWorkingOrder`'s walk-up shortcut, unused here.
+    // Priced BEFORE deleting anything, so a bad line aborts with the parked order still intact.
     const context = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
     const { lineRows, lineContexts } = await priceOrderLines(
       tx,
@@ -3421,12 +2452,13 @@ export async function updateHeldOrder(
       req.lines,
       context?.zoneId,
     );
+    // Cascades to each line's `ticket_items` row, so a fired line's kitchen ticket is deleted, not
+    // recalled, and the new lines are not fired. `working_line_contexts` is re-recorded below.
     await tx.delete(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id));
     await tx.insert(workingOrderLines).values(lineRows);
     await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts);
 
-    // Runs over the `enforce_transition` trigger (OLD.status = 'open', so it passes). `req.label`
-    // absent clears any prior label to NULL — the whole request is the new state, labels included.
+    // An absent label clears it: the whole request is the new state.
     await tx
       .update(workingOrders)
       .set({ label: req.label ?? null })
@@ -3434,11 +2466,7 @@ export async function updateHeldOrder(
   });
 }
 
-/**
- * Abandon an open held order anywhere in the venue (venue-wide, till-reroute §3.6). The conditional
- * status update leaves settled_at null because abandonment does not settle an order. An unknown id
- * matches nothing and reads as `working_order.not_open`.
- */
+/** Abandon an open held order anywhere in the venue. An unknown id reads as `working_order.not_open`. */
 export async function abandonHeldOrder(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
@@ -3458,13 +2486,7 @@ export async function abandonHeldOrder(
   });
 }
 
-/**
- * The result of placing an order. In Task 7 (Mode T / generic placing) an order goes `open → placed`
- * and NO fiscal document is filed, so only `id` and `status: "placed"` are returned. The optional
- * fiscal fields are the shape Task 8's mode dispatch fills for the modes that DO file at placing:
- * Mode P (prepay) pays + issues → `settled`, and Mode I (invoice-first) issues the deferred invoice.
- * Kept on this interface now so the placing surface does not change shape when those modes land.
- */
+/** The fiscal fields are filled only when placing files an invoice. */
 export interface PlaceOrderResult {
   id: string;
   status: "placed" | "settled";
@@ -3476,16 +2498,12 @@ export interface PlaceOrderResult {
 }
 
 /**
- * Place an open order, append its genesis amendment and fire kitchen items in one
- * transaction. invoice_first also files a deferred invoice from the stored prices.
- * The operator and trusted clock identify the amendment; saleTillId identifies the
+ * Place an open order, append its genesis amendment and fire kitchen items in one transaction.
+ * invoice_first also files a deferred invoice from the stored prices. `saleTillId` is the
  * authenticated device's register on the fiscal record.
  *
- * A second concurrent placement must not file a second invoice. The status read below used to
- * take the order's row `for update` to arrange that; what arranges it now is that the two
- * placements cannot overlap — one write transaction runs on the venue file at a time
- * ({@link assertAnchoredTabOpen} carries the chain and the receipt) — so the second reads
- * `placed` and is refused before it reaches the file.
+ * A second placement cannot file a second invoice: `withTransaction` IS the venue file's write lock,
+ * so it reads `placed` and is refused before it reaches the file.
  */
 export async function placeOrder(
   deps: TillSaleDeps,
@@ -3495,8 +2513,6 @@ export async function placeOrder(
   saleTillId: TillId,
 ): Promise<PlaceOrderResult> {
   return withTransaction(deps.db, async (tx) => {
-    // Read the order's status. Absent or not-open → `working_order.not_open`; the
-    // enforce_transition trigger is the DB backstop if this app check is ever wrong.
     const [locked] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
@@ -3507,19 +2523,13 @@ export async function placeOrder(
     const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
     const orderFlow = serviceContext?.serviceMode ?? cfg.orderFlow;
 
-    // Mode dispatch (design §3). Mode I files the DEFERRED invoice HERE, before the transition, from
-    // the order's stored locked lines (never a re-price — the composition was locked at add-time); the
-    // read-back invoice number rides on the result. Modes T and P file nothing at placing. The
-    // deferred file tags the sale with `working_order_id = id`, and the status check above already
-    // guarantees one invoice per order (a second place sees `placed` and is refused before
-    // reaching this — see the docstring for why it cannot read a stale `open`).
+    // Only invoice-first files at placing, from the stored locked lines: never a re-price.
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     let issuedOrderLabel: string | null | undefined;
     if (orderFlow === "invoice_first") {
       const priced = await priceStoredOrder(tx, id);
-      // SP-A.2 §16.4 split: the fiscal record's `till_id` is the DEVICE till (`saleTillId`), while the
-      // `order_placed` amendment below records the box's CONFIGURED register (`cfg.tillId`). `nodeId`/
-      // `seriesId` stay `cfg` — the chain is keyed by the node's SIF, not the device.
+      // The fiscal record's `till_id` is the DEVICE till, while the amendment below records the box's
+      // CONFIGURED register. The chain is keyed by the node, not the device.
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
         tillId: saleTillId,
         nodeId: cfg.nodeId,
@@ -3532,12 +2542,9 @@ export async function placeOrder(
         vatBreakdown: priced.vatBreakdown,
         clock: deps.clock,
         operatorId,
-        // A chained invoice with NO tender and NO settlement — the legitimate unsettled steady state
-        // an invoice-first sale sits in until `collectOrder` settles it (design §3, Ordering 1).
+        // No tender and no settlement until `collectOrder` settles it.
         settlement: { kind: "deferred" },
       });
-      // The human-facing "A/1" is read back from the sale row + its series (the FiscalRecordRef is
-      // regime-opaque), in this same transaction — the shared `readInvoiceNumber` reader.
       const ticket: TillSaleResult = {
         ...(await readReceiptIssuer(deps.backend, tx, saleId)),
         ...(await readReceiptOrder(tx, cfg, id, { atIssuance: true })),
@@ -3562,8 +2569,6 @@ export async function placeOrder(
       await enqueueOriginalReceipt(tx, { ...cfg, tillId: saleTillId }, ticket);
     }
 
-    // open → placed. `working_orders_enforce_transition` validates OLD.status = 'open'; no `settled_at`
-    // (the biconditional requires it stay NULL for a non-settled status).
     await tx
       .update(workingOrders)
       .set({
@@ -3572,13 +2577,8 @@ export async function placeOrder(
       })
       .where(eq(workingOrders.id, id));
 
-    // Open the amendment log with its `order_placed` genesis. `appendOrderAmendment` owns the
-    // parent-row-lock serialisation, the per-order sequence and the tamper-evident hash (Task 3); the
-    // genesis carries NO contest reason (a placement has none). The venue's trusted-clock instant +
-    // wall offset are hashed and stored so the entry reprints in venue time (#52).
-    // `capturedByTillId` is the box's CONFIGURED register (`cfg.tillId`), NOT the device till the
-    // fiscal record above carries (SP-A.2 §16.4) — this matches `cancelPlacedOrder`, so a re-homed
-    // box's `order_placed`/`order_cancelled` pair for one order stays on the same register.
+    // `capturedByTillId` is the CONFIGURED register, as in `cancelPlacedOrder`, so one order's
+    // placed/cancelled pair stays on the same register.
     const now = deps.clock.now();
     await appendOrderAmendment(tx, {
       workingOrderId: id,
@@ -3591,13 +2591,6 @@ export async function placeOrder(
       eventOffsetMinutes: now.offsetMinutes,
     });
 
-    // Placing = firing to the kitchen (KDS-1 §3b): one `ticket_items` row per PARENT dish line, each
-    // routed through its frozen service zone and SNAPSHOTTED at fire time, replacing #63's
-    // single `order_prep` row per order. Read ALL the order's lines (id + product + parent link, in
-    // line order) and hand them to `fireLines`, which fires the parents and skips child modifier lines
-    // (a modifier is part of its dish, not its own ticket item). Ticket items advance queued →
-    // preparing → ready freely even after the order is fiscally frozen, so they live in their own
-    // MUTABLE table, as `order_prep` did.
     const firedLines = await tx
       .select({
         id: workingOrderLines.id,
@@ -3616,13 +2609,7 @@ export async function placeOrder(
 }
 
 /**
- * Cancel a placed order and append its reasoned amendment in one transaction.
- * Require a non-empty reason before database work, then check the order.
- * The operator and trusted clock identify the cancellation amendment.
- *
- * The status read used to take the order's row `for update` so that a second cancel could not
- * append a second amendment. It cannot: one write transaction runs on the venue file at a time
- * ({@link assertAnchoredTabOpen} carries the chain and the receipt), so the second cancel reads
+ * Cancel a placed order and append its reasoned amendment in one transaction. A second cancel reads
  * `abandoned` and is refused `working_order.not_placed`.
  */
 export async function cancelPlacedOrder(
@@ -3632,10 +2619,8 @@ export async function cancelPlacedOrder(
   reason: string,
   operatorId: string,
 ): Promise<void> {
-  // Refused before any database work: a cancel with no reason is not a loggable amendment (its reason
-  // is the accountable content), so an empty/whitespace reason neither transitions the order nor
-  // appends a reasonless entry. Its own code — this fires BEFORE the status is read, so a missing
-  // reason is a request-shape error, not the state conflict `not_placed` names (§1).
+  // The reason is the amendment's accountable content. Checked before the status, so a missing reason
+  // is a request-shape error, not the state conflict `not_placed` names.
   if (reason.trim() === "") {
     throw new AppError("working_order.reason_required", { workingOrderId: id });
   }
@@ -3649,12 +2634,8 @@ export async function cancelPlacedOrder(
       throw new AppError("working_order.not_placed", { workingOrderId: id });
     }
 
-    // Terminal transition `placed → abandoned` (enforce_transition permits it; no `settled_at`, which
-    // the biconditional requires stay NULL for a non-settled status).
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
 
-    // Append the `order_cancelled` amendment — the cancel is itself a logged amendment (design §4),
-    // carrying the operator's reason, linked to the genesis via `appendOrderAmendment`'s per-order hash.
     const now = deps.clock.now();
     await appendOrderAmendment(tx, {
       workingOrderId: id,
@@ -3669,17 +2650,13 @@ export async function cancelPlacedOrder(
   });
 }
 
-/**
- * Fire a settled prepay order through fireLines. Reject other statuses before any
- * kitchen write; the unique item-per-line constraint rejects a repeated fire.
- */
+/** Fire a settled prepay order. The unique item-per-line constraint refuses a repeated fire. */
 export async function sendToPrep(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   id: string,
 ): Promise<void> {
   return withTransaction(deps.db, async (tx) => {
-    // Only settled orders are eligible for firing. Settled is a terminal status.
     const [order] = await tx
       .select({ status: workingOrders.status })
       .from(workingOrders)
@@ -3688,9 +2665,6 @@ export async function sendToPrep(
       throw new AppError("working_order.not_settled", { workingOrderId: id });
     }
 
-    // Fire the settled order's lines to the kitchen: read them ALL (id + product + parent link, in line
-    // order) and hand them to `fireLines`, which inserts one ticket item per PARENT dish line (station
-    // resolved + snapshotted) and skips child modifier lines — the same fire `placeOrder` runs at placing.
     const firedLines = await tx
       .select({
         id: workingOrderLines.id,
@@ -3706,11 +2680,7 @@ export async function sendToPrep(
   });
 }
 
-/**
- * Stamp a settled, fired order as collected so it leaves the kitchen queue.
- * Refuse an already-collected or never-fired order. The conditional update stamps
- * only an unset collected_at, leaving a concurrent second stamp as a no-op.
- */
+/** Stamp a settled, fired order as collected so it leaves the kitchen queue. */
 export async function markCollected(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
@@ -3718,7 +2688,6 @@ export async function markCollected(
 ): Promise<void> {
   void cfg;
   return withTransaction(deps.db, async (tx) => {
-    // Only settled orders are eligible for collection. Settled is a terminal status.
     const [order] = await tx
       .select({ status: workingOrders.status, collectedAt: workingOrders.collectedAt })
       .from(workingOrders)
@@ -3726,12 +2695,12 @@ export async function markCollected(
     if (order === undefined || order.status !== "settled") {
       throw new AppError("working_order.not_settled", { workingOrderId: id });
     }
-    // Already handed over — refuse the repeat HERE, before the NULL → non-null-only trigger (0056) would
-    // RAISE a P0001 that becomes an opaque 500.
+    // Refused here, before the trigger that allows `collected_at` only NULL → non-null refuses it
+    // as an opaque error.
     if (order.collectedAt !== null) {
       throw new AppError("working_order.already_collected", { workingOrderId: id });
     }
-    // Must have been fired — an order with no ticket items is on no station display to hand over.
+    // An order with no ticket items is on no station display to hand over.
     const [fired] = await tx
       .select({ id: ticketItems.id })
       .from(ticketItems)
@@ -3741,12 +2710,8 @@ export async function markCollected(
       throw new AppError("ticket.not_fired", { workingOrderId: id });
     }
 
-    // Stamp the handover marker. enforce_transition (0056) permits this settled → settled UPDATE ONLY
-    // because it sets collected_at NULL → non-null and touches nothing else. The `collected_at IS NULL`
-    // predicate keeps a concurrent double-collect a no-op for the loser rather than a trigger RAISE.
     await tx
       .update(workingOrders)
-      // The clock is read in JavaScript and bound — see `fireCourse` above for why.
       .set({ collectedAt: nowIso() })
       .where(and(eq(workingOrders.id, id), isNull(workingOrders.collectedAt)));
   });
@@ -3771,36 +2736,20 @@ function parseUnservedLines(value: string): UnservedLine[] {
 }
 
 /**
- * Whole minutes from a stored ISO stamp to `nowMs`, floored — what
- * `floor(extract(epoch from (now() - stamp)) / 60)::int` computed in SQL.
- *
- * It moved out of SQL because this engine has neither `now()` nor `extract`, and because a
- * timestamp column here is TEXT rather than a point in time. The reason the SQL version existed —
- * that the DATABASE's clock and the app server's could skew — is gone with the swap: the engine
- * runs inside this process (`node:sqlite`), so there is one clock, the same conclusion
- * `packages/printing/src/runtime.ts` reaches for the print-job lease. Callers read that clock ONCE
- * per query and pass it in, so every row of one board is aged against one instant, which is what
- * `now()` gave for free by being transaction time.
+ * Whole minutes from a stored ISO stamp to `nowMs`, floored. Callers read the clock ONCE per query,
+ * so every row of one board is aged against one instant.
  */
 function minutesSince(stamp: string, nowMs: number): number {
   return Math.floor((nowMs - Date.parse(stamp)) / 60_000);
 }
 
-/** The kitchen state a ticket item advances through (KDS-1 §2d) — `queued → preparing → ready`, from
- *  the `ticket_state` enum (the successor to `order_prep`'s dropped `prep_state`). */
+/** `queued → preparing → ready`. */
 export type TicketState = (typeof ticketState.enumValues)[number];
 
-/** The working order's own status (`open → placed → settled|abandoned`, orders.ts) — surfaced on a
- *  station-queue group so the till knows which orders are COLLECTABLE (a settled Mode-P order awaiting
- *  its counter handover, {@link markCollected}) versus still open (a tab building) or placed (awaiting
- *  the fiscal {@link collectOrder}). */
 export type WorkingOrderStatus = (typeof workingOrderStatus.enumValues)[number];
 
-/** The forward kitchen transitions (KDS-1 §2d), keyed by the state a move goes TO: the one legal
- *  predecessor it comes `from` and the timestamp column it stamps. The per-line {@link advanceTicketItem}
- *  and whole-ticket {@link advanceTicket} verbs both drive their predecessor-WHERE and stamp off this ONE
- *  table, so the state machine lives in a single place. `queued` is not a target (a FIRE reaches it,
- *  {@link fireLines}), so only the two forward moves are keyed. */
+/** The forward kitchen transitions, keyed by target state: the one legal predecessor and the column
+ *  stamped. `queued` is not a target: a fire reaches it. */
 const TICKET_TRANSITIONS = {
   preparing: { from: "queued", stampedAt: "preparingAt" },
   ready: { from: "preparing", stampedAt: "readyAt" },
@@ -3809,13 +2758,8 @@ const TICKET_TRANSITIONS = {
   { from: TicketState; stampedAt: "preparingAt" | "readyAt" }
 >;
 
-/** The typed `.set()` payload for a forward move: the new state plus the stamp column the transition
- *  names, stamped from this process's clock. A ternary on the (two-valued) stamp column keeps each
- *  branch a concrete object Drizzle infers against `ticket_items`' update shape — a computed key would
- *  widen it to a string index and drop the typing the per-verb switch/ternary existed to hold.
- *
- *  The clock is read in JavaScript and bound: `now()` is a PostgreSQL function this engine does not
- *  have. `nowIso` because both stamp columns are `tsString`. */
+/** A ternary, not a computed key: a computed key would widen the payload to a string index and lose
+ *  Drizzle's typing against `ticket_items`. */
 function advanceSet(to: Exclude<TicketState, "queued">) {
   const at = nowIso();
   return TICKET_TRANSITIONS[to].stampedAt === "preparingAt"
@@ -3823,12 +2767,7 @@ function advanceSet(to: Exclude<TicketState, "queued">) {
     : { state: to, readyAt: at };
 }
 
-/**
- * Advance one fired ticket item from queued to preparing or preparing to ready.
- * The conditional update enforces the predecessor and held-item gate together.
- * On a miss, distinguish a held item from an invalid transition. Reject an unknown
- * target before looking up its transition.
- */
+/** Advance one fired ticket item one step. A held item is refused `ticket.item_held`. */
 export async function advanceTicketItem(
   tx: Transaction,
   cfg: TillConfig,
@@ -3836,9 +2775,7 @@ export async function advanceTicketItem(
   to: TicketState,
 ): Promise<void> {
   void cfg;
-  // `to as Exclude<TicketState, "queued">` only satisfies the index type — it asserts nothing at
-  // runtime, so "queued" (not a key of TICKET_TRANSITIONS) and any missing/garbage `to` both read back
-  // `undefined` here and are refused together, before `advanceSet`/`.from` ever run.
+  // "queued" and any garbage `to` read back `undefined` here and are refused together.
   const table = TICKET_TRANSITIONS as Record<
     string,
     (typeof TICKET_TRANSITIONS)[Exclude<TicketState, "queued">] | undefined
@@ -3849,8 +2786,6 @@ export async function advanceTicketItem(
   }
   const validTo = to as Exclude<TicketState, "queued">;
 
-  // A held item cannot advance. Read back an unsuccessful update to distinguish
-  // ticket.item_held from ticket.invalid_transition.
   const updated = await tx
     .update(ticketItems)
     .set(advanceSet(validTo))
@@ -3874,11 +2809,7 @@ export async function advanceTicketItem(
   }
 }
 
-/**
- * Advance fired items of one order and station from the legal predecessor state.
- * Held items and items already past that predecessor are skipped; an empty match
- * is a no-op.
- */
+/** Advance the fired items of one order at one station; held items are skipped. */
 export async function advanceTicket(
   tx: Transaction,
   cfg: TillConfig,
@@ -3900,36 +2831,20 @@ export async function advanceTicket(
     );
 }
 
-/** One ticket item on a station's queue — its id (the bump target for {@link advanceTicketItem}), the
- *  line it was fired from, its current kitchen state, and the DISPLAY fields a cook reads: the line's
- *  snapshotted `descriptions` (locale → text, the dish name — so the kitchen shows "2× Paella", not a
- *  bare line number) and its `quantity` (a three-place decimal string, e.g. "2.000", converted from
- *  the count of thousandths the column stores). Both are carried from
- *  the joined `working_order_lines` row; the description is the SNAPSHOT frozen at fire, never a live
- *  catalogue lookup. */
-/** The course a queue item was fired for (KDS-2) — its snapshotted `course_id` joined to the LIVE
- *  `kitchen_courses` row, so the display renders the course header and orders the coursing sequence by
- *  `displayOrder` without a second fetch. The name/order are the current config (a display convenience,
- *  not a fiscal snapshot); the item's `course_id` snapshot is the anchor. `null` on the item when the
- *  line carried no course. Not filtered by `active`, so a course deactivated after the item was fired
- *  still names its header. */
+/** The LIVE course row an item's snapshotted `course_id` names. Not filtered by `active`, so a course
+ *  deactivated after the item was fired still names its header. */
 export interface StationQueueCourse {
   id: string;
   name: string;
   displayOrder: number;
 }
 
-/** One selected option (ordering modifier) on a queue item — the child modifier line's SNAPSHOTTED
- *  `descriptions` map (locale → text), which the KDS UI localises client-side, per the repo's
- *  never-store-formatted rule. A modifier is never its own ticket item; it rides here as sub-text
- *  beneath its parent dish. */
+/** A child modifier line on a queue item: never its own ticket item. */
 export interface QueueModifier {
   descriptions: Record<string, string>;
-  /** The extra's OWN allergens (the child option's `add_allergens`), shown beside the dish's own on the
-   *  KDS/expo — never folded. Null for a plain text answer or an option that declares none. */
+  /** The extra's OWN allergens, shown beside the dish's own, never folded into them. */
   addAllergens?: ProductAllergens | null;
-  /** The extra's OWN positive dietary suitability (`dietary_suitability`), shown beside the dish's own.
-   *  Empty/null when it declares none. */
+
   suitableFor?: string[] | null;
 }
 
@@ -3937,97 +2852,41 @@ export interface StationQueueItem {
   id: string;
   workingOrderLineId: string;
   state: TicketState;
-  /** The dish's frozen options answers (spec §2.3); empty when it answered none. */
   optionSnapshots?: OptionSnapshot[];
-  /** The dish's frozen KITCHEN label — `kitchen_name` falling back to `name`, the variant's own on a
-   * variant line. The same name the printed kitchen ticket carries (`apps/server/src/kitchen-print.ts`):
-   * a cook reads one name whether the ticket came off a printer or off a screen. */
+  /** The KITCHEN name, the same one the printed kitchen ticket carries. */
   name: string;
   quantity: string;
   unitName: Record<string, string> | null;
   unitPrecision: number | null;
-  /** The dish's selected options (ordering modifiers), in selection (`line_no`) order — the KDS UI
-   *  renders them as indented sub-text under this item. Empty for a plain dish. */
   modifiers: QueueModifier[];
-  /** The dish's OWN allergen profile (modifier↔allergen) — the parent product's published allergens,
-   *  with no modifier contribution. `pending` is true when the dish's own allergens are unreviewed (a
-   *  null base), so the KDS shows the plate as unverified. Display-only — never a fiscal value. Defaults
-   *  to `{ allergens: {}, pending: true }` when the parent line is absent from the read (belt-and-braces).
-   *  Each extra's own allergens are shown separately, not combined here. */
+  /** The dish's OWN allergens, no modifier contribution. `pending` when they are unreviewed. */
   asServed: { allergens: ProductAllergens; pending: boolean };
-  /** The dish's OWN diet profile — its recipe-derived declarations, with no modifier contribution.
-   *  Display-only; defaults to
-   *  `{ vegan: "unknown", vegetarian: "unknown", contains: [] }` when the parent line is absent from
-   *  the read (belt-and-braces, parity with {@link asServed}'s `{ allergens: {}, pending: true }`). */
   asServedDiet?: DietProfile;
-  /** The item's course (KDS-2 §3d/§5a), or `null` for a line with no course — the client groups the
-   *  queue by this and renders a per-course header in `displayOrder`. */
   course: StationQueueCourse | null;
-  /** `null` while the item's course is HELD — the client renders it GREYED and non-advanceable
-   *  (`advanceTicketItem` refuses it, `ticket.item_held`); a timestamp once fired (auto-fired earliest
-   *  course, or released via `fireCourse`). */
+  /** `null` while the item is HELD. */
   firedAt: string | null;
-  /** The per-line kitchen customisation (order-line customisation, spec §2/§3, NON-FISCAL), read from the
-   *  SNAPSHOTTED `ticket_items.note` (frozen at fire) rather than the live line, so a later draft edit
-   *  never changes what the kitchen already sees. A free-text instruction; `null` when the line carried
-   *  none. The KDS renders it as sub-text beside the modifiers. */
+  /** Snapshotted at fire, so a later draft edit never changes what the kitchen already sees. */
   note: string | null;
-  /** `ticket_items.queued_at` — the moment this line reached its station (KDS order-timing alerts, design
-   *  §3), so the client's `TickingClock` can re-derive {@link band} between refreshes from this plus the
-   *  group's {@link StationQueueGroup.thresholds}. */
   queuedAt: string;
-  /** The line's age band against its station's thresholds, computed on the DB clock at fetch time (§3, §6)
-   *  — authoritative for the first render; the client re-ticks it locally afterward. */
+  /** The age band at fetch time; the client re-ticks it locally afterwards. */
   band: TimingBand;
 }
 
-/** One order's lines at a station, grouped for the per-station display (KDS-1 §3c) — the order's id and
- *  operator label, the `queued_at` of its OLDEST line at this station (the group's oldest-first ordering
- *  key + elapsed-time anchor), and the lines themselves. */
+/** One order's lines at a station. `queuedAt` is its OLDEST line's. */
 export interface StationQueueGroup {
   orderId: string;
   orderNumber: number;
   label: string | null;
   queuedAt: string;
-  /** The order's own status (KDS-1 collect fix). Every order on the queue is non-abandoned and
-   *  not-yet-collected (the query filters both), so the till reads COLLECTABLE off this alone: a
-   *  `settled` order is a Mode-P pickup awaiting the counter handover ({@link markCollected}); `open`
-   *  (a tab) and `placed` (awaiting the fiscal collect) are not collectable via this path. */
+  /** The till reads COLLECTABLE off this alone: only a `settled` order awaits the counter handover. */
   status: WorkingOrderStatus;
   items: StationQueueItem[];
-  /** This station's order-timing thresholds (KDS order-timing alerts, design §3/§6/§11) — every group
-   *  from one `listStationQueue` call shares the same station, hence the same thresholds, but they ride
-   *  per-group (not as a separate fetch) so the client's `TickingClock` can re-derive each item's
-   *  {@link StationQueueItem.band} locally without a second round trip. */
   thresholds: StationThresholds;
 }
 
 /**
- * The per-station kitchen queue (KDS-1 §3c) — the venue's ticket items AT `stationId` (venue-wide,
- * till-reroute §3.6 — not node-scoped, so a promoted node keeps serving the tabs it inherited), joined to their
- * working order for the display fields and GROUPED BY ORDER (each group = one order's lines at this
- * station), oldest order first. The per-line/per-station successor to #63's order-level `listPrepQueue`,
- * over `ticket_items` rather than `order_prep`.
- *
- * Two order-level exclusions, mirroring `listPrepQueue`'s abandoned filter and adding the collect
- * handover: an `abandoned` working order (`ne(status, "abandoned")` — a cancelled placed order's items
- * are cascaded only if the LINE is deleted, so the status join is what retires a still-present item's
- * order, as `listPrepQueue` relied on) and a COLLECTED order (`collected_at IS NULL` — the default-station
- * display drops an order once handed to the customer, §3e) both drop out. Ticket items are NOT filtered
- * by state: a `ready` line stays on the display until its order collects, so the group carries the
- * order's queued/preparing/ready lines alike (the Nuevo/Preparando/Listo columns are a client lens).
- *
- * Ordered by `ticket_items.queued_at` ascending, so within the grouping the oldest line seen for an
- * order fixes that group's position (oldest-first) and its `queuedAt`. Venue-wide (till-reroute §3.6 —
- * not node-scoped): the station's queue is the whole venue's, so a promoted node keeps serving the
- * dead node's fired items. Runs on the CALLER's transaction. `working-order.test.ts` proves the
- * join, the exclusions, the grouping and the ordering; the venue-wide, cross-node read is
- * `working-order.pay-and-dispatch.test.ts`'s.
- */
-/**
- * Read modifier descriptions for the supplied parent lines, then each parent product's OWN allergens
- * and diet. An empty parent list skips the reads; a missing base leaves allergens pending. No modifier
- * fold — each dish shows its own recipe-derived figures.
+ * Each parent line's child modifier lines, then its product's OWN allergens and diet: no modifier
+ * fold, each dish shows its own figures.
  */
 async function readQueueSubItems(
   tx: Transaction,
@@ -4052,11 +2911,7 @@ async function readQueueSubItems(
   >();
   if (parentLineIds.length === 0) return { modifiersByParent, asServedByParent };
 
-  // ONE child read: the extras' descriptions from the child lines, in `line_no` (selection) order —
-  // the indented sub-text the KDS renders under each dish, plus each EXTRA's OWN allergens and
-  // dietary labels, taken from the PRODUCT the child line names — a variant's effective ones — (LEFT
-  // join, so a child whose product row has gone still renders its frozen text). Shown beside the
-  // dish's own; no fold, because the dish's figures and each extra's are independent.
+  // LEFT join, so a child whose product row has gone still renders its frozen text.
   const childRows = await tx
     .select({
       parentLineId: workingOrderLines.parentLineId,
@@ -4070,20 +2925,15 @@ async function readQueueSubItems(
     .where(inArray(workingOrderLines.parentLineId, parentLineIds))
     .orderBy(workingOrderLines.lineNo);
   for (const child of childRows) {
-    // `parentLineId` is non-null on every row (the `inArray` matched it).
     const mods = modifiersByParent.get(child.parentLineId!) ?? [];
     mods.push({
       descriptions: child.descriptions,
       addAllergens: (child.addAllergens as ProductAllergens | null) ?? null,
-      // The dish's own row a few lines below expands its declarations the same way.
       suitableFor: expandDietaryDeclarations(child.dietaryDeclarations as DietaryLabel[]),
     });
     modifiersByParent.set(child.parentLineId!, mods);
   }
 
-  // Each parent line's OWN allergens and diet — the PARENT line's product, a variant's effective
-  // ones (LEFT join: a null base is allowed and yields `pending: true`). No modifier contribution:
-  // each dish shows its own recipe-derived figures, and each extra's own list is shown separately.
   const parents = await tx
     .select({
       lineId: workingOrderLines.id,
@@ -4112,6 +2962,10 @@ async function readQueueSubItems(
   return { modifiersByParent, asServedByParent };
 }
 
+/**
+ * The venue's ticket items at one station, grouped by order, oldest first. An abandoned or collected
+ * order drops out; items are not filtered by state, so a `ready` line stays until its order collects.
+ */
 export async function listStationQueue(
   tx: Transaction,
   stationId: string,
@@ -4122,10 +2976,7 @@ export async function listStationQueue(
       workingOrderLineId: ticketItems.workingOrderLineId,
       state: ticketItems.state,
       queuedAt: ticketItems.queuedAt,
-      // The DISPLAY fields the kitchen renders — the line's four snapshotted staff/kitchen names +
-      // quantity, carried from the joined working_order_lines row (the snapshot, never a live
-      // catalogue lookup). Customer-facing text is deliberately not read: a cook reads the kitchen
-      // name, as the printed ticket does.
+      // Customer-facing text is deliberately not read: a cook reads the kitchen name.
       name: workingOrderLines.name,
       kitchenName: workingOrderLines.kitchenName,
       variantName: workingOrderLines.variantName,
@@ -4135,41 +2986,25 @@ export async function listStationQueue(
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
       lineNo: workingOrderLines.lineNo,
-      // KDS-2: the item's snapshotted course (or null) + its held/fired marker. `course_id` is the
-      // item's own snapshot; the name/order ride from the LEFT-joined live `kitchen_courses` row (a
-      // display convenience — see StationQueueCourse). `fired_at` null = HELD (greyed, non-advanceable).
       courseId: ticketItems.courseId,
       courseName: kitchenCourses.name,
       courseDisplayOrder: kitchenCourses.displayOrder,
       firedAt: ticketItems.firedAt,
-      // The per-line kitchen customisation (order-line customisation, spec §2/§3) — read from the
-      // SNAPSHOTTED `ticket_items` columns (frozen at fire), NOT the live `working_order_lines`, so a
-      // later draft edit never moves what the kitchen already sees.
+      // The fire-time snapshot, not the live line.
       note: ticketItems.note,
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
       label: workingOrders.label,
-      // The order's status — surfaced so the till shows the collect action only on a collectable
-      // (settled Mode-P) order (see StationQueueGroup.status). Non-abandoned + uncollected is already
-      // guaranteed by the WHERE, so this is the only remaining collectability signal.
       status: workingOrders.status,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
     })
     .from(ticketItems)
-    // The owning order, joined on its id.
     .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
-    // The line this item was fired from, for its display name + quantity.
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-    // The item's OWN station, for its order-timing thresholds (KDS order-timing alerts, design §3/§6).
-    // A plain INNER JOIN — never a correlated subquery (CLAUDE.md §3's caution) — keyed on the
-    // `ticket_items.station_id` FK; every row here is
-    // already filtered to `stationId` below, so this always resolves.
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
-    // The item's course, for the display header + coursing order (KDS-2 §5a). LEFT join — `course_id`
-    // is nullable (a courseless line), and it is NOT filtered by `active`, so a course deactivated after
-    // the item was fired still names its header.
+    // Not filtered by `active`: a course deactivated after the item was fired still names its header.
     .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
     .where(
       and(
@@ -4178,29 +3013,18 @@ export async function listStationQueue(
         isNull(workingOrders.collectedAt),
       ),
     )
-    // Primary `queued_at` keeps the oldest-order-first grouping (each group's position + `queuedAt`
-    // anchor is its oldest line, unchanged), with `line_no` breaking the tie so an order's lines —
-    // fired together with an identical `queued_at` — render in a stable line order within the group.
+    // `line_no` breaks the tie between lines fired together with an identical `queued_at`.
     .orderBy(ticketItems.queuedAt, workingOrderLines.lineNo);
 
-  // The selected options AND each dish's OWN allergen/diet profile of every queued dish, keyed by the
-  // parent line ids just returned — attached below as each item's `modifiers` sub-text and `asServed`.
-  // One child read + one base read, no N+1.
   const { modifiersByParent, asServedByParent } = await readQueueSubItems(
     tx,
     rows.map((row) => row.workingOrderLineId),
   );
 
-  // KDS order-timing alerts (design §3/§6): the clock is read ONCE here, so every item on this board
-  // is aged against one instant — which is what `now()`, being transaction time, gave the SQL this
-  // replaced. See {@link minutesSince}.
   const nowMs = Date.now();
-  // Group by order, preserving first-seen (= oldest queued_at) order — the Map keeps insertion order,
-  // so the returned groups are oldest-order-first and each group's `queuedAt` is its oldest line's.
+  // The Map keeps insertion order, so groups come out oldest-first.
   const groups = new Map<string, StationQueueGroup>();
   for (const row of rows) {
-    // This station's thresholds — identical on every row (the query is filtered to one `stationId`),
-    // reconstructed once per row rather than hoisted so the shape stays a plain per-row projection.
     const thresholds: StationThresholds = {
       warmAfterMinutes: row.warmAfterMinutes,
       overdueAfterMinutes: row.overdueAfterMinutes,
@@ -4223,64 +3047,41 @@ export async function listStationQueue(
       id: row.itemId,
       workingOrderLineId: row.workingOrderLineId,
       state: row.state,
-      // One label per queue item: the line's frozen kitchen name falling back to its staff name — the
-      // same resolver the printed kitchen ticket uses.
       name: kitchenPresentationName(row),
       optionSnapshots: row.optionSnapshots,
-      // `working_order_lines.quantity` stores a count of whole thousandths; this row is where it
-      // becomes the decimal string the KDS renders, so nothing downstream handles a count.
       quantity: thousandthsToDecimal(row.quantity),
       unitName: row.unitName,
       unitPrecision: row.unitPrecision,
       modifiers: modifiersByParent.get(row.workingOrderLineId) ?? [],
-      // The dish's OWN allergen profile — a safe default `{ allergens: {}, pending: true }` when the
-      // parent line is somehow absent from the read (belt-and-braces; every queued line is present in
-      // practice).
       asServed: asServedByParent.get(row.workingOrderLineId)?.asServed ?? {
         allergens: {},
         pending: true,
       },
-      // The dish's OWN diet profile. An UNREVIEWED dish already reads "unknown" from its own derivation
-      // (a null derivation is empty-but-PENDING, the cautious posture), so this "unknown" default is only
-      // the belt-and-braces case where the parent line is absent from the read entirely — parity with
-      // `asServed`'s `{ allergens: {}, pending: true }` default.
       asServedDiet: asServedByParent.get(row.workingOrderLineId)?.asServedDiet ?? {
         vegan: "unknown",
         vegetarian: "unknown",
         contains: [],
       },
-      // A non-null `course_id` always matches a `kitchen_courses` row (the FK guarantees it), so when
-      // `courseId` is present its name/order are too; a null course serialises `course: null`.
+      // A non-null `course_id` always matches a `kitchen_courses` row: the foreign key guarantees it.
       course:
         row.courseId === null
           ? null
           : { id: row.courseId, name: row.courseName!, displayOrder: row.courseDisplayOrder! },
       firedAt: row.firedAt,
-      // The snapshotted per-line customisation (order-line customisation, spec §2/§3).
       note: row.note,
       queuedAt: row.queuedAt,
-      // Still a whole-minute offset reconstructed from the age, not `Date.parse(row.queuedAt)`
-      // straight: only where the age is COMPUTED moved (see {@link minutesSince}), and rounding the
-      // age to the minute first is what the bands were tuned against.
+      // Rounded to the whole minute first: what the bands were tuned against.
       band: classifyBand(nowMs - minutesSince(row.queuedAt, nowMs) * 60_000, nowMs, thresholds),
     });
   }
   return [...groups.values()];
 }
 
-/** One item on the cross-station expo/pass board (KDS-3 §3a) — a fired-or-held ticket item of an order,
- *  carrying the display fields the pass renders: the line's frozen kitchen `name` and its snapshotted
- *  `qty` (the same fields `StationQueueItem` serialises, never a live catalogue lookup), the resolved
- *  STATION name (the cross-station join `listStationQueue` deliberately omits — the pass sees the grill
- *  lagging the cold station), the kitchen `state`, and the `fired`/`away` lifecycle stamps. `name` is
- *  resolved server-side by `kitchenPresentationName`, the same call `StationQueueItem.name` uses — a
- *  pre-flattened string, not a locale map. */
+/** One item on the cross-station expo board. */
 export interface ExpoItem {
-  /** The dish's frozen options answers (spec §2.3); empty when it answered none. */
   optionSnapshots?: OptionSnapshot[];
   id: string;
-  /** The dish's frozen KITCHEN label — the same one {@link StationQueueItem.name} carries, so the pass
-   * and the stations it is expediting read identical names. */
+  /** The same KITCHEN name the stations read. */
   name: string;
   qty: string;
   unitName: Record<string, string> | null;
@@ -4289,44 +3090,19 @@ export interface ExpoItem {
   state: TicketState;
   firedAt: string | null;
   awayAt: string | null;
-  /** The per-line kitchen customisation (order-line customisation, spec §2/§3, NON-FISCAL), read from the
-   *  SNAPSHOTTED `ticket_items.note` (frozen at fire) — the same snapshot
-   *  {@link StationQueueItem.note} carries, never the live line. `null` when the line carried none.
-   *  The pass renders it as sub-text. */
   note: string | null;
-  /** The dish's selected options (ordering modifiers), in selection (`line_no`) order — the pass renders
-   *  them as sub-text under this item. Each is the child modifier line's snapshotted `descriptions` map
-   *  (localised client-side, as `name` is). Empty for a plain dish. */
   modifiers: QueueModifier[];
-  /** The dish's OWN allergen profile — the same product-own figure `StationQueueItem` carries: the
-   *  parent product's published allergens, with no modifier contribution, `pending` when the dish's base
-   *  is unreviewed. Display-only; defaults to `{ allergens: {}, pending: true }` when the parent line is
-   *  absent from the read. */
   asServed: { allergens: ProductAllergens; pending: boolean };
-  /** The dish's OWN diet profile — the same product-own figure {@link StationQueueItem.asServedDiet}
-   *  carries. Display-only; defaults to a
-   *  derived-empty `{ vegan: "unknown", vegetarian: "unknown", contains: [] }` when the parent line is
-   *  absent from the read. */
   asServedDiet?: DietProfile;
-  /** `ticket_items.queued_at` (KDS order-timing alerts, design §3/§6/§11) — the expo spans stations, so
-   *  UNLIKE `StationQueueGroup.thresholds` this rides PER ITEM (Controller Ruling A): the client's
-   *  `TickingClock` re-derives {@link band} from this plus {@link thresholds} between refreshes. */
   queuedAt: string;
   /** This item's OWN station's order-timing thresholds — per item, not per order, because one order's
    *  items can span several stations each with different thresholds. */
   thresholds: StationThresholds;
-  /** This item's age band against its own station's thresholds, computed on the DB clock at fetch time.
-   *  Authoritative for the first render; the client re-ticks it locally afterward. */
   band: TimingBand;
 }
 
-/** One course section of an expo order (KDS-3 §3a) — the order's items for one course, grouped under the
- *  course header and ordered by `displayOrder` (a null-course line has no course row: `courseId`/
- *  `courseName`/`displayOrder` are null and it sorts EARLIEST, the same null-first coursing
- *  `listStationQueue`'s client renders). Two roll-up flags drive the pass's per-course lever: `fired` is
- *  true once EVERY item of the course carries `fired_at` (so the "Curso listo" bump is offered — a held
- *  course reads `false`), `away` true once every item carries `away_at` (the drop-off signal the screen
- *  uses to retire the course). */
+/** One course of an expo order; the null course sorts earliest. `fired` and `away` are true only once
+ *  EVERY item of the course carries that stamp. */
 export interface ExpoCourse {
   courseId: string | null;
   courseName: string | null;
@@ -4336,53 +3112,22 @@ export interface ExpoCourse {
   items: ExpoItem[];
 }
 
-/** One open order on the cross-station expo board (KDS-3 §3a) — its id, the human order number and
- *  optional dining-table label, how long it has been open (`openedMinutes`, from `opened_at`), and its
- *  `ticket_items` grouped BY COURSE in `display_order`. `tableLabel` is present only when the order maps
- *  to a table (a tab back-pointer or a counter delivery); it is omitted for a bare walk-up (the `?`). */
+/** One order on the cross-station expo board. `tableLabel` is absent for a bare walk-up. */
 export interface ExpoOrder {
   orderId: string;
   tableLabel?: string;
   orderNumber: number;
   openedMinutes: number;
   courses: ExpoCourse[];
-  /** The worst age band across the order's UNSERVED lines (design §3 — a served line, `working_order_
-   *  lines.served_at` set, has reached the guest and drops off the clock; the reduction skips it). The
-   *  card head's escalation signal, `worstBand` over every {@link ExpoItem.band} whose line is unserved;
-   *  `"fresh"` when none are, or when every remaining unserved item is itself fresh. */
+  /** The worst age band over the UNSERVED lines: a served line has reached the guest. */
   worstBand: TimingBand;
 }
 
 /**
- * The cross-station expo/pass read (KDS-3 §3a) — every OPEN order in the venue with at least one
- * not-yet-away item, its `ticket_items` gathered ACROSS all stations and grouped by course, so the
- * expediter sees a whole order's coursing at once. The counterpart to KDS-1's per-station
- * `listStationQueue`, which filters to ONE station and never needs the station's name; this joins
- * `kitchen_stations` to label each item with its station, so the pass reads "the grill is lagging the
- * cold station" off one query.
- *
- * Three order-level exclusions, computed at query time (there is no per-order "done" column):
- *  - `abandoned` orders (`ne(status,"abandoned")`) and COLLECTED orders (`collected_at IS NULL`), the
- *    same two `listStationQueue` drops;
- *  - FULLY-AWAY orders — an order leaves the pass once the expediter has dispatched every course (every
- *    item carries `away_at`). Expressed as an EXISTS of one still-not-away item in the venue (§2a: `away`
- *    is the KDS-3 dispatch marker; the waiter's `served_at` is a separate floor ack, not consulted here),
- *    so the order stays while ANY item is undispatched and drops the instant the last one goes away. Done
- *    in SQL rather than post-grouping so a venue's fully-dispatched orders are never hauled into memory.
- *  A SURVIVING order still carries ALL its items — including away ones — so a per-course `away` flag can
- *  be rolled up; the SCREEN (a later task) hides fully-away courses, the READ does not.
- *
- * Venue-wide (till-reroute §3.6 — not node-scoped, so a promoted node keeps expediting the dead node's
- * live orders), exactly as `listStationQueue`'s queue now is. `locationId` (default `cfg.locationId`)
- * scopes only the dining-table label lookup, keeping the `(tx, cfg, locationId?)` signature symmetric
- * with `listTablesWithState`; a node sits in one location, so the default is the till's own venue.
- *
- * Ordered by `opened_at` (oldest order first — the most urgent to dispatch), then course `display_order`
- * NULLS FIRST (the null course fires earliest), then `line_no`/item id for a stable within-course order.
- * Runs on the CALLER's transaction. `working-order.test.ts` proves the join, the
- * exclusions, the course grouping and the fired/away roll-ups; the
- * venue-wide, cross-node read is `working-order.pay-and-dispatch.test.ts`'s, the same split
- * `listStationQueue` uses.
+ * The cross-station expo read: every order in the venue that is not abandoned, not collected, and
+ * has at least one item not yet away (open, placed and settled orders alike), its items gathered
+ * across all stations and grouped by course. A surviving order carries ALL its items, away ones
+ * included, so a per-course `away` flag can be rolled up. `locationId` scopes only the table label.
  */
 export async function listExpoQueue(
   tx: Transaction,
@@ -4393,19 +3138,11 @@ export async function listExpoQueue(
   const rows = await tx
     .select({
       itemId: ticketItems.id,
-      // The fired PARENT line — the key its child modifier lines point at (`parent_line_id`), for the
-      // modifier sub-item read below.
       lineId: ticketItems.workingOrderLineId,
       state: ticketItems.state,
       firedAt: ticketItems.firedAt,
       awayAt: ticketItems.awayAt,
-      // The per-line kitchen customisation (order-line customisation, spec §2/§3) — the SNAPSHOTTED
-      // `ticket_items` columns (frozen at fire), the same snapshot `listStationQueue` reads, so a later
-      // draft edit never moves what the pass sees.
       note: ticketItems.note,
-      // The DISPLAY snapshot the pass renders — the line's four frozen staff/kitchen names + quantity,
-      // carried from working_order_lines (never a live catalogue lookup), exactly as
-      // `listStationQueue` serialises.
       name: workingOrderLines.name,
       kitchenName: workingOrderLines.kitchenName,
       variantName: workingOrderLines.variantName,
@@ -4415,40 +3152,24 @@ export async function listExpoQueue(
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
       lineNo: workingOrderLines.lineNo,
-      // The line's own delivery marker (design §3 — a line ages until it reaches the guest). NOT
-      // exposed on `ExpoItem` itself; consulted only to exclude a served line from `ExpoOrder.worstBand`.
+      // Not exposed; read only to leave a served line out of `worstBand`.
       servedAt: workingOrderLines.servedAt,
-      // The item's STATION name — the cross-station label listStationQueue omits (it filters by one
-      // station, so it never needs it). `station_id` is notNull, so this inner join drops nothing.
       stationName: kitchenStations.name,
-      // KDS order-timing alerts (design §3/§6/§11, Controller Ruling A): this item's own queued-at plus
-      // its OWN station's thresholds — an order's items can span several stations, so unlike
-      // `listStationQueue` (one station per call) these ride per item, not per order.
+      // Per item, not per order: one order's items can span stations with different thresholds.
       queuedAt: ticketItems.queuedAt,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
-      // The item's snapshotted course (or null) + its live header/order from the LEFT-joined
-      // kitchen_courses row — a courseless line serialises `course* : null` and sorts earliest.
       courseId: ticketItems.courseId,
       courseName: kitchenCourses.name,
       courseDisplayOrder: kitchenCourses.displayOrder,
       orderId: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
-      // Minutes since the order opened — the pass's urgency clock, computed from this column below
-      // rather than in SQL (see {@link minutesSince}).
       openedAt: workingOrders.openedAt,
-      // The dining-table label, resolved by a FAN-OUT-PROOF scalar subquery (a LEFT JOIN could multiply
-      // an order's item rows if two tables pointed at it — tab_id carries no DB unique, only an app lock).
-      // Covers both directions a table binds an order: a TAB (`dining_tables.tab_id` back-points at the
-      // order) or a counter DELIVERY (`working_orders.delivery_table_id` points at the table). Scoped to
-      // `loc` (the expo's location, the `locationId?` param defaulting to the till's own venue) — the one
-      // place this read consumes the location, keeping the (tx, cfg, locationId?) signature symmetric with
-      // listTablesWithState while the READ itself is venue-wide (§3.6). The `order by` — a seated-tab match
-      // (`dt.tab_id = ` the order) first, then the unique `dt.id` as a total tiebreak — makes the single
-      // label deterministic (a bare `limit 1` is NOT: two rows can match — the order's own tab table
-      // AND a table it delivers to — and nothing makes an unordered `limit 1` pick the same one
-      // twice, whatever the engine; the `order by` is what does).
+      // A scalar subquery, not a LEFT JOIN, which would multiply the item rows when several tables
+      // match (the tables joined to one tab, or a tab's table and a table the order delivers to).
+      // The `order by` makes the label picked deterministic: a table whose `tab_id` is this order
+      // first, then the lowest table id.
       tableLabel: sql<string | null>`(
         select dt.label from dining_tables dt
         where dt.location_id = ${loc}
@@ -4457,35 +3178,23 @@ export async function listExpoQueue(
         limit 1)`,
     })
     .from(ticketItems)
-    // The owning order, for the display fields + the open/collected/abandoned exclusions, mirroring
-    // listStationQueue.
     .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
-    // The line this item was fired from, for its display name + quantity.
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-    // The item's STATION, for its name — the join that makes this read cross-station.
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
-    // The item's course, for the header + coursing order. LEFT join — `course_id` is nullable, and (as
-    // in listStationQueue) it is NOT filtered by `active`, so a course deactivated after the item was
-    // fired still names its header.
+    // Not filtered by `active`, as in `listStationQueue`.
     .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
     .where(
       and(
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),
-        // Fully-away exclusion, order-level, computed at query time (there is no per-order "done"
-        // column): keep the order while ANY of its items is still not-away, drop it once every item
-        // carries `away_at` (§2a — `away` is KDS-3's dispatch marker; `served_at` is a separate floor
-        // ack, not consulted). Venue-wide like the outer read (till-reroute §3.6), so items from any
-        // node count. A surviving order still returns ALL its items (away ones included) so a per-course
-        // `away` roll-up can be formed; the screen hides fully-away courses.
+        // An order leaves once every item is away. `served_at` is a separate floor marker, not
+        // consulted here.
         sql`exists (
           select 1 from ${ticketItems} tix
           where tix.working_order_id = ${workingOrders.id}
             and tix.away_at is null)`,
       ),
     )
-    // Oldest order first (opened_at), then course display_order NULLS FIRST (the null course fires
-    // earliest), then line_no and item id for a stable within-course order. Grouping preserves this.
     .orderBy(
       workingOrders.openedAt,
       sql`${kitchenCourses.displayOrder} asc nulls first`,
@@ -4493,21 +3202,13 @@ export async function listExpoQueue(
       ticketItems.id,
     );
 
-  // Group rows into orders → courses → items, preserving the SQL order (Maps keep insertion order), so
-  // orders come out oldest-first and each order's courses in display_order. A null course_id collapses
-  // to one "no course" bucket per order. `fired`/`away` start true and flip false on the first item
-  // that lacks the stamp — i.e. true only when EVERY item of the course carries it.
-  // The selected options AND each dish's OWN allergen/diet profile of every fired dish line, keyed on
-  // the parent line ids — attached below as each expo item's `modifiers` sub-text and `asServed`.
-  // One child read + one base read, no N+1.
   const { modifiersByParent, asServedByParent } = await readQueueSubItems(
     tx,
     rows.map((row) => row.lineId),
   );
 
-  // Read ONCE, so every order and item on this board is aged against one instant — what `now()`,
-  // being transaction time, gave the SQL this replaced. See {@link minutesSince}.
   const nowMs = Date.now();
+  // Maps keep insertion order, so the SQL order survives the grouping.
   const orders = new Map<string, ExpoOrder>();
   const courseMaps = new Map<string, Map<string, ExpoCourse>>();
   for (const row of rows) {
@@ -4518,10 +3219,7 @@ export async function listExpoQueue(
         orderNumber: row.orderNumber,
         openedMinutes: minutesSince(row.openedAt, nowMs),
         courses: [],
-        // `tableLabel` is present only when the order maps to a table (the `?` in ExpoOrder).
         ...(row.tableLabel === null ? {} : { tableLabel: row.tableLabel }),
-        // Folded in below, per row, over UNSERVED lines only (design §3) — starts `fresh` (worstBand's
-        // own empty-set default) and only ever climbs as rows are processed.
         worstBand: "fresh",
       };
       orders.set(row.orderId, order);
@@ -4533,8 +3231,6 @@ export async function listExpoQueue(
     if (course === undefined) {
       course = {
         courseId: row.courseId,
-        // A non-null course_id always matches a kitchen_courses row (the FK guarantees it), so its
-        // name/order are present; a null course serialises both as null.
         courseName: row.courseId === null ? null : row.courseName!,
         displayOrder: row.courseId === null ? null : row.courseDisplayOrder!,
         fired: true,
@@ -4549,8 +3245,7 @@ export async function listExpoQueue(
       overdueAfterMinutes: row.overdueAfterMinutes,
       forgottenAfterMinutes: row.forgottenAfterMinutes,
     };
-    // Still a whole-minute offset reconstructed from the age rather than `Date.parse(row.queuedAt)`
-    // straight — the same idiom, and the same reason, as `listStationQueue`.
+    // Rounded to the whole minute first, as in `listStationQueue`.
     const band = classifyBand(
       nowMs - minutesSince(row.queuedAt, nowMs) * 60_000,
       nowMs,
@@ -4558,12 +3253,8 @@ export async function listExpoQueue(
     );
     course.items.push({
       id: row.itemId,
-      // One label per pass item: the line's frozen kitchen names, resolved exactly as the station
-      // queue and the printed ticket resolve them.
       name: kitchenPresentationName(row),
       optionSnapshots: row.optionSnapshots,
-      // As in `listStationQueue`: the stored count of thousandths becomes the decimal string the
-      // pass renders, here at the row.
       qty: thousandthsToDecimal(row.quantity),
       unitName: row.unitName,
       unitPrecision: row.unitPrecision,
@@ -4571,16 +3262,12 @@ export async function listExpoQueue(
       state: row.state,
       firedAt: row.firedAt,
       awayAt: row.awayAt,
-      // The snapshotted per-line customisation (order-line customisation, spec §2/§3).
       note: row.note,
       modifiers: modifiersByParent.get(row.lineId) ?? [],
-      // The dish's OWN allergen profile the station read attaches, safe-defaulted identically.
       asServed: asServedByParent.get(row.lineId)?.asServed ?? {
         allergens: {},
         pending: true,
       },
-      // The dish's OWN diet profile the station read attaches (an unreviewed dish reads "unknown" from
-      // its own pending derivation), safe-defaulted identically for the absent-parent case.
       asServedDiet: asServedByParent.get(row.lineId)?.asServedDiet ?? {
         vegan: "unknown",
         vegetarian: "unknown",
@@ -4592,88 +3279,46 @@ export async function listExpoQueue(
     });
     if (row.firedAt === null) course.fired = false;
     if (row.awayAt === null) course.away = false;
-    // The order's worst band is a reduction over UNSERVED lines only (design §3 — a served line has
-    // reached the guest and drops off the clock). `workingOrderLines.servedAt` is written only while the
-    // parent order is `open` (ruling R4), so a settled/placed order's lines always fold in here.
     if (row.servedAt === null) order.worstBand = worstBand([order.worstBand, band]);
   }
   return [...orders.values()];
 }
 
-/** One row of the occupancy read-model (design §4). The raw signals (`hasOpenTab`, `pendingDeliveries`)
- *  are exposed alongside the rolled-up `state` so the floor plan can render a richer badge. */
+/** One row of the occupancy read-model. */
 export interface TableState {
   id: string;
   label: string;
-  /** The `floor_zones` row this table sits in (FP-1), or null — the successor to the former free-text
-   *  `zone` string (a FK to `floor_zones`, not an arbitrary label). */
   zoneId: string | null;
   capacity: number | null;
   state: "free" | "open-tab" | "delivery-pending";
   hasOpenTab: boolean;
   tabId?: string;
   tabLineCount?: number;
-  /** The open tab's gross draft total (sum of `line_total`), a two-place decimal string converted
-   *  from the count of cents the column stores — present iff a tab. */
+  /** The open tab's GROSS draft total. */
   tabTotal?: string;
   pendingDeliveries: number;
-  /** Count of the open tab's lines STILL to serve (`working_order_lines` with `served_at IS NULL`), for
-   *  the floor screen's "N still to serve" badge (FP-1). `0` for a free table (no open tab) — the
-   *  LEFT-join branch. DISTINCT from `pendingDeliveries` (uncollected counter deliveries to this table);
-   *  both are kept. */
+  /** The open tab's unserved lines, whatever their kitchen state. */
   pendingToServe: number;
-  /** Count of the open tab's lines that are KITCHEN-DONE but NOT yet carried out — the ticket item is
-   *  `ready` AND the line's `served_at IS NULL` (KDS-1 §3d, the floor's "N listos"). DISTINCT from
-   *  `pendingToServe` (unserved lines regardless of kitchen state) and from `pendingDeliveries` (counter
-   *  deliveries): a line is counted here only in the window between the kitchen bumping it `ready` and the
-   *  waiter marking it served. `0` for a free table (no open tab — the LEFT-join branch). */
+  /** The open tab's unserved lines whose ticket item is `ready`. */
   readyToServe: number;
-  /** Count of the open tab's lines the pass has DISPATCHED to the floor but the waiter has not yet
-   *  acknowledged — the ticket item carries `away_at IS NOT NULL` (KDS-3's dispatch marker, set by
-   *  `markCourseAway`) AND the line's `served_at IS NULL` (KDS-3 §3c, the floor's "en camino"). DISTINCT
-   *  from `readyToServe` (kitchen-done, may not yet be dispatched) and `pendingToServe` (unserved lines
-   *  regardless of kitchen/pass state): counted only in the window between the expediter sending a course
-   *  away and the waiter marking it served, the same 1:1 ti-on-line join so no multiplication. The floor
-   *  renders the MOST-ADVANCED hint per table — en camino (`enRoute`) over listos (`readyToServe`) over
-   *  por servir (`pendingToServe`). `0` for a free table (no open tab — the LEFT-join branch). */
+  /** The open tab's unserved lines the pass has sent away. Such a line counts in `readyToServe` too. */
   enRoute: number;
-  /** The worst age band across the OPEN TAB's unserved lines (KDS order-timing alerts, design §3/§6) —
-   *  `"fresh"` for a free table (no open tab) or one whose unserved lines are all still fresh. A served
-   *  line (`served_at` set) has reached the guest and never contributes: this is the floor's flash-red
-   *  signal, driving a table tile from steady amber/red through to a flashing-red "forgotten" tile. Scoped
-   *  to the open TAB only, the same scope `pendingToServe`/`readyToServe`/`enRoute` already use — a
-   *  counter delivery to this table (`pendingDeliveries`) is not a per-line detail this read carries, so
-   *  it does not feed this band (see the read-model's own doc comment). */
+  /** The worst age band over the open tab's unserved lines; a counter delivery does not feed it. */
   timingBand: TimingBand;
-  /** The table's MANUAL service status (design §4), or null. Independent of occupancy — a `free` table
-   *  may carry one. Joined from `table_service_statuses` on `dining_tables.status_id`. */
+  /** The MANUAL service status, independent of occupancy: a `free` table may carry one. */
   status: { id: string; label: string; color: string } | null;
-  /** FP-2 spatial placement on the floor-plan canvas — canvas coordinates, rendered shape, and
-   *  rotation in degrees, or `null` for an unplaced table. Written by `setTablePlacement` /
-   *  `clearPlacement`. Non-optional `| null` (unconditionally present, `null` when unplaced), matching
-   *  the `zoneId`/`capacity`/`status` siblings above rather than the conditionally-spread `tab*`
-   *  fields below — so the canvas can read a placement field without a presence check. */
+  /** Floor-plan placement, `null` when unplaced. */
   posX: number | null;
   posY: number | null;
   shape: FloorTableShape | null;
   rotation: number | null;
-  /** The table's NEXT imminent `booked` reservation, or `null` — merged from every enabled module's
-   *  floor annotator (SP1: bookings' `BOOKINGS_FLOOR_ANNOTATIONS`, which owns the timezone read, grace
-   *  window and the bookings scan). The floor renders "Reserved HH:MM" from `time`. A non-optional
-   *  `| null` sibling (like `status`/`posX`), unconditionally present — `null` when no module annotates
-   *  the table (a disabled bookings module contributes no annotator, so it stays `null`). */
+  /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
   nextReservation: { time: string } | null;
 }
 
 /**
- * Read active tables in the location with open-tab and pending-delivery occupancy.
- * An open tab takes precedence over a delivery; otherwise the table is free.
- * Pending deliveries must have kitchen items and remain uncollected and unabandoned.
- *
- * `annotators` are the ENABLED modules' floor annotators (boot passes `enabledFloorAnnotators`); each is
- * called once with this read's table ids and the venue clock, and its per-table result is merged onto
- * the rows (SP1: bookings' reserved-on-floor badge). Defaults to none, so a caller that does not care
- * about module annotations (most occupancy tests) omits it and every table's `nextReservation` is `null`.
+ * Read the location's active tables with their occupancy. An open tab takes precedence over a
+ * delivery. A pending delivery has kitchen items and is neither collected nor abandoned.
  */
 export async function listTablesWithState(
   tx: Transaction,
@@ -4694,13 +3339,7 @@ export async function listTablesWithState(
     pending_to_serve: number;
     ready_to_serve: number;
     en_route: number;
-    // KDS order-timing alerts (design §3/§6): one entry per unserved, fired line on the open tab, each
-    // carrying its `queued_at` plus its OWN station's thresholds — the raw material `classifyBand`/
-    // `worstBand` reduce in JS below (never classified in SQL, so server and client share one classifier).
-    //
-    // JSON TEXT, not a parsed array: `json_group_array` returns a string and a raw read reaches no
-    // column mapping, so it is parsed at the row below. The age is no longer computed in SQL —
-    // see {@link minutesSince}.
+    // Classified in JS, never in SQL, so server and client share one classifier.
     tab_unserved_lines: string;
     pending_deliveries: number;
     status_id: string | null;
@@ -4797,9 +3436,7 @@ export async function listTablesWithState(
     order by dt.label
   `);
 
-  // Read ONCE, so every table on this floor plan is aged against one instant — what `now()`, being
-  // transaction time, gave the SQL this replaced. NOT the `now` parameter above, which is the VENUE
-  // clock the module annotators take and can be supplied by a caller.
+  // Not the `now` parameter, which is the VENUE clock the annotators take and a caller may supply.
   const nowMs = Date.now();
   const states = result.rows.map((r) => {
     const hasOpenTab = r.tab_id !== null;
@@ -4809,13 +3446,8 @@ export async function listTablesWithState(
       : pendingDeliveries > 0
         ? "delivery-pending"
         : "free";
-    // KDS order-timing alerts (design §3/§6): classify each unserved line in JS (never in SQL, so this
-    // read-model and the client's `TickingClock` share one classifier), then worst-wins across the open
-    // tab. `worstBand([])` is `"fresh"`, covering a free table or one whose lines are all still fresh.
     const timingBand = worstBand(
       parseUnservedLines(r.tab_unserved_lines).map((line) =>
-        // Still a whole-minute offset reconstructed from the age, the same idiom the two kitchen
-        // boards use — only where the age is COMPUTED moved (see {@link minutesSince}).
         classifyBand(nowMs - minutesSince(line.queuedAt, nowMs) * 60_000, nowMs, {
           warmAfterMinutes: line.warmAfterMinutes,
           overdueAfterMinutes: line.overdueAfterMinutes,
@@ -4839,12 +3471,10 @@ export async function listTablesWithState(
         r.status_id !== null
           ? { id: r.status_id, label: r.status_label!, color: r.status_color! }
           : null,
-      // Unconditionally present, null when unplaced (the smallint/enum columns return null directly).
       posX: r.pos_x,
       posY: r.pos_y,
       shape: r.shape,
       rotation: r.rotation,
-      // Merged from the module annotators below; `null` until one contributes a reservation.
       nextReservation: null as { time: string } | null,
       ...(hasOpenTab
         ? {
@@ -4856,11 +3486,6 @@ export async function listTablesWithState(
     };
   });
 
-  // Reserved-on-floor (§4): fold each ENABLED module's annotator onto the rows to fill `nextReservation`.
-  // Today bookings' `BOOKINGS_FLOOR_ANNOTATIONS` is the one producer — it owns the timezone read, grace
-  // window and the bookings scan; a `reservedTime` (venue-local `HH:MM`, already normalised) overwrites the
-  // row's `null`. `loc` is this read's location; the annotator scopes
-  // its own query to that location.
   if (annotators.length > 0) {
     const tableIds = states.map((s) => s.id);
     const annCfg = { locationId: brandLocationId(loc) };

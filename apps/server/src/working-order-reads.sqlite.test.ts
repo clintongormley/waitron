@@ -23,19 +23,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { TillConfig } from "./till-config.js";
 import { listExpoQueue, listStationQueue, listTablesWithState } from "./working-order.js";
 
-/**
- * The three kitchen/floor read models, RUN against a real migrated venue database.
- *
- * They are here because nothing else in this package reaches them on this engine: every suite that
- * exercises `working-order.ts` through a route dies earlier in its own PostgreSQL-shaped fixture,
- * so the storage swap's changes to these three queries had no test running them at all. Each of the
- * three carried SQL this engine refuses — `now()`, `extract(epoch from ...)`, `::` casts, and in
- * `listTablesWithState` a `LEFT JOIN LATERAL`, `json_agg` and `json_build_object` — and every one of
- * those is a PREPARE-time refusal, so a suite that merely reaches the statement is the whole test.
- *
- * What this pins beyond acceptance: the tab roll-up's counts, which is where replacing the two
- * LATERAL joins with grouped derived tables could have changed the answer rather than the syntax.
- */
+/** The three kitchen/floor read models, run against a real migrated venue database. */
 
 const LOCALE = "es";
 const MINUTE_MS = 60_000;
@@ -68,9 +56,6 @@ beforeAll(async () => {
     .values({ locationId, name: "Cocina", isDefault: true })
     .returning({ id: kitchenStations.id });
 
-  // One open tab: a table seated with it, one unserved line, one fired ticket item queued three
-  // minutes ago — old enough to be past the station's five-minute `warm_after_minutes` default?
-  // No: three minutes is inside it, so the band stays `fresh` and the assertion below says so.
   const orderId = randomUUID();
   await db
     .insert(workingOrders)
@@ -127,7 +112,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       hasOpenTab: true,
       pendingToServe: 1,
       // The item is `ready` and the line unserved, so it counts here and not in `enRoute` (no
-      // `away_at`). These two are the aggregates the LATERAL rewrite could have changed.
+      // `away_at`).
       readyToServe: 1,
       enRoute: 0,
       pendingDeliveries: 0,
@@ -150,8 +135,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       return listExpoQueue(tx, cfg);
     });
     expect(orders).toHaveLength(1);
-    // Opened in this suite's own setup, so the count is 0 — `openedMinutes` moved out of SQL and
-    // is a floored minute count either way.
+    // Opened in this suite's own setup, so the floored minute count is 0.
     expect(orders[0]!.openedMinutes).toBe(0);
     expect(orders[0]!.tableLabel).toBe("Mesa 1");
   });

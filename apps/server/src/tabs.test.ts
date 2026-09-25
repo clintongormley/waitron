@@ -50,8 +50,7 @@ import {
 import "./errors.js";
 
 const LOCALE = "es-ES";
-// The whole manifest (`manifestSets()`), applied in order — the tables here belong to modules (e.g.
-// bookings) that FK into core, so the shared ordered set is the fixture.
+// The whole manifest: the tables here belong to several modules.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -79,12 +78,8 @@ interface Seeded {
 async function setupVenue(): Promise<Seeded> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
-  // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
-  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
-  // engine and a raw insert reaches none of them (all three columns are NOT NULL —
-  // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
-  // a text column, which is what refused the `array[...]` constructor that used to fill it
-  // (`near "['es-ES']": syntax error`).
+  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are
+  // `$defaultFn` generators, which a raw insert does not reach.
   const [location] = await db
     .insert(locations)
     .values({
@@ -94,8 +89,6 @@ async function setupVenue(): Promise<Seeded> {
     })
     .returning({ id: locations.id });
   const locationId = location!.id;
-  // The default kitchen station, where `offerProducts` routes both products, so a round's fire has
-  // somewhere to go.
   await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
   const [till] = await db
     .insert(tills)
@@ -184,10 +177,7 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T> | T): Pro
   });
 }
 
-/** Offer `extraProductId` as an extra of `dishId` through a one-item list, returning the list id a
- *  round line names. `minPicks: 0` leaves the list optional, so the dish still orders on its own.
- *  The list's customer and kitchen names are left to fall back to its staff name: no assertion in
- *  this file reads a list name, only the picked PRODUCT a child line carries. */
+/** `minPicks: 0` leaves the list optional, so the dish still orders on its own. */
 async function attachExtras(
   tx: Transaction,
   cfg: TillConfig,
@@ -213,15 +203,8 @@ async function attachExtras(
   return list.id;
 }
 
-/** A PLACED counter delivery to `tableId`, FIRED to the kitchen (one ticket item), not yet collected —
- *  the KDS-1 successor to the old "delivery with an uncollected order_prep row". Created OPEN (so the line
- *  insert satisfies `require_open_parent`), fired via the real resolver into a `ticket_items` row at the
- *  venue's default station, then transitioned open → placed (the Mode-T counter path: a placed delivery is
- *  in the kitchen awaiting collection). Returns its id so a test can COLLECT it via the legal placed →
- *  settled + `collected_at` transition (`collected_at` is set AS the order settles, mirroring the real
- *  collectOrder Task 6 wires). An instant
- *  handover with NO ticket item leaves no occupancy — the `EXISTS(ticket_items)` branch of
- *  `listTablesWithState`'s pending-deliveries count. */
+/** A placed counter delivery to `tableId`, fired to the kitchen and not yet collected. Created open
+ *  first, because the line insert needs an open parent (`require_open_parent`). */
 async function seedFiredDelivery(
   cfg: TillConfig,
   cafeOffer: string,
@@ -248,7 +231,6 @@ async function seedFiredDelivery(
   return id;
 }
 
-/** The dining table's current tab_id — owner read. */
 async function tabIdOf(tableId: string): Promise<string | null> {
   const { rows } = await db.execute<{ tab_id: string | null }>(
     sql`select tab_id from dining_tables where id = ${tableId}`,
@@ -300,12 +282,10 @@ describe("openTab", () => {
     const { tabId: firstTab } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
-    // Settle the first tab (owner write — fixture setup). tab_id STILL points at it (no
-    // settle-time write, design §2b), but it is now stale.
+    // `tab_id` is left pointing at a settled order.
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${firstTab}`,
     );
-    // A fresh tab is fine — the stale pointer reads free and is overwritten to the new order.
     const { tabId: secondTab } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
@@ -320,7 +300,6 @@ describe("openTab", () => {
       code: "table.not_found",
       params: { tableId: missing },
     });
-    // Deactivate the real table (owner write, fixture setup), then a tab is refused.
     await db.execute(sql`update dining_tables set active = false where id = ${tableId}`);
     await expect(asApp(cfg, (tx) => openTab(tx, cfg, { tableId }))).rejects.toMatchObject({
       code: "table.inactive",
@@ -329,10 +308,9 @@ describe("openTab", () => {
   });
 });
 
-/** Insert a bare OPEN working order that NO table points at (a walk-up) — for the "not a tab" case. */
+/** An open walk-up order that no table points at. */
 async function bareOpenOrder(cfg: TillConfig, id: string): Promise<void> {
-  // Through the table definition: `working_orders.opened_at` is a `$defaultFn` generator on a NOT
-  // NULL column (`packages/db/drizzle/0000_baseline.sql:120`) and a raw insert never reaches it.
+  // Through the table definition: `working_orders.opened_at` is a `$defaultFn` generator.
   await db
     .insert(workingOrders)
     .values({ id, tillId: cfg.tillId, nodeId: cfg.nodeId, orderNumber: 999, status: "open" });
@@ -344,16 +322,13 @@ describe("addTabRound (append-only, no re-price)", () => {
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
-    // Round 2 at the current 1.50.
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
     );
-    // Change the catalogue price AFTER two rounds are locked.
     await asApp(cfg, (tx) =>
       tx.execute(sql`update products set unit_price = 999 where id = ${cafeId}`),
     );
-    // Round 3 prices at the NEW 9.99 — but rounds 1 & 2 are UNTOUCHED (the load-bearing behaviour; a
-    // full-basket replace like updateHeldOrder would re-price ALL to 9.99).
+    // Unlike a full-basket replace such as updateHeldOrder, earlier rounds keep their price.
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
     );
@@ -363,8 +338,7 @@ describe("addTabRound (append-only, no re-price)", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, tabId))
       .orderBy(workingOrderLines.lineNo);
-    // Read straight off the column, which counts whole cents: 150 is the locked 1.50 and 999 the
-    // new 9.99.
+    // The column counts whole cents.
     expect(lines).toEqual([
       { lineNo: 1, gross: 150 },
       { lineNo: 2, gross: 150 },
@@ -373,12 +347,8 @@ describe("addTabRound (append-only, no re-price)", () => {
   });
 
   it("appends a round with extras as parent + child lines, firing ONLY the parent", async () => {
-    // Extras on the tab round-send path: a round line carrying `extras` expands into a parent dish
-    // line plus one child line per pick, and only the PARENT is fired to the kitchen (an extra is
-    // part of its dish, not its own ticket item).
     const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
-    // The café offers the agua as a +0.50 extra. Two DIFFERENT products, so an assertion about which
-    // one a row carries can fail.
+    // Two different products, so an assertion about which one a row carries can fail.
     const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
 
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
@@ -406,11 +376,9 @@ describe("addTabRound (append-only, no re-price)", () => {
     const [parent, child] = lines;
     expect(parent!.productId).toBe(cafeId);
     expect(parent!.parentLineId).toBeNull();
-    // The child IS the picked product, and it hangs off the dish line.
     expect(child!.productId).toBe(aguaId);
     expect(child!.parentLineId).toBe(parent!.id);
 
-    // Exactly ONE ticket item — the parent dish; the child modifier was filtered out of the fire.
     const fired = await db
       .select({ workingOrderLineId: ticketItems.workingOrderLineId })
       .from(ticketItems)
@@ -423,7 +391,6 @@ describe("addTabRound (append-only, no re-price)", () => {
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
-    // Settled tab → not open.
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
@@ -431,14 +398,12 @@ describe("addTabRound (append-only, no re-price)", () => {
       asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }])),
     ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId } });
 
-    // A bare open walk-up (no table points at it) is not a tab.
     const walkUp = randomUUID();
     await bareOpenOrder(cfg, walkUp);
     await expect(
       asApp(cfg, (tx) => addTabRound(tx, cfg, walkUp, [{ menuItemId: cafeOffer, quantity: "1" }])),
     ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: walkUp } });
 
-    // An absent id names nothing.
     const missing = randomUUID();
     await expect(
       asApp(cfg, (tx) => addTabRound(tx, cfg, missing, [{ menuItemId: cafeOffer, quantity: "1" }])),
@@ -464,14 +429,12 @@ describe("addTabRound per-line note (NON-FISCAL, spec §2/§3)", () => {
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", note: "  sin sal  " }]),
     );
 
-    // Draft line carries the validated (trimmed) note.
     const [line] = await db
       .select({ id: workingOrderLines.id, note: workingOrderLines.note })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, tabId));
     expect(line!.note).toBe("sin sal");
 
-    // Fire SNAPSHOTTED it onto the ticket item (like station_id/course_id).
     const [item] = await db
       .select({ note: ticketItems.note })
       .from(ticketItems)
@@ -511,8 +474,7 @@ describe("addTabRound per-line note (NON-FISCAL, spec §2/§3)", () => {
   });
 
   it("rejects a non-string note with a clean 400 screen (management.request_invalid), not a 500", async () => {
-    // A crafted body could send `note: 123` (the wire type `note?: string` is a JSON lie). It must be
-    // type-screened to a structured 400 rather than reaching `.trim()` as a TypeError → an opaque 500.
+    // The wire type says string, but a crafted body can send anything.
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     await expect(
@@ -569,7 +531,6 @@ describe("voidTabLine", () => {
 });
 
 describe("markLineServed / unmarkLineServed", () => {
-  /** served_at per line_no — owner read. NULL until a runner marks the line served. */
   async function servedAtByLine(tabId: string): Promise<Map<number, string | null>> {
     const rows = await db
       .select({ lineNo: workingOrderLines.lineNo, servedAt: workingOrderLines.servedAt })
@@ -591,18 +552,15 @@ describe("markLineServed / unmarkLineServed", () => {
       }),
     );
 
-    // Mark line 1 served — only line 1 gets a timestamp; line 2 stays NULL.
     await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
     let served = await servedAtByLine(tabId);
     expect(served.get(1)).not.toBeNull();
     expect(served.get(2)).toBeNull();
 
-    // Unmark line 1 — cleared back to NULL.
     await asApp(cfg, (tx) => unmarkLineServed(tx, cfg, tabId, 1));
     served = await servedAtByLine(tabId);
     expect(served.get(1)).toBeNull();
 
-    // An absent line_no on the tab → tab.line_not_found, for both verbs.
     await expect(asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 99))).rejects.toMatchObject({
       code: "tab.line_not_found",
       params: { tabId, lineNo: 99 },
@@ -618,10 +576,8 @@ describe("markLineServed / unmarkLineServed", () => {
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
-    // Settled order → not open. assertAnchoredTabOpen's STATUS check refuses it — but strip that
-    // check and the DB
-    // `require_open_parent` trigger still rejects a served write on a non-open parent (a different wrong
-    // shape, but a refusal). So this branch alone does NOT isolate the domain guard; the next test does.
+    // The `require_open_parent` trigger would also refuse this, so this case does not isolate the
+    // status check; the next case isolates the back-pointer check.
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
@@ -636,12 +592,8 @@ describe("markLineServed / unmarkLineServed", () => {
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
-    // Orphan the tab: clear the dining_tables back-pointer while the order stays OPEN and keeps line 1.
-    // No DB trigger fires (the parent is still open) and the UPDATE would match a real row, so
-    // assertAnchoredTabOpen's BACK-POINTER check is the ONLY thing that can refuse this — the isolating
-    // deletion-proof for it. Strip that check and the served write silently succeeds (verified: the
-    // guard-removed run resolves instead of rejecting). The zero-line walk-up used elsewhere cannot
-    // isolate it — a guard-removed UPDATE there matches 0 rows and errors tab.line_not_found regardless.
+    // The order stays open with a real line, so no trigger fires and the update would match a row:
+    // only assertAnchoredTabOpen's back-pointer check can refuse it.
     await db.execute(sql`update dining_tables set tab_id = null where id = ${tableId}`);
     await expect(asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1))).rejects.toMatchObject({
       code: "tab.not_open",
@@ -662,13 +614,10 @@ describe("readTabLines", () => {
         ],
       }),
     );
-    // Serve line 1 — its served_at becomes a timestamp; line 2 stays NULL (the two floor states the
-    // table-order screen renders "Servido" vs "Pendiente de servir").
     await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
 
     const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
     expect(lines).toHaveLength(2);
-    // Quantities and gross prices retain their database scales.
     expect(lines[0]).toMatchObject({
       lineNo: 1,
       productId: cafeId,
@@ -686,10 +635,6 @@ describe("readTabLines", () => {
   });
 
   it("carries each line's course + fired/held state (KDS-2 §5b) for the tab's waiter-fire", async () => {
-    // cafe → Entrantes (earliest course, auto-fires on send); agua → Postres (a later course, HELD until
-    // fired). `addTabRound` fires the round via `fireLines`, which stamps `fired_at` on the earliest
-    // course and leaves the later one null. `readTabLines` LEFT-joins the ticket item so the tab screen
-    // can group its "Fire <course>" actions by held course.
     const { cfg, cafeId, aguaId, tableId, cafeOffer, aguaOffer } = await setupVenue();
     const entrantes = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 }),
@@ -710,24 +655,18 @@ describe("readTabLines", () => {
     const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
     const cafe = lines.find((l) => l.productId === cafeId)!;
     const agua = lines.find((l) => l.productId === aguaId)!;
-    // cafe's Entrantes is the earliest course → auto-fired (fired_at set); agua's Postres is later → held.
+    // The earliest course fires on send; a later one is held.
     expect(cafe.courseId).toBe(entrantes.id);
     expect(cafe.firedAt).not.toBeNull();
     expect(agua.courseId).toBe(postres.id);
     expect(agua.firedAt).toBeNull();
-    // Coursing corrections (C1): both lines already have a ticket item (fireLines inserts one per fired
-    // OR held parent line), so both carry the fresh row's `state`, always "queued" at insert time
-    // (working-order.ts ~1041) — HELD vs FIRED is `firedAt`, not `state`; `state` only advances once the
-    // kitchen screen bumps it (preparing/ready), which this fixture never does.
+    // Held versus fired is `firedAt`: a held line has a ticket item too, still "queued".
     expect(cafe.state).toBe("queued");
     expect(agua.state).toBe("queued");
   });
 
   it("carries state: null for an extra's child line, which has no ticket item of its own", async () => {
-    // A round line with `extras` expands into a parent dish line plus one child line per pick; only
-    // the PARENT is fired to the kitchen (`fireLines` filters children out), so the child never gets
-    // a `ticket_items` row at all — `readTabLines`'s LEFT JOIN then reports `state: null` for it,
-    // distinct from a HELD parent (which has a row, state "queued", firedAt null).
+    // Distinct from a held parent, which has a ticket item in state "queued".
     const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
     const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
 
@@ -745,22 +684,15 @@ describe("readTabLines", () => {
     const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
     expect(lines).toHaveLength(2);
     const parent = lines.find((l) => l.productId === cafeId)!;
-    // The child carries the PICKED product, so it is told apart from the dish by product id.
     const child = lines.find((l) => l.productId === aguaId)!;
-    // Null course → auto-fires (§2b): the parent gets a fresh "queued" ticket item.
     expect(parent.firedAt).not.toBeNull();
     expect(parent.state).toBe("queued");
-    // The extra's child line has no ticket item of its own — null firedAt AND null state.
     expect(child.firedAt).toBeNull();
     expect(child.state).toBeNull();
   });
 
   it("names a child extras line's parent by LINE NUMBER, and leaves the dish's own null", async () => {
-    // The only marker on the tab wire that tells a child extras line from a dish. A child carries the
-    // PICKED product (spec §3.4), so `productId` cannot do it, and the two products here are different
-    // rows so a test reading the wrong one fails. The parent is named by its `lineNo`, the same shape
-    // `TillSaleLine.parentLineNo` uses on the settled-sale wire (`apps/server/src/till-sale.ts`), so a
-    // screen groups children under dishes without a second lookup.
+    // A child carries the picked product, so `productId` cannot tell it from a dish.
     const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
     const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
 
@@ -788,9 +720,6 @@ describe("readTabLines", () => {
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
-    // Change the catalogue price AFTER the line locked its gross at 1.50 (a tab does NOT re-price —
-    // addTabRound/openTab stamp unit_price_gross at add-time). A read that recomputed from the
-    // catalogue would report 9.99 and misreport the locked tab; readTabLines must return the LOCK.
     await asApp(cfg, (tx) =>
       tx.execute(sql`update products set unit_price = 999 where id = ${cafeId}`),
     );
@@ -809,7 +738,6 @@ describe("readTabLines", () => {
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
-    // Settled → not open (owner write, fixture setup).
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
@@ -817,7 +745,6 @@ describe("readTabLines", () => {
       code: "tab.not_open",
       params: { tabId },
     });
-    // An absent id names nothing.
     const missing = randomUUID();
     await expect(asApp(cfg, (tx) => readTabLines(tx, cfg, missing))).rejects.toMatchObject({
       code: "tab.not_open",
@@ -853,7 +780,6 @@ describe("listTablesWithState (occupancy)", () => {
       pendingDeliveries: 0,
     });
 
-    // Settle the tab (tab_id still points at it, now stale); the table frees.
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
@@ -863,8 +789,6 @@ describe("listTablesWithState (occupancy)", () => {
 
   it("shows delivery-pending while a fired delivery is uncollected, and free once collected", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    // A settled counter delivery FIRED to the kitchen (a ticket item), not yet collected — the KDS-1
-    // successor to the old uncollected order_prep row.
     const orderId = await seedFiredDelivery(cfg, cafeOffer, tableId);
 
     const pending = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
@@ -874,12 +798,6 @@ describe("listTablesWithState (occupancy)", () => {
       pendingDeliveries: 1,
     });
 
-    // Collected → the Mode-T collect transition placed → settled sets `working_orders.collected_at` (the
-    // §3e successor to order_prep's `collected` state); no lingering occupancy.
-    // ONE clock reading bound to both columns: PostgreSQL's `now()` returned transaction-start time,
-    // so the two columns this statement writes were equal, and two separate `nowIso()` calls need
-    // not be. Nothing below asserts on either value — the assertion is on `state`/`pendingDeliveries`
-    // — but the fixture still stages what the real collect path writes.
     const settledAt = nowIso();
     await asApp(cfg, (tx) =>
       tx.execute(
@@ -894,9 +812,7 @@ describe("listTablesWithState (occupancy)", () => {
     const { cfg, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId } = await setupVenue();
     const zone = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" }));
     await asApp(cfg, async (tx) => {
-      // Through the table definition: `departments.id` and `.created_at` are `$defaultFn`
-      // generators on NOT NULL columns
-      // (`packages/venue-service/drizzle/0000_baseline.sql:13` and `:20`).
+      // Through the table definition: `departments.id` and `.created_at` are `$defaultFn` generators.
       const [department] = await tx
         .insert(departments)
         .values({
@@ -906,15 +822,8 @@ describe("listTablesWithState (occupancy)", () => {
           defaultServiceMode: "table_tab",
         })
         .returning({ id: departments.id });
-      // Three statements where PostgreSQL took two. `zone_service_policies_default_allowed_fk`
-      // (zone_id, default_menu_id) → zone_menus was DEFERRABLE INITIALLY DEFERRED on PostgreSQL and
-      // sqlite-core has no deferrable option, so it is checked AT THE STATEMENT here — and
-      // `zone_menus.zone_id` points back at the policy row, so neither table can be filled first
-      // with `default_menu_id` already set. The comment above the key in
-      // `packages/venue-service/src/schema/service.ts` records the same order. The FINAL row is the
-      // one this fixture always wrote; only the number of statements changed. Without the split
-      // this statement is refused with `FOREIGN KEY constraint failed`, which is what it did before
-      // the split (run recorded in this task's report).
+      // Insert order: see `zone_service_policies_default_allowed_fk` in
+      // `packages/venue-service/src/schema/service.ts`.
       await tx.execute(sql`
         insert into zone_service_policies
           (location_id, zone_id, department_id, service_mode, default_menu_id)
@@ -927,8 +836,7 @@ describe("listTablesWithState (occupancy)", () => {
         values (${zone.id}, ${menuId})`);
       await tx.execute(sql`
         update zone_service_policies set default_menu_id = ${menuId} where zone_id = ${zone.id}`);
-      // `preparation_routes.id` is a `$defaultFn` generator on a NOT NULL column
-      // (`packages/venue-service/drizzle/0000_baseline.sql:47`).
+      // `preparation_routes.id` is a `$defaultFn` generator.
       await tx.insert(preparationRoutes).values({
         locationId: cfg.locationId,
         categoryId,
@@ -936,7 +844,6 @@ describe("listTablesWithState (occupancy)", () => {
         noPreparation: true,
       });
     });
-    // A SECOND table with no tab — exercises the LEFT-join-reads-0 branch for a free table.
     const freeTable = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "T2" }));
     await asApp(cfg, (tx) => updateTable(tx, cfg, tableId, { zoneId: zone.id }));
 
@@ -950,7 +857,6 @@ describe("listTablesWithState (occupancy)", () => {
       }),
     );
 
-    // Two unserved lines → pendingToServe 2; zoneId carried through; the FREE table reads 0 (LEFT-join).
     let rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(rows.find((t) => t.id === tableId)).toMatchObject({
       zoneId: zone.id,
@@ -961,12 +867,10 @@ describe("listTablesWithState (occupancy)", () => {
       pendingToServe: 0,
     });
 
-    // Serve one → N-1.
     await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
     rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(rows.find((t) => t.id === tableId)!.pendingToServe).toBe(1);
 
-    // Serve the rest → 0.
     await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 2));
     rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(rows.find((t) => t.id === tableId)!.pendingToServe).toBe(0);
@@ -977,25 +881,17 @@ describe("listTablesWithState (occupancy)", () => {
     await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
-    // A fired, uncollected counter delivery to the SAME table — pendingDeliveries counts it, but the open
-    // tab dominates the rolled-up state.
     await seedFiredDelivery(cfg, cafeOffer, tableId);
     const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(rows[0]).toMatchObject({ state: "open-tab", hasOpenTab: true, pendingDeliveries: 1 });
   });
 });
 
-// KDS-2 ring-time course resolution (design §2b). Resolver/CRUD logic — a plain read-then-insert of
-// a nullable column.
 type RoundLine = { menuItemId: string; quantity: string; courseId?: string | null };
-/** A round line for `addTabRoundWith`; `courseId` OPTIONAL — absent = no override (fall to the product
- *  default), present (incl. `null`) = the line-level override the resolver honours. */
+/** A `courseId` that is null or absent falls to the product's default course. */
 function line(menuItemId: string, opts?: { courseId?: string | null }): RoundLine {
   return { menuItemId, quantity: "1", ...opts };
 }
-/** Ring a round, then read each resulting line's resolved `course_id` back (the load-bearing assertion —
- *  a null-only check would prove nothing about the resolver). Runs inside the caller's tx, so it reads its
- *  own writes. */
 async function addTabRoundWith(
   tx: Transaction,
   cfg: TillConfig,
@@ -1017,11 +913,7 @@ function lineCourse(
 
 describe("addTabRound ring-time course resolution (override ?? product default ?? null)", () => {
   it("resolves a line's course: override > product default > null", async () => {
-    // The verbatim task-3 brief test: steak carries a product default (no override → default wins);
-    // bread has no product default, so it resolves to null. NB under `override ?? product.course_id`
-    // the `courseId: null` on bread is indistinguishable from no override — it is the absent default,
-    // not the null override, that makes bread null here. Whether an explicit null should FORCE "no
-    // course" over a product default is deferred to Task 7's picker; this test does not turn on it.
+    // Bread's `courseId: null` is the same as no override: it is null because it has no default.
     const { cfg, cafeId: steak, aguaId: bread, tableId, offerFor } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
     const c = await asApp(cfg, (tx) =>
@@ -1034,8 +926,8 @@ describe("addTabRound ring-time course resolution (override ?? product default ?
         line(offerFor(bread), { courseId: null }),
       ]),
     );
-    expect(lineCourse(o, steak)).toBe(c.id); // product default (no override)
-    expect(lineCourse(o, bread)).toBeNull(); // no product default → null
+    expect(lineCourse(o, steak)).toBe(c.id);
+    expect(lineCourse(o, bread)).toBeNull();
   });
 
   it("a non-null line override WINS over the product's default course", async () => {
@@ -1080,8 +972,7 @@ it("returns a tab line's stored staff names and options answers", async () => {
         labelKitchenName: "Rare kitchen",
       },
     ];
-    // The customer-facing map is planted alongside the staff names and must NOT come back: a tab's
-    // line list is what a waiter reads, so it shows the variant's staff name.
+    // A waiter reads a tab's lines, so a line shows the variant's staff name.
     await tx
       .update(workingOrderLines)
       .set({

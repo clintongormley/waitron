@@ -1,5 +1,5 @@
-// Side-effect only: keeps this host's `table.*` codes (errors.ts) reachable from the file that throws
-// them — the reachability convention `till-config.ts`/`till-sale.ts` follow. See errors.ts.
+// Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
+// its codes.
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
@@ -14,25 +14,12 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { TillConfig } from "./till-config.js";
 
-/**
- * The rendered shape of a table on the FP-2 floor plan, DERIVED from the `floor_table_shape` schema
- * enum rather than hand-re-declared as a string union — so this and the DB stay in lockstep if a
- * member is ever added/removed (the same derive-don't-duplicate shape `till-config.ts`'s `OrderFlow`
- * and `working-order.ts`'s `TicketState` use). `working-order.ts`'s `TableState` imports this for the
- * read side, so the write verb and the read model share one source of truth.
- */
 export type FloorTableShape = (typeof floorTableShape.enumValues)[number];
 
-/** The inclusive canvas-coordinate bound (design §placement: `pos_x`/`pos_y` are 0..1000). */
 const COORD_MAX = 1000;
-/** The inclusive rotation bound in degrees (design §placement: `rotation` is 0..359). */
 const ROTATION_MAX = 359;
 
-/**
- * Refuse a placement number that is not an integer in `[0, max]`, naming the FIELD (never the value —
- * the no-leak discipline `placement.invalid` documents). Shared by `posX`/`posY`/`rotation` so the
- * three field guards read and reject identically.
- */
+/** Names the FIELD, never the value. */
 function requirePlacementInt(value: number, max: number, field: string): void {
   if (!Number.isInteger(value) || value < 0 || value > max) {
     throw new AppError("placement.invalid", { field });
@@ -40,19 +27,10 @@ function requirePlacementInt(value: number, max: number, field: string): void {
 }
 
 /**
- * Refuse a `zoneId` naming no `floor_zones` row, as `zone.not_found`.
- *
- * Asked BEFORE the write rather than read off the refusal afterwards. The engine's foreign-key
- * refusal is the whole message `FOREIGN KEY constraint failed` — no table, no column, no
- * constraint name (`packages/db/src/constraint-target.ts` states this), and `dining_tables`
- * carries a location FK and a status FK beside the zone one, so a refusal cannot be attributed to
- * any of the three.
- *
- * `dining_tables_zone_fk` is still in the schema and is still what makes a dangling `zone_id`
- * impossible; this check only decides what the caller is TOLD. The two can disagree only if the
- * zone is deleted between the select and the write, and they cannot: both run on the caller's
- * transaction, and `packages/store/src/write-queue.ts` admits one write transaction at a time. A
- * second process on the same file is outside that and would get the raw refusal.
+ * Asked BEFORE the write because the engine's foreign-key refusal names no constraint
+ * (`packages/db/src/constraint-target.ts`), and `dining_tables` has other foreign keys beside the
+ * zone one.
+ * `dining_tables_zone_fk` still enforces the reference; this only decides what the caller is told.
  */
 async function requireZone(tx: Transaction, zoneId: string): Promise<void> {
   const [zone] = await tx
@@ -63,22 +41,15 @@ async function requireZone(tx: Transaction, zoneId: string): Promise<void> {
   if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
 }
 
-/** A dining table as the CRUD surface returns it. `createdAt` is an ISO string. The `tab_id` back-pointer
- *  is an INTERNAL link (design §2b), not part of the CRUD surface — occupancy exposes it, not this. */
+/** `createdAt` is an ISO string. */
 export interface DiningTable {
   id: string;
   label: string;
-  /** The `floor_zones` row this table sits in (FP-1), or null. The successor to the former free-text
-   *  `zone` string — a FK (`dining_tables_zone_fk`), not an arbitrary label. */
   zoneId: string | null;
   capacity: number | null;
   active: boolean;
   createdAt: string;
-  /** FP-2 spatial placement on the floor-plan canvas — canvas coordinates, rendered shape, and rotation
-   *  in degrees, or `null` for an unplaced table. Written by {@link setTablePlacement} /
-   *  {@link clearPlacement}. Non-optional `| null` (unconditionally present, `null` when unplaced),
-   *  mirroring `working-order.ts`'s `TableState` placement block so the dashboard editor reads a
-   *  placement field without a presence check and keeps a placed table placed on reload. */
+  /** Placement is `null` for an unplaced table; rotation is in degrees. */
   posX: number | null;
   posY: number | null;
   shape: FloorTableShape | null;
@@ -86,11 +57,8 @@ export interface DiningTable {
 }
 
 /**
- * Create a dining table in the till's venue (its `cfg.locationId`), returning the minted id. Runs on
- * the CALLER's transaction. A duplicate `(location, label)` collides
- * on `dining_tables_location_label_key` (the only unique an INSERT can trip — `id` is fresh) and is
- * surfaced as `table.label_taken` rather than the raw refusal. A `zoneId` naming no `floor_zones`
- * row throws `zone.not_found`, from {@link requireZone} before the insert.
+ * A duplicate `(location, label)` is `table.label_taken`: `dining_tables_location_label_key` is the
+ * only unique an insert with a fresh `id` can trip.
  */
 export async function createTable(
   tx: Transaction,
@@ -117,10 +85,6 @@ export async function createTable(
   }
 }
 
-/**
- * The venue's ACTIVE tables, by `label`. The deployment holds one tenant per database. The
- * location filter narrows to this till's venue.
- */
 export async function listTables(tx: Transaction, cfg: TillConfig): Promise<DiningTable[]> {
   return tx
     .select({
@@ -140,17 +104,9 @@ export async function listTables(tx: Transaction, cfg: TillConfig): Promise<Dini
     .orderBy(diningTables.label);
 }
 
-/**
- * Edit a table's `label`/`zoneId`/`capacity` (any subset). An absent id throws `table.not_found`;
- * a label collision throws `table.label_taken`; a `zoneId` naming no `floor_zones` row throws
- * `zone.not_found`, from {@link requireZone} before the update. Reactivate is `updateTable`-shaped
- * and kept trivial — this task deactivates via {@link deactivateTable}.
- */
 export async function updateTable(
   tx: Transaction,
-  // The deployment holds one tenant per database. Kept for a uniform `(tx, cfg, …)` verb surface;
-  // this update filters by id, so the config is unused here (repo idiom for an interface-mandated
-  // unused param).
+  // Unused; kept for the uniform `(tx, cfg, …)` verb surface.
   _cfg: TillConfig,
   id: string,
   input: { label?: string; zoneId?: string; capacity?: number },
@@ -183,18 +139,14 @@ export async function updateTable(
 }
 
 /**
- * Deactivate a table (`active = false`) — never a hard delete, because the table has order history.
- * An absent id throws `table.not_found`.
+ * Deactivate, never hard-delete, because the table has order history.
  *
- * THIS VERB IS THE WHOLE GUARD, and this note says it once for the deactivate family across
- * `tables.ts`, `kitchen.ts`, `till-api.ts`, `management-api.ts`, `device-api.ts` and `print-api.ts`,
- * which point back here. This engine has no roles and no grants at all, so a
- * `delete from dining_tables` issued by any code in this process would simply run. Nothing below
- * the verb objects.
+ * THIS VERB IS THE WHOLE GUARD, for this and the other deactivate verbs that point here: this
+ * engine has no roles or grants, so a `delete from dining_tables` from any code in this process
+ * would simply run.
  */
 export async function deactivateTable(
   tx: Transaction,
-  // Unused here for the same reason as `updateTable` — kept for the uniform verb surface.
   _cfg: TillConfig,
   id: string,
 ): Promise<void> {
@@ -209,28 +161,8 @@ export async function deactivateTable(
 }
 
 /**
- * The deployment holds one tenant per database. Place a table on the FP-2 spatial floor plan
- * (design §placement): write its zone + canvas coordinates + shape + rotation. Runs on the
- * CALLER's transaction. LOCATION-scoped to `cfg.locationId` (like
- * the sibling read {@link listTables}): a tenant can hold several venues, so both the table and
- * the zone must belong to THIS venue — a caller supplying another location's table or zone UUID
- * is refused, not allowed to reach across venues. Validates IN ORDER, each with its own precise
- * code:
- * 1. the table is ACTIVE and in this LOCATION (an absent, deactivated, or cross-location row →
- *    `table.not_found`, the same "must be active" shape {@link setTableStatus} enforces);
- * 2. the `zoneId` is a LIVE zone of this LOCATION — present, `active`, and `location_id =
- *    cfg.locationId` (else `zone.not_found`; an inactive/absent/foreign/cross-location zone folds
- *    into the one code, matching the spec's "a live zone"). The `dining_tables_zone_fk` {@link
- *    createTable}/{@link updateTable} lean on is (zone) only — it can see neither
- *    `active` nor the location — so this is an explicit read rather than a caught FK violation;
- * 3. `posX`/`posY` integer in `0..1000`, `shape` in the `floor_table_shape` enum, `rotation`
- *    integer in `0..359` — each failure is `placement.invalid` naming THAT field, never the
- *    value.
- *
- * Steps 1–2 are ONE round trip (two scalar subqueries, NULL when no row matches), the shape
- * {@link setTableStatus} uses. Only then does it UPDATE the four placement columns plus
- * `zone_id`, itself re-scoped to (id, location) so a zero-row UPDATE (the table is not this
- * venue's) is `table.not_found` rather than a silent no-op.
+ * Both the table and the zone must be active and in `cfg.locationId`. The zone is checked by an
+ * explicit read because `dining_tables_zone_fk` sees neither `active` nor the location.
  */
 export async function setTablePlacement(
   tx: Transaction,
@@ -238,10 +170,6 @@ export async function setTablePlacement(
   tableId: string,
   p: { zoneId: string; posX: number; posY: number; shape: FloorTableShape; rotation: number },
 ): Promise<void> {
-  // The deployment holds one tenant per database. One round trip: the table's `active` flag and
-  // the target zone's `active` flag, each NULL when no row matches (the `location_id` predicate
-  // narrows each to THIS venue). NULL-or-false distinguishes missing from inactive but both map
-  // to the one code here — a placement needs a live table AND a live zone, both in this location.
   const { rows } = await tx.execute<{
     table_active: boolean | null;
     zone_active: boolean | null;
@@ -275,15 +203,7 @@ export async function setTablePlacement(
   }
 }
 
-/**
- * Remove a table from the floor plan: NULL the four placement columns (`pos_x`/`pos_y`/`shape`/
- * `rotation`). `zone_id` is left AS-IS — it is an FP-1 assignment, not one of the four placement
- * columns, and a table may belong to a zone without being spatially placed. LOCATION-scoped to
- * `cfg.locationId` (like {@link setTablePlacement} and the sibling read {@link listTables}): an
- * absent id or another VENUE's (same tenant, different `location_id`) matches no row and throws
- * `table.not_found`, the by-id shape {@link updateTable}/{@link deactivateTable} use. No `active`
- * check — like those two, `clearPlacement` operates on the row regardless of its `active` flag.
- */
+/** Leaves `zone_id`: a table may belong to a zone without being placed on the canvas. */
 export async function clearPlacement(
   tx: Transaction,
   cfg: TillConfig,
@@ -299,9 +219,6 @@ export async function clearPlacement(
   }
 }
 
-/** A floor-plan zone (FP-1) as the config CRUD surface returns it — the authorable successor to the
- *  former free-text `dining_tables.zone`. `createdAt` is INTERNAL, not part of this surface (the same
- *  choice {@link DiningTable}'s `tab_id` back-pointer makes). */
 export interface FloorZone {
   id: string;
   name: string;
@@ -309,13 +226,7 @@ export interface FloorZone {
   active: boolean;
 }
 
-/**
- * Create a floor-plan zone in the till's venue (its `cfg.locationId`), returning the minted id. Runs on
- * the CALLER's transaction. A duplicate `(location, name)`
- * collides on `floor_zones_name_key` (the only unique an INSERT can trip — `id` is fresh) and is
- * surfaced as `zone.name_taken` rather than the raw refusal — the same shape {@link createTable} maps
- * `table.label_taken` with.
- */
+/** A duplicate `(location, name)` is `zone.name_taken`, from `floor_zones_name_key`. */
 export async function createZone(
   tx: Transaction,
   cfg: TillConfig,
@@ -339,10 +250,6 @@ export async function createZone(
   }
 }
 
-/**
- * The venue's ACTIVE zones, by `display_order`. The deployment holds one tenant per database. The
- * location filter narrows to this till's venue.
- */
 export async function listZones(tx: Transaction, cfg: TillConfig): Promise<FloorZone[]> {
   return tx
     .select({
@@ -356,17 +263,8 @@ export async function listZones(tx: Transaction, cfg: TillConfig): Promise<Floor
     .orderBy(floorZones.displayOrder);
 }
 
-/**
- * Edit a zone's `name`/`displayOrder`/`active` (any subset). An absent id throws
- * `zone.not_found`; a name collision throws `zone.name_taken`. Reactivate is `updateZone({
- * active: true })` — the same `update`-shaped surface {@link updateTable} uses, so this task
- * deactivates via {@link deactivateZone} and never hard-deletes.
- */
 export async function updateZone(
   tx: Transaction,
-  // The deployment holds one tenant per database. Kept for a uniform `(tx, cfg, …)` verb surface;
-  // this update filters by id, so the config is unused here (repo idiom for an interface-mandated
-  // unused param).
   _cfg: TillConfig,
   id: string,
   patch: { name?: string; displayOrder?: number; active?: boolean },
@@ -395,15 +293,8 @@ export async function updateZone(
   }
 }
 
-/** Deactivate a zone (`active = false`) — never a hard delete: a `dining_tables.zone_id` may
- *  reference it, and the verb is the only thing arranging that (`tables.ts`'s `deactivateTable` note). An
- *  absent id throws `zone.not_found`. */
-export async function deactivateZone(
-  tx: Transaction,
-  // Unused here for the same reason as `updateZone` — kept for the uniform verb surface.
-  _cfg: TillConfig,
-  id: string,
-): Promise<void> {
+/** Never a hard delete: a `dining_tables.zone_id` may reference it (see `deactivateTable`). */
+export async function deactivateZone(tx: Transaction, _cfg: TillConfig, id: string): Promise<void> {
   const updated = await tx
     .update(floorZones)
     .set({ active: false })
@@ -414,7 +305,7 @@ export async function deactivateZone(
   }
 }
 
-/** A configured service status as the CRUD surface returns it. `createdAt` is an ISO string. */
+/** `createdAt` is an ISO string. */
 export interface ServiceStatus {
   id: string;
   label: string;
@@ -424,11 +315,7 @@ export interface ServiceStatus {
   createdAt: string;
 }
 
-// A floor-plan swatch is a hex ("#ef4444") or a short token ("amber", "amber-500"): a bounded,
-// charset-restricted string. Validated app-side (design §2a) — the DB stores opaque text. A malformed
-// value is a request-payload fault surfaced as `management.request_invalid` naming the FIELD (never the
-// value — the no-leak discipline errors.ts states), the same shape the layout PUT route uses; the spec
-// enumerates only status.not_found/inactive/label_taken, so no new status.* code is minted (Plan note 3).
+// Validated here only: the database stores the colour as opaque text.
 const STATUS_COLOR_RE = /^[#A-Za-z0-9_-]{1,32}$/;
 function validateStatusColor(color: string): string {
   if (typeof color !== "string" || !STATUS_COLOR_RE.test(color)) {
@@ -437,21 +324,10 @@ function validateStatusColor(color: string): string {
   return color;
 }
 
-/**
- * The `venue.configure` gate the four status config-CRUD verbs share (design §3a): manager/admin only
- * (the #81 venue-config permission — reused, not renamed), run BEFORE any DB write, proven by-deletion
- * in the suite. Extracted so the one gate is stated once across create/list/update/deactivate.
- */
 async function requireConfigure(tx: Transaction, managementSessionId: string): Promise<void> {
   await authorizeManager(tx, { managementSessionId, permission: "venue.configure" });
 }
 
-/**
- * Create a service status in the tenant's configured set. Manager/admin only (`venue.configure`, the
- * #81 venue-config permission — reused, not renamed): the authorize gate runs BEFORE any DB write,
- * proven by-deletion in the suite. A duplicate `(label)` collides on
- * `table_service_statuses_tenant_label_key` and is surfaced as `status.label_taken`.
- */
 export async function createStatus(
   tx: Transaction,
   input: {
@@ -481,9 +357,6 @@ export async function createStatus(
   }
 }
 
-/** A pickable ACTIVE service status for the till's Estado picker (FP-1) — the slim `{ id, label, color }`
- *  the floor-plan picker needs, DISTINCT from the config-CRUD {@link ServiceStatus} (which also carries
- *  `displayOrder`/`active`/`createdAt` for the editor). */
 export interface ServiceStatusOption {
   id: string;
   label: string;
@@ -491,14 +364,8 @@ export interface ServiceStatusOption {
 }
 
 /**
- * The deployment holds one tenant per database. The tenant's ACTIVE service statuses as pickable
- * options for the till's Estado picker (FP-1) — `{ id, label, color }` only, ordered by
- * `display_order` then `label`. Deactivated statuses are EXCLUDED (`active = true`): a status the
- * operator cannot apply (`setTableStatus` rejects `status.inactive`) must not be offered.
- * SESSION-gated at the route — NOT `requireConfigure`, unlike the manager-only {@link
- * listStatuses}: an operator holds a till session, not a management one, so it takes no
- * `managementSessionId`. Takes NO `cfg`: the statuses table carries no location column, so the read
- * is unfiltered, unlike {@link listZones}'s location filter.
+ * Active statuses only, because `setTableStatus` refuses an inactive one. Gated by the till
+ * session at the route, not `venue.configure`: an operator holds no management session.
  */
 export async function listServiceStatuses(tx: Transaction): Promise<ServiceStatusOption[]> {
   return tx
@@ -512,12 +379,7 @@ export async function listServiceStatuses(tx: Transaction): Promise<ServiceStatu
     .orderBy(tableServiceStatuses.displayOrder, tableServiceStatuses.label);
 }
 
-/**
- * The deployment holds one tenant per database. The tenant's WHOLE status set — active AND
- * inactive, ordered by `display_order` then `label` — so the editor can reactivate a deactivated
- * one. Manager/admin only (`venue.configure`), gated here rather than at the route so the verb is
- * safe from any caller. The read is unfiltered.
- */
+/** Inactive statuses included, so the editor can reactivate one. */
 export async function listStatuses(
   tx: Transaction,
   input: { managementSessionId: string },
@@ -536,12 +398,6 @@ export async function listStatuses(
     .orderBy(tableServiceStatuses.displayOrder, tableServiceStatuses.label);
 }
 
-/**
- * Edit a status's `label`/`color`/`displayOrder`/`active` (any subset). Manager/admin only
- * (`venue.configure`). An absent id throws `status.not_found`; a label collision throws
- * `status.label_taken`; a malformed color throws `management.request_invalid`. Reactivation is
- * `updateStatus({ active: true })`.
- */
 export async function updateStatus(
   tx: Transaction,
   input: {
@@ -579,9 +435,7 @@ export async function updateStatus(
   }
 }
 
-/** Deactivate a status (`active = false`) — never a hard delete: a table may reference it, and the
- *  verb is the only thing arranging that (`tables.ts`'s `deactivateTable` note). Manager/admin only.
- *  Absent id → `status.not_found`. */
+/** Never a hard delete: a table may reference it (see `deactivateTable`). */
 export async function deactivateStatus(
   tx: Transaction,
   input: { managementSessionId: string; id: string },
@@ -598,33 +452,17 @@ export async function deactivateStatus(
 }
 
 /**
- * Set (or clear, with `null`) a table's single manual status (design §3b) — an OPERATIONAL verb a
- * logged-in operator uses the way they ring a sale, so it is gated by the operator SESSION at the
- * route (`requireSession`, Task 8), NOT by `venue.configure`. Validates the table is active (an
- * absent or deactivated table → `table.not_found`, design §3b) and, when `statusId` is non-null,
- * that the status is real (`status.not_found`) and `active` (`status.inactive`). Runs on the
- * CALLER's transaction. The status is occupancy-INDEPENDENT: a
- * `free` table may carry one, so this never consults the tab state.
+ * An operational verb, gated by the operator's session at the route rather than `venue.configure`.
+ * The status is independent of occupancy: a free table may carry one.
  */
 export async function setTableStatus(
   tx: Transaction,
-  // The deployment holds one tenant per database. Unused here for the same reason as
-  // `updateTable`/`deactivateTable` — this verb filters by id, so the config is kept only for the
-  // uniform `(tx, cfg, …)` verb surface.
   _cfg: TillConfig,
   tableId: string,
   statusId: string | null,
 ): Promise<void> {
-  // Both existence/active reads are independent, so fold them into ONE round trip via two scalar
-  // subqueries (2 round trips total instead of 3). Each subquery returns the row's `active` flag, or
-  // NULL when no row matches — so a missing row (NULL) stays distinguishable from an inactive one
-  // (false), preserving the three domain errors byte-for-byte: table NULL-or-false → `table.not_found`;
-  // status NULL → `status.not_found`; status false → `status.inactive`. The status subquery is added
-  // only when `statusId` is set — a CLEAR (null) skips the status check entirely, as before.
-  // `number | null`, not `boolean | null`: these are raw-SQL reads, which go around the `flag`
-  // helper's boolean mapping, so the engine hands back 1, 0, or null for a subquery that matched no
-  // row. The three branches below turn on truthiness and on `=== null`, both of which read 0/1 the
-  // same way they read false/true.
+  // Each subquery is NULL when no row matches, so a missing status stays distinct from an inactive
+  // one. `number`, not `boolean`: a raw-SQL read bypasses the `flag` column's boolean mapping.
   const { rows } = await tx.execute<{
     table_active: number | null;
     status_active: number | null;

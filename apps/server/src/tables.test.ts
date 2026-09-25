@@ -54,24 +54,14 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 const LOCALE = "es-ES";
 
 /**
- * An ISO stamp `minutes` before the reading this call takes, for a `tsString` column — what
- * `now() - interval '<n> minutes'` wrote before the engine changed (SQLite has neither function nor
- * interval type).
- *
- * The clock read here is the FIXTURE's, taken a few milliseconds before the read under test takes
- * its own (`listTablesWithState` calls `Date.now()` once per call, `working-order.ts:4720`), so the
- * age the read measures is `minutes` PLUS whatever the suite spent in between. That direction is
- * the safe one for every case below, which sit inside a band rather than on its edge: 12 minutes is
- * between the seeded station's `overdue` 10 and `forgotten` 15, and 16 is past 15 with no upper
- * bound above it. PostgreSQL's `now()` was transaction time and had the same property, one
- * transaction earlier.
+ * The read under test takes its own clock later, so the age it measures is `minutes` plus the
+ * suite's elapsed time. The cases below sit inside a band, not on its edge, so that drift is safe.
  */
 function minutesAgo(minutes: number): string {
   return new Date(Date.now() - minutes * 60_000).toISOString();
 }
 
-// The whole manifest, not [core]: the tables here belong to several modules that FK into core, and
-// `manifestSets()` is that whole ordered set.
+// The whole manifest: the tables here belong to several modules.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -83,15 +73,9 @@ beforeAll(() => {
 
 async function setupVenue(opts: { timeZone?: string } = {}): Promise<TillConfig> {
   await seedTenant(db);
-  // Default the location's time_zone from the schema default (Europe/Madrid) unless a test pins one —
-  // the reserved-on-floor read derives venue-local "today"/"now" from this column (design §2b/§4).
   const timeZone = opts.timeZone ?? DEFAULT_TIME_ZONE;
-  // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
-  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
-  // engine and a raw insert reaches none of them (all three columns are NOT NULL —
-  // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
-  // a text column, which is what refused the `array[...]` constructor that used to fill it
-  // (`near "['es-ES']": syntax error`).
+  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are
+  // `$defaultFn` generators, which a raw insert does not reach.
   const [location] = await db
     .insert(locations)
     .values({
@@ -129,14 +113,11 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T> | T): Pro
 describe("table CRUD", () => {
   it("creates a table WITH a zone and lists it (active, by label)", async () => {
     const cfg = await setupVenue();
-    // A table with a zone now points at a real `floor_zones` row (the FK), not a free-text string.
     const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terraza" }));
     const { id } = await asApp(cfg, (tx) =>
       createTable(tx, cfg, { label: "12", zoneId, capacity: 4 }),
     );
     const tables = await asApp(cfg, (tx) => listTables(tx, cfg));
-    // A freshly-created (unplaced) table carries the four FP-2 placement columns as null — listTables
-    // now PROJECTS them (Task 7b), so the dashboard editor no longer loses a placement on reload.
     expect(tables).toEqual([
       expect.objectContaining({
         id,
@@ -153,9 +134,7 @@ describe("table CRUD", () => {
   });
 
   it("listTables projects the FP-2 placement columns — place a table, then read them back", async () => {
-    // The place-then-read receipt (CLAUDE.md §1): a null-only assertion proves nothing about the
-    // projection, so PLACE the table and read the exact values back through listTables. Sibling at the
-    // "table placement" describe below proves the same for `listTablesWithState` (the till surface).
+    // A null-only assertion cannot show the columns are projected, so place the table first.
     const cfg = await setupVenue();
     const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" }));
     const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "4", capacity: 4 }));
@@ -200,7 +179,6 @@ describe("table CRUD", () => {
     const cfg = await setupVenue();
     const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Barra" }));
     const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "3" }));
-    // All three optional fields supplied, so the patch-builder's label/zoneId/capacity branches all fire.
     await asApp(cfg, (tx) => updateTable(tx, cfg, id, { label: "3A", zoneId, capacity: 6 }));
     const [t] = await asApp(cfg, (tx) => listTables(tx, cfg));
     expect(t).toMatchObject({ id, label: "3A", zoneId, capacity: 6 });
@@ -245,11 +223,7 @@ describe("table CRUD", () => {
 
   it("createTable rethrows a NON-unique DB error raw, not as table.label_taken", async () => {
     const cfg = await setupVenue();
-    // A location id that names no row: the (location_id) FK `dining_tables_location_fk` refuses the
-    // insert — NOT the label unique. So `isUniqueViolation` is false and `createTable` must rethrow
-    // the raw driver error rather than mistranslating any failure into `table.label_taken` (the
-    // false branch of its catch). The engine's message is `FOREIGN KEY constraint failed` and names
-    // neither table nor column, which is why nothing here asks WHICH key refused.
+    // A location id that names no row: the location foreign key refuses, not the label unique.
     const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
     const err = await asApp(cfg, (tx) => createTable(tx, badCfg, { label: "5" })).catch(
       (e: unknown) => e,
@@ -364,11 +338,7 @@ describe("zone CRUD", () => {
 
   it("createZone rethrows a NON-unique DB error raw, not as zone.name_taken", async () => {
     const cfg = await setupVenue();
-    // A location id that names no row: the (location_id) FK `floor_zones_location_fk` refuses the
-    // insert — NOT the name unique. So `isUniqueViolation` is false and `createZone` rethrows the
-    // raw driver error rather than mistranslating it (the false branch of its catch). The same
-    // idiom as the `createTable` control above; it replaced an int4 `display_order` overflow, which
-    // this engine's 64-bit INTEGER no longer refuses.
+    // A location id that names no row: the location foreign key refuses, not the name unique.
     const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
     const err = await asApp(cfg, (tx) => createZone(tx, badCfg, { name: "Big" })).catch(
       (e: unknown) => e,
@@ -397,19 +367,7 @@ describe("zone CRUD", () => {
   });
 });
 
-// ONE LOSS, from the storage swap: the `isZoneFkViolation` crafted-error unit tests are deleted
-// with the function they covered. They pinned that a refusal on `dining_tables_zone_fk` was told
-// apart from the sibling location and status FKs by the TABLE and COLUMN the refusal named. This
-// engine's foreign-key refusal names neither — the whole message is `FOREIGN KEY constraint
-// failed` (`packages/db/src/constraint-target.ts`) — so there is nothing left to tell apart.
-// `zone.not_found` now comes from `tables.ts`'s `requireZone`, an existence check before the
-// write, and the two real-DB cases above are what prove it. What is no longer checked: that a
-// refusal on the location FK or the status FK cannot be mistaken for a zone fault. Those two FKs
-// still refuse, and their refusals are now rethrown raw because nothing inspects them at all.
-
-// FP-2 spatial placement (Task 2). The verb logic is validation plus a by-id UPDATE; the
-// `venue.configure` gate lives on the ROUTE and is proven there.
-// A distinct case proves EACH validation branch: table.not_found, zone.not_found, and one per field.
+// The `venue.configure` gate lives on the route and is tested there.
 describe("table placement", () => {
   it("places a table, reads the placement back via listTablesWithState, then clears the four columns (zoneId kept)", async () => {
     const cfg = await setupVenue();
@@ -434,7 +392,6 @@ describe("table placement", () => {
     const cleared = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
       (t) => t.id === id,
     )!;
-    // The four placement columns are NULL; zoneId (an FP-1 column, not one of the four) is left as-is.
     expect(cleared).toMatchObject({ posX: null, posY: null, shape: null, rotation: null, zoneId });
   });
 
@@ -451,22 +408,18 @@ describe("table placement", () => {
     const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "5" }));
     const ok = { zoneId, posX: 0, posY: 0, shape: "round" as const, rotation: 0 };
 
-    // posX above the range, AND a non-integer — both name posX (the two upper/non-integer branches).
     await expect(
       asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, { ...ok, posX: 2000 })),
     ).rejects.toMatchObject({ code: "placement.invalid", params: { field: "posX" } });
     await expect(
       asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, { ...ok, posX: 1.5 })),
     ).rejects.toMatchObject({ code: "placement.invalid", params: { field: "posX" } });
-    // posY below the range → names posY (the lower branch).
     await expect(
       asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, { ...ok, posY: -1 })),
     ).rejects.toMatchObject({ code: "placement.invalid", params: { field: "posY" } });
-    // shape not a floor_table_shape enum member → names shape.
     await expect(
       asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, { ...ok, shape: "hexagon" as never })),
     ).rejects.toMatchObject({ code: "placement.invalid", params: { field: "shape" } });
-    // rotation above 359 → names rotation.
     await expect(
       asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, { ...ok, rotation: 360 })),
     ).rejects.toMatchObject({ code: "placement.invalid", params: { field: "rotation" } });
@@ -481,7 +434,6 @@ describe("table placement", () => {
       code: "table.not_found",
       params: { tableId: missing },
     });
-    // A deactivated table is not placeable — an ACTIVE table is required (setTableStatus/design §3b shape).
     const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "gone" }));
     await asApp(cfg, (tx) => deactivateTable(tx, cfg, id));
     await expect(asApp(cfg, (tx) => setTablePlacement(tx, cfg, id, p))).rejects.toMatchObject({
@@ -505,8 +457,6 @@ describe("table placement", () => {
         }),
       ),
     ).rejects.toMatchObject({ code: "zone.not_found", params: { zoneId: missingZone } });
-    // A deactivated zone is not "live" → zone.not_found. The zone FK (createTable/updateTable's check)
-    // cannot see `active`, so setTablePlacement checks it explicitly.
     const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Old" }));
     await asApp(cfg, (tx) => deactivateZone(tx, cfg, zoneId));
     await expect(
@@ -526,9 +476,8 @@ describe("table placement", () => {
   });
 });
 
-// KDS-1 §3d ready→floor. Unlike the CRUD describes above, this exercises the full
-// tab→fire→bump→serve path, so the venue also needs products offered in the table's zone and a
-// default kitchen station each product routes to.
+// Products offered in the table's zone, and a kitchen station they route to, for the
+// tab → fire → bump → serve path.
 async function setupTabVenue(): Promise<{
   cfg: TillConfig;
   cafeId: string;
@@ -538,12 +487,8 @@ async function setupTabVenue(): Promise<{
 }> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
-  // Inserted through the table definitions, the change `apps/server/src/testing/fiscal-fixtures.ts`
-  // took: `locations.id`, `tills.id` and `tills.created_at` are `$defaultFn` generators on this
-  // engine and a raw insert reaches none of them (all three columns are NOT NULL —
-  // `packages/db/drizzle/0000_baseline.sql:2` and `:40`), and `invoice_locales` is a JSON array in
-  // a text column, which is what refused the `array[...]` constructor that used to fill it
-  // (`near "['es-ES']": syntax error`).
+  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are
+  // `$defaultFn` generators, which a raw insert does not reach.
   const [location] = await db
     .insert(locations)
     .values({
@@ -596,12 +541,10 @@ async function setupTabVenue(): Promise<{
   return { cfg, cafeId, aguaId, tableId, offers };
 }
 
-// A read-model shape test: the shape is what this pins.
 describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
   it("counts the tab's ready-not-served lines, distinct from pendingToServe", async () => {
     const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
 
-    // Open a tab with two lines and FIRE the round → two ticket items, both queued.
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, {
         tableId,
@@ -626,13 +569,11 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
     );
     await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
 
-    // Queued, nothing served → readyToServe 0; pendingToServe still counts both unserved lines.
     let row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
       (t) => t.id === tableId,
     )!;
     expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 2 });
 
-    // Bump the first line's ticket item queued → preparing → ready.
     const [item] = await asApp(cfg, (tx) =>
       tx
         .select({ id: ticketItems.id })
@@ -642,26 +583,20 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
     await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item!.id, "preparing"));
     await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, item!.id, "ready"));
 
-    // One line ready and still unserved → readyToServe 1; pendingToServe unchanged (ready ≠ served).
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 1, pendingToServe: 2 });
 
-    // Mark that same line served → the ready item drops out of readyToServe; pendingToServe falls to 1.
     await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ readyToServe: 0, pendingToServe: 1 });
   });
 });
 
-// KDS-3 §3c "en camino": the floor's most-advanced hint. `enRoute` counts the tab's lines whose
-// ticket item has been DISPATCHED by the pass (`away_at IS NOT NULL`) but the waiter has not yet
-// acknowledged (`served_at IS NULL`) — the window between the expediter sending a course away and
-// the floor carrying it out. The same read-model shape test as readyToServe above.
+// `enRoute` counts lines the pass has sent away (`away_at` set) that the waiter has not yet served.
 describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
   it("counts away-not-served lines, reports enRoute + readyToServe together, and clears enRoute on serve", async () => {
     const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
 
-    // Open a tab with two lines and FIRE the round → two ticket items, both queued.
     const { tabId } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, {
         tableId,
@@ -686,13 +621,11 @@ describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
     );
     await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
 
-    // Nothing dispatched yet → enRoute 0; the two unserved lines still count in pendingToServe.
     let row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find(
       (t) => t.id === tableId,
     )!;
     expect(row).toMatchObject({ enRoute: 0, readyToServe: 0, pendingToServe: 2 });
 
-    // Bump BOTH lines' ticket items queued → preparing → ready → readyToServe 2, still none away.
     const items = await asApp(cfg, (tx) =>
       tx
         .select({ id: ticketItems.id, lineId: ticketItems.workingOrderLineId })
@@ -706,10 +639,7 @@ describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ enRoute: 0, readyToServe: 2, pendingToServe: 2 });
 
-    // DISPATCH line 1's item — stamp `away_at` (the read-model column `markCourseAway` writes; its
-    // dispatch VERB is exercised in Task 3, this pins the read count). It stays `ready` + unserved, so it
-    // now counts in BOTH enRoute (away, unserved) AND readyToServe (ready, unserved) — a table can report
-    // both, which is exactly what lets the client apply the en-camino > listos precedence.
+    // Away and still ready: a table reports both, so the client can rank en camino above listos.
     const away = items.find((i) => i.lineId === lines[0]!.id)!;
     await asApp(cfg, (tx) =>
       tx.update(ticketItems).set({ awayAt: nowIso() }).where(eq(ticketItems.id, away.id)),
@@ -717,18 +647,13 @@ describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ enRoute: 1, readyToServe: 2, pendingToServe: 2 });
 
-    // The waiter carries out line 1 (`served_at` set) → the away item drops out of enRoute (served) AND
-    // readyToServe; pendingToServe falls to the one still-unserved line. `served_at` is the final ack.
     await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
     expect(row).toMatchObject({ enRoute: 0, readyToServe: 1, pendingToServe: 1 });
   });
 });
 
-// KDS order-timing alerts (design §3/§6) — the floor's flash-red signal: the worst age band
-// across the open tab's UNSERVED lines, classified against each line's OWN station thresholds on
-// the DB clock. The same read-model shape test as readyToServe/enRoute above; the schema suite
-// covers the threshold columns and their CHECK.
+// The worst age band across the open tab's unserved lines, each against its own station's thresholds.
 describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
   it("bands a line by its station thresholds and clears once served (design §3 — ages until it reaches the guest)", async () => {
     const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
@@ -757,8 +682,7 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
     );
     await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
 
-    // Backdate line 1's ticket item past the seeded station's default overdue threshold (10) but under
-    // forgotten (15); line 2 stays fresh.
+    // Between the seeded station's overdue (10) and forgotten (15) thresholds.
     await asApp(cfg, (tx) =>
       tx.execute(sql`update ticket_items set queued_at = ${minutesAgo(12)}
                      where working_order_line_id = ${lines[0]!.id}`),
@@ -769,8 +693,6 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
     )!;
     expect(row.timingBand).toBe("overdue");
 
-    // Serve the overdue line → it drops off the clock (§3); the remaining unserved line (line 2) is
-    // fresh, so the TABLE clears too.
     await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
     row = (await asApp(cfg, (tx) => listTablesWithState(tx, cfg))).find((t) => t.id === tableId)!;
     expect(row.timingBand).toBe("fresh");
@@ -803,7 +725,7 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
     );
     await asApp(cfg, (tx) => fireLines(tx, cfg, tabId, lines));
 
-    // Line 1 past forgotten (15); line 2 left fresh — the table reports the worse of the two.
+    // Past the seeded station's forgotten threshold (15).
     await asApp(cfg, (tx) =>
       tx.execute(sql`update ticket_items set queued_at = ${minutesAgo(16)}
                      where working_order_line_id = ${lines[0]!.id}`),
