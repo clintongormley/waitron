@@ -255,7 +255,14 @@ export async function listMenuVariants(
   menuItemId: string,
   menuId?: string,
 ): Promise<MenuVariant[]> {
-  const productId = await offerProduct(tx, menuItemId, menuId);
+  return menuVariantsOf(tx, menuItemId, await offerProduct(tx, menuItemId, menuId));
+}
+
+async function menuVariantsOf(
+  tx: Transaction,
+  menuItemId: string,
+  productId: string,
+): Promise<MenuVariant[]> {
   const overrides = new Map(
     (
       await tx
@@ -330,7 +337,7 @@ export async function setMenuVariants(
         set: { price: row.price, offered: row.offered },
       });
   }
-  return listMenuVariants(tx, menuItemId);
+  return menuVariantsOf(tx, menuItemId, productId);
 }
 
 /**

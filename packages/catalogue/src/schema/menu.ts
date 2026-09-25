@@ -67,8 +67,7 @@ export const menuDetails = table(
 );
 
 /**
- * What one menu says about a product its structure reaches (`syncMenuOffers`, menu-structure.ts).
- * A blank `gross_price` means the product's own price (`resolveOfferPrice`, `offer-price.ts`).
+ * Kept by `syncMenuOffers` (menu-structure.ts). A blank `gross_price` means the product's own price (`resolveOfferPrice`, `offer-price.ts`).
  */
 export const menuItems = table(
   "menu_items",

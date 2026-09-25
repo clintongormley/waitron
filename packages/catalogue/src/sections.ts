@@ -248,7 +248,7 @@ export async function deleteSection(tx: Transaction, id: string): Promise<void> 
         .children(parent)
         .filter((member) => !(member.ref.kind === "section" && member.ref.sectionId === id)),
     );
-  await onStructureChanged(tx, menus);
+  await onStructureChanged(tx, menus, graph);
 }
 
 /** Appends the member, or puts it at `position` and renumbers the list. */
@@ -276,7 +276,7 @@ export async function addMember(
     ordered.splice(at, 0, added);
     await renumber(tx, ordered);
   }
-  await onStructureChanged(tx, menusContaining(graph, sectionId));
+  await onStructureChanged(tx, menusContaining(graph, sectionId), graph);
   return added;
 }
 
@@ -301,7 +301,7 @@ export async function addProducts(
     await tx
       .insert(sectionMembers)
       .values(batch.map((productId) => ({ sectionId, position: position++, productId })));
-  await onStructureChanged(tx, menusContaining(graph, sectionId));
+  await onStructureChanged(tx, menusContaining(graph, sectionId), graph);
   return { added: adding.length };
 }
 
@@ -318,7 +318,7 @@ export async function removeMember(
     tx,
     graph.children(sectionId).filter((member) => member.id !== memberId),
   );
-  await onStructureChanged(tx, menus);
+  await onStructureChanged(tx, menus, graph);
 }
 
 /** Moves the member to index `to` (past the end means last) and renumbers the whole list. */
@@ -334,7 +334,7 @@ export async function moveMember(
   const ordered = graph.children(sectionId).filter((candidate) => candidate !== member);
   ordered.splice(to, 0, member);
   await renumber(tx, ordered);
-  await onStructureChanged(tx, menusContaining(graph, sectionId));
+  await onStructureChanged(tx, menusContaining(graph, sectionId), graph);
   return ordered.map((held, position) => ({ ...held, position }));
 }
 
@@ -353,7 +353,7 @@ export async function replaceMember(
   await checkRef(tx, graph, sectionId, ref, current);
   await tx.update(sectionMembers).set(refColumns(ref)).where(eq(sectionMembers.id, memberId));
   // A replace changes what the list holds, never which menus reach the list.
-  await onStructureChanged(tx, menusContaining(graph, sectionId));
+  await onStructureChanged(tx, menusContaining(graph, sectionId), graph);
   return { ...current, ref };
 }
 
@@ -422,7 +422,7 @@ export async function duplicateSection(
       .where(eq(sectionMembers.id, replaceIn.memberId));
     menus = menusContaining(graph, replaceIn.sectionId);
   }
-  await onStructureChanged(tx, menus);
+  await onStructureChanged(tx, menus, graph);
   return readSection(tx, copyId);
 }
 

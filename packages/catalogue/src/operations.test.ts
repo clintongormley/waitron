@@ -1597,7 +1597,7 @@ describe("menu offers nest a product's variants", () => {
     ]);
   });
 
-  it("creates an offer with a blank price, and blanks a re-activated offer's old one", async () => {
+  it("creates an offer with a blank price, and switches an offer back on with a blank price", async () => {
     const created = await run(async (tx) => {
       const product = await createProduct(tx, {
         catalogueId: f.menuId,

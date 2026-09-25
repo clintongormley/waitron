@@ -110,8 +110,16 @@ export async function reachableMenuItem(
  * product reached, active or not, and every other row of the menu reset to "starts fresh" — no menu
  * price, switched on, and no variant or extras overrides. Rows are reset rather than deleted
  * because `working_line_contexts.menu_item_id` keeps keys into the table with no delete rule.
+ *
+ * With `before`, the graph a structure write read before writing, only the rows that write took off
+ * the menu are reset: a row the menu stopped reaching earlier was reset then, and every settings
+ * write refuses it since (`reachableMenuItem`).
  */
-export async function syncMenuOffers(tx: Transaction, menuIds: readonly string[]): Promise<void> {
+export async function syncMenuOffers(
+  tx: Transaction,
+  menuIds: readonly string[],
+  before?: SectionGraph,
+): Promise<void> {
   if (menuIds.length === 0) return;
   const roots = await menuRoots(tx, menuIds);
   if (roots.size === 0) return;
@@ -124,14 +132,24 @@ export async function syncMenuOffers(tx: Transaction, menuIds: readonly string[]
         .values(batch.map((productId) => ({ menuId, productId })))
         .onConflictDoNothing({ target: [menuItems.menuId, menuItems.productId] });
     const held = new Set(reached);
-    const stale = (
-      await tx
+    const leaving =
+      before === undefined
+        ? undefined
+        : reachableProducts(before, rootSectionId).filter((productId) => !held.has(productId));
+    if (leaving?.length === 0) continue;
+    const candidates =
+      leaving === undefined
+        ? [eq(menuItems.menuId, menuId)]
+        : batches(leaving).map((batch) =>
+            and(eq(menuItems.menuId, menuId), inArray(menuItems.productId, batch)),
+          );
+    const stale: string[] = [];
+    for (const where of candidates)
+      for (const row of await tx
         .select({ id: menuItems.id, productId: menuItems.productId })
         .from(menuItems)
-        .where(eq(menuItems.menuId, menuId))
-    )
-      .filter((row) => !held.has(row.productId))
-      .map((row) => row.id);
+        .where(where))
+        if (!held.has(row.productId)) stale.push(row.id);
     for (const batch of batches(stale)) {
       await tx
         .delete(menuItemVariantOverrides)

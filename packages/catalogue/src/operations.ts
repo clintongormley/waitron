@@ -320,8 +320,9 @@ export async function addProductToMenu(
     .select({ id: menuItems.id })
     .from(menuItems)
     .where(and(eq(menuItems.menuId, input.menuId), eq(menuItems.productId, input.productId)));
+  // Just placed on the root, so reached: `updateMenuItem`'s reachability check would only repeat it.
   if (input.grossPrice !== undefined)
-    await updateMenuItem(tx, input.menuId, row!.id, { grossPrice: input.grossPrice });
+    await writeMenuItemSettings(tx, row!.id, { grossPrice: input.grossPrice });
   const [written] = await tx
     .select(MENU_ITEM_COLUMNS)
     .from(menuItems)
@@ -338,6 +339,14 @@ export async function updateMenuItem(
 ): Promise<void> {
   if ((await reachableMenuItem(tx, menuItemId, menuId)) === undefined)
     throw new AppError("menu_item.not_found", { menuId, menuItemId });
+  await writeMenuItemSettings(tx, menuItemId, patch);
+}
+
+async function writeMenuItemSettings(
+  tx: Transaction,
+  menuItemId: string,
+  patch: { grossPrice?: string | null; active?: boolean },
+): Promise<void> {
   const { grossPrice, active } = patch;
   const values = {
     ...(active === undefined ? {} : { active }),

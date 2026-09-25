@@ -622,3 +622,52 @@ describe("syncing menus that have no structure", () => {
     expect(await app((tx) => tx.select().from(menuItems))).toEqual([]);
   });
 });
+
+describe("which rows a sync resets", () => {
+  /** A row Lunch does not reach that still holds a price and an override, written past the
+   * settings writes' reachability check. */
+  async function strayRow(f: Fixture): Promise<string> {
+    return app(async (tx) => {
+      const [row] = await tx
+        .insert(menuItems)
+        .values({ menuId: f.lunch, productId: f.lemonade, grossPrice: 250, active: false })
+        .returning({ id: menuItems.id });
+      await tx
+        .insert(menuItemVariantOverrides)
+        .values({ menuItemId: row!.id, productId: f.lemonade, variantId: f.large, price: 300 });
+      return row!.id;
+    });
+  }
+
+  it("resets every row the menu does not reach when no earlier graph is given", async () => {
+    const f = await fixture();
+    const stray = await strayRow(f);
+    await app((tx) => syncMenuOffers(tx, [f.lunch]));
+    const [row] = await app((tx) => tx.select().from(menuItems).where(eq(menuItems.id, stray)));
+    expect(row).toMatchObject({ grossPrice: null, active: true });
+    expect(
+      await app((tx) =>
+        tx
+          .select()
+          .from(menuItemVariantOverrides)
+          .where(eq(menuItemVariantOverrides.menuItemId, stray)),
+      ),
+    ).toEqual([]);
+  });
+
+  it("resets only what a structure write took off the menu", async () => {
+    const f = await fixture();
+    const stray = await strayRow(f);
+    await app((tx) => addMember(tx, f.lunchRoot, product(f.water)));
+    const [row] = await app((tx) => tx.select().from(menuItems).where(eq(menuItems.id, stray)));
+    expect(row).toMatchObject({ grossPrice: 250, active: false });
+    expect(
+      await app((tx) =>
+        tx
+          .select({ price: menuItemVariantOverrides.price })
+          .from(menuItemVariantOverrides)
+          .where(eq(menuItemVariantOverrides.menuItemId, stray)),
+      ),
+    ).toEqual([{ price: 300 }]);
+  });
+});
