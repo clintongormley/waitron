@@ -17,9 +17,8 @@ import type { RejoinDeps, RejoinResult } from "./rejoin.js";
 import { runRejoin } from "./rejoin-command.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
-// The venue directory the wipe empties and the re-migrate rebuilds. Named explicitly here rather
-// than left to the `<stateDir>/venue` default, so a case that asserts on the directory is asserting
-// on a path this file chose.
+// Named explicitly rather than left to the `<stateDir>/venue` default, so a case that asserts on
+// the directory is asserting on a path this file chose.
 const STATE_DIR = mkdtempSync(join(tmpdir(), "rejoin-cmd-"));
 const VENUE_DIR = join(STATE_DIR, "venue");
 
@@ -39,11 +38,8 @@ const base: Record<string, string | undefined> = {
 
 type OpenedVenue = { db: Database; close(): Promise<void> };
 
-// A minimal fake venue handle: `readNodeMembership` asks the catalogue whether `node_membership`
-// exists and only then reads the value. Returning NO rows is the catalogue's answer for a table that
-// is not there, which is this suite's common path — no held document — and it is also why the fake
-// needs no query builder: the value read is never reached. `close` is a spy so the close can be
-// asserted.
+// `readNodeMembership` reads the value only when the catalogue lists `node_membership`, so NO rows
+// means no held document and the fake needs no query builder.
 function fakeVenue(execute?: Database["execute"]): OpenedVenue {
   return {
     db: { execute: execute ?? (vi.fn(async () => ({ rows: [] })) as never) } as unknown as Database,
@@ -184,8 +180,6 @@ describe("waitron-rejoin rejoin", () => {
       );
 
       expect(code).toBe(0);
-      // Both files and both sets of sidecars are gone, each with the marker table written into it
-      // above — which is what `DROP DATABASE` took when there was one database.
       for (const name of [
         "venue.db",
         "venue.db-wal",

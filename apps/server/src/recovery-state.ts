@@ -3,9 +3,7 @@ import { join } from "node:path";
 import { VENUE_HOLDER_KINDS, type VenueHolderKind } from "@waitron/db";
 import { writeFileAtomic } from "./fs-atomic.js";
 
-/** Where a box sits on the escalation, and therefore whether it can still SELL. Only two levels:
- *  a degraded-but-trading mode cannot be built on the tiers that exist (spec §9.1) and belongs to
- *  the recovery spec. */
+/** Where a box sits on the escalation, and therefore whether it can still SELL. */
 export type RecoveryLevel = "normal" | "recovery";
 
 export interface RecoveryState {

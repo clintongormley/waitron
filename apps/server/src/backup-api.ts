@@ -24,19 +24,16 @@ import type { BackupRuntimeStatus, BackupSupervisor } from "./backup-supervisor.
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
 import type { Turns } from "./backup-turns.js";
-// This file THROWS the `backup.*` admin codes, so it imports the host error registry directly, the
-// "every file that throws one of these imports ./errors.js" convention errors.ts states.
 import "./errors.js";
 
-/** Everything the authenticated backup admin routes need. `db` is what the management gate runs on
- * (mirroring `RecoveryBundleDeps`/`DiagnosticsApiDeps`); `supervisor` is the live backup duty the
- * routes read and hot-reload; `stateDir` is where `backup.env` is written. */
+/** Everything the authenticated backup admin routes need. `stateDir` is where `backup.env` is
+ * written. */
 export interface BackupApiDeps {
   supervisor: BackupSupervisor;
   db: Database;
   stateDir: string;
-  /** The recovery key from the box env (files merged under the process env), read afresh each call.
-   * Answers with no archive destination configured, which the supervisor's `current()` cannot. */
+  /** The recovery key from the box env, read afresh each call. Answers with no archive destination
+   * configured, which the supervisor's `current()` cannot. */
   readRecoveryKey: () => Promise<string | undefined>;
   /** Rewrites this node's sealed state row, which carries `backup.env` and is locked with the recovery
    * key. */
@@ -47,14 +44,6 @@ export interface BackupApiDeps {
   turns: Turns;
 }
 
-/**
- * Code→HTTP status for the backup admin surface. The management gate's codes (401/403) match
- * box-status/recovery-bundle exactly. `managed_by_environment`/`not_primary`/`reload_in_progress`/
- * `recovery_key_exists` are 409 CONFLICTS (the box's config-ownership, role state, an in-flight reload,
- * or the key the box already holds forbids the write); the request-shape and config-validation faults
- * are 400. `effective_mismatch` is mapped explicitly at 400 rather than left to the boundary's `?? 400`
- * default — an unmapped code silently 400ing is the footgun errors.ts warns of.
- */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
@@ -62,8 +51,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "backup.managed_by_environment": 409,
   "backup.not_primary": 409,
-  // A write's reload met another reload still running on the supervisor: a conflict to retry, not a
-  // 400 bad request.
   "backup.reload_in_progress": 409,
   "backup.recovery_key_exists": 409,
   "backup.recovery_key_unstorable": 400,
@@ -75,11 +62,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 /**
- * Refuse a recovery key that cannot be stored VERBATIM in the `KEY=value` `backup.env` file. A key
- * carrying a newline/control char or surrounding whitespace, or one that does not survive the env-file
- * round-trip byte-for-byte, would have the box encrypt archives under a DIFFERENT string than the
- * operator recorded — unrecoverable (CLAUDE.md §5). Refused before any write; `reason` never carries
- * the key.
+ * Refuse a recovery key that cannot be stored VERBATIM in `backup.env`: the box would encrypt archives
+ * under a DIFFERENT string than the operator recorded. `reason` never carries the key.
  */
 export function assertStorableKey(key: string): void {
   // `[\r\n\t]` is redundant with `[\x00-\x1f]` (which covers all C0 controls) but is kept explicit —
@@ -88,8 +72,6 @@ export function assertStorableKey(key: string): void {
   if (/[\r\n\t]/.test(key) || /[\x00-\x1f]/.test(key) || key.trim() !== key) {
     throw new AppError("backup.recovery_key_unstorable", { reason: "whitespace_or_control" });
   }
-  // Defensive: the value must survive the env-file round-trip byte-for-byte, or the box would encrypt
-  // under a string the operator never recorded.
   if (parseEnvFile(formatEnvFile({ K: key })).K !== key) {
     throw new AppError("backup.recovery_key_unstorable", { reason: "round_trip" });
   }
@@ -101,9 +83,8 @@ function projectStatus<T extends BackupRuntimeStatus>(s: T): Omit<T, "recoveryKe
   return rest;
 }
 
-/** Validate a `schedule` wire value into a `BackupSchedule`. Structural validation only — the
- * semantic checks (a bad weekday/time, interval-and-wall-clock both set) are `loadBackupConfig`'s job
- * on the dry-validate below, so the route rejects exactly what boot would (`backup.schedule_invalid`). */
+/** Structural validation only — the semantic checks are `loadBackupConfig`'s job on the
+ * dry-validate below, so the route rejects exactly what boot would. */
 function readSchedule(raw: unknown): BackupSchedule {
   if (typeof raw !== "object" || raw === null) {
     throw new AppError("backup.request_invalid", { field: "schedule" });
@@ -141,7 +122,6 @@ function readSchedule(raw: unknown): BackupSchedule {
   throw new AppError("backup.request_invalid", { field: "schedule" });
 }
 
-/** Validate a `retention` wire value into `{ count, days }` — both positive integers. */
 function readRetention(raw: unknown): { count: number; days: number } {
   if (typeof raw !== "object" || raw === null) {
     throw new AppError("backup.request_invalid", { field: "retention" });
@@ -156,10 +136,9 @@ function readRetention(raw: unknown): { count: number; days: number } {
   return { count: r.count, days: r.days };
 }
 
-/** The `apply` body → a `BackupEnvInput` with `keyRotatedAt` unset (apply is the initial enable, not a
- * rotation — `rotate` is what stamps the rotation timestamp). `recoveryKey` is `undefined` when absent,
- * because a box that already holds a key reuses it. The client is never the gate: every field is
- * validated on the server, naming the offending field (never its value — it could be the key). */
+/** `keyRotatedAt` is unset: only `rotate` stamps it. `recoveryKey` is `undefined` when absent, because
+ * a box that already holds a key reuses it. A refusal names the offending field, never its value — it
+ * could be the key. */
 async function readApplyBody(
   c: Context,
 ): Promise<Omit<BackupEnvInput, "recoveryKey"> & { recoveryKey: string | undefined }> {
@@ -212,31 +191,24 @@ function fromCurrent(
 }
 
 /**
- * Mount the authenticated backup admin routes. Every route runs the SAME management gate first
- * (`requireManagementSession` → 401, then `authorizeManager("system.manage")` under
- * `withTransaction` → 403), mirroring `recovery-bundle-api.ts`. The write routes (`apply`,
- * `rotate`) additionally run `guardWritable` — refuse if the ENV owns the config (409) or this node is
- * not the primary (409) — BEFORE any file write, then dry-validate what they will write the way boot
- * would read it (so the route rejects exactly what boot would), write `backup.env`, reload, and assert
- * the EFFECTIVE key equals the expected one (the guard against a partial env override silently
- * orphaning archives): on `apply`, the key the box holds or, holding none long enough to use, the
- * one supplied; on `rotate`, the requested key. `rotate` with no destination loaded does not reload;
- * it re-reads the key from the box env files instead.
+ * The write routes run `guardWritable` BEFORE any file write, dry-validate what they will write the way
+ * boot would read it, write `backup.env`, reload, and assert the EFFECTIVE key equals the expected one
+ * (the guard against a partial env override silently orphaning archives). `rotate` with no
+ * destination loaded does not reload; it compares the key re-read from the box env files instead.
  */
 export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "backup.failed");
 
   const authorize = async (c: Context): Promise<void> => {
-    const sessionId = requireManagementSession(c); // throws 401 if absent/forged
+    const sessionId = requireManagementSession(c);
     await withTransaction(deps.db, async (tx) => {
       await authorizeManager(tx, { managementSessionId: sessionId, permission: "system.manage" });
     });
   };
 
-  // Refuse a write the box would silently override or that would never take effect here. Runs BEFORE
-  // any `writeBackupEnv`, so a refused write leaves `backup.env` untouched (I5).
+  // Refuse a write the box would silently override or that would never take effect here.
   const guardWritable = (): void => {
-    const s = deps.supervisor.current(); // sync snapshot; reads the live singleton role
+    const s = deps.supervisor.current();
     if (s.managedByEnvironment) throw new AppError("backup.managed_by_environment", {});
     if (!s.isPrimary) throw new AppError("backup.not_primary", {});
   };
@@ -266,7 +238,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     };
   };
 
-  // Read the live backup status (async freshness read folded in). Never carries the recovery key.
+  // Never carries the recovery key.
   app.get("/api/backup/status", (c) =>
     run(c, log, async () => {
       await authorize(c);
@@ -274,8 +246,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }),
   );
 
-  // Mint a strong recovery key for the operator to record. Stateless — mints and returns, stores
-  // nothing; `apply` is what persists a chosen key.
   app.post("/api/backup/mint-key", (c) =>
     run(c, log, async () => {
       await authorize(c);
@@ -283,9 +253,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }),
   );
 
-  // Configure + enable backups from the wizard. Guards, validates, writes `backup.env`, hot-reloads,
-  // and confirms the effective key is the one the box holds or, holding none long enough to use, the
-  // one the operator supplied.
   app.post("/api/backup/apply", (c) =>
     run(c, log, async () => {
       await authorize(c);
@@ -315,7 +282,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         const input: BackupEnvInput = { ...body, recoveryKey };
         assertStorableKey(input.recoveryKey);
         // Dry-validate the EXACT record we are about to write, so the route rejects exactly what boot
-        // would (`recovery_key_too_short`/`destinations_invalid`/`schedule_invalid`) BEFORE touching disk.
+        // would BEFORE touching disk.
         loadBackupConfig(backupEnvRecord(input));
         await persist(() => writeBackupEnv(deps.stateDir, input));
         await deps.supervisor.reload();
@@ -332,10 +299,10 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }),
   );
 
-  // Return the EFFECTIVE recovery key (`current().recoveryKey`, what the box encrypts under), or,
-  // with no destination loaded, the key the box env holds, so an operator can re-record it.
-  // Authenticated admin only, served over TLS; the body is never logged (the boundary logs
-  // codes/params, never response bodies — and this route logs nothing).
+  // The EFFECTIVE recovery key (`current().recoveryKey`, what the box encrypts under), or, with no
+  // destination loaded, the key the box env holds, so an operator can re-record it. The body is
+  // never logged: the error boundary logs codes and params, never response bodies, and this route
+  // logs nothing.
   app.get("/api/backup/recovery-key", (c) =>
     run(c, log, async () => {
       await authorize(c);
@@ -344,11 +311,9 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }),
   );
 
-  // Rotate the recovery key: change only the key and stamp `keyRotatedAt`. With an archive destination
-  // it reuses the running destination/schedule/retention, and the supervisor's immediate first tick
-  // after reload takes a fresh dump under the new key. A box holding a key whose supervisor has no
-  // destination LOADED — none configured, or its config dropped after the venue failed to open — has
-  // the key alone rewritten, every other setting kept.
+  // With an archive destination, rotate reuses the running destination/schedule/retention. A box
+  // holding a key whose supervisor has no destination LOADED — none configured, or its config dropped
+  // after the venue failed to open — has only the key and `keyRotatedAt` rewritten in `backup.env`.
   app.post("/api/backup/rotate", (c) =>
     run(c, log, async () => {
       await authorize(c);

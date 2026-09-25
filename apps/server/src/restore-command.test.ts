@@ -66,10 +66,6 @@ describe("waitron-restore restore", () => {
   });
 
   it("takes the default venue directory when WAITRON_VENUE_DIR is EMPTY, never the working directory", async () => {
-    // The fail-closed rule the retired `WAITRON_RESTORE_DATABASE_URL` carried, in the shape a
-    // DIRECTORY needs it. An empty string is a valid-looking value, not an absent one, and
-    // `resolve("")` is wherever the operator happened to be standing when they ran the CLI — so an
-    // empty value must take `<stateDir>/venue` (CLAUDE.md §3's "empty value is a valid value").
     const dir = mkdtempSync(join(tmpdir(), "restore-command-empty-venue-"));
     const artifactPath = await makeArtifact(dir);
     const stateDir = join(dir, "state");
@@ -138,9 +134,6 @@ describe("waitron-restore restore", () => {
       out: (line) => out.push(line),
       restore: async (args) => {
         received = args;
-        // Exercise the `log` seam too: `restoreFromArtifact` reports progress through it
-        // (`restore.db.placed`, `restore.secrets.done`, ...), and this confirms those structured
-        // lines actually reach the operator via `out`, formatted, with no secret riding along.
         args.log("info", "restore.db.placed", { bytes: 123 });
       },
     });
@@ -161,19 +154,13 @@ describe("waitron-restore restore", () => {
       expect.stringContaining("restore.db.placed"),
       `restored ${artifactPath}`,
     ]);
-    // The recovery key never reaches the operator-facing output.
     expect(out.join("\n")).not.toContain(RECOVERY_KEY);
   });
 
   it("uses the real restoreFromArtifact when no orchestrator is injected", async () => {
-    // No `deps.restore` here — exercises the DEFAULT wiring (`restoreFromArtifact` itself), all
-    // the way through decrypt+unpack+the compatibility gate, WITHOUT ever placing a venue file:
-    // the gate throws first (the target is `production` here, `WAITRON_ENV=production`, and this
-    // artifact's manifest says `preproduction`), so no database file is written or touched. `WAITRON_MIGRATIONS_DIR` mirrors `boot.test.ts`'s own from-source fixture — the
-    // gate reads each module's EXPECTED version off real, shipped migration folders
-    // (`expectedSchemaVersion`), and `boot.ts`'s own default migrations root (`<src>/drizzle`)
-    // only exists beside a built bundle, not run from source (see `DEFAULT_MIGRATIONS_ROOT`'s own
-    // doc comment on `boot.ts`).
+    // The environment gate refuses (production target, preproduction manifest) before a venue file
+    // is placed. The gate reads real migration folders, and the default root exists only beside a
+    // built bundle, so they are copied in.
     const dir = mkdtempSync(join(tmpdir(), "restore-command-real-orchestrator-"));
     const migrationsRoot = await mkdtemp(join(tmpdir(), "restore-command-migrations-"));
     const fromSource = migrationOptionsFor(manifestSets(), null);
@@ -241,9 +228,6 @@ describe("waitron-restore restore", () => {
   });
 
   it("returns 1 (never rejects raw) on an invalid WAITRON_ENV", async () => {
-    // `deploymentEnvironment` throws `server.config_invalid` for a WAITRON_ENV that is not
-    // production/preproduction/dev. runRestore must RETURN 1 with a coded message, not throw. The
-    // assertion is `.resolves` — a raw throw here fails the test outright.
     const dir = mkdtempSync(join(tmpdir(), "restore-command-bad-env-"));
     const artifactPath = await makeArtifact(dir);
     const out: string[] = [];
@@ -325,7 +309,6 @@ describe("waitron-restore restore", () => {
   });
 
   it("reports an AppError outside restore/recovery/backup namespaces generically, never rethrown", async () => {
-    // An AppError from some OTHER domain (here: a config error) must not propagate raw either.
     const dir = mkdtempSync(join(tmpdir(), "restore-command-other-apperror-"));
     const artifactPath = await makeArtifact(dir);
     const out: string[] = [];
@@ -347,11 +330,8 @@ describe("waitron-restore restore", () => {
   });
 
   it("never echoes a raw error's .message, whatever the thrower put in it", async () => {
-    // `runRestore`'s independent second layer: a raw error out of the orchestrator's chain is
-    // reported as the fixed string `restore failed`, never by its message. The message below is a
-    // secret-carrying one on purpose — nothing in the chain composes it, which is the point: this
-    // function cannot know what a thrower wrote, so it prints none of it. A box operator's only
-    // window is this terminal, and what reaches it is curated text chosen by code.
+    // Nothing in the chain composes this message: the CLI cannot know what a thrower wrote, so it
+    // prints none of it.
     const dir = mkdtempSync(join(tmpdir(), "restore-command-no-message-leak-"));
     const artifactPath = await makeArtifact(dir);
     const secretish = "S3CR3T-ADMIN-PASSWORD";
@@ -428,7 +408,6 @@ async function kitFile(text = `Waitron recovery kit\n\n${encodeRecoveryKit(KIT)}
   return { dir, kitPath: join(dir, "kit.txt") };
 }
 
-/** Runs `restore --from-bucket` with a fake restore that throws `error`, and returns what it printed. */
 async function refusedWith(error: unknown): Promise<{ code: number; out: string[] }> {
   const { dir, kitPath } = await kitFile();
   const out: string[] = [];
@@ -483,8 +462,7 @@ describe("waitron-restore restore --from-bucket", () => {
     expect(out.join("\n")).not.toContain(KIT.bucket.secretAccessKey);
   });
 
-  // Reconciliation N26: the operator sees whose copy this is, and it goes ahead only when
-  // --confirm-venue names that copy's tax id.
+  // It goes ahead only when --confirm-venue names the copy's tax id exactly.
   it.each([
     [[], false],
     [["--confirm-venue", "B00000000"], false],
@@ -655,7 +633,6 @@ describe("waitron-restore restore --from-bucket", () => {
     expect(out.join("\n")).not.toContain("secret-0123456789");
   });
 
-  // Review Focus 2: a pasted kit cut short is refused by name, and nothing is restored.
   it("refuses a kit cut short by name, and restores nothing", async () => {
     const whole = encodeRecoveryKit(KIT);
     const { dir, kitPath } = await kitFile(whole.slice(0, Math.floor(whole.length / 2)));
@@ -909,7 +886,6 @@ describe("waitron-restore restore <artifact>, the old server's bucket", () => {
 });
 
 describe("waitron-restore restore <artifact> and the old server", () => {
-  // Reconciliation N23: the archive path runs its own old-box check, and the flag reaches it.
   it.each([
     [[], false],
     [["--confirm-old-box-gone"], true],

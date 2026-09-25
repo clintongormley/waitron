@@ -39,12 +39,9 @@ const CONFIRM_VENUE = "--confirm-venue";
 const clock = (): Date => new Date();
 
 /**
- * The `AppError` codes `decryptArtifact`/`unpackArchive` throw — in `restoreFromArtifact`'s
- * decrypt+unpack phase, and when the bucket path unlocks the copy's locked secrets with the kit's
- * recovery key (`unsealNodeState`). Each path collapses them into ONE generic message, for the
- * reason `runRecoveryUnpack` gives for its own decrypt phase (`recovery-unpack-command.ts`): telling
- * an operator (or an attacker who has stolen the artifact and is running this CLI) "wrong recovery
- * key" versus "corrupt artifact" would hand them an oracle to guess the recovery key against.
+ * The codes `decryptArtifact`/`unpackArchive` throw. Each restore path (the archive and the
+ * bucket) collapses them into one message of its own: telling "wrong recovery key" from "corrupt
+ * artifact" would hand someone holding a stolen artifact an oracle to guess the recovery key against.
  */
 const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
   "recovery.passphrase_invalid",
@@ -53,50 +50,11 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * `waitron-restore restore <artifact-path>` — decrypt and restore one BR-3 backup artifact
- * (`restoreFromArtifact`, `restore.ts`): validate → set aside any existing identity → database →
- * migrate → hooks (one transaction) → secrets (identity last). The target database must be FRESH.
- * The recovery key comes from the environment, NEVER argv (`WAITRON_BACKUP_RECOVERY_KEY` — the SAME
- * variable a backup was encrypted under, `backup-config.ts`): an argv element leaks into the process
- * table (`ps`), the same reason `waitron-recovery`/`waitron-break-glass` read theirs from env.
- * `restore --from-bucket <kit-file>` rebuilds from the venue's bucket copy instead
- * (`runBucketRestore` below); its recovery key comes from the kit file, never argv either.
+ * `waitron-restore restore <artifact-path>` restores one backup artifact; `restore --from-bucket
+ * <kit-file>` rebuilds from the venue's bucket copy instead. The recovery key comes from
+ * `WAITRON_BACKUP_RECOVERY_KEY` or the kit file, never argv: an argv element leaks into `ps`.
  *
- * Resolves `stateDir`/`venueDir`/`migrationsRoot`/`environment` exactly as `boot.ts`'s `loadConfig`
- * does — the same `WAITRON_STATE_DIR`/`WAITRON_VENUE_DIR`/`WAITRON_MIGRATIONS_DIR`/`WAITRON_ENV`
- * variables, the same `DEFAULT_STATE_ROOT`/`DEFAULT_MIGRATIONS_ROOT` defaults
- * (imported from `boot.ts` rather than recomputed, so the two can never drift) and the same
- * `isUnset`-gated `resolve()`-only-a-real-value shape. `migrationsRoot` is stored VERBATIM when
- * overridden — no `resolve()` — mirroring `config.ts`'s own `loadConfig` exactly. `stagingDir` is
- * `<stateDir>/restore-staging`, the restore-side twin of `boot.ts`'s `<stateDir>/backup-staging`.
- * `modules` is always `ALL_MODULES`, never an enabled subset — matching how `boot.ts` wires the
- * backup sweep: a restore hook must run for every module whose tables are in the backup, and the
- * descriptor list is that set.
- *
- * `WAITRON_VENUE_DIR` replaces the retired `WAITRON_RESTORE_DATABASE_URL`, and it keeps that
- * variable's fail-closed rule in the shape a DIRECTORY needs it. The connection string failed
- * closed because an empty one is a VALID connection string that silently resolves to this box's own
- * localhost server; the equivalent for a path is that `resolve("")` is the process's working
- * directory, so an empty value with no guard would put `venue.db` wherever the operator happened to
- * be standing. `resolveConfigDir` is the one `config.ts` uses for exactly this — an unset OR empty
- * value takes the default under the state root, and only a real value is `resolve`d.
- *
- * Exported so the flow is unit-tested without touching a venue directory: `deps.restore`
- * is the orchestrator seam (defaults to {@link restoreFromArtifact}), injected by tests as a fake that
- * never touches a database. `bin-restore.ts` is a thin wrapper that supplies
- * `process.argv`/`process.env` and exits on the returned code. Returns a process exit code: 0 on
- * success, 1 on an expected disaster-recovery failure (missing recovery key,
- * an unreadable artifact file, an invalid `WAITRON_ENV`, or ANY error out of the orchestrator — a
- * few codes have their own message (see the catch below), any other `restore.*`/`recovery.*`/
- * `backup.*` code is reported by code, and anything else as `restore failed`), 2 on a usage error.
- *
- * The orchestrator's error is NEVER rethrown and its `.message` is NEVER printed, unlike
- * `runRecoveryUnpack`'s posture of rethrowing an unrecognised error. The reason is no longer a
- * subprocess — there is none — it is that this is a disaster-recovery CLI whose failure path is the
- * one an operator is most likely to see and to paste somewhere, and the messages that reach it come
- * from outside this function: a filesystem error names the path it failed on, and any bug anywhere
- * in `restoreFromArtifact`'s chain throws whatever its thrower wrote. Reporting a CODE carries no
- * value from outside the image; reporting a message carries whatever the thrower put in it.
+ * Returns a process exit code: 0 on success, 1 on a failure, 2 on a usage error.
  */
 export async function runRestore(deps: CommandDeps): Promise<number> {
   const args = parseArgs(deps.argv);
@@ -119,8 +77,6 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
   try {
     artifact = await readFile(artifactPath);
   } catch {
-    // Missing/unreadable artifact file (ENOENT etc) — the operator gave a bad path. Name the path;
-    // no secret is in a filename.
     deps.out(`cannot read artifact file: ${artifactPath}`);
     return 1;
   }
@@ -202,12 +158,12 @@ type RestoreTarget = Pick<
 >;
 
 /**
- * Where the restore goes and under which environment, resolved as the module comment above
- * describes; an exit code, with the reason printed, when `WAITRON_ENV` is invalid.
+ * Where the restore goes and under which environment, from the same variables and defaults as
+ * `loadConfig` (`config.ts`); an exit code, with the reason printed, when `WAITRON_ENV` is invalid.
+ * `modules` is every module, never an enabled subset: a restore hook must run for every module
+ * whose tables are in the backup.
  */
 function resolveRestoreTarget(deps: CommandDeps): RestoreTarget | number {
-  // `deploymentEnvironment` throws `server.config_invalid` for a bad `WAITRON_ENV`; caught here so
-  // runRestore never rejects with a raw error.
   let environment: DeploymentEnvironment;
   try {
     environment = deploymentEnvironment(deps.env);
@@ -216,13 +172,10 @@ function resolveRestoreTarget(deps: CommandDeps): RestoreTarget | number {
     return 1;
   }
   const migrationsDir = deps.env.WAITRON_MIGRATIONS_DIR;
-  // Computed once so `stagingDir` below joins onto the SAME resolved root the returned `stateDir`
-  // carries, exactly the reasoning `config.ts`'s `resolvedStateDir` documents for `logDir`.
   const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
   return {
     stateDir,
-    // The same resolution `config.ts` does for `venueDir`, against the state root that won above:
-    // unset or EMPTY takes `<stateDir>/venue`, never `resolve("")` — which is the working directory.
+    // Unset or EMPTY takes `<stateDir>/venue`, never `resolve("")` — which is the working directory.
     venueDir: resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, "venue")),
     stagingDir: join(stateDir, RESTORE_STAGING_DIR),
     migrationsRoot: isUnset(migrationsDir) ? DEFAULT_MIGRATIONS_ROOT : migrationsDir,
@@ -235,7 +188,6 @@ function resolveRestoreTarget(deps: CommandDeps): RestoreTarget | number {
   };
 }
 
-/** The words for an old server that may still be running, `subject` naming it. */
 function sourceLiveRefusal(err: AppError, subject: string): string | null {
   const goAhead = `if it is switched off for good, re-run with ${CONFIRM_OLD_BOX_GONE}`;
   if (hasCode(err, "restore.stream_source_live")) {
@@ -321,11 +273,7 @@ function bucketRefusal(err: AppError): string | null {
   return said === undefined ? null : failed + said;
 }
 
-/**
- * `restore --from-bucket <kit-file>`: rebuilds this box from the venue's bucket copy
- * ({@link restoreFromStream}). The recovery key and the bucket's secret come from the kit, so the
- * environment holds neither, and no printed line carries the kit's text.
- */
+/** The recovery key and the bucket's secret come from the kit; no printed line carries its text. */
 async function runBucketRestore(
   deps: CommandDeps,
   args: Extract<ParsedArgs, { kitPath: string }>,

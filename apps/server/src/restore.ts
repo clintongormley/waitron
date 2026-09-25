@@ -38,14 +38,8 @@ import { REBUILD_MARKER, type RebuildSource } from "./rebuild-first-start.js";
 import { unpackBundleToDir } from "./state-secrets.js";
 import "./errors.js";
 
-/** Images are database rows; the archive carries the database and protected state files. */
 const MANIFEST_NAME = "manifest.json";
-/**
- * The archive's database entry. Its bytes are now a whole SQLite venue database — the file
- * `packages/store/src/archive.ts`'s `archiveTo` writes with `VACUUM INTO` — not a `pg_dump`
- * archive. The NAME is unchanged so a reader who met it in an older archive, a runbook or the
- * `restore.archive_incomplete` params still finds the same string.
- */
+/** Holds a whole SQLite venue database, the file `archiveTo` (`packages/store/src/archive.ts`) writes. */
 const DB_DUMP_NAME = "db.dump";
 const SECRETS_PREFIX = "secrets/";
 const TRADING_ENV_ENTRY = `${SECRETS_PREFIX}trading.env`;
@@ -57,7 +51,6 @@ const IDENTITY_KEYS = [
   "WAITRON_TILL_LOCATION_ID",
   "WAITRON_TILL_SERIES_ID",
 ] as const;
-/** The venue database file `openVenueStore` opens inside the venue directory. */
 const VENUE_FILE = "venue.db";
 /** The folder inside the state folder that the restore command, the staged restore and boot pass as `stagingDir`. */
 export const RESTORE_STAGING_DIR = "restore-staging";
@@ -68,23 +61,12 @@ export const RESTORE_STAGING_DIR = "restore-staging";
 const VENUE_SIDECARS = ["-wal", "-shm"] as const;
 /** Where the incoming database sits while it is still incoming — same directory, so the rename is atomic. */
 const INCOMING_SUFFIX = ".incoming";
-/** The `mkdtemp` prefix of the folder the old database is moved into, inside the venue directory. */
 const ASIDE_PREFIX = ".venue.db-replaced-";
 /** The venue file holds the whole database, the same protected content the artifact carried. */
 const VENUE_FILE_MODE = 0o600;
 
-/**
- * Everything BR-3's restore orchestrator needs to turn one encrypted backup artifact back into a
- * live box: the ciphertext + its recovery key, the directory this node's database files live in,
- * the state-secrets and scratch staging roots, the module list (for
- * both the compatibility gate's `expectedVersions` and the restore hooks), and this binary's target
- * environment. `migrationsRoot` is `config.migrationsRoot` (or `null` when
- * running from source) — the same value boot feeds `expectedSchemaVersion`.
- *
- * There is no injected database-restore runner any more. The restore is a file placement now
- * ({@link restoreDatabase}), so a fake standing in for it would hide the two failures that
- * placement exists to avoid — see that function's own comment.
- */
+/** `RestoreDeps` has no seam for {@link restoreDatabase}: a fake would hide the two failures named
+ * in its own comment. */
 export interface RestoreDeps extends ValidationDeps {
   /** A managed replacement must receive fresh destination credentials. */
   readonly managedCloud?: { requestId: string; pointId: string };
@@ -93,7 +75,7 @@ export interface RestoreDeps extends ValidationDeps {
   /** Opens the handle the hook transaction runs on. Default {@link openVenueDatabase}'s venue file. */
   readonly openDb?: (directory: string) => Promise<{ db: Database; close(): Promise<void> }>;
   /** Migrates the restored database to this binary's schema before any hook runs. Default
-   * `applyMigrations`; tests stub it. */
+   * `applyMigrations`. */
   readonly migrate?: typeof applyMigrations;
   /** Holds the venue folder for the whole write. Default {@link lockRestoreTarget}. */
   readonly lockVenue?: (directory: string) => Promise<VenueLock>;
@@ -108,14 +90,7 @@ export interface RestoreDeps extends ValidationDeps {
 /** What writing an already validated artifact reads. */
 export type PlacementDeps = Omit<RestoreDeps, "artifact" | "recoveryKey">;
 
-/**
- * What {@link validateArtifact} reads, and nothing else.
- *
- * The write-free pass decides everything from the artifact bytes, the module list and the two
- * destination roots it guards entry names against. It opens no database and writes no log line, so
- * neither the venue directory nor a {@link Logger} belongs in its parameter — a caller that had to
- * supply one would be supplying a value the function cannot use.
- */
+/** What {@link validateArtifact} reads, and nothing else. */
 export interface ValidationDeps {
   readonly artifact: Uint8Array;
   readonly recoveryKey: string;
@@ -124,19 +99,14 @@ export interface ValidationDeps {
   readonly migrationsRoot: string | null;
   readonly modules: readonly WaitronModule[];
   readonly environment: DeploymentEnvironment;
-  /** Skip restoring `secrets/*`, the set-aside of any existing identity, AND the restore hooks: a
-   * returning node keeps its OWN identity, and a hook exists only to make an ASSUMED identity
-   * trade-safe (spec §3.3). */
+  /** Skip restoring `secrets/*`, the set-aside of any existing identity, AND the restore hooks. */
   readonly skipSecrets?: boolean;
 }
 
 /**
- * The classified, validated pieces of one backup artifact — the output of {@link validateArtifact}
- * and the input to {@link writeValidated}. Everything the destructive write phase needs, decided
- * entirely from the in-memory artifact bytes: an artifact that produces one of these has passed the
- * compatibility GATE and the traversal GUARD, plus identity completeness when secrets are restored.
- * R3 rejoin threads it across the wipe (validate BEFORE the irreversible `DROP DATABASE`, write
- * AFTER), so a bad key or a rejected manifest/entry refuses with the database still intact.
+ * The output of {@link validateArtifact} and the input to {@link writeValidated}: an artifact that
+ * produces one has passed the compatibility GATE and the traversal GUARD, plus identity completeness
+ * when secrets are restored.
  */
 export interface ValidatedArtifact {
   readonly manifest: BackupManifest;
@@ -145,25 +115,10 @@ export interface ValidatedArtifact {
 }
 
 /**
- * The whole up-front, WRITE-FREE pass of a restore: decrypt → unpack → classify entries → refuse an
- * incompatible target (the GATE) → refuse an unroutable entry → mkdir the destination roots → validate
- * EVERY entry name against its destination root (the GUARD) → check identity completeness unless
- * `skipSecrets`. Returns the classified pieces; writes NOTHING to the database and no artifact
- * content to disk (it only `mkdir`s the roots the guard must `realpath`). Every rejection
- * here — a wrong recovery key, a cross-environment or
- * schema-too-new manifest, a crafted entry name, an incomplete identity — is decidable from the
- * artifact bytes alone.
- *
- * `stagingDir` is no longer a DESTINATION: the database entry goes straight into the venue
- * directory under a fixed name, and nothing is written under `stagingDir` at all. It stays as the
- * root every non-secret entry name is resolved against, which is what refuses a crafted-but-
- * authentic name before any write — and that resolution needs a real directory to `realpath`.
- *
- * The GATE and the GUARD live HERE, before any write, on purpose: {@link restoreDatabase} replaces
- * the venue file irreversibly and secret writes land permanently on disk, so an incompatible
- * manifest or a single crafted-but-authentic entry name must abort before the first byte is written
- * — never after a half-restore (CLAUDE.md §5). R3 rejoin runs this BEFORE its irreversible wipe so
- * the same rejections refuse the whole operation while the old database is still intact.
+ * The WRITE-FREE pass of a restore: it writes no artifact content to disk, only `mkdir`s the roots
+ * the guard must `realpath`. `stagingDir` receives nothing; it is the root every non-secret entry
+ * name is resolved against. The GATE and the GUARD run here because {@link restoreDatabase} replaces
+ * the venue file irreversibly, so a refusal must come before the first byte is written.
  *
  * Throws `restore.archive_incomplete` for a missing `manifest.json`/`db.dump`,
  * `restore.identity_incomplete` for missing identity keys/file when secrets are restored,
@@ -248,17 +203,8 @@ export async function validateEntries(
 }
 
 /**
- * Identity completeness is checked by `validateArtifact`: refusal leaves the target intact, before
- * any set-aside or database restore. After validation, set any existing identity aside → restore
- * database → migrate → run module hooks and settle series in one transaction → write
- * secrets. Once the old identity is set
- * aside, a failure before the secrets write leaves no bootable identity. `skipSecrets` keeps the
- * target's identity and skips hooks.
- * The GATE and GUARD belong to `validateArtifact`.
- *
- * Nothing is staged outside the venue directory any more, so there is no `finally` cleanup here:
- * {@link restoreDatabase} writes its incoming file beside the target and removes it itself on a
- * failed write.
+ * Once the old identity is set aside, a failure before the secrets write leaves no bootable
+ * identity.
  */
 async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps): Promise<void> {
   const { log } = deps;
@@ -314,7 +260,7 @@ export async function writeValidated(
   try {
     // A restored identity finishes on its first trading start (rebuild-first-start.ts). Written
     // before anything is placed, so a box that trades after this restore finds it; a restore that
-    // throws removes it while the lock is still held (slice-2 plan, Reconciliation N16).
+    // throws removes it while the lock is still held.
     const marker = join(deps.stateDir, REBUILD_MARKER);
     if (!deps.skipSecrets) {
       await writeFileAtomic(
@@ -346,9 +292,6 @@ async function lockRestoreTarget(directory: string): Promise<VenueLock> {
 /**
  * Validate an encrypted backup and its identity completeness, then set aside any existing identity,
  * restore, migrate, run the module hooks in one transaction and write the artifact's secrets last.
- * After set-aside and before
- * the secrets write, the box has no bootable identity. Rejoin calls the two halves separately around its
- * database wipe and uses `skipSecrets` to keep its own identity without running restore hooks.
  */
 export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
   const validated = await validateArtifact(deps);
@@ -367,11 +310,7 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
 }
 
 /**
- * Put the artifact's database where `venue.db` goes. Exposed for R3 composition (restore DB, skip
- * secrets). Returns the path it wrote.
- *
- * The archive entry's bytes ARE a SQLite venue database (`archiveTo`, `packages/store/src/archive.ts`),
- * so the operation is a file placement, and what it amounts to is the ORDER of the calls below.
+ * Put the artifact's database where `venue.db` goes. Returns the path it wrote.
  *
  * **Old intact or new placed, never neither.** Nothing that is database content is deleted until
  * the new file is at `venue.db`: the incoming bytes are written first, the old `venue.db` and its
@@ -385,13 +324,8 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
  * `#startChild` with `fresh`, `packages/stream/src/supervisor.ts`).
  *
  * **The side files go with the main file.** A writer killed mid-service (a box losing power) leaves
- * `venue.db-wal` and `venue.db-shm` behind, and a committed row can live in the `-wal` alone.
- * Measured 2026-09-25 on Node v26.7.0 by moving the main file alone, in the two real-file cases of
- * `restore.test.ts`: after a killed writer the next open answered with the crashed database's row
- * and none of the archive's, and with a connection still open on the old file it answered with
- * that connection's rows, one written after the restore included. Moving the side files as well,
- * both answer with the archive, whether the main file is moved or renamed over; it is moved so
- * that it can be put back.
+ * `venue.db-wal` and `venue.db-shm` behind, and a committed row can live in the `-wal` alone. The
+ * main file is moved rather than renamed over so that it can be put back.
  *
  * A path here holding something other than a regular file is not database content, so it is not
  * moved: a plain removal takes a symlink and refuses a directory. The stale incoming file is
@@ -399,13 +333,10 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
  * `fs-atomic.ts` gives for the same call. `rename` within one directory is atomic on POSIX, so
  * `venue.db` is never observed half-written.
  *
- * **`node.db` IS LEFT ALONE, and that differs from the wipe — deliberately recorded rather than
- * discovered.** `db-wipe.ts` removes both files of the venue directory; this replaces `venue.db`,
- * its two side files and Litestream's folder beside it, and nothing else. The node file is created
- * empty and holds no table (`applyMigrations` sends every set to the venue handle,
- * `packages/migrations/src/apply.ts`), and slice 2 keeps it that way: a node's own rows are keyed
- * by node id inside `venue.db` (slice-2 spec §2). A slice that puts tables into `node.db` has to
- * decide here whether a restore carries, clears or keeps them.
+ * **`node.db` IS LEFT ALONE, unlike `db-wipe.ts`, which removes both files.** It holds no table
+ * (`applyMigrations` sends every set to the venue handle, `packages/migrations/src/apply.ts`). A
+ * change that puts tables into `node.db` has to decide here whether a restore carries, clears or
+ * keeps them.
  */
 export async function restoreDatabase(args: {
   dumpBytes: Uint8Array;
@@ -524,10 +455,10 @@ function errnoOf(error: unknown): string | undefined {
 /**
  * Restore every `secrets/<path>` entry into `stateDir`, prefix stripped, via `unpackBundleToDir` —
  * which re-applies the same traversal guard AND writes each file 0600 atomically, exactly as the
- * recovery-bundle unpack does. Exposed for R3 (which SKIPS this step: a mirror restore keeps its own
- * identity). Secret contents are utf8 text (`RECOVERY_FILES` are `.env`/PEM), matching the utf8 they
- * were read as into the archive. `trading.env` is written last, after every other secret succeeds;
- * failure during that final atomic write can leave a temporary file, but cannot publish a partial identity.
+ * recovery-bundle unpack does. Secret contents are utf8 text (`RECOVERY_FILES` are `.env`/PEM),
+ * matching the utf8 they were read as into the archive. `trading.env` is written last, after every
+ * other secret succeeds; failure during that final atomic write can leave a temporary file, but
+ * cannot publish a partial identity.
  */
 export async function restoreSecrets(args: {
   entries: readonly ArchiveEntry[];
@@ -616,7 +547,7 @@ function wrapHookError(module: string, err: unknown): unknown {
 }
 
 /**
- * Run every module's `backup.restore` hook and settle the node's series, in ONE tenant
+ * Run every module's `backup.restore` hook and settle the node's series, in ONE
  * transaction. Order: check the node exists → hooks in
  * list order → at most one module may return `series` → if one did, retire the node's live series and
  * open the returned ones → on EVERY path read the live standard series id — zero or two live standard

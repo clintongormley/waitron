@@ -1,40 +1,14 @@
-// The backup duty's lifecycle owner. It sits between boot and the scheduled sweep (`backup-sweep.ts`)
-// so the duty can be (re)configured at runtime — enable from off, change destination, rotate the
-// recovery key, or follow a promotion — WITHOUT restarting the process. `reload()` is the single
-// entry point: it stops the running duty, closes its own database handle, RE-READS the config from
-// disk (the box env files, via the injected `buildConfig`), opens the venue again, and — only on a
-// singleton primary with a valid config it could open — starts a fresh sweep whose immediate first
-// tick takes a copy under the new config.
+// The backup duty's lifecycle owner, so the duty can be reconfigured at runtime WITHOUT restarting
+// the process. `reload()` stops the running duty, closes its own database handle, re-reads the config
+// from disk, opens the venue again, and — only on a singleton primary with a valid config it could
+// open — starts a fresh sweep whose immediate first tick takes a copy under the new config.
 //
-// **It opens its OWN handle on the venue directory rather than reusing boot's.** The archive is
-// `VACUUM INTO`, which SQLite refuses on a connection that has a transaction open. Measured on
-// Node v26.7.0, `/tmp/f1-restore-probe/vacuum-concurrency.mjs`, re-run 2026-09-21: a SECOND
-// connection archiving while the first holds an open `begin immediate` with an uncommitted insert
-// SUCCEEDS, and the archive holds the committed row and not the uncommitted one; the control — the
-// SAME connection that holds the transaction — answers `cannot VACUUM from within a transaction`,
-// errcode 1, and writes no file.
+// It opens its OWN handle on the venue directory rather than reusing boot's, because `reload()` closes
+// it, and boot's handle is the one the server answers requests on.
 //
-// **What that no longer establishes, since `packages/store` gained a read connection per file.**
-// It used to say here that on boot's handle every backup firing while a sale was mid-transaction
-// would fail, intermittently, so the separate handle was a correctness requirement. That is no
-// longer what happens: an archive issued from outside a running transaction body is routed to the
-// file's read connection, where `VACUUM INTO` is allowed — measured 2026-09-23 on Node v26.7.0
-// both ways round, the copy is written and holds the committed row alone, while the same statement
-// on the write connection at that moment is still refused errcode 1
-// (`packages/store/src/index.test.ts`, "archives the committed state while another caller's
-// transaction is open"). What the separate handle still buys is the reload above: `reload()` closes
-// it and opens the venue again under the freshly read config, and boot's handle is the one the
-// server answers requests on, so this cannot close that.
-//
-// `current()` is a SYNC, config-derived snapshot (no I/O) for the routes and the status shell.
-// `status()` adds the async freshness read (`readBackupStatus`) and `archiveUnderCurrentKey`, which
-// reports whether THIS supervisor's own running sweep — which runs under the current key — has stored
-// an archive to at least one destination since the last reload. It is an IN-PROCESS signal, set by the
-// sweep's `onStored` callback (which fires ONLY when ≥1 destination stored on a tick), never inferred
-// from a stored object's mtime: a restored/copied OLD-key archive can carry a fresh mtime, so mtime
-// does not prove the key. `onStored` firing only on a real store also keeps the all-destinations-failed
-// tick false (the Task 3 carry: `Promise.allSettled` swallows per-backend faults). The flag resets on
-// each reload and on restart, self-healing on the immediate first dump after boot — sound, unlike mtime.
+// `archiveUnderCurrentKey` is an IN-PROCESS signal, set by the sweep's `onStored` callback (which fires
+// only when ≥1 destination stored on a tick), never inferred from a stored object's mtime: a
+// restored/copied OLD-key archive can carry a fresh mtime, so mtime does not prove the key.
 
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -70,16 +44,15 @@ export interface BackupRuntimeStatus {
 }
 
 export interface BackupSupervisorDeps {
-  /** Re-reads the box-env files from DISK each reload (B2) — closing over a boot-time value would make
-   * hot-reload a no-op. ASYNC because it merges files off disk. */
+  /** Re-reads the box-env files from DISK each reload — closing over a boot-time value would make
+   * hot-reload a no-op. */
   buildConfig: () => Promise<BackupConfig | undefined>;
-  /** True iff any `WAITRON_BACKUP_*` var is non-empty in the RAW base env (provenance, spec §3.2). */
+  /** True iff any `WAITRON_BACKUP_*` var is non-empty in the RAW base env. */
   isManagedByEnvironment: () => boolean;
   /** The live singleton role, read fresh each reload/status so a promotion is followed. */
   readSingletonRole: () => SingletonRole;
-  /** The venue directory holding `venue.db` and `node.db` (`config.venueDir`). The supervisor opens
-   * it ITSELF rather than taking boot's handle — see this file's header for what that buys now and
-   * for the reason it used to give, which no longer holds. */
+  /** `config.venueDir`. The supervisor opens it ITSELF rather than taking boot's handle — see this
+   * file's header. */
   venueDir: string;
   modules: readonly WaitronModule[];
   environment: DeploymentEnvironment;
@@ -91,15 +64,12 @@ export interface BackupSupervisorDeps {
    * sweep so each destination's tick result is recorded; optional so tests that ignore alerts omit it. */
   outcomes?: BackupOutcomeHolder;
   log: Logger;
-  /** DI for tests; defaults to `openVenueDatabase`. A test supplies this to count the handles the
-   * supervisor opens and closes, or to hand back one whose `archiveTo` fails. */
+  /** DI for tests; defaults to `openVenueDatabase`. */
   openVenue?: (directory: string) => Promise<VenueDatabase>;
   now?: () => Date;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }
 
-/** Short hash prefix of a recovery key — an identity for "which key is running" that reveals nothing
- * about the key. `sha256(key)` truncated to 8 hex chars. */
 export function keyFingerprint(key: string): string {
   return createHash("sha256").update(key).digest("hex").slice(0, 8);
 }
@@ -112,10 +82,7 @@ export class BackupSupervisor {
   #config: BackupConfig | undefined;
   #reloading = false;
   /** Set once by `stop()` (shutdown is terminal). `reload()` checks it after every `await` and bails —
-   * tearing down anything it opened — rather than start (or leave) a worker after a stop. Without it a
-   * shutdown `stop()` that interleaves with a route-triggered `reload()` at an await point could tear
-   * down BEFORE `reload()` assigned a fresh worker/handle, leaving a sweep running after `stop()`
-   * returned (Task 4 review carry, step 8b). */
+   * tearing down anything it opened — rather than start (or leave) a worker after a stop. */
   #stopped = false;
   /** True once the running sweep has stored an archive to ≥1 destination since the last reload — the
    * in-process proof that an artifact exists under the CURRENT key. Set by the sweep's `onStored`
@@ -126,22 +93,15 @@ export class BackupSupervisor {
     this.#deps = deps;
   }
 
-  /**
-   * (Re)configure the duty: stop the running sweep, close its database handle, re-read the config
-   * from disk, open the venue again, and — only on a singleton primary whose venue opened — start a
-   * fresh sweep (whose immediate first tick copies under the new config). Latched: a concurrent
-   * reload throws `backup.reload_in_progress` rather than racing two teardowns.
-   */
+  /** Latched: a concurrent reload throws `backup.reload_in_progress` rather than racing two
+   * teardowns. */
   async reload(): Promise<void> {
     if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
     this.#reloading = true;
     try {
-      // A fresh config/key takes effect this reload; the old sweep's stores no longer count, so the
-      // in-process "stored under the current key" proof restarts at false and the new sweep re-earns it.
       this.#storedUnderCurrentKey = false;
       await this.#teardown();
-      // A `stop()` may have run (fully, or concurrently) while we awaited the teardown. Bail before
-      // reading config or starting anything — `#teardown` above already left no worker/handle.
+      // A `stop()` may have run while we awaited the teardown, which already left no worker/handle.
       if (this.#stopped) return;
       const cfg = await this.#deps.buildConfig();
       if (this.#stopped) return; // a stop() landed during buildConfig — don't adopt this config
@@ -155,15 +115,7 @@ export class BackupSupervisor {
       const openVenue = this.#deps.openVenue ?? openVenueDatabase;
       let db: VenueDatabase | undefined;
       try {
-        // A venue directory that will not open — missing, unreadable, or holding a file that is not
-        // a database — leaves backup OFF without aborting boot: a broken backup duty must never
-        // brick the till (§5), and a tick that cannot read the database must never ship a partial
-        // archive as recovery-ready.
-        //
-        // There is no privilege probe here any longer, and the log tag says so. The probe this
-        // replaced asked PostgreSQL's catalogue whether the connecting role could read the fiscal
-        // tables; SQLite has no roles and no catalogue to ask, so that question has no subject.
-        // What survives is the open, and `backup.disabled_open_failed` names exactly that.
+        // A venue directory that will not open leaves backup OFF rather than throwing out of reload.
         db = await openVenue(this.#deps.venueDir);
       } catch (err) {
         if (db !== undefined) await db.close().catch(() => {});
@@ -171,9 +123,8 @@ export class BackupSupervisor {
         this.#config = undefined;
         return;
       }
-      // A `stop()` landed while we opened the venue. Close what we just opened and bail WITHOUT
-      // assigning `#db` or starting a worker — otherwise the sweep we are about to start would
-      // outlive the `stop()` that already returned.
+      // A `stop()` landed while we opened the venue: bail WITHOUT assigning `#db` or starting a
+      // worker, or the sweep would outlive the `stop()` that already returned.
       if (this.#stopped) {
         await db?.close().catch(() => {});
         return;
@@ -190,7 +141,6 @@ export class BackupSupervisor {
         resolvers: {},
         stateDir: this.#deps.stateDir,
         stagingDir: join(this.#deps.stateDir, "backup-staging"),
-        // The copy runs on THIS handle — the one this supervisor opened — never on boot's.
         archive: (outFile) => venue.venue.archiveTo(outFile),
         recoveryKey: cfg.recoveryKey,
         schedule: cfg.schedule,
@@ -200,9 +150,6 @@ export class BackupSupervisor {
         readClock: this.#deps.readClock,
         outcomes: this.#deps.outcomes,
         signal: controller.signal,
-        // Fired when a tick stored to ≥1 destination — the in-process proof an artifact exists under
-        // the current key. A stale callback from a torn-down sweep cannot lie: reload() reset the flag
-        // and this closure is bound to the sweep this reload started.
         onStored: () => {
           this.#storedUnderCurrentKey = true;
         },
@@ -210,8 +157,7 @@ export class BackupSupervisor {
         now: this.#deps.now,
         log: this.#deps.log,
       });
-      // The worker swallows its own per-tick faults; a settle-by-rejection here is unforeseen, logged
-      // the same `codeOf`-classified way boot logs the other singleton workers.
+      // The worker swallows its own per-tick faults; a settle-by-rejection here is unforeseen.
       this.#worker.catch((err) =>
         this.#deps.log("error", "backup.worker_rejected", { errorCode: codeOf(err) }),
       );
@@ -220,7 +166,6 @@ export class BackupSupervisor {
     }
   }
 
-  /** SYNC config-derived snapshot — no I/O. */
   current(): BackupRuntimeStatus {
     const cfg = this.#config;
     const isPrimary = this.#deps.readSingletonRole() === "primary";
@@ -246,9 +191,6 @@ export class BackupSupervisor {
     const now = this.#now();
     const backends = cfg?.destinations.map(buildBackend) ?? [];
     const backupStatus = await readBackupStatus(backends, cfg?.staleAfterMs ?? 0, now);
-    // Truthful: an archive exists under the CURRENT key iff THIS supervisor's running sweep stored one
-    // since the last reload. Read from the in-process flag, never a stored object's mtime — a copied
-    // old-key archive can carry a fresh mtime, and the flag only rises on a real ≥1-destination store.
     return { ...base, backupStatus, archiveUnderCurrentKey: this.#storedUnderCurrentKey };
   }
 
