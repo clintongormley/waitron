@@ -1,8 +1,10 @@
 import { access, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { KeyRing } from "@waitron/credentials";
 import { persistNodeMembershipIfNewer, readNodeMembership, type Database } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
+import { AppError, isAppError } from "@waitron/shared";
 import {
   createS3ObjectStore,
   readPointer,
@@ -32,8 +34,9 @@ export interface RebuildDeps {
   listIpv4: () => string[];
   now: () => Date;
   log: Logger;
-  /** The term the bucket's pointer names, or null when it has none or cannot be read. Asked only
-   * when a marker is found. */
+  /** The term the bucket's pointer names, or null when no bucket is set up or it holds no pointer.
+   * Rejects when a bucket is set up but its pointer cannot be read, which fails the first start.
+   * Asked only when a marker is found. */
   pointerTerm?: () => Promise<number | null>;
 }
 
@@ -55,6 +58,11 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
   }
+  // Started before the re-issue's key generation so the bucket wait overlaps it. The empty catch
+  // only marks the promise handled for when the re-issue throws first; the await below still sees
+  // a rejection.
+  const pointerRead = deps.pointerTerm?.() ?? Promise.resolve(null);
+  pointerRead.catch(() => {});
   await reissueBoxLeaf({
     stateDir: deps.stateDir,
     hostnames: deps.hostnames,
@@ -70,7 +78,7 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
         );
   // Never below the bucket's pointer: the stream supervisor refuses to replace a pointer naming a
   // higher term (plan Reconciliation N23).
-  const pointerTerm = (await deps.pointerTerm?.()) ?? null;
+  const pointerTerm = await pointerRead;
   const next = await mintNextMembershipDocument(
     { db: deps.db, ring: deps.ring },
     {
@@ -138,30 +146,34 @@ export async function deferFirstStart(stateDir: string, log: Logger): Promise<Fi
 /** How long a first start waits for the bucket's pointer. */
 export const POINTER_READ_TIMEOUT_MS = 15_000;
 
+const TIMED_OUT = Symbol("timed out");
+
 /**
  * The term the owner's bucket's pointer names, for {@link RebuildDeps.pointerTerm}. Null when the
- * box has no bucket settings or cannot read them, the bucket cannot be opened or holds no readable
- * pointer, or it does not answer within the bound. A request still waiting at the bound is
- * abandoned, not cancelled: the bucket interface takes no way to stop it.
+ * box has no bucket settings or the bucket holds no pointer. Throws when settings are stored but
+ * the term cannot be learnt — the settings cannot be read, the pointer is malformed, or the bucket
+ * cannot be opened or read or does not answer within the bound — with the failure's own code, or
+ * `restore.pointer_unreadable` for the bound and for a failure that has none. A request still
+ * waiting at the bound is abandoned, not cancelled: the bucket interface takes no way to stop it.
  */
 export async function readBucketPointerTerm(
   db: Database,
   ring: KeyRing,
   options: { openStore?: (bucket: BucketConfig) => ObjectStore; timeoutMs?: number } = {},
 ): Promise<number | null> {
-  let timer: NodeJS.Timeout | undefined;
+  const settings = await readStreamSettings(db, ring);
+  if (settings === null) return null;
+  let read: Awaited<ReturnType<typeof readPointer>> | typeof TIMED_OUT;
   try {
-    const settings = await readStreamSettings(db, ring);
-    if (settings === null) return null;
     const store = (options.openStore ?? createS3ObjectStore)(settings.bucket);
-    const timeout = new Promise<null>((resolve) => {
-      timer = setTimeout(() => resolve(null), options.timeoutMs ?? POINTER_READ_TIMEOUT_MS);
-    });
-    const read = await Promise.race([readPointer(store, settings.venueId), timeout]);
-    return read === null ? null : read.pointer.body.term;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
+    read = await Promise.race([
+      readPointer(store, settings.venueId),
+      delay(options.timeoutMs ?? POINTER_READ_TIMEOUT_MS, TIMED_OUT, { ref: false }),
+    ]);
+  } catch (error) {
+    if (isAppError(error)) throw error;
+    throw new AppError("restore.pointer_unreadable", {});
   }
+  if (read === TIMED_OUT) throw new AppError("restore.pointer_unreadable", {});
+  return read === null ? null : read.pointer.body.term;
 }

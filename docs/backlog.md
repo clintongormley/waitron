@@ -5309,9 +5309,11 @@ venue lock before anything is placed and removed if the restore throws. At the n
 the box signs a new certificate for this machine's addresses with the authority it brought back,
 then the membership document one term above both the restored document and the term the bucket's
 pointer names (read for at most 15 seconds, only when the marker is there), naming this machine's
-advertised origin; the marker goes last (`apps/server/src/rebuild-first-start.ts`). A first start
-that fails lets the box sell but holds the bucket copy, a reload after a settings save included,
-and raises `restore.first_start_failed`. It runs after the returned-box reconciliation with the
+advertised origin; the marker goes last (`apps/server/src/rebuild-first-start.ts`). A box with bucket
+settings whose pointer it cannot read in that time fails the first start rather than sign a term the
+pointer may be above; no settings, or a bucket holding no pointer, signs one above the restored
+document. A first start that fails lets the box sell but holds the bucket copy, a reload after a
+settings save included, and raises `restore.first_start_failed`. It runs after the returned-box reconciliation with the
 cloud peer, not straight after the key ring as the plan placed it: with the call moved there, the
 fenced-restore case in `apps/server/src/boot.reconcile.test.ts` failed with the box accepting sales,
 because the moved term made the peer's fencing document read as not newer. That ordering covers

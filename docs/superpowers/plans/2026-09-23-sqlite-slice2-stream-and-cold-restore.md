@@ -218,6 +218,10 @@ single task is most likely to get wrong.
   database holds bucket settings runs N19's old-box check before staging, and before the command
   line places anything (Task 9b's `refuseIfArchiveSourceLive`; a bucket that gives no answer refuses
   with `restore.stream_source_unchecked { reason: "bucket" }`).
+  _(2026-09-25, Task 9a review: when bucket settings exist but the pointer cannot be read within the
+  bound, `readBucketPointerTerm` throws and the first start FAILS under N24 — marker kept, copy held,
+  alert raised — rather than signing restored + 1 as Step 12's code and doc comment below show.
+  Signing below an unread pointer left the supervisor refusing `pointer_newer_term` for good.)_
 - N24. **(Lead decision.) A failed first start does not keep the box shut.** If `completeRebuild`
   fails, the box opens for sales, does NOT start streaming, raises the ongoing alert
   `restore.first_start_failed` (English and Spanish wording), and retries at the next start (the

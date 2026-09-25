@@ -15,6 +15,7 @@ import {
   writeNodeMembership,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { AppError } from "@waitron/shared";
 import {
   generateNodeKeyPair,
   verifyMembershipDocument,
@@ -266,6 +267,26 @@ describe("completeRebuild", () => {
     ]);
   });
 
+  // Whether a restored box absent from its own document should add itself, and at which standing,
+  // is not settled by the plan or the spec; this pins today's answer so a change is deliberate.
+  it("leaves the node list as it is when this node is absent from the restored document", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    const other: MembershipNode = {
+      nodeId: OTHER_NODE,
+      contactUrl: "https://other.example",
+      standing: "serving-primary",
+    };
+    await writeNodeMembership(
+      suite.db,
+      await mintNextMembershipDocument(
+        { db: suite.db, ring: RING },
+        { heldDocument: null, nodes: [other], signerNodeId: NODE },
+      ),
+    );
+    await completeRebuild(deps(stateDir));
+    expect((await readNodeMembership(suite.db))!.body.nodes).toEqual([other]);
+  });
+
   it("signs term 0 naming this node alone when the restored database holds no document", async () => {
     const stateDir = await rebuiltStateDir("archive");
     await suite.db.execute(sql`delete from node_membership`);
@@ -285,10 +306,54 @@ describe("the term after a restore (plan Reconciliation N23)", () => {
     expect((await readNodeMembership(suite.db))!.body.term).toBe(3);
   });
 
-  it("moves one term up from the restored document when the pointer cannot be read", async () => {
+  it("moves one term up from the restored document when no bucket is set up or it holds no pointer", async () => {
     const stateDir = await rebuiltStateDir("stream");
     await completeRebuild(deps(stateDir, { pointerTerm: async () => null }));
     expect((await readNodeMembership(suite.db))!.body.term).toBe(1);
+  });
+
+  // Signing restored + 1 below a pointer the box could not read would leave the supervisor refusing
+  // the copy for good (`pointer_newer_term`), with nothing to raise the term again.
+  it("fails when a bucket is set up but its pointer cannot be read: the term stays and the marker stays", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    const unreadable = new AppError("restore.pointer_unreadable", {});
+    await expect(
+      completeRebuild(deps(stateDir, { pointerTerm: async () => Promise.reject(unreadable) })),
+    ).rejects.toBe(unreadable);
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
+    await stat(join(stateDir, REBUILD_MARKER));
+  });
+
+  it("asks the bucket before re-issuing the certificate, so the wait overlaps the key generation", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    const leafBefore = await readFile(join(stateDir, "tls", "server.crt"), "utf8");
+    let leafWhenAsked: string | undefined;
+    await completeRebuild(
+      deps(stateDir, {
+        pointerTerm: async () => {
+          leafWhenAsked = await readFile(join(stateDir, "tls", "server.crt"), "utf8");
+          return null;
+        },
+      }),
+    );
+    expect(leafWhenAsked).toBe(leafBefore);
+    expect(await readFile(join(stateDir, "tls", "server.crt"), "utf8")).not.toBe(leafBefore);
+  });
+
+  // The read starts before the re-issue, so a re-issue that throws leaves a read nobody awaits.
+  // Vitest fails the run on an unhandled rejection.
+  it("reports the re-issue's failure, and no unhandled rejection, when the pointer read fails too", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    await rm(join(stateDir, "tls", "ca.key"));
+    await expect(
+      completeRebuild(
+        deps(stateDir, {
+          pointerTerm: () => Promise.reject(new AppError("restore.pointer_unreadable", {})),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    // Gives an unobserved rejection the turn it needs to be reported.
+    await new Promise((resolve) => setImmediate(resolve));
   });
 
   it("does not ask the bucket on an ordinary start", async () => {
@@ -348,7 +413,7 @@ describe("readBucketPointerTerm", () => {
     expect(await readBucketPointerTerm(suite.db, RING, { openStore: () => store })).toBe(2);
   });
 
-  it("answers null when the bucket does not answer in time", async () => {
+  it("refuses, rather than answering null, when the bucket does not answer in time", async () => {
     await storeSettings(SETTINGS);
     const store = createMemoryObjectStore();
     const silent: ObjectStore = {
@@ -358,40 +423,48 @@ describe("readBucketPointerTerm", () => {
       delete: (key) => store.delete(key),
       deleteMany: (keys) => store.deleteMany(keys),
     };
-    expect(
-      await readBucketPointerTerm(suite.db, RING, { openStore: () => silent, timeoutMs: 50 }),
-    ).toBeNull();
+    await expect(
+      readBucketPointerTerm(suite.db, RING, { openStore: () => silent, timeoutMs: 50 }),
+    ).rejects.toMatchObject({ code: "restore.pointer_unreadable" });
   });
 
-  it("answers null when the pointer in the bucket cannot be read", async () => {
+  it("refuses when the pointer in the bucket cannot be read", async () => {
     await storeSettings(SETTINGS);
     const store = createMemoryObjectStore();
     await store.put(pointerKey(LOCATION), new TextEncoder().encode("not json"), undefined);
-    expect(await readBucketPointerTerm(suite.db, RING, { openStore: () => store })).toBeNull();
+    await expect(
+      readBucketPointerTerm(suite.db, RING, { openStore: () => store }),
+    ).rejects.toMatchObject({ code: "backup.stream_pointer_invalid" });
   });
 
-  it("answers null when the stored settings cannot be read", async () => {
+  it("refuses when the stored settings cannot be read, without opening a bucket", async () => {
     await storeSettings(SETTINGS);
     const openStore = vi.fn();
-    expect(await readBucketPointerTerm(suite.db, OTHER_RING, { openStore })).toBeNull();
+    await expect(readBucketPointerTerm(suite.db, OTHER_RING, { openStore })).rejects.toMatchObject({
+      code: "credentials.decrypt_failed",
+    });
     expect(openStore).not.toHaveBeenCalled();
   });
 
-  it("answers null when the bucket cannot be opened", async () => {
+  it("refuses when the bucket cannot be opened", async () => {
     await storeSettings(SETTINGS);
     const openStore = () => {
       throw new Error("no client");
     };
-    expect(await readBucketPointerTerm(suite.db, RING, { openStore })).toBeNull();
+    await expect(readBucketPointerTerm(suite.db, RING, { openStore })).rejects.toMatchObject({
+      code: "restore.pointer_unreadable",
+    });
   });
 
   it("opens the stored bucket itself when no store is given", async () => {
-    // Nothing listens on port 1, so the real client's request fails and the read answers null.
+    // Nothing listens on port 1, so the real client's request fails with the client's own code.
     await storeSettings({
       ...SETTINGS,
       bucket: { ...SETTINGS.bucket, endpoint: "http://127.0.0.1:1" },
     });
-    expect(await readBucketPointerTerm(suite.db, RING, { timeoutMs: 5_000 })).toBeNull();
+    await expect(readBucketPointerTerm(suite.db, RING, { timeoutMs: 5_000 })).rejects.toMatchObject(
+      { code: "backup.stream_request_failed" },
+    );
   });
 });
 
@@ -412,6 +485,45 @@ describe("runFirstStart (plan Reconciliation N24)", () => {
       failed: false,
     });
     await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("fails, keeps the marker and does not stream, when a bucket is set up but does not answer", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, {
+        purpose: STREAM_PURPOSE,
+        value: streamSettingsPayload({
+          venueId: LOCATION,
+          bucket: {
+            region: "eu-west-1",
+            bucket: "venue-copy",
+            prefix: "",
+            accessKeyId: "AKIA",
+            secretAccessKey: "secret-0123456789",
+          },
+        }),
+      }),
+    );
+    try {
+      const silent = { get: () => new Promise<never>(() => {}) } as unknown as ObjectStore;
+      const log = vi.fn();
+      await expect(
+        runFirstStart(
+          deps(stateDir, {
+            log,
+            pointerTerm: () =>
+              readBucketPointerTerm(suite.db, RING, { openStore: () => silent, timeoutMs: 50 }),
+          }),
+        ),
+      ).resolves.toEqual({ mayStream: false, failed: true });
+      expect(log).toHaveBeenCalledWith("error", "restore.first_start_failed", {
+        errorCode: "restore.pointer_unreadable",
+      });
+      await stat(join(stateDir, REBUILD_MARKER));
+      expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
+    } finally {
+      await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: STREAM_PURPOSE }));
+    }
   });
 
   it("streams on an ordinary start", async () => {
