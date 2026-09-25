@@ -427,8 +427,8 @@ describe("the live copy's wiring", () => {
 
       // Starting never waits for a bucket that never answers, and every commit still reaches the
       // supervisor. The fake Litestream puts nothing on the commit path, so this does NOT show a sale
-      // keeping its normal time against the real binary. The 1,000 ms bound only catches a write
-      // that never finishes.
+      // keeping its normal time against the real binary. The 1,000 ms bound catches a write that
+      // takes a second or more; one that never finishes is caught by the test's timeout instead.
       it("returns from start() at once while the bucket never answers, and hears every commit", async () => {
         db.run(sql`create table if not exists stream_probe (n integer)`);
         const store = new SwitchableStore(() => new Date());

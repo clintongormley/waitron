@@ -11,7 +11,7 @@ describe("computeLag", () => {
         pending: [],
         newestUploadAt: null,
         skewMs: 0,
-        now: new Date("2026-09-23T12:00:00Z"),
+        now: at("2026-09-23T12:00:00Z"),
       }),
     ).toEqual({ lagMs: 0, coveredUpTo: null });
   });
@@ -22,7 +22,7 @@ describe("computeLag", () => {
       pending: [[at("2026-09-23T23:00:00Z"), at("2026-09-23T23:00:00Z")]],
       newestUploadAt: new Date("2026-09-23T23:00:05Z"),
       skewMs: 0,
-      now: new Date("2026-09-24T08:00:00Z"),
+      now: at("2026-09-24T08:00:00Z"),
     });
     expect(lagMs).toBe(0);
   });
@@ -32,7 +32,7 @@ describe("computeLag", () => {
       pending: [[at("2026-09-23T12:00:00Z"), at("2026-09-23T12:00:00Z")]],
       newestUploadAt: new Date("2026-09-23T11:59:00Z"),
       skewMs: 0,
-      now: new Date("2026-09-23T12:20:00Z"),
+      now: at("2026-09-23T12:20:00Z"),
     });
     expect(lagMs).toBe(20 * MINUTE);
   });
@@ -42,7 +42,7 @@ describe("computeLag", () => {
       pending: [[at("2026-09-23T12:00:00Z"), at("2026-09-23T12:00:09Z")]],
       newestUploadAt: null,
       skewMs: 0,
-      now: new Date("2026-09-23T12:05:00Z"),
+      now: at("2026-09-23T12:05:00Z"),
     });
     expect(lagMs).toBe(5 * MINUTE);
   });
@@ -55,7 +55,7 @@ describe("computeLag", () => {
       pending: [[at("2026-09-23T12:10:00Z"), at("2026-09-23T12:10:00Z")] as const],
       // Stamped by the bucket at 12:15, which is 12:05 on this box: before the commit.
       newestUploadAt: new Date("2026-09-23T12:15:00Z"),
-      now: new Date("2026-09-23T12:30:00Z"),
+      now: at("2026-09-23T12:30:00Z"),
     };
     expect(computeLag({ ...input, skewMs: 10 * MINUTE }).lagMs).toBe(20 * MINUTE);
     expect(computeLag({ ...input, skewMs: 0 }).lagMs).toBe(0);
@@ -66,7 +66,7 @@ describe("computeLag", () => {
     const input = {
       pending: [[at("2026-09-23T12:10:00Z"), at("2026-09-23T12:10:00Z")] as const],
       newestUploadAt: new Date("2026-09-23T12:00:01Z"),
-      now: new Date("2026-09-23T12:30:00Z"),
+      now: at("2026-09-23T12:30:00Z"),
     };
     expect(computeLag({ ...input, skewMs: -10 * MINUTE }).lagMs).toBe(0);
     expect(computeLag({ ...input, skewMs: 0 }).lagMs).toBe(20 * MINUTE);
@@ -79,7 +79,7 @@ describe("computeLag", () => {
       pending: [[at("2026-09-23T12:00:00Z"), at("2026-09-23T12:00:08Z")]],
       newestUploadAt: new Date("2026-09-23T12:00:04Z"),
       skewMs: 0,
-      now: new Date("2026-09-23T12:10:04Z"),
+      now: at("2026-09-23T12:10:04Z"),
     });
     expect(coveredUpTo).toBe(at("2026-09-23T12:00:04Z"));
     expect(lagMs).toBe(10 * MINUTE - 1);
@@ -90,7 +90,7 @@ describe("computeLag", () => {
       pending: [[at("2026-09-23T12:10:00Z"), at("2026-09-23T12:10:00Z")]],
       newestUploadAt: null,
       skewMs: 0,
-      now: new Date("2026-09-23T12:05:00Z"),
+      now: at("2026-09-23T12:05:00Z"),
     });
     expect(lagMs).toBe(0);
   });
@@ -99,9 +99,9 @@ describe("computeLag", () => {
 describe("CommitLog", () => {
   it("keeps commits closer together than the granularity as one run", () => {
     const log = new CommitLog();
-    log.record(new Date(at("2026-09-23T12:00:00Z")));
-    log.record(new Date(at("2026-09-23T12:00:00Z") + COMMIT_GRANULARITY_MS - 1));
-    log.record(new Date(at("2026-09-23T12:00:00Z") + COMMIT_GRANULARITY_MS));
+    log.record(at("2026-09-23T12:00:00Z"));
+    log.record(at("2026-09-23T12:00:00Z") + COMMIT_GRANULARITY_MS - 1);
+    log.record(at("2026-09-23T12:00:00Z") + COMMIT_GRANULARITY_MS);
     expect(log.pending()).toEqual([
       [at("2026-09-23T12:00:00Z"), at("2026-09-23T12:00:00Z") + COMMIT_GRANULARITY_MS - 1],
       [
@@ -113,16 +113,16 @@ describe("CommitLog", () => {
 
   it("does not move a run's last commit backwards when a commit arrives out of order", () => {
     const log = new CommitLog();
-    log.record(new Date(at("2026-09-23T12:00:05Z")));
-    log.record(new Date(at("2026-09-23T12:00:02Z")));
+    log.record(at("2026-09-23T12:00:05Z"));
+    log.record(at("2026-09-23T12:00:02Z"));
     expect(log.pending()).toEqual([[at("2026-09-23T12:00:05Z"), at("2026-09-23T12:00:05Z")]]);
   });
 
   it("forgets what the bucket covers, and trims a run it covers part of", () => {
     const log = new CommitLog();
-    log.record(new Date(at("2026-09-23T12:00:00Z")));
-    log.record(new Date(at("2026-09-23T12:00:08Z")));
-    log.record(new Date(at("2026-09-23T12:01:00Z")));
+    log.record(at("2026-09-23T12:00:00Z"));
+    log.record(at("2026-09-23T12:00:08Z"));
+    log.record(at("2026-09-23T12:01:00Z"));
     log.settle(at("2026-09-23T12:00:04Z"));
     expect(log.pending()).toEqual([
       [at("2026-09-23T12:00:04Z") + 1, at("2026-09-23T12:00:08Z")],
@@ -134,9 +134,25 @@ describe("CommitLog", () => {
     expect(log.pending()).toEqual([]);
   });
 
+  // A box offline for a month, committing all day, then back: the whole backlog is settled on the
+  // first good read, on the thread sales run on.
+  it("settles a month of runs at once without stalling", () => {
+    const log = new CommitLog();
+    const start = at("2026-09-01T00:00:00Z");
+    const runs = (30 * 24 * 60 * 60_000) / COMMIT_GRANULARITY_MS;
+    for (let i = 0; i < runs; i += 1) log.record(start + i * COMMIT_GRANULARITY_MS);
+    expect(log.pending()).toHaveLength(runs);
+    const started = performance.now();
+    log.settle(start + (runs - 2) * COMMIT_GRANULARITY_MS);
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(log.pending()).toEqual([
+      [start + (runs - 1) * COMMIT_GRANULARITY_MS, start + (runs - 1) * COMMIT_GRANULARITY_MS],
+    ]);
+  });
+
   it("keeps everything when the bucket covers nothing yet", () => {
     const log = new CommitLog();
-    log.record(new Date(at("2026-09-23T12:00:00Z")));
+    log.record(at("2026-09-23T12:00:00Z"));
     log.settle(null);
     expect(log.pending()).toEqual([[at("2026-09-23T12:00:00Z"), at("2026-09-23T12:00:00Z")]]);
   });

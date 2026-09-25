@@ -84,6 +84,11 @@ export interface SupervisorDeps {
   walBytes(): Promise<number>;
   walLimitBytes: number;
   now(): Date;
+  /**
+   * Milliseconds from a clock that correcting the time of day does not move; default
+   * {@link steadyMs}. Freshness is measured on it.
+   */
+  monotonic?: () => number;
   log: StreamLog;
   spawn?: SpawnFn;
   store?: ObjectStore;
@@ -123,8 +128,13 @@ export const PRUNE_WINDOW_MS = 168 * 60 * 60_000;
 export const L0_RETENTION_MS = 5 * 60_000;
 /** How often, while streaming, the bucket's safe-write check is repeated. */
 const PROBE_EVERY_MS = 24 * 60 * 60_000;
-/** How often a bucket that failed a read, or has a problem named, is checked again. */
+/**
+ * How often a bucket that failed a read, or has a problem named, is checked again, and how often
+ * a bucket that stays unreadable is logged.
+ */
 const CLASSIFY_EVERY_MS = 10 * 60_000;
+/** A read of the bucket unanswered this long is given up on, and the next tick starts another. */
+const READ_DEADLINE_MS = 5 * 60_000;
 /** Beside the configuration: the PID of the Litestream this supervisor started. */
 const PID_FILE = "litestream.pid";
 const CONFIG_FILE = "litestream.yml";
@@ -175,6 +185,13 @@ const replicateArgs = (configPath: string): string[] => ["replicate", "-config",
 
 const codeOf = (error: unknown): string => (isAppError(error) ? error.code : "unknown");
 
+/**
+ * `process.hrtime`'s clock in milliseconds. Node's documentation for it: "These times are relative
+ * to an arbitrary time in the past, and not related to the time of day and therefore not subject to
+ * clock drift" (`doc/api/process.md`, v26.x).
+ */
+export const steadyMs = (): number => Number(process.hrtime.bigint()) / 1e6;
+
 const newestOf = (objects: readonly ListedObject[]): Date | null =>
   objects.reduce<Date | null>(
     (newest, object) =>
@@ -221,6 +238,7 @@ export class StreamSupervisor {
   readonly #spawn: SpawnFn;
   readonly #sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   readonly #stopWaitMs: number;
+  readonly #monotonic: () => number;
   #status: StreamCore;
   #controller: AbortController | undefined;
   #run: Promise<void> = Promise.resolve();
@@ -236,10 +254,12 @@ export class StreamSupervisor {
   #unsubscribe!: () => void;
   /** The newest file seen in the live generation, by the bucket's clock. */
   #newestUploadAt: Date | null = null;
-  /** The bucket's clock minus this box's. */
+  /** The bucket's clock minus {@link SupervisorDeps.monotonic}'s reading. */
   #skewMs = 0;
   #lastProbeAt = 0;
   #lastClassifyAt = Number.NEGATIVE_INFINITY;
+  /** When a bucket that cannot be read was last logged; null while reads succeed. */
+  #unreadableLoggedAt: number | null = null;
 
   constructor(deps: SupervisorDeps) {
     this.#deps = deps;
@@ -247,6 +267,7 @@ export class StreamSupervisor {
     this.#spawn = deps.spawn ?? spawnLitestream;
     this.#sleep = deps.sleep ?? abortableSleep;
     this.#stopWaitMs = deps.stopWaitMs ?? STOP_WAIT_MS;
+    this.#monotonic = deps.monotonic ?? steadyMs;
     this.#status = {
       state: "off",
       generation: null,
@@ -267,7 +288,9 @@ export class StreamSupervisor {
   /** Schedules the work and returns: nothing here waits for the bucket. */
   async start(): Promise<void> {
     if (this.#controller !== undefined) return;
-    this.#unsubscribe = this.#deps.onCommit((at) => this.#commits.record(at));
+    // The store calls this as soon as the commit is made, so the steady clock's reading here is the
+    // commit's time on that clock; the wall-clock time handed in could since have been corrected.
+    this.#unsubscribe = this.#deps.onCommit(() => this.#commits.record(this.#monotonic()));
     const controller = new AbortController();
     this.#controller = controller;
     this.#run = this.#main(controller.signal).catch(async (error: unknown) => {
@@ -375,7 +398,7 @@ export class StreamSupervisor {
           continue;
         }
         this.#noteBucketProblem(null);
-        this.#lastProbeAt = this.#deps.now().getTime();
+        this.#lastProbeAt = this.#monotonic();
         const previous = await readPointer(this.#store, venueId);
         signal.throwIfAborted();
         if (previous !== null && previous.pointer.body.term > term) {
@@ -383,7 +406,7 @@ export class StreamSupervisor {
           return null;
         }
         const generation = generationName(term, nodeId, this.#deps.now());
-        const claimStarted = this.#deps.now();
+        const claimStarted = this.#instant();
         try {
           await claimGeneration(this.#store, venueId, generation);
         } catch (error) {
@@ -391,7 +414,7 @@ export class StreamSupervisor {
           await this.#sleep(1_000, signal);
           continue;
         }
-        const claimEnded = this.#deps.now();
+        const claimEnded = this.#instant();
         signal.throwIfAborted();
         this.#newestUploadAt = null;
         await this.#measureSkew(generation, claimStarted, claimEnded);
@@ -526,17 +549,18 @@ export class StreamSupervisor {
   }
 
   async #stream(generation: string, signal: AbortSignal): Promise<void> {
-    let reading = false;
+    let reading: { since: number } | undefined;
     // Not awaited, like the prune: a bucket that never answers must not hold the tick. One read of
-    // the bucket at a time.
+    // the bucket at a time, until it has gone unanswered past the deadline.
     const readBucket = () => {
-      if (reading) return;
-      reading = true;
-      void this.#refreshFreshness(generation)
-        .then(() => this.#probeDaily())
-        .finally(() => {
-          reading = false;
-        });
+      const now = this.#monotonic();
+      if (reading !== undefined && now - reading.since < READ_DEADLINE_MS) return;
+      if (reading !== undefined) this.#noteUnreadable("timeout");
+      const mine = { since: now };
+      reading = mine;
+      void this.#readBucket(generation, signal).finally(() => {
+        if (reading === mine) reading = undefined;
+      });
     };
     for (;;) {
       const walBytes = await this.#untilOverLimit(TICK_MS, signal, () => {
@@ -548,26 +572,55 @@ export class StreamSupervisor {
   }
 
   /**
-   * Reads the live generation's newest file (spec §7) and forgets the commits it covers. Level 0
-   * each time; level 1 as well once a commit has waited longer than level 0 keeps a file, since it
-   * may have been compacted and tidied between two reads. A bucket that failed the read, or has a
-   * problem named, is checked for being unusable.
+   * Reads the live generation's newest file (spec §7) and forgets the commits it covers, then
+   * checks the bucket when that is due: after a failed read, or with a problem named, at most every
+   * ten minutes; otherwise daily. Nothing is changed or checked once the run has stopped.
    */
-  async #refreshFreshness(generation: string): Promise<void> {
-    let failed = false;
+  async #readBucket(generation: string, signal: AbortSignal): Promise<void> {
+    const read = await this.#newestUpload(generation);
+    if (signal.aborted) return;
+    if (read.ok) {
+      this.#unreadableLoggedAt = null;
+      this.#newestUploadAt = read.newest;
+    } else {
+      this.#noteUnreadable(read.errorCode);
+    }
+    this.#commits.settle(this.#lagWith(this.#newestUploadAt).coveredUpTo);
+    const now = this.#monotonic();
+    if (!read.ok || this.#status.bucketProblem !== null) {
+      await this.#classifyBucket(false, signal);
+    } else if (now - this.#lastProbeAt >= PROBE_EVERY_MS) {
+      this.#lastProbeAt = now;
+      await this.#classifyBucket(true, signal);
+    }
+  }
+
+  /**
+   * Level 0 each time; level 1 as well once a commit has waited longer than level 0 keeps a file,
+   * since it may have been compacted and tidied between two reads.
+   */
+  async #newestUpload(
+    generation: string,
+  ): Promise<{ ok: true; newest: Date | null } | { ok: false; errorCode: string }> {
     try {
       const prefix = generationPrefix(this.#deps.venueId, generation);
       let newest = later(this.#newestUploadAt, newestOf(await this.#store.list(`${prefix}0000/`)));
       if (this.#lagWith(newest).lagMs > L0_RETENTION_MS) {
         newest = later(newest, newestOf(await this.#store.list(`${prefix}0001/`)));
       }
-      this.#newestUploadAt = newest;
+      return { ok: true, newest };
     } catch (error) {
-      failed = true;
-      this.#deps.log("warn", "stream.freshness_unreadable", { errorCode: codeOf(error) });
+      return { ok: false, errorCode: codeOf(error) };
     }
-    this.#commits.settle(this.#lagWith(this.#newestUploadAt).coveredUpTo);
-    if (failed || this.#status.bucketProblem !== null) await this.#classifyBucket(false);
+  }
+
+  #noteUnreadable(errorCode: string): void {
+    const now = this.#monotonic();
+    if (this.#unreadableLoggedAt !== null && now - this.#unreadableLoggedAt < CLASSIFY_EVERY_MS) {
+      return;
+    }
+    this.#unreadableLoggedAt = now;
+    this.#deps.log("warn", "stream.freshness_unreadable", { errorCode });
   }
 
   #lagWith(newestUploadAt: Date | null): { lagMs: number; coveredUpTo: number | null } {
@@ -575,43 +628,46 @@ export class StreamSupervisor {
       pending: this.#commits.pending(),
       newestUploadAt,
       skewMs: this.#skewMs,
-      now: this.#deps.now(),
+      now: this.#monotonic(),
     });
   }
 
+  #instant(): { wall: number; steady: number } {
+    return { wall: this.#deps.now().getTime(), steady: this.#monotonic() };
+  }
+
   /**
-   * The bucket's clock minus this box's, from the marker this box has just written: its
-   * `lastModified` against the middle of the write. Kept as it was when the marker cannot be read.
+   * The bucket's clock minus the steady clock, from the marker this box has just written: its
+   * `lastModified` against the middle of the write. When the marker cannot be read, this box's
+   * time of day at the write stands in for the bucket's.
    */
-  async #measureSkew(generation: string, started: Date, ended: Date): Promise<void> {
+  async #measureSkew(
+    generation: string,
+    started: { wall: number; steady: number },
+    ended: { wall: number; steady: number },
+  ): Promise<void> {
+    const steady = (started.steady + ended.steady) / 2;
+    this.#skewMs = (started.wall + ended.wall) / 2 - steady;
     const key = markerKey(this.#deps.venueId, generation);
     try {
       const marker = (await this.#store.list(key)).find((object) => object.key === key);
-      if (marker !== undefined) {
-        this.#skewMs = marker.lastModified.getTime() - (started.getTime() + ended.getTime()) / 2;
-      }
+      if (marker !== undefined) this.#skewMs = marker.lastModified.getTime() - steady;
     } catch (error) {
       this.#deps.log("warn", "stream.freshness_unreadable", { errorCode: codeOf(error) });
     }
-  }
-
-  async #probeDaily(): Promise<void> {
-    const now = this.#deps.now().getTime();
-    if (now - this.#lastProbeAt < PROBE_EVERY_MS) return;
-    this.#lastProbeAt = now;
-    await this.#classifyBucket(true);
   }
 
   /**
    * A bucket that answers with a refusal is unusable (its key, or its safe write); one that gives no
    * answer at all is unreachable, which the lag already shows.
    */
-  async #classifyBucket(force: boolean): Promise<void> {
-    const now = this.#deps.now().getTime();
+  async #classifyBucket(force: boolean, signal: AbortSignal): Promise<void> {
+    const now = this.#monotonic();
     if (!force && now - this.#lastClassifyAt < CLASSIFY_EVERY_MS) return;
     this.#lastClassifyAt = now;
     try {
       const probe = await probeBucket(this.#store);
+      if (signal.aborted) return;
       this.#noteBucketProblem(probe.ok ? null : probe.reason);
     } catch (error) {
       this.#deps.log("warn", "stream.bucket_unreachable", { errorCode: codeOf(error) });

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { claimGeneration, generationPrefix, markerKey } from "./generations.js";
 import { generationName } from "./names.js";
 import { pointerKey, readPointer, writePointer, type SignedPointer } from "./pointer.js";
+import { CommitLog } from "./freshness.js";
 import { PROBE_PREFIX } from "./probe.js";
 import type { BucketConfig } from "./s3-store.js";
 import { FakeLitestream } from "./testing/fake-litestream.js";
@@ -36,17 +37,29 @@ const BUCKET: BucketConfig = {
 /**
  * Time that moves only when a test says so. Every wait in the supervisor is one of these sleeps,
  * so `next()` wakes the earliest sleeper and moves the clock to its wake time.
+ *
+ * Three readings: `now()` is this box's time of day, which `step()` corrects without time passing;
+ * `monotonic()` counts time passing and nothing else; `trueNow()` is the time of day the bucket
+ * keeps, which a box's correction does not move.
  */
 class ManualClock {
+  readonly #start: number;
   #t: number;
+  /** Starts far from any time of day, so a reading used as one shows. */
+  #m = 5_000;
   #sleeping: { at: number; ms: number; wake: () => void }[] = [];
   readonly slept: number[] = [];
 
   constructor(start: string) {
-    this.#t = Date.parse(start);
+    this.#start = Date.parse(start);
+    this.#t = this.#start;
   }
 
   readonly now = (): Date => new Date(this.#t);
+
+  readonly monotonic = (): number => this.#m;
+
+  readonly trueNow = (): Date => new Date(this.#start + this.#m - 5_000);
 
   readonly sleep = (ms: number, signal: AbortSignal): Promise<void> =>
     new Promise((resolve) => {
@@ -54,7 +67,7 @@ class ManualClock {
         resolve();
         return;
       }
-      const entry = { at: this.#t + ms, ms, wake: () => resolve() };
+      const entry = { at: this.#m + ms, ms, wake: () => resolve() };
       this.#sleeping.push(entry);
       signal.addEventListener(
         "abort",
@@ -67,6 +80,12 @@ class ManualClock {
     });
 
   advance(ms: number): void {
+    this.#t += ms;
+    this.#m += ms;
+  }
+
+  /** This box's time of day corrected by `ms`, as time sync does; no time passes. */
+  step(ms: number): void {
     this.#t += ms;
   }
 
@@ -102,7 +121,9 @@ class ManualClock {
     this.#sleeping.sort((a, b) => a.at - b.at);
     const entry = this.#sleeping.shift();
     if (entry === undefined) return false;
-    this.#t = Math.max(this.#t, entry.at);
+    const passed = Math.max(0, entry.at - this.#m);
+    this.#m += passed;
+    this.#t += passed;
     this.slept.push(entry.ms);
     entry.wake();
     return true;
@@ -145,7 +166,7 @@ async function harness(options: HarnessOptions = {}) {
   const events: string[] = [];
   const clock = new ManualClock(START);
   const store = new SwitchableStore(
-    () => new Date(clock.now().getTime() + (options.bucketAheadMs ?? 0)),
+    () => new Date(clock.trueNow().getTime() + (options.bucketAheadMs ?? 0)),
     events,
   );
   /** Every prefix a listing was answered for, in order. */
@@ -205,6 +226,7 @@ async function harness(options: HarnessOptions = {}) {
     },
     walLimitBytes: LIMIT,
     now: clock.now,
+    monotonic: clock.monotonic,
     log: (level, event, fields) => logs.push({ level, event, fields }),
     spawn: (bin, args, env) => {
       if (options.replicateThrows === true && args[0] === "replicate") {
@@ -1423,7 +1445,7 @@ describe("freshness", () => {
     h.commit();
     h.clock.advance(1_000);
     h.store.upload(l0(h.generation, 2));
-    const uploadedAt = h.clock.now().toISOString();
+    const uploadedAt = h.clock.trueNow().toISOString();
     await h.clock.next();
     await vi.waitFor(() => expect(h.supervisor.status().lagMs).toBe(0));
     expect(h.supervisor.status().lastConfirmedUploadAt).toBe(uploadedAt);
@@ -1515,12 +1537,18 @@ describe("freshness", () => {
     await h.clock.until(() => h.supervisor.status().state === "streaming");
   });
 
-  it("keeps its last measure of the bucket's clock when the listing does not show the marker", async () => {
+  it("takes the bucket's clock as this box's when the listing does not show the marker", async () => {
     const h = await harness();
     const list = h.store.list.bind(h.store);
     h.store.list = async (prefix) => (prefix.endsWith("opened.json") ? [] : list(prefix));
     await h.supervisor.start();
     await h.clock.until(() => h.litestream.running() !== undefined);
+    h.store.upload(fullCopyOf(h.supervisor.status().generation!));
+    await h.clock.until(() => h.supervisor.status().state === "streaming");
+    h.commit();
+    for (let tick = 0; tick < 16; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBeGreaterThanOrEqual(16));
+    expect(h.supervisor.status().lagMs).toBeGreaterThanOrEqual(15 * MINUTE);
     expect(h.logs.some((line) => line.event === "stream.freshness_unreadable")).toBe(false);
   });
 
@@ -1581,6 +1609,154 @@ describe("freshness", () => {
     });
     expect(h.supervisor.status().bucketProblem).toBeNull();
     expect(h.supervisor.status().lagMs).toBeGreaterThanOrEqual(15 * MINUTE);
+  });
+
+  // The recovery page shows the log's tail: an outage is logged when it starts and every ten
+  // minutes while it lasts, not on every tick.
+  it("logs a bucket it cannot read when that starts and every ten minutes after, not every minute", async () => {
+    const h = await streaming();
+    const unreadable = () =>
+      h.logs.filter((line) => line.event === "stream.freshness_unreadable").length;
+    h.store.down = true;
+    for (let tick = 0; tick < 16; tick += 1) await h.clock.next();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(unreadable()).toBe(2);
+    h.store.down = false;
+    await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(1));
+    h.store.down = true;
+    await h.clock.next();
+    await vi.waitFor(() => expect(unreadable()).toBe(3));
+  });
+
+  // Review Focus 1 across a correction: time sync steps this box's clock back after the
+  // generation opened, and the bucket holds nothing after the commit.
+  it("reads as behind when this box's clock is stepped back after the generation opened", async () => {
+    const h = await streaming();
+    h.clock.advance(MINUTE);
+    h.store.upload(l0(h.generation, 2));
+    h.clock.advance(MINUTE);
+    h.clock.step(-5 * MINUTE);
+    h.commit();
+    for (let tick = 0; tick < 16; tick += 1) await h.clock.next();
+    await vi.waitFor(() => expect(listingsOf(h, "0000")).toBeGreaterThanOrEqual(16));
+    expect(h.supervisor.status().lagMs).toBeGreaterThanOrEqual(15 * MINUTE);
+  });
+
+  // A box that booted with a stale clock and then synced: its clock jumps forward while the bucket
+  // keeps up with every commit.
+  it("reads as current when this box's clock is stepped forward after the generation opened", async () => {
+    const h = await streaming();
+    h.clock.step(5 * MINUTE);
+    for (let tick = 0; tick < 16; tick += 1) {
+      h.commit();
+      h.clock.advance(1_000);
+      h.store.upload(l0(h.generation, tick + 2));
+      await h.clock.next();
+      await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(tick + 1));
+      expect(h.supervisor.status().lagMs).toBe(0);
+    }
+  });
+
+  it("forgets the commits the bucket holds", async () => {
+    const pending = vi.spyOn(CommitLog.prototype, "pending");
+    try {
+      const h = await streaming();
+      h.commit();
+      h.clock.advance(1_000);
+      h.store.upload(l0(h.generation, 2));
+      await h.clock.next();
+      await vi.waitFor(() => expect(listingsOf(h, "0000")).toBe(1));
+      h.supervisor.status();
+      expect(pending.mock.results.at(-1)?.value).toEqual([]);
+    } finally {
+      pending.mockRestore();
+    }
+  });
+
+  it("changes nothing when a read answers after stop, and checks no bucket", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let release!: () => void;
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    let held = false;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/")) {
+        held = true;
+        await answered;
+      }
+      return list(prefix);
+    };
+    await h.clock.next();
+    await vi.waitFor(() => expect(held).toBe(true));
+    await h.supervisor.stop();
+    const writes = h.probeWrites();
+    h.store.denied = true;
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(h.probeWrites()).toBe(writes);
+    expect(h.logs.some((line) => line.event === "stream.freshness_unreadable")).toBe(false);
+  });
+
+  it("does not name a bucket problem from a check that answers after stop", async () => {
+    const h = await streaming();
+    const put = h.store.put.bind(h.store);
+    let release!: () => void;
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    let probing = false;
+    h.store.put = async (key, body, cond) => {
+      if (key.startsWith(PROBE_PREFIX)) {
+        probing = true;
+        await answered;
+      }
+      return put(key, body, cond);
+    };
+    h.store.down = true;
+    await h.clock.next();
+    await vi.waitFor(() => expect(probing).toBe(true));
+    await h.supervisor.stop();
+    h.store.down = false;
+    h.store.denied = true;
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(h.supervisor.status().bucketProblem).toBeNull();
+    expect(h.logs.some((line) => line.event === "stream.bucket_unusable")).toBe(false);
+  });
+
+  it("starts a new read once one has waited five minutes without an answer", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    const held: (() => void)[] = [];
+    let holding = true;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/") && holding) {
+        await new Promise<void>((resolve) => held.push(resolve));
+      }
+      return list(prefix);
+    };
+    h.commit();
+    h.clock.advance(1_000);
+    h.store.upload(l0(h.generation, 2));
+    for (let tick = 0; tick < 5; tick += 1) await h.clock.next();
+    await h.clock.asleep();
+    expect(held).toHaveLength(1);
+    expect(h.supervisor.status().lagMs).toBeGreaterThan(0);
+    await h.clock.next();
+    await vi.waitFor(() => expect(held).toHaveLength(2));
+    expect(h.logs).toContainEqual({
+      level: "warn",
+      event: "stream.freshness_unreadable",
+      fields: { errorCode: "timeout" },
+    });
+    // The read given up on answers late: the one that replaced it is still the one in flight.
+    held[0]!();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await h.clock.next();
+    await h.clock.asleep();
+    expect(held).toHaveLength(2);
+    holding = false;
+    held[1]!();
+    await vi.waitFor(() => expect(h.supervisor.status().lagMs).toBe(0));
   });
 
   // A bucket that never answers must not hold the tick: the side-file limit is checked there.
