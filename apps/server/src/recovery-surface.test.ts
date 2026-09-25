@@ -177,7 +177,7 @@ describe("the caught error's own words on the page", () => {
   });
 });
 
-// The Spanish twin of "never wipe": the action is always restore or reinstall.
+// The Spanish twin of "never wipe".
 const NEVER_WIPE_ES = /\bborra|\bborrar|\belimina|\brestablece|\bresetea|\bformatea|\bvacía/i;
 
 /** The page as an operator sees it, for one recorded failure code. */

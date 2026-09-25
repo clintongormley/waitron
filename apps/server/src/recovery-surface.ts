@@ -79,8 +79,8 @@ const HOLDER_NAMES: Readonly<Record<VenueHolderKind, Readonly<Record<SupportedLo
 };
 
 /**
- * The page's own fixed wording. `level`, `code` and `at` come from outside and are not translated;
- * each line is escaped whole where it is rendered.
+ * The page's own fixed wording. `code` and `at` come from outside and are shown as recorded;
+ * `level` is shown by its internal name. Each line is escaped whole where it is rendered.
  */
 const PAGE_TEXT: Readonly<
   Record<
@@ -334,7 +334,9 @@ function renderPage(state: RecoveryState, logLines: string[], locale: SupportedL
     state.lastFailureAt ?? page.noTime,
   );
   const tail =
-    logLines.length === 0 ? page.noLog : logLines.map((line) => escapeHtml(line)).join("\n");
+    logLines.length === 0
+      ? escapeHtml(page.noLog)
+      : logLines.map((line) => escapeHtml(line)).join("\n");
   // The retry form sits above the installer detail: the operator's action is the point of the page.
   return `<!doctype html>
 <html lang="${locale}">
@@ -369,7 +371,7 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
 
   app.get("/", async (c) => {
     const logLines = await tailLog(deps.logDir);
-    // No venue locale: this page is served without reading the box's configuration.
+    // No venue locale: that is read from the venue database, which the recovery path never opens.
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
     c.header("Cache-Control", "no-store");
     c.header("Vary", "Accept-Language");
