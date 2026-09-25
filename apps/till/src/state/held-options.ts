@@ -2,38 +2,19 @@ import type { OfferedModifier, OfferedOptionsList } from "../api/client.js";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 
 /**
- * The one plain staff name a frozen side carries. An answer's staff names arrive as locale → text
- * maps holding a single entry, keyed by whatever content language the order path widened them under
- * (`buildLineExtras`, `apps/server/src/modifier-selection.ts`). This code does not know that
- * language, so it reads the VALUE positionally rather than by key — as
- * `staffOptionSnapshotLabels` (`packages/catalogue/src/option-snapshot-labels.ts`) does for the
- * basket.
+ * A frozen staff name arrives as a single-entry locale → text map, keyed by a content language this
+ * code does not know, so the value is read positionally.
  */
 function staffName(names: Record<string, string>): string {
   return Object.values(names)[0] ?? "";
 }
 
 /**
- * Give as many lists as possible one of the answers they can take, and say which.
- *
- * `candidates[i]` maps the index of each answer list `i` could take onto the label id that answer
- * would name. The walk is the textbook augmenting-path one: each list tries its candidates in the
- * map's own order and takes the first one it can get — either free, or held by a list the same rule
- * can push onto one of ITS other candidates — with no answer revisited twice within one list's
- * walk. There is no free-answer-first phase: a held FIRST candidate sends the walk straight into
- * its holder even when a later candidate is sitting free. That bound — one pass per list, and
- * within it each answer considered at most once — is what makes the search complete without being
- * able to loop; a dish carries a handful of lists, so its cost is not worth a cleverer shape.
- *
- * Returns, per list index, the index of the answer it was given, or `undefined` for a list THIS
- * assignment left out — which is not the same as a list no assignment could have answered. Two
- * lists whose only candidate is the same answer can each be answered, just not both, so whichever
- * of them loses comes back `undefined` while an assignment giving IT that answer exists. What the
- * augmenting search buys is the SIZE: it answers as many lists as it can, which is why an answer
- * moves aside for a narrower list instead of being kept by the first list that fitted ("moves an
- * answer off one list so a narrower one sharing its name can be answered too",
- * `./held-options.test.ts`). Among assignments of the same size it promises nothing about WHICH
- * list gets which of two interchangeable answers.
+ * Answer as many lists as possible (an augmenting-path matching). `candidates[i]` maps the index of
+ * each answer list `i` could take onto the label id it would name. Returns, per list, the answer index
+ * it was given, or `undefined` for a list THIS assignment left out, which is not the same as a list no
+ * assignment could answer. Among assignments of the same size it promises nothing about which list
+ * gets which of two interchangeable answers.
  */
 function assignAnswers(candidates: readonly ReadonlyMap<number, string>[]): (number | undefined)[] {
   const holderOf: (number | undefined)[] = [];
@@ -62,46 +43,17 @@ function assignAnswers(candidates: readonly ReadonlyMap<number, string>[]): (num
 }
 
 /**
- * Put a retrieved order's options answers back into re-sendable ones.
+ * Re-derive a retrieved order's options answers, which come back as frozen NAMES with no ids, by
+ * matching the STAFF name of the list and of the chosen label; the server compares the other four.
+ * The walk is over the OFFERED lists, which are already narrowed to active lists and available labels.
  *
- * A held order hands an answer back as six frozen NAMES and no ids, while the wire names a list and
- * one of its labels by ID (`validateOptionSelections`, `packages/catalogue/src/option-contract.ts`).
- * The ids are re-derived here by matching the STAFF name of the list and of the chosen label — the
- * pair the basket itself shows. The other four names are left to the server's own comparison
- * (`sameOptionSelections`, `apps/server/src/modifier-selection.ts`). Any of the six having moved
- * costs the WHOLE ORDER, not the one line: the preserve test is all-or-nothing
- * (`preservesEveryLine`, `apps/server/src/working-order.ts`), so a single line that does not match
- * sends the request down the replacement path, which re-prices every line at today's offers and
- * deletes and re-inserts them all under new ids.
+ * Two lists can share a staff name (`option_lists.name` has no unique index), so taking each answer as
+ * first matched could strand a list; {@link assignAnswers} searches instead.
  *
- * Re-sending nothing is not a smaller failure than re-sending something: every ACTIVE list the dish
- * carries must be answered, and one left out refuses the WHOLE edit with `options.label_required`
- * (`apps/server/src/working-order.test.ts`, "refuses a quantity-only edit that names no answer for
- * an active options list").
- *
- * The walk is over the OFFERED lists, because that is the set the server requires an answer for, and
- * they arrive already narrowed to ACTIVE lists and AVAILABLE labels (`readOfferedModifiers`,
- * `packages/catalogue/src/offered-modifiers.ts`) — so a match here can only name a list and a label
- * the contract will accept, and nothing re-checks either flag.
- *
- * TWO LISTS CAN SHARE A STAFF NAME: `option_lists.name` carries no unique index
- * (`packages/catalogue/src/schema/options.ts`), so which of them takes which answer is a choice.
- * Taking each answer as it is first matched strands a list that an answer already given away would
- * have satisfied, so {@link assignAnswers} searches instead.
- *
- * Two ways something can stay unmatched, and they are not the same failure:
- *
- *  - An OFFERED list nothing matched comes back in `unanswered`, and the caller must tell the
- *    operator: the line cannot be re-sent until that list is answered again. Its `defaultLabelId` is
- *    deliberately NOT substituted — that would change what the diner asked for on a line about to be
- *    billed.
- *  - A frozen answer matching no offered list is simply left out. Nothing requires it (the list is
- *    no longer active or no longer attached) and sending it would be refused as `options.invalid`,
- *    so leaving it out is the only sendable shape.
- *
- * The frozen wording itself is carried through untouched by the caller: it is what the order holds
- * and what the basket must keep showing until the server re-prices — which, as above, is the whole
- * order and not the one line.
+ * An offered list nothing matched comes back in `unanswered`, and the caller must tell the operator.
+ * Its `defaultLabelId` is deliberately NOT substituted: that would change what the diner asked for on
+ * a line about to be billed. A frozen answer matching no offered list is left out, because sending it
+ * would be refused.
  */
 export function deriveOptionSelections(
   offered: readonly OfferedModifier[],
@@ -112,9 +64,7 @@ export function deriveOptionSelections(
   const candidates = lists.map((list) => {
     const byAnswer = new Map<number, string>();
     frozen.forEach((snapshot, answerIndex) => {
-      // A blank name matches nothing: a list and a label each hold a non-blank staff name
-      // (`staffName` in `packages/catalogue/src/option-contract.ts` refuses a blank one), so a blank
-      // here means an answer arrived without the map its type declares.
+      // A list and a label each hold a non-blank staff name, so a blank one here matches nothing.
       const wantedList = staffName(snapshot.listName);
       const wantedLabel = staffName(snapshot.labelName);
       if (wantedList === "" || wantedList !== list.name || wantedLabel === "") return;

@@ -12,7 +12,7 @@ import {
 import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { sellingValuesOf, type TillProduct } from "../api/client.js";
 
-// A gross-1.50 espresso at the general rate; the brief's worked example (×2 = "3.00").
+// A gross-1.50 espresso at the general rate.
 const cafe: TillProduct = {
   id: "cafe",
   name: "Café",
@@ -48,7 +48,6 @@ const jamon: TillProduct = {
   allergens: null,
 };
 
-// One pick off an extras list: the product picked, at the price the offer resolved.
 const shot: SelectedExtra = {
   listId: "list-extras",
   productId: "p-shot",
@@ -215,7 +214,7 @@ describe("needsModifierPicker", () => {
     available,
   });
 
-  // A product with variants is never rung up as itself (spec §15.1): tapping it always asks which.
+  // A product with variants is never rung up as itself: tapping it always asks which.
   it("is true for a product with variants, whether or not one is available", () => {
     expect(needsModifierPicker({ ...cafe, variants: [wine(true)] })).toBe(true);
     expect(needsModifierPicker({ ...cafe, variants: [wine(false)] })).toBe(true);

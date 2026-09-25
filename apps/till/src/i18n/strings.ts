@@ -1,20 +1,6 @@
-// The till's string catalogue.
-//
-// English is the SOURCE of truth: `en` below is the base map, `StringKey` is
-// derived from its keys, and every other locale is a translation that may only
-// re-say what `en` already names. Spanish (`es`) is what a Spanish venue
-// renders (the shipped default is en-GB; a venue is driven to es-ES at boot;
-// see t.ts), but it is a translation, not the origin — a key must exist in
-// `en` first.
-//
-// `apps/*` is exempt from the english-only guard (packages/db/src/english-only.ts),
-// so the English UI copy here is deliberate and allowed; the Spanish below is
-// user-facing translation, not schema vocabulary.
-//
-// Later till screens (Tasks 10-19) append keys here. Add the English base entry
-// AND its Spanish translation together — `es` is typed `Record<StringKey,string>`,
-// so a key added to `en` without a Spanish sibling is a compile error, which is
-// the guard that keeps the two in step.
+// The till's string catalogue. English is the source of truth: `StringKey` is derived from `en`'s
+// keys, and `es` is typed `Record<StringKey, string>`, so a key added without its Spanish sibling
+// fails typecheck.
 export const en = {
   // Primary actions
   "action.pay": "Pay",
@@ -23,7 +9,7 @@ export const en = {
   "mode.demo": "Demo",
   "mode.prepare": "Preparation",
   "mode.live": "Live",
-  // Counter receipt/drawer (§5): the ticket screen's reprint-the-paper and open-the-cash-drawer levers.
+  // Counter receipt and drawer
   "action.reprint": "Reprint",
   "action.print_receipt": "Print receipt",
   "action.payment_slip": "Payment slip",
@@ -37,7 +23,6 @@ export const en = {
   "form.error_heading": "There is a problem with this form",
   "form.name_required": "Enter a name",
   "action.hold": "Hold",
-  // The confirm verb of the reusable supervisor-override dialog (cash-drawer-authorization §5).
   "action.authorize": "Authorize",
   // Tenders
   "tender.cash": "Cash",
@@ -56,14 +41,11 @@ export const en = {
   "label.tendered": "Tendered",
   // Basket
   "basket.empty": "Basket is empty",
-  // Dish-line quantity stepper: the accessible names of a basket line's −/+ count controls. Combined
-  // with the product's own name at render, e.g. "Increase Café". Distinct from the modifier-picker
-  // stepper (`modifier.*`) — this counts DISHES on a basket line, that counts a modifier per dish.
+  // A basket line's −/+ dish count, combined with the product name at render ("Increase Café").
   "basket.increase": "Increase",
   "basket.decrease": "Decrease",
   "basket.not_offered": "Not offered now",
-  // Modifier picker per-option-quantity stepper (ordering modifiers): the accessible names of the −/+
-  // step controls. Combined with the option's own name at render, e.g. "Increase Extra shot".
+  // The modifier picker's per-option −/+ stepper, combined with the option name at render.
   "modifier.increase": "Increase",
   "modifier.decrease": "Decrease",
   "modifier.edit": "Modifiers",
@@ -80,13 +62,9 @@ export const en = {
   "login.no_staff": "No staff available",
   "login.load_failed": "Could not load staff, try again",
   "login.error": "Could not log in, try again",
-  // Task 10 wrong-PIN throttle: shown counting down while a (device, person) back-off runs. `{n}` is
-  // the whole seconds remaining, substituted at the call site (`t()` does not interpolate).
+  // `{n}` is substituted at the call site; `t()` does not interpolate.
   "login.throttled": "Try again in {n}s",
-  // Supervisor-override dialog (cash-drawer-authorization §5) — the reusable "authorize this action"
-  // modal a non-permitted operator gets under a gated policy: pick an eligible supervisor, then enter
-  // their PIN. `override.error` is the generic in-dialog failure (a wrong PIN surfaces the shared
-  // `pin.invalid` copy instead); `override.no_supervisors` is the empty-picker state.
+  // Supervisor-override dialog
   "override.title": "Supervisor authorization",
   "override.pick_supervisor": "Choose a supervisor",
   "override.enter_pin": "Enter the supervisor's PIN",
@@ -100,17 +78,12 @@ export const en = {
   "held.empty": "No held orders",
   "held.retrieve": "Retrieve",
   "held.discard": "Discard",
-  // Placing & prep (7c prepare & collect)
+  // Placing and prep
   "action.place": "Place order",
   "action.send_to_prep": "Send to prep",
   "action.collect": "Collect",
-  // Station display (KDS-1) — the kitchen screen + the counter's default-station queue widget. `station.open`
-  // is the counter's nav control (mirrors `floor.open`); `station.title` names the screen. The two view
-  // toggle labels name the view they SWITCH TO (like `floor.view_*`): shown in kanban → offer the rail,
-  // shown in rail → offer the board. `station.state.*` name the three kitchen states (also the kanban column
-  // headers). `station.min` is a suffix word, not a sentence (t() takes no params, so a count-bearing
-  // label is `${n} ${t(key)}` — the age "N min"; the dish label "qty× name" is DATA, not a translated
-  // key). Spanish per design §6 (UI copy localised, identifiers English).
+  // Station display. The view toggles name the view they switch TO. `station.min` is a suffix word,
+  // rendered as `${n} ${t(key)}`.
   "station.open": "Kitchen",
   "station.title": "Kitchen",
   "station.back": "Back to counter",
@@ -120,40 +93,18 @@ export const en = {
   "station.view_kanban": "Board",
   "station.view_rail": "Tickets",
   "station.min": "min",
-  // The overdue+forgotten count badge (KDS order-timing alerts, design §7.1/§7.2) — shared by the
-  // station-queue header (station-queue.ts) and the expo pass (till-expo-screen.ts). A suffix word
-  // like `station.min`, not a sentence: `${n} ${t("station.overdue_count")}` ("3 overdue"). Counts every
-  // group whose band has escalated to at least `overdue` (overdue OR forgotten) — a non-colour tell
-  // beside the border accents, shown only when the count is non-zero.
+  // A suffix word, like `station.min`.
   "station.overdue_count": "overdue",
   "station.advance": "Advance",
   "station.bump_ticket": "Advance ticket",
-  // The per-order Mode-P handover control on the rail card — hand a settled, fired order to the customer,
-  // which drops it off the station display (KDS-1 §3e). A rail-card action, shown only for a collectable
-  // (settled) order.
   "station.collect": "Collect",
-  // The kitchen-fire action on a HELD course's rail section (KDS-2 §5a) — release this held course to the
-  // kitchen, shown only when `fire_control = 'kitchen'` (the station display owns the fire; under `waiter`
-  // the tab screen does, Task 7). A per-order/per-course action, so it lives on the rail card like the
-  // collect handover, not on the cross-order kanban board.
   "station.fire_course": "Start course",
-  // The per-order REPRINT action on the rail card (KDS-4 §3d) — re-send this order's current kitchen
-  // tickets after a paper jam / lost print. Shown on the station display only in OPERATOR (session) mode:
-  // the reprint route is session-guarded, so an enrolled DEVICE display (no session) hides it. A
-  // per-order card-foot action beside the collect handover, like `station.collect`.
   "station.reprint": "Reprint",
   "station.state.queued": "New",
   "station.state.preparing": "Preparing",
   "station.state.ready": "Ready",
-  // Device join (device-join-and-accept §2) — the front-door screen a FRESH browser shows. `_name_*`
-  // is the one field it asks for; `_waiting_*` and `_number_label` are the wait, where an admin reads
-  // the two digits off this screen and taps their twin in the dashboard; `_refused_*` and `_retry` are
-  // the "not approved" end. `{number}` is substituted at the call site (`t(...).replace`), the same
-  // shape `login.throttled` uses — `t` itself does no interpolation. A REFUSED KNOCK has no key here:
-  // it resolves through `i18n/codes.ts`, so `device.pairing_closed` gets its own sentence and every
-  // other code the generic one.
-  // `device.type.*` are the human labels for a device's kind (never the raw `kds_station`/`till` token),
-  // shown in the dev chooser's device rows — mapped from the kind via `i18n/device-label.ts`.
+  // Device join. `{number}` is substituted at the call site. A refused knock's error code resolves
+  // through `i18n/codes.ts`, not a key here.
   "device.join_name_title": "Set up this device",
   "device.join_name_hint":
     "Give this device a name, then ask a manager to approve it in the dashboard",
@@ -168,15 +119,9 @@ export const en = {
   "device.type.till": "Counter till",
   "device.type.handheld": "Handheld",
   "device.type.kds": "Kitchen display",
-  // The login screen's dev-only "Switch device" affordance (device-enrolment §3.2) — shown only when this
-  // tab has adopted a dev device; it clears the tab's device and returns to the chooser.
+  // Dev-only
   "device.switch": "Switch device",
-  // Expo / pass display (KDS-3) — the expediter's cross-station board: a card per open order, its items
-  // grouped by course. `expo.open` is the counter's nav control (mirrors `station.open`); `expo.title`
-  // names the screen. The three per-course levers name the state they ADVANCE the course to: `expo.fire`
-  // releases a HELD course (shown only when `fire_control = 'expo'`), `expo.ready` bumps a FIRED course to
-  // ready ("all plated"), `expo.away` dispatches a READY course to the floor. Item station names + the
-  // "N min" age reuse DATA / `station.min`; item states reuse `station.state.*`. Spanish per design §6.
+  // Expo / pass display. The per-course levers name the state they advance the course TO.
   "expo.open": "Pass",
   "expo.title": "Pass",
   "expo.back": "Back to counter",
@@ -184,18 +129,10 @@ export const en = {
   "expo.fire": "Fire",
   "expo.ready": "Course ready",
   "expo.away": "Away",
-  // The per-order REPRINT action on an expo card (KDS-4 §3d) — re-send this order's current kitchen
-  // tickets after a paper jam / lost print. The expo/pass ALWAYS runs in a logged-in session, so this is
-  // shown on every card (unlike the station display, which hides it in device mode). Same verb as
-  // `station.reprint`, kept in its own screen namespace like the other KDS action keys.
   "expo.reprint": "Reprint",
-  // The item-level FORGOTTEN flag (KDS order-timing alerts, design §7.2) — a non-colour tell shown
-  // beside a single item's station/state when its OWN station has badly lagged (past the forgotten
-  // threshold), distinct from `station.overdue_count`'s pass-wide count badge: this flags the
-  // SPECIFIC item, not the whole pass. A short adjective label, not a sentence.
   "expo.item_forgotten": "Forgotten",
   "cancel.reason_prompt": "Reason for cancelling",
-  // Integrated card terminal (sub-project 7 Task 9)
+  // Integrated card terminal
   "card.collecting": "Tap or insert card…",
   "card.cancel": "Cancel",
   "card.declined": "Card declined",
@@ -204,16 +141,12 @@ export const en = {
   "card.wait": "Keep waiting",
   "card.tip": "Tip (optional)",
   "card.offline_consent": "Accept offline if the network is down",
-  // The payment-time reader picker (Task 17): the idle screen's "use a different reader" control and
-  // the dialog it opens, listing the venue's active readers.
+  // Payment-time card reader picker
   "action.use_different_reader": "Use a different reader",
   "reader_picker.heading": "Choose a card reader",
   "reader_picker.empty": "No active readers configured",
   "reader_picker.offline": "Offline",
-  // Allergens (menu & allergens) — UI chrome for the till allergen screen. `may_contain` follows the
-  // snake_case sibling convention every other multi-word key here uses (card_ref, switch_tender, …),
-  // not the camelCase the task brief spelled it; the allergen CODES/name strings are elsewhere
-  // (i18n/allergen-names.ts), so these are screen chrome only.
+  // Allergen screen chrome; the allergen names are in `allergen-names.ts`.
   "allergens.open": "Allergens",
   "allergens.title": "Allergens",
   "allergens.notice": "Allergen information is available — please ask staff.",
@@ -222,21 +155,11 @@ export const en = {
   "allergens.may_contain": "May contain",
   "allergens.print": "Print",
   "allergens.close": "Close",
-  // As-served allergens on the basket dish line (modifier↔allergen, Task 7). `as_served` labels the
-  // per-line chip row (the dish's OWN declared allergens — no modifier fold; each extra shows its own
-  // list separately). `none` is shown when that set is empty on a REVIEWED dish (nothing to declare).
-  // `not_reviewed` is the
-  // Cautious note the waiter sees whenever the dish's own allergens are unreviewed — the note must
-  // read as "review pending" (the browser test pins /review|pendiente/i).
+  // `not_reviewed` must read as "review pending": `widgets/basket.test.ts` pins /review|pendiente/i.
   "allergens.as_served": "As served",
   "allergens.as_served_none": "No declared allergens",
   "allergens.not_reviewed": "Allergens not fully reviewed",
-  // Dietary classification (dietary-classification, Task 7). The POSITIVE diet labels shown as badges
-  // beside the as-served allergen chips (basket line, KDS/expo) — rendered ONLY when the profile
-  // asserts the claim (`vegan`/`vegetarian` === "yes"; `halal`/`kosher` === "yes"). `contains.meat`/
-  // `contains.fish` are the contains-tags the derivation asserts from KNOWN ingredient presence.
-  // `not_reviewed` is the NEUTRAL note shown when the diet derivation is pending (vegan === "unknown")
-  // — never a positive claim on an unreviewed dish (the Cautious policy). `label` prefixes the badge row.
+  // Dietary classification
   "diet.label": "Diet",
   "diet.vegan": "Vegan",
   "diet.vegetarian": "Vegetarian",
@@ -245,19 +168,13 @@ export const en = {
   "diet.contains.meat": "Contains meat",
   "diet.contains.fish": "Contains fish",
   "diet.not_reviewed": "Diet not reviewed",
-  // The menu diet FILTER chips (dietary-classification, Task 6/7) — the segmented control above the
-  // product grid that narrows the tiles via `filterProductsByDiet`. `filter.label` names the group;
-  // `no_meat`/`no_fish` are PREFERENCE filters (they keep unreviewed dishes), unlike the cautious
-  // vegan/vegetarian lenses (which reuse `diet.vegan`/`diet.vegetarian` above).
+  // Menu diet filter chips
   "diet.filter.label": "Dietary filter",
   "diet.filter.no_meat": "No meat",
   "diet.filter.no_fish": "No fish",
-  // Per-line customisation (order-line customisation) — the modifier picker's free-text kitchen note,
-  // shown for every product: `line.note.label` + `line.note.placeholder` label the textarea.
+  // Per-line kitchen note
   "line.note.label": "Kitchen note",
   "line.note.placeholder": "e.g. no onion, allergy — nut",
-  // The per-basket-line affordance (Task 4b) that opens the note editor on ANY line, incl. a plain
-  // fast-added dish that never opened the modifier picker.
   "line.note.button": "Note",
   // Staff schedule (the staff-facing swap/absence request path)
   "schedule.open": "My schedule",
@@ -290,10 +207,7 @@ export const en = {
   "schedule.status.accepted": "Accepted",
   "schedule.status.approved": "Approved",
   "schedule.status.rejected": "Rejected",
-  // Live floor (FP-1) — the till floor screen's chrome + occupancy copy. `t()` takes no params, so a
-  // count-bearing label is rendered as `${n} ${t(key)}` (the value + the suffix word), which is why
-  // these are suffix words rather than whole sentences. `floor.open` is the counter's nav control
-  // (mirrors `schedule.open`); `floor.title` names the screen itself.
+  // Live floor. The count labels are suffix words, rendered as `${n} ${t(key)}`.
   "floor.open": "Floor",
   "floor.title": "Floor",
   "floor.back": "Back to counter",
@@ -306,17 +220,10 @@ export const en = {
   "floor.line_count": "items",
   "floor.pending_delivery": "to deliver",
   "floor.free": "Free",
-  // The reserved-on-floor chip (Bookings-1 §4): rendered as `${t("floor.reserved")} ${time}`
-  // ("Reserved 20:30") — the label PREFIXES the wall-clock time, unlike the count-suffix labels above.
+  // Prefixes the time: "Reserved 20:30".
   "floor.reserved": "Reserved",
-  // The forgotten-table badge (KDS order-timing alerts, design §7.3) — a non-colour tell shown
-  // whenever a table's `timingBand` is `forgotten`, unconditionally (not just under reduced motion —
-  // mirrors `expo.item_forgotten`), so a colour-blind operator or one with a reduced-motion setting
-  // still sees the escalation without relying on the flashing-red accent alone.
   "floor.forgotten": "Forgotten",
-  // Spatial floor plan (FP-2): the map/list toggle, the manager-only edit toggle, the unplaced tray,
-  // and the edit-mode inspector copy threaded into `<wt-floor-canvas>`. `floor.view_map`/`view_list`
-  // label the toggle with the view it SWITCHES TO. `floor.shape_*` name the three canvas shapes.
+  // Spatial floor plan. The view toggles name the view they switch TO.
   "floor.view_map": "Map",
   "floor.view_list": "List",
   "floor.edit_plan": "Edit plan",
@@ -328,9 +235,7 @@ export const en = {
   "floor.shape_round": "Round",
   "floor.shape_square": "Square",
   "floor.shape_rect": "Rectangular",
-  // Table-ordering screen (FP-1) — one open table's tab: the round bar, the pull-out tab drawer, and
-  // its actions. `table.open_drawer` names the badged drawer handle; `table.pay_title`/`action.pay` both
-  // render "Cobrar" (the reused tender-pay's own Pay button carries the tender). Spanish per design §5b.
+  // Table-ordering screen
   "table.title": "Table order",
   "table.back": "Back to floor",
   "table.open_drawer": "Tab",
@@ -343,27 +248,15 @@ export const en = {
   "table.pay_title": "Charge",
   "table.status_title": "Status",
   "table.status_clear": "No status",
-  // KDS-2 (§5b): the round bar's per-line course picker + the waiter-fire drawer section.
-  // `table.course_label` labels each round line's course select; `table.course_default` is its
-  // "use the product's default" placeholder (there is no explicit "no course" option). `table.course_none`
-  // is the TAB-line course picker's placeholder (coursing editing A1): re-filing a not-yet-fired tab line
-  // whose courseId is `null` — an explicit "no course", not "the product default". `table.fire_title`
-  // heads the held-course section; `table.fire_course` is the per-course fire verb (course name appended).
+  // `table.course_default` means the product's default course; `table.course_none` an explicit
+  // "no course".
   "table.course_label": "Course",
   "table.course_default": "Default",
   "table.course_none": "No course",
-  // `table.hold_label` names each round line's hold toggle (coursing editing A3): ON inserts the line
-  // without firing it (held for a later course fire); OFF (the default) fires it on send.
   "table.hold_label": "Hold",
   "table.fire_title": "Courses to fire",
   "table.fire_course": "Fire",
-  // Per-line kitchen actions (coursing corrections C5), each gated on the line's kitchen state: a HELD
-  // line (`firedAt === null`) offers `table.send_line` (release it to the kitchen) with a tab-level
-  // `table.send_all` (release every held line at once); a FIRED, not-yet-started line offers
-  // `table.recall_line` (un-send it); a FIRED, STARTED line offers `table.cancel_line` behind the
-  // consequence-naming confirm below. `table.cancel_title` names that confirm (its accessible name),
-  // `table.cancel_started` states the consequence, `table.cancel_confirm` is the destructive button and
-  // `table.cancel_keep` dismisses it without cancelling.
+  // Per-line kitchen actions
   "table.send_line": "Send",
   "table.send_all": "Send all",
   "table.recall_line": "Recall",
@@ -372,11 +265,7 @@ export const en = {
   "table.cancel_started": "The kitchen has started this — cancel and bin it?",
   "table.cancel_confirm": "Cancel and bin it",
   "table.cancel_keep": "Keep it",
-  // Table actions (TS-3/TS-4): the in-drawer move/join/merge/transfer flow. `table.actions_title` heads
-  // the flow and labels its trigger (replacing the old disabled "Move · Split" placeholder). The
-  // `table.action_*` keys name the four verbs + the disabled Split placeholder (Back/Cancel reuse the
-  // shared `action.back`/`action.cancel`). The empty-state keys cover a picker with no valid targets;
-  // the transfer keys head the line-picker step.
+  // Table actions
   "table.actions_title": "Table actions",
   "table.action_move": "Move to table",
   "table.action_join": "Join a table",
@@ -401,27 +290,11 @@ export const en = {
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "This account is disabled — ask a manager",
   "sale.error": "Could not complete the sale, try again",
-  // A PERMANENT refusal, unlike `sale.error` above: the sale breaks a rule of the tax filing itself,
-  // so the same basket will be refused however many times it is rung up. Retrying is the one piece
-  // of advice that cannot work, so this says to stop and who to call instead. Raised for the codes
-  // till-api.ts answers 409 on the sale routes (`fiscal.record_invalid`,
-  // `fiscal.foreign_recipient_unsupported`).
-  //
-  // It says the till recorded nothing, NEVER that nothing was charged. Every settle path that shows
-  // this may already have taken the customer's money: `confirm-payment` and `collect-order` carry a
-  // manual bank-terminal (datáfono) charge the operator keyed in after the card went through, and
-  // `collect-card` reaches the fiscal record only AFTER the integrated terminal captured
-  // (`finalizeCapture`, `apps/server/src/till-sale.ts`). Telling that operator no money was taken
-  // would leave the customer charged for a sale the till has no record of, so the refund
-  // instruction is the sentence that has to be here. Cash is covered by the same wording: the till
-  // recorded nothing, so the drawer's money belongs to nobody yet. The siblings above deliberately
-  // make no claim about money at all.
+  // A PERMANENT refusal, unlike `sale.error`: retrying cannot work. It must never say nothing was
+  // charged, because a settle path can reach it after a card was already charged on a terminal.
   "sale.refused":
     "This sale cannot be filed with the tax agency. The till has recorded nothing, and trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up. If you already charged a card on the terminal, refund it there.",
-  // Counter receipt/drawer (§5): a failed reprint or a failed drawer-open is NON-FATAL — the ticket
-  // stays on screen and the operator retries. `drawer.error` covers both a `drawer.no_printer` (no
-  // receipt printer set on this till) and a transient failure, staying generic like the sale/table
-  // errors (never the raw domain code), since the fix in either case is the same to the operator.
+  // `drawer.error` stays generic: the fix is the same to the operator whatever the cause.
   "reprint.error": "Could not reprint the receipt, try again",
   "receipt.error": "Could not print the receipt, try again",
   "payment_slip.error": "Could not print the payment slip, try again",
@@ -430,41 +303,25 @@ export const en = {
   "held.product_gone": "A product is no longer available and was dropped from the order",
   "held.extra_not_offered":
     "An extra on this order is no longer offered. It is still charged; changing the order removes it.",
-  // A retrieved line's frozen answer no longer names anything the dish offers (the list or the
-  // chosen label was renamed, or the label was withdrawn), so the till cannot re-send it and the
-  // server refuses the whole edit until the question is answered again. Says what the operator has
-  // to DO, because there is no other way out of it: reopen the line and choose.
+  // Says what to DO, because reopening the line and choosing again is the only way out.
   "held.options_changed": "An item's choices have changed — open the line and choose again",
   "held.stale": "That order is no longer available",
   "place.error": "Could not place the order, try again",
-  // `sale.refused`'s sibling for the one path that takes no tender: placing an order (and, in
-  // invoice-first mode, issuing its deferred invoice) can hit the same permanent fiscal refusal, but
-  // no money has changed hands, so this carries no sentence about charges or refunds — a refund
-  // instruction would be as wrong here as "nothing was charged" is on the settle paths.
+  // Placing takes no tender, so unlike `sale.refused` this says nothing about charges or refunds.
   "place.refused":
     "This order cannot be filed with the tax agency. Trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up.",
   "station.advance_error": "Could not update the ticket, try again",
-  // A failed per-user language write (PUT /api/session/locale) is non-fatal — the UI stays in the
-  // current language and the operator can retry (per-user-language-preference, Task 9).
   "locale.save_failed": "Could not save your language, try again",
-  // A failed Mode-P handover (markCollected) is non-fatal — the operator retries; the queue reload reconciles.
   "station.collect_error": "Could not mark the order collected, try again",
-  // Table-ordering (FP-1): a failed round/serve/status write is non-fatal — the operator retries.
   "table.error": "Could not update the table, try again",
-  // Boot: `getTill` failed — the server unreachable, or a non-2xx `{ code }` (e.g. `server.internal`).
-  // Unlike the retryable errors above, the only recovery is a page reload — `#boot` runs once from
-  // `firstUpdated` with no in-UI retry — so the copy says "reload", not "try again", and stays neutral
-  // about the cause ("could not load") rather than naming only the unreachable case.
   "boot.error": "Could not load the till, reload to try again",
-  // Multi-menu till: the accessible name of the menu switcher (the segmented control above the product
-  // grid that picks which of the current zone's menus the grid shows). Menu and service-zone names are
-  // data from the server, localised when authored rather than keys here.
+  // Menu and service-zone names are server data, not keys here.
   "menu.switcher": "Menu",
   "service_zone.label": "Service area",
   "service_zone.refresh": "Refresh menus",
   "service_zone.load_error": "Could not load menus for this service area",
   "service_zone.basket_active": "Clear the basket before changing service area",
-  // Server status (till-reroute §4.4)
+  // Server status
   "server.on": "On:",
   "server.unknown": "checking",
   "server.unreachable": "unreachable",
@@ -479,9 +336,7 @@ export const en = {
 
 export type StringKey = keyof typeof en;
 
-// A full translation of the base map. Typed `Record<StringKey, string>` (not
-// Partial): every base key must be translated, so an untranslated addition fails
-// typecheck rather than silently falling through to English at runtime.
+// Typed `Record<StringKey, string>`, not Partial, so an untranslated key fails typecheck.
 export const es: Record<StringKey, string> = {
   "action.pay": "Cobrar",
   "action.confirm_payment": "Confirmar cobro",
@@ -773,12 +628,8 @@ export const es: Record<StringKey, string> = {
     "El servidor no respondió. Comprueba si la venta se registró antes de reintentar.",
 };
 
-// Locale → catalogue. `en` is included as its own catalogue so an explicit
-// English request resolves directly rather than only through t()'s fallback.
-// Both the language tag `es` and the region tag `es-ES` map to the same Spanish
-// catalogue — the language a Spanish venue is driven to. Catalogues are typed
-// Partial<Record<StringKey, string>> so a future locale may be introduced with
-// only some keys translated; t() fills the gaps from the English base.
+// `en` is its own catalogue, so an explicit English request resolves directly rather than through
+// t()'s fallback.
 export const catalogues: Record<string, Partial<Record<StringKey, string>>> = {
   en,
   "en-GB": en,

@@ -92,8 +92,8 @@ describe("deriveExtraSelections", () => {
   });
 
   it("takes the first offered list when two carry the same product", () => {
-    // The server refuses this pairing and re-prices the line whichever list the till names
-    // (docs/developers/modifiers.md), so the till picks deterministically rather than guessing.
+    // The server refuses this pairing whichever list the till names, so the till picks
+    // deterministically.
     const alsoBacon: OfferedModifier = {
       ...sauces,
       id: "list-sauces",

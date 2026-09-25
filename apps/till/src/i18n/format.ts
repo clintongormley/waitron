@@ -1,35 +1,14 @@
 import { currentLocale } from "./t.js";
 
-/**
- * Format a money amount for display.
- *
- * `value` is a `Decimal` string — money is stored and carried as an exact
- * decimal string (spec §9 forbids storing formatted or floating-point money),
- * and this is the EDGE where that string becomes human-readable text. The
- * returned string is for display only; never store it and never feed it back
- * into arithmetic.
- *
- * `Number(value)` is safe here and only here: at money scale the value is at
- * most ~12 integer digits and 2 decimal places, well within IEEE-754 double
- * precision, so the display conversion is lossless. It must NOT be used to round
- * or compute — that stays in `Decimal` upstream; this call is the last step
- * before the pixels.
- *
- * With no explicit locale the amount follows the ACTIVE UI locale (`currentLocale()`), so operator-UI
- * money tracks the language the operator is using — English amounts (`€12.27`) in English mode, es-ES
- * amounts (`12,27 €`) in Spanish mode. The fiscal receipt view passes its invoice locale explicitly and
- * is unaffected. Note that `Intl.NumberFormat("es-ES", …)` places a non-breaking space (U+00A0, or a
- * narrow no-break space U+202F on some ICU builds) between the amount and the €, not an ASCII space —
- * callers comparing the es-ES output must account for that.
- */
-
-/**
- * Cache the `Intl.NumberFormat` per locale. `formatMoney` runs on every keystroke
- * and basket render, and building a formatter is the expensive part; the instances
- * are immutable and safe to reuse. Keyed by locale (the only thing that varies).
- */
+/** Building an `Intl.NumberFormat` is the expensive part, and an instance is safe to reuse. */
 const formatters = new Map<string, Intl.NumberFormat>();
 
+/**
+ * Display only: never store the result or feed it back into arithmetic. `Number(value)` is safe only
+ * because a money amount is bounded well inside double precision (`MAX_MONEY_INTEGER_DIGITS`,
+ * `@waitron/shared`). es-ES output puts a no-break space (U+00A0, or U+202F on some ICU builds)
+ * before the €, not an ASCII space.
+ */
 export function formatMoney(value: string, l: string = currentLocale()): string {
   let formatter = formatters.get(l);
   if (formatter === undefined) {

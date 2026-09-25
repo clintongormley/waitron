@@ -131,8 +131,7 @@ describe("TillApi", () => {
   });
 
   it("surfaces the error body's params alongside the code (pin.throttled retryAfterSeconds)", async () => {
-    // Task 10 throttle: the 429 body carries `params.retryAfterSeconds`; the client spreads params onto
-    // the thrown object so the lock screen's countdown can read it. Dropping the spread makes this fail.
+    // The lock screen's countdown reads `retryAfterSeconds` off the thrown object.
     const fetchStub = vi
       .fn()
       .mockResolvedValue(
@@ -149,10 +148,8 @@ describe("TillApi", () => {
   });
 
   it("keeps the validated code and status even when the body's params carry their own", async () => {
-    // The thrown object promises `code` is always a validated string and `status` the real HTTP status.
     // A server (buggy or hostile) that puts `code`/`status` keys inside `params` must NOT override
-    // either — the lock screen branches on `code`, so a `code: null` slipping through would break its
-    // pin.throttled path. The validated `code` and the answered `status` win over the spread.
+    // either — the lock screen branches on `code`.
     const fetchStub = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -181,10 +178,8 @@ describe("TillApi", () => {
   });
 
   it("falls back to server.internal (not a parse error) when the error body is not JSON", async () => {
-    // A gateway or a vanished route can answer a non-2xx with a `text/plain` body, which `res.json()`
-    // throws on. Left unguarded that SyntaxError reaches the caller as a fake network failure. The
-    // guarded parse turns it into the same `{ code }` shape every caller already branches on, and the
-    // HTTP `status` rides along additively.
+    // Left unguarded, the SyntaxError `res.json()` throws would reach the caller as a fake network
+    // failure.
     const fetchStub = vi
       .fn()
       .mockResolvedValue(
@@ -199,7 +194,7 @@ describe("TillApi", () => {
 
   it("falls back to server.internal when the error body is the literal JSON null", async () => {
     // `null` parses cleanly, so a bare try/catch never runs and reading `.error` off it would throw a
-    // TypeError — the second half of the same bug.
+    // TypeError.
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(null, 500));
 
     await expect(new TillApi("", fetchStub).getTill()).rejects.toMatchObject({
@@ -226,16 +221,10 @@ describe("TillApi", () => {
       }),
     );
     expect(r.personId).toBe("u1");
-    // The server-computed capability rides the response so the till can gate manager-only affordances
-    // (FP-2 Editar plano) without mirroring the role→permission map on the client.
     expect(r.canConfigureTill).toBe(true);
   });
 
   it("getTill GETs the boot info with no request body or content-type", async () => {
-    // The boot payload carries the device's layout `canvas` (SP-B4 — the region-model `layout` is gone)
-    // and the non-fiscal `receipt` trim — the client passes both through untouched, typed as `TillInfo`,
-    // so this literal is a compile-time proof the shape carries them and the `.toEqual` a runtime proof
-    // they round-trip.
     const info = {
       locale: "es-ES",
       venueName: "Deli",
@@ -257,7 +246,6 @@ describe("TillApi", () => {
           },
         ],
       },
-      // Capabilities ride the payload as an explicit sibling of `canvas` (device-profile §5.3, Task 9).
       capabilities: [],
       receipt: { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" },
     };
@@ -336,12 +324,9 @@ describe("TillApi", () => {
   });
 
   it("listProducts GETs the location's menus + products, carrying each product's allergens and menu tag", async () => {
-    // Typed as `ProductCatalogue` so the mock is a COMPILE-TIME proof the client shape carries both the
-    // `menus` half (the switcher's accessible catalogues) and the products' `allergens` (the EU-14
-    // declaration map keyed by allergen code, menu & allergens) plus each product's `catalogueId` menu
-    // tag. The runtime `.toEqual` then proves the client passes the whole payload through untouched. One
-    // product carries a declaration (both presences plus the optional `source` specificity), a second is
-    // unreviewed (`null`), and the two sit on different menus, so all the shapes round-trip.
+    // Typed as `ProductCatalogue` so `tsc` checks the client shape carries `menus`, `allergens` and
+    // `catalogueId`. One product carries a declaration (both presences plus the optional `source`), the
+    // other is unreviewed (`null`).
     const payload: ProductCatalogue = {
       menus: [
         { id: "cat-food", name: "Comida", isDefault: true },
@@ -551,8 +536,8 @@ describe("TillApi", () => {
   });
 
   it("retrieveWorkingOrder GETs the addressed order and returns its label + rebuild lines", async () => {
-    // The server sends `quantity` as a three-place decimal string ("2.000"); the client passes it through as
-    // sent — the basket-display normalisation is a later task's concern, not the client's.
+    // The server sends `quantity` as a three-place decimal string ("2.000"); the client passes it
+    // through as sent.
     const order = {
       id: "wo1",
       orderNumber: 7,
@@ -571,8 +556,7 @@ describe("TillApi", () => {
   });
 
   it("updateWorkingOrder PUTs the whole new basket to the addressed order (empty 200 body)", async () => {
-    // The server answers PUT with an EMPTY 200 body (`c.body(null, 200)`), so the client must
-    // resolve void without trying to JSON-parse nothing.
+    // An EMPTY 200 body resolves void rather than being JSON-parsed.
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     const api = new TillApi("", fetchStub);
 
@@ -1191,7 +1175,7 @@ describe("TillApi", () => {
     ).rejects.toMatchObject({ code: "absence.overlaps" });
   });
 
-  // --- Live floor (FP-1): zones, occupancy read-model, served markers, tab open/round ---
+  // --- Live floor: zones, occupancy read-model, served markers, tab open/round ---
 
   it("listZones GETs the venue's active floor-plan zones and returns them", async () => {
     // Typed `FloorZone[]` so the mock is a compile-time proof the client shape carries every field
@@ -1230,10 +1214,9 @@ describe("TillApi", () => {
   });
 
   it("getTablesState GETs the occupancy read-model, decoding zoneId + pendingToServe + readyToServe + enRoute + timingBand and the tab fields", async () => {
-    // Typed `TableState[]` so the mock is a compile-time proof the client mirror carries every field
-    // `listTablesWithState` returns. An open-tab row carries the optional `tabId`/`tabLineCount`/
-    // `tabTotal` and a manual `status`; a free row omits the tab fields and nulls zone/capacity/status
-    // — both shapes round-trip. `timingBand` (KDS order-timing alerts, design §7.3) rides on BOTH.
+    // Typed `TableState[]` so `tsc` checks the client mirror carries every field. An open-tab row
+    // carries the optional tab fields and a manual `status`; a free row omits the tab fields and nulls
+    // zone/capacity/status.
     const rows: TableState[] = [
       {
         id: "t1",
@@ -1251,9 +1234,8 @@ describe("TillApi", () => {
         enRoute: 1,
         timingBand: "forgotten",
         status: { id: "s1", label: "Reservada", color: "#ff0000" },
-        // Bookings-1 §4: an imminent reservation rides the read-model and must round-trip decoded.
         nextReservation: { time: "20:30" },
-        // FP-2: a PLACED table carries its spatial coordinates + shape + rotation…
+        // A PLACED table carries its coordinates, shape and rotation…
         posX: 250,
         posY: 400,
         shape: "round",
@@ -1289,9 +1271,6 @@ describe("TillApi", () => {
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
     expect(r).toEqual(rows);
-    // The badge signals the floor screen renders survive the round-trip decoded — `pendingToServe`,
-    // `readyToServe` (KDS-1 §3d's "N listos") AND `enRoute` (KDS-3 §3c's "en camino") — as do the FP-2
-    // placement fields (a placed table's coordinates, an unplaced table's nulls).
     expect(r[0]).toMatchObject({
       zoneId: "z1",
       pendingToServe: 2,
@@ -1304,8 +1283,6 @@ describe("TillApi", () => {
   });
 
   it("markLineServed POSTs the served path (empty 200 body, no request body)", async () => {
-    // The server answers with an EMPTY 200 body (`c.body(null, 200)`), so the client resolves void
-    // without JSON-parsing nothing.
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 
     await expect(new TillApi("", fetchStub).markLineServed("ord-1", 2)).resolves.toBeUndefined();
@@ -1403,17 +1380,8 @@ describe("TillApi", () => {
   });
 
   it("getTabLines GETs the open tab's lines, decoding the locked price + served state per line", async () => {
-    // Typed `TabLine[]` so the mock is a compile-time proof the client mirror carries every field the
-    // server sends (`lineNo`, `productId`, `quantity`, `unitPriceGross`, `servedAt`, and KDS-2's
-    // `courseId`/`firedAt`/`state`). A served line carries a timestamp, an unserved one `null` — the two
-    // floor states the table-order screen renders ("Servido" vs "Pendiente de servir"). `courseId`/
-    // `firedAt`/`state` carry the kitchen coursing state the waiter-fire + recall-vs-cancel-only actions
-    // read (coursing corrections, C1): `state: null` for the second line pins the LEFT-join edge (a line
-    // with no ticket item yet), distinct from a held line that already has one (`state: "queued"`,
-    // `firedAt: null`). `unitPriceGross` is the LOCKED gross unit, not a re-price. The second line is a
-    // CHILD extras row, naming its parent dish by `parentLineNo` — the one field that tells a child from
-    // a dish, since a child carries the picked product. The round trip below is what proves it survives
-    // decoding; that the MIRROR declares it is proved by `tsc` over this fixture, not at runtime.
+    // Typed `TabLine[]` so `tsc` checks the client mirror declares every field. The second line is a
+    // CHILD extras row with no ticket item (`state: null`), naming its parent dish by `parentLineNo`.
     const lines: TabLine[] = [
       {
         lineNo: 1,
@@ -1449,8 +1417,6 @@ describe("TillApi", () => {
     // The served-state signal survives the round-trip decoded per line.
     expect(r[0]!.servedAt).not.toBeNull();
     expect(r[1]!.servedAt).toBeNull();
-    // The ticket `state` signal (C1) survives the round-trip too — "queued" for the fired line, null for
-    // the line with no ticket item yet.
     expect(r[0]!.state).toBe("queued");
     expect(r[1]!.state).toBeNull();
     // The child marker survives too: null on the dish, the parent's line number on the child.
@@ -1470,8 +1436,7 @@ describe("TillApi", () => {
     });
   });
 
-  // --- Coursing editing (A1/A2/A4): per-line re-course + fine-grained send/recall of held lines. Each
-  //     mirrors the served/status verbs above — an operational floor verb, PRE-FISCAL. ---
+  // --- Coursing editing: per-line re-course and send/recall of held lines ---
 
   it("setLineCourse PATCHes { courseId } to the line's /course route (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
@@ -1578,9 +1543,6 @@ describe("TillApi", () => {
   });
 
   it("voidLine DELETEs the tab line's path (empty 200 body, no request body)", async () => {
-    // Cancel (void) ONE line of an open tab (coursing editing C5) → DELETE
-    // /api/working-orders/:orderId/lines/:lineNo (voidTabLine). The server answers an EMPTY 200 body, so
-    // the client resolves void; a discard carries neither a body nor a content-type header.
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 
     await expect(new TillApi("", fetchStub).voidLine("ord-1", 2)).resolves.toBeUndefined();
@@ -1607,9 +1569,7 @@ describe("TillApi", () => {
   });
 
   it("setTableStatus POSTs { statusId } to the TABLE's /status route (empty 200 body)", async () => {
-    // The server answers with an EMPTY 200 body (`c.body(null, 200)`), so the client resolves void
-    // without JSON-parsing nothing. Keyed by TABLE id (not order id) — a manual service status is a
-    // property of the table, independent of any open tab.
+    // Keyed by TABLE id (not order id): a manual service status belongs to the table, not to a tab.
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 
     await expect(
@@ -1657,8 +1617,7 @@ describe("TillApi", () => {
     });
   });
 
-  // --- Table actions (TS-3 move/join/merge, TS-4 transfer): the tab-relocation + bill-combining verbs
-  //     the till surfaces behind the drawer's action menu. Each POSTs to /api/tabs/:tabId/<verb>. ---
+  // --- Table actions: move, join, merge, transfer and split, each POSTing to /api/tabs/:tabId/<verb> ---
 
   it("moveTab POSTs { toTableId } to the tab's /move route (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
@@ -1766,12 +1725,9 @@ describe("TillApi", () => {
     });
   });
 
-  // --- Spatial floor-plan placement (FP-2, Task 4's on-till routes — NOT the management ones) ---
+  // --- Floor-plan placement (the on-till routes, not the management ones) ---
 
   it("setTablePlacement PUTs the placement body to the TABLE's /placement route (empty 204 body)", async () => {
-    // The on-till route (`PUT /api/tables/:id/placement`) answers a 204 with no body, so the client
-    // resolves void without JSON-parsing nothing. The body carries the four placement columns + the
-    // target zone (the server re-validates each — `placement.invalid` / `zone.not_found`).
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     const api = new TillApi("", fetchStub);
 
@@ -1830,9 +1786,8 @@ describe("TillApi", () => {
     ).rejects.toMatchObject({ code: "placement.invalid" });
   });
 
-  // --- Device mode (device-identity-1 §5a): the enrolled KDS station display + the join front door. The
-  // httpOnly device cookie rides `credentials: "include"` exactly like the operator session, so these
-  // never send a token themselves. ---
+  // --- Device mode: the httpOnly device cookie rides `credentials: "include"`, so these never send a
+  // token themselves. ---
 
   it("join POSTs only { name } to /api/device/join and returns the id + the number", async () => {
     // ONLY the name goes up, and nothing about the venue comes back: the profile and the binding are
@@ -1985,7 +1940,7 @@ describe("TillApi", () => {
     ).rejects.toMatchObject({ code: "device.forbidden_station" });
   });
 
-  // --- Per-user language preference (Task 4's PUBLIC pre-login read) ---
+  // --- Per-user language preference ---
 
   it("getLocales GETs the public /api/locales list and returns { locales, venueDefault }", async () => {
     const body = {
@@ -2011,8 +1966,6 @@ describe("TillApi", () => {
   });
 
   it("login response carries the operator's per-user locale (or null when unset)", async () => {
-    // Task 5 widened POST /api/session to also return the signed-in person's stored UI locale — the
-    // value the app feeds `resolveActiveLocale` on login. `null` when the person has no preference.
     const fetchStub = vi
       .fn()
       .mockResolvedValue(
@@ -2023,8 +1976,6 @@ describe("TillApi", () => {
   });
 
   it("putLocale PUTs the chosen code to /api/session/locale and resolves void on the 204", async () => {
-    // The operator's own UI-language write (per-user-language-preference). The server route answers an
-    // empty 204, so `#request<void>` resolves undefined; the body carries `locale` and nothing else.
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     const api = new TillApi("", fetchStub);
 
@@ -2054,8 +2005,8 @@ describe("isNetworkFailure", () => {
 
 describe("menuOfferToTillProduct", () => {
   it("carries the offer's ordered lists through, in the order they arrive", () => {
-    // The till re-sorts nothing: the order IS the product's own attachment order (spec §5), and the
-    // picker draws it as given. Three different texts per name, so a reader of the wrong one fails.
+    // The order IS the product's own attachment order. Three different texts per name, so a reader of
+    // the wrong one fails.
     const extras: OfferedModifier = {
       kind: "extras",
       id: "list-extras",

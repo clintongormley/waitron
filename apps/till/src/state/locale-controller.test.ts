@@ -23,7 +23,6 @@ afterEach(() => {
 
 describe("LocaleChangeController", () => {
   it("repaints the host when the locale changes", async () => {
-    // Start at the en-GB default, switch to es-ES; the probe must repaint from English to Spanish.
     const { el } = await mountWidget<LocaleProbe>("locale-probe", {});
     expect(el.shadowRoot!.textContent).toContain(t("action.logout", "en-GB"));
     setLocale("es-ES");
@@ -34,7 +33,7 @@ describe("LocaleChangeController", () => {
   it("unsubscribes on disconnect so a later switch does not repaint it", async () => {
     const { el, host } = await mountWidget<LocaleProbe>("locale-probe", {});
     expect(el.shadowRoot!.textContent).toContain(t("action.logout", "en-GB"));
-    host.remove(); // disconnectedCallback → hostDisconnected → dispose
+    host.remove();
     setLocale("es-ES");
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain(t("action.logout", "en-GB"));
@@ -42,10 +41,8 @@ describe("LocaleChangeController", () => {
 
   it("invokes a custom handler instead of the default requestUpdate", async () => {
     let calls = 0;
-    // A second controller on the same (already-connected) host with an explicit handler
-    // exercises the `handler ?? default` branch; the probe above covers the default branch.
-    // Lit's addController calls hostConnected immediately when the host is already
-    // connected, so the custom controller subscribes at construction time here.
+    // Lit's addController calls hostConnected at once on an already-connected host, so this
+    // controller subscribes at construction time.
     const { el } = await mountWidget<LocaleProbe>("locale-probe", {});
     new LocaleChangeController(el, () => {
       calls += 1;

@@ -3,8 +3,8 @@ import { deriveOptionSelections } from "./held-options.js";
 import type { OfferedModifier } from "../api/client.js";
 import type { OptionSnapshot } from "@waitron/shared";
 
-/** One offered options list. Its three names, and each label's three, DIFFER, so a match made on the
- *  wrong one of the six fails (CLAUDE.md §3). */
+/** Its three names, and each label's three, DIFFER, so a match made on the wrong one of the six
+ *  fails. */
 function list(id: string, staff: string, labels: [string, string][]): OfferedModifier {
   return {
     kind: "options",
@@ -88,8 +88,8 @@ describe("deriveOptionSelections", () => {
   });
 
   it("leaves out an answer no offered list matches, since nothing may name it", () => {
-    // The Pan list was deactivated between the park and the edit: `validateOptionSelections` asks
-    // for no answer to it and refuses one (`options.invalid`), so the wire carries none.
+    // The Pan list was deactivated between the park and the edit, so the server would refuse an
+    // answer to it.
     expect(
       deriveOptionSelections([punto], [frozen("Pan", "Blanco"), frozen("Punto", "Al punto")]),
     ).toEqual({ options: [{ listId: "list-punto", labelId: "label-medium" }], unanswered: [] });
@@ -156,9 +156,7 @@ describe("deriveOptionSelections", () => {
   });
 
   it("matches nothing when an answer arrives with no staff name in it", () => {
-    // A list and a label each hold a non-blank staff name (`staffName`,
-    // `packages/catalogue/src/option-contract.ts` refuses a blank one), so an empty map is an answer
-    // that lost the wording it is identified by — which must not fall through to a match.
+    // An empty map is an answer that lost the wording it is identified by, and must not match.
     const nameless = { ...frozen("Punto", "Al punto"), listName: {} };
     expect(deriveOptionSelections([punto], [nameless])).toEqual({
       options: [],

@@ -1,29 +1,11 @@
 /**
- * The till's in-browser "current order" — the basket the walk-up-sale widgets read from and act on.
- * It holds the lines the operator has rung up and previews their total, and it belongs to the TILL,
- * not to a login session: nothing here is cleared on logout (only {@link WorkingOrderStore.clear}
- * empties it), so a shift change never loses a half-built order.
+ * The till's in-browser basket. It belongs to the TILL, not to a login session: only
+ * {@link WorkingOrderStore.clear} empties it, so a shift change never loses a half-built order.
+ * Widgets never hold references to one another; they coordinate through this store's events.
  *
- * Widgets never hold references to one another (spec §3): they coordinate through this store and its
- * event channel. A product button broadcasts its pick with `emit("product-selected", product)`; the
- * basket view subscribes to `"changed"` (via {@link WorkingOrderStore.subscribe}) and re-renders.
- *
- * PRICING. The preview total is computed with the SERVER's authoritative pricer, `priceBasket`
- * (`packages/catalogue/src/pricing.ts`), reached by a DEEP import that bypasses the `@waitron/catalogue`
- * barrel. The barrel re-exports `operations.ts`, which pulls in `@waitron/db` and Node builtins and
- * would break the browser bundle; `pricing.ts` in isolation depends only on `@waitron/shared` (its
- * `@waitron/core`/`@waitron/fiscal` imports are `import type`, erased at build). `@waitron/catalogue`
- * has no `exports` map, so a deep subpath resolves. What keeps the bundle small is a PROPERTY of
- * every catalogue module reached that way, not how many there are: none pulls in anything at runtime
- * beyond `@waitron/shared` and its own siblings, and any `@waitron/core`/`@waitron/fiscal` reference
- * is an `import type`. A further deep import is safe only while that still holds — one that reaches
- * `operations.ts` drags `@waitron/db` and Node builtins in behind it. Using the real pricer — not a reimplementation — is what keeps the preview equal
- * to the total the server re-prices at pay time ON THE WALK-UP PATH: there both sides run the same
- * `priceBasket` over the same live catalogue, so they cannot drift. It is NOT a guarantee for a
- * PLACED or RETRIEVED order (7c): the server files those from `priceLockedLines` over the ADD-TIME
- * lock (`working_order_lines.unit_price_gross`) while this preview reprices the CURRENT catalogue, so
- * the two DIVERGE if the catalogue price changed between add and pay — the deliberate line-add
- * snapshot, not a bug.
+ * The `@waitron/catalogue` imports are DEEP, bypassing the barrel, which re-exports `operations.ts`
+ * and with it `@waitron/db` and Node builtins. A deep import is safe only while the module it reaches
+ * pulls in nothing at runtime beyond `@waitron/shared` and its own siblings.
  */
 import { type BasketItem, priceBasket } from "@waitron/catalogue/src/pricing.js";
 import { customerPresentationText } from "@waitron/catalogue/src/product-presentation.js";
@@ -36,121 +18,71 @@ import type { HeldExtra, TillProduct } from "../api/client.js";
 import { productUnit, toPresentation } from "../widgets/product-name.js";
 
 /**
- * One extras pick the operator made on a basket line: which list offered it, which PRODUCT was
- * picked, and how many of that product this dish takes. The wire sends the first three fields alone
- * (`ExtraSelection`, `@waitron/shared`) — `name` and `price` are the client's copy of what the offer
- * resolved, so the basket can draw the pick's own row without a second lookup.
- *
- * `price` is DISPLAY-ONLY: the server re-resolves it from the offer and files the child line at its
- * own figure. `quantity` is always present and at least 1 — a pick of none is no pick.
+ * One extras pick on a basket line. `name` and `price` are the client's copy of what the offer
+ * resolved, for display only: the server re-resolves the price from the offer.
  */
 export interface SelectedExtra {
-  /** The extras list the pick came off — the id the wire names, and the reason a retrieved line has
-   * to re-derive one (`deriveExtraSelections`, `./held-extras.ts`). */
   listId: string;
-  /** The picked product. An extra IS a product: a pick never names an `extra_list_items` row. */
+  /** An extra IS a product: a pick never names an `extra_list_items` row. */
   productId: string;
-  /** The picked product's STAFF name — what the basket shows under its dish. */
+  /** The STAFF name. */
   name: string;
-  /** GROSS (VAT-inclusive) resolved unit price as a two-place decimal STRING ("0.50", "0.00" for a
-   * free pick) — the shape the offer sends, not the shape the column holds: a money column counts
-   * whole cents (`money`, `packages/db/src/schema/columns.ts`) and the row converts on the way out.
-   * {@link lineGross} prices it at `price × (dishQuantity × quantity)`. */
+  /** GROSS (VAT-inclusive) unit price as a two-place decimal string ("0.50"). */
   price: string;
-  /** How many of this product the dish takes, per dish. The server multiplies by the dish count. */
+  /** Per dish, at least 1. */
   quantity: number;
 }
 
 /**
- * A retrieved pick that no list the dish offers today carries, so no wire entry can name it
- * (`deriveExtraSelections`, `./held-extras.ts`). An unedited order is paid from its stored lines,
- * which still bill it, so the basket shows and counts it until the order is edited.
+ * A retrieved pick that no list the dish offers today carries, so no wire entry can name it. An
+ * unedited order is paid from its stored lines, which still bill it, so the basket shows and counts it
+ * until the order is edited.
  */
 export type NotOfferedExtra = Pick<HeldExtra, "productId" | "name" | "price" | "quantity">;
 
 /**
- * What a picker confirm puts on a line: the answers the wire sends, plus the frozen wording the
- * basket reads. `optionSnapshots` carries the six names an answered options list freezes — built
- * locally here, exactly as the server builds it on the order path — so one renderer serves both a
- * line the operator just answered and a line read back from a held order.
+ * What a picker confirm puts on a line. `optionSnapshots` is built locally in the same shape a held
+ * order carries back, so one renderer serves both.
  */
 export interface LineSelection {
   extras?: SelectedExtra[];
   options?: OptionSelection[];
   optionSnapshots?: OptionSnapshot[];
-  /** The line's free-text kitchen instruction (order-line customisation), absent when it has none.
-   * Read by {@link WorkingOrderStore.addProduct} alone — {@link WorkingOrderStore.setLineModifiers}
-   * replaces a line's ANSWERS and leaves its note to {@link WorkingOrderStore.setLineExtras}, which
-   * is the basket's own note editor. */
+  /** Read by {@link WorkingOrderStore.addProduct} alone; {@link WorkingOrderStore.setLineExtras} owns
+   * a line's note after that. */
   note?: string;
 }
 
-/** One rung-up basket line: a product and its decimal-string quantity. */
 export interface OrderLine {
-  /** Stable server identity retained while editing a retrieved line. */
   workingOrderLineId?: string;
   product: TillProduct;
   /** A decimal string accepted by the product unit's precision. */
   quantity: string;
-  /**
-   * The extras picked on this line, or ABSENT for a dish that took none — kept absent (never `[]`)
-   * so a plain add stays byte-identical to before. The DISH `quantity` above applies to every pick
-   * (a child is priced at `dishQuantity × pickQuantity`, matching the server's
-   * `priceBasketWithOptions`).
-   */
+  /** ABSENT (never `[]`) for a dish that took none. The dish `quantity` applies to every pick. */
   extras?: SelectedExtra[];
   /** Never sent on the wire; ABSENT (never `[]`) when there are none. */
   notOfferedExtras?: NotOfferedExtra[];
-  /** A retrieved line whose offer is not in the till's live list, which leaves out a sold-out or
-   * inactive product and every menu this zone does not show (`listMenuOffers`,
-   * `packages/catalogue/src/operations.ts`). Display only. */
+  /** A retrieved line whose offer is not in the till's live list. Display only. */
   notOffered?: true;
   /**
-   * The line's answers to its dish's options lists, as the wire names them — one entry per answered
-   * list. ABSENT when the dish answered none. A RETRIEVED line has these too, but not from the
-   * server: a held order hands its answers back as the frozen wording below, which names no ids, so
-   * the ids are re-derived from the dish's live offer (`deriveOptionSelections`,
-   * `./held-options.ts`) — and a still-offered list whose wording nothing matches leaves this key
-   * short, which is what the retrieve path's notice is about.
+   * One entry per answered list; ABSENT when none. On a RETRIEVED line the ids are re-derived from the
+   * frozen wording (`deriveOptionSelections`), so a list whose wording nothing matches is missing here.
    */
   options?: OptionSelection[];
-  /**
-   * The six names each answered options list froze — the list's three and the chosen label's three.
-   * Two writers, one shape: the picker builds it at confirm time, and a retrieved held order carries
-   * the server's own (`HeldOrder.lines`, `../api/client.ts`). It never travels back up the wire.
-   */
+  /** Never sent on the wire. */
   optionSnapshots?: OptionSnapshot[];
-  /**
-   * A free-text kitchen instruction the operator typed on the line (order-line customisation), or
-   * ABSENT when none — the common case, kept absent (never `""`) so a plain add stays byte-identical to
-   * before. The picker trims it and omits an empty result, so a whitespace-only note never lands here.
-   * NON-FISCAL: it rides the wire (`SaleLine.note`) to the working-order line and the server caps it at
-   * 200 chars; it never reaches a sale or a huella.
-   */
+  /** A kitchen instruction; ABSENT (never `""`) when none. */
   note?: string;
 }
 
-/**
- * The store's event names. `"changed"` fires after every mutation (add/remove/clear) so views
- * re-render; `"product-selected"` is a widget-to-widget broadcast that carries a picked product and
- * does NOT mutate the basket.
- */
+/** `"product-selected"` is a widget-to-widget broadcast that does NOT mutate the basket. */
 export type WorkingOrderEvent = "changed" | "product-selected";
 
-/** An event listener. `payload` is `undefined` for `"changed"` and the picked product for `"product-selected"`. */
 export type WorkingOrderListener = (payload?: unknown) => void;
 
-/** The priced shape `priceBasket` returns; used to type the getters without importing fiscal/core here. */
 type Priced = ReturnType<typeof priceBasket>;
 
-/**
- * Resolve one basket line into the shape the pricer takes. The till carries the three names the way
- * the catalogue stores them — a staff `name`, an optional per-language `customerName`, an optional
- * `kitchenName`, each with the variant's own alongside — while a priced line wants the CUSTOMER text
- * already resolved, so `product-presentation.ts` (the one home for the blank-falls-back-to-the-staff-name
- * rule) does that here, through `customerPresentationText`. The product and the variant stay SEPARATE
- * fields: the pricer freezes them into separate columns and joins nothing.
- */
+/** A priced line wants the CUSTOMER text already resolved. */
 function toPriceable(line: OrderLine): BasketItem {
   const p = line.product;
   const text = customerPresentationText(
@@ -168,11 +100,7 @@ function toPriceable(line: OrderLine): BasketItem {
   };
 }
 
-/**
- * Copy a selection's non-empty parts onto a line. An empty list is not an answer, so it leaves no
- * key: a line the operator answered and then cleared reads the same as one never answered, which is
- * what every `toEqual` on a plain line pins.
- */
+/** An empty list is not an answer, so it leaves no key. */
 function applySelection(line: OrderLine, selection: LineSelection | undefined): void {
   if (selection?.extras?.length) line.extras = selection.extras;
   if (selection?.options?.length) line.options = selection.options;
@@ -182,106 +110,62 @@ function applySelection(line: OrderLine, selection: LineSelection | undefined): 
 export class WorkingOrderStore {
   readonly #lines: OrderLine[] = [];
   readonly #listeners = new Map<WorkingOrderEvent, Set<WorkingOrderListener>>();
-  /**
-   * The STABLE client-minted id for this working order — one uuid per basket, minted here at
-   * construction and kept across every add/remove. Park and pay send it as the idempotency key, so a
-   * retried request re-sends the SAME id and settles the order once rather than twice. It changes in
-   * exactly one place, {@link clear}, because a fresh basket is a new working order; adding a line
-   * never re-mints it, and {@link loadFrom} adopts a retrieved order's id verbatim.
-   */
+  /** The idempotency key park and pay send, so a retried request settles the order once. */
   #id: string = crypto.randomUUID();
-  /**
-   * The operator's optional name for the order ("Mesa 4", "Barra"), shown in the held-orders list.
-   * Metadata, not a line — but {@link label}'s setter and {@link loadFrom} both emit `"changed"` so a
-   * basket header re-renders when it is set or a retrieved order carries one.
-   */
   #label?: string;
-  /**
-   * The memoised `priceBasket(this.#lines)` result, or `null` when a mutation has invalidated it.
-   * `total` and `vatBreakdown` both read the same cached object, so a mutation re-prices once rather
-   * than once per getter per consumer. Set to `null` in every mutation and recomputed lazily.
-   */
   #priced: Priced | null = null;
-  /**
-   * The memoised extras-aware grand total, or `null` when a mutation invalidated it. Held SEPARATELY
-   * from {@link #priced} because `priceBasket` prices the dishes alone — so the grand total (and the
-   * cash-tender sufficiency gate + the readout that both read {@link total}) is summed from the
-   * per-line {@link lineGross}, which DOES add each extras pick. Cleared in every mutation beside
-   * {@link #priced} and recomputed lazily.
-   */
   #total: Decimal | null = null;
   /**
-   * Whether {@link id} already names an OPEN row server-side (7c place/collect). A fresh store starts
-   * `false` — nothing has synced it yet; {@link loadFrom} sets it `true` (a RETRIEVED order already
-   * exists); {@link clear} resets it `false` (a fresh id is a fresh, unsynced basket); the app calls
-   * {@link markPersisted} after a successful `parkOrder`. Both the place path (`#onPlaceOrder`) and the
-   * Hold path (`#onParkOrder`) read this to decide whether they must park/create FIRST or can sync an
-   * already-parked one — a retrieved order re-parked with the same id would SILENTLY REPLAY the existing
-   * open order server-side (park is idempotent: it inserts nothing and discards the re-sent basket),
-   * discarding any edit, so a persisted order is synced with `updateWorkingOrder`, never re-parked.
+   * Whether {@link id} already names an OPEN row server-side. A persisted order must be synced with
+   * `updateWorkingOrder`, never re-parked: park is idempotent, so a re-park with the same id discards
+   * the re-sent basket and any edit in it.
    */
   #persisted = false;
   /**
-   * Whether the basket's LINES have changed since it last MATCHED the server's stored composition —
-   * i.e. since the last {@link loadFrom} (retrieve), {@link markPersisted} (park) or {@link clear}. A
-   * fresh or just-loaded/just-parked basket is clean (`false`); every line edit sets it `true`
-   * through {@link #markDirty}. The PAY flow (`till-app`'s `#onConfirmPayment`) reads this so it
-   * re-syncs a RETRIEVED order to the server ONLY when it was actually edited: an UNEDITED retrieved
-   * order pays straight from its stored ADD-TIME lock with no pay-time re-price, so a catalogue change
-   * between park and pay never moves the filed total. A LABEL change is deliberately NOT a line edit
-   * and does not set this — the label is held-list metadata that never reaches the filed sale, so it
-   * needs no re-lock.
+   * Whether the LINES have changed since they last matched the server's stored composition. A
+   * retrieved order is re-synced only when this is set, so an unedited one pays from its stored
+   * add-time prices. A LABEL change is deliberately NOT a line edit and does not set this: the label
+   * never reaches the filed sale.
    */
   #dirty = false;
 
-  /** The stable client-minted working-order id for this basket. Changes only on {@link clear}. */
+  /** Changes only on {@link clear} and {@link loadFrom}. */
   get id(): string {
     return this.#id;
   }
 
-  /** The operator's optional name for the order, or `undefined` when unnamed. */
   get label(): string | undefined {
     return this.#label;
   }
 
-  /** Name (or rename) the order. Emits `"changed"` so a basket header showing the label re-renders. */
   set label(value: string | undefined) {
     this.#label = value;
     this.emit("changed");
   }
 
-  /** The current basket lines. A defensive copy — mutate the order only through the methods below. */
+  /** A defensive copy: mutate the order only through the methods below. */
   get lines(): readonly OrderLine[] {
     return [...this.#lines];
   }
 
-  /** How many lines are in the basket — a cheap count that avoids materialising the defensive copy. */
   get lineCount(): number {
     return this.#lines.length;
   }
 
-  /** Whether {@link id} already names an OPEN row server-side. See the field's own doc for why this
-   * exists. */
   get persisted(): boolean {
     return this.#persisted;
   }
 
-  /** Whether the basket's lines have changed since it last matched the server (see {@link #dirty}). The
-   * pay flow re-syncs a retrieved order only when this is `true`. */
   get dirty(): boolean {
     return this.#dirty;
   }
 
-  /** Record that {@link id} now names a persisted (parked) row. Not a rendering concern — no `"changed"`
-   * notification, unlike every basket mutation below. */
+  /** No `"changed"` notification: not a rendering concern. */
   markPersisted(): void {
     this.#persisted = true;
-    // A just-parked basket now MATCHES the server's stored composition, so it is clean — a later pay
-    // needs no re-sync until it is edited again.
     this.#dirty = false;
   }
 
-  /** The memoised priced basket, recomputed only after a mutation cleared {@link #priced}. */
   get #pricedOrder(): Priced {
     if (this.#priced === null) {
       this.#priced = priceBasket(this.#lines.map((line) => toPriceable(line)));
@@ -290,14 +174,8 @@ export class WorkingOrderStore {
   }
 
   /**
-   * The previewed grand total (VAT-inclusive), EXTRAS-AWARE: the sum of every line's `lineGross`,
-   * which adds each extras pick at `price × (dishQuantity × pickQuantity)` on top of the dish. This
-   * is what the tender-pay sufficiency gate and the on-screen readout consume, so it must include
-   * the picks — `priceBasket` (which prices `vatBreakdown` below) sees only the dishes and would
-   * under-report what the customer owes. An options answer adds nothing: it is a kitchen
-   * instruction, never a price. Summing the same rounded per-line grosses the receipt lists keeps
-   * this equal to the server's `priceBasketWithOptions` total to the céntimo (the server re-prices
-   * authoritatively at pay time). Memoised in {@link #total}.
+   * The previewed VAT-inclusive total, summed from each line's {@link lineGross} because that adds the
+   * extras picks, which `priceBasket` does not see. The server re-prices at pay time.
    */
   get total(): Decimal {
     if (this.#total === null) {
@@ -307,44 +185,29 @@ export class WorkingOrderStore {
   }
 
   /**
-   * The previewed VAT bands (one per rate present in the basket), priced by the server's `priceBasket`.
-   * DISH-ONLY: `priceBasket` does not see the extras picked on a line, so these bands cover the
-   * dishes' bases/cuotas and NOT the picks. That is deliberate and currently invisible — no basket
-   * surface renders this preview (the only VAT breakdown shown to the customer is the FILED desglose
-   * on `till-ticket-view`, read back from the fiscal record). If a client-side VAT preview is ever
-   * added over a basket that can carry extras, this must move to `priceBasketWithOptions` (which
-   * needs each pick's own `vatClass`, not carried on {@link SelectedExtra} today) so the bands
-   * reconcile with {@link total}.
+   * DISH-ONLY: `priceBasket` does not see the extras picks, so these bands do not reconcile with
+   * {@link total}. A VAT preview over a basket with extras would need `priceBasketWithOptions`, and
+   * each pick's `vatClass`, which {@link SelectedExtra} does not carry.
    */
   get vatBreakdown(): Priced["vatBreakdown"] {
     return this.#pricedOrder.vatBreakdown;
   }
 
-  /** Drop the memoised {@link #priced}/{@link #total} so the next read recomputes them. Every mutation
-   * below (add/remove/clear/load) changes `#lines`, so every one of them invalidates both. */
   #invalidatePricing(): void {
     this.#priced = null;
     this.#total = null;
   }
 
   /**
-   * Every line edit comes through here. An edit sends each line without its not-offered picks, so the
-   * server replaces the whole order and re-prices it; the picks leave the basket now to match. No
-   * prompt, unlike the modifier picker's stale picks: the retrieve banner (`held.extra_not_offered`)
-   * already told the operator that changing the order removes them.
+   * An edit sends each line without its not-offered picks, so the server re-prices the order without
+   * them; they leave the basket now to match. No prompt: the retrieve banner
+   * (`held.extra_not_offered`) already said that changing the order removes them.
    */
   #markDirty(): void {
     this.#dirty = true;
     for (const line of this.#lines) delete line.notOfferedExtras;
   }
 
-  /**
-   * Append a line and notify. The server revalidates `quantity` against the selected unit.
-   * `selection` is the whole of what a picker confirm decided — its answers AND the line's note —
-   * so a confirm is ONE argument. Each of its keys attaches ONLY when it names something, so the
-   * common one-tap add carries no keys at all and stays byte-identical to a bare add. The picker
-   * already trims a whitespace-only note to nothing before calling.
-   */
   addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
     assertQuantityPrecision(quantity, productUnit(product).precision, { positive: true });
     const line: OrderLine = { product, quantity };
@@ -358,12 +221,7 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
-  /**
-   * Replace the answers on the line at `index` — the basket's re-open-the-picker path. The whole
-   * selection is replaced, so an answer the operator cleared leaves no key behind. The line's NOTE is
-   * not among them: {@link setLineExtras} owns it, and the basket's own editor is the only thing that
-   * sets it. Out-of-range indices are a no-op, like {@link removeLine}.
-   */
+  /** Replaces the line's answers but not its note, which {@link setLineExtras} owns. */
   setLineModifiers(index: number, selection: LineSelection): void {
     const line = this.#lines[index];
     if (!line) return;
@@ -376,14 +234,7 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
-  /**
-   * Set how many of the line at `index` the basket holds (dish-line quantity) and notify. `quantity` is
-   * a whole quantity (the basket's +/- stepper is the only caller and never touches a fractional or
-   * hardware-mapped line). Out-of-range indices are a no-op, exactly like {@link removeLine}. This does NOT merge lines:
-   * each add stays its own line, so stepping one line's count never folds it into an identical sibling.
-   * Re-prices ({@link #invalidatePricing}) and marks the basket {@link #dirty} — a quantity change is a
-   * line edit, so a retrieved order re-syncs before pay, the same as add/remove.
-   */
+  /** Never merges lines: stepping one line's count never folds it into an identical sibling. */
   setLineQuantity(index: number, quantity: string): void {
     if (index < 0 || index >= this.#lines.length) {
       return;
@@ -398,19 +249,8 @@ export class WorkingOrderStore {
   }
 
   /**
-   * Set the per-line note (order-line customisation) on the line at `index` and notify. The basket-line
-   * editor (Task 4b) is the caller — it reaches EVERY line, including a plain product fast-added with
-   * one tap that never passed through the modifier picker. A PARTIAL update: only the keys PRESENT in
-   * `extras` are touched, so an extras object that names none leaves the stored note alone.
-   * Out-of-range indices are a no-op, like {@link removeLine}.
-   *
-   * Applies the SAME omission discipline as the picker: a `note` is trimmed and an empty result CLEARS
-   * the key (a whitespace-only note is "not chosen"), so a line stays byte-identical to a note-free add
-   * once its extras are cleared, never carrying `""`. Marks the basket {@link #dirty} — the note rides
-   * the wire (`SaleLine.note`), so a retrieved order must re-sync before pay, the same as
-   * {@link addProduct}/{@link setLineQuantity}. A note does NOT affect price, but
-   * {@link #invalidatePricing} is called for consistency with every other mutation (the recompute is
-   * cheap and can never disagree with the unchanged prices).
+   * A PARTIAL update: only keys PRESENT in `extras` are touched. A note that trims to empty CLEARS the
+   * key. It marks the basket dirty because the note is sent with the line.
    */
   setLineExtras(index: number, extras: { note?: string }): void {
     if (index < 0 || index >= this.#lines.length) {
@@ -430,7 +270,6 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
-  /** Drop the line at `index` (out-of-range indices are a no-op) and notify. */
   removeLine(index: number): void {
     if (index < 0 || index >= this.#lines.length) {
       return;
@@ -441,11 +280,8 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
-  /**
-   * Empty the basket and notify. This is the ONLY thing that clears the order — logout does not — and
-   * it mints a FRESH {@link id}: a cleared basket is a new working order, so its next park/pay keys a
-   * new idempotency slot rather than colliding with the settled one. The label is dropped with it.
-   */
+  /** Mints a FRESH {@link id}: a cleared basket is a new working order, so its next park or pay does
+   * not collide with the settled one. */
   clear(): void {
     this.#lines.length = 0;
     this.#id = crypto.randomUUID();
@@ -456,13 +292,8 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
-  /**
-   * Replace the basket with a RETRIEVED working order: adopt its `id` verbatim (so paying it later
-   * keys the same idempotency slot the server persisted it under), swap in the given lines, and set
-   * the label. Callers pass ready {@link OrderLine}s built from the stored offer snapshot when present,
-   * with product lookup retained for a context-less legacy line. A missing `label` clears any prior one.
-   * Notifies once.
-   */
+  /** Adopts a RETRIEVED order's `id` verbatim, so paying it keys the same idempotency slot the server
+   * stored it under. */
   loadFrom(id: string, lines: OrderLine[], label?: string): void {
     this.#id = id;
     this.#lines.length = 0;
@@ -470,18 +301,15 @@ export class WorkingOrderStore {
     this.#label = label;
     this.#invalidatePricing();
     this.#persisted = true;
-    // A just-retrieved basket MATCHES the server's stored composition, so it starts clean — the pay
-    // flow re-syncs it only once the operator edits it (see {@link #dirty}).
     this.#dirty = false;
     this.emit("changed");
   }
 
-  /** Subscribe to `"changed"` (the common case). Returns a dispose function that unsubscribes. */
   subscribe(listener: WorkingOrderListener): () => void {
     return this.on("changed", listener);
   }
 
-  /** Subscribe to any event. Returns a dispose function that unsubscribes. */
+  /** Returns a disposer. */
   on(event: WorkingOrderEvent, listener: WorkingOrderListener): () => void {
     let set = this.#listeners.get(event);
     if (set === undefined) {
@@ -494,7 +322,6 @@ export class WorkingOrderStore {
     };
   }
 
-  /** Fire every listener registered for `event`, passing `payload`. Unknown events are a no-op. */
   emit(event: WorkingOrderEvent, payload?: unknown): void {
     const set = this.#listeners.get(event);
     if (set === undefined) {

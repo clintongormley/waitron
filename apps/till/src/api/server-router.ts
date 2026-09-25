@@ -19,8 +19,7 @@ export interface RouterOptions {
 
 export const SERVERS_STORAGE_KEY = "waitron.servers";
 
-/** The bare `localStorage` access itself throws (SecurityError) in a browser that blocks site data, so
- * the default acquisition degrades to memory-only exactly like `#load`/`#save`. */
+/** Reading `localStorage` itself throws in a browser that blocks site data. */
 function defaultStorage(): Pick<Storage, "getItem" | "setItem"> | undefined {
   try {
     return typeof localStorage === "undefined" ? undefined : localStorage;
@@ -36,21 +35,17 @@ interface Tracked extends ServerEntry {
 }
 
 /**
- * The one place the till knows more than one server exists (till-reroute design §4.1). It holds the
- * venue's server list, probes every server each round, and points `current` at whichever answered
- * `acceptingSales: true` — the highest `term` if several. If none did, `current` stays where it is and
- * the till keeps probing: there is no giving up on a server and no failure count (owner, 2026-09-05).
- * The page's own origin is always listed, so a stale or empty cache still reaches the box.
+ * The one place the till knows more than one server exists. `current` points at whichever server
+ * answered `acceptingSales: true`, the highest `term` if several; if none did, it stays put and the
+ * till keeps probing, with no failure count (owner decision, 2026-09-05). The page's own origin is
+ * always listed, so a stale or empty cache still reaches the box.
+ * Design: docs/superpowers/specs/2026-09-05-till-reroute-design.md §4.1.
  */
 export class ServerRouter extends EventTarget {
   #servers: Tracked[];
   #current: string;
   #waiting = false;
-  /** The render-relevant state at the last `state-changed`, as a JSON signature over
-   * `{ statuses(), waiting, current }` — the exact inputs `till-app`'s lock-screen repaint reads. BOTH a
-   * probe round and `setServers` dispatch through `#emitStateChanged`, which updates this, so it always
-   * tracks the last RENDERED state and the two paths can never disagree. The initial `""` never equals a
-   * real signature, so the first change always dispatches. */
+  /** The initial `""` never equals a real signature, so the first change always dispatches. */
   #stateSignature = "";
   #inFlight = 0;
   #round: Promise<void> | undefined;
@@ -112,10 +107,8 @@ export class ServerRouter extends EventTarget {
     this.#inFlight = Math.max(0, this.#inFlight - 1);
   }
 
-  /** One probe round over every listed server, then the target rule (§4.1). Overlapping calls share
-   * the in-flight round: two rounds mutating `#servers[].state` in place would let an older round
-   * resolving last overwrite a newer round's target and undo a move (reachable once S5 calls this while
-   * the interval round is in flight). */
+  /** Overlapping calls share the in-flight round: two rounds mutating `#servers[].state` in place would
+   * let an older round resolving last undo a newer round's move. */
   probeNow(): Promise<void> {
     if (this.#round === undefined) {
       this.#round = this.#runRound().finally(() => {
@@ -133,13 +126,10 @@ export class ServerRouter extends EventTarget {
       const best = yes.reduce((a, b) => ((b.term ?? -1) > (a.term ?? -1) ? b : a));
       if (best.url !== this.#current) this.#move(best.url);
     }
-    // `#move` above already fired `server-changed` on a move; the render repaint is `#emitStateChanged`.
     this.#emitStateChanged();
   }
 
-  /** Dispatch `state-changed` iff the rendered state actually changed (§4.1, S4 deferral D2): the ONE
-   * gate both a probe round and `setServers` flow through, so a steady 5 s round drives no repaint and a
-   * `setServers` repaint can never leave a stale signature a later round would mistake for no-change. */
+  /** Dispatch only when the rendered state changed, so a steady probe round drives no repaint. */
   #emitStateChanged(): void {
     const signature = JSON.stringify({
       statuses: this.statuses(),
@@ -196,8 +186,7 @@ export class ServerRouter extends EventTarget {
     const next: Tracked[] = [];
     const push = (e: ServerEntry) => {
       const parsed = new URL(e.url);
-      // Opaque-origin URLs (mailto:/data:/file:) yield the literal origin "null", which statuses()
-      // would later feed to new URL() and crash the render — treat them like a malformed URL: drop.
+      // Opaque-origin URLs (mailto:/data:/file:) have the literal origin "null".
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return;
       const url = parsed.origin;
       if (next.some((n) => n.url === url)) return;
@@ -237,7 +226,7 @@ export class ServerRouter extends EventTarget {
         ? (parsed.servers as ServerEntry[]).filter((e) => typeof e?.url === "string")
         : [];
     } catch {
-      return []; // unreadable/blocked storage or bad JSON: start empty (the page origin still merges in)
+      return [];
     }
   }
 
@@ -250,9 +239,8 @@ export class ServerRouter extends EventTarget {
   }
 }
 
-/** Apply the router as a fetch wrapper (§4.1): the TillApi keeps `baseUrl = ""` and never learns that
- * more than one server exists. Only an absolute-path (`/`-rooted, not `//`) relative request is
- * rewritten; the TillApi issues only those, and each is unchanged while `current` is the page origin. */
+/** A fetch wrapper, so the TillApi keeps `baseUrl = ""` and never learns that more than one server
+ * exists. */
 export function withServerTarget(fetchImpl: typeof fetch, router: ServerRouter): typeof fetch {
   return async (input, init) => {
     const target =

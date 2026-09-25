@@ -7,7 +7,7 @@ import type { TillProduct } from "../api/client.js";
 // A v4 uuid, as `crypto.randomUUID()` mints: 8-4-4-4-12 hex, version nibble 4, variant 8..b.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-// A gross-1.50 espresso at the general rate; the brief's worked example (×2 = "3.00").
+// A gross-1.50 espresso at the general rate.
 const cafe: TillProduct = {
   id: "cafe",
   name: "Café",
@@ -117,9 +117,6 @@ describe("WorkingOrderStore", () => {
     expect(n).toBe(3); // two adds + one remove
   });
 
-  // Dish-line quantity (feature B): the operator sets how many of a product a line holds via the
-  // basket's +/- stepper, WITHOUT auto-merging identical lines. `setLineQuantity` is the store setter
-  // the stepper calls; it re-prices, marks the basket dirty and notifies, exactly like the other edits.
   it("setLineQuantity updates the line's quantity, re-prices the total, marks dirty and notifies", () => {
     const s = new WorkingOrderStore();
     s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]); // clean baseline, total 1.50
@@ -129,7 +126,7 @@ describe("WorkingOrderStore", () => {
     s.subscribe(() => n++);
     s.setLineQuantity(0, "3");
     expect(s.lines[0]?.quantity).toBe("3");
-    expect(s.total).toBe("4.50"); // 1.50 × 3 — proves the pricing cache was invalidated
+    expect(s.total).toBe("4.50"); // 1.50 × 3
     expect(s.dirty).toBe(true); // a quantity change is a line edit
     expect(n).toBe(1);
   });
@@ -163,11 +160,6 @@ describe("WorkingOrderStore", () => {
     expect(n).toBe(notificationsAfterAdds);
   });
 
-  // Per-line note (order-line customisation, Task 4b): the basket-line editor sets a rung line's note
-  // AFTER it was fast-added, via `setLineExtras`. It marks the basket dirty (the note rides the wire, so
-  // a retrieved order must re-sync) and notifies, exactly like the other line edits, and applies the
-  // SAME omission discipline as the picker — a whitespace-only note clears the key rather than
-  // storing "".
   it("setLineExtras attaches a note to a fast-added line, marks dirty and notifies", () => {
     const s = new WorkingOrderStore();
     s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]); // clean baseline
@@ -183,8 +175,7 @@ describe("WorkingOrderStore", () => {
   it("setLineExtras touches only the keys the caller names, leaving an unnamed note alone", () => {
     const s = new WorkingOrderStore();
     s.addProduct(cafe, "1", { note: "keep me" });
-    // An extras object that does not name `note` must not wipe the stored one: the update is keyed on
-    // the PRESENCE of the key, not on its value, so an absent key is "unchanged", never "clear it".
+    // The update is keyed on the PRESENCE of `note`: an absent key means "unchanged".
     s.setLineExtras(0, {});
     expect(s.lines[0]).toEqual({ product: cafe, quantity: "1", note: "keep me" });
   });
@@ -193,7 +184,6 @@ describe("WorkingOrderStore", () => {
     const s = new WorkingOrderStore();
     s.addProduct(cafe, "1", { note: "old note" });
     s.setLineExtras(0, { note: "   " });
-    // The key is gone — a plain line, byte-identical to a note-free add.
     expect(s.lines[0]).toEqual({ product: cafe, quantity: "1" });
   });
 
@@ -305,13 +295,10 @@ describe("WorkingOrderStore", () => {
     const a = new WorkingOrderStore();
     const b = new WorkingOrderStore();
     a.addProduct(cafe, "1");
-    // Nothing a 'logout' could call resets it — only clear() empties an instance, and one
-    // instance's state never leaks into another.
     expect(a.lines).toHaveLength(1);
     expect(b.lines).toHaveLength(0);
   });
 
-  // The stable client-minted working-order id (keys pay-time idempotency; a retry re-sends it).
   it("mints a uuid id for a fresh store, unique per instance", () => {
     const a = new WorkingOrderStore();
     const b = new WorkingOrderStore();
@@ -333,10 +320,8 @@ describe("WorkingOrderStore", () => {
   it("loadFrom replaces the basket — id, lines, total and label", () => {
     const s = new WorkingOrderStore();
     s.addProduct(jamon, "0.100"); // a pre-existing line that loadFrom must drop
-    // Read total BEFORE loadFrom so the #priced cache is POPULATED (10.00 × 0.100 = 1.00). This is
-    // what makes the "re-priced from the loaded lines" assertion below load-bearing on loadFrom's
-    // `#priced = null` invalidation: without a populated cache going in, that line is untested and a
-    // refactor could drop it and ship a stale retrieved-order total. Proven by deletion (CLAUDE.md §4).
+    // Read total BEFORE loadFrom so the cache is populated; otherwise the re-price assertion below
+    // could not see a missing invalidation.
     expect(s.total).toBe("1.00");
     const lines: OrderLine[] = [
       { product: cafe, quantity: "2" }, // 1.50 × 2 = 3.00 (general)
@@ -346,7 +331,7 @@ describe("WorkingOrderStore", () => {
     expect(s.id).toBe("held-123");
     expect(s.label).toBe("Mesa 4");
     expect(s.lines).toEqual(lines);
-    expect(s.total).toBe("6.20"); // re-priced from the loaded lines — proves #priced was invalidated
+    expect(s.total).toBe("6.20");
   });
 
   it("keeps the loaded id when a product is added after loadFrom — only clear() re-mints", () => {
@@ -382,8 +367,6 @@ describe("WorkingOrderStore", () => {
     expect(n).toBe(1);
   });
 
-  // `persisted` (7c place/collect): whether `id` already names an OPEN row server-side, so the app
-  // knows whether placing this basket needs a park first or can sync-then-place an already-parked one.
   it("a fresh store is not persisted", () => {
     const s = new WorkingOrderStore();
     expect(s.persisted).toBe(false);
@@ -411,9 +394,6 @@ describe("WorkingOrderStore", () => {
     expect(s.persisted).toBe(false);
   });
 
-  // `dirty` (Finding-2 re-review): whether the LINES changed since the basket last matched the server,
-  // so the pay flow re-syncs a retrieved order ONLY when it was actually edited (no pay-time re-price
-  // of an untouched order).
   it("a fresh store is not dirty", () => {
     const s = new WorkingOrderStore();
     expect(s.dirty).toBe(false);
@@ -434,8 +414,7 @@ describe("WorkingOrderStore", () => {
     s.addProduct(jamon, "0.100"); // a prior edit → dirty
     expect(s.dirty).toBe(true);
     s.loadFrom("held-1", [{ product: cafe, quantity: "1" }], "Mesa 4");
-    // A just-retrieved basket matches the server, so it is clean — an unedited retrieve→pay must not
-    // re-sync (which would re-price at pay time and defeat the add-time lock).
+    // An unedited retrieve→pay must not re-sync, which would re-price at pay time.
     expect(s.dirty).toBe(false);
   });
 
@@ -443,7 +422,6 @@ describe("WorkingOrderStore", () => {
     const s = new WorkingOrderStore();
     s.loadFrom("held-1", [{ product: cafe, quantity: "1" }]);
     s.label = "Mesa 9";
-    // The label is held-list metadata that never reaches the filed sale, so it needs no re-lock.
     expect(s.dirty).toBe(false);
   });
 
@@ -457,10 +435,8 @@ describe("WorkingOrderStore", () => {
     expect(s.dirty).toBe(false);
   });
 
-  // A basket line MAY carry extras picks, and the client's DISPLAY-ONLY running line price adds each
-  // at its resolved price (the server re-prices authoritatively from the offer).
   describe("extras picked on a basket line", () => {
-    // A +0.50 gross pick, carrying the picked product's staff name so the basket can draw its row.
+    // A +0.50 gross pick.
     const oatMilk: SelectedExtra = {
       listId: "list-milk",
       productId: "p-oat",
@@ -475,7 +451,7 @@ describe("WorkingOrderStore", () => {
       s.addProduct(cortado, "1", { extras: [oatMilk] });
       expect(s.lines).toHaveLength(1);
       expect(s.lines[0]?.extras).toEqual([oatMilk]);
-      // The brief's worked example: dish 2.50 + pick 0.50 → 3.00.
+      // dish 2.50 + pick 0.50 → 3.00.
       expect(lineGross(s.lines[0]!)).toBe("3.00");
       expect(s.dirty).toBe(true); // an add is a line edit
     });
@@ -492,8 +468,7 @@ describe("WorkingOrderStore", () => {
       const without = new WorkingOrderStore();
       without.addProduct(cafe, "1"); // dish 1.50 only
       expect(without.total).toBe("1.50");
-      // priceBasket sees only the dishes, so a total taken from it alone stays 1.50; it must be 2.00,
-      // or the readout AND the cash-tender sufficiency gate (which read store.total) are short.
+      // priceBasket sees only the dishes, so a total taken from it alone would stay 1.50.
       expect(withOption.total).toBe("2.00");
     });
 
@@ -506,10 +481,10 @@ describe("WorkingOrderStore", () => {
     it("with no picks the line is unchanged — no extras key, price identical to before", () => {
       const s = new WorkingOrderStore();
       s.addProduct(cafe, "2");
-      // The strict toEqual pins that a no-pick add carries NO extras key (regression-safe).
+      // The strict toEqual pins that a no-pick add carries NO extras key.
       expect(s.lines[0]).toEqual({ product: cafe, quantity: "2" });
       expect(s.lines[0]?.extras).toBeUndefined();
-      expect(lineGross(s.lines[0]!)).toBe("3.00"); // 1.50 × 2, exactly as before
+      expect(lineGross(s.lines[0]!)).toBe("3.00"); // 1.50 × 2
     });
   });
 
