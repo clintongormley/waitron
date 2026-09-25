@@ -86,6 +86,7 @@ import {
   awaitingCertAlertSource,
   backupAlertSource,
   sealedStateAlertSource,
+  firstStartAlertSource,
   type BackupOutcomeHolder,
   batteryAlertSource,
   printingAlertSource,
@@ -2175,11 +2176,11 @@ export async function startServer(
     outcomes: backupOutcomes,
     now,
     readStream: () => streamHost.status(),
-    firstStartFailed: () => firstStart.failed,
   });
   const serverAlertSources: AlertSource[] = [
     backupSource,
     sealedStateAlertSource(sealedStateStatus),
+    firstStartAlertSource(firstStart),
     awaitingCertAlertSource(awaitingFiscalCert),
     printingAlertSource(),
     batteryAlertSource({

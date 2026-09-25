@@ -17166,6 +17166,10 @@ recovery kit stays valid. Only Rotate makes a new key."
   - `reissueBoxLeaf(deps: { stateDir: string; hostnames: string[]; now: () => Date; listIpv4?: () => string[] }): Promise<void>`.
   - `REBUILD_MARKER = "rebuild-first-start.json"`, `type RebuildSource = "archive" | "stream"` and `completeRebuild(deps: RebuildDeps): Promise<boolean>` in `apps/server/src/rebuild-first-start.ts`. The marker holds `{ version: 1, source }`.
   - `runFirstStart(deps: RebuildDeps): Promise<{ mayStream: boolean }>`, `readBucketPointerTerm(db, ring, options?): Promise<number | null>`, `POINTER_READ_TIMEOUT_MS`, and `RebuildDeps.pointerTerm?` (Reconciliation N23, N24); `buildNextMembershipDocument`/`mintNextMembershipDocument` accept `minTerm?`; the ongoing alert `restore.first_start_failed` and `backupAlertSource`'s `firstStartFailed` dep.
+  _(2026-09-25, Task 9a review: the alert is raised by a source of its own,
+  `firstStartAlertSource(firstStart)`, not a `backupAlertSource` dep, because that source's backups
+  listing can throw and collapse the whole source; `FirstStart` is `{ mayStream, failedSince }`; and a
+  held copy with bucket settings reads off with the reason `first_start_pending`.)_
   - `RestoreDeps.rebuildSource?: RebuildSource` (default `"archive"`). `writeValidated` writes the marker for either source whenever it restores an identity (`skipSecrets` false) — so the existing archive path (`restoreFromArtifact`, the staged restore and `waitron-restore restore <artifact>`) writes it from this task on, and Task 9b's stream path writes it by passing `rebuildSource: "stream"` through the same function. A rejoin (`skipSecrets: true`) keeps its own identity and writes none.
 
 **Why this is its own task.** Today the leaf is minted only when `tls/server.key` is absent

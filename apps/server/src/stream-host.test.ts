@@ -100,6 +100,16 @@ describe("the live copy's wiring", () => {
     expect(logs).toContain("stream.not_configured");
   });
 
+  // With nothing set up there is no copy to hold, so the log and the status say "not set up".
+  it("reads plain off, not held, when no bucket is stored and a restore's first start is unfinished", async () => {
+    logs = [];
+    const rt = runtime({ spawn: new FakeLitestream().spawn, mayStream: () => false });
+    await rt.start();
+    expect(rt.status()).toEqual({ state: "off" });
+    expect(logs).toContain("stream.not_configured");
+    expect(logs).not.toContain("stream.first_start_pending");
+  });
+
   it("stores an absent endpoint and an empty prefix as '-', and a present one as itself", () => {
     const settings = {
       venueId: "venue-1",
@@ -300,7 +310,11 @@ describe("the live copy's wiring", () => {
         try {
           await rt.start();
           await rt.reload();
-          expect(rt.status()).toEqual({ state: "off" });
+          expect(rt.status()).toEqual({
+            state: "off",
+            reason: "first_start_pending",
+            stateSince: expect.any(String),
+          });
           expect(litestream.children).toHaveLength(0);
           expect(logs.filter((event) => event === "stream.first_start_pending")).toHaveLength(2);
           mayStream = true;

@@ -16,6 +16,7 @@ import type { StreamView } from "@waitron/stream";
 import type { BackupStatus } from "./backup-status.js";
 import type { AwaitingCertStatus } from "./pass.js";
 import type { SealedStateStatus } from "./sealed-state.js";
+import { FIRST_START_PENDING } from "./stream-host.js";
 import type { TtlCache } from "./ttl-cache.js";
 import "./errors.js";
 
@@ -40,6 +41,9 @@ function streamAlert(alert: Pick<OngoingAlert, "code" | "params" | "since">): On
 
 function streamAlerts(stream: StreamView, now: Date): OngoingAlert[] {
   if (!("reason" in stream)) return [];
+  // A failed first start raises its own alert ({@link firstStartAlertSource}); a deferred one (a
+  // fenced node or a mirror) raises none.
+  if (stream.reason === FIRST_START_PENDING) return [];
   const stopped = streamAlert({
     code: "backup.stream_stopped",
     params: { reason: stream.reason },
@@ -129,9 +133,6 @@ export function backupAlertSource(deps: {
   outcomes: BackupOutcomeHolder;
   now: () => Date;
   readStream: () => StreamView;
-  /** True when this start's attempt at a restored box's first start (`rebuild-first-start.ts`)
-   * failed; false when it finished, was deferred, or was not needed. */
-  firstStartFailed: () => boolean;
 }): AlertSource {
   return {
     area: "backup",
@@ -140,16 +141,6 @@ export function backupAlertSource(deps: {
       const status = await deps.listStatus();
       const stream = deps.readStream();
       const alerts = streamAlerts(stream, deps.now());
-      if (deps.firstStartFailed()) {
-        alerts.push({
-          key: "restore.first_start_failed",
-          code: "restore.first_start_failed",
-          params: {},
-          severity: "warning",
-          since: null,
-          screen: BACKUP_SCREEN,
-        });
-      }
       const streamCurrent =
         "lagMs" in stream && stream.state === "streaming" && stream.lagMs < STREAM_BEHIND_AFTER_MS;
       if (!status.configured) {
@@ -210,6 +201,30 @@ export function sealedStateAlertSource(holder: SealedStateStatus): AlertSource {
           code: "backup.sealed_state_failed",
           params: {},
           severity: "error",
+          since: holder.failedSince,
+          screen: BACKUP_SCREEN,
+        },
+      ];
+    },
+  };
+}
+
+/**
+ * Raised while this start's attempt at a restored box's first start (`rebuild-first-start.ts`)
+ * failed: the box sells but holds its bucket copy until a later start finishes.
+ */
+export function firstStartAlertSource(holder: { failedSince: string | null }): AlertSource {
+  return {
+    area: "backup",
+    permission: "system.manage",
+    async read(): Promise<readonly OngoingAlert[]> {
+      if (holder.failedSince === null) return [];
+      return [
+        {
+          key: "restore.first_start_failed",
+          code: "restore.first_start_failed",
+          params: {},
+          severity: "warning",
           since: holder.failedSince,
           screen: BACKUP_SCREEN,
         },

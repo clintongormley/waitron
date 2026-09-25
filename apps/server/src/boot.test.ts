@@ -1274,7 +1274,7 @@ describe("startServer, against a migrated venue directory", () => {
       JSON.stringify({ version: 1, source: "stream" }),
     );
     // A bucket copy set up, and no membership document: a copy that tried to start would read off
-    // with the reason `no_membership`, so a plain off shows it was held.
+    // with the reason `no_membership`, so `first_start_pending` shows it was held first.
     await withTransaction(db, (tx) =>
       putCredential(tx, loadKeyRing(KEY_ENV), {
         purpose: STREAM_PURPOSE,
@@ -1301,7 +1301,11 @@ describe("startServer, against a migrated venue directory", () => {
     try {
       const health = await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
       expect(health.status).toBe(200);
-      expect(((await health.json()) as { stream: unknown }).stream).toEqual({ state: "off" });
+      expect(((await health.json()) as { stream: unknown }).stream).toEqual({
+        state: "off",
+        reason: "first_start_pending",
+        stateSince: expect.any(String),
+      });
       const node = await fetch(`https://127.0.0.1:${port}/api/node`, via);
       expect(node.status).toBe(200);
       expect(await node.json()).toMatchObject({
@@ -1315,6 +1319,7 @@ describe("startServer, against a migrated venue directory", () => {
       expect(response.status).toBe(200);
       const body = (await response.json()) as { alerts: { code: string }[] };
       expect(body.alerts.map((alert) => alert.code)).toContain("restore.first_start_failed");
+      expect(body.alerts.map((alert) => alert.code)).not.toContain("backup.stream_stopped");
       expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(true);
     } finally {
       await server.close();

@@ -104,11 +104,11 @@ function sourceOf(body: string): RebuildSource | "unknown" {
   }
 }
 
-/** What boot does after the first start: whether the bucket copy may start, and whether the
- * `restore.first_start_failed` alert is raised. */
+/** What boot does after the first start: whether the bucket copy may start, and since when the
+ * `restore.first_start_failed` alert is raised (null: not raised). */
 export interface FirstStart {
   mayStream: boolean;
-  failed: boolean;
+  failedSince: string | null;
 }
 
 /**
@@ -119,10 +119,10 @@ export interface FirstStart {
 export async function runFirstStart(deps: RebuildDeps): Promise<FirstStart> {
   try {
     await completeRebuild(deps);
-    return { mayStream: true, failed: false };
+    return { mayStream: true, failedSince: null };
   } catch (error) {
     deps.log("error", "restore.first_start_failed", { errorCode: codeOf(error) });
-    return { mayStream: false, failed: true };
+    return { mayStream: false, failedSince: deps.now().toISOString() };
   }
 }
 
@@ -135,12 +135,12 @@ export async function deferFirstStart(stateDir: string, log: Logger): Promise<Fi
     await access(join(stateDir, REBUILD_MARKER));
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { mayStream: true, failed: false };
+      return { mayStream: true, failedSince: null };
     }
-    return { mayStream: false, failed: false };
+    return { mayStream: false, failedSince: null };
   }
   log("warn", "restore.first_start_deferred", {});
-  return { mayStream: false, failed: false };
+  return { mayStream: false, failedSince: null };
 }
 
 /** How long a first start waits for the bucket's pointer. */

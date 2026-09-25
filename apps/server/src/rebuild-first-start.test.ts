@@ -474,7 +474,7 @@ describe("runFirstStart (plan Reconciliation N24)", () => {
     const log = vi.fn();
     await expect(runFirstStart(deps(stateDir, { ring: OTHER_RING, log }))).resolves.toEqual({
       mayStream: false,
-      failed: true,
+      failedSince: NOW.toISOString(),
     });
     expect(log).toHaveBeenCalledWith("error", "restore.first_start_failed", {
       errorCode: "credentials.decrypt_failed",
@@ -482,7 +482,7 @@ describe("runFirstStart (plan Reconciliation N24)", () => {
     await stat(join(stateDir, REBUILD_MARKER));
     await expect(runFirstStart(deps(stateDir))).resolves.toEqual({
       mayStream: true,
-      failed: false,
+      failedSince: null,
     });
     await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -515,7 +515,7 @@ describe("runFirstStart (plan Reconciliation N24)", () => {
               readBucketPointerTerm(suite.db, RING, { openStore: () => silent, timeoutMs: 50 }),
           }),
         ),
-      ).resolves.toEqual({ mayStream: false, failed: true });
+      ).resolves.toEqual({ mayStream: false, failedSince: NOW.toISOString() });
       expect(log).toHaveBeenCalledWith("error", "restore.first_start_failed", {
         errorCode: "restore.pointer_unreadable",
       });
@@ -530,7 +530,7 @@ describe("runFirstStart (plan Reconciliation N24)", () => {
     const stateDir = await rebuiltStateDir(false);
     await expect(runFirstStart(deps(stateDir))).resolves.toEqual({
       mayStream: true,
-      failed: false,
+      failedSince: null,
     });
   });
 });
@@ -542,7 +542,7 @@ describe("deferFirstStart", () => {
     const log = vi.fn();
     await expect(deferFirstStart(stateDir, log)).resolves.toEqual({
       mayStream: false,
-      failed: false,
+      failedSince: null,
     });
     expect(log).toHaveBeenCalledWith("warn", "restore.first_start_deferred", {});
     await stat(join(stateDir, REBUILD_MARKER));
@@ -555,7 +555,7 @@ describe("deferFirstStart", () => {
     const log = vi.fn();
     await expect(deferFirstStart(stateDir, log)).resolves.toEqual({
       mayStream: true,
-      failed: false,
+      failedSince: null,
     });
     expect(log).not.toHaveBeenCalled();
   });
@@ -568,7 +568,7 @@ describe("deferFirstStart", () => {
     await writeFile(notADirectory, "");
     await expect(deferFirstStart(notADirectory, () => {})).resolves.toEqual({
       mayStream: false,
-      failed: false,
+      failedSince: null,
     });
   });
 });

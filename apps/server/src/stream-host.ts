@@ -22,6 +22,9 @@ import "./errors.js";
 /** The vault purpose holding the owner's bucket. */
 export const STREAM_PURPOSE = "backup.stream";
 
+/** The reason a copy set up here reads off while a restore's first start is unfinished. */
+export const FIRST_START_PENDING = "first_start_pending";
+
 /** How the vault stores an absent optional field: it refuses empty strings. */
 const ABSENT = "-";
 
@@ -117,14 +120,15 @@ export class StreamHost {
       log("info", "stream.not_primary", {});
       return;
     }
-    if (this.#deps.mayStream?.() === false) {
-      log("warn", "stream.first_start_pending", {});
-      return;
-    }
     try {
       const settings = await readStreamSettings(db, ring);
       if (settings === null) {
         log("info", "stream.not_configured", {});
+        return;
+      }
+      if (this.#deps.mayStream?.() === false) {
+        log("warn", "stream.first_start_pending", {});
+        this.#notStartedFor(FIRST_START_PENDING);
         return;
       }
       const membership = await readNodeMembership(db);
