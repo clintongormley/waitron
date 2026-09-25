@@ -5508,12 +5508,12 @@ open:
   but no dedicated error code names that case.
 - An interrupted bucket rebuild or archive check leaves its scratch folder, a full copy of the
   venue database, under the state folder; the next run makes a new one and does not remove it.
-- The placement step can lose the old database. `restoreDatabase` (`apps/server/src/restore.ts`)
-  removes `venue.db` before its sidecars, and if a sidecar cannot be removed the cleanup also
-  deletes the incoming copy, leaving neither. The run-it review reproduced it with a directory at
-  `venue.db-wal` (`{ error: 'ERR_FS_EISDIR', old: 'ENOENT' }`), and reproduced the same result with
-  the base commit's placement order, so I believe it predates this branch; both restore forms go
-  through it.
+- Fixed in (this branch): the placement step no longer loses both databases. `restoreDatabase`
+  (`apps/server/src/restore.ts`) moves the old `venue.db` and its side files into a folder beside
+  them and deletes nothing that is database content until the new file is in place; a failure puts
+  them back and says `restore.placement_failed`, naming the folder when one could not go back.
+  Still open: a setup-wizard restore is placed on the next start, so its recovery page shows only
+  the code, and which database was kept reaches the installer's channel alone.
 - The bucket client sets no time limit of its own: `createS3ObjectStore` (`packages/stream`) has
   none. The command line and the setup restores wrap it for every object-store call they make
   (`boundObjectStore`, which abandons a call but never cancels it),
