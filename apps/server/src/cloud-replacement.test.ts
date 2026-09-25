@@ -45,13 +45,15 @@ async function fixture(phase: "staged" | "restored" | "reported" = "reported") {
     { mode: 0o600 },
   );
   const requests: { action: string; body: Record<string, string>; payload: unknown[] }[] = [];
-  let mode: "awaiting_owner" | "complete" | "lost" | "wrong" = "awaiting_owner";
+  let mode: "awaiting_owner" | "complete" | "lost" | "wrong" | "refused" = "awaiting_owner";
   const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
     const action = new URL(url).pathname.split("/").at(-1)!;
     const body = JSON.parse(String(init?.body)) as Record<string, string>;
     const payload = JSON.parse(Buffer.from(body.payload, "base64url").toString()) as unknown[];
     requests.push({ action, body, payload });
     if (mode === "lost") throw Error("lost reply");
+    if (mode === "refused")
+      return Response.json({ error: "replacement_unavailable" }, { status: 409 });
     if (action === "info")
       return Response.json({
         point: {
@@ -144,6 +146,14 @@ it("persists new keys before sending dual signatures and reuses them after a los
         Buffer.from(signature!, "base64url"),
       ),
     ).toBe(true);
+});
+
+it("reports a Cloud refusal separately from a transport outage", async () => {
+  const f = await fixture();
+  f.setMode("refused");
+  await expect(
+    createCloudReplacement({ ...f.options, connection: f.connection }).prepare(),
+  ).rejects.toMatchObject({ code: "cloud.replacement_refused" });
 });
 
 it("reports a completed local restore to Cloud before replacement prepare", async () => {
@@ -250,4 +260,36 @@ it("retrieves owner confirmation after a lost status reply with the saved propos
   const after = JSON.parse(await readFile(join(f.stateDir, "cloud-replacement.json"), "utf8"));
   expect(after.privateKey).toBe(before.privateKey);
   expect(after.peerPrivateKey).toBe(before.peerPrivateKey);
+});
+
+it("offers only the original public approval code and Cloud link after restart", async () => {
+  const f = await fixture();
+  const client = createCloudReplacement({ ...f.options, connection: f.connection });
+  await client.prepare();
+  const approval = await createCloudReplacement({
+    ...f.options,
+    connection: f.connection,
+  }).approval();
+  expect(approval).toEqual({
+    requestId: f.requestId,
+    code: "12345678",
+    openCloudUrl: `${origin}/recover#request=${f.requestId}`,
+  });
+  expect(JSON.stringify(approval)).not.toContain(f.privateKey);
+});
+
+it("imports a durable completion on boot after the recovery request file is removed", async () => {
+  const f = await fixture();
+  const client = createCloudReplacement({ ...f.options, connection: f.connection });
+  await client.prepare();
+  f.setMode("complete");
+  const originalImport = f.connection.importReplacement.bind(f.connection);
+  f.connection.importReplacement = vi.fn(async () => {
+    throw Error("disk write interrupted");
+  });
+  await expect(client.check()).rejects.toThrow("disk write interrupted");
+  await rm(join(f.stateDir, "cloud-recovery.json"));
+  f.connection.importReplacement = originalImport;
+  await createCloudReplacement({ ...f.options, connection: f.connection }).resume();
+  expect((await f.connection.status()).registration).toEqual(registration);
 });

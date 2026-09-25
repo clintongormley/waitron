@@ -15,7 +15,10 @@ import "./errors.js";
 export interface CloudApiDeps {
   db: Database;
   connection?: CloudConnection;
-  replacement?: Pick<CloudReplacement, "status" | "eligible" | "prepare" | "check">;
+  replacement?: Pick<
+    CloudReplacement,
+    "status" | "hasProposal" | "approval" | "eligible" | "prepare" | "check"
+  >;
   managementOrigin: string;
   isPrimary: () => boolean;
 }
@@ -35,6 +38,8 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       "cloud.not_configured": 409,
       "cloud.request_invalid": 400,
       "cloud.replacement_not_restored": 409,
+      "cloud.replacement_state_invalid": 409,
+      "cloud.replacement_refused": 409,
     },
     "cloud.failed",
   );
@@ -67,12 +72,24 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       const status = deps.connection
         ? await deps.connection.status()
         : { state: "not_connected", code: "" };
-      const replacement = (await deps.replacement?.status()) ?? null;
+      let replacement = null;
+      let replacementPending = false;
+      let replacementError: string | null = null;
+      try {
+        replacement = (await deps.replacement?.status()) ?? null;
+        replacementPending = (await deps.replacement?.hasProposal()) ?? false;
+      } catch (error) {
+        replacementError = error instanceof AppError ? error.code : "cloud.failed";
+      }
+      const replacementApproval = (await deps.replacement?.approval()) ?? null;
       const replacementEligible = (await deps.replacement?.eligible()) ?? false;
       await authorize(c, true);
       return c.json({
         ...status,
         replacement,
+        replacementPending,
+        replacementApproval,
+        replacementError,
         replacementEligible,
         configured: !!deps.connection,
         isPrimary: deps.isPrimary(),
@@ -102,10 +119,14 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
         const status = deps.connection
           ? await deps.connection.status()
           : { state: "not_connected", code: "" };
+        const replacementApproval = (await deps.replacement.approval()) ?? null;
         return c.json({
           ...status,
           replacement,
-          replacementEligible: true,
+          replacementPending: true,
+          replacementApproval,
+          replacementError: null,
+          replacementEligible: await deps.replacement.eligible(),
           configured: !!deps.connection,
           isPrimary: deps.isPrimary(),
         });

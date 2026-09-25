@@ -382,6 +382,22 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
     return view(state, "approved", p, info.operationExpiresAt);
   }
   return {
+    async replacementApproval(): Promise<{
+      requestId: string;
+      code: string;
+      openCloudUrl: string;
+    }> {
+      return locked(async () => {
+        const state = await read();
+        if (!state?.pointId || (state.phase !== "restored" && state.phase !== "reported"))
+          unavailable();
+        return {
+          requestId: state.requestId,
+          code: state.code,
+          openCloudUrl: `${options.origin}/recover#request=${state.requestId}`,
+        };
+      });
+    },
     async replacementIdentity(): Promise<{
       requestId: string;
       pointId: string;

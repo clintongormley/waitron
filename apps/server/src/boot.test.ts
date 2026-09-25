@@ -758,6 +758,31 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
 }
 
 describe("startServer, against a migrated venue directory", () => {
+  it("boots and serves local requests when a saved Cloud replacement cannot be resumed", async () => {
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-replacement-"));
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    await writeFile(join(stateDir, "cloud-replacement.json"), "corrupt", { mode: 0o600 });
+    let server: StartedServer | undefined;
+    try {
+      server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
+      });
+      const response = await fetchHealthOk(`http://127.0.0.1:${port}/health`);
+      expect(response.status).toBe(200);
+    } finally {
+      await server?.close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
   it("boots, pins the tick-clamp mapping, folds settlementLagMs, threads environment, runs a pass, serves /health and shuts down cleanly", async () => {
     const port = await freePort();
     // A throwaway log dir so this real boot's assembled rotating file sink writes somewhere isolated —

@@ -38,6 +38,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Finish restoring and reporting the approved Cloud snapshot on this server, then request reconnection.",
     es: "Termina la restauración de la instantánea aprobada de Cloud en este servidor y comunícala antes de solicitar la reconexión.",
   },
+  "cloud.replacement_state_invalid": {
+    en: "The saved replacement request cannot be read. Ask the local operator to inspect this server's Cloud replacement state.",
+    es: "No se puede leer la solicitud de sustitución guardada. Pide al operador local que revise el estado de sustitución Cloud de este servidor.",
+  },
+  "cloud.replacement_refused": {
+    en: "Cloud refused the replacement request. Check the approved recovery and old installation in Cloud, then check reconnection here.",
+    es: "Cloud rechazó la solicitud de sustitución. Comprueba la recuperación aprobada y la instalación anterior en Cloud, y después comprueba la reconexión aquí.",
+  },
 
   "connection.failed": {
     en: "This browser could not connect to Waitron. Check your connection and try again.",

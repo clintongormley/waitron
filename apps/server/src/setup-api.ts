@@ -109,7 +109,10 @@ export interface SetupDeps {
   /** Stages an encrypted cold-recovery artifact for the entrypoint to restore after restart. */
   stageRestore?: (request: RestoreRequest) => Promise<void>;
   /** Fresh replacement's private Cloud snapshot recovery client. */
-  cloudRecovery?: Omit<ReturnType<typeof createCloudRecoveryClient>, "replacementIdentity">;
+  cloudRecovery?: Omit<
+    ReturnType<typeof createCloudRecoveryClient>,
+    "replacementIdentity" | "replacementApproval"
+  >;
   /** Validates and stages a prepared configuration archive before live provisioning. */
   stageConfiguration?: (artifact: Uint8Array, passphrase: string) => Promise<ConfigurationPreview>;
   /** Removes any staged archive after the selected venue and its configuration are durable. */

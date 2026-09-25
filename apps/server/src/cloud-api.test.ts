@@ -12,6 +12,7 @@ import {
   hashSessionToken,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
 import { createCloudConnection } from "./cloud-client.js";
 import { mountCloudApi } from "./cloud-api.js";
 import type { ReplacementView } from "./cloud-replacement.js";
@@ -133,7 +134,7 @@ it("requires a live manager, correct Origin and serving primary; status reads ar
     await f.close();
   }
 });
-it("gates replacement requests before and after a network wait", async () => {
+it("requires manager, origin and primary, and rechecks primary before responding", async () => {
   const manager = await person("manager"),
     staff = await person("staff");
   let primary = true;
@@ -145,6 +146,8 @@ it("gates replacement requests before and after a network wait", async () => {
   const replacement = {
     status: vi.fn(async () => null),
     eligible: vi.fn(async () => true),
+    approval: vi.fn(async () => null),
+    hasProposal: vi.fn(async () => false),
     prepare: vi.fn(async (authorize?: () => Promise<void>) => {
       entered();
       await new Promise<void>((resolve) => {
@@ -179,6 +182,37 @@ it("gates replacement requests before and after a network wait", async () => {
   primary = false;
   release();
   expect((await pending).status).toBe(409);
+});
+it("keeps Cloud status visible with a diagnostic when saved replacement state is corrupt", async () => {
+  const manager = await person("manager");
+  const app = new Hono();
+  mountCloudApi(
+    app,
+    {
+      db: suite.db,
+      managementOrigin: "https://venue.test",
+      isPrimary: () => true,
+      replacement: {
+        status: async () => {
+          throw new AppError("cloud.replacement_state_invalid", {});
+        },
+        eligible: async () => true,
+        approval: async () => null,
+        hasProposal: async () => false,
+        prepare: vi.fn(),
+        check: vi.fn(),
+      },
+    },
+    () => {},
+  );
+  const response = await app.request("/management-api/cloud/status", {
+    headers: { cookie: manager.cookie },
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    state: "not_connected",
+    replacementError: "cloud.replacement_state_invalid",
+  });
 });
 it("losing permission or primary role during the Cloud status wait prevents a completion signature", async () => {
   const f = await cloudFixture();

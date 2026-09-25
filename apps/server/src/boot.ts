@@ -2262,7 +2262,11 @@ export async function startServer(
           connection: cloudConnection,
         })
       : undefined;
-  await cloudReplacement?.resume();
+  try {
+    await cloudReplacement?.resume();
+  } catch (error) {
+    log("warn", "cloud.replacement_resume_failed", { errorCode: codeOf(error) });
+  }
   const cloudPrimary = () =>
     holders.mode.current === "primary" && holders.singletonRole.current === "primary" && !fenced;
   cloudServing = cloudPrimary;

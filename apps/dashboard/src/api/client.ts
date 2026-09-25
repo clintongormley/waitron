@@ -864,6 +864,9 @@ export type BackupFreshness =
 
 export interface CloudConnectionStatus {
   replacementEligible?: boolean;
+  replacementPending?: boolean;
+  replacementError?: string | null;
+  replacementApproval?: null | { requestId: string; code: string; openCloudUrl: string };
   replacement?: null | {
     requestId: string;
     pointId: string;

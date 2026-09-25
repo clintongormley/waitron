@@ -134,7 +134,7 @@ export function createCloudReplacement(options: ReplacementOptions) {
       return saved;
     } catch (error) {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
-      throw new AppError("cloud.state_invalid", {});
+      throw new AppError("cloud.replacement_state_invalid", {});
     }
   }
   async function save(value: SavedReplacement) {
@@ -317,6 +317,8 @@ export function createCloudReplacement(options: ReplacementOptions) {
         redirect: "error",
         signal: AbortSignal.timeout(8000),
       });
+      if (response.status >= 400 && response.status < 500)
+        throw new AppError("cloud.replacement_refused", {});
       if (!response.ok || !response.body) unavailable();
       const chunks: Uint8Array[] = [];
       let size = 0;
@@ -326,7 +328,8 @@ export function createCloudReplacement(options: ReplacementOptions) {
         chunks.push(chunk);
       }
       value = JSON.parse(Buffer.concat(chunks).toString());
-    } catch {
+    } catch (error) {
+      if (error instanceof AppError && error.code === "cloud.replacement_refused") throw error;
       unavailable();
     }
     const view = validate(value, saved);
@@ -346,6 +349,16 @@ export function createCloudReplacement(options: ReplacementOptions) {
     return saved.view;
   }
   return {
+    async approval(): Promise<{ requestId: string; code: string; openCloudUrl: string } | null> {
+      try {
+        return await recovery.replacementApproval();
+      } catch {
+        return null;
+      }
+    },
+    async hasProposal(): Promise<boolean> {
+      return (await read()) !== undefined;
+    },
     async eligible(): Promise<boolean> {
       try {
         await recovery.replacementIdentity();
@@ -363,8 +376,6 @@ export function createCloudReplacement(options: ReplacementOptions) {
       await locked(async () => {
         const saved = await read();
         if (!saved?.view || saved.view.state !== "complete") return;
-        const { proof } = await candidate();
-        if (proof.requestId !== saved.requestId) conflict();
         await options.connection.importReplacement({
           requestId: saved.requestId,
           privateKey: saved.privateKey,

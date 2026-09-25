@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import { DashboardApi } from "../api/client.js";
 import { CloudServicesScreen } from "./cloud-services-screen.js";
 afterEach(cleanupWidgets);
@@ -57,6 +58,108 @@ it("offers restored server reconnection and a synchronous busy guard", async () 
   );
   await expect.poll(() => el.shadowRoot!.textContent).toContain("Waiting for the Cloud owner");
   expect(el.shadowRoot!.querySelector("#check-reconnection")).not.toBeNull();
+  await expectNoA11yViolations(host);
+});
+
+it("reopens Cloud approval with the original code after the owner's tab is closed", async () => {
+  setLocale("en");
+  const approvalUrl = `https://cloud.example/recover#request=${requestId}`;
+  const api = new DashboardApi("", async () =>
+    Response.json({
+      state: "not_connected",
+      code: "",
+      configured: true,
+      isPrimary: true,
+      replacementEligible: true,
+      replacementPending: true,
+      replacementApproval: { requestId, code: "12345678", openCloudUrl: approvalUrl },
+      replacement: {
+        state: "awaiting_owner",
+        oldInstallationId: "old-installation",
+        organisationName: "Org",
+        legalBusinessName: "Business",
+      },
+    }),
+  );
+  const { el, host } = await mountWidget<CloudServicesScreen>(
+    "dashboard-cloud-services-screen",
+    { api },
+    "light",
+  );
+  await expect.poll(() => el.shadowRoot!.textContent).toContain("12345678");
+  const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("#replacement-open-cloud");
+  expect(link?.href).toBe(approvalUrl);
+  expect(link?.target).toBe("_blank");
+  expect(link?.rel).toBe("noopener noreferrer");
+  await expectNoA11yViolations(host);
+});
+
+it("offers status retry for a saved proposal with a lost reply", async () => {
+  setLocale("en");
+  const api = new DashboardApi("", async () =>
+    Response.json({
+      state: "not_connected",
+      code: "",
+      configured: true,
+      isPrimary: true,
+      replacementEligible: true,
+      replacementPending: true,
+      replacement: null,
+    }),
+  );
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("#check-reconnection")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("#request-reconnection")).toBeNull();
+});
+
+it("shows owner approval when registration import is still pending", async () => {
+  setLocale("en");
+  const api = new DashboardApi("", async () =>
+    Response.json({
+      state: "not_connected",
+      code: "",
+      configured: true,
+      isPrimary: true,
+      replacementEligible: true,
+      replacementPending: true,
+      replacement: {
+        state: "complete",
+        oldInstallationId: "old-installation",
+        organisationName: "Org",
+        legalBusinessName: "Business",
+      },
+    }),
+  );
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => el.shadowRoot!.textContent).toContain("Cloud owner approved");
+  expect(el.shadowRoot!.textContent).not.toContain("Waiting for the Cloud owner");
+  expect(el.shadowRoot!.querySelector("#check-reconnection")).not.toBeNull();
+});
+
+it("shows a saved replacement diagnostic without offering ordinary pairing", async () => {
+  setLocale("en");
+  const api = new DashboardApi("", async () =>
+    Response.json({
+      state: "not_connected",
+      code: "",
+      configured: true,
+      isPrimary: true,
+      replacementEligible: true,
+      replacementPending: false,
+      replacement: null,
+      replacementError: "cloud.replacement_state_invalid",
+    }),
+  );
+  const { el, host } = await mountWidget<CloudServicesScreen>(
+    "dashboard-cloud-services-screen",
+    { api },
+    "dark",
+  );
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("wt-form-error-summary")!.errors)
+    .toContain(codeMessage("cloud.replacement_state_invalid"));
+  expect(el.shadowRoot!.querySelector("#connect")).toBeNull();
+  expect(el.shadowRoot!.querySelector("#request-reconnection")).toBeNull();
   await expectNoA11yViolations(host);
 });
 
