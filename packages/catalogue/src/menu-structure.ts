@@ -54,8 +54,17 @@ export async function menuRoots(
   return roots;
 }
 
-async function rootOf(tx: Transaction, menuId: string): Promise<string> {
-  const rootSectionId = (await menuRoots(tx, [menuId])).get(menuId);
+/** The menu's root; undefined for a menu with no details row. */
+export async function menuRoot(tx: Transaction, menuId: string): Promise<string | undefined> {
+  const [row] = await tx
+    .select({ rootSectionId: menuDetails.rootSectionId })
+    .from(menuDetails)
+    .where(eq(menuDetails.menuId, menuId));
+  return row?.rootSectionId;
+}
+
+export async function requireMenuRoot(tx: Transaction, menuId: string): Promise<string> {
+  const rootSectionId = await menuRoot(tx, menuId);
   if (rootSectionId === undefined)
     throw new AppError("catalogue.not_found", { catalogueId: menuId });
   return rootSectionId;
@@ -75,7 +84,7 @@ export async function readMenuStructure(
   tx: Transaction,
   menuId: string,
 ): Promise<{ rootSectionId: string; nodes: MenuStructureNode[] }> {
-  const rootSectionId = await rootOf(tx, menuId);
+  const rootSectionId = await requireMenuRoot(tx, menuId);
   const graph = await loadSectionGraph(tx);
   return { rootSectionId, nodes: nodesOf(graph, rootSectionId) };
 }
@@ -99,7 +108,7 @@ export async function reachableMenuItem(
       ),
     );
   if (row === undefined) return undefined;
-  const rootSectionId = (await menuRoots(tx, [row.menuId])).get(row.menuId);
+  const rootSectionId = await menuRoot(tx, row.menuId);
   if (rootSectionId === undefined) return undefined;
   const graph = await loadSectionGraph(tx);
   return reachableProducts(graph, rootSectionId).includes(row.productId) ? row : undefined;
@@ -111,9 +120,10 @@ export async function reachableMenuItem(
  * price, switched on, and no variant or extras overrides. Rows are reset rather than deleted
  * because `working_line_contexts.menu_item_id` keeps keys into the table with no delete rule.
  *
- * With `before`, the graph a structure write read before writing, only the rows that write took off
- * the menu are reset: a row the menu stopped reaching earlier was reset then, and every settings
- * write refuses it since (`reachableMenuItem`).
+ * With `before`, the graph a structure write read before writing, only the products that write put
+ * on the menu get a row, and only the rows it took off are reset: a product `before` reached got its
+ * row from the write that put it there, and a row the menu stopped reaching earlier was reset then,
+ * with every settings write refusing it since (`reachableMenuItem`).
  */
 export async function syncMenuOffers(
   tx: Transaction,
@@ -126,19 +136,25 @@ export async function syncMenuOffers(
   const graph = await loadSectionGraph(tx);
   for (const [menuId, rootSectionId] of roots) {
     const reached = reachableProducts(graph, rootSectionId);
-    for (const batch of batches(reached))
+    const held = new Set(reached);
+    const heldBefore =
+      before === undefined ? undefined : new Set(reachableProducts(before, rootSectionId));
+    const adding =
+      heldBefore === undefined
+        ? reached
+        : reached.filter((productId) => !heldBefore.has(productId));
+    for (const batch of batches(adding))
       await tx
         .insert(menuItems)
         .values(batch.map((productId) => ({ menuId, productId })))
         .onConflictDoNothing({ target: [menuItems.menuId, menuItems.productId] });
-    const held = new Set(reached);
     const stale =
-      before === undefined
+      heldBefore === undefined
         ? await rowsNotHeld(tx, menuId, held)
         : await rowsOf(
             tx,
             menuId,
-            reachableProducts(before, rootSectionId).filter((productId) => !held.has(productId)),
+            [...heldBefore].filter((productId) => !held.has(productId)),
           );
     for (const batch of batches(stale)) {
       await tx

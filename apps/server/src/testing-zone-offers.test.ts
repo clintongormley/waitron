@@ -297,6 +297,15 @@ describe("offerProducts", () => {
     expect(await soldLines(suite.db, id)).toEqual([{ productId: pan.id, unitPriceGross: 80 }]);
   });
 
+  it("takes an extras list off the offer once the product stops carrying it", async () => {
+    const venue = await seedVenue(suite.db);
+    await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    expect((await counts(suite.db)).extras).toBe(1);
+    await withTransaction(suite.db, (tx) => writeProductModifiers(tx, venue.cafe, []));
+    await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+    expect((await counts(suite.db)).extras).toBe(0);
+  });
+
   it("names the product when asked for one it does not offer", async () => {
     const venue = await seedVenue(suite.db);
     const offers = await withTransaction(suite.db, (tx) =>

@@ -31,8 +31,15 @@ import {
 import type { PricingUnit, VatClass } from "./pricing.js";
 import { contentLanguages, menuItems } from "./schema/menu.js";
 import { sections } from "./schema/sections.js";
-import { createMenuShell, menuRoots, reachableMenuItem } from "./menu-structure.js";
-import { loadSectionGraph, placementsByProduct, reachableProducts } from "./section-graph.js";
+import {
+  createMenuShell,
+  menuRoot,
+  menuRoots,
+  reachableMenuItem,
+  requireMenuRoot,
+} from "./menu-structure.js";
+import { batches } from "./batches.js";
+import { loadSectionGraph, placementsByProduct, type SectionGraph } from "./section-graph.js";
 import { addMember } from "./sections.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
@@ -61,6 +68,7 @@ import type { ListedVariant, Product } from "./product-types.js";
 import type {
   AccessibleCatalogue,
   AvailableProduct,
+  EditableMenuOffer,
   MenuItem,
   MenuOffer,
   MenuOfferVariant,
@@ -68,6 +76,7 @@ import type {
 export type {
   AccessibleCatalogue,
   AvailableProduct,
+  EditableMenuOffer,
   MenuItem,
   MenuOffer,
   MenuOfferVariant,
@@ -303,9 +312,7 @@ export async function addProductToMenu(
   tx: Transaction,
   input: { menuId: string; productId: string; grossPrice?: string | null },
 ): Promise<MenuItem> {
-  const rootSectionId = (await menuRoots(tx, [input.menuId])).get(input.menuId);
-  if (rootSectionId === undefined)
-    throw new AppError("catalogue.not_found", { catalogueId: input.menuId });
+  const rootSectionId = await requireMenuRoot(tx, input.menuId);
   const [product] = await tx
     .select({ parentId: products.parentId })
     .from(products)
@@ -447,62 +454,112 @@ function offerLineValues(row: OfferLineRow, defaultLanguage: string) {
 export async function listMenuOffers(
   tx: Transaction,
   menuIds: string[],
-  options: { includeUnavailable?: boolean; includeSwitchedOff?: boolean } = {},
+  options: OfferOptions = {},
 ): Promise<MenuOffer[]> {
   if (menuIds.length === 0) return [];
   const roots = await menuRoots(tx, menuIds);
+  return offersOn(tx, roots, await loadSectionGraph(tx), options);
+}
+
+/** `listMenuOffers` for one menu, each offer with its product's membership of the menu's top level. */
+export async function listMenuOffersWithTopLevel(
+  tx: Transaction,
+  menuId: string,
+  options: OfferOptions = {},
+): Promise<EditableMenuOffer[]> {
+  const rootSectionId = await menuRoot(tx, menuId);
+  if (rootSectionId === undefined) return [];
   const graph = await loadSectionGraph(tx);
-  const rankOf = new Map(
-    [...roots].map(([menuId, rootSectionId]) => [
-      menuId,
-      new Map(reachableProducts(graph, rootSectionId).map((productId, rank) => [productId, rank])),
-    ]),
+  const offers = await offersOn(tx, new Map([[menuId, rootSectionId]]), graph, options);
+  const onTopLevel = new Map(
+    graph
+      .children(rootSectionId)
+      .flatMap(({ id, ref }) => (ref.kind === "product" ? [[ref.productId, id] as const] : [])),
   );
+  return offers.map((offer) => {
+    const memberId = onTopLevel.get(offer.productId);
+    return {
+      ...offer,
+      topLevelMember: memberId === undefined ? null : { sectionId: rootSectionId, memberId },
+    };
+  });
+}
+
+interface OfferOptions {
+  includeUnavailable?: boolean;
+  includeSwitchedOff?: boolean;
+}
+
+async function offersOn(
+  tx: Transaction,
+  roots: ReadonlyMap<string, string>,
+  graph: SectionGraph,
+  options: OfferOptions,
+): Promise<MenuOffer[]> {
+  // Keyed in the order `reachableProducts` gives, so a key's position is its rank on the menu.
   const placed = new Map(
     [...roots].map(([menuId, rootSectionId]) => [
       menuId,
       placementsByProduct(graph, rootSectionId),
     ]),
   );
-  const rows = (
-    await tx
-      .select({
-        id: menuItems.id,
-        menuId: menuItems.menuId,
-        productId: menuItems.productId,
-        grossPrice: menuItems.grossPrice,
-        productPrice: products.unitPrice,
-        active: menuItems.active,
-        menuName: catalogues.name,
-        name: products.name,
-        customerName: products.customerName,
-        kitchenName: products.kitchenName,
-        ...offerLineColumns,
-      })
-      .from(menuItems)
-      .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
-      .innerJoin(products, eq(products.id, menuItems.productId))
-      .leftJoin(parentProducts, parentJoin)
-      .leftJoin(productUnits, unitOwnerJoin)
-      .leftJoin(units, eq(units.id, productUnits.unitId))
-      .leftJoin(categories, eq(categories.id, effective.categoryId))
-      .where(
-        and(
-          inArray(menuItems.menuId, menuIds),
-          options.includeSwitchedOff === true ? undefined : eq(menuItems.active, true),
-          eq(catalogues.active, true),
-          isTopLevelProduct,
-          eq(products.active, true),
-          options.includeUnavailable === true ? undefined : eq(products.available, true),
-        ),
-      )
-      .orderBy(catalogues.name, catalogues.id)
-  ).filter((row) => rankOf.get(row.menuId)?.has(row.productId));
-  if (rows.length === 0) return [];
-  // The query settles the menus' order; the structure settles the order within each menu.
-  const menuOrder = new Map<string, number>();
-  for (const row of rows) if (!menuOrder.has(row.menuId)) menuOrder.set(row.menuId, menuOrder.size);
-  rows.sort(
+  const rankOf = new Map(
+    [...placed].map(([menuId, paths]) => [
+      menuId,
+      new Map([...paths.keys()].map((productId, rank) => [productId, rank])),
+    ]),
+  );
+  const reached = [...new Set([...placed.values()].flatMap((paths) => [...paths.keys()]))];
+  if (reached.length === 0) return [];
+  const menuIds = [...roots.keys()];
+  const rows = [];
+  for (const batch of batches(reached))
+    rows.push(
+      ...(await tx
+        .select({
+          id: menuItems.id,
+          menuId: menuItems.menuId,
+          productId: menuItems.productId,
+          grossPrice: menuItems.grossPrice,
+          productPrice: products.unitPrice,
+          active: menuItems.active,
+          menuName: catalogues.name,
+          name: products.name,
+          customerName: products.customerName,
+          kitchenName: products.kitchenName,
+          ...offerLineColumns,
+        })
+        .from(menuItems)
+        .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
+        .innerJoin(products, eq(products.id, menuItems.productId))
+        .leftJoin(parentProducts, parentJoin)
+        .leftJoin(productUnits, unitOwnerJoin)
+        .leftJoin(units, eq(units.id, productUnits.unitId))
+        .leftJoin(categories, eq(categories.id, effective.categoryId))
+        .where(
+          and(
+            inArray(menuItems.menuId, menuIds),
+            inArray(menuItems.productId, batch),
+            options.includeSwitchedOff === true ? undefined : eq(menuItems.active, true),
+            eq(catalogues.active, true),
+            isTopLevelProduct,
+            eq(products.active, true),
+            options.includeUnavailable === true ? undefined : eq(products.available, true),
+          ),
+        )),
+    );
+  const offered = rows.filter((row) => rankOf.get(row.menuId)!.has(row.productId));
+  if (offered.length === 0) return [];
+  const menuOrder = new Map(
+    (
+      await tx
+        .select({ id: catalogues.id })
+        .from(catalogues)
+        .where(inArray(catalogues.id, menuIds))
+        .orderBy(catalogues.name, catalogues.id)
+    ).map((row, index) => [row.id, index]),
+  );
+  offered.sort(
     (a, b) =>
       menuOrder.get(a.menuId)! - menuOrder.get(b.menuId)! ||
       rankOf.get(a.menuId)!.get(a.productId)! - rankOf.get(b.menuId)!.get(b.productId)!,
@@ -512,14 +569,14 @@ export async function listMenuOffers(
   // this offer publishes (spec §3.2), while the order stays the product's own.
   const offeredByItem = await readOfferedModifiers(
     tx,
-    rows.map((row) => ({ productId: row.productId, menuItemId: row.id })),
+    offered.map((row) => ({ productId: row.productId, menuItemId: row.id })),
   );
   const variantsByItem = await readOfferVariants(
     tx,
-    rows.map((row) => row.id),
+    offered.map((row) => row.id),
     content.defaultLanguage,
   );
-  return rows.map((row) => ({
+  return offered.map((row) => ({
     id: row.id,
     menuId: row.menuId,
     productId: row.productId,
@@ -639,7 +696,7 @@ export async function renameCatalogue(
     .returning({ id: catalogues.id });
   if (row === undefined) throw new AppError("catalogue.not_found", { catalogueId });
   // The root's internal name is the menu's name.
-  const rootSectionId = (await menuRoots(tx, [catalogueId])).get(catalogueId);
+  const rootSectionId = await menuRoot(tx, catalogueId);
   if (rootSectionId !== undefined)
     await tx.update(sections).set({ internalName: name }).where(eq(sections.id, rootSectionId));
 }

@@ -9,6 +9,7 @@ import {
   createProduct,
   deactivateMenuItem,
   listMenuOffers,
+  listMenuOffersWithTopLevel,
   renameCatalogue,
   updateMenuItem,
   updateProduct,
@@ -327,6 +328,27 @@ describe("a menu offers what its structure reaches", () => {
     });
   });
 
+  it("orders a product reached along several paths at the first place the structure reaches it", async () => {
+    const f = await fixture();
+    await app(async (tx) => {
+      await addMember(tx, f.drinks, product(f.lemonade));
+      await addMember(tx, f.drinks, product(f.water));
+      await addMember(tx, f.favourites, product(f.juice));
+      await addMember(tx, f.favourites, section(f.drinks));
+      await addMember(tx, f.lunchRoot, product(f.water));
+      await addMember(tx, f.lunchRoot, section(f.favourites));
+      await addMember(tx, f.lunchRoot, section(f.drinks));
+      await addMember(tx, f.lunchRoot, product(f.burger));
+    });
+    const offers = await app((tx) => listMenuOffers(tx, [f.lunch]));
+    expect(offers.map((offer) => [offer.productId, offer.placements])).toEqual([
+      [f.water, [[], [f.favourites, f.drinks], [f.drinks]]],
+      [f.juice, [[f.favourites]]],
+      [f.lemonade, [[f.favourites, f.drinks], [f.drinks]]],
+      [f.burger, [[]]],
+    ]);
+  });
+
   it("orders several menus by name, each in its own structure's order", async () => {
     const f = await fixture();
     await app(async (tx) => {
@@ -342,6 +364,31 @@ describe("a menu offers what its structure reaches", () => {
       ["Lunch menu", "Water (staff)"],
       ["Lunch menu", "Burger (staff)"],
     ]);
+  });
+});
+
+describe("the dashboard's read of a menu's offers", () => {
+  it("gives each offer the top-level membership that takes it off the top level, if it has one", async () => {
+    const f = await fixture();
+    await app(async (tx) => {
+      await addMember(tx, f.drinks, product(f.lemonade));
+      await addMember(tx, f.drinks, product(f.water));
+      await addMember(tx, f.lunchRoot, section(f.drinks));
+      await addMember(tx, f.lunchRoot, product(f.water));
+      await addMember(tx, f.dinnerRoot, product(f.lemonade));
+    });
+    const waterOnTop = await memberHolding(f.lunchRoot, product(f.water));
+    const offers = await app((tx) => listMenuOffersWithTopLevel(tx, f.lunch));
+    expect(offers.map((offer) => [offer.productId, offer.topLevelMember])).toEqual([
+      [f.lemonade, null],
+      [f.water, { sectionId: f.lunchRoot, memberId: waterOnTop }],
+    ]);
+    // Everything else is the offer `listMenuOffers` gives.
+    const plain = await app((tx) => listMenuOffers(tx, [f.lunch]));
+    expect(offers).toEqual(
+      plain.map((offer, index) => ({ ...offer, topLevelMember: offers[index]!.topLevelMember })),
+    );
+    expect(await app((tx) => listMenuOffersWithTopLevel(tx, crypto.randomUUID()))).toEqual([]);
   });
 });
 

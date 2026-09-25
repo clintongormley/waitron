@@ -22,6 +22,7 @@ export * from "./sections.js";
 export {
   createMenuShell,
   readMenuStructure,
+  requireMenuRoot,
   syncMenuOffers,
   type MenuStructureNode,
 } from "./menu-structure.js";

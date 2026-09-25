@@ -3538,9 +3538,19 @@ describe("a menu's structure", () => {
     const structure = (await (
       await send(app, "GET", `/management-api/catalogues/${menuId}/structure`)
     ).json()) as { rootSectionId: string; nodes: { memberId: string }[] };
+    const offers = `/management-api/catalogues/${menuId}/offers`;
+    // The offer names the membership to take off, so the dashboard need not read the structure.
+    expect(await (await send(app, "GET", offers)).json()).toMatchObject([
+      {
+        id: itemId,
+        topLevelMember: {
+          sectionId: structure.rootSectionId,
+          memberId: structure.nodes[0]!.memberId,
+        },
+      },
+    ]);
     const member = `/management-api/sections/${structure.rootSectionId}/members/${structure.nodes[0]!.memberId}`;
     expect((await send(app, "DELETE", member)).status).toBe(204);
-    const offers = `/management-api/catalogues/${menuId}/offers`;
     expect(await (await send(app, "GET", offers)).json()).toEqual([]);
     const again = await send(app, "POST", items, { body: { productId, grossPrice: null } });
     expect(again.status).toBe(201);

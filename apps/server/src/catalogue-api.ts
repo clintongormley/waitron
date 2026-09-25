@@ -50,7 +50,7 @@ import {
   listCatalogues,
   listCataloguesForLocation,
   listCategories,
-  listMenuOffers,
+  listMenuOffersWithTopLevel,
   readMenuStructure,
   listOptionLists,
   getOptionList,
@@ -809,7 +809,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const rows = await gated(sessionId, (tx) =>
-        listMenuOffers(tx, [menuId], { includeUnavailable: true, includeSwitchedOff: true }),
+        listMenuOffersWithTopLevel(tx, menuId, {
+          includeUnavailable: true,
+          includeSwitchedOff: true,
+        }),
       );
       return c.json(rows);
     }),

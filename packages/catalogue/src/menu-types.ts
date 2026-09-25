@@ -54,6 +54,13 @@ export interface MenuOffer extends MenuItem {
   variants: MenuOfferVariant[];
 }
 
+/** A menu offer as the dashboard's menu editor reads it (`listMenuOffersWithTopLevel`). */
+export interface EditableMenuOffer extends MenuOffer {
+  /** The product's membership of the menu's top level, when it has one: what taking it off the
+   * top level removes. */
+  topLevelMember: { sectionId: string; memberId: string } | null;
+}
+
 /**
  * One variant as a menu offers it. The names are the variant's own; every other product value is
  * its EFFECTIVE one — its own, or its parent's where it leaves the field blank.

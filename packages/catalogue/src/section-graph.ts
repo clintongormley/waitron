@@ -118,7 +118,8 @@ export function reachableProducts(graph: SectionGraph, rootId: string): string[]
   return [...products];
 }
 
-/** `placements` for every product the root reaches, from one walk. */
+/** For every product the root reaches, each path of section ids from the root to a list holding it
+ * directly. */
 export function placementsByProduct(graph: SectionGraph, rootId: string): Map<string, string[][]> {
   const found = new Map<string, string[][]>();
   const walk = (path: string[]): void => {
@@ -133,11 +134,6 @@ export function placementsByProduct(graph: SectionGraph, rootId: string): Map<st
   };
   walk([rootId]);
   return found;
-}
-
-/** Each path of section ids, from the root, ending at a list that holds the product directly. */
-export function placements(graph: SectionGraph, rootId: string, productId: string): string[][] {
-  return placementsByProduct(graph, rootId).get(productId) ?? [];
 }
 
 /** The menus whose root reaches the section, sorted. A home layout holding it does not count. */

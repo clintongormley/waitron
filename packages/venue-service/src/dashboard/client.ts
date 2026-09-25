@@ -129,13 +129,9 @@ export interface MenuOffer {
    * the top level itself. */
   placements: string[][];
   /** The product's membership of the menu's top level, when it has one: what taking it off the
-   * top level removes. Joined in by `load` from the menu's structure. */
+   * top level removes. */
   topLevelMember: { sectionId: string; memberId: string } | null;
   variants?: MenuOfferVariant[];
-}
-interface MenuStructure {
-  rootSectionId: string;
-  nodes: { memberId: string; ref: { kind: "product"; productId: string } | { kind: "section" } }[];
 }
 export type VenueServiceView = VenueServiceModel & VenueServiceChoices;
 
@@ -162,7 +158,7 @@ export class VenueServiceApi {
       this.#read<VenueServiceChoices["stations"]>("/management-api/stations"),
       this.#read<FloorZone[]>("/management-api/zones"),
     ]);
-    const [productLists, offerLists, structures] = await Promise.all([
+    const [productLists, offerLists] = await Promise.all([
       Promise.all(
         menus.map((menu) =>
           this.#read<Product[]>(`/management-api/catalogues/${menu.id}/products`),
@@ -170,32 +166,14 @@ export class VenueServiceApi {
       ),
       Promise.all(
         menus.map((menu) =>
-          this.#read<Omit<MenuOffer, "topLevelMember">[]>(
-            `/management-api/catalogues/${menu.id}/offers`,
-          ),
-        ),
-      ),
-      Promise.all(
-        menus.map((menu) =>
-          this.#read<MenuStructure>(`/management-api/catalogues/${menu.id}/structure`),
+          this.#read<MenuOffer[]>(`/management-api/catalogues/${menu.id}/offers`),
         ),
       ),
     ]);
     const products = [
       ...new Map(productLists.flat().map((product) => [product.id, product])).values(),
     ];
-    const offers = offerLists.flatMap((list, index) => {
-      const { rootSectionId, nodes } = structures[index]!;
-      return list.map((offer) => {
-        const member = nodes.find(
-          (node) => node.ref.kind === "product" && node.ref.productId === offer.productId,
-        );
-        return {
-          ...offer,
-          topLevelMember: member ? { sectionId: rootSectionId, memberId: member.memberId } : null,
-        };
-      });
-    });
+    const offers = offerLists.flat();
     return {
       ...model,
       menus,

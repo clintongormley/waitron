@@ -4,9 +4,10 @@ import type { Transaction } from "@waitron/db";
 import {
   addProducts,
   createCatalogue,
-  menuDetails,
+  menuItemExtraLists,
   menuItems,
   readProductModifiers,
+  requireMenuRoot,
   resolveAccessibleCatalogueIds,
   setMenuItemExtraLists,
 } from "@waitron/catalogue";
@@ -78,16 +79,26 @@ export async function offerProducts(
   const productIds = [...new Set(options.productIds ?? (await topLevelProducts(tx, cfg)))];
   const offerByProduct = await placeOnTopLevel(tx, menuId, productIds);
   const modifiers = await readProductModifiers(tx, productIds);
+  const withoutExtras: string[] = [];
   for (const productId of productIds) {
     const extras = (modifiers.get(productId.toLowerCase()) ?? []).filter(
       (ref) => ref.kind === "extras",
     );
-    await setMenuItemExtraLists(
-      tx,
-      offerByProduct.get(productId)!,
-      extras.map((ref) => ({ listId: ref.id, items: [] })),
-    );
+    const offerId = offerByProduct.get(productId)!;
+    if (extras.length === 0) withoutExtras.push(offerId);
+    else
+      await setMenuItemExtraLists(
+        tx,
+        offerId,
+        extras.map((ref) => ({ listId: ref.id, items: [] })),
+      );
   }
+  // What `setMenuItemExtraLists` writes for an offer publishing no list, in one statement: its
+  // reachability check, a whole-graph read per call, is settled by `placeOnTopLevel` above.
+  if (withoutExtras.length > 0)
+    await tx
+      .delete(menuItemExtraLists)
+      .where(inArray(menuItemExtraLists.menuItemId, withoutExtras));
 
   if ((options.routes ?? "mirror-legacy") === "mirror-legacy") {
     await mirrorLegacyRoutes(tx, cfg, productIds);
@@ -178,11 +189,7 @@ async function placeOnTopLevel(
   productIds: string[],
 ): Promise<Map<string, string>> {
   if (productIds.length === 0) return new Map();
-  const [details] = await tx
-    .select({ rootSectionId: menuDetails.rootSectionId })
-    .from(menuDetails)
-    .where(eq(menuDetails.menuId, menuId));
-  await addProducts(tx, details!.rootSectionId, productIds);
+  await addProducts(tx, await requireMenuRoot(tx, menuId), productIds);
   const ofMenu = and(eq(menuItems.menuId, menuId), inArray(menuItems.productId, productIds));
   await tx.update(menuItems).set({ grossPrice: null, active: true }).where(ofMenu);
   const rows = await tx
