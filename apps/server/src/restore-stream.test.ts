@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -440,23 +440,42 @@ describe("prepareStreamRestore", () => {
     await expectStateUntouched(deps.stateDir);
   });
 
-  // Litestream refuses to restore over a non-empty output file.
-  it("downloads into an empty folder even when an interrupted restore left its copy behind", async () => {
+  // Litestream refuses to restore over a non-empty output file. The first run is held mid-download,
+  // so its folder is on disk exactly as a run killed at that point leaves it.
+  it("leaves an interrupted restore's folder as it was, and downloads into an empty folder of its own", async () => {
+    const deps = await prepareDeps(await bucket());
+    let cutShortPath = "";
+    let downloading!: () => void;
+    const started = new Promise<void>((resolve) => (downloading = resolve));
+    let cutShort!: (error: Error) => void;
+    const held = new Promise<never>((_, reject) => (cutShort = reject));
+    const interrupted = prepareStreamRestore({
+      ...deps,
+      restoreGeneration: async (args) => {
+        cutShortPath = args.outPath;
+        await writeFile(args.outPath, "from a restore cut short");
+        downloading();
+        await held;
+      },
+    });
+    await started;
+
     let seen: string[] | undefined;
-    const deps = await prepareDeps(await bucket(), {
+    const prepared = await prepareStreamRestore({
+      ...deps,
       restoreGeneration: async (args) => {
         seen = await readdir(dirname(args.outPath));
         await copyFile(fixtureDb, args.outPath);
       },
     });
-    await mkdir(join(deps.stateDir, "stream-restore-cutshort"));
-    await writeFile(
-      join(deps.stateDir, "stream-restore-cutshort", "venue.db"),
-      "from a restore cut short",
-    );
-    const prepared = await prepareStreamRestore(deps);
     expect(seen).toEqual([]);
+    expect(dirname(prepared.databasePath)).not.toBe(dirname(cutShortPath));
+    expect(await readFile(cutShortPath, "utf8")).toBe("from a restore cut short");
+
     await prepared.discard();
+    cutShort(new Error("cut short"));
+    await expect(interrupted).rejects.toThrow("cut short");
+    await expectStateUntouched(deps.stateDir);
   });
 
   it("gives each preparation its own scratch folder, so discarding one leaves another's copy", async () => {
