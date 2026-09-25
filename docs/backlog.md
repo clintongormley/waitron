@@ -2828,12 +2828,46 @@ image constraints under *Detail → Box image*.
   parse-tree walk, tests included; the 17 part-h files lane A's slice-2 branch or plan Tasks 7–10
   name are held back as h2) and the rest of `apps/till` — the files directly in `src/` and the
   two configs, part d of four (#621, about 2,660 to about 1,250, parse-tree walk, tests included;
-  `till-app.ts` alone 1,286 to 349).
+  `till-app.ts` alone 1,286 to 349) and `apps/server`'s kitchen, print, receipt, station, report,
+  payments, webhook, pass, me, transfer, served, sale, split, move and modifier files, part g (#622,
+  about 4,120 to about 1,750, parse-tree walk, tests included).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620 and #621 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621 and #622 and left for the package that owns each, all
   still OPEN:
+  - Found by #622 (`apps/server` part g), outside its files or not fixable in a comments-only
+    change. **A hard delete of a referenced row IS refused**: `tables.ts`'s `deactivateTable` note
+    says "nothing below the verb objects" and that the verb is the whole guard, and
+    `management-api.ts` repeats "the verb is the whole guard" for stations, courses and tables; the
+    review measured (Node v26.7.0, every `packages/db` migration, foreign keys on) that a `DELETE` of
+    a dining table, station, course or print agent that other rows reference fails with `FOREIGN KEY
+    constraint failed` (errcode 787), while an unreferenced one is deleted. The same note lists
+    `till-api.ts`, `device-api.ts`, `kitchen.ts` and `print-api.ts` as pointing back to it, and none
+    does now. `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same
+    live-course definition; `fireCourse` calls `requireCourse`. `packages/provisioning/src/venue-apply.ts`
+    names a `till.configure` gate for `createDeviceProfile`; the gate is `layout.configure`
+    (`packages/layouts/src/device-profile-store.ts`). `docs/developers/conventions-data.md` names a
+    `print-api.printer-wiring.test.ts` case "refuses another tenant's manager…" that #378 removed.
+    `docs/developers/testing-guide.md` says the concurrent Enable/unpair payments test "locks the
+    reader before deciding"; there are no row locks, the enable waits behind the unpair's write
+    transaction. `apps/server/README.md` sends readers to "the `drain.complete` log line, the
+    `incidents` table" for rejected fiscal records, a path only someone with a terminal can take.
+    Stale line pointers into moved schema files remain in `recovery-bundle-api.test.ts`
+    (`persons.ts:26`) and `backup-api.route.test.ts`, and `working-order.ts`'s `splitOffCheck`
+    points at "line ~221". Read only, not run: `WebhookDeps.nodeId` looks unread by `settleWebhook`;
+    `receipt-order.ts` takes a `cfg` it never uses; `me-api.ts`'s profile save logs
+    `account_email.send_failed` with the caught error's message. The lock-ordering and deadlock
+    cases for transfers, merges and split bills went with PostgreSQL and nothing replaced them (one
+    write transaction per venue file is what serialises those writers now). Test titles #622 could
+    not touch: "never a 22P02 → 500" and "never a 23503 → 500" in `print-api.printer-wiring.test.ts`
+    (and 22P02 titles in `till-api.receipt.test.ts`, `till-api.tables.test.ts`, `till-api.test.ts`),
+    "regardless of database date display settings" in `print-api.test.ts`, "(the R-D dedupe)" in
+    `kitchen-print.test.ts`, "(SP-B4 rehome)" in `receipt-print.test.ts`, "(SP-A.2 §16.4)" and
+    "SP-C:" in `sale-till-source.receipt.test.ts`, "old per-taxpayer path" and "path tenant" in
+    `webhook.test.ts`, "never a 23514 500" in `me-api.test.ts`, "(FIX 2 cascade / FIX 4 split)" in
+    `transfer-lines.test.ts`, "(the TS-4 shape)" in `move-merge.test.ts`, "TS-4's move guards" and
+    "TS-2 status" in `split-bill.test.ts`.
   - Found by #621 (the rest of `apps/till`), not fixable in a comments-only change.
     **`apps/till/src/till-app.test.ts:7143` is an empty test**, `it("sends a walk-up line's options
     answer without any local price preview", () => {})`, which passes whatever the code does
@@ -2948,21 +2982,19 @@ image constraints under *Detail → Box image*.
     test-only; and in device mode the station screen's `#reload` swallows a `device.unauthorized`,
     so a device cookie revoked mid-session raises nothing until the next connect. Test NAMES still
     say `till.configure` where the permission is `venue.configure`, in `apps/till/src/api/client.test.ts`
-    and `till-app.test.ts`, and so do comments and test names in `apps/server/src/kitchen.ts`,
-    `kitchen.test.ts` and `promote-endpoint-e2e.test.ts`. The screens' `css` templates still carry
+    and `till-app.test.ts`, and so does a comment in `apps/server/src/promote-endpoint-e2e.test.ts`
+    (#622 fixed `kitchen.ts` and `kitchen.test.ts`). The screens' `css` templates still carry
     task and spec numbers ("Task 7", "KDS-4 §3d"). Unchecked and kept: the allergen screen's legal
     citation (RD 126/2015 Art. 6.5.a.2°). Not restored because nothing confirms it: the table-order
     screen's `#lineGross` "same arithmetic the server files with" (the server does not call
     `grossOf`).
   - Found by #613 (`apps/server` `till-*`), outside its files or not fixable in a comments-only
-    change. Present-tense "a malformed id becomes a 500" survives in `print-api.printer-wiring.test.ts`,
-    `print-api.test.ts` and `working-order.test.ts` (ids are text columns, so no `22P02`; #615
-    removed the `errors.ts` zone-route claim and the `catalogue-api.test.ts` and `recipe-api.test.ts`
-    copies). Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`,
+    change. Present-tense "a malformed id becomes a 500" survives in `working-order.test.ts` (ids are text
+    columns, so no `22P02`; #615 removed the `errors.ts` zone-route claim and the
+    `catalogue-api.test.ts` and `recipe-api.test.ts` copies, #622 the `print-api` suites'). Two `v8 ignore start` comments in `till-sale.ts` (`finalizeCapture`,
     `finalizeSettle`) cite `provider.ts:66-83`; the checker compares tool comments character for
     character, so repointing them to `PaymentResult` in `packages/payments/src/provider.ts` is not
-    a comments-only change. `apps/server/src/receipt-lines.ts` still carries "(Finding 2)" and
-    "(Task 8)" (part h). Test titles #613 could not touch: "lost-T2" in
+    a comments-only change. Test titles #613 could not touch: "lost-T2" in
     `till-sale-integrated.db.test.ts` (a captured card payment whose sale was never filed),
     "Tasks 5 & 6", "7b", "FP-1, Task 6", "FP-2, Task 4", "SP-A.2 cutover", "Task 12 cutover",
     "KDS-2/3", "(Copilot)" and "int4" in the `till-api*` and `till-config` suites, and 29 titles
@@ -2980,9 +3012,7 @@ image constraints under *Detail → Box image*.
     checked on the server (not traced). Like #607 and #610, #612 did not carry its 19 deleted
     proof-by-deletion notes into its commit message.
   - Found by #611 (`packages/venue-service`), outside its package or not fixable in a comments-only
-    change. `apps/server/src/served-at-huella.test.ts` and `sale-till-source.receipt.test.ts` cite
-    `packages/venue-service/src/schema/service.ts:180` for `preparation_routes.id`, a line #611
-    moved: name `preparationRoutes.id` in `service.ts` instead. `apps/server/src/working-order.test.ts`
+    change. `apps/server/src/working-order.test.ts`
     names a key `zone_service_policies_default_menu_zone_fk`; the real one is
     `zone_service_policies_default_allowed_fk` (from #489). `apps/server/scripts/demo-seed/seed-floor.ts`
     writes `department_hours` times as `HH:MM`, bypassing `storedTime`'s `HH:MM:SS` (from #489; the
@@ -2992,7 +3022,7 @@ image constraints under *Detail → Box image*.
     commit-time case, and the title, are a test change. `operations.test.ts`'s placeholder unit id
     no longer shows an empty string refused: `unit_id` is plain text. The PostgreSQL-deferral
     history ("DEFERRABLE INITIALLY DEFERRED", "three statements where PostgreSQL took two") is
-    still in `apps/server/src/tabs.test.ts`, `served-at-huella.test.ts`,
+    still in `apps/server/src/tabs.test.ts`,
     `working-order.test.ts` and `testing/clear-provision-fixture.ts`.
   - Found by #609 (`packages/media`), not fixable in a comments-only change. **The
     `media_images` filename CHECK accepts a name with an embedded NUL**: the review stored 64 hex
@@ -3009,14 +3039,12 @@ image constraints under *Detail → Box image*.
     "a `wt-button` forwards only `disabled`/`aria-label`", and #618 the till's "a runtime shape
     error a view test catches".
   - Found by #607 (`apps/dashboard/src/screens`), outside the screens folder; #610 fixed the
-    dashboard's copies and #614 the till's "never send a personId". Still open: the fire-control modes are listed as
-    `waiter`/`kitchen` only, leaving out `expo` (`fireControlMode`,
-    `packages/db/src/schema/tenants.ts`), at `apps/server/src/kitchen.ts:360`. Read only, not run: the recipe screen's `#loadRecipe` guard
+    dashboard's copies and #614 the till's "never send a personId". Still open, read only, not run: the recipe screen's `#loadRecipe` guard
     compares product ids, so choosing A, then B, then A again lets the first A answer apply and turn
     Save back on while the second A load is still running.
-  - Found by #606 (`packages/module`), outside its package (#617 fixed its `provision.ts` half).
-    `apps/server/src/kitchen.test.ts` (the station test's comment) says a refusal would end up
-    "poisoning a shared transaction", the claim `working-order.test.ts` makes (below).
+  - Found by #606 (`packages/module`), outside its package (#617 fixed its `provision.ts` half,
+    #622 `kitchen.test.ts`'s). `apps/server/src/working-order.test.ts` still says a refused statement
+    poisons the transaction ("so the 23505 poisons that one"); on this engine it backs out by itself.
   - Found by #604 (`packages/ui`), not fixable in a comments-only change. **A table with no shape
     is drawn as a rectangle and saved as round on its first edit**: `wt-table-token.ts` draws
     `shape-${t.shape ?? "rect"}`, while `wt-floor-canvas.ts` marks Round as pressed and sends
@@ -3311,10 +3339,10 @@ image constraints under *Detail → Box image*.
     making them static imports is a small code follow-up.
   - Found by #589 (`packages/db` outside `src/schema`), not changed. Line pointers from other
     packages into `packages/db/src/schema`, most of them made wrong by #585 and some pointing past
-    the end of their file: `apps/server/src/boot.test.ts:2761`, `kitchen-print.test.ts:138`, `retire.test.ts:76`, `sale-till-source.receipt.test.ts:212`
-    and `:227`, `working-order.test.ts:103` (all under `apps/server/src`)
+    the end of their file: `apps/server/src/boot.test.ts:2761`, `retire.test.ts:76`, `working-order.test.ts:103` (all under `apps/server/src`)
     (the `scripts/catalogue-engine-neutral.test.ts` pointers were removed by #602,
-    `packages/venue-service/src/operations.ts`'s by #611, the `till-*` ones by #613, and `join-requests.test.ts`'s by #617)
+    `packages/venue-service/src/operations.ts`'s by #611, the `till-*` ones by #613, `join-requests.test.ts`'s by #617, and `kitchen-print.test.ts`'s and
+    `sale-till-source.receipt.test.ts`'s by #622)
     — name the file and the column instead, with each package's pruning. In
     `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES ANYTHING"
     repeats the first case under another name (a test change, not a comment one). The same
@@ -3351,15 +3379,6 @@ image constraints under *Detail → Box image*.
     `groupOrder` measurement on bookings (CLAUDE.md §4) out of its `vitest.config.ts` into its
     commit message; `docs/developers/testing-guide.md` has no paragraph holding it (#597 and #611 cut
     `payments-sumup`'s and `venue-service`'s config copies to a pointer at CLAUDE.md §4).
-  - The same false comments outside bookings, found by #574 (#610 removed the dashboard API
-    client's "runtime shape error a view test catches" and `purchase-form.ts`'s "client validation
-    mirrors the op's checks"; #612 removed `date-utils.ts`'s "per-venue timezone is a later
-    slice"): PostgreSQL's `22P02`
-    described as current in `apps/server`'s `print-api.printer-wiring.test.ts` and
-    `print-api.test.ts` (#615 removed `recipe-api.test.ts`'s); and `apps/server/src/print-api.test.ts` says `bookings-cas.test.ts`
-    records a deleted setup, which it no longer does. (#600 removed the same claim from
-    `fiscal-none` and `workforce-es`, and `composition/src/modules.ts`'s "the only place bookings is
-    named".)
   - Found by #588 (`packages/layouts`), not fixable in a comments-only change. Two test titles in
     `packages/layouts/src/canvas-store.db.test.ts` (lines 144 and 249) still quote PostgreSQL's
     error numbers 23001 and 23505; the stores match SQLite's. The false "Inert: nothing here reads
@@ -5734,8 +5753,7 @@ the chain-append seam when a record's totals disagree with its own VAT lines. #3
 (`listOpenIncidents`, `packages/core/src/incidents.ts`) and the dashboard bell and Alerts surface that
 displays them. It is one surface serving every producer, which is why it was not folded into A1: a
 screen shaped around that branch's two arithmetic warnings would be the wrong shape for the ones
-already waiting. (A real venue's operator has no terminal, so `apps/server/src/pass.ts`'s "grep
-`drain.complete`, or read the `incidents` table" note is not a path they can take.)
+already waiting.
 
 ### Logging, diagnostics & one-touch bug report (A9; Slice 1 landed #192)
 
