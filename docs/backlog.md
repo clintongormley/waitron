@@ -5272,7 +5272,7 @@ bucket copy that is on and current. Left open:
 - Of the four places boot hands the copy's state to, three are held by the compiler, which refuses
   a boot call that leaves the key out, and `/health` by a boot test. A boot test also pins the
   sealed-state alert's registration.
-Task 8a, the server side of the bucket-copy settings, landed as #TBD. Routes under
+Task 8a, the server side of the bucket-copy settings, landed as #627. Routes under
 `/api/backup/stream`, behind the manager login, read the settings, test a bucket, save and switch
 the copy on, switch it off, and hand out the recovery kit: one string holding the bucket's details,
 the venue id, the recovery key and the public key that signs the pointer
