@@ -10,7 +10,8 @@ import { readNodeIdentityKey } from "./node-identity.js";
 
 /**
  * The endorsements to carry on a document `signerNodeId` signs: its stored endorsement, if any, so a
- * peer that trusts only the endorser's key still accepts the document.
+ * peer that trusts only the endorser's key can accept the document when that endorsement is valid for
+ * the signer's key.
  */
 export async function readSignerEndorsements(
   db: Database,

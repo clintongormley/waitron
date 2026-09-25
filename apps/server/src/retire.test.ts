@@ -114,8 +114,8 @@ describe("retireSelf", () => {
     expect(verifyMembershipDocument(held!, trust).valid).toBe(true);
   });
 
-  // A node that began as a mirror is trusted by its peers only through the endorsement of its key
-  // that adopt stored on its node row.
+  // A node that began as a mirror is trusted by a peer that holds only the endorser's key through the
+  // endorsement of its key that adopt stored on its node row.
   it("carries this node's stored endorsement, so a peer trusting only the endorser accepts the eviction", async () => {
     const { deps, nodeId } = await fencedNode();
     const endorser = generateNodeKeyPair();
@@ -130,7 +130,6 @@ describe("retireSelf", () => {
     expect(held.endorsements).toEqual([endorsement]);
     const byEndorser = verifyMembershipDocument(held, { [CARRIER_ID]: endorser.publicKey });
     expect(byEndorser.valid ? "valid" : byEndorser.reason).toBe("valid");
-    // A peer holding this node's own key directly still accepts the document that carries it.
     const direct = verifyMembershipDocument(held, { [nodeId]: ownKey });
     expect(direct.valid ? "valid" : direct.reason).toBe("valid");
   });

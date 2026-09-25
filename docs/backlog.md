@@ -5421,7 +5421,8 @@ crash between the two renames leaves a mismatched pair, which the next start rep
 listener reads it, because the marker is still there — unless that start defers the first start
 (fenced, mirror or adoption-pending), when the listener refuses the pair. The next membership
 document carries this node's stored endorsement, so a peer that trusts only the endorser (the
-primary that adopted this node) still accepts it. Every signer except the term-0 seed
+primary that adopted this node) accepts it when the stored endorsement is valid for this node's
+key. Every signer except the term-0 seed
 (`apps/server/src/membership-seed.ts`) reads the signing node's stored endorsement through
 `readSignerEndorsements` (`apps/server/src/membership-mint.ts`): this first start, both promotions
 (`apps/server/src/promote.ts`), `retireSelf` (`apps/server/src/retire.ts`) and the chart append in
@@ -5432,8 +5433,11 @@ endorser accepts the eviction" (`apps/server/src/retire.test.ts`), "… accepts 
 so a peer trusting only the endorser accepts the appended chart"
 (`apps/server/src/mirror-bundle-api.test.ts`) each check that the stored document carries the
 endorsement and verifies both against the endorser's key alone and against the signer's own key
-held directly. A node row holding no endorsement still signs `endorsements: []`, which the other
-retire, both promotions' and chart-append cases in those files assert. Left open:
+held directly. A node row holding no endorsement still signs `endorsements: []`; one case each for
+retire, both promotions and the chart append asserts it, and no first-start case does. The chart
+append reads the endorsement again on each retry round: "signs a retried chart write with the
+endorsement stored when that round reads, not the first round's"
+(`apps/server/src/mirror-bundle-api.test.ts`). Left open:
 - A restored box whose cloud peer does not answer during its first start signs the next term and
   removes the marker; a fencing document the peer serves later at that same term reads as not
   newer, so the box is never fenced. This task's review reproduced it with a temporary two-boot case in
