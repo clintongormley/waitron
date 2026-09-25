@@ -5112,7 +5112,7 @@ any of this code, so you can still read how something worked under PostgreSQL.
 ([spec](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
 [plan](superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md); PRs, in the order the
 tasks landed: #513, #540, #543, #548, #554, #557, #560, #566, #569, #590, #619, #627, #628, #630,
-#642, #646 and this change, with follow-ups #573, #576, #594, #599, #608, #643, #647, #649 and #650).
+#642, #646 and #652, with follow-ups #573, #576, #594, #599, #608, #643, #647, #649 and #650).
 A venue streams `venue.db` continuously to an S3-compatible bucket the owner supplies, a dead box is
 rebuilt from that bucket with one recovery kit and carries on under a fresh fiscal chain, and staff
 see how current the copy is. What each task built, and what it left open, is in the slice-2 entry
@@ -5173,7 +5173,7 @@ a venue key** stored in `venue.db` only in locked form (slice-2 spec §3.3) — 
 **SQLite slice 2 — COMPLETE (2026-09-25)** ([spec](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
 [plan](superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md)): the venue streams
 its database to a bucket the owner supplies, and a dead box is rebuilt from it. Every task below has
-landed, the last one (Task 10) in this change. The items each paragraph calls open, left open, still
+landed, the last one (Task 10) in #652. The items each paragraph calls open, left open, still
 open or an open question are still open after slice 2 unless a later line marks them done. Landed:
 Task 3b, the restart reset (#513); Task 4, the five measurements Litestream's behaviour decides
 (#540) — the values later tasks read are under "What later
@@ -5319,7 +5319,7 @@ these codes (Tasks 7 and 8b) must not put it in front of anyone as trusted text.
 English-only guard's `GENERIC_PACKAGES` (`packages/db/src/english-only.ts`), so it is never scanned
 — I believe this predates #569 (the package dates from #489); and nothing in the package has been
 run against a real provider's bucket — the unit tests drive the real S3 client over a scripted
-network, and since Task 10 (this change) the loop test drives it against versitygw 1.8.0, a real
+network, and since Task 10 (#652) the loop test drives it against versitygw 1.8.0, a real
 S3-compatible server run on the test machine.
 `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe: its fixture
 closes the handles first, which removes the sidecars, so with `db-wipe.ts`'s `SIDECARS` cut to
@@ -5391,7 +5391,7 @@ bucket copy that is on and current. Left open:
 - A sale whose write transaction began before the supervisor first subscribed after boot (no
   listener registered when it began) is not counted, so the lag reads low for it.
 - Whether Litestream uploads anything while the side file is unchanged is not measured; Task 10's
-  loop test (this change) does not measure it either.
+  loop test (#652) does not measure it either.
 - The alerts send the owner to the Backups page for the bucket's settings, which Task 8b added; the
   status gained a third shape, a copy set up but not started, which Task 8b's panel shows as "Not
   running".
@@ -5613,8 +5613,8 @@ the process restarted. Left open:
   peers are stopped" confirmation again: the shell shows the progress screen while the request runs
   and then draws a new Cloud screen, which starts unticked.
 
-Task 10, the loop test against a real S3-compatible server and the documentation sweep (this
-change). `apps/server/src/stream-loop.e2e.test.ts` runs the whole slice with the real pinned
+Task 10, the loop test against a real S3-compatible server and the documentation sweep
+(#652). `apps/server/src/stream-loop.e2e.test.ts` runs the whole slice with the real pinned
 Litestream against versitygw 1.8.0, run as a plain child process
 (`apps/server/src/testing/s3-test-server.ts`, installed by `scripts/setup-s3-test-server.mjs`
 against a pinned SHA-256): box A streams and dies, box B is rebuilt from the recovery kit, sells
@@ -5633,8 +5633,9 @@ line with what slice 2 built. Left open:
   `test-server` shard, on its pull request or on its merge to `main`, because neither is in
   `ROOT_SCOPE_CONSUMERS` ([ci-and-gates.md](developers/ci-and-gates.md)); the next run that tests
   `apps/server` is the first real download through the changed script.
-- versitygw had not run on Linux before this change's CI run, and the time the two downloads add to
-  each shard has not been measured.
+- Linux is covered by one CI run only: #652's first (2026-09-25, run 36173603563), where each
+  `test-server` shard's install step took about two seconds by GitHub's whole-second step
+  timestamps, and the loop test passed in 15,989 ms with no test skipped in the merged report.
 - The frozen-server stage never reaches the 256 MiB side-file limit, so the supervisor's pause runs
   only against a fake Litestream in the test suites (`packages/stream/src/supervisor.test.ts`
   among them); the real binary at that limit was measured by the bench rig (results note, 1b), not

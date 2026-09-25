@@ -575,8 +575,8 @@ repository is archived and its community binaries are no longer published.
 **It runs with `--sidecar`** (`apps/server/src/testing/s3-test-server.ts`), which keeps object
 metadata in a plain directory instead of extended attributes, so it does not depend on what the
 temporary filesystem supports. Litestream 0.5.17 replicated to it and restored from it in both modes
-on darwin/arm64 (the same notes). It had not run on Linux when this section was written; CI's
-`test-server` shards are its first Linux runs.
+on darwin/arm64 (the same notes). Its first Linux run was #652's CI on 2026-09-25 (run
+36173603563), where the loop test passed in 15,989 ms.
 
 **If the conditional-write probe fails**, which is the case's first assertion and prints the probe's
 reason and the server's log, suspect the server before the product. Check `.bin/versitygw
