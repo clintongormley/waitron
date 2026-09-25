@@ -2824,12 +2824,36 @@ image constraints under *Detail → Box image*.
   files, part f1 (#617, about 2,360 to about 1,110, parse-tree walk, tests included; the 13 part-f
   files the SQLite slice-2 plan will change are held back as f2) and `apps/till`'s `src/api`,
   `src/state` and `src/i18n`, part c of four (#618, about 2,420 to about 1,130, parse-tree walk,
-  tests included).
+  tests included) and `apps/server`'s remaining files, part h1 (#620, about 4,010 to about 1,970,
+  parse-tree walk, tests included; the 17 part-h files lane A's slice-2 branch or plan Tasks 7–10
+  name are held back as h2).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617 and #618 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618 and #620 and left for the package that owns each, all
   still OPEN:
+  - Found by #620 (`apps/server` part h1), not fixable in a comments-only change.
+    **`CLAUDE.md` §2's "shard can exit 1" trap is stale on Vitest 4**: it says the worker-to-main
+    reporting call has a sixty-second timeout nothing can raise, but Vitest 4.1.11 passes
+    `timeout: -1` for that call (`rpc.MzXet3jl.js:117`) and its bundled birpc starts a timer only for
+    a timeout of zero or more; `docs/developers/ci-and-gates.md` already says so. Read by two review
+    seats, not run; `CLAUDE.md` takes the normal PR flow (question in lane B's questions file).
+    **The demo seed does not refuse a production stamp**: with `WAITRON_ENV=production`,
+    `scripts/demo-seed/seed-sales.test.ts` fails its stamp check with `Received: "production"`
+    (measured); only `dev-setup.ts`'s header says it must never run against a production directory,
+    and whether `dev-setup`'s own process can inherit that variable is untested.
+    `redact-secrets.ts` was written against the PostgreSQL connection-string parser, and `pg` is now
+    installed only for `bench/pglite-throughput`; whether a credential-bearing URL can still reach
+    the log is unchecked. `apps/server/vitest.config.ts`'s `coverage.exclude` lists `scripts/**`,
+    which its `src/**/*.ts` include already leaves out (read only). The adoption-pending entry below
+    still gives PostgreSQL's SQLSTATE 23503 on `nodes_location_id_locations_id_fk` as evidence; this
+    engine reports `FOREIGN KEY constraint failed` and names no constraint. Held back in h2,
+    `apps/server/scripts/record-one-sale.ts` still says leaking its two SQLite files keeps the
+    process alive (false per #577 below), that the repository has no till application, and "see
+    this task's own report". Test titles #620 could not touch: "never a 23514 500" in
+    `schedule-api.test.ts`, "masks the password in a postgres URL" in `redact-secrets.test.ts`,
+    "(design §3b(2))" in `set-table-status.test.ts`, "(owner decision 2026-08-02)" in
+    `workforce-api.test.ts`, "(guard by deletion)" in `seed-sales.test.ts`.
   - Found by #618 (`apps/till` `src/api` + `src/state` + `src/i18n`), not fixable in a
     comments-only change. Test titles repeat claims the branch corrected:
     `apps/till/src/state/working-order.test.ts` "previews the total via priceBasket" (the preview
@@ -3103,9 +3127,9 @@ image constraints under *Detail → Box image*.
     `grep -rhoE "export const [A-Z_]+_MIGRATIONS\b" packages --include='*.ts' | sort -u` lists 15
     names on `ca01a7fbd`. `sumupClientForTenant` (`packages/payments-sumup/src/card-provider.ts:50`)
     still carries "tenant" in its name, and `collect.sandbox.test.ts:32` still calls its database
-    `pg`. Three `apps/server` tests still quote PostgreSQL's 23514 as the failure a range check
-    prevents (`me-api.test.ts:850`, `schedule-api.test.ts:459` and `:463`,
-    `workforce-api.test.ts:358`). The fake SumUp client leaves its one-shot switches for a lookup or
+    `pg`. Two `apps/server` test titles still quote PostgreSQL's 23514 as the failure a range check
+    prevents ("400s an INVERTED date range (absence.invalid), never a 23514 500", in
+    `me-api.test.ts` and `schedule-api.test.ts`; #620 deleted the comments that repeated it). The fake SumUp client leaves its one-shot switches for a lookup or
     a refund armed when a checkout before them is refused; no test combines the two.
   - Found by #592 (`packages/fiscal`), not fixable in a comments-only change or outside the
     package. Two SQL comments inside a `sql` string in `packages/fiscal/src/testing/fake-backend.ts`
@@ -5085,7 +5109,7 @@ sidecar removal is pinned by `apps/server/src/db-wipe.test.ts`; what is missing 
 rejoin-level case with sidecars on disk.
 Every synchronous `deriveKey` caller still blocks the event loop while it derives, among them:
 `encodeConfigurationBundle` (`apps/server/src/configuration-transfer.ts`, through
-`encryptArtifact`); everything reaching `decryptArtifact` (`apps/server/src/artifact-cipher.ts:83`) —
+`encryptArtifact`); everything reaching `decryptArtifact` (`apps/server/src/artifact-cipher.ts`) —
 `decodeConfigurationBundle` (`apps/server/src/configuration-transfer.ts`, on the request path,
 decoding an uploaded bundle), `apps/server/src/restore.ts:153` and `unsealNodeState`
 (`apps/server/src/sealed-state.ts:33`); and the recovery bundle's `encryptBundle` and
