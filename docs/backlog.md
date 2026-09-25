@@ -2696,6 +2696,17 @@ image constraints under *Detail → Box image*.
 
 ### B9. CI and test infra
 
+- **`scripts/waitron-sh.test.mjs`'s "when the pull fails" case fails whenever its temporary
+  folder's random name contains "up".** It asserts the recorded docker calls do not match
+  `/docker compose .*up/`, and the pull it does expect, `docker compose -f "$WAITRON_DIR/compose.yml"
+  pull` (`deploy/waitron.sh`), carries the sandbox's `mkdtemp` path. It failed that way on `main`'s
+  CI run for `47ee3a7ba` (the `lint` job's root suite) and passed on the next commit. Reproduced
+  2026-09-25 by lane A: `TMPDIR=/tmp/probe-up-dir pnpm exec vitest run scripts/waitron-sh.test.mjs -t
+  'when the pull fails'` fails with CI's message; the same run with `TMPDIR=/tmp/probe-ab-dir`
+  passes. The fix is to match the `up` subcommand as a word rather than two letters anywhere on the
+  line; nothing is changed yet. Other assertions in that file that match a short word against a
+  line carrying the sandbox path may share the shape (not checked).
+
 - **A pull request that changes only `scripts/bundle-node.mjs` builds no bundle — DONE (the
   owner's answer (a), 2026-09-24, to the note lane B's campaign queue item B8 raised about #580 —
   not §B8 above; **PR #593**, main `97467c013`; checked on real CI with the throwaway draft #595, whose one-line change to `scripts/bundle-node.mjs` selected the four members and ran `bundle-smoke`, run 36045110201).** `scripts/changed-scope.mjs` now carries
