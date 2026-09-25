@@ -233,11 +233,12 @@ async function priceOrderLines(
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
   priced: PricedBasket;
+  identities: OrderLineIdentity[];
   lineContexts: { workingOrderLineId: string; menuItemId: string }[];
 }> {
   if (requestedLines.length === 0) {
     // A lineless call (splitOffCheck, openTab, unjoin) needs no zone and reads nothing.
-    return { lineRows: [], priced: priceBasket([]), lineContexts: [] };
+    return { lineRows: [], priced: priceBasket([]), identities: [], lineContexts: [] };
   }
   if (zoneId === undefined) {
     throw new AppError("order.service_context_missing", { workingOrderId });
@@ -448,11 +449,15 @@ async function priceOrderLines(
       kitchenName: line.kitchenName ?? null,
     };
   });
+  const identities = lineMeta.map((meta, index) => ({
+    id: ids[index]!,
+    productId: meta.productId,
+  }));
   const lineContexts = lineMeta.map((meta, index) => ({
     workingOrderLineId: ids[index]!,
     menuItemId: meta.menuItemId,
   }));
-  return { lineRows, priced, lineContexts };
+  return { lineRows, priced, identities, lineContexts };
 }
 
 /**
@@ -466,10 +471,11 @@ async function priceOrderLines(
 export async function readLockedLines(
   tx: Transaction,
   workingOrderId: string,
-): Promise<LockedLine[]> {
+): Promise<{ locked: LockedLine[]; identities: OrderLineIdentity[] }> {
   const stored = await tx
     .select({
       id: workingOrderLines.id,
+      productId: workingOrderLines.productId,
       lineNo: workingOrderLines.lineNo,
       parentLineId: workingOrderLines.parentLineId,
       grossUnitPrice: workingOrderLines.unitPriceGross,
@@ -496,7 +502,7 @@ export async function readLockedLines(
   // the stored `line_no` space: a void or a transfer leaves stored numbers with gaps, and keying on
   // them would file a child under the wrong parent in the immutable record.
   const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
-  return stored.map((line) => ({
+  const locked = stored.map((line) => ({
     grossUnitPrice: centsToDecimal(line.grossUnitPrice),
     quantity: thousandthsToDecimal(line.quantity),
     vatRate: basisPointsToDecimal(line.vatRate),
@@ -512,6 +518,19 @@ export async function readLockedLines(
     variantKitchenName: line.variantKitchenName,
     kitchenName: line.kitchenName,
   }));
+  return { locked, identities: stored.map(({ id, productId }) => ({ id, productId })) };
+}
+
+/** A working-order line's own identity, which the filed sale line does not carry. */
+export interface OrderLineIdentity {
+  id: string;
+  productId: string | null;
+}
+
+/** Priced lines together with, at the same index, the working-order line each was priced from. */
+export interface PricedOrder {
+  priced: PricedLines;
+  identities: OrderLineIdentity[];
 }
 
 /** Price a persisted order from its add-time locked prices; refuses a lineless order (see
@@ -520,7 +539,16 @@ export async function priceStoredOrder(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<PricedLines> {
-  return priceLockedLines(await readLockedLines(tx, workingOrderId));
+  return (await priceStoredOrderForIssue(tx, workingOrderId)).priced;
+}
+
+/** {@link priceStoredOrder}, with each priced line's working-order identity for `issuancePass`. */
+export async function priceStoredOrderForIssue(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<PricedOrder> {
+  const { locked, identities } = await readLockedLines(tx, workingOrderId);
+  return { priced: priceLockedLines(locked), identities };
 }
 
 /** Read a filed sale's invoice number ("A/1"); the fiscal record reference is regime-opaque and
@@ -590,6 +618,7 @@ export async function createOpenOrder(
 ): Promise<{
   orderNumber: number;
   priced: PricedBasket;
+  identities: OrderLineIdentity[];
   lineRows: WorkingOrderLineInsert[];
 }> {
   // Checked first so an unknown id is `table.not_found`, not a raw foreign-key failure. An inactive
@@ -608,7 +637,7 @@ export async function createOpenOrder(
     }
     effectiveZoneId = table.zoneId ?? effectiveZoneId;
   }
-  const { lineRows, priced, lineContexts } = await priceOrderLines(
+  const { lineRows, priced, identities, lineContexts } = await priceOrderLines(
     tx,
     cfg,
     id,
@@ -637,7 +666,7 @@ export async function createOpenOrder(
     await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts);
   }
 
-  return { orderNumber, priced, lineRows };
+  return { orderNumber, priced, identities, lineRows };
 }
 
 export async function parkOrder(
@@ -2528,7 +2557,7 @@ export async function placeOrder(
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     let issuedOrderLabel: string | null | undefined;
     if (orderFlow === "invoice_first") {
-      const priced = await issuancePass(tx, cfg, id, await priceStoredOrder(tx, id));
+      const priced = await issuancePass(tx, cfg, id, await priceStoredOrderForIssue(tx, id));
       // The fiscal record's `till_id` is the DEVICE till, while the amendment below records the box's
       // CONFIGURED register. The chain is keyed by the node, not the device.
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {

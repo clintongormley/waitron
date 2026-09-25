@@ -23,7 +23,6 @@ import {
   updateCategory,
   writeProductModifiers,
 } from "@waitron/catalogue";
-import type { PricedLines } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
@@ -57,8 +56,9 @@ import {
   openTab,
   parkOrder,
   placeOrder,
-  priceStoredOrder,
+  priceStoredOrderForIssue,
 } from "./working-order.js";
+import type { PricedOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
@@ -706,8 +706,8 @@ describe("issuancePass", () => {
     ]);
 
     await withTransaction(suite.db, async (tx) => {
-      const pricedOne = await priceStoredOrder(tx, one);
-      const pricedFive = await priceStoredOrder(tx, five);
+      const pricedOne = await priceStoredOrderForIssue(tx, one);
+      const pricedFive = await priceStoredOrderForIssue(tx, five);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
 
       await issuancePass(tx, v.cfg, one, pricedOne);
@@ -737,7 +737,7 @@ describe("issuancePass", () => {
       .where(eq(workingOrderLines.lineNo, 2));
 
     const issued = await withTransaction(suite.db, async (tx) =>
-      issuancePass(tx, v.cfg, id, await priceStoredOrder(tx, id)),
+      issuancePass(tx, v.cfg, id, await priceStoredOrderForIssue(tx, id)),
     );
 
     expect(issued.lines.map((l) => [l.productId, l.parentProductId, l.classification])).toEqual([
@@ -756,22 +756,25 @@ describe("issuancePass", () => {
     await suite.db.run(sql`delete from working_line_contexts`);
 
     const issued = await withTransaction(suite.db, async (tx) =>
-      issuancePass(tx, v.cfg, id, await priceStoredOrder(tx, id)),
+      issuancePass(tx, v.cfg, id, await priceStoredOrderForIssue(tx, id)),
     );
 
     expect(issued.lines.map((l) => [l.productId, l.menuId])).toEqual([[v.products.negroni, null]]);
   });
 
-  it("refuses priced lines that do not line up with the order's stored lines", async () => {
+  it("refuses priced lines that do not line up with the line identities handed with them", async () => {
     const v = await setupVenue();
     const id = await basketOrder(v, [{ productId: v.products.negroni }]);
 
     await withTransaction(suite.db, async (tx) => {
-      const priced: PricedLines = await priceStoredOrder(tx, id);
+      const { priced, identities }: PricedOrder = await priceStoredOrderForIssue(tx, id);
       const doubled = { ...priced, lines: [...priced.lines, ...priced.lines] };
-      const renamed = { ...priced, lines: [{ ...priced.lines[0]!, name: "Otro" }] };
-      await expect(issuancePass(tx, v.cfg, id, doubled)).rejects.toThrow(/do not line up/);
-      await expect(issuancePass(tx, v.cfg, id, renamed)).rejects.toThrow(/do not line up/);
+      await expect(issuancePass(tx, v.cfg, id, { priced: doubled, identities })).rejects.toThrow(
+        /do not line up/,
+      );
+      await expect(issuancePass(tx, v.cfg, id, { priced, identities: [] })).rejects.toThrow(
+        /do not line up/,
+      );
     });
   });
 });

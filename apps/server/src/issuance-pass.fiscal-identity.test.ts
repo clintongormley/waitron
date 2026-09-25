@@ -38,7 +38,7 @@ vi.mock("./issuance-pass.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./issuance-pass.js")>();
   return {
     issuancePass: (...args: Parameters<typeof actual.issuancePass>) =>
-      bypass.on ? Promise.resolve(args[3]) : actual.issuancePass(...args),
+      bypass.on ? Promise.resolve(args[3].priced) : actual.issuancePass(...args),
   };
 });
 

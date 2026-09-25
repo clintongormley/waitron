@@ -1,5 +1,4 @@
-import { eq } from "drizzle-orm";
-import { workingOrderLines, type Transaction } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import {
   classifyLine,
   loadClassification,
@@ -10,6 +9,7 @@ import type { PricedLines } from "@waitron/catalogue";
 import { FALLBACK_LOCALE } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
+import type { PricedOrder } from "./working-order.js";
 
 /**
  * The issuance pass: what each line of the sale about to be filed records about its product at the
@@ -18,30 +18,20 @@ import type { TillConfig } from "./till-config.js";
  * pass that issues the record (spec 2026-09-25-sales-classification §3), and a replay or reprint
  * never does.
  *
- * `priced` must be the order's stored lines in `line_no` order, as `priceStoredOrder` and a
- * walk-up's `createOpenOrder` both produce them. The classification is read once for the whole sale.
+ * `order.identities[i]` is the working-order line `order.priced.lines[i]` was priced from, as
+ * `priceStoredOrderForIssue` and `createOpenOrder` both return them. The classification is read once
+ * for the whole sale.
  */
 export async function issuancePass(
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
-  priced: PricedLines,
+  order: PricedOrder,
 ): Promise<PricedLines> {
-  const stored = await tx
-    .select({
-      id: workingOrderLines.id,
-      name: workingOrderLines.name,
-      productId: workingOrderLines.productId,
-    })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
-    .orderBy(workingOrderLines.lineNo);
-  if (
-    stored.length !== priced.lines.length ||
-    stored.some((line, i) => line.name !== priced.lines[i]!.name)
-  ) {
+  const { priced, identities } = order;
+  if (identities.length !== priced.lines.length) {
     throw new Error(
-      `issuancePass: the priced lines of working order ${workingOrderId} do not line up with its stored lines`,
+      `issuancePass: the ${priced.lines.length} priced lines of working order ${workingOrderId} do not line up with its ${identities.length} line identities`,
     );
   }
 
@@ -54,14 +44,14 @@ export async function issuancePass(
   // The language the line's free-text `category` is resolved in (`listMenuOffers`).
   const { defaultLanguage } = await readContentLanguages(tx, FALLBACK_LOCALE);
   const productIds = [
-    ...new Set(stored.flatMap((line) => (line.productId === null ? [] : [line.productId]))),
+    ...new Set(identities.flatMap((line) => (line.productId === null ? [] : [line.productId]))),
   ];
   const classification = await loadClassification(tx, productIds, defaultLanguage);
 
   return {
     ...priced,
     lines: priced.lines.map((line, i) => {
-      const { id, productId } = stored[i]!;
+      const { id, productId } = identities[i]!;
       return {
         ...line,
         productId,
