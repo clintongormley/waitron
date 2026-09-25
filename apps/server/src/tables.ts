@@ -138,13 +138,7 @@ export async function updateTable(
   }
 }
 
-/**
- * Deactivate, never hard-delete, because the table has order history.
- *
- * THIS VERB IS THE WHOLE GUARD, for this and the other deactivate verbs that point here: this
- * engine has no roles or grants, so a `delete from dining_tables` from any code in this process
- * would simply run.
- */
+/** Deactivate, never hard-delete, because the table has order history. */
 export async function deactivateTable(
   tx: Transaction,
   _cfg: TillConfig,
@@ -293,7 +287,7 @@ export async function updateZone(
   }
 }
 
-/** Never a hard delete: a `dining_tables.zone_id` may reference it (see `deactivateTable`). */
+/** Never a hard delete: a `dining_tables.zone_id` may reference it. */
 export async function deactivateZone(tx: Transaction, _cfg: TillConfig, id: string): Promise<void> {
   const updated = await tx
     .update(floorZones)
@@ -435,7 +429,7 @@ export async function updateStatus(
   }
 }
 
-/** Never a hard delete: a table may reference it (see `deactivateTable`). */
+/** Never a hard delete: a table may reference it. */
 export async function deactivateStatus(
   tx: Transaction,
   input: { managementSessionId: string; id: string },

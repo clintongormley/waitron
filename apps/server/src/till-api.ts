@@ -1152,7 +1152,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // DELETE deactivates; `deactivateTable` is the only thing keeping it a deactivation.
   app.delete("/api/tables/:id", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);

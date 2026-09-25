@@ -22,17 +22,14 @@ describe("backupArchiveKey", () => {
     const key = backupArchiveKey(at);
     expect(key).toBe("waitron-20260829T175501Z.backup.enc");
     expect(key).not.toContain(":");
-    // Same stamp as the staging dump for the same instant, so a run's files line up.
     expect(key).toBe(dumpFileName(at).replace(/\.dump$/, ".backup.enc"));
-    // Shares the BACKUP_KEY_PREFIX the prune/status scans use, so it is pruned + read fresh.
+    // The prefix the prune and status scans list.
     expect(key.startsWith("waitron-")).toBe(true);
   });
 });
 
 describe("backupArchiveTimestamp", () => {
   it("round-trips backupArchiveKey to second precision", () => {
-    // The stamp is second-precision (basicIsoStamp drops sub-seconds), so the inverse recovers the
-    // instant truncated to the second — assert on THAT precision, not the sub-second the Date carried.
     const d = new Date("2026-08-29T17:55:01.123Z");
     const truncated = new Date("2026-08-29T17:55:01.000Z");
     expect(backupArchiveTimestamp(backupArchiveKey(d))).toEqual(truncated);
@@ -51,7 +48,6 @@ describe("backupArchiveTimestamp", () => {
   });
 
   it("throws on a key carrying no parseable stamp", () => {
-    // A real backup key always carries the stamp, so a missing one is a defect, not an age to guess.
     expect(() => backupArchiveTimestamp("waitron-notastamp.backup.enc")).toThrow(
       /no parseable timestamp/,
     );

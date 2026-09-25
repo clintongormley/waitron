@@ -12,17 +12,12 @@ import {
   type RecoveryState,
 } from "./recovery-state.js";
 
-// Real processes, each running this package's own `updateRecoveryState` and `withRecoveryLock`
-// through tsx. Every race is forced rather than hoped for: the first process holds its read open
-// for `HOLD_MS` and drops a marker file, and the second starts its write when it sees the marker.
-// Each case but the undo-after-clear one runs twice: with the lock the write survives, and with the
-// lock held around the write alone (`NO_LOCK=1`: the read-to-write span unlocked) the same schedule
-// loses a write — another start's counted failure, or the running server's clear — which is what
-// shows it races at all. The control still locks the write itself, so two writers never share
-// `recovery.json.tmp` (`fs-atomic.ts`), whose clash is a crash rather than a lost write.
+// Real processes, with each race forced by marker files rather than hoped for. Each case but the
+// undo-after-clear one also runs with the lock held around the write alone (`NO_LOCK=1`), where the
+// same schedule must lose a write — which is what shows it races at all. That control still locks
+// the write itself, because two writers clashing on `recovery.json.tmp` crash rather than lose one.
 
 const HOLD_MS = 1_000;
-/** Each child's own bound. Import (~1 s), the barrier and one `HOLD_MS` fit well inside it. */
 const CHILD_DEADLINE_MS = 20_000;
 const TEST_TIMEOUT_MS = 60_000;
 

@@ -1,37 +1,10 @@
-// The scheduled backup worker (onboarding slice 4b-ii, widened for BR-1 storage fan-out, then BR-2's
-// full-archive assembly, then BR-1 Task 3's wall-clock scheduler). Each tick takes ONE copy of the
-// venue database into a STAGING temp file, assembles the FULL backup archive around it
-// (manifest.json + db.dump + module non-DB state + state secrets, packed by `packArchive`),
-// encrypts the WHOLE archive ONCE under the operator's recovery key, then `put`s the SAME ciphertext
-// to EVERY configured `StorageBackend` as `waitron-<stamp>.backup.enc` and prunes each by BOTH a
-// count cap (`retain`) and an age cap (`retainDays`, measured off each artifact's own key stamp).
-// The loop takes an immediate first copy on start, then waits to the schedule's next fire
-// (`nextFireMs`) — sleeping in <=1h chunks so a clock/NTP jump is caught within ~1h (the fire
-// instant is computed once per cycle, so a tz/cutover config change takes effect at the next fire,
-// not mid-wait). A failing copy or an unreachable backend is logged and swallowed and must never
-// kill the loop and, with it, the box's only backup duty; an abort mid-tick is a cancellation, not a
-// `backup.failed`. Same containment the box's main loop uses — `runLoop` logs `pass.threw` and goes
-// around again rather than exiting (`loop.ts`).
+// The scheduled backup worker. Each tick copies the venue database to a staging file, packs it with
+// the manifest, module non-DB state and state secrets into one archive, encrypts that ONCE under the
+// recovery key, puts the same ciphertext to every destination, and prunes each destination.
 //
-// **The copy itself is injected (`archive`), not built here.** The sweep knows nothing about the
-// storage engine: `BackupSupervisor` binds that seam to the venue store's own `archiveTo`, a
-// `VACUUM INTO` on the connection the supervisor opened (`packages/store/src/archive.ts`).
-//
-// A per-destination fault that THROWS (a bad backend, a full disk, a network fault) is caught, logged
-// as `backup.destination_failed`, and does NOT stop the remaining destinations — a throwing backend
-// never costs the others their backup (fail-safe, CLAUDE.md §5: nothing may block a sale, and backup
-// housekeeping is best-effort in the same spirit).
-//
-// A destination that HANGS rather than throws (an unresponsive mount, a stalled network write) is NOT
-// abandoned mid-tick in v1: `Promise.allSettled` waits for every backend to settle, so a wedged `put`
-// stalls the whole tick and teardown's `await backupWorker` blocks with it. This is the same
-// between-ticks abort model the box's main loop uses — `runLoop` reads `deps.signal.aborted` in its
-// `while` condition, again once the pass has returned, and hands the signal to `sleep` (`loop.ts`), so
-// an abort cuts the WAIT short and never reaches a pass already running. Same shape here: every abort
-// read in `runBackupSweep` sits between ticks, and `backend.put` below is handed no signal at all. An
-// abort-aware per-destination timeout is a follow-on for when a network-latency backend (s3/sftp)
-// lands; the only backend today is local-fs, where a `put` does not hang. It is deliberately NOT
-// implemented here.
+// A failing tick is logged and the loop goes on, and a destination that throws does not cost the
+// others their copy. A destination that HANGS stalls the tick: `backend.put` is handed no signal,
+// so an abort cannot interrupt it.
 
 import { chmod, mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -56,10 +29,6 @@ import {
 import type { StorageBackend } from "./storage-backend.js";
 import "./errors.js";
 
-/** The manifest builder the sweep uses; matches {@link buildManifest}'s signature. Injectable so the
- * fan-out/archive-assembly tests stay pure-DI (no real journal), while the real-database
- * integration is covered by the migrated-venue cases in `backup-sweep.test.ts`, which drive the
- * default. */
 export type ManifestBuilder = (deps: {
   readonly db: Database;
   readonly modules: readonly WaitronModule[];
@@ -68,91 +37,44 @@ export type ManifestBuilder = (deps: {
 }) => Promise<BackupManifest>;
 
 export interface BackupSweepDeps {
-  /** Every destination this run fans the SAME encrypted artifact out to. */
   backends: StorageBackend[];
-  /** The handle the MANIFEST is read off — every module's applied schema version, counted from its
-   * own drizzle journal table (`appliedSchemaVersion`). It is the sweep's only use of a database:
-   * the copy itself goes through {@link BackupSweepDeps.archive}. If a journal read fails,
-   * `buildManifest` fails the tick BEFORE the copy or any archive delivery, so an incomplete
-   * manifest cannot be shipped as a successful backup. */
+  /** Read only for the manifest; the copy goes through {@link BackupSweepDeps.archive}. */
   db: Database;
-  /** The running composition's modules — their `backup.nonDbState` refs drive filesystem capture
-   * and their names + applied schema versions populate the manifest. */
   modules: readonly WaitronModule[];
-  /** Stamped into the manifest so BR-3's restore can refuse an incompatible target. */
   environment: DeploymentEnvironment;
-  /** Maps declared non-DB source ids to absolute directories; see `collectModuleNonDbState`. */
   resolvers: Record<string, string>;
-  /** State dir holding the RECOVERY_FILES secrets captured into `secrets/<path>` (state-secrets.ts). */
   stateDir: string;
-  /** The operator-held passphrase the dump is encrypted under before it ever reaches a backend. */
   recoveryKey: string;
-  /** Where the pre-encryption copy is staged. Created (recursively) each tick, so a wiped staging
-   * dir self-heals; the staged file is always removed again before this tick returns. */
+  /** Created each tick; the plaintext copy staged here is removed before the tick returns. */
   stagingDir: string;
-  /** When the next dump fires: a fixed interval or a wall-clock cadence (`backup-config.ts`). The
-   * loop resolves it through `nextFireMs` after each tick. */
   schedule: BackupSchedule;
-  /** The count cap of the dual-retention policy: how many newest `waitron-*` artifacts to keep per
-   * backend by count; older-than-`retain` ones are deleted each tick. */
+  /** How many of the newest artifacts each destination keeps. */
   retain: number;
-  /** The age cap of the dual-retention policy: an artifact older than this many days is deleted even
-   * if it is within the count cap. Age is read off the artifact's OWN key stamp
-   * (`backupArchiveTimestamp`), never the filesystem mtime, so a clock jump cannot revive it. */
+  /** An artifact older than this many days is deleted even within the count cap. */
   retainDays: number;
-  /** Node-stable seed for the `at: "auto"` jitter, so a fleet of boxes spreads its auto dumps across a
-   * small window rather than firing in lockstep (the box's node id in production). */
+  /** Node-stable, so a fleet spreads its `auto` backups across a window rather than firing together. */
   jitterSeed: string;
-  /** The venue's wall clock (tz + business-day cutover) resolved fresh each cycle before computing the
-   * next fire, so an operator's tz/cutover change is picked up. Consulted ONLY for a `wall-clock`
-   * schedule; an `interval` schedule never calls it. */
+  /** Read fresh each cycle, and only for a `wall-clock` schedule. */
   readClock: () => Promise<ScheduleClock>;
   signal: AbortSignal;
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;
-  /** Fired once per tick when AT LEAST ONE destination stored the archive on that tick — the
-   * in-process signal the supervisor uses to know an artifact was written under the CURRENT key. It
-   * fires ONLY on a real store, so an all-destinations-failed tick (every `put` threw, swallowed as
-   * `backup.destination_failed`) never fires it. */
+  /** Fires only on a tick where at least one destination stored the archive. */
   onStored?: () => void;
-  /** In-memory per-destination outcome holder the backups alert source reads. Each destination's tick
-   * result is recorded here (success clears an earlier failure, a throw records one), so a failed last
-   * attempt surfaces as an ongoing dashboard alert without waiting for the freshness threshold. Optional
-   * so the loop-logic and fan-out tests that do not care about outcomes need not supply one. */
+  /** Read by the backups alert source, so a failed store shows before the freshness threshold. */
   outcomes?: BackupOutcomeHolder;
   log: Logger;
   /**
-   * Copies the whole venue database to `outFile`. The supervisor binds this to the venue store's
-   * `archiveTo` (`packages/store/src/archive.ts`), which writes to a `.partial` working name and
-   * renames it onto `outFile` only once the copy is whole — so `readFile(staged)` below either reads
-   * a COMPLETE database file or fails with ENOENT, and never encrypts a truncated one as a
-   * recovery-ready artifact (CLAUDE.md §5: backup IS the cold-recovery path).
-   *
-   * Required rather than defaulted: there is no engine-global copy any more, only a copy of one OPEN
-   * database, so only the caller holding that handle can supply it. It takes no `AbortSignal`
-   * either — `VACUUM INTO` is one synchronous statement with no cancel, where `pg_dump` was a
-   * killable child process.
+   * Must leave either a whole copy at `outFile` or nothing, so a truncated copy is never encrypted
+   * as a good artifact; the store's `archiveTo` renames its working file into place when done.
    */
   archive: (outFile: string) => Promise<void>;
-  /** Injectable so the fan-out/archive-assembly tests need no real journal; defaults to the real
-   * {@link buildManifest} (reads the schema versions off `db`). */
   buildManifest?: ManifestBuilder;
-  /** Injectable so the filename stamp is deterministic under test; defaults to wall-clock now. */
   now?: () => Date;
 }
 
 /**
- * One backup: copy the venue database to a staging file, then assemble the FULL backup archive — a
- * manifest, that copy, declared non-DB state, and the state-dir secrets — encrypt the
- * whole archive ONCE, fan the same ciphertext out to every backend as `waitron-<stamp>.backup.enc`,
- * and prune each backend to `retain`. Exported (rather than kept internal to `runBackupSweep`) so a
- * single tick can be unit-tested directly, without driving the loop's sleep/abort machinery.
- *
- * FAIL-FAST: the manifest, the non-DB state capture, and the secrets read all happen BEFORE the
- * expensive whole-database copy, so a throw in any of them (an unreadable journal, a missing
- * recovery file → `recovery.state_incomplete`) fails the tick WITHOUT copying the whole database
- * every tick only to throw. It is also fail-visible: the throw propagates out of `runOnce` to the tick's `backup.failed`
- * and NO partial archive is fanned out — an incomplete backup must never masquerade as a
- * recovery-ready one (CLAUDE.md §5, backup IS the cold-recovery path).
+ * One backup. A failure to build the manifest or collect state throws before the database copy, and
+ * no partial archive is ever put to a destination.
  */
 export async function runOnce(
   deps: Omit<BackupSweepDeps, "schedule" | "sleep" | "jitterSeed" | "readClock">,
@@ -162,8 +84,6 @@ export async function runOnce(
   const stamp = (deps.now ?? (() => new Date()))();
   const dumpName = dumpFileName(stamp);
   const staged = join(deps.stagingDir, dumpName);
-  // The staged file only comes into existence once `archive` runs; the fail-fast collection below
-  // can throw before that, so the `finally` guards its cleanup on this flag.
   let dumped = false;
   try {
     // Collected before the copy, so a broken state folder fails the tick without copying the
@@ -182,77 +102,48 @@ export async function runOnce(
       }),
     ]);
 
-    // Cheap collection passed — now take the expensive copy into the staging file.
     await mkdir(deps.stagingDir, { recursive: true });
     await deps.archive(staged);
     dumped = true;
-    // The staged file is the whole venue database in plaintext. Lock it to 0600 (owner-only) the
-    // moment it exists, matching the restrictive perms the encrypted artifact already gets on disk
-    // (`LocalFsBackend.put` writes 0o600) — the copy inherits the process umask, which can leave it
-    // group/other-readable.
+    // The whole venue database in plaintext, created under the process umask.
     await chmod(staged, 0o600);
     const dumpBytes = await readFile(staged);
     const entries = assembleArchiveEntries(manifest, dumpBytes, parts);
     const ciphertext = await encryptArtifactAsync(packArchive(entries), deps.recoveryKey);
     const key = backupArchiveKey(stamp);
-    // Fan out to every backend concurrently; each keeps its own try/catch so a THROWING failure is
-    // logged and swallowed rather than rejecting the batch — a throwing backend never costs the
-    // others their backup (fail-safe, per this file's header). `allSettled` therefore never rejects
-    // here. (A HANGING backend is a different matter — see the header: `allSettled` waits for it, so
-    // in v1 it stalls the tick rather than being abandoned.)
     let anyStored = false;
     await Promise.allSettled(
       deps.backends.map(async (backend) => {
-        // Whether the STORE (`put`) itself succeeded, separate from the whole try: a prune fault below
-        // must not flip this destination's recorded outcome to failed when the archive is safely stored.
+        // Separate from the whole try: a prune fault must not record a stored archive as failed.
         let stored = false;
         try {
           await backend.put(key, ciphertext);
-          // The archive is now stored on this backend regardless of what prune does next; record the
-          // success before prune so a later prune fault cannot mask a genuine store.
           stored = true;
           anyStored = true;
-          // Record the store as this destination's latest outcome, clearing any earlier failure —
-          // done right after the store (before prune) so a later prune fault cannot mask a genuine
-          // store, matching the `anyStored` ordering above.
           if (deps.outcomes)
             recordBackupOutcome(deps.outcomes, backend.id, true, stamp.toISOString());
           await pruneBackend(backend, deps.retain, deps.retainDays, nowMs);
           deps.log("info", "backup.destination_completed", { destination: backend.id, key });
         } catch (err) {
-          // A `LocalFsBackend` fault is a `NodeJS.ErrnoException` (ENOSPC/EACCES/EROFS), for which
-          // `codeOf` yields "unknown" (it only maps AppErrors). Surface the raw errno too — it is a
-          // fixed symbol, not the path or message, so it carries no secrets — while keeping
-          // `codeOf` for the AppError cases.
+          // `codeOf` maps only AppErrors; the errno is a fixed symbol, never the path or message.
           deps.log("warn", "backup.destination_failed", {
             destination: backend.id,
             errorCode: codeOf(err),
             errno: (err as NodeJS.ErrnoException).code,
           });
-          // Record a failed outcome only for a genuine STORE failure. A prune-only fault (put already
-          // stored the archive) leaves the success recorded above — the backup is safe, so the alert
-          // source must not report this destination as failed.
           if (deps.outcomes && !stored)
             recordBackupOutcome(deps.outcomes, backend.id, false, stamp.toISOString());
         }
       }),
     );
-    // Signal an in-process store ONLY when a destination actually stored the archive this tick — not
-    // "a tick ran". An all-destinations-failed tick leaves `anyStored` false and never fires it.
     if (anyStored) deps.onStored?.();
   } finally {
-    // Only the copy creates the staged file; a fail-fast tick that threw before it never staged
-    // anything, so guard the cleanup on `dumped` rather than issuing a spurious `rm`.
     if (dumped) await rm(staged, { force: true });
   }
 }
 
-/** Dual-retention prune: delete a `waitron-*` artifact when it is EITHER past the count cap (`retain`
- * newest kept — `list` returns newest-first per the `StorageBackend` contract) OR older than
- * `retainDays`, whichever bites first. Age is measured off the artifact's OWN embedded key stamp
- * (`backupArchiveTimestamp`), NOT the filesystem `mtimeMs`: the stamp is the immutable backup time, so a
- * later clock change can never resurrect a window already past the age cap (spec §3.3). Exported so
- * the dual-cap policy is unit-tested directly without driving a full fan-out. */
+/** Deletes an artifact past EITHER cap: beyond the `retain` newest (`list` is newest-first), or older
+ * than `retainDays` by the stamp in its key, never the file's mtime. */
 export async function pruneBackend(
   backend: StorageBackend,
   retain: number,
@@ -268,29 +159,16 @@ export async function pruneBackend(
 }
 
 /**
- * Runs the scheduled backup loop until `signal` aborts. It takes an immediate first copy on start
- * (enable/rotate/boot — preserving the pre-scheduler "runOnce first"), then repeatedly resolves the
- * schedule's next fire (`nextFireMs`) and sleeps toward it in <=`MAX_SLEEP_MS` (1h) chunks. The <=1h
- * wake catches a clock/NTP jump within ~1h; `fireAt` is captured once per cycle (before the wait, not
- * inside it), so a tz/day_cutover CONFIG change takes effect at the NEXT scheduled fire, not mid-wait.
- * A wall-clock schedule reads the venue clock (`readClock`) fresh each cycle; an interval needs none, so it uses a
- * UTC placeholder that `nextFireMs` ignores. A throw anywhere in a tick — including one that escaped
- * `runOnce`'s per-destination handling, e.g. the copy itself failing — is logged as `backup.failed`
- * (structured `errorCode`, never a raw message that could carry a filesystem path) and swallowed
- * so the next tick still runs; but an abort MID-tick is a cancellation, not a failure (M15). A
- * transient failure to RESOLVE the next fire (a `readClock` rejection) is contained the same way — it
- * is logged as `backup.schedule_failed`, the loop sleeps a bounded delay and retries, and never exits.
+ * Takes a copy at once, then sleeps toward each next fire in chunks of at most `MAX_SLEEP_MS`, so a
+ * clock jump is noticed within the hour. A failed tick is logged with its code, never its message,
+ * which could carry a path; an abort mid-tick is a cancellation, not a failure.
  */
 export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
   const now = deps.now ?? (() => new Date());
-  if (deps.signal.aborted) return; // don't fire a backup into a shutting-down box (M15)
+  if (deps.signal.aborted) return;
   await tick(deps);
   while (!deps.signal.aborted) {
-    // Resolve the next fire INSIDE a try: a wall-clock schedule reads the venue clock (`readClock`),
-    // which can reject transiently (a tenant-config read fault). That rejection sat outside the loop's
-    // error handling and propagated out of `runBackupSweep`, killing the box's only backup duty until
-    // the next reload/boot. Contain it: log, sleep a bounded delay, and RETRY — never exit on a
-    // transient schedule-resolution failure. An `interval` schedule never calls `readClock`.
+    // Inside the try: a `readClock` rejection must not end the backup loop.
     let fireAt: number;
     try {
       const clock =
@@ -304,8 +182,9 @@ export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
       await deps.sleep(MAX_SLEEP_MS, deps.signal);
       continue;
     }
-    // Sleep toward `fireAt` in <=1h chunks: each chunk re-checks `now()`, so a clock/NTP jump is
-    // caught within ~1h. `fireAt` is fixed for this cycle (a tz/cutover change lands at the next fire).
+    // `fireAt` is fixed for the cycle, so a time zone or cutover change lands at the next fire.
+    // Never recompute it mid-wait: an interval schedule's next fire is `now + ms`, so each wake
+    // would push it out again.
     while (!deps.signal.aborted && now().getTime() < fireAt) {
       const chunk = Math.min(MAX_SLEEP_MS, fireAt - now().getTime());
       await deps.sleep(chunk, deps.signal);
@@ -315,14 +194,11 @@ export async function runBackupSweep(deps: BackupSweepDeps): Promise<void> {
   }
 }
 
-/** One loop iteration: run the tick, and translate its outcome into the loop's contract. A throw is
- * logged as `backup.failed` and swallowed UNLESS the signal aborted mid-tick, in which case the throw
- * is a cancellation of the in-flight copy, not a failure to record. */
 async function tick(deps: BackupSweepDeps): Promise<void> {
   try {
     await runOnce(deps);
   } catch (err) {
-    if (deps.signal.aborted) return; // an abort mid-tick is a cancellation, not a failure
+    if (deps.signal.aborted) return;
     deps.log("warn", "backup.failed", { errorCode: codeOf(err) });
   }
 }

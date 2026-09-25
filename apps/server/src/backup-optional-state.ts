@@ -2,24 +2,13 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 /**
- * The state-dir config files a backup captures OPTIONALLY — durable on-disk settings a cold restore
- * must bring back but whose ABSENCE is a valid box state, not a fault: `backup.env` (the backup
- * schedule/destinations — absent when backups are off) and `modules.json` (the enabled-module set —
- * absent when every module runs at its default). UNLIKE `RECOVERY_FILES` (`state-secrets.ts`), a
- * missing one here is skipped, never a `recovery.state_incomplete`. Captured by the backup archive
- * (`backup-sweep.ts`) and the sealed state row (`sealed-state.ts`), NOT by `collectStateSecrets`/the
- * operator recovery-bundle download, which stays the identity-only set. Restored with no
- * restore-side change: they pack as `secrets/<name>`, which the restore already writes back verbatim
- * (`restore.ts`).
+ * State-dir files a cold restore must bring back but whose ABSENCE is a valid box state: unlike
+ * `RECOVERY_FILES` (`state-secrets.ts`), a missing one is skipped, never
+ * `recovery.state_incomplete`.
  */
 export const OPTIONAL_BACKUP_STATE = ["backup.env", "modules.json"] as const;
 
-/**
- * Read each `names` file under `stateDir` into a `{ name: contents }` map, silently skipping any that
- * is ENOENT — that is the whole point (absent-is-fine, see {@link OPTIONAL_BACKUP_STATE}). Any OTHER
- * read error (EISDIR/EACCES/…) rethrows, so a genuinely broken state dir still fails the tick rather
- * than shipping a silently short archive.
- */
+/** Skips only a missing file; any other read error rethrows rather than shipping a short archive. */
 export async function collectOptionalStateFiles(
   stateDir: string,
   names: readonly string[],

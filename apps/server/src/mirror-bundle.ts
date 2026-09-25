@@ -1,12 +1,3 @@
-// The PRIMARY side of the cloud-mirror adopt flow (design §10). `assembleMirrorBundle` reads the
-// venue's tenant identity + the designated node's descriptor, reserves the standby's dormant
-// identity, and returns a `MirrorBundle` the endpoint serves. The bundle carries IDENTITY and DIAL
-// details only — it carries no per-peer credential and none of the venue's parent ROWS. How a mirror
-// obtains the venue's data is an open question: the PostgreSQL replication that used to answer it is
-// deleted and its replacement has not landed.
-//
-// The deployment holds one tenant per database. The tenant row and the designated node row are
-// selected by id.
 import "./errors.js";
 import { readFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";
@@ -28,11 +19,8 @@ import { ALL_MODULES } from "./modules.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 
 /**
- * The dormant identity the PRIMARY reserves for a standby at adopt (reserved-standby-identity design
- * §4/§6 R2). What each module reserves is that module's own business and opaque here — the carrier
- * neither reads nor validates it. `endorsement` vouches for the standby's identity key, signed by the
- * primary's identity key — the chain-back-to-setup that lets other members trust a document the
- * standby later signs.
+ * What each module reserves is opaque here. `endorsement` is the primary's signature over the
+ * standby's identity key, so other members can trust a document the standby later signs.
  */
 export interface ReservedIdentity {
   /** Module name → the opaque state that module's `provisioning.standby.reserve` returned. */
@@ -42,14 +30,6 @@ export interface ReservedIdentity {
   endorsement: Endorsement;
 }
 
-/**
- * Everything the mirror needs to adopt this venue's IDENTITY. `designated` are the four ids the primary
- * till was provisioned with (`config.till.*`), so the mirror knows which node/tenant it mirrors; the
- * venue's parent rows are NOT carried. `tenant` is the venue's `(country, taxId)` identity, for the
- * mirror-side foreign-tenant + environment guards. `primaryNode` is the designated node's descriptor
- * (name + filing/tax modules), the shape the reserved standby identity mirrors. `reservedIdentity` is
- * the standby's dormant identity the primary reserves + endorses (design §6 R2).
- */
 export interface MirrorBundle {
   designated: AdoptResult;
   /** The venue's tenant identity, for the mirror's foreign-tenant guard (one tenant per database). */
@@ -63,30 +43,13 @@ export interface MirrorBundle {
   /** Venue-wide key for encrypted account factors; transferred only inside this authenticated bundle. */
   accountKey: string;
   reservedIdentity: ReservedIdentity;
-  /**
-   * The primary's enabled-module set as a sparse override map (SP-1b's modules.json inner map), read
-   * fresh at mint time. `{}` when nothing is disabled (default-on). The mirror re-validates it against
-   * its own ALL_MODULES and writes its own modules.json from it (SP-1d adopt bootstrap).
-   */
+  /** The primary's module overrides, read at mint time; `{}` when nothing is disabled. */
   moduleOverrides: Record<string, boolean>;
-  /**
-   * The box's WireGuard public key, swap S2 (spec §2.3: "the token goes, the key comes"). Additive
-   * and optional — no consumer until Track B item 2 proves the tunnel end to end.
-   */
+  /** The box's WireGuard public key. */
   wireguardPublicKey?: string;
 }
 
-/**
- * `appDb` reads the venue rows and runs each enabled module's `provisioning.standby.reserve` (for
- * fiscal, reads and writes over `contadores_instalacion`/`registro_sif`/`cadenas` and a read of
- * `invoice_series`). That used to be a statement about privilege — a connection deliberately holding
- * no more than those grants. There are no roles and no grants on this engine, so the name now records
- * which PATH the work belongs on and nothing more; `scripts/write-path-tables.test.ts` is what keeps
- * a protected table's write in a named file. `ring` unseals the primary's identity PRIVATE key
- * (`readNodeIdentityKey`) to sign the standby's endorsement; `standby` is the node the primary vouches for. `designated` are the four ids
- * the till was provisioned with (`config.till.*`); `stateDir` locates the box CA;
- * `relayUrl`/`boxHostname` are the box's dial-in.
- */
+// `ring` unseals the primary's identity private key, which signs the standby's endorsement.
 export interface AssembleDeps {
   appDb: Database;
   ring: KeyRing;
@@ -96,21 +59,13 @@ export interface AssembleDeps {
   designated: AdoptResult;
   standby: { nodeId: string; publicKey: string };
   accountKey: string;
-  /** The box's WireGuard public key (swap S2); the box image supplies it in S7, absent in dev/fixture. */
   wireguardPublicKey?: string;
 }
 
-/**
- * Assemble the mirror bundle: the venue's tenant + designated-node identity, the deployment
- * environment, the box's CA + dial details, and the reserved standby identity. Throws
- * `mirror.not_provisioned` if the database carries no deployment stamp (there is nothing to mirror).
- * No credential is minted and no parent rows travel.
- */
+// Throws `mirror.not_provisioned` when the database carries no deployment stamp.
 export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBundle> {
   const { tenant, primaryNode } = await withTransaction(deps.appDb, async (tx) => {
-    // The non-null assertions are safe on both reads: the taxpayer row is the one row every
-    // provisioned database holds, and `designated.nodeId` is the primary till's provisioned id
-    // (`config.till`), whose node row is minted as its FK parent at provision.
+    // Safe: every provisioned database holds the taxpayer row and the designated node's row.
     const t = (await readTenant(tx))!;
     const n = (
       await tx
@@ -128,21 +83,12 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   const environment = await readDeploymentEnvironment(deps.appDb);
   if (environment === null) throw new AppError("mirror.not_provisioned", {});
 
-  // The primary's enabled-module set, read FRESH at mint time rather than from boot — the operator may
-  // have edited modules.json since the primary booted, and a malformed file surfaces its
-  // `module.config_*` code HERE, before the reservation bumps any counter. It both decides which
-  // modules reserve below and travels to the mirror as `moduleOverrides`.
+  // Read fresh, not from boot: the operator may have edited modules.json since, and a malformed file
+  // must fail here, before the reservation bumps any counter.
   const moduleConfig = await readModuleConfig(deps.stateDir);
   const modules = enabledModules(ALL_MODULES, moduleConfig);
 
-  // Reserve the standby's dormant identity through each enabled module's provisioning seat
-  // (reserved-standby-identity design §6 R2), unseal the primary's identity key, and read the box CA
-  // IN PARALLEL — the three have no data dependency. The reservation shares ONE `withTransaction`
-  // transaction, so every module's reads and its allocation are consistent with each other. What a
-  // module reserves, and what it throws when the primary is not in a state to reserve, is the module's
-  // own business; nothing is caught here. The endorsement is MEMBERSHIP's, computed below from the
-  // primary's identity PRIVATE key: `endorseKey` signs canonicalize({nodeId, publicKey}) so it chains
-  // the standby's key back to the primary's setup-established trust anchor (design §4).
+  // Every module's reservation shares one transaction, so their reads and allocations agree.
   const [reserved, primaryPrivateKey, boxCaPem] = await Promise.all([
     withTransaction(deps.appDb, async (tx) => {
       const primary = {

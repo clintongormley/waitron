@@ -4,24 +4,14 @@ import { AppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import type { PromoteRunResult } from "./promote-api.js";
 
-// A UNIT test: the two authorization paths and the delegation to `run` are doubled, never driven
-// against a real database. The admin-login path threads `withTransaction` → `loginManagerById` →
-// `authorizeManager` → `endManagementSession`; each is mocked (the boot.test.ts `importOriginal`
-// idiom) so a test can wire login/authorize to SUCCEED for an admin, THROW for a bad credential, or
-// THROW `authorization.not_permitted` for a non-admin — without a database. `verifyBreakGlass` is
-// mocked at its own module boundary so the fallback path needs no `deployment` row. `run` is a stub
-// `vi.fn`, so this suite proves the endpoint's own logic (which credential path, when `run` is
-// reached, how a thrown code maps to a status) — never the promote functions themselves (Task 7's
-// closure wires those; the endpoint never calls them directly, spec §2).
+// A unit test with no database: login, authorisation, `verifyBreakGlass` and `run` are doubled, so
+// it pins only the endpoint's own logic, never the promote functions.
 
 const PERSON = "22222222-2222-2222-2222-222222222222";
 const GOOD_SECRET = "correct-break-glass-secret";
 const SESSION_ID = "33333333-3333-3333-3333-333333333333";
 
-// withTransaction: run the callback against a dummy tx; no real connection. loginManagerById
-// resolves a session for the good PERSON; authorizeManager succeeds (admin has node.promote) by
-// default. Individual tests re-wire these via the hoisted refs. `vi.hoisted` is required: the
-// `vi.mock` factory is hoisted above the file, so the refs it closes over must be too.
+// `vi.hoisted`, because the `vi.mock` factory is hoisted above the file and closes over these refs.
 const { loginManagerById, authorizeManager, endManagementSession, verifyBreakGlass } = vi.hoisted(
   () => ({
     loginManagerById: vi.fn(async () => ({ token: "33333333-3333-3333-3333-333333333333" })),
@@ -47,7 +37,6 @@ vi.mock("@waitron/identity", async (importOriginal) => {
 
 vi.mock("./break-glass.js", () => ({ verifyBreakGlass }));
 
-// The mounted module is imported AFTER the mocks above so it binds the doubled dependencies.
 import { mountPromoteApi } from "./promote-api.js";
 
 const fakeDb = {} as Database;
@@ -73,9 +62,6 @@ async function post(app: Hono, body: unknown): Promise<Response> {
 }
 
 describe("POST /management-api/promote (two-path auth over the promote closure)", () => {
-  // The auth-double refs accumulate calls across tests; clear them (call history only — the default
-  // implementations set at `vi.hoisted` survive `clearAllMocks`) so each test's "was X reached?"
-  // assertions see only its own request.
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -90,7 +76,6 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     expect(res.status).toBe(200);
     expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true });
     expect(await res.json()).toEqual({ alreadyPrimary: false, restarting: true });
-    // The admin-login path was taken: it authenticated, authorized node.promote, and ended the session.
     expect(loginManagerById).toHaveBeenCalled();
     expect(authorizeManager).toHaveBeenCalledWith(expect.anything(), {
       managementSessionId: SESSION_ID,
@@ -105,7 +90,6 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     const res = await post(app, { oldNodeNeutralised: true, breakGlass: GOOD_SECRET });
     expect(res.status).toBe(200);
     expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true });
-    // The secret is checked against THIS node's verifier.
     expect(verifyBreakGlass).toHaveBeenCalledWith(fakeDb, NODE, GOOD_SECRET);
     // The break-glass path never touches the manager-login path.
     expect(loginManagerById).not.toHaveBeenCalled();
@@ -177,7 +161,6 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     const res = await post(app, { oldNodeNeutralised: false, personId: PERSON, password: "pw" });
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe("promotion.fence_not_attested");
-    // The endpoint passed the operator's attestation through verbatim (false → false).
     expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: false });
   });
 

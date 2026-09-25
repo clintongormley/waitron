@@ -1318,7 +1318,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // DELETE deactivates; the verb is the whole guard (`tables.ts`'s `deactivateTable` note).
   app.delete("/management-api/service-statuses/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1401,7 +1400,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // DELETE deactivates; the verb is the whole guard (`tables.ts`'s `deactivateTable` note).
   app.delete("/management-api/zones/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1480,7 +1478,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // DELETE deactivates; the verb is the whole guard (`tables.ts`'s `deactivateTable` note).
   app.delete("/management-api/tables/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1662,7 +1659,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // DELETE deactivates; the verb is the whole guard (`tables.ts`'s `deactivateTable` note).
   app.delete("/management-api/stations/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1798,7 +1794,6 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
     }),
   );
 
-  // DELETE deactivates; the verb is the whole guard (`tables.ts`'s `deactivateTable` note).
   app.delete("/management-api/courses/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

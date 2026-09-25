@@ -6,14 +6,9 @@ import { unpackBundleToDir } from "./state-secrets.js";
 type Env = Record<string, string | undefined>;
 
 /**
- * `waitron-recovery unpack <envelope-file> <dest-dir>` — decrypt a downloaded recovery bundle and
- * write its files under `dest-dir`. The passphrase comes from `WAITRON_RECOVERY_PASSPHRASE` (never an
- * argv, which leaks into the process table). Exported so the flow is unit-tested without a subprocess;
- * `bin-recovery.ts` is a thin wrapper that supplies `process.argv`/`process.env` and exits on the
- * returned code. The full "re-provision a fresh box from these files" procedure is the 4b-iii runbook —
- * this only recovers the files. Returns a process exit code: 0 on success, 1 on the expected
- * disaster-recovery errors (wrong passphrase / corrupt bundle / unreadable envelope file), 2 on a
- * usage/config error.
+ * `waitron-recovery unpack <envelope-file> <dest-dir>`. The passphrase comes from the environment,
+ * never argv, which leaks into the process table. Returns an exit code: 1 for a wrong passphrase, a
+ * corrupt bundle or an unreadable file, 2 for a usage error.
  */
 export async function runRecoveryUnpack(deps: {
   argv: string[];
@@ -34,8 +29,6 @@ export async function runRecoveryUnpack(deps: {
   try {
     envelopeJson = await readFile(envelopePath, "utf8");
   } catch {
-    // The envelope file is missing/unreadable (ENOENT etc.) — the operator gave a bad path. Name
-    // the path so they can fix it; no secret is in a filename.
     deps.out(`cannot read bundle file: ${envelopePath}`);
     return 1;
   }
@@ -44,10 +37,7 @@ export async function runRecoveryUnpack(deps: {
     files = decryptBundle(envelopeJson, passphrase);
     await unpackBundleToDir(files, destDir);
   } catch (err) {
-    // The two expected disaster-recovery failures: a mistyped passphrase (recovery.passphrase_invalid)
-    // or a corrupt/hostile bundle (recovery.bundle_invalid, incl. an unsafe unpack path). One message
-    // for both — revealing which would help an attacker, and neither leaks a secret. Anything else
-    // (an unexpected bug) propagates so it is not silently swallowed.
+    // One message for both: revealing which would help an attacker.
     if (
       err instanceof AppError &&
       (err.code === "recovery.passphrase_invalid" || err.code === "recovery.bundle_invalid")

@@ -13,20 +13,13 @@ import "./errors.js";
 
 export type RecoveryBundleDeps = {
   db: Database;
-  /** The box's persisted state dir — the secret files the bundle packs live here (`config.stateDir`). */
   stateDir: string;
   now: () => Date;
 };
 
 /**
- * Code→HTTP status for this route. The management gate's codes match `box-status.ts` exactly (401/403).
- * `recovery.passphrase_required` and `recovery.passphrase_too_short` are client errors (400).
- * `recovery.state_incomplete` maps to a STRUCTURED 500: a provisioned box that has lost its own secret
- * files is a box-side fault, not something the authorized operator did wrong, and it still carries a
- * `{ code, missing }` body naming the absent file. It must be listed here — an AppError absent from
- * this map gets the boundary's `?? 400` fallback (a client error), not a 500. The boundary's OPAQUE
- * `server.internal` 500 (no body detail) is reached only by NON-AppError throws, so an AppError is
- * never opaque.
+ * `recovery.state_incomplete` must be listed: an AppError absent from this map gets the boundary's
+ * `?? 400` fallback, and a box that has lost its own secret files is a box-side fault.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -39,19 +32,14 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 /**
- * `POST /api/box/recovery-bundle` — download the box's passphrase-encrypted recovery bundle. Gated
- * exactly like `GET /api/box/status`: `requireManagementSession` → 401, then `withTransaction` +
- * `authorizeManager("system.manage")`. The passphrase rides the JSON body (never the URL/query — it
- * is a secret). The bundle carries the box's UNRECOVERABLE state (vault master key + fiscal identity +
- * CA/leaf), so it is returned as an attachment and logged with the requesting person's id only —
- * never the cookie, the passphrase or any secret. POST, not GET: it carries a secret and produces a
- * sensitive artifact.
+ * `POST /api/box/recovery-bundle` — the passphrase-encrypted bundle of the box's unrecoverable
+ * state. POST so the passphrase rides the body, never the URL; logged with the person's id only.
  */
 export function mountRecoveryBundleApi(app: Hono, deps: RecoveryBundleDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "recovery-bundle.failed");
   app.post("/api/box/recovery-bundle", (c) =>
     run(c, log, async () => {
-      const token = requireManagementSession(c); // throws 401 if absent
+      const token = requireManagementSession(c);
       const { authorizedBy: personId } = await withTransaction(deps.db, (tx) =>
         authorizeManager(tx, { managementSessionId: token, permission: "system.manage" }),
       );
@@ -59,7 +47,6 @@ export function mountRecoveryBundleApi(app: Hono, deps: RecoveryBundleDeps, log:
       if (typeof body.passphrase !== "string" || body.passphrase === "") {
         throw new AppError("recovery.passphrase_required", {});
       }
-      // encryptBundle enforces MIN_PASSPHRASE_LENGTH (→ recovery.passphrase_too_short, 400).
       const envelope = encryptBundle(await collectStateSecrets(deps.stateDir), body.passphrase);
       const date = deps.now().toISOString().slice(0, 10);
       log("info", "recovery.bundle_downloaded", { personId });

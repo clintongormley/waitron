@@ -2,14 +2,6 @@ import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 
-/**
- * A mirror serves an UNAUTHENTICATED admin dashboard (`ensureMirrorViewer` + `mirrorSession`); the
- * only thing keeping it off the network is that the server binds to a loopback `httpHost` by default.
- * `assertMirrorBindSafe` is the fail-closed boot guard: under `mode='mirror'` it refuses a
- * non-loopback bind unless `WAITRON_MIRROR_ALLOW_EXPOSED` is explicitly truthy. A primary may bind
- * non-loopback legitimately, so the guard is mirror-only.
- */
-
 function reason(
   httpHost: string,
   isMirror: boolean,

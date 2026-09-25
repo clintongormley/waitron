@@ -17,11 +17,9 @@ import { decryptBundle } from "./recovery-bundle.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 
 const LOCALE = "es-ES";
-const PASSWORD = "correct horse"; // the seeded manager's dashboard password
-// Dashboard sign-in resolves the person by EMAIL, so the seeded manager carries a login email
-// (unique on `lower(email)` across the database — persons_tenant_email_uq).
+const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
-const BUNDLE_PASS = "recovery pass phrase"; // ≥ MIN_PASSPHRASE_LENGTH
+const BUNDLE_PASS = "recovery pass phrase";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -29,11 +27,8 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// One fixed NIF: this suite owns its own venue directory, so nothing else ever writes the `tenants`
-// row the uniqueness constraint covers.
 const NIF = "74000001K";
 
-// Same manager-login scaffolding as box-status.route.test.ts.
 async function setupTenant(): Promise<{ managerId: string }> {
   await applyVenue(
     planVenue(
@@ -70,8 +65,7 @@ async function setupTenant(): Promise<{ managerId: string }> {
   );
   const managerId = await withTransaction(suite.db, async (tx) => {
     // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
-    // `$defaultFn` generators (`packages/identity/src/schema/persons.ts:26,:67`) that an insert
-    // statement never reaches, and both columns are NOT NULL.
+    // `$defaultFn` generators a raw insert never reaches.
     const [m] = await tx
       .insert(persons)
       .values({
@@ -87,8 +81,6 @@ async function setupTenant(): Promise<{ managerId: string }> {
   return { managerId };
 }
 
-/** Seed every `RECOVERY_FILES` path, or all but `omit` — omitting one makes the route hit
- * `recovery.state_incomplete`. */
 async function seedStateDir(omit?: string): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), "recovery-state-"));
   await mkdir(join(dir, "tls"), { recursive: true });
@@ -105,8 +97,6 @@ function buildApp(stateDir: string, log: Logger = () => {}): Hono {
     app,
     {
       db: suite.db,
-      // The all-zero node id (the capture default): this suite uses the management API only for its
-      // login route, not origin attribution, so the sentinel keeps behaviour exactly as before Task 6.
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
@@ -186,8 +176,7 @@ describe("POST /api/box/recovery-bundle", () => {
     expect(Object.keys(files).sort()).toEqual([...RECOVERY_FILES].sort());
     expect(files["secrets.env"]).toBe("contents-of-secrets.env\n");
 
-    // The download is logged by WHO asked, never by the cookie: the cookie's value is a live
-    // dashboard credential, and a log line is not a place to keep one.
+    // The cookie's value is a live dashboard credential.
     const token = cookie.split("=")[1]!;
     const line = logged.find((l) => l.code === "recovery.bundle_downloaded");
     expect(line?.fields).toEqual({ personId: managerId });
@@ -195,9 +184,6 @@ describe("POST /api/box/recovery-bundle", () => {
   });
 
   it("500s with recovery.state_incomplete when the box lost one of its own secret files", async () => {
-    // A provisioned box missing its own `trading.env` is a box-side fault, not operator error, so
-    // the boundary classifies it a STRUCTURED 500 that names the absent file — not a 400 and not an
-    // opaque 500. Same authorized manager, a state dir seeded all-but-one.
     const incompleteApp = buildApp(await seedStateDir("trading.env"));
     const incompleteCookie = await login(incompleteApp, MANAGER_EMAIL);
     const res = await incompleteApp.request("/api/box/recovery-bundle", {

@@ -26,10 +26,7 @@ describe("checkRestoreCompatibility", () => {
   });
 
   it("refuses a newer backup even when the target's expected version is 0 (pins `!== undefined`)", () => {
-    // A truthiness regression — `if (targetVersion && backupVersion > targetVersion)` — would treat a
-    // target expecting version 0 (a module with no migrations applied yet) as "not run" and let a
-    // newer backup through. The guard is `targetVersion !== undefined`, so a target at 0 is still a
-    // module the target runs, and backup 1 > 0 must refuse.
+    // A truthiness check would read a target at 0 as a module it does not run.
     expect(() =>
       checkRestoreCompatibility(
         { manifestVersion: 1, createdAt: "x", environment: "preproduction", modules: { core: 1 } },

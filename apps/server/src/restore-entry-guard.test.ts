@@ -22,34 +22,22 @@ describe("assertSafeEntryName", () => {
     });
   });
 
-  // Proven by deletion (task-2-report.md): with the realpath-aware layer commented out, this is the
-  // ONE case in the file that starts failing — "tls/ca.crt" is lexically fine (join/resolve never
-  // see the symlink), so only a realpath check catches it. `readdir(outside)` staying empty is NOT
-  // load-bearing evidence for THIS guard the way it is for `unpackBundleToDir`'s own symlink test:
-  // `assertSafeEntryName` never writes file contents itself (it only validates and mkdirs the
-  // parent), so `outside` would read empty regardless of whether the check ran — asserting only that
-  // would "pass wrongly" even with the guard deleted. The rejection itself is the real assertion.
+  // "tls/ca.crt" is lexically fine, so only the realpath layer catches it. The guard never writes
+  // file contents, so an empty `outside` proves nothing: the rejection is the real assertion.
   it("rejects a lexically-fine name whose parent is a symlink escaping destRoot", async () => {
     const dest = mkdtempSync(join(tmpdir(), "restore-guard-symlink-"));
     const outside = mkdtempSync(join(tmpdir(), "restore-guard-outside-"));
-    // Pre-existing destRoot/tls -> outside, mirroring state-secrets.test.ts's symlink case exactly:
-    // "tls/ca.crt"'s dirname IS the symlink itself, so `mkdir(dirname(target), {recursive:true})` is
-    // a no-op (the dir already "exists" through the link) rather than creating anything new — only
-    // `realpath` can tell the parent's TRUE location is outside destRoot.
     await symlink(outside, join(dest, "tls"));
     await expect(assertSafeEntryName("tls/ca.crt", dest)).rejects.toMatchObject({
       code: "restore.unsafe_entry_path",
       params: { name: "tls/ca.crt" },
     });
-    // Sanity check only (see comment above) — not the proof.
     expect(await readdir(outside)).toEqual([]);
   });
 
   it("rejects a sibling dir that shares a name prefix with destRoot (the sep boundary)", async () => {
-    // destRoot ends in the segment `b`; `../bad/x` resolves to `<parent>/bad/x`, a SIBLING of destRoot
-    // that shares the `b` prefix. A regression dropping the trailing `sep` — `target.startsWith(root)`
-    // instead of `target.startsWith(root + sep)` — would ACCEPT it (`<parent>/bad/x` does start with
-    // `<parent>/b`). With the `+ sep` boundary it is rejected. Pins `/a/b` vs `/a/bad`.
+    // `<parent>/bad/x` starts with `<parent>/b`: a containment check without the trailing separator
+    // would accept it.
     const parent = mkdtempSync(join(tmpdir(), "restore-guard-sibling-"));
     const dest = join(parent, "b");
     await mkdir(dest, { recursive: true });

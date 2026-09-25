@@ -20,11 +20,10 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import { openBreakGlassVenue, runBreakGlassReset } from "./break-glass-command.js";
 import { ALL_MODULES } from "./modules.js";
 
-// One migrated venue directory for the suite; `useVenueDb` empties the data after every test, so
-// each case provisions its own venue and the "no admin on this box" case sees a genuinely empty one.
+// `useVenueDb` empties the data after every test, so each case provisions its own venue.
 const LOCALE = "es-ES";
-const OLD_PASSWORD = "dashPass123"; // ≥ MIN_PASSWORD_LENGTH; the seeded admin's original password.
-const NEW_PASSWORD = "brandNewSecret"; // what break-glass sets.
+const OLD_PASSWORD = "dashPass123";
+const NEW_PASSWORD = "brandNewSecret";
 const NIF = "73000001K";
 
 const suite = useVenueDb({
@@ -32,8 +31,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-/** Stand up a fresh provisioned venue. Provisioning seeds exactly one ADMIN with the given
- * password; returns that admin's id. */
+/** Provisioning seeds exactly one admin with the given password. */
 async function setupTenant(adminPassword: string = OLD_PASSWORD): Promise<{ adminId: string }> {
   await applyVenue(
     planVenue(
@@ -78,7 +76,6 @@ async function readSoleAdminId(): Promise<string> {
   return rows.rows[0]!.id;
 }
 
-/** Read one person's password_hash + status back. */
 async function readPerson(
   personId: string,
 ): Promise<{ passwordHash: string | null; status: string } | undefined> {
@@ -90,13 +87,8 @@ async function readPerson(
 }
 
 /**
- * Run the command with an `openDb` that hands back the suite's own migrated venue handle.
- *
- * The stub's `close` does NOT close that handle — the suite owns it for the whole file — but it is
- * COUNTED, because releasing the venue files is the command's own obligation: `openVenueDatabase`
- * holds two open SQLite files, and a CLI that exits without closing leaves them to the process
- * teardown. `directories` records what the command asked to open, which is what pins the env-to-
- * directory resolution below.
+ * The stub's `close` leaves the suite's handle open but is COUNTED, because releasing the venue
+ * files is the command's own obligation. `directories` pins the env-to-directory resolution.
  */
 async function run(
   env: Record<string, string | undefined>,
@@ -123,8 +115,7 @@ async function run(
   return { code, out, directories, closes };
 }
 
-// `null` (not `undefined`) means "omit the password env var" — an explicit `undefined` argument
-// would trigger the `= NEW_PASSWORD` default and defeat the very test that wants it absent.
+// `null` omits the password: `undefined` would take the default.
 function baseEnv(password: string | null = NEW_PASSWORD) {
   return {
     WAITRON_VENUE_DIR: "/tmp/break-glass-venue-dir-is-ignored-by-the-stub",
@@ -141,14 +132,10 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     expect(code).toBe(0);
     const person = await readPerson(adminId);
     expect(person).toBeDefined();
-    // The real proof the reset took: the NEW password verifies against the stored hash, the OLD one
-    // no longer does.
     expect(verifyPassword(NEW_PASSWORD, person!.passwordHash!)).toBe(true);
     expect(verifyPassword(OLD_PASSWORD, person!.passwordHash!)).toBe(false);
-    // Success line names the admin, never the secret.
     expect(out.join("\n")).toMatch(adminId);
     expect(out.join("\n")).not.toMatch(NEW_PASSWORD);
-    // The venue files are released on the way out.
     expect(closes).toBe(1);
   });
 
@@ -159,9 +146,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     expect(named.code).toBe(0);
     expect(named.directories).toEqual(["/tmp/break-glass-named-venue"]);
 
-    // An operator's `WAITRON_VENUE_DIR=` line must fall back to the default under the state root,
-    // never to `resolve("")` — the working directory ("an empty value is a valid value",
-    // CLAUDE.md §3). Same rule for the state root itself, so both are exercised here.
+    // Never `resolve("")`, which is the working directory (CLAUDE.md §3).
     await setupTenant();
     const empty = await run({
       ...baseEnv(),
@@ -179,13 +164,11 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     const { code } = await run({ ...baseEnv(), WAITRON_BREAKGLASS_PIN: "9999" });
     expect(code).toBe(0);
 
-    // Read the pin_hash directly and confirm it changed to the new PIN's hash-verifiable value.
     const rows = await suite.db.execute<{ pin_hash: string }>(
       sql`select pin_hash from persons where id = ${adminId}`,
     );
     const after = rows.rows[0]!.pin_hash;
     expect(before).toBeDefined();
-    // A new hash was written (salted scrypt, so it differs from the seed's) and it verifies "9999".
     const { verifyPin } = await import("@waitron/identity");
     expect(verifyPin("9999", after)).toBe(true);
     expect(verifyPin("1234", after)).toBe(false);
@@ -206,15 +189,12 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     await suite.db.execute(
       sql`update persons set totp_secret = 'sealed', google_subject = 'subject' where id = ${adminId}`,
     );
-    // Through the table definition: `id` and `created_at` are `$defaultFn` generators on this
-    // engine that a raw insert never reaches while both columns are NOT NULL (the trap
-    // `apps/server/src/testing/fiscal-fixtures.ts` records) — measured here as
-    // `NOT NULL constraint failed: webauthn_credentials.id`.
+    // Through the table definition: a raw insert never reaches the `$defaultFn` generators for `id`
+    // and `created_at`.
     await suite.db
       .insert(webauthnCredentials)
       .values({ personId: adminId, credentialId: "credential", publicKey: "key" });
-    // `recoveryCodes` is NOT exported from `@waitron/identity`'s barrel (only `webauthnCredentials`
-    // is), so this one stays raw and supplies both generated columns itself.
+    // Raw because `@waitron/identity` does not export `recoveryCodes`, so it supplies both columns.
     await suite.db.execute(
       sql`insert into recovery_codes (id, person_id, code_hash, created_at)
           values (${randomUUID()}, ${adminId}, ${"a".repeat(64)}, ${nowIso()})`,
@@ -247,7 +227,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
 
     const { code, directories } = await run(baseEnv(null));
     expect(code).toBe(2);
-    // A usage error refuses BEFORE the venue is opened.
+    // Refused before the venue is opened.
     expect(directories).toEqual([]);
 
     const after = await readPerson(adminId);
@@ -258,7 +238,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     const { adminId } = await setupTenant();
     const before = await readPerson(adminId);
 
-    const { code } = await run(baseEnv("short")); // < MIN_PASSWORD_LENGTH (8)
+    const { code } = await run(baseEnv("short"));
     expect(code).toBe(2);
 
     const after = await readPerson(adminId);
@@ -269,12 +249,10 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     const { adminId } = await setupTenant();
     const before = await readPerson(adminId);
 
-    // "12" is length 2, below MIN_PIN_LENGTH (4). A valid password rides along so only the PIN gate
-    // can be what rejects it — a break-glass PIN below the floor would re-lock the operator.
+    // A valid password rides along, so only the PIN floor can be what refuses.
     const { code } = await run({ ...baseEnv(), WAITRON_BREAKGLASS_PIN: "12" });
     expect(code).toBe(2);
 
-    // Rejected before any write — the password (and thus the whole row) is untouched.
     const after = await readPerson(adminId);
     expect(after!.passwordHash).toBe(before!.passwordHash);
   });
@@ -304,11 +282,9 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     const joined = ambiguous.out.join("\n");
     expect(joined).toMatch(adminId);
     expect(joined).toMatch(secondId);
-    // Neither row was reset — both still verify the OLD password.
     expect(verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(true);
     expect(verifyPassword(OLD_PASSWORD, (await readPerson(secondId))!.passwordHash!)).toBe(true);
 
-    // With --person, exactly that one is reset and the other is left alone.
     const targeted = await run(baseEnv(), ["--person", secondId]);
     expect(targeted.code).toBe(0);
     expect(verifyPassword(NEW_PASSWORD, (await readPerson(secondId))!.passwordHash!)).toBe(true);
@@ -318,8 +294,6 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   it("--person as the last token (no following id) → returns 2 (usage), nothing reset", async () => {
     const { adminId } = await setupTenant();
     const before = await readPerson(adminId);
-    // `--person` with nothing after it must not silently degrade to "no --person" and reset the
-    // sole admin — it is an operator typo, so fail as a usage error and touch nothing.
     const { code, out } = await run(baseEnv(), ["--person"]);
     expect(code).toBe(2);
     expect(out.join("\n")).toMatch(/--person/);
@@ -337,9 +311,7 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   it("the new credential is read from env, never argv: a password in argv is ignored", async () => {
     const { adminId } = await setupTenant();
     const before = await readPerson(adminId);
-    // No WAITRON_BREAKGLASS_PASSWORD in env; the secret is smuggled into argv instead.
     const { code } = await run(baseEnv(null), ["--person", adminId, NEW_PASSWORD]);
-    // Usage error (no env password) and the row is untouched — argv never supplies the secret.
     expect(code).toBe(2);
     const after = await readPerson(adminId);
     expect(after!.passwordHash).toBe(before!.passwordHash);

@@ -19,46 +19,20 @@ import "./errors.js";
 
 type Env = NodeJS.ProcessEnv;
 
-/**
- * The pre-wipe membership read's handle: the VENUE file of this node's own venue directory.
- *
- * `applyMigrations` applies every set to the venue handle and leaves the node file empty
- * (`packages/migrations/src/apply.ts`), so the venue handle is where `node_membership`'s row is.
- * `close` closes BOTH files — `openVenueDatabase` opens `node.db` beside `venue.db`, and a handle
- * left open would hold a directory this command is about to empty.
- */
+/** `close` closes both files: an open handle would hold the directory this command empties. */
 async function openVenue(directory: string): Promise<{ db: Database; close(): Promise<void> }> {
   const store = await openVenueDatabase(directory);
   return { db: store.venue, close: () => store.close() };
 }
 
 /**
- * `waitron-rejoin rejoin [--accept-loss]` — WIPE this fenced ex-primary's local database, re-migrate
- * it, and clear `trading.env` so the next boot enters SETUP mode and the operator re-adopts from the
- * connect screen (spec §4). There is NO artifact restore (Ruling I3).
+ * `waitron-rejoin rejoin [--accept-loss]` — wipes this fenced ex-primary's venue directory,
+ * re-migrates it and clears `trading.env`, so the next boot is setup mode. Configuration comes from
+ * the environment, never argv.
  *
- * `--accept-loss` waives nothing today — see `RejoinDeps.acceptLoss`; the drain confirmation it used to
- * waive went with the PostgreSQL replication machinery. The flag still records the operator's explicit
- * acknowledgement in the log.
- *
- * Configuration comes from the environment, NEVER argv, and the two directory settings follow
- * `config.ts`'s own resolution — an unset OR EMPTY value takes the default, never `resolve("")`,
- * which is the working directory ("an empty value is a valid value", CLAUDE.md §3). Env contract:
- *  - `WAITRON_STATE_DIR` — the state root whose `trading.env` is cleared, and the base the venue
- *    directory defaults under. Unset or empty = `DEFAULT_STATE_ROOT`.
- *  - `WAITRON_VENUE_DIR` — the directory holding `venue.db` and `node.db`: what the pre-wipe
- *    membership read opens, what the wipe empties, and what the re-migrate rebuilds, so all three
- *    always name one venue. Unset or empty = `<stateDir>/venue`.
- *  - `WAITRON_TILL_*_ID` — via `tryLoadTillConfig` → the node's `nodeId`. Absent = an
- *    unprovisioned box, which `rejoin` is a misuse of.
- *  - `WAITRON_ENV` — the target environment (gates `deploymentEnvironment`).
- *
- * Returns a process exit code: 0 on success, 2 on a usage error, and 1 whenever the rejoin cannot go
- * ahead or fails — bad or missing configuration, a venue folder it cannot lock, open or read, or an
- * error out of the orchestrator. Each such failure is reported by text this command composed: a
- * fixed sentence, a known error's code, or a bare `rejoin failed`. No error it catches is rethrown
- * and none's `.message` is printed: a box operator has no terminal and no way to read around such a
- * line.
+ * Returns 0 on success, 2 on a usage error, and 1 otherwise. Every failure is reported by text this
+ * command composed; no caught error's `.message` is printed, because a box operator has no terminal
+ * to read around it.
  */
 export async function runRejoin(deps: {
   argv: string[];
@@ -71,7 +45,6 @@ export async function runRejoin(deps: {
 }): Promise<number> {
   const [cmd, ...rest] = deps.argv;
   const acceptLoss = rest.includes("--accept-loss");
-  // The only positional beyond the flag is disallowed — `rejoin [--accept-loss]` takes no artifact now.
   const extras = rest.filter((a) => a !== "--accept-loss");
   if (cmd !== "rejoin" || extras.length > 0) {
     deps.out("usage: waitron-rejoin rejoin [--accept-loss]");
@@ -110,7 +83,6 @@ export async function runRejoin(deps: {
   }
 
   const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
-  // The same resolution `config.ts` does for `venueDir`, against the state root that won above.
   const venueDir = resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
   const log = createLogger(
     (line) => deps.out(line.trimEnd()),
@@ -140,9 +112,7 @@ export async function runRejoin(deps: {
         applyMigrations(directory, migrationOptionsFor(manifestSets(), null)));
     const rejoin = deps.rejoin ?? rejoinAsSecondary;
 
-    // Open the venue and read the held chart ONCE — the chart `rejoinAsSecondary` runs its
-    // standing guards against. Report an open/read failure GENERICALLY: whatever the engine says
-    // about a directory it could not open is not text this command composed.
+    // Read once: this is the chart the guards run against.
     let opened: { db: Database; close(): Promise<void> };
     let held: Awaited<ReturnType<typeof readNodeMembership>>;
     try {
@@ -166,10 +136,6 @@ export async function runRejoin(deps: {
         opened.close().then(() => {
           closed = true;
         }),
-      // The whole wipe (Ruling I3): remove both database files and their write-ahead sidecars,
-      // re-migrate the directory from scratch, then clear trading.env so the next boot enters setup
-      // mode. `applyMigrations` recreates both files and takes the directory's own migration lock,
-      // which is why our handle is closed first rather than held across this.
       wipeDatabase: async () => {
         await wipeVenueDatabases(venueDir);
         await migrate(venueDir);
@@ -188,13 +154,10 @@ export async function runRejoin(deps: {
       if (err instanceof AppError && err.code.startsWith("rejoin.")) {
         return reportCode(err.code);
       }
-      // Anything else — an AppError outside the namespace, or a non-AppError — NEVER propagates
-      // raw and NEVER echoes `.message`: a failed migrate arrives as whatever the driver wrote.
+      // A failed migrate arrives as whatever the driver wrote.
       return failGeneric();
     } finally {
-      // On a guard refusal the orchestrator throws before `closePreWipe`, so the pre-wipe handle
-      // is still open — close it here (idempotent via `closed`, so the success/wipe path never
-      // closes twice).
+      // A guard refusal throws before `closePreWipe`, leaving the handle open.
       if (!closed) await opened.close().catch(() => {});
     }
   } finally {

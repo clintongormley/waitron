@@ -14,55 +14,33 @@ import {
   setManagementCookie,
 } from "@waitron/server-kit";
 
-/** Fixed, stable row ids so the seed is idempotent (upsert on a known PK) and the middleware can name
- * the ambient session's row without a lookup. Valid v4-shaped UUIDs; arbitrary but MUST never change
- * (the seed keys on them). Distinct high bytes so they are recognizable as the mirror viewer in a
- * `persons` / `management_sessions` dump. Public values, so neither is ever a cookie: the ambient
- * session's cookie is the token {@link ensureMirrorViewer} mints. */
+/** Fixed ids the seed upserts on, so they must never change. Public values, so neither is ever a
+ * cookie: the cookie is the token {@link ensureMirrorViewer} mints. */
 export const MIRROR_VIEWER_PERSON_ID = "acce55ed-0000-4000-8000-000000000001";
 export const MIRROR_VIEWER_SESSION_ID = "acce55ed-0000-4000-8000-000000000002";
 
-/** A pin hash that no PIN can ever verify against (scrypt parse fails → `false`, since `verifyPin`
- * fails CLOSED on a malformed value — @waitron/identity's verify-pin.ts). The viewer never logs in —
- * the mirror gates every login POST shut (§5) — but `persons.pin_hash` is NOT NULL with a length>0
- * CHECK, so it needs a non-empty, deliberately-unusable value. */
+/** No PIN verifies against it: `verifyPin` fails closed on a malformed hash. */
 const UNUSABLE_PIN_HASH = "mirror-viewer-never-logs-in";
 
-/**
- * How stale the ambient session's `last_seen_at` has to be before a request refreshes it.
- *
- * It was the SQL literal `interval '1 minute'`; it is a named millisecond count because the cutoff
- * is computed in JavaScript and bound now, not built in SQL — see the keepalive in
- * {@link mirrorSession}.
- */
 const KEEPALIVE_INTERVAL_MS = 60_000;
 
 /**
- * Ensures the mirror's ambient read-only viewer exists: one `admin` person (every permission, so every
- * gated dashboard read passes `authorizeManager` — the §5 gate is what enforces read-only, not this
- * role) and one live management session for it. Idempotent in its rows — safe to call on every boot.
- * Runs under one `withTransaction`.
- *
- * Every call mints a fresh cookie token, stores only its hash, and returns the token; the hash an
- * earlier call stored stops resolving. The database keeps only the hash, so a copy of it holds no
- * value that signs in as this admin.
+ * Seeds the mirror's ambient viewer: an `admin` person and one live session. The role grants every
+ * read; the read-only gate, not this role, is what keeps the mirror read-only. Idempotent in its
+ * rows. Every call mints a fresh token, stores only its hash and returns it, so an earlier token
+ * stops resolving and a copy of the database holds nothing that signs in.
  */
 export async function ensureMirrorViewer(db: Database): Promise<string> {
   const token = mintSessionToken();
   const tokenHash = hashSessionToken(token);
   await withTransaction(db, async (tx) => {
-    // Both rows are written through their table definitions rather than as raw SQL, so each
-    // column's own generator runs: `persons.created_at` and `management_sessions.created_at` /
-    // `last_seen_at` are `$defaultFn` values on this engine, and a raw insert reaches none of them
-    // (`NOT NULL constraint failed`). Same change, and the same reason, as
-    // `packages/db/src/testing/seed.ts`.
+    // Through the table definitions, not raw SQL: the `created_at`/`last_seen_at` defaults are
+    // `$defaultFn` values that a raw insert never reaches.
     await tx
       .insert(persons)
       .values({
         id: MIRROR_VIEWER_PERSON_ID,
         displayName: "mirror viewer",
-        // Folded for the same reason the venue plan's admin is: the live-display-name index and
-        // every lookup compare on this key, and a row without it falls back on an ASCII-only one.
         displayNameFolded: foldForUniqueness("mirror viewer"),
         pinHash: UNUSABLE_PIN_HASH,
         role: "admin",
@@ -78,10 +56,6 @@ export async function ensureMirrorViewer(db: Database): Promise<string> {
       })
       .onConflictDoUpdate({
         target: managementSessions.id,
-        // The revive: the clock is read in JavaScript and bound, because `now()` is a PostgreSQL
-        // function this engine does not have. `nowIso` is the one spelling every writer of these
-        // text timestamp columns uses, which is what makes the `<` comparison in the keepalive
-        // below a correct time ordering (`packages/printing/src/runtime.ts` has the measurement).
         set: { tokenHash, lastSeenAt: nowIso(), endedAt: null },
       });
   });
@@ -89,12 +63,9 @@ export async function ensureMirrorViewer(db: Database): Promise<string> {
 }
 
 /**
- * Ends the mirror viewer's session. Boot calls it on a trading boot whose deployment mode is not
- * `mirror` (an adoption-pending boot returns before that read and serves no dashboard), because
- * {@link mirrorSession} is mounted only on a mirror boot: without this, a promoted mirror that
- * restarts, or a mirror's database booted as a primary, would still resolve a visitor's kept cookie as
- * this admin. An already-ended session keeps its `ended_at`; a later mirror boot's
- * {@link ensureMirrorViewer} revives it.
+ * Called on a trading boot whose mode is not `mirror`. {@link mirrorSession} is mounted only on a
+ * mirror boot, so without this a promoted mirror that restarts, or a mirror's database booted as a
+ * primary, would still resolve a kept cookie as this admin.
  */
 export async function endMirrorViewer(db: Database): Promise<void> {
   await withTransaction(db, (tx) =>
@@ -111,33 +82,12 @@ export async function endMirrorViewer(db: Database): Promise<void> {
 }
 
 /**
- * Per-request ambient auth for the mirror's dashboard. `token` is the value this process's
- * {@link ensureMirrorViewer} call returned. Keeps the ambient session live (so
- * `resolveManagementSession`'s sliding-window expiry never turns an idle mirror's first request into a
- * 401) and, when the request does not carry `token`, sets the cookie to it — so the
- * browser never sees a login screen and the existing `requireManagementSession` gates resolve a real,
- * live session. The keepalive is an internal SQL write inside the request; it is NOT an HTTP write, so
- * the read-only gate (which gates the HTTP verb) does not block it — the reason a read-only DB role was
- * rejected (§3).
+ * Ambient auth for the mirror's dashboard: sets the viewer's cookie on any request that lacks it,
+ * and keeps the session from expiring on an idle mirror (throttled to one write a minute).
  *
- * The keepalive is THROTTLED to at most one write per minute (the `device-session.ts` /
- * `printing/agent.ts` / `sync/peers.ts` last-seen pattern), NOT written on every request:
- * `resolveManagementSession` already bumps `last_seen_at` on every gated request within its 30-minute
- * `IDLE_TIMEOUT_MS`, so the ONLY gap this middleware closes is an idle mirror (untouched > 30 min) whose
- * next request's own gate would otherwise throw `management_session.expired` before it could bump. A
- * one-minute cadence covers that with 30x headroom while removing the per-request write amplification —
- * a live dashboard polls many times a second, and an unthrottled write here would double every gated
- * request's `management_sessions` writes (once here, once in `resolveManagementSession`). All ambient
- * traffic shares the single `MIRROR_VIEWER_SESSION_ID` row, so its `resolveManagementSession` bumps
- * serialize on one row — accepted for the single-tenant DR-mirror posture (decision 4), not a bug.
- *
- * `getMode` is read PER REQUEST, exactly like the read-only gate, so promotion is a genuine flag-flip:
- * the moment the holder flips to `primary`, a promoted node requires REAL auth. Merely not-injecting is
- * not enough — a client holding a PRE-promotion ambient cookie would stay authenticated as admin the
- * instant the gate opens writes. So on promotion this middleware actively DROPS the ambient admin: when
- * the request still carries `token` it ENDS the ambient session (`resolveManagementSession` then
- * 401s it) and clears the cookie. Without this, promotion would be an unauthenticated-admin-write bypass.
- * A future re-mirror boot revives the ambient session via `ensureMirrorViewer`'s `ended_at = null` upsert.
+ * `getMode` is read per request. Once the node is promoted, a request still carrying the viewer's
+ * token ends the session and clears the cookie; merely not injecting it would leave a pre-promotion
+ * cookie authenticated as admin the moment writes open.
  */
 export function mirrorSession(
   db: Database,
@@ -147,8 +97,6 @@ export function mirrorSession(
 ): MiddlewareHandler {
   return async (c, next) => {
     if (getMode() !== "mirror") {
-      // Promoted: drop the ambient admin. Only act when the request still presents the ambient token —
-      // otherwise there is nothing to end, and requireManagementSession handles the no-cookie case.
       if (readManagementSessionToken(c) === token) {
         await withTransaction(db, (tx) =>
           tx
@@ -165,16 +113,8 @@ export function mirrorSession(
       }
       return next();
     }
-    // Throttled keepalive: refresh `last_seen_at` when it is stale, OR revive a session that was somehow
-    // ended (`ended_at is not null`). Clearing `ended_at` must NOT be gated behind the last_seen_at
-    // throttle alone — a stamped `ended_at` with a still-fresh `last_seen_at` would otherwise keep the
-    // session dead and 401 the next dashboard request.
-    //
-    // The clock is read once, so the stamp written and the staleness cutoff are the same moment —
-    // which is what PostgreSQL's `now()`, being transaction-start time, gave for free. `last_seen_at`
-    // is a text column here, so `<` on it compares SPELLINGS; `nowIso` is the spelling every writer
-    // of it uses, and the measurement of the three that sort wrong is in
-    // `packages/printing/src/runtime.ts`.
+    // Also revives an ended session: gating `ended_at` behind the throttle alone would leave a
+    // session ended with a fresh `last_seen_at` dead. One clock read, so stamp and cutoff agree.
     const seenAt = nowIso();
     const staleBefore = new Date(Date.parse(seenAt) - KEEPALIVE_INTERVAL_MS).toISOString();
     await withTransaction(db, (tx) =>
@@ -185,9 +125,7 @@ export function mirrorSession(
           and(
             eq(managementSessions.id, MIRROR_VIEWER_SESSION_ID),
             or(
-              // `last_seen_at` is NOT NULL in the schema, so the null arm can never fire — it is
-              // kept because the raw statement this replaced carried it, and dropping a condition
-              // is a behaviour change this conversion is not making.
+              // Never matches: `last_seen_at` is NOT NULL.
               isNull(managementSessions.lastSeenAt),
               lt(managementSessions.lastSeenAt, staleBefore),
               isNotNull(managementSessions.endedAt),
@@ -195,12 +133,7 @@ export function mirrorSession(
           ),
         ),
     );
-    // Inject the ambient token whenever the request does NOT already carry it — absent, a non-UUID,
-    // or any other value, including a token an earlier boot minted. A mirror is unauthenticated, so
-    // overwriting any other value keeps the dashboard reachable: it would otherwise fail
-    // `requireManagementSession`'s shape check (or hash to no live row) and 401, breaking the
-    // read-only posture. A request already carrying the token is left untouched (no redundant
-    // Set-Cookie).
+    // Any other cookie value, an earlier boot's token included, would 401; overwrite it.
     if (readManagementSessionToken(c) !== token) {
       setManagementCookie(c, token, secure);
     }

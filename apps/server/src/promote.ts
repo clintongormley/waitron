@@ -1,4 +1,4 @@
-import "./errors.js"; // register promotion.* on the shared registry (reachability convention)
+import "./errors.js";
 import { AppError } from "@waitron/shared";
 import {
   persistNodeMembershipIfNewerTx,
@@ -24,47 +24,26 @@ import { mintNextMembershipDocument } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 
 /**
- * The operator's attestation that the OLD node is physically neutralised (promotion runbook design §6) —
- * powered off, or demoted to sell-only at the box. A required human input because software cannot verify a
- * partitioned peer; without it, two submitters under one NIF could coexist.
+ * The operator's attestation that the old node is powered off or demoted to sell-only. Software
+ * cannot verify a partitioned peer; without it, two submitters under one NIF could coexist.
  */
 export interface FenceAttestation {
   readonly oldNodeNeutralised: boolean;
 }
 
-/** Whether the node already held the singletons — a `true` here means the promote was an idempotent no-op. */
 export interface PromotionResult {
   readonly alreadyPrimary: boolean;
 }
 
 export interface PromoteDeps {
-  /**
-   * The venue file — every read this module makes and the point-of-no-return transaction alike.
-   *
-   * The `singleton_role` flip and the membership-document write share ONE transaction (CLAUDE.md §3:
-   * they commit together, or neither does), so a crash between the two cannot leave a primary with no
-   * document. That is a design invariant and it survives the storage change untouched.
-   *
-   * The plain-upsert membership accessor (`writeNodeMembership`/`writeNodeMembershipTx`) is reserved
-   * for the promote paths by convention — every other write (gossip adoption, retire, the adopt
-   * handshake's org-chart append) uses the term-guarded `persistNodeMembershipIfNewer` instead, see
-   * `node-membership.ts`.
-   */
   readonly db: Database;
   readonly holders: DeploymentHolders;
   readonly log: Logger;
-  /** The box key ring — unseals this node's identity private key to sign the minted document. */
   readonly ring: KeyRing;
-  /** This node's id — the new document's `signerNodeId`, the node that becomes serving-primary, and
-   * what the identity-key read, the series read and the endorsement read are each keyed on. */
   readonly nodeId: string;
 }
 
-/**
- * Refuses to proceed without a fence attestation (promotion runbook design §6). A plain throw BEFORE any
- * state change, so a refused promote leaves the node exactly as it was (abort before the point-of-no-return,
- * §7). Extracted so the guard can be proven by deletion (CLAUDE.md §4).
- */
+// Throws before any state change, so a refused promote leaves the node as it was.
 export function assertFenced(attestation: FenceAttestation): void {
   if (attestation.oldNodeNeutralised !== true) {
     throw new AppError("promotion.fence_not_attested", {});
@@ -72,20 +51,12 @@ export function assertFenced(attestation: FenceAttestation): void {
 }
 
 /**
- * Refuses to promote a node whose OWN held membership document marks it fenced (`sell-only`/`evicted`)
- * — a node that has been superseded (membership rejoin R1 reconciles a fenced node to the SAME axes as
- * a healthy local secondary, so the axis guards cannot catch it). Promoting it in place would resume
- * the fiscal submitter duties on a superseded chain: two submitters under one NIF (CLAUDE.md §5). A
- * plain throw BEFORE any state change (before the point-of-no-return), so a refused promote leaves the
- * node exactly as it was. A fenced node returns to service via wipe-and-restore, never in-place
- * promotion (the un-fencing transition is out of scope, backlog note). Extracted so the guard can be
- * proven by deletion (CLAUDE.md §4). Distinct from `assertFenced`, which checks the OPERATOR's
- * old-node-neutralised attestation — the mirrored names track the two different "fence" concepts.
+ * Refuses a node its own held document marks fenced (`sell-only`/`evicted`): it was superseded, and
+ * promoting it in place would resume submitter duties on a superseded chain, two submitters under
+ * one NIF. A fenced node returns via wipe-and-restore. Throws before any state change. Distinct from
+ * `assertFenced`, which checks the operator's attestation about the OLD node.
  */
 export function assertNotFenced(held: SignedMembershipDocument | null, nodeId: string): void {
-  // Read the standing once and let `isFencedStanding` (a type guard) narrow it to the fenced union
-  // `"sell-only" | "evicted"` — so the throw payload is type-safe with no non-null assertions. A null
-  // document yields an `undefined` standing, which is not fenced.
   const standing = held === null ? undefined : standingOf(held, nodeId);
   if (isFencedStanding(standing)) {
     throw new AppError("promotion.node_fenced", { standing });
@@ -93,48 +64,30 @@ export function assertNotFenced(held: SignedMembershipDocument | null, nodeId: s
 }
 
 /**
- * Local secondary → primary (promotion runbook design §5a). The node already sells (`mode='primary'`); this
- * claims the singleton duties only. Idempotent and checkpointed (§3e): a fence-attestation refusal aborts
- * with no effect; an already-primary node is a no-op; a mirror is refused (it needs `promoteMirrorToPrimary`,
- * below, §5b); and a node its OWN held document marks FENCED (`sell-only`/`evicted`) is refused
- * (`assertNotFenced`) — it was superseded, so promoting it in place would resume submitter duties on a
- * superseded chain (two submitters under one NIF, §5); it returns via wipe-and-restore, not promotion.
- * The point-of-no-return (§7) is one transaction that flips `singleton_role` to primary AND
- * writes the freshly-minted membership document together (CLAUDE.md §3) — making this node the AEAT
- * submitter and recording the new org chart atomically, so a crash cannot leave a primary with no
- * document. The document is built and signed BEFORE that transaction, so a signing failure aborts with no
- * effect. The subsequent holder refresh flips the running fiscal pass from the empty pass to the real
- * drain on its next tick, with no restart (§3b/§3c).
+ * Local secondary to primary: the node already sells, so this claims the singleton duties only.
+ * Idempotent: an already-primary node is a no-op. The checks and the mint run before the one
+ * transaction that flips `singleton_role` and writes the new membership document together, so a
+ * crash cannot leave a primary with no document.
  */
 export async function promoteLocalSecondaryToPrimary(
   deps: PromoteDeps,
   attestation: FenceAttestation,
 ): Promise<PromotionResult> {
-  assertFenced(attestation); // before PONR: abortable, zero lasting effect
+  assertFenced(attestation);
 
-  // Read the freshest state before deciding — a concurrent write, or a prior half-completed promote, is
-  // reflected here, which is what makes the flow idempotent on re-run (§3e).
+  // Fresh state, so a re-run after a half-completed promote sees what landed.
   await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);
 
   if (deps.holders.mode.current === "mirror") {
-    // A mirror cannot become the submitter by a bare role flip; refuse with a clean code before the write
-    // (the (mirror, primary) CHECK is the backstop, not the primary guard).
+    // Refused with a clean code; the `(mirror, primary)` CHECK is only the backstop.
     throw new AppError("promotion.not_a_local_secondary", { mode: deps.holders.mode.current });
   }
   if (deps.holders.singletonRole.current === "primary") {
-    return { alreadyPrimary: true }; // already the singleton holder — idempotent no-op
+    return { alreadyPrimary: true };
   }
 
-  // Build the next membership document BEFORE the point-of-no-return: read the held org chart, flip
-  // standings (this node -> serving-primary, the outgoing primary -> sell-only), then read this node's
-  // signing key and sign — all reads plus the in-memory sign, no write yet, so a failure here aborts
-  // with no effect. R1 signs with this node's OWN directly-trusted identity key (`endorsements: []`); the
-  // endorsement chain is an R2/R3 concern. The held read and the key read run sequentially rather than in
-  // parallel: `mintNextMembershipDocument` (the design-named shared helper, §6 R1 item 2) owns the key
-  // read, and the node list it needs is derived from the held document, so the shared helper wins over
-  // saving one round trip on this rare failover path.
   const held = await readNodeMembership(deps.db);
-  assertNotFenced(held, deps.nodeId); // before PONR: a fenced node was superseded — refuse in place (§5)
+  assertNotFenced(held, deps.nodeId);
   const document = await mintNextMembershipDocument(
     { db: deps.db, ring: deps.ring },
     {
@@ -144,19 +97,14 @@ export async function promoteLocalSecondaryToPrimary(
     },
   );
 
-  // PONR: the role flip and the new document commit together in ONE transaction (CLAUDE.md §3), so a
-  // crash between the two writes cannot leave a primary with no document.
+  // The point of no return: the role flip and the document commit together or not at all.
   await withTransaction(deps.db, async (tx) => {
-    await setSingletonRoleTx(tx, deps.nodeId, "primary"); // claims the submitter (§7)
+    await setSingletonRoleTx(tx, deps.nodeId, "primary");
     await writeNodeMembershipTx(tx, document);
   });
 
-  // Flip the running pass on its next tick. If THIS read throws after the transaction above committed,
-  // the caller sees an error while the process keeps the stale 'secondary'
-  // holder — so it won't drain yet. Self-healing (§3e): a re-run (its refresh #1 + the already-primary
-  // path re-syncs the holder) or a restart starts the drain, and fiscal submission is a delay-tolerant
-  // outbox. A re-run is a no-op on the document too — the already-primary early return above fires before
-  // any re-mint, so the term is never bumped twice.
+  // If this refresh throws after the commit, the process keeps the stale holder until a re-run or a
+  // restart; a re-run takes the already-primary return, so the term is never bumped twice.
   await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);
 
   deps.log("info", "promotion.completed", { target: "local_secondary" });
@@ -164,58 +112,33 @@ export async function promoteLocalSecondaryToPrimary(
 }
 
 export interface MirrorPromotionResult extends PromotionResult {
-  /** The cloud's OWN reserved standard series id the promote persisted into trading.env, so the promoted
-   * primary numbers under its disjoint series, not the primary's (spec §4.3). Returned so the caller can
-   * assert on it / decide whether to restart. */
+  /** This node's own reserved series, disjoint from the old primary's, now in trading.env. */
   readonly seriesId: string;
 }
 
 export interface MirrorPromoteDeps extends PromoteDeps {
   /**
-   * Persist the corrected `trading.env` (its `seriesId` = the cloud's OWN reserved standard series) so the
-   * NEXT boot comes up primary numbering under the right series. Injected (the boot supplies
-   * `writeTradingEnv`) so this DB-centric module stays out of the filesystem/process transition.
-   *
-   * Called BEFORE the point-of-no-return (owner decision, 2026-09-04): a corrected `seriesId` is INERT on a
-   * still-read-only mirror (the read-only gate rejects every non-GET, so `config.till.seriesId` is never
-   * used to allocate), so persisting it early is SAFE even if the promote later aborts — the file it leaves
-   * is durable but never consulted while the box stays a mirror. It closes the PROCESS-crash window a
-   * persist-AFTER-PONR leaves: the env write is issued (atomic rename, `fs-atomic.ts`) before the PONR
-   * commits, so a process crash between them reboots the box either still a mirror or `mode=primary` on the
-   * CORRECT series — never `mode=primary` on the primary's series with no mirror-promote path left to
-   * self-heal it. It does NOT close the narrower POWER-LOSS window: `writeFileAtomic` does not fsync
-   * (`fs-atomic.ts` — atomic visibility, no durability across power loss), while the PONR is a
-   * durable database commit — measured on this tree, the venue file runs `journal_mode = wal` with
-   * `synchronous = 2` (FULL), so a commit is fsynced — and a power cut can therefore leave the
-   * rename unflushed behind a commit that survived. That residual is
-   * benign in R3b (nothing sells against a promoted cloud until the deferred till-reroute slice) and is the
-   * carry-in for closing it (fsync the env write, or resolve the series at boot). Ordering the persist
-   * before the flip is a correctness invariant, so it lives here rather than in the caller.
+   * Called BEFORE the point of no return. A corrected `seriesId` is inert while the node is still a
+   * read-only mirror, so writing it early is safe if the promote then aborts, and a process crash
+   * between the two can never boot the node primary on the old primary's series. Power loss still
+   * can: `writeFileAtomic` does not fsync.
    */
   readonly persistTradingEnv: (seriesId: string) => Promise<void>;
 }
 
 /**
- * The point-of-no-return body of a mirror→primary promote, extracted so the term-guard can be
- * proven as a unit (parent spec §8 "R3 sharp edge"; CLAUDE.md §4). Runs in ONE transaction, in an
- * order that respects `node_roles_role_valid_ck`: flip `mode → primary` FIRST (leaving
- * `singleton_role`, so the transient pair is the valid `(primary, secondary)`, never the forbidden
- * `(mirror, primary)`), then `singleton_role → primary`, then the TERM-GUARDED document write. A
- * `false` from the guard means a concurrent gossip-adopt already landed a >= term, so writing would
- * REGRESS the org chart — the whole transaction is aborted (`promotion.membership_superseded`) and
- * the mode/singleton flip does not commit against a superseded chart.
- *
- * The diagnostic held-term read runs `readNodeMembership` on `tx`, the handle this transaction is open
- * on. The value is only for the error message; the throw is what rolls the transaction back regardless.
- * (`readNodeMembership` accepts a `Database | Transaction`, which is what lets it take `tx` here.)
+ * One transaction, ordered for `node_roles_role_valid_ck`: `mode` first, so the transient pair is
+ * `(primary, secondary)` and never the forbidden `(mirror, primary)`. A refused term-guarded write
+ * means a concurrent gossip adoption already landed a term at least as high; the throw rolls the whole flip
+ * back rather than regress the org chart.
  */
 export async function commitMirrorPromotionTx(
   tx: Transaction,
   nodeId: string,
   document: SignedMembershipDocument,
 ): Promise<void> {
-  await setDeploymentModeTx(tx, nodeId, "primary"); // (primary, secondary) — valid transient pair
-  await setSingletonRoleTx(tx, nodeId, "primary"); // (primary, primary)
+  await setDeploymentModeTx(tx, nodeId, "primary");
+  await setSingletonRoleTx(tx, nodeId, "primary");
   const accepted = await persistNodeMembershipIfNewerTx(tx, document);
   if (!accepted) {
     const current = await readNodeMembership(tx);
@@ -227,50 +150,27 @@ export async function commitMirrorPromotionTx(
 }
 
 /**
- * Mirror → primary (parent SIF spec §5b; R3 design §4). A read-only mirror becomes the venue's primary
- * on the identity it already holds (R3a gave it its own nodeId; R2 reserved its SIF + disjoint series +
- * sealed key + the primary's endorsement). No identity ceremony, no SIF re-mint: `currentSif` returns
- * the reserved SIF once the box reboots `mode=primary`.
- *
- * ABORT-BEFORE-PONR (parent spec §7): the fence-attestation check, the held/endorsement/series reads, the
- * held-document fenced-node refusal (`assertNotFenced` — a fenced mirror was superseded and returns via
- * wipe-and-restore, never in-place promotion onto a superseded chain, §5), the in-memory mint AND the
- * `trading.env` correction (`persistTradingEnv`, inert on a still-read-only mirror) all run BEFORE the one
- * transaction, so any failure there leaves the mirror exactly as it was. The PONR is
- * ONE transaction (`commitMirrorPromotionTx`) — `mode → primary`, `singleton_role → primary`, then
- * the TERM-GUARDED document write; if that write is refused (a concurrent gossip-adopt landed a >= term),
- * the whole transaction aborts with `promotion.membership_superseded` and the flip does not commit against
- * a superseded chart (spec §8 "R3 sharp edge"). Idempotent: an already-primary node returns
- * `{ alreadyPrimary: true }` before any mint or persist. Because the env write is issued before the flip,
- * a PROCESS crash between them can never leave the box primary on the primary's series (only still-mirror,
- * or primary on the correct series); the narrower power-loss window is a documented residual, benign until
- * till-reroute (see `MirrorPromoteDeps.persistTradingEnv`). The caller only restarts on
- * `{ alreadyPrimary: false }` — the mirror is not selling, so a restart costs nothing (contrast the LIVE
- * local-secondary promote).
+ * Mirror to primary, on the identity reserved at adopt: no fiscal identity is minted here. The
+ * checks, the mint and `persistTradingEnv` run before `commitMirrorPromotionTx`, so a failure there
+ * leaves the mirror as it was. The caller restarts only on `{ alreadyPrimary: false }`.
  */
 export async function promoteMirrorToPrimary(
   deps: MirrorPromoteDeps,
   attestation: FenceAttestation,
 ): Promise<MirrorPromotionResult> {
-  assertFenced(attestation); // before PONR: abortable, zero lasting effect
+  assertFenced(attestation);
 
   await refreshDeploymentHolders(deps.db, deps.nodeId, deps.holders);
-  // Read the corrected series id up front — it is also the value an already-primary re-run returns.
+  // Also what an already-primary re-run returns.
   const seriesId = await readStandardSeriesId(deps.db, deps.nodeId);
 
   if (deps.holders.mode.current === "primary") {
-    // Already promoted — idempotent no-op. trading.env was already corrected before this box's own PONR,
-    // so there is nothing to re-persist here.
     return { alreadyPrimary: true, seriesId };
   }
 
-  // Build the endorsed document BEFORE the PONR: read the held org chart, flip standings (this node →
-  // serving-primary, outgoing primary → sell-only), read the primary's endorsement of this node's key,
-  // and sign with this node's OWN key. R3b attaches the endorsement so a peer trusting only the primary
-  // transitively trusts this document (parent wire-protocol §4) — the first production doc signed by a
-  // non-setup key.
+  // The primary's endorsement lets a peer that trusts only the primary trust this document.
   const held = await readNodeMembership(deps.db);
-  assertNotFenced(held, deps.nodeId); // before PONR/persist: a fenced mirror was superseded — refuse (§5)
+  assertNotFenced(held, deps.nodeId);
   const endorsement = await readNodeEndorsement(deps.db, deps.nodeId);
   const document = await mintNextMembershipDocument(
     { db: deps.db, ring: deps.ring },
@@ -282,14 +182,9 @@ export async function promoteMirrorToPrimary(
     },
   );
 
-  // Persist the corrected trading.env BEFORE the point-of-no-return (owner decision, 2026-09-04). A
-  // corrected series is inert on a still-read-only mirror, so this is safe even if the promote aborts, and
-  // issuing the env write before the flip closes the PROCESS-crash window a persist-after-PONR would leave
-  // (the power-loss window is a documented residual — writeFileAtomic does not fsync). See
-  // `MirrorPromoteDeps.persistTradingEnv`.
+  // Before the point of no return: see `MirrorPromoteDeps.persistTradingEnv`.
   await deps.persistTradingEnv(seriesId);
 
-  // PONR: mode + singleton + term-guarded doc in ONE transaction (CLAUDE.md §3).
   await withTransaction(deps.db, async (tx) => {
     await commitMirrorPromotionTx(tx, deps.nodeId, document);
   });

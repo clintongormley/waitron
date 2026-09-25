@@ -1,19 +1,9 @@
-// `POST /management-api/promote` — the operator's failover trigger (spec §3). A server-to-server
-// endpoint (the operator's browser calls it through the management surface, the credential in the
-// REQUEST BODY, mirroring `mirror-bundle-api.ts`), it authorizes TWO ways then delegates to the
-// boot-wired `run` closure (Task 7). It NEVER calls the promote functions directly: which promote
-// path runs (mirror vs already-primary), the trading.env correction and the restart all live in
-// `run`; this module only decides WHO may promote and hands `run` the operator's fence attestation.
+// `POST /management-api/promote`, the operator's failover trigger. This module decides only WHO may
+// promote; which promote path runs, and the restart, belong to the boot-wired `run` closure.
 //
-// Two authorization paths, checked in this order:
-//  - A `breakGlass` secret present in the body → the offline fallback (`verifyBreakGlass`), for when
-//    the primary that held the admin's credentials is the very node that died. A wrong secret is
-//    `promotion.break_glass_invalid` (401) and `run` is never reached.
-//  - Otherwise the admin-login path — `loginManagerById` → `authorizeManager("node.promote")` →
-//    `endManagementSession`, all under one `withTransaction`, the `mirror-bundle-api.ts` shape.
-//    `node.promote` is ADMIN-only, so a staff credential authenticates but fails authorization (403).
-//  - Neither usable (no secret, and no well-formed id+password) → `password.invalid` (401), the same
-//    code a wrong password gets, so the response never says which field was missing.
+// A `breakGlass` secret in the body takes the offline path (`verifyBreakGlass`), for when the node
+// that held the admin's credentials is the one that died; otherwise the admin logs in by person id
+// and needs the admin-only `node.promote`.
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -27,22 +17,14 @@ import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 
 /**
- * What the boot-wired `run` closure reports back (Task 7 computes both). `alreadyPrimary` is the
- * idempotent no-op case (the node already held the singletons); `restarting` is true only for a real
- * mirror→primary promote, which reboots the box `mode=primary` — the operator UI polls for the node
- * to come back on that flag. The endpoint returns this object verbatim (spec §3); it needs no
- * `MirrorPromotionResult` (the reserved `seriesId` is `run`'s own concern).
+ * `restarting` is true only for a real mirror-to-primary promote, which reboots the node; the
+ * operator UI polls for it to come back on that flag.
  */
 export interface PromoteRunResult {
   alreadyPrimary: boolean;
   restarting: boolean;
 }
 
-/**
- * `appDb` authenticates + authorizes (under `withTransaction`, the dashboard-login shape) AND backs
- * `verifyBreakGlass`'s verifier read. `run` is the boot-wired promote closure (Task 7) — the
- * endpoint delegates to it and never calls the promote functions itself.
- */
 export interface PromoteApiDeps {
   appDb: Database;
   /** This node's id — whose break-glass verifier is checked. */
@@ -50,17 +32,7 @@ export interface PromoteApiDeps {
   run: (attestation: FenceAttestation) => Promise<PromoteRunResult>;
 }
 
-/**
- * Every AppError CODE this route answers + its HTTP status (the management-api STATUS parallel).
- * Credential faults: a wrong/malformed/missing credential is 401 (`password.invalid`/`totp.invalid`),
- * a wrong break-glass secret 401 (`promotion.break_glass_invalid`); a suspended person or an
- * unauthorised role 403; an unknown person 404 (`loginManagerById` throws `person.not_found` for an id
- * with no row — no enumeration surface to hide on this trusted server-to-server path). The promote
- * codes come out of `run`: a missing fence attestation is a client fault (400,
- * `promotion.fence_not_attested`); a node its own chart marks fenced, or a chart superseded mid-promote,
- * is a conflict (409). A registered code absent here defaults to 400 via `run`; a non-AppError is an
- * opaque 500.
- */
+// `person.not_found` is a 404: this server-to-server path has no enumeration surface to hide.
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
   "totp.invalid": 401,
@@ -73,18 +45,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "promotion.membership_superseded": 409,
 };
 
-/**
- * Mounts `POST /management-api/promote` on an existing Hono app — the `mountMirrorBundleApi`
- * convention. `log` is optional (a boot always threads one; a unit mount may omit it) and defaults to
- * a no-op so `run` always has a sink.
- */
 export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = () => {}): void {
   const run = createErrorBoundary(STATUS, "promotion.failed");
 
   app.post("/management-api/promote", (c) =>
     run(c, log, async () => {
-      // `readJsonBody` coerces an empty/malformed/`null` body to `{}` so a degenerate body falls
-      // through to the credential screens (a specific 4xx) rather than an opaque 500.
       const body = await readJsonBody<{
         oldNodeNeutralised?: unknown;
         personId?: string;
@@ -93,9 +58,8 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
         breakGlass?: string;
       }>(c);
 
-      // Authorize: the break-glass fallback if a secret is present, else the admin-login path. A
-      // present break-glass secret is authoritative — it is never silently downgraded to the login
-      // path, so a wrong secret is refused here rather than falling through to `password.invalid`.
+      // A present break-glass secret is authoritative: a wrong one is refused here, never downgraded
+      // to the login path.
       if (typeof body.breakGlass === "string") {
         if (!(await verifyBreakGlass(deps.appDb, deps.nodeId, body.breakGlass))) {
           throw new AppError("promotion.break_glass_invalid", {});
@@ -106,10 +70,6 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
         typeof body.password === "string" &&
         (body.totp === undefined || typeof body.totp === "string")
       ) {
-        // The dashboard-login shape (`mirror-bundle-api.ts`): authenticate by PERSON ID, authorize the
-        // admin-only `node.promote`, end the throwaway session — all in one transaction.
-        // The `isUuid` screen turns a malformed id into this path's clean 401. It is the only
-        // refusal: the `persons.id` read would neither object to it nor match it.
         const { personId, password, totp } = body;
         await withTransaction(deps.appDb, async (tx) => {
           const session = await loginManagerById(tx, {
@@ -124,14 +84,10 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
           await endManagementSession(tx, session.token);
         });
       } else {
-        // No usable credential — reported as `password.invalid` so the response never says which of
-        // the missing/malformed fields failed.
+        // The same code a wrong password gets, so the response never says which field failed.
         throw new AppError("password.invalid", {});
       }
 
-      // Delegate to the boot-wired closure (Task 7). It computes `alreadyPrimary`/`restarting`, runs
-      // the correct promote path, and either returns a result or throws a `promotion.*` code the
-      // STATUS map above maps. The endpoint never calls the promote functions directly (spec §2).
       const result = await deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true });
       return c.json(result);
     }),

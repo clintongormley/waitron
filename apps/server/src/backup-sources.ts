@@ -5,34 +5,16 @@ import type { WaitronModule } from "@waitron/module";
 import type { ArchiveEntry } from "./backup-archive.js";
 import "./errors.js";
 
-/** How many files a single source dir's read fans out to at once. Bounds `readFile` concurrency so
- * a large content-addressed store (thousands of blobs) cannot exhaust file descriptors (EMFILE);
- * see the read loop in {@link collectModuleNonDbState} below. */
+/** Bounds open files, so a store of thousands of blobs cannot exhaust file descriptors. */
 const CONCURRENCY = 64;
 
 /**
- * Turn every enabled module's declared `backup.nonDbState` source refs into actual archive
- * entries. v1 knows one `NonDbSource` kind, `"content-addressed-dir"`: the named directory's files,
- * each emitted verbatim as `${source}/<filename>` — content-addressed blobs need no restructuring,
- * their filename already carries their identity.
+ * Each enabled module's declared non-DB sources as archive entries named `${source}/<filename>`.
  *
- * `resolvers` maps a declared source id to its absolute directory. The collector has no knowledge
- * of application configuration; each composition must supply every declared source.
- *
- * A module with no `backup`/`nonDbState` contributes nothing. Images are database rows and
- * contribute through the database dump. A declared source with NO resolver entry, or one resolving to a falsy dir
- * (`""`, most concretely) is a fail-visible bug — a module declaring state the composition root
- * never wired up would otherwise vanish from the backup silently — so it throws
- * `backup.source_unresolved` rather than being skipped. An empty string would otherwise pass an
- * `undefined`-only guard, reach `readdir("")` → ENOENT, and be swallowed by the ENOENT-tolerant
- * branch below, silently dropping that module's non-DB state. A resolved directory that does not
- * exist on disk (ENOENT) is tolerated as empty: a declared source that has not received any files is a
- * valid, backup-worthy state, not an error.
- *
- * Entries are sorted by name — first within each source dir (so archive order does not depend on
- * `readdir`'s unspecified order), and the returned list is emitted in that same per-source order
- * for every module/source pair, so the whole archive is deterministic byte-for-byte across runs of
- * an unchanged source directory.
+ * A declared source with no resolver, or an empty one, throws `backup.source_unresolved`: skipped,
+ * it would drop that module's state from the backup silently, and `""` would otherwise reach the
+ * missing-directory branch below. A directory that does not exist yet contributes nothing.
+ * Entries are sorted, so the archive does not depend on `readdir`'s order.
  */
 export async function collectModuleNonDbState(
   modules: readonly WaitronModule[],
@@ -42,11 +24,7 @@ export async function collectModuleNonDbState(
   for (const mod of modules) {
     for (const ref of mod.backup?.nonDbState ?? []) {
       if (ref.kind !== "content-addressed-dir") {
-        // Exhaustiveness guard. `NonDbSource.kind` is a closed union with one member today; the
-        // capture below (read the resolved dir's flat files) is correct only for
-        // `"content-addressed-dir"`. A future kind added to the type without a branch here would
-        // otherwise be given flat-dir treatment silently — so the `never` binding fails the build
-        // until a branch is added, and the throw fails the backup visibly at runtime meanwhile.
+        // The capture below is right only for a flat content-addressed directory.
         const _never: never = ref.kind;
         throw new AppError("backup.source_kind_unsupported", { kind: _never });
       }
@@ -59,25 +37,15 @@ export async function collectModuleNonDbState(
       try {
         dirents = await readdir(dir, { withFileTypes: true });
       } catch (err) {
-        // A source dir that has never been written to is a valid,
-        // empty contribution — the same ENOENT-tolerant idiom `LocalFsBackend.list` uses.
         if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
         throw err;
       }
 
-      // A content-addressed store is flat by construction, but filter to regular files anyway
-      // rather than assume it: a stray subdirectory must not reach `readFile` (EISDIR) or be
-      // captured as if it were a blob.
+      // A stray subdirectory must not reach `readFile` or be captured as a blob.
       const names = dirents
         .filter((d) => d.isFile())
         .map((d) => d.name)
         .sort();
-      // Read the (already-sorted) files in fixed-size CHUNKS rather than one unbounded
-      // `Promise.all` over the whole directory — a store with thousands of files could otherwise
-      // hit EMFILE from opening them all at once. Each chunk is read concurrently
-      // (`Promise.all(chunk.map(readFile))`, up to CONCURRENCY files open at a time) and the
-      // chunks themselves are processed in order, so the deterministic sorted archive order is
-      // preserved exactly as it was under the old unbounded fan-out.
       for (let i = 0; i < names.length; i += CONCURRENCY) {
         const chunk = names.slice(i, i + CONCURRENCY);
         const blobs = await Promise.all(chunk.map((name) => readFile(join(dir, name))));
