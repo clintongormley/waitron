@@ -223,7 +223,9 @@ command against it treat that entrypoint differently:
   file, with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`. `restore --from-bucket <kit-file>`
   rebuilds the box from the copy the old box kept in the owner's bucket; the recovery kit file
   holds the bucket's key and the recovery key, so nothing secret goes on the command line. The file
-  must be visible inside the container:
+  must be visible inside the container and readable by the image's user, `waitron` (uid 10001):
+  `sudo chown 10001 kit.txt` keeps it private at mode 0600. Otherwise the command stops with
+  `cannot read kit file: /kit.txt`.
 
   ```bash
   docker compose run --rm -v "$PWD/kit.txt:/kit.txt:ro" --entrypoint node app \
@@ -238,7 +240,10 @@ command against it treat that entrypoint differently:
 
   Restore and rejoin are refused while another process, usually the running server, is using the
   venue folder (`provisioning.database_in_use`): rejoin before it reads or wipes anything, restore
-  before it writes, moves or removes any database, identity or secret file. Break-glass is the exception by design: it runs beside the
+  before it changes the venue folder, the box's identity or its secrets. A restore's earlier steps
+  run in temporary folders under the state folder, and the bucket form downloads the whole copy
+  there first, then is refused only when it comes to place it — so stop the server before either
+  form. Break-glass is the exception by design: it runs beside the
   server and takes no lock. Whatever holds the folder keeps a small file beside it,
   `venue.holder.json`, naming what kind of program it is and rewriting a heartbeat time every five
   seconds. A server start refused while that heartbeat is under 30 seconds old — a second copy of

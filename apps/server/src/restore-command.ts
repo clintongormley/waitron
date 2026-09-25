@@ -37,13 +37,12 @@ const CONFIRM_OLD_BOX_GONE = "--confirm-old-box-gone";
 const clock = (): Date => new Date();
 
 /**
- * The `AppError` codes thrown by the decrypt+unpack phase (`decryptArtifact`/`unpackArchive` inside
- * `restoreFromArtifact`), before the compatibility gate or the entry-name guard ever runs. Collapsed
- * into ONE generic message below — the same reasoning `runRecoveryUnpack` applies to its own decrypt
- * phase (`recovery-unpack-command.ts`): telling an operator (or an attacker who has stolen the
- * artifact and is running this CLI) "wrong recovery key" versus "corrupt artifact" would hand them an
- * oracle to guess the recovery key against, and this artifact is a whole-database backup — a far
- * higher-value target than the recovery bundle `runRecoveryUnpack` protects the same way.
+ * The `AppError` codes `decryptArtifact`/`unpackArchive` throw — in `restoreFromArtifact`'s
+ * decrypt+unpack phase, and when the bucket path unlocks the copy's locked secrets with the kit's
+ * recovery key (`unsealNodeState`). Each path collapses them into ONE generic message, for the
+ * reason `runRecoveryUnpack` gives for its own decrypt phase (`recovery-unpack-command.ts`): telling
+ * an operator (or an attacker who has stolen the artifact and is running this CLI) "wrong recovery
+ * key" versus "corrupt artifact" would hand them an oracle to guess the recovery key against.
  */
 const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
   "recovery.passphrase_invalid",
@@ -98,18 +97,20 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
  * value from outside the image; reporting a message carries whatever the thrower put in it.
  */
 export async function runRestore(deps: CommandDeps): Promise<number> {
-  const [cmd, artifactPath, kitPath] = deps.argv;
+  const [cmd, artifactPath] = deps.argv;
+  const bucketFlag = deps.argv.indexOf("--from-bucket", 1);
+  const kitPath = bucketFlag === -1 ? undefined : deps.argv[bucketFlag + 1];
   if (
     cmd !== "restore" ||
     artifactPath === undefined ||
-    (artifactPath === "--from-bucket" && (kitPath === undefined || kitPath.startsWith("--")))
+    (bucketFlag !== -1 && (kitPath === undefined || kitPath.startsWith("--")))
   ) {
     deps.out(
       "usage: waitron-restore restore <artifact-path> [--confirm-old-box-gone] | restore --from-bucket <kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone]",
     );
     return 2;
   }
-  if (artifactPath === "--from-bucket") return runBucketRestore(deps, kitPath!);
+  if (bucketFlag !== -1) return runBucketRestore(deps, kitPath!);
 
   const recoveryKey = deps.env.WAITRON_BACKUP_RECOVERY_KEY;
   if (isUnset(recoveryKey)) {

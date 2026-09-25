@@ -708,6 +708,47 @@ describe("waitron-restore restore --from-bucket", () => {
     expect(out).toEqual([expect.stringMatching(/usage/i)]);
   });
 
+  it("takes the bucket form when flags come before --from-bucket", async () => {
+    const { kitPath } = await kitFile();
+    const out: string[] = [];
+    let received: StreamDeps | undefined;
+    let answer: boolean | undefined;
+    const code = await runRestore({
+      argv: [
+        "restore",
+        "--confirm-venue",
+        VENUE.taxId,
+        "--confirm-old-box-gone",
+        "--from-bucket",
+        kitPath,
+      ],
+      env: { WAITRON_ENV: "preproduction" },
+      out: (line) => out.push(line),
+      restoreStream: async (d) => {
+        received = d;
+        answer = d.confirmVenue(VENUE);
+      },
+    });
+    expect(code).toBe(0);
+    expect(received).toMatchObject({ kit: KIT, oldBoxGone: true });
+    expect(answer).toBe(true);
+    expect(out.at(-1)).toBe(`restored from the bucket named in ${kitPath}`);
+  });
+
+  it("prints the one-line usage when --from-bucket comes last with no kit file", async () => {
+    const out: string[] = [];
+    const restoreStream = vi.fn<RestoreStreamFake>();
+    const code = await runRestore({
+      argv: ["restore", "--confirm-venue", VENUE.taxId, "--from-bucket"],
+      env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },
+      out: (l) => out.push(l),
+      restoreStream,
+    });
+    expect(code).toBe(2);
+    expect(out).toEqual([expect.stringMatching(/usage/i)]);
+    expect(restoreStream).not.toHaveBeenCalled();
+  });
+
   it("uses the real bucket restore when none is injected", async () => {
     const { dir, kitPath } = await kitFile();
     const out: string[] = [];
