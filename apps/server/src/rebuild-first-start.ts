@@ -43,7 +43,8 @@ export interface RebuildDeps {
  * returns false, when no restore left its marker.
  *
  * The marker is removed last, so a failure or a crash part-way re-runs every step at the next
- * start; each step only moves forward (a new leaf, a higher term), so running it twice is safe.
+ * start. Each re-run issues another leaf and, once the term has been stored, moves the term up
+ * again.
  */
 export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
   const marker = join(deps.stateDir, REBUILD_MARKER);
@@ -139,22 +140,23 @@ export const POINTER_READ_TIMEOUT_MS = 15_000;
 
 /**
  * The term the owner's bucket's pointer names, for {@link RebuildDeps.pointerTerm}. Null when the
- * box has no bucket settings, the bucket holds no readable pointer, or it does not answer within
- * the bound.
+ * box has no bucket settings or cannot read them, the bucket cannot be opened or holds no readable
+ * pointer, or it does not answer within the bound. A request still waiting at the bound is
+ * abandoned, not cancelled: the bucket interface takes no way to stop it.
  */
 export async function readBucketPointerTerm(
   db: Database,
   ring: KeyRing,
   options: { openStore?: (bucket: BucketConfig) => ObjectStore; timeoutMs?: number } = {},
 ): Promise<number | null> {
-  const settings = await readStreamSettings(db, ring);
-  if (settings === null) return null;
-  const store = (options.openStore ?? createS3ObjectStore)(settings.bucket);
   let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), options.timeoutMs ?? POINTER_READ_TIMEOUT_MS);
-  });
   try {
+    const settings = await readStreamSettings(db, ring);
+    if (settings === null) return null;
+    const store = (options.openStore ?? createS3ObjectStore)(settings.bucket);
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), options.timeoutMs ?? POINTER_READ_TIMEOUT_MS);
+    });
     const read = await Promise.race([readPointer(store, settings.venueId), timeout]);
     return read === null ? null : read.pointer.body.term;
   } catch {

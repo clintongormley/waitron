@@ -1,11 +1,12 @@
 import { execFileSync } from "node:child_process";
+import { X509Certificate, createPrivateKey } from "node:crypto";
 import { mkdtemp, readFile, readdir, stat, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import forge from "node-forge";
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { writeFile, mkdir } from "node:fs/promises";
-import { ensureBoxSecrets, mintedBoxLeaf } from "./box-secrets.js";
+import { ensureBoxSecrets, mintedBoxLeaf, reissueBoxLeaf } from "./box-secrets.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 // `access` alone is wrapped so one test can inject a non-ENOENT failure for a single path; every
@@ -185,6 +186,55 @@ describe("ensureBoxSecrets", () => {
     }
     await expect(readFile(secretsFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
+});
+
+describe("reissueBoxLeaf", () => {
+  const reissue = (stateDir: string) =>
+    reissueBoxLeaf({
+      stateDir,
+      hostnames: ["waitron.local", "localhost"],
+      now: () => new Date("2026-09-23T10:00:00Z"),
+      listIpv4: () => ["192.168.1.77"],
+    });
+  const pairOf = async (stateDir: string) => ({
+    cert: await readFile(join(stateDir, "tls", "server.crt"), "utf8"),
+    key: await readFile(join(stateDir, "tls", "server.key"), "utf8"),
+  });
+
+  it("replaces the pair and leaves no working file behind", async () => {
+    const d = await newDir();
+    await ensureBoxSecrets(deps(d));
+    const before = await pairOf(d);
+    await reissue(d);
+    const after = await pairOf(d);
+    expect(after.cert).not.toBe(before.cert);
+    expect(new X509Certificate(after.cert).checkPrivateKey(createPrivateKey(after.key))).toBe(true);
+    expect((await readdir(join(d, "tls"))).sort()).toEqual([
+      "ca.crt",
+      "ca.key",
+      "server.crt",
+      "server.key",
+    ]);
+  });
+
+  // The listener reads both files and refuses a certificate whose key does not match, so a write
+  // that fails part-way must leave the pair it found.
+  it.each(["server.crt", "server.key"])(
+    "keeps the old, matching pair when writing the new %s fails",
+    async (blocked) => {
+      const d = await newDir();
+      await ensureBoxSecrets(deps(d));
+      const before = await pairOf(d);
+      // A directory where that file's working copy goes, so writing it fails.
+      await mkdir(join(d, "tls", `${blocked}.tmp`));
+      await expect(reissue(d)).rejects.toThrow();
+      expect(await pairOf(d)).toEqual(before);
+      const leftover = (await readdir(join(d, "tls"))).filter(
+        (name) => name.endsWith(".tmp") && name !== `${blocked}.tmp`,
+      );
+      expect(leftover).toEqual([]);
+    },
+  );
 });
 
 describe("mintedBoxLeaf", () => {

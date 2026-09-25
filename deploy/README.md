@@ -244,8 +244,9 @@ database server to hold one for. Its own secrets, the vault key ring and the CA 
 certificates, are minted on the first setup boot into the `state` volume and never appear here. A
 box restored from a backup brings them back and, at its first trading start, replaces the leaf with
 one naming its own addresses, signed by the same CA, so devices that trusted the old box need no new
-trust step. A restored box that comes up fenced or as a mirror leaves the leaf as it is; if the
-replacement fails, the dashboard raises an alert and the next start tries again.
+trust step. A restored box that comes up fenced, as a mirror, or still waiting to finish an
+adoption leaves the leaf as it is; if the replacement fails, the dashboard raises an alert and the
+next start tries again.
 
 **`WAITRON_BOX_ADDRESSES`** is a comma-separated list of IPv4 literals that REPLACES interface
 sniffing everywhere the box reports its own addresses: the SANs in the leaf certificate it presents,

@@ -63,8 +63,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "El equipo no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un equipo reconstruido desde tu bucket podría volver con claves y ajustes desactualizados, o sin ellos si nunca se llegaron a guardar. Las ventas continúan. Contacta con soporte.",
   },
   "restore.first_start_failed": {
-    en: "This box was restored but could not finish setting itself up, so it is not copying to your storage bucket. Sales continue. Restart the box; if this message stays, contact support.",
-    es: "Este equipo se ha restaurado pero no ha podido terminar de configurarse, así que no está copiando a tu bucket de almacenamiento. Las ventas continúan. Reinicia el equipo; si el mensaje sigue, contacta con soporte.",
+    en: "This box could not finish setting itself up after the restore. Sales continue, but it will not copy to a storage bucket until it does. Restart the box; if this message stays, contact support.",
+    es: "Este equipo no ha podido terminar de configurarse después de la restauración. Las ventas continúan, pero no copiará a ningún bucket de almacenamiento hasta que lo consiga. Reinicia el equipo; si el mensaje sigue, contacta con soporte.",
   },
   "chain.verification_failed": {
     en: "The invoice record chain failed its integrity check on a sale. Contact support.",

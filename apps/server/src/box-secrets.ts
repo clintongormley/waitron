@@ -1,4 +1,4 @@
-import { mkdir, access, readFile } from "node:fs/promises";
+import { mkdir, access, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
@@ -176,8 +176,10 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
 
 /**
  * Replace the leaf with one naming THIS machine's addresses, signed by the authority already in
- * `<stateDir>/tls`, which stays untouched. `server.key` is written last, as `ensureBoxSecrets`
- * writes it.
+ * `<stateDir>/tls`, which stays untouched. The listener refuses a certificate whose key does not
+ * match, so both new files are written under working names first and renamed into place only when
+ * both are written; a failed write removes the working files and leaves the old pair. What is left
+ * is the moment between the two renames.
  */
 export async function reissueBoxLeaf(deps: {
   stateDir: string;
@@ -196,6 +198,19 @@ export async function reissueBoxLeaf(deps: {
     ipAddresses: ips,
     now: deps.now(),
   });
-  await writeFileAtomic(join(tlsDir, "server.crt"), leaf.serverCertPem, 0o600);
-  await writeFileAtomic(join(tlsDir, "server.key"), leaf.serverKeyPem, 0o600);
+  const files = [
+    { path: join(tlsDir, "server.crt"), pem: leaf.serverCertPem },
+    { path: join(tlsDir, "server.key"), pem: leaf.serverKeyPem },
+  ].map((f) => ({ ...f, working: `${f.path}.tmp` }));
+  try {
+    for (const f of files) {
+      // Removed first: `writeFile` applies the mode only to a file it creates.
+      await rm(f.working, { force: true });
+      await writeFile(f.working, f.pem, { mode: 0o600 });
+    }
+  } catch (error) {
+    for (const f of files) await rm(f.working, { force: true }).catch(() => {});
+    throw error;
+  }
+  for (const f of files) await rename(f.working, f.path);
 }

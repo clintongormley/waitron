@@ -1302,6 +1302,12 @@ describe("startServer, against a migrated venue directory", () => {
       const health = await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
       expect(health.status).toBe(200);
       expect(((await health.json()) as { stream: unknown }).stream).toEqual({ state: "off" });
+      const node = await fetch(`https://127.0.0.1:${port}/api/node`, via);
+      expect(node.status).toBe(200);
+      expect(await node.json()).toMatchObject({
+        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        acceptingSales: true,
+      });
       const response = await fetch(`https://127.0.0.1:${port}/management-api/alerts`, {
         ...via,
         headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },

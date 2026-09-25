@@ -5314,8 +5314,25 @@ that fails lets the box sell but holds the bucket copy, a reload after a setting
 and raises `restore.first_start_failed`. It runs after the returned-box reconciliation with the
 cloud peer, not straight after the key ring as the plan placed it: with the call moved there, the
 fenced-restore case in `apps/server/src/boot.reconcile.test.ts` failed with the box accepting sales,
-because the moved term made the peer's fencing document read as not newer. A mirror or a fenced
-node re-issues and signs nothing; the marker stays and the copy is held. Left open:
+because the moved term made the peer's fencing document read as not newer. That ordering covers
+only a peer that answers during the same start (see the first item below). A mirror or a fenced
+node re-issues and signs nothing; the marker stays and the copy is held. An adoption-pending box
+returns from boot before the first start, so it neither runs nor defers it: it keeps serving the old
+certificate and the marker stays. The new certificate and key are written under working names and
+renamed into place only when both are written, so a failed write keeps the old matching pair; a
+crash between the two renames leaves a mismatched pair, which the next start replaces before the
+listener reads it, because the marker is still there — unless that start defers the first start
+(fenced, mirror or adoption-pending), when the listener refuses the pair. Left open:
+- A restored box whose cloud peer does not answer during its first start signs the next term and
+  removes the marker; a fencing document the peer serves later at that same term reads as not
+  newer, so the box is never fenced. This task's review reproduced it with a temporary two-boot case in
+  `apps/server/src/boot.reconcile.test.ts` (peer down on the first boot, a fencing document at
+  term 2 on the second: the box still accepted sales; without the marker it was fenced). I believe
+  it cannot happen today — the only writer of `mirror_config`, which the peer check needs, is
+  `apps/server/src/adopt.ts`, for a standby that never finishes adoption — from reading, not a run.
+  Recorded, not redesigned.
+- The pointer read gives up after 15 seconds but does not cancel the request: the bucket interface
+  takes no way to stop one.
 - The pointer's term is taken without checking its signature, as the supervisor already does, so
   whoever can write the bucket can push a restored box's term up (never down).
 - A marker left on a fenced box survives `waitron-rejoin`, which wipes the database and removes

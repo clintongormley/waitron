@@ -214,6 +214,23 @@ describe("completeRebuild", () => {
     expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
   });
 
+  // What a crash between the two renames in `reissueBoxLeaf` leaves: a certificate whose key does
+  // not match it. The marker is still there, so the next start replaces both.
+  it("repairs a mismatched pair left by an interrupted re-issue", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    const other = await mkdtemp(join(tmpdir(), "waitron-rebuild-other-"));
+    dirs.push(other);
+    await ensureBoxSecrets({ stateDir: other, hostnames: ["waitron.local"], now: () => NOW });
+    await writeFile(
+      join(stateDir, "tls", "server.key"),
+      await readFile(join(other, "tls", "server.key")),
+    );
+    const key = () => readFile(join(stateDir, "tls", "server.key"), "utf8");
+    expect((await leafOf(stateDir)).checkPrivateKey(createPrivateKey(await key()))).toBe(false);
+    await completeRebuild(deps(stateDir));
+    expect((await leafOf(stateDir)).checkPrivateKey(createPrivateKey(await key()))).toBe(true);
+  });
+
   it("drops an address the authority cannot vouch for, as first minting does", async () => {
     const stateDir = await rebuiltStateDir("archive");
     await completeRebuild(deps(stateDir, { listIpv4: () => [NEW_ADDRESS, "100.64.0.9"] }));
@@ -351,6 +368,21 @@ describe("readBucketPointerTerm", () => {
     const store = createMemoryObjectStore();
     await store.put(pointerKey(LOCATION), new TextEncoder().encode("not json"), undefined);
     expect(await readBucketPointerTerm(suite.db, RING, { openStore: () => store })).toBeNull();
+  });
+
+  it("answers null when the stored settings cannot be read", async () => {
+    await storeSettings(SETTINGS);
+    const openStore = vi.fn();
+    expect(await readBucketPointerTerm(suite.db, OTHER_RING, { openStore })).toBeNull();
+    expect(openStore).not.toHaveBeenCalled();
+  });
+
+  it("answers null when the bucket cannot be opened", async () => {
+    await storeSettings(SETTINGS);
+    const openStore = () => {
+      throw new Error("no client");
+    };
+    expect(await readBucketPointerTerm(suite.db, RING, { openStore })).toBeNull();
   });
 
   it("opens the stored bucket itself when no store is given", async () => {

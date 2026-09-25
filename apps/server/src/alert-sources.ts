@@ -129,7 +129,8 @@ export function backupAlertSource(deps: {
   outcomes: BackupOutcomeHolder;
   now: () => Date;
   readStream: () => StreamView;
-  /** True while a restored box's first start (`rebuild-first-start.ts`) has not finished. */
+  /** True when this start's attempt at a restored box's first start (`rebuild-first-start.ts`)
+   * failed; false when it finished, was deferred, or was not needed. */
   firstStartFailed: () => boolean;
 }): AlertSource {
   return {

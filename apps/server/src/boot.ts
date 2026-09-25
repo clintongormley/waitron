@@ -1502,9 +1502,11 @@ export async function startServer(
   const fencedOrMirror = isMirror || fenced;
   // A restored box finishes its restore here (rebuild-first-start.ts), before the trading listener
   // reads the certificate and before the sealed-state refresh below seals it. After the peer
-  // reconciliation above, because a term moved first would make a peer's superseding document read
-  // as not newer. A mirror or a fenced node defers it: nothing is re-issued or signed, and the
-  // bucket copy is held. A failure never keeps the box shut: it sells, does not stream, and raises
+  // reconciliation above, so a peer that answers during THIS start can fence the box before its
+  // term moves. A peer that does not answer now is not waited for: a fencing document it serves
+  // later at a term no higher than the new one reads as not newer (docs/backlog.md, Task 9a).
+  // A mirror or a fenced node defers it: nothing is re-issued or signed, and the bucket copy is
+  // held. A failure never keeps the box shut: it sells, does not stream, and raises
   // restore.first_start_failed until a later start finishes.
   const firstStart = fencedOrMirror
     ? await deferFirstStart(config.stateDir, log)
