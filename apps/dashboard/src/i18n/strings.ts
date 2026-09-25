@@ -1512,6 +1512,22 @@ export const en = {
   "menus.new_section_heading": "New section in {list}",
   "menus.section_not_added":
     "{name} was created, but it could not be added to this list. Choose it below to add it.",
+  "add_to_menus.heading": "Add {name} to menus",
+  "add_to_menus.intro":
+    "{name} is saved. Choose where it goes on your menus, or skip this and add it later from Menus.",
+  "add_to_menus.top_level": "Top level",
+  "add_to_menus.place_top_level": "Top level of {menu}",
+  "add_to_menus.shared": "Shared: also on {menus}",
+  "add_to_menus.shared_note":
+    "A shared section is the same list on every menu that uses it, so adding the product to it adds it to all of them.",
+  "add_to_menus.loading": "Loading your menus…",
+  "add_to_menus.load_error":
+    "{name} is saved, but your menus could not be loaded, so it has not been added to any. You can add it from Menus.",
+  "add_to_menus.failed":
+    "{name} is saved, but it could not be added to these places. They are still chosen below, so you can try again:",
+  "add_to_menus.none_chosen": "Choose at least one place, or skip this step.",
+  "add_to_menus.confirm": "Add to menus",
+  "add_to_menus.skip": "Skip",
 } as const;
 
 export type StringKey = keyof typeof en;
@@ -3040,6 +3056,22 @@ export const es: Record<StringKey, string> = {
   "menus.new_section_heading": "Nueva sección en {list}",
   "menus.section_not_added":
     "Se creó {name}, pero no se pudo añadir a esta lista. Elígela abajo para añadirla.",
+  "add_to_menus.heading": "Añadir {name} a los menús",
+  "add_to_menus.intro":
+    "{name} está guardado. Elige dónde va en tus menús, u omite este paso y añádelo más tarde desde Menús.",
+  "add_to_menus.top_level": "Nivel principal",
+  "add_to_menus.place_top_level": "Nivel principal de {menu}",
+  "add_to_menus.shared": "Compartida: también en {menus}",
+  "add_to_menus.shared_note":
+    "Una sección compartida es la misma lista en todos los menús que la usan, así que añadir el producto a ella lo añade a todos.",
+  "add_to_menus.loading": "Cargando tus menús…",
+  "add_to_menus.load_error":
+    "{name} está guardado, pero no se pudieron cargar tus menús, así que no se ha añadido a ninguno. Puedes añadirlo desde Menús.",
+  "add_to_menus.failed":
+    "{name} está guardado, pero no se pudo añadir a estos lugares. Siguen elegidos abajo, así que puedes volver a intentarlo:",
+  "add_to_menus.none_chosen": "Elige al menos un lugar, u omite este paso.",
+  "add_to_menus.confirm": "Añadir a los menús",
+  "add_to_menus.skip": "Omitir",
 };
 
 export const catalogues: Record<string, Partial<Record<StringKey, string>>> = {
