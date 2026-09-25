@@ -26,6 +26,7 @@ import {
   readProductLabels,
   setProductLabels,
   listSections,
+  listMembers,
   readSection,
   createSection,
   updateSection,
@@ -38,6 +39,7 @@ import {
   duplicateSection,
   sectionUsages,
   type MemberRef,
+  type SectionInput,
   type SectionPatch,
   type CategoryInput,
   type CategoryReassignment,
@@ -166,6 +168,8 @@ function categoryInput(body: Record<string, unknown>, creating: boolean): Partia
 }
 
 /** A section body's fields, shape only: `createSection`/`updateSection` check the values. */
+function sectionInput(body: Record<string, unknown>, creating: true): SectionInput;
+function sectionInput(body: Record<string, unknown>, creating: false): SectionPatch;
 function sectionInput(body: Record<string, unknown>, creating: boolean): SectionPatch {
   const result: SectionPatch = {};
   if (creating || body.internalName !== undefined) {
@@ -174,7 +178,10 @@ function sectionInput(body: Record<string, unknown>, creating: boolean): Section
     result.internalName = body.internalName;
   }
   if (body.names !== undefined) {
-    if (!isPlainObject(body.names))
+    if (
+      !isPlainObject(body.names) ||
+      Object.values(body.names).some((value) => typeof value !== "string")
+    )
       throw new AppError("management.request_invalid", { field: "names" });
     result.names = body.names as Record<string, string>;
   }
@@ -190,18 +197,19 @@ function sectionInput(body: Record<string, unknown>, creating: boolean): Section
 
 function memberRef(value: unknown): MemberRef {
   if (isPlainObject(value)) {
-    if (value.kind === "product" && typeof value.productId === "string" && isUuid(value.productId))
-      return { kind: "product", productId: value.productId };
-    if (value.kind === "section" && typeof value.sectionId === "string" && isUuid(value.sectionId))
-      return { kind: "section", sectionId: value.sectionId };
+    if (value.kind === "product" && typeof value.productId === "string")
+      return { kind: "product", productId: requireUuidParam(value.productId, "ProductId") };
+    if (value.kind === "section" && typeof value.sectionId === "string")
+      return { kind: "section", sectionId: requireUuidParam(value.sectionId, "SectionId") };
   }
   throw new AppError("management.request_invalid", { field: "ref" });
 }
 
-function uuidList(value: unknown, field: string): string[] {
-  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || !isUuid(entry)))
+/** An array of strings, each a well-formed id of `kind`. */
+function idList(value: unknown, field: string, kind: string): string[] {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string"))
     throw new AppError("management.request_invalid", { field });
-  return value as string[];
+  return value.map((entry: string) => requireUuidParam(entry, kind));
 }
 
 /** A position or index, shape only: the section writes refuse a negative or fractional one. */
@@ -507,9 +515,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const input = sectionInput(await readJsonBody<Record<string, unknown>>(c), true);
-      const created = await gated(session, (tx) =>
-        createSection(tx, input as SectionPatch & { internalName: string }, venueLocale),
-      );
+      const created = await gated(session, (tx) => createSection(tx, input, venueLocale));
       return c.json(created, 201);
     }),
   );
@@ -540,7 +546,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const id = sectionId(c);
-      return c.json(await gated(session, async (tx) => (await readSection(tx, id)).members));
+      return c.json(await gated(session, (tx) => listMembers(tx, id)));
     }),
   );
   app.post(members, (c) =>
@@ -559,7 +565,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
       const session = requireManagementSession(c);
       const id = sectionId(c);
       const body = await readJsonBody<{ productIds?: unknown }>(c);
-      const productIds = uuidList(body.productIds, "productIds");
+      const productIds = idList(body.productIds, "productIds", "ProductId");
       return c.json(await gated(session, (tx) => addProducts(tx, id, productIds)));
     }),
   );
@@ -600,7 +606,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
         throw new AppError("management.request_invalid", { field: "internalName" });
       const input = {
         internalName: body.internalName,
-        memberIds: uuidList(body.memberIds, "memberIds"),
+        memberIds: idList(body.memberIds, "memberIds", "SectionMemberId"),
         ...(body.replaceIn === undefined ? {} : { replaceIn: replaceTarget(body.replaceIn) }),
       };
       return c.json(await gated(session, (tx) => duplicateSection(tx, id, input)), 201);
@@ -619,12 +625,13 @@ function replaceTarget(value: unknown): { sectionId: string; memberId: string } 
   if (
     !isPlainObject(value) ||
     typeof value.sectionId !== "string" ||
-    !isUuid(value.sectionId) ||
-    typeof value.memberId !== "string" ||
-    !isUuid(value.memberId)
+    typeof value.memberId !== "string"
   )
     throw new AppError("management.request_invalid", { field: "replaceIn" });
-  return { sectionId: value.sectionId, memberId: value.memberId };
+  return {
+    sectionId: requireUuidParam(value.sectionId, "SectionId"),
+    memberId: requireUuidParam(value.memberId, "SectionMemberId"),
+  };
 }
 
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {

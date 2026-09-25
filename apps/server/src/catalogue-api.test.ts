@@ -4194,6 +4194,12 @@ describe("mountCatalogueApi — sections", () => {
         params: { sectionId: a.id, memberId: unknownMember },
       },
     });
+    const unknownList = crypto.randomUUID();
+    const unlisted = await send(app, "GET", members(unknownList));
+    expect(unlisted.status).toBe(404);
+    expect(await unlisted.json()).toMatchObject({
+      error: { code: "menu_section.not_found", params: { sectionId: unknownList } },
+    });
   });
 
   it("screens every section body's shape and ids", async () => {
@@ -4207,6 +4213,8 @@ describe("mountCatalogueApi — sections", () => {
         ["POST", "/management-api/sections", {}, "internalName"],
         ["POST", "/management-api/sections", { internalName: 7 }, "internalName"],
         ["POST", "/management-api/sections", { internalName: "X", names: "x" }, "names"],
+        ["POST", "/management-api/sections", { internalName: "X", names: { en: 5 } }, "names"],
+        ["PATCH", `/management-api/sections/${id}`, { names: { en: "Ok", es: null } }, "names"],
         ["POST", "/management-api/sections", { internalName: "X", image: 7 }, "image"],
         ["POST", "/management-api/sections", { internalName: "X", color: 7 }, "color"],
         ["PATCH", `/management-api/sections/${id}`, { internalName: 7 }, "internalName"],
@@ -4216,7 +4224,7 @@ describe("mountCatalogueApi — sections", () => {
         [
           "POST",
           `/management-api/sections/${id}/members`,
-          { ref: { kind: "product", productId: "nope" } },
+          { ref: { kind: "product", productId: 7 } },
           "ref",
         ],
         [
@@ -4235,7 +4243,13 @@ describe("mountCatalogueApi — sections", () => {
         [
           "POST",
           `/management-api/sections/${id}/members/products`,
-          { productIds: ["nope"] },
+          { productIds: "nope" },
+          "productIds",
+        ],
+        [
+          "POST",
+          `/management-api/sections/${id}/members/products`,
+          { productIds: [uuid, 7] },
           "productIds",
         ],
         ["PUT", `/management-api/sections/${id}/members/${member}/position`, {}, "to"],
@@ -4244,7 +4258,7 @@ describe("mountCatalogueApi — sections", () => {
         [
           "POST",
           `/management-api/sections/${id}/duplicate`,
-          { internalName: "X", memberIds: ["nope"] },
+          { internalName: "X", memberIds: [7] },
           "memberIds",
         ],
         ["POST", `/management-api/sections/${id}/duplicate`, { internalName: "X" }, "memberIds"],
@@ -4260,6 +4274,58 @@ describe("mountCatalogueApi — sections", () => {
       expect(response.status, `${method} ${path} ${JSON.stringify(body)}`).toBe(400);
       expect(await response.json()).toMatchObject({
         error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    // A malformed id inside a body is refused as the categories' product list refuses one.
+    const idCases: [method: "POST", path: string, body: unknown, kind: string][] = [
+      [
+        "POST",
+        `/management-api/sections/${id}/members`,
+        { ref: { kind: "product", productId: "nope" } },
+        "ProductId",
+      ],
+      [
+        "POST",
+        `/management-api/sections/${id}/members`,
+        { ref: { kind: "section", sectionId: "nope" } },
+        "SectionId",
+      ],
+      [
+        "POST",
+        `/management-api/sections/${id}/members/${member}/replace`,
+        { ref: { kind: "section", sectionId: "nope" } },
+        "SectionId",
+      ],
+      [
+        "POST",
+        `/management-api/sections/${id}/members/products`,
+        { productIds: [uuid, "nope"] },
+        "ProductId",
+      ],
+      [
+        "POST",
+        `/management-api/sections/${id}/duplicate`,
+        { internalName: "X", memberIds: [], replaceIn: { sectionId: "nope", memberId: uuid } },
+        "SectionId",
+      ],
+      [
+        "POST",
+        `/management-api/sections/${id}/duplicate`,
+        { internalName: "X", memberIds: [], replaceIn: { sectionId: uuid, memberId: "nope" } },
+        "SectionMemberId",
+      ],
+      [
+        "POST",
+        `/management-api/sections/${id}/duplicate`,
+        { internalName: "X", memberIds: [uuid, "nope"] },
+        "SectionMemberId",
+      ],
+    ];
+    for (const [method, path, body, kind] of idCases) {
+      const response = await send(app, method, path, { body });
+      expect(response.status, `${method} ${path} ${JSON.stringify(body)}`).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "shared.invalid_id", params: { kind, value: "nope" } },
       });
     }
     for (const path of [

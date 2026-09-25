@@ -13,6 +13,7 @@ import {
   createSection,
   deleteSection,
   duplicateSection,
+  listMembers,
   listSections,
   moveMember,
   readSection,
@@ -113,6 +114,23 @@ async function rawMember(sectionId: string, ref: MemberRef, position: number): P
       ${ref.kind === "product" ? ref.productId : null},
       ${ref.kind === "section" ? ref.sectionId : null})`);
   return id;
+}
+
+/** `count` copies of a product, written in one statement; the ids sort in the order returned. */
+async function cloneProducts(templateId: string, count: number): Promise<string[]> {
+  const { rows } = await fx.db.execute<{ name: string }>(sql`pragma table_info(products)`);
+  const columns = rows.map((row) => row.name);
+  const picked = columns.map((column) =>
+    column === "id" ? sql`'bulk-' || substr('000000' || n, -6)` : sql.identifier(column),
+  );
+  await fx.db.execute(sql`
+    insert into products (${sql.join(
+      columns.map((column) => sql.identifier(column)),
+      sql`, `,
+    )})
+    with recursive seq(n) as (select 1 union all select n + 1 from seq where n < ${count})
+    select ${sql.join(picked, sql`, `)} from seq, products where products.id = ${templateId}`);
+  return Array.from({ length: count }, (_, index) => `bulk-${String(index + 1).padStart(6, "0")}`);
 }
 
 const create = (internalName: string) => app((tx) => createSection(tx, { internalName }));
@@ -253,6 +271,7 @@ describe("section details", () => {
     const missing = crypto.randomUUID();
     const writes: ((tx: Transaction) => Promise<unknown>)[] = [
       (tx) => readSection(tx, missing),
+      (tx) => listMembers(tx, missing),
       (tx) => updateSection(tx, missing, { internalName: "X" }),
       (tx) => deleteSection(tx, missing),
       (tx) => sectionUsages(tx, missing),
@@ -363,6 +382,31 @@ describe("membership and order", () => {
     expect(await app((tx) => addProducts(tx, drinks.id, []))).toEqual({ added: 0 });
   });
 
+  it("adds more products than one statement can bind, every one in the order given", async () => {
+    const f = await fixture();
+    const drinks = await create("Drinks");
+    await app((tx) => addMember(tx, drinks.id, product(f.water)));
+    // The committed one-insert-per-row loop took this many; one statement binding them all did not.
+    const ids = await cloneProducts(f.lemonade, 20_000);
+
+    expect(await app((tx) => addProducts(tx, drinks.id, ids))).toEqual({ added: ids.length });
+
+    const { members } = await app((tx) => readSection(tx, drinks.id));
+    expect(refs(members)).toEqual([product(f.water), ...ids.map(product)]);
+    expect(positions(members)).toEqual(members.map((_, index) => index));
+  });
+
+  it("refuses a product named twice, or a variant, however far apart in the list", async () => {
+    const f = await fixture();
+    const drinks = await create("Drinks");
+    const ids = await cloneProducts(f.lemonade, 1_500);
+    for (const late of [ids[0]!, f.pint])
+      await expect(app((tx) => addProducts(tx, drinks.id, [...ids, late]))).rejects.toMatchObject({
+        code: "menu_section.membership_invalid",
+      });
+    expect((await app((tx) => readSection(tx, drinks.id))).members).toEqual([]);
+  });
+
   it("refuses a whole batch naming an unknown product, a variant or one product twice", async () => {
     const f = await fixture();
     const drinks = await create("Drinks");
@@ -408,6 +452,18 @@ describe("membership and order", () => {
       await expect(
         app((tx) => moveMember(tx, drinks.id, beerInDrinks.id, to)),
       ).rejects.toMatchObject({ code: "menu_section.invalid", params: { field: "to" } });
+  });
+
+  it("lists a list's members in order, a menu's own list included", async () => {
+    const f = await fixture();
+    const root = await menuOwned("menu_root", f.lunchMenu);
+    const drinks = await create("Drinks");
+    await app((tx) => addProducts(tx, root, [f.water, f.lemonade]));
+    await app((tx) => addMember(tx, root, section(drinks.id), 1));
+    const members = await app((tx) => listMembers(tx, root));
+    expect(refs(members)).toEqual([product(f.water), section(drinks.id), product(f.lemonade)]);
+    expect(members).toEqual((await app((tx) => readSection(tx, root))).members);
+    expect(await app((tx) => listMembers(tx, drinks.id))).toEqual([]);
   });
 
   it("removes a member and renumbers what is left", async () => {
@@ -581,6 +637,26 @@ describe("duplicate", () => {
     ]);
   });
 
+  it("copies more members than one statement can bind, in the source's order", async () => {
+    const f = await fixture();
+    const drinks = await create("Drinks");
+    const ids = await cloneProducts(f.lemonade, 20_000);
+    await fx.db.execute(sql`
+      insert into section_members (id, section_id, position, product_id)
+      select 'member-' || id, ${drinks.id}, row_number() over (order by id) - 1, id
+      from products where id like 'bulk-%'`);
+    const source = await app((tx) => readSection(tx, drinks.id));
+
+    const copy = await app((tx) =>
+      duplicateSection(tx, drinks.id, {
+        internalName: "Copy",
+        memberIds: source.members.map((member) => member.id),
+      }),
+    );
+    expect(refs(copy.members)).toEqual(ids.map(product));
+    expect(positions(copy.members)).toEqual(ids.map((_, index) => index));
+  });
+
   it("refuses a member id the source does not hold, a repeated one, or a blank name", async () => {
     const f = await fixture();
     const drinks = await create("Drinks");
@@ -737,12 +813,50 @@ describe("replace", () => {
           replaceIn: { sectionId: beer.id, memberId: inBeer.id },
         }),
       ),
-    ).rejects.toMatchObject({ code: "menu_section.member_cycle" });
+    ).rejects.toMatchObject({
+      code: "menu_section.member_cycle",
+      params: { sectionId: beer.id, childSectionId: expect.any(String) },
+    });
     expect((await app((tx) => listSections(tx))).map((row) => row.internalName)).toEqual([
       "Beer",
       "Drinks",
     ]);
     expect(refs((await app((tx) => readSection(tx, beer.id))).members)).toEqual([product(f.lager)]);
+  });
+
+  it("refuses a replaceIn list the copy's kept sections reach at any depth", async () => {
+    const f = await fixture();
+    const drinks = await create("Drinks");
+    const beer = await create("Beer");
+    const ales = await create("Ales");
+    await app((tx) => addMember(tx, drinks.id, product(f.water)));
+    const nested = await app((tx) => addMember(tx, drinks.id, section(beer.id)));
+    await app((tx) => addMember(tx, beer.id, section(ales.id)));
+    const inAles = await app((tx) => addMember(tx, ales.id, product(f.lager)));
+    // Copy -> Beer -> Ales, and the copy would take a place inside Ales.
+    await expect(
+      app((tx) =>
+        duplicateSection(tx, drinks.id, {
+          internalName: "Copy",
+          memberIds: [nested.id],
+          replaceIn: { sectionId: ales.id, memberId: inAles.id },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "menu_section.member_cycle",
+      params: { sectionId: ales.id, childSectionId: expect.any(String) },
+    });
+    expect(refs((await app((tx) => readSection(tx, ales.id))).members)).toEqual([product(f.lager)]);
+    // Keeping only the product leaves nothing to lead back to Ales.
+    const plain = await app((tx) => readSection(tx, drinks.id));
+    const copy = await app((tx) =>
+      duplicateSection(tx, drinks.id, {
+        internalName: "Copy",
+        memberIds: [plain.members[0]!.id],
+        replaceIn: { sectionId: ales.id, memberId: inAles.id },
+      }),
+    );
+    expect(refs((await app((tx) => readSection(tx, ales.id))).members)).toEqual([section(copy.id)]);
   });
 });
 

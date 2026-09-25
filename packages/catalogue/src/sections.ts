@@ -1,7 +1,8 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
-import { catalogues, products, type Transaction } from "@waitron/db";
+import { asc, eq, inArray } from "drizzle-orm";
+import { catalogues, newId, type Transaction } from "@waitron/db";
 import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
-import { mediaImageExists } from "./categories.js";
+import { batches } from "./batches.js";
+import { allTopLevelProducts, isHexColor, mediaImageExists } from "./categories.js";
 import { findContentTranslationGap } from "./content-languages.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 import {
@@ -13,13 +14,11 @@ import {
 } from "./section-graph.js";
 import { onStructureChanged } from "./section-structure.js";
 import type { LibrarySection, MemberRef, SectionMember, SectionUsages } from "./section-types.js";
-import { isTopLevelProduct } from "./variant-fallback.js";
 import "./errors.js";
 
 /*
- * Each member write reads the whole graph and checks it in JavaScript before writing; a duplicate
- * that also replaces reads it again after the copy. No other writer can change the graph between
- * a read and the write that depends on it: `withTransaction`
+ * Each member write reads the whole graph once and checks it in JavaScript before writing. No other
+ * writer can change the graph between a read and the write that depends on it: `withTransaction`
  * (`packages/db/src/tenancy.ts`) runs its body inside the venue file's write queue, which admits
  * one write transaction at a time. Receipt: the opposing-containment case in
  * `sections.db.test.ts`, run through `racePair`.
@@ -31,12 +30,7 @@ export interface SectionInput {
   image?: string | null;
   color?: string | null;
 }
-export type SectionPatch = Partial<{
-  internalName: string;
-  names: Record<string, string>;
-  image: string | null;
-  color: string | null;
-}>;
+export type SectionPatch = Partial<SectionInput>;
 
 const details = {
   id: sections.id,
@@ -85,8 +79,7 @@ async function namesOf(
 
 function colorOf(value: unknown): string | null {
   if (value === null) return null;
-  if (typeof value !== "string" || !/^#[0-9a-f]{6}$/.test(value))
-    throw new AppError("menu_section.invalid", { field: "color" });
+  if (!isHexColor(value)) throw new AppError("menu_section.invalid", { field: "color" });
   return value;
 }
 
@@ -111,26 +104,11 @@ function requireLibrary(graph: SectionGraph, sectionId: string): void {
   if (role !== "library") throw new AppError("menu_section.not_library", { sectionId });
 }
 
-function replaceable(graph: SectionGraph, sectionId: string, memberId: string): SectionMember {
+function writableMember(graph: SectionGraph, sectionId: string, memberId: string): SectionMember {
   requireWritableList(graph, sectionId);
-  return heldMember(graph, sectionId, memberId);
-}
-
-function heldMember(graph: SectionGraph, sectionId: string, memberId: string): SectionMember {
   const member = graph.children(sectionId).find((candidate) => candidate.id === memberId);
   if (!member) throw new AppError("menu_section.not_found", { sectionId, memberId });
   return member;
-}
-
-/** Are these all distinct top-level products? A repeat leaves the count short, as an absent id does. */
-async function allTopLevelProducts(tx: Transaction, ids: readonly unknown[]): Promise<boolean> {
-  if (ids.some((id) => typeof id !== "string")) return false;
-  if (ids.length === 0) return true;
-  const found = await tx
-    .select({ id: products.id })
-    .from(products)
-    .where(and(inArray(products.id, ids as string[]), isTopLevelProduct));
-  return found.length === ids.length;
 }
 
 function sameRef(a: MemberRef, b: MemberRef): boolean {
@@ -148,11 +126,7 @@ async function checkRef(
   replacing?: SectionMember,
 ): Promise<void> {
   if (ref?.kind === "section" && typeof ref.sectionId === "string") {
-    const role = graph.role(ref.sectionId);
-    if (role === undefined)
-      throw new AppError("menu_section.not_found", { sectionId: ref.sectionId });
-    if (role !== "library")
-      throw new AppError("menu_section.not_library", { sectionId: ref.sectionId });
+    requireLibrary(graph, ref.sectionId);
   } else if (ref?.kind !== "product" || !(await allTopLevelProducts(tx, [ref.productId]))) {
     throw new AppError("menu_section.membership_invalid", {});
   }
@@ -209,6 +183,16 @@ export async function readSection(tx: Transaction, id: string): Promise<LibraryS
   const [row] = await tx.select(details).from(sections).where(eq(sections.id, id));
   if (!row) throw new AppError("menu_section.not_found", { sectionId: id });
   return { ...row, members: await membersOf(tx, id) };
+}
+
+/** Any section's members, a menu's own lists included. */
+export async function listMembers(tx: Transaction, sectionId: string): Promise<SectionMember[]> {
+  const [row] = await tx
+    .select({ id: sections.id })
+    .from(sections)
+    .where(eq(sections.id, sectionId));
+  if (!row) throw new AppError("menu_section.not_found", { sectionId });
+  return membersOf(tx, sectionId);
 }
 
 export async function createSection(
@@ -279,16 +263,18 @@ export async function addMember(
   if (position !== undefined && (!Number.isInteger(position) || position < 0))
     throw new AppError("menu_section.invalid", { field: "position" });
   await checkRef(tx, graph, sectionId, ref);
+  const children = graph.children(sectionId);
+  const at =
+    position === undefined ? nextPosition(graph, sectionId) : Math.min(position, children.length);
   const [row] = await tx
     .insert(sectionMembers)
-    .values({ sectionId, position: nextPosition(graph, sectionId), ...refColumns(ref) })
+    .values({ sectionId, position: at, ...refColumns(ref) })
     .returning();
-  let added = toSectionMember(row!);
+  const added = toSectionMember(row!);
   if (position !== undefined) {
-    const ordered = [...graph.children(sectionId)];
-    ordered.splice(position, 0, added);
+    const ordered = [...children];
+    ordered.splice(at, 0, added);
     await renumber(tx, ordered);
-    added = { ...added, position: ordered.indexOf(added) };
   }
   await onStructureChanged(tx, menusContaining(graph, sectionId));
   return added;
@@ -311,8 +297,10 @@ export async function addProducts(
   );
   const adding = productIds.filter((productId) => !held.has(productId));
   let position = nextPosition(graph, sectionId);
-  for (const productId of adding)
-    await tx.insert(sectionMembers).values({ sectionId, position: position++, productId });
+  for (const batch of batches(adding))
+    await tx
+      .insert(sectionMembers)
+      .values(batch.map((productId) => ({ sectionId, position: position++, productId })));
   await onStructureChanged(tx, menusContaining(graph, sectionId));
   return { added: adding.length };
 }
@@ -323,8 +311,7 @@ export async function removeMember(
   memberId: string,
 ): Promise<void> {
   const graph = await loadSectionGraph(tx);
-  requireWritableList(graph, sectionId);
-  heldMember(graph, sectionId, memberId);
+  writableMember(graph, sectionId, memberId);
   const menus = menusContaining(graph, sectionId);
   await tx.delete(sectionMembers).where(eq(sectionMembers.id, memberId));
   await renumber(
@@ -342,32 +329,13 @@ export async function moveMember(
   to: number,
 ): Promise<SectionMember[]> {
   const graph = await loadSectionGraph(tx);
-  requireWritableList(graph, sectionId);
-  const member = heldMember(graph, sectionId, memberId);
+  const member = writableMember(graph, sectionId, memberId);
   if (!Number.isInteger(to) || to < 0) throw new AppError("menu_section.invalid", { field: "to" });
   const ordered = graph.children(sectionId).filter((candidate) => candidate !== member);
   ordered.splice(to, 0, member);
   await renumber(tx, ordered);
   await onStructureChanged(tx, menusContaining(graph, sectionId));
-  return membersOf(tx, sectionId);
-}
-
-/** The replace itself, without telling the hook; answers the menus the list reaches. */
-async function swapMember(
-  tx: Transaction,
-  graph: SectionGraph,
-  sectionId: string,
-  memberId: string,
-  ref: MemberRef,
-): Promise<{ member: SectionMember; menus: string[] }> {
-  const current = replaceable(graph, sectionId, memberId);
-  await checkRef(tx, graph, sectionId, ref, current);
-  await tx.update(sectionMembers).set(refColumns(ref)).where(eq(sectionMembers.id, memberId));
-  return {
-    member: { ...current, ref },
-    // A replace changes what the list holds, never which menus reach the list.
-    menus: menusContaining(graph, sectionId),
-  };
+  return ordered.map((held, position) => ({ ...held, position }));
 }
 
 /**
@@ -380,15 +348,13 @@ export async function replaceMember(
   memberId: string,
   ref: MemberRef,
 ): Promise<SectionMember> {
-  const { member, menus } = await swapMember(
-    tx,
-    await loadSectionGraph(tx),
-    sectionId,
-    memberId,
-    ref,
-  );
-  await onStructureChanged(tx, menus);
-  return member;
+  const graph = await loadSectionGraph(tx);
+  const current = writableMember(graph, sectionId, memberId);
+  await checkRef(tx, graph, sectionId, ref, current);
+  await tx.update(sectionMembers).set(refColumns(ref)).where(eq(sectionMembers.id, memberId));
+  // A replace changes what the list holds, never which menus reach the list.
+  await onStructureChanged(tx, menusContaining(graph, sectionId));
+  return { ...current, ref };
 }
 
 /**
@@ -410,36 +376,54 @@ export async function duplicateSection(
   const internalName = internalNameOf(input.internalName);
   const chosen = input.memberIds;
   const source = graph.children(sourceId);
+  const sourceIds = new Set(source.map((member) => member.id));
+  const chosenIds = new Set(Array.isArray(chosen) ? chosen : []);
   if (
     !Array.isArray(chosen) ||
-    new Set(chosen).size !== chosen.length ||
-    chosen.some((memberId) => !source.some((member) => member.id === memberId))
+    chosenIds.size !== chosen.length ||
+    chosen.some((memberId) => !sourceIds.has(memberId))
   )
     throw new AppError("menu_section.membership_invalid", {});
-  if (input.replaceIn) replaceable(graph, input.replaceIn.sectionId, input.replaceIn.memberId);
+  const kept = source.filter((member) => chosenIds.has(member.id));
+  const copyId = newId();
+  const { replaceIn } = input;
+  if (replaceIn) {
+    writableMember(graph, replaceIn.sectionId, replaceIn.memberId);
+    // No list holds the new copy, so only the sections it keeps can lead back to the list.
+    if (
+      kept.some(
+        ({ ref }) =>
+          ref.kind === "section" && wouldCreateCycle(graph, replaceIn.sectionId, ref.sectionId),
+      )
+    )
+      throw new AppError("menu_section.member_cycle", {
+        sectionId: replaceIn.sectionId,
+        childSectionId: copyId,
+      });
+  }
   const [row] = await tx.select(details).from(sections).where(eq(sections.id, sourceId));
-  const [copy] = await tx
+  await tx
     .insert(sections)
-    .values({ internalName, names: row!.names, image: row!.image, color: row!.color })
-    .returning({ id: sections.id });
-  const kept = source.filter((member) => chosen.includes(member.id));
-  for (const [position, member] of kept.entries())
+    .values({ id: copyId, internalName, names: row!.names, image: row!.image, color: row!.color });
+  let position = 0;
+  for (const batch of batches(kept))
+    await tx.insert(sectionMembers).values(
+      batch.map((member) => ({
+        sectionId: copyId,
+        position: position++,
+        ...refColumns(member.ref),
+      })),
+    );
+  let menus: string[] = [];
+  if (replaceIn) {
     await tx
-      .insert(sectionMembers)
-      .values({ sectionId: copy!.id, position, ...refColumns(member.ref) });
-  const menus = input.replaceIn
-    ? (
-        await swapMember(
-          tx,
-          await loadSectionGraph(tx),
-          input.replaceIn.sectionId,
-          input.replaceIn.memberId,
-          { kind: "section", sectionId: copy!.id },
-        )
-      ).menus
-    : [];
+      .update(sectionMembers)
+      .set(refColumns({ kind: "section", sectionId: copyId }))
+      .where(eq(sectionMembers.id, replaceIn.memberId));
+    menus = menusContaining(graph, replaceIn.sectionId);
+  }
   await onStructureChanged(tx, menus);
-  return readSection(tx, copy!.id);
+  return readSection(tx, copyId);
 }
 
 /**
