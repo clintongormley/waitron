@@ -559,7 +559,8 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
             totpKeyRing: credentialKeyRing,
           });
           // Deliberately in the sign-in's transaction: if this read throws, the sign-in fails with
-          // it rather than leaving a session half open.
+          // it rather than leaving a session half open. Read only after the sign-in succeeded, so the
+          // offer says nothing to an unauthenticated caller.
           return {
             ...opened,
             offerPasskey: await shouldOfferPasskey(tx, {

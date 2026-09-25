@@ -400,8 +400,8 @@ export async function importConfigurationTables(
   validateConfigurationBundle(bundle, modules, targetVersions);
   const checked = checkedRows(bundle, modules);
   const columns = new Map<string, Set<string>>();
-  // Which columns hold bytes, so the bundle's `\x<hex>` strings go back in as BYTES: this engine
-  // stores a text value as text whatever the column declares.
+  // Which columns hold bytes, so the bundle's `\x<hex>` strings go back in as BYTES: a string bound
+  // to a BLOB column is stored as text.
   const blobColumns = new Map<string, Set<string>>();
   for (const [declaration] of checked) {
     // The table-valued `pragma_table_info(?)` binds its argument, unlike the `pragma table_info`
@@ -441,9 +441,10 @@ export async function importConfigurationTables(
   `);
 
   // The declared tables hold at least one foreign-key cycle — `zone_menus.zone_id` points at
-  // `zone_service_policies`, whose `(zone_id, default_menu_id)` points back at `zone_menus` — so no
-  // delete order satisfies a per-statement check. The pragma moves the check to COMMIT; it holds
-  // only until this transaction ends, and the caller's commit still validates the final state.
+  // `zone_service_policies`, whose `(zone_id, default_menu_id)` points back at `zone_menus` — so
+  // neither the deletes nor the inserts below, in the order they run, pass a per-statement check.
+  // The pragma moves the check to COMMIT; it holds only until this transaction ends, and the
+  // caller's commit still validates the final state.
   // `packages/db/src/testing/venue-db.ts` empties a whole venue the same way.
   await tx.execute(sql`pragma defer_foreign_keys = on`);
   for (const [declaration] of [...checked].reverse()) {

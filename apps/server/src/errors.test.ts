@@ -4,9 +4,8 @@ import { AppError } from "@waitron/shared";
 import { createErrorBoundary } from "@waitron/server-kit";
 import "./errors.js";
 
-// Each case constructs a code with the params errors.ts declares for it. That typechecks only
-// because the side-effect import above loads errors.ts's `declare module` augmentation; AppError
-// does no runtime validation of the code, so a missing registration fails the typecheck, not the run.
+// Each case constructs a code with the params errors.ts declares for it. AppError does no runtime
+// validation of the code, so a missing registration fails the typecheck, not the run.
 describe("the zone error codes carry their declared params", () => {
   it("constructs zone.not_found with the qualified zoneId, matching table.not_found's shape", () => {
     const zoneId = "11111111-1111-1111-1111-111111111111";

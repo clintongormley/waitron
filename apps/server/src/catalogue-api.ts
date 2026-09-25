@@ -91,8 +91,8 @@ export interface CatalogueApiDeps {
 }
 
 /**
- * The one permission that gates every catalogue route. `person.manage` stands in until a
- * `catalogue.manage` permission exists; realising it is a one-line swap here.
+ * The one permission that gates every `/management-api` catalogue route. `person.manage` stands in
+ * until a `catalogue.manage` permission exists; realising it is a one-line swap here.
  */
 const CATALOGUE_WRITE_PERMISSION: Permission = "person.manage";
 
@@ -398,7 +398,8 @@ function mountListSurface<TList, TDependants>(
 }
 
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
-  // Every route's DB work goes through here, so the gate is applied in exactly one place.
+  // Every `/management-api` route's DB work goes through here, so the gate is applied in exactly
+  // one place.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
       await authorizeManager(tx, {

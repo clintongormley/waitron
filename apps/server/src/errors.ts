@@ -262,6 +262,7 @@ declare module "@waitron/shared" {
     "working_order.already_collected": { workingOrderId: string };
     /** NOTHING RAISES THIS ANY MORE: an order-level prep move that was not legal. */
     "order_prep.invalid_transition": { workingOrderId: string };
+    // `table.not_found` is declared in @waitron/db's errors.ts.
     /** A dining table label already exists in this venue. `label` is the operator's own text. */
     "table.label_taken": { label: string };
     /** A dining table exists but is deactivated, so no tab may be opened on it. */
@@ -592,8 +593,7 @@ declare module "@waitron/shared" {
     "mirror.standby_invalid": Record<string, never>;
     /**
      * A mirror could not fetch or parse the bundle from the primary. Never carries the upstream
-     * error's `.message`, which can embed a URL or connection detail; the cause is logged, not put on
-     * the wire.
+     * error's `.message`, which can embed a URL or connection detail.
      */
     "mirror.bundle_fetch_failed": Record<string, never>;
     /**
