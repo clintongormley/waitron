@@ -293,12 +293,14 @@ The error's own text goes to the container's stdout only, through `redactSecrets
 channel. Three strings on the page come from outside the image: the error CODE, `lastFailureAt` and
 the LOG TAIL. The failure count also does, read as a number, and so does a recorded holder kind,
 which on the page only selects a fixed name from a closed table. `/recovery-api/status` returns the
-kind itself; the read of `recovery.json` keeps it only when it is one of `VENUE_HOLDER_KINDS`. The tail is the
-widest, because the shared error boundary writes an `AppError`'s params
-into `waitron.log`. So the convention that params never carry a secret (stated in the header of
-`apps/server/src/errors.ts`) is what keeps a page anyone on the venue's LAN can open safe. A page
-edit that interpolated a caught message, or a new code carrying a credential in its params, breaks a
-security boundary nothing outside the design states. Pointer:
+kind itself; the read of `recovery.json` keeps it only when it is one of `VENUE_HOLDER_KINDS`. The
+browser's `Accept-Language` also reaches the page, and only selects the language
+`resolveLoginLocale` returns from the supported set (`apps/server/src/login-locale.ts`). The tail is
+the widest, because the shared error boundary writes an `AppError`'s params into `waitron.log`. So the
+convention that params never carry a secret (stated in the header of `apps/server/src/errors.ts`) is
+what keeps a page anyone on the venue's LAN can open safe. A page edit that interpolated a caught
+message, or a new code carrying a credential in its params, breaks a security boundary nothing
+outside the design states. Pointer:
 `docs/superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md` §5;
 `apps/server/src/recovery-surface.ts`.
 

@@ -329,9 +329,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   and not a hard `devices:` line.
 - **The unauthenticated recovery page renders fixed strings chosen by code, never the caught error's
   words.** Only the error CODE, `lastFailureAt` and the LOG TAIL reach it as text from outside the
-  image (the failure count is read as a number, and a recorded holder kind only picks a fixed name
-  from a closed table), which is why no code's params may carry a secret. A page edit that
-  interpolates a caught message breaks a security boundary nothing outside the design states.
+  image (the failure count is read as a number, a recorded holder kind only picks a fixed name from
+  a closed table, and the browser's `Accept-Language` only picks one of the supported languages),
+  which is why no code's params may carry a secret. A page edit that interpolates a caught message
+  breaks a security boundary nothing outside the design states.
   The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
   `packages/ui-core/src/tap-target-and-focus.test.ts` directly over its own controls.
 

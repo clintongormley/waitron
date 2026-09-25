@@ -177,11 +177,15 @@ describe("the caught error's own words on the page", () => {
   });
 });
 
+// The Spanish twin of "never wipe".
+const NEVER_WIPE_ES = /\bborra|\bborrar|\belimina|\brestablece|\bresetea|\bformatea|\bvacía/i;
+
 /** The page as an operator sees it, for one recorded failure code. */
-async function pageFor(
+async function pageResponse(
   lastErrorCode: string | null,
-  holderKind?: RecoveryState["holderKind"],
-): Promise<string> {
+  options: { holderKind?: RecoveryState["holderKind"]; acceptLanguage?: string } = {},
+): Promise<Response> {
+  const { holderKind, acceptLanguage } = options;
   const app = recoveryApp({
     state: {
       failures: 3,
@@ -194,16 +198,151 @@ async function pageFor(
     logDir: "/nonexistent",
     onRetry: vi.fn(),
   });
-  return await (await app.request("/")).text();
+  return await app.request(
+    "/",
+    acceptLanguage === undefined ? {} : { headers: { "Accept-Language": acceptLanguage } },
+  );
 }
+
+async function pageFor(
+  lastErrorCode: string | null,
+  holderKind?: RecoveryState["holderKind"],
+  acceptLanguage?: string,
+): Promise<string> {
+  return await (
+    await pageResponse(lastErrorCode, {
+      ...(holderKind === undefined ? {} : { holderKind }),
+      ...(acceptLanguage === undefined ? {} : { acceptLanguage }),
+    })
+  ).text();
+}
+
+const SPANISH = "es-ES,es;q=0.9";
+const LOCALES = [
+  ["en-GB", "en-GB"],
+  ["es-ES", SPANISH],
+] as const;
+
+// Fixed on purpose: a table read here would pass a page that renders the wrong row of it.
+const ENGLISH_CHROME = [
+  "<title>Waitron did not start</title>",
+  "<h1>Waitron did not start</h1>",
+  "Retry a normal boot",
+  "For whoever installed this box",
+  "Log tail",
+  "Level: recovery. Failed 3 times.",
+  "(no log yet)",
+];
+const SPANISH_CHROME = [
+  "<title>Waitron no ha arrancado</title>",
+  "<h1>Waitron no ha arrancado</h1>",
+  "Reintentar un arranque normal",
+  "Para quien instaló este equipo",
+  "Final del registro",
+  "Nivel: recovery. Intentos fallidos: 3.",
+  "(aún no hay registro)",
+];
+
+describe("the page's language", () => {
+  const code = "migrations.set_missing";
+  const english = OPERATOR_TEXT[code]!["en-GB"];
+  const spanish = OPERATOR_TEXT[code]!["es-ES"];
+
+  it("is Spanish, and only Spanish, when the browser prefers Spanish", async () => {
+    const res = await pageResponse(code, { acceptLanguage: SPANISH });
+    const body = await res.text();
+    expect(body).toContain('<html lang="es-ES">');
+    for (const line of SPANISH_CHROME) expect(body).toContain(line);
+    expect(body).toContain(escapeHtml(spanish.title));
+    expect(body).toContain(escapeHtml(spanish.action));
+    for (const line of ENGLISH_CHROME) expect(body).not.toContain(line);
+    expect(body).not.toContain(escapeHtml(english.title));
+    expect(body).not.toContain(escapeHtml(english.action));
+    expect(res.headers.get("Vary")).toBe("Accept-Language");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  for (const [label, acceptLanguage] of [
+    ["an English browser", "en-GB"],
+    ["no Accept-Language header", undefined],
+    ["a language the page does not have", "fr-FR"],
+    ["a malformed header", ";;q=zz,"],
+  ] as const) {
+    it(`is English, and only English, for ${label}`, async () => {
+      const res = await pageResponse(code, acceptLanguage === undefined ? {} : { acceptLanguage });
+      const body = await res.text();
+      expect(body).toContain('<html lang="en-GB">');
+      for (const line of ENGLISH_CHROME) expect(body).toContain(line);
+      expect(body).toContain(escapeHtml(english.title));
+      expect(body).toContain(escapeHtml(english.action));
+      for (const line of SPANISH_CHROME) expect(body).not.toContain(line);
+      expect(body).not.toContain(escapeHtml(spanish.title));
+      expect(body).not.toContain(escapeHtml(spanish.action));
+      expect(res.headers.get("Vary")).toBe("Accept-Language");
+      expect(res.headers.get("Cache-Control")).toBe("no-store");
+    });
+  }
+
+  it("says none and never in the page's language when nothing has failed yet", async () => {
+    const app = (acceptLanguage: string) =>
+      recoveryApp({ state: FRESH, logDir: "/nonexistent", onRetry: vi.fn() }).request("/", {
+        headers: { "Accept-Language": acceptLanguage },
+      });
+    expect(await (await app("en-GB")).text()).toContain("Last error: none at never");
+    expect(await (await app(SPANISH)).text()).toContain("Último error: ninguno, fecha: nunca");
+  });
+
+  // The three strings from outside the image are shown as they came, in either language.
+  it("leaves the code, the time and the log tail untranslated and escaped, in both languages", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "wt-log-"));
+    await writeFile(join(logDir, "waitron.log"), `<img src=x onerror="alert(1)">\n`);
+    const at = `2026-09-25T10:00:00.000Z<b>`;
+    const app = recoveryApp({
+      state: {
+        failures: 2,
+        level: "normal",
+        lastErrorCode: `<script>"'&`,
+        lastFailureAt: at,
+        clears: 0,
+      },
+      logDir,
+      onRetry: vi.fn(),
+    });
+    for (const [lang, acceptLanguage] of LOCALES) {
+      const body = await (
+        await app.request("/", { headers: { "Accept-Language": acceptLanguage } })
+      ).text();
+      expect(body).toContain(`<html lang="${lang}">`);
+      expect(body).toContain("&lt;script&gt;&quot;&#39;&amp;");
+      expect(body).not.toContain(`<script>"'&`);
+      expect(body).toContain("2026-09-25T10:00:00.000Z&lt;b&gt;");
+      expect(body).not.toContain("<b>");
+      expect(body).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
+      expect(body).not.toContain('<img src=x onerror="alert(1)">');
+    }
+  });
+});
 
 describe("curated operator text", () => {
   // Through `escapeHtml`: curated strings are escaped too, so an apostrophe renders as `&#39;`.
-  it("renders the title and action for every code in the table", async () => {
+  it("renders the title and action for every code in the table, in each language", async () => {
     for (const [code, text] of Object.entries(OPERATOR_TEXT)) {
-      const body = await pageFor(code);
-      expect(body).toContain(escapeHtml(text.title));
-      expect(body).toContain(escapeHtml(text.action));
+      for (const [lang, acceptLanguage] of LOCALES) {
+        const body = await pageFor(code, undefined, acceptLanguage);
+        expect(body, `${code} in ${lang}`).toContain(escapeHtml(text[lang].title));
+        expect(body, `${code} in ${lang}`).toContain(escapeHtml(text[lang].action));
+      }
+    }
+  });
+
+  // A Spanish half copied from the English would render and pass every other case.
+  it("has a Spanish title and action for every entry that differ from the English", () => {
+    for (const [code, text] of [
+      ...Object.entries(OPERATOR_TEXT),
+      ["generic", GENERIC_TEXT] as const,
+    ]) {
+      expect(text["es-ES"].title, code).not.toBe(text["en-GB"].title);
+      expect(text["es-ES"].action, code).not.toBe(text["en-GB"].action);
     }
   });
 
@@ -211,17 +350,47 @@ describe("curated operator text", () => {
     const body = await pageFor("provisioning.database_ahead");
     expect(body).toMatch(/restore it from a backup, or reinstall/i);
     expect(body).not.toMatch(/\bwipe\b|\berase\b|\bdelete the database\b/i);
+    const spanish = await pageFor("provisioning.database_ahead", undefined, SPANISH);
+    expect(spanish).toMatch(/restáurala desde una copia de seguridad, o reinstala/i);
+    expect(spanish).not.toMatch(NEVER_WIPE_ES);
+  });
+
+  it("never suggests wiping anything, in either language", () => {
+    for (const [code, text] of [
+      ...Object.entries(OPERATOR_TEXT),
+      ["generic", GENERIC_TEXT] as const,
+    ]) {
+      expect(text["en-GB"].action, code).not.toMatch(/\bwipe\b|\berase\b|\bdelete\b|\breset\b/i);
+      expect(text["es-ES"].action, code).not.toMatch(NEVER_WIPE_ES);
+    }
   });
 
   // The reader has no terminal and often no backup, so a restore action must name who can help.
   it("points an operator with no backup at whoever installed the box", () => {
     const restoreActions = Object.entries(OPERATOR_TEXT).filter(([, text]) =>
-      /restore it from a backup, or reinstall/i.test(text.action),
+      /restore it from a backup, or reinstall/i.test(text["en-GB"].action),
     );
     expect(restoreActions.length).toBeGreaterThan(0);
     for (const [code, text] of restoreActions) {
-      expect(text.action, `${code} offers a restore with no fallback`).toMatch(
+      expect(text["en-GB"].action, `${code} offers a restore with no fallback`).toMatch(
         /ask whoever installed this box/i,
+      );
+    }
+  });
+
+  it("points an operator with no backup at whoever installed the box, in Spanish", () => {
+    const restoreActions = Object.entries(OPERATOR_TEXT).filter(([, text]) =>
+      /restáurala desde una copia de seguridad, o reinstala/i.test(text["es-ES"].action),
+    );
+    expect(restoreActions.map(([code]) => code).sort()).toEqual(
+      Object.entries(OPERATOR_TEXT)
+        .filter(([, text]) => /restore it from a backup, or reinstall/i.test(text["en-GB"].action))
+        .map(([code]) => code)
+        .sort(),
+    );
+    for (const [code, text] of restoreActions) {
+      expect(text["es-ES"].action, `${code} offers a restore with no fallback`).toMatch(
+        /quien instaló este equipo/i,
       );
     }
   });
@@ -254,42 +423,69 @@ describe("curated operator text", () => {
   it("offers a database_unreachable both a retry and the person a restart cannot replace", () => {
     const text = OPERATOR_TEXT["provisioning.database_unreachable"];
     expect(text).toBeDefined();
-    expect(text!.action).toMatch(/retry/i);
-    expect(text!.action).toMatch(/ask whoever installed this box/i);
+    expect(text!["en-GB"].action).toMatch(/retry/i);
+    expect(text!["en-GB"].action).toMatch(/ask whoever installed this box/i);
+    expect(text!["es-ES"].action).toContain("«Reintentar un arranque normal»");
+    expect(text!["es-ES"].action).toMatch(/reinicia el equipo/i);
+    expect(text!["es-ES"].action).toMatch(/quien instaló este equipo/i);
+  });
+
+  // The Spanish action names the button by the label the Spanish page gives it.
+  it("names the Spanish button by its Spanish label wherever a Spanish action says to press it", () => {
+    const pressing = Object.entries(OPERATOR_TEXT).filter(([, text]) =>
+      /\bpulsa\b/i.test(text["es-ES"].action),
+    );
+    expect(pressing.length).toBeGreaterThan(0);
+    for (const [code, text] of pressing) {
+      expect(text["es-ES"].action, code).toMatch(/pulsa «Reintentar un arranque normal»/i);
+      expect(text["es-ES"].action, code).not.toContain("Retry");
+    }
   });
 
   // A cold restore runs the migrations itself, so it can raise `migrations.incomplete`.
   it("does not answer a partly-updated database with the restore that can raise it", () => {
     const text = OPERATOR_TEXT["migrations.incomplete"];
     expect(text).toBeDefined();
-    expect(text!.action).not.toMatch(/restore it from a backup, or reinstall/i);
-    expect(text!.action).toMatch(/ask whoever installed this box/i);
+    expect(text!["en-GB"].action).not.toMatch(/restore it from a backup, or reinstall/i);
+    expect(text!["en-GB"].action).toMatch(/ask whoever installed this box/i);
+    expect(text!["es-ES"].action).not.toMatch(
+      /restáurala desde una copia de seguridad, o reinstala/i,
+    );
+    expect(text!["es-ES"].action).toMatch(/quien instaló este equipo/i);
   });
 
   // A failure reading or counting the recovery state is logged with its code alone.
   it("does not promise the generic failure's reason was written down anywhere", () => {
-    expect(GENERIC_TEXT.action).not.toMatch(/read the reason/i);
-    expect(GENERIC_TEXT.action).toMatch(/ask whoever installed this box/i);
+    expect(GENERIC_TEXT["en-GB"].action).not.toMatch(/read the reason/i);
+    expect(GENERIC_TEXT["en-GB"].action).toMatch(/ask whoever installed this box/i);
+    expect(GENERIC_TEXT["es-ES"].action).not.toMatch(/registro|motivo/i);
+    expect(GENERIC_TEXT["es-ES"].action).toMatch(/quien instaló este equipo/i);
   });
 
   it("renders the generic line for a code it does not know, without throwing", async () => {
-    const body = await pageFor("some.code.invented.later");
-    expect(body).toContain(GENERIC_TEXT.title);
-    expect(body).toContain(GENERIC_TEXT.action);
+    for (const [lang, acceptLanguage] of LOCALES) {
+      const body = await pageFor("some.code.invented.later", undefined, acceptLanguage);
+      expect(body).toContain(escapeHtml(GENERIC_TEXT[lang].title));
+      expect(body).toContain(escapeHtml(GENERIC_TEXT[lang].action));
+    }
   });
 
   it("renders the generic line when no failure has been recorded at all", async () => {
-    const body = await pageFor(null);
-    expect(body).toContain(GENERIC_TEXT.title);
+    for (const [lang, acceptLanguage] of LOCALES) {
+      const body = await pageFor(null, undefined, acceptLanguage);
+      expect(body).toContain(escapeHtml(GENERIC_TEXT[lang].title));
+    }
   });
 
   // The code comes from a file on the box; a plain lookup of "toString" finds an inherited
   // function.
   it("renders the generic line for an inherited property name, not a prototype value", async () => {
     for (const code of ["toString", "constructor", "__proto__", "valueOf"]) {
-      const body = await pageFor(code);
-      expect(body).toContain(GENERIC_TEXT.title);
-      expect(body).not.toContain("undefined");
+      for (const [lang, acceptLanguage] of LOCALES) {
+        const body = await pageFor(code, undefined, acceptLanguage);
+        expect(body).toContain(escapeHtml(GENERIC_TEXT[lang].title));
+        expect(body).not.toContain("undefined");
+      }
     }
   });
 });
@@ -304,28 +500,47 @@ describe("a start refused by a holder that stopped", () => {
     script: ["another Waitron program", "otro programa de Waitron"],
   };
 
-  it("names each kind of holder, in English and in Spanish", async () => {
+  it("names each kind of holder in English on an English page", async () => {
     expect(Object.keys(names).sort()).toEqual([...VENUE_HOLDER_KINDS].sort());
     for (const kind of VENUE_HOLDER_KINDS) {
       const body = await pageFor(code, kind);
-      const [english, spanish] = names[kind]!;
+      const [english] = names[kind]!;
       expect(body).toContain(escapeHtml(`The box's database is held by ${english},`));
-      expect(body).toContain(escapeHtml(`está ocupada por ${spanish},`));
       for (const [other, [otherEnglish]] of Object.entries(names)) {
         if (other !== kind) expect(body).not.toContain(`held by ${otherEnglish},`);
       }
     }
   });
 
-  it("names no particular program when no kind was recorded", async () => {
-    const body = await pageFor(code);
-    expect(body).toContain("held by another Waitron program,");
-    expect(body).toContain("ocupada por otro programa de Waitron,");
+  it("names each kind of holder in Spanish on a Spanish page", async () => {
+    for (const kind of VENUE_HOLDER_KINDS) {
+      const body = await pageFor(code, kind, SPANISH);
+      const [, spanish] = names[kind]!;
+      expect(body).toContain(
+        escapeHtml(`La base de datos de este equipo está ocupada por ${spanish},`),
+      );
+      for (const [other, [, otherSpanish]] of Object.entries(names)) {
+        if (other !== kind) expect(body).not.toContain(`ocupada por ${otherSpanish},`);
+      }
+    }
   });
 
-  it("marks the Spanish lines as Spanish, and gives no other code a Spanish line", async () => {
-    expect((await pageFor(code, "server")).match(/<p lang="es">/g)).toHaveLength(2);
-    expect(await pageFor("migrations.set_missing")).not.toContain('lang="es"');
+  it("names no particular program when no kind was recorded", async () => {
+    expect(await pageFor(code)).toContain("held by another Waitron program,");
+    expect(await pageFor(code, undefined, SPANISH)).toContain(
+      "ocupada por otro programa de Waitron,",
+    );
+  });
+
+  it("shows one language per page: no Spanish line on the English page, no English on the Spanish", async () => {
+    const english = await pageFor(code, "server");
+    expect(english).not.toContain("está ocupada por");
+    expect(english).not.toContain("Espera dos minutos");
+    expect(english).not.toContain('lang="es');
+    const spanish = await pageFor(code, "server", SPANISH);
+    expect(spanish).not.toContain("held by");
+    expect(spanish).not.toMatch(/wait two minutes/i);
+    expect(spanish).not.toContain('lang="en');
   });
 
   it("tells the operator to wait for the holder to be ended, then retry, then ask for help", async () => {
@@ -333,6 +548,10 @@ describe("a start refused by a holder that stopped", () => {
     expect(body).toMatch(/wait two minutes, then press retry/i);
     expect(body).toMatch(/ask whoever installed this box/i);
     expect(body).not.toMatch(/\bwipe\b|\berase\b|\bdelete the database\b/i);
+    const spanish = await pageFor(code, "restore", SPANISH);
+    expect(spanish).toMatch(/espera dos minutos y pulsa «Reintentar un arranque normal»/i);
+    expect(spanish).toMatch(/quien instaló este equipo/i);
+    expect(spanish).not.toMatch(NEVER_WIPE_ES);
   });
 
   it("puts the recorded kind in the status JSON, which is from a closed set", async () => {
@@ -355,9 +574,13 @@ describe("a restore whose database could not be put in place, if it is the last 
   it("sends the operator to whoever installed the box, and not to the log on this page", async () => {
     const text = OPERATOR_TEXT["restore.placement_failed"];
     expect(text).toBeDefined();
-    expect(text!.action).toMatch(/ask whoever installed this box/i);
-    expect(text!.action).not.toMatch(/log below/i);
+    expect(text!["en-GB"].action).toMatch(/ask whoever installed this box/i);
+    expect(text!["en-GB"].action).not.toMatch(/log below/i);
+    expect(text!["es-ES"].action).toMatch(/quien instaló este equipo/i);
+    expect(text!["es-ES"].action).not.toMatch(/registro de abajo/i);
     const body = await pageFor("restore.placement_failed");
-    expect(body).toContain(escapeHtml(text!.action));
+    expect(body).toContain(escapeHtml(text!["en-GB"].action));
+    const spanish = await pageFor("restore.placement_failed", undefined, SPANISH);
+    expect(spanish).toContain(escapeHtml(text!["es-ES"].action));
   });
 });

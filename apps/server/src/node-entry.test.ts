@@ -1231,7 +1231,11 @@ setInterval(() => {}, 1000);`;
     ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
   }
 
-  async function recoveryPage(stateDir: string, venueDir: string): Promise<string> {
+  /** The page with no language asked for, and the page a Spanish browser gets. */
+  async function recoveryPage(
+    stateDir: string,
+    venueDir: string,
+  ): Promise<{ english: string; spanish: string }> {
     let served: Hono | undefined;
     await runEntry(
       deps({
@@ -1246,7 +1250,12 @@ setInterval(() => {}, 1000);`;
         },
       }),
     );
-    return await (await served!.request("/")).text();
+    return {
+      english: await (await served!.request("/")).text(),
+      spanish: await (
+        await served!.request("/", { headers: { "Accept-Language": "es-ES" } })
+      ).text(),
+    };
   }
 
   const oneFailure: RecoveryState = {
@@ -1288,8 +1297,8 @@ setInterval(() => {}, 1000);`;
         holderKind: "restore",
       });
       const page = await recoveryPage(stateDir, venueDir);
-      expect(page).toContain("a restore from a backup");
-      expect(page).toContain("una restauración desde una copia de seguridad");
+      expect(page.english).toContain("a restore from a backup");
+      expect(page.spanish).toContain("una restauración desde una copia de seguridad");
     },
     TEST_TIMEOUT_MS,
   );
@@ -1311,8 +1320,8 @@ setInterval(() => {}, 1000);`;
       });
       expect(state).not.toHaveProperty("holderKind");
       const page = await recoveryPage(stateDir, venueDir);
-      expect(page).toContain("another Waitron program");
-      expect(page).toContain("otro programa de Waitron");
+      expect(page.english).toContain("another Waitron program");
+      expect(page.spanish).toContain("otro programa de Waitron");
     },
     TEST_TIMEOUT_MS,
   );
