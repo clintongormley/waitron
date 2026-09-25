@@ -73,8 +73,8 @@ export interface PreparedStream {
 }
 
 /**
- * SQLite's `integrity_check` over `<directory>/venue.db`: `[]` when healthy, else its lines. A file
- * that cannot be opened or read is reported as a problem, never thrown.
+ * SQLite's `integrity_check` over `<directory>/venue.db`: `[]` when healthy, else its lines. A
+ * failure to open or read the file is reported as a problem rather than thrown.
  */
 export async function checkIntegrity(directory: string): Promise<string[]> {
   let store: VenueDatabase | undefined;
@@ -104,7 +104,8 @@ async function newestChange(
 
 /**
  * The bucket's clock minus this box's, in milliseconds, from the `LastModified` of a probe object
- * written and listed back; null when that cannot be done. The probe is deleted afterwards.
+ * written and listed back; null when that cannot be done. A probe whose delete is refused is left
+ * in the bucket.
  */
 export async function measureBucketSkew(
   store: ObjectStore,
@@ -177,21 +178,28 @@ export async function refuseIfArchiveSourceLive(args: {
       await copy.close();
     }
     if (settings === null) return;
-    const store = (args.openStore ?? createS3ObjectStore)(settings.bucket);
-    let read;
+    const { bucket, venueId } = settings;
     try {
-      read = await readPointer(store, settings.venueId);
-    } catch {
+      const store = (args.openStore ?? createS3ObjectStore)(bucket);
+      const read = await readPointer(store, venueId);
+      if (read === null) return;
+      await refuseIfSourceLive({
+        store,
+        venueId,
+        generation: read.pointer.body.generation,
+        now: args.now,
+        oldBoxGone: false,
+      });
+    } catch (error) {
+      if (
+        isAppError(error) &&
+        (hasCode(error, "restore.stream_source_live") ||
+          hasCode(error, "restore.stream_source_unchecked"))
+      ) {
+        throw error;
+      }
       throw new AppError("restore.stream_source_unchecked", { reason: "bucket" });
     }
-    if (read === null) return;
-    await refuseIfSourceLive({
-      store,
-      venueId: settings.venueId,
-      generation: read.pointer.body.generation,
-      now: args.now,
-      oldBoxGone: false,
-    });
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }

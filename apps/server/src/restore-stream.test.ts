@@ -63,6 +63,7 @@ const T = {
   seriesId: "c0000000-0000-4000-8000-000000000004",
   nodeId: "c0000000-0000-4000-8000-000000000008",
 };
+const OTHER_LOCATION_ID = "c0000000-0000-4000-8000-000000000001";
 const RECOVERY_KEY = "recovery-key-one-strong";
 const GENERATION = `gen-0-${T.nodeId}-20260923T090000Z`;
 const NOW = new Date("2026-09-23T12:00:00Z");
@@ -99,6 +100,13 @@ beforeAll(async () => {
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: VENUE.taxId, legalName: VENUE.legalName });
+  // Inserted first, so a read that ignored the kit's venue would find this one.
+  await db.insert(locations).values({
+    id: OTHER_LOCATION_ID,
+    name: "Another venue",
+    invoiceLocales: ["es"],
+    operationDescription: "Venta",
+  });
   await db.insert(locations).values({
     id: T.locationId,
     name: VENUE.locationName,
@@ -488,6 +496,42 @@ describe("prepareStreamRestore", () => {
     });
     await expectStateUntouched(deps.stateDir);
   });
+
+  it("refuses a copy whose migration record is ahead of this software, leaving the box as it was", async () => {
+    const core = manifestSets().find((set) => set.name === "core")!;
+    const unknown = "f".repeat(64);
+    const deps = await prepareDeps(await bucket(), {
+      restoreGeneration: async (args) => {
+        await copyFile(fixtureDb, args.outPath);
+        const store = await openVenueDatabase(dirname(args.outPath));
+        await store.venue.execute(
+          sql`insert into ${sql.identifier(core.table)} ("hash", "created_at")
+              values (${unknown}, ${Number.MAX_SAFE_INTEGER})`,
+        );
+        await store.close();
+      },
+    });
+    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
+      code: "provisioning.database_ahead",
+      params: { set: "core", unknownMigrations: [unknown] },
+    });
+    await expectStateUntouched(deps.stateDir);
+  });
+
+  it("names the kit venue's location, not the first one the copy holds", async () => {
+    const deps = await prepareDeps(await bucket());
+    const prepared = await prepareStreamRestore(deps);
+    // The control: an unfiltered read of this copy would find the other location.
+    const store = await openVenueDatabase(dirname(prepared.databasePath));
+    try {
+      const first = await store.venue.select({ name: locations.name }).from(locations).limit(1);
+      expect(first).toEqual([{ name: "Another venue" }]);
+    } finally {
+      await store.close();
+    }
+    expect(prepared.venue.locationName).toBe(VENUE.locationName);
+    await prepared.discard();
+  });
 });
 
 describe("measureBucketSkew", () => {
@@ -498,10 +542,11 @@ describe("measureBucketSkew", () => {
     expect(store.snapshot().size).toBe(0);
   });
 
-  it("still answers when the probe cannot be deleted afterwards", async () => {
+  it("still answers when the probe cannot be deleted afterwards, leaving the probe behind", async () => {
     const store = createMemoryObjectStore({ now: () => NOW });
     store.failNext({ operation: "delete", error: new Error("denied") });
     expect(await measureBucketSkew(store, () => NOW)).toBe(0);
+    expect(store.snapshot().size).toBe(1);
   });
 
   it("is null when the probe it wrote is not listed", async () => {
@@ -674,6 +719,36 @@ describe("refuseIfArchiveSourceLive", () => {
     await expect(refuseIfArchiveSourceLive(a)).rejects.toMatchObject({
       code: "restore.stream_source_unchecked",
       params: { reason: "bucket" },
+    });
+    await expectStateUntouched(a.stateDir);
+  });
+
+  it("asks for confirmation when the bucket answers for the pointer but not for the generation's listing", async () => {
+    const store = await bucket();
+    store.failNext({
+      operation: "list",
+      error: new AppError("backup.stream_request_failed", {
+        operation: "list",
+        key: generationPrefix(T.locationId, GENERATION),
+        status: 503,
+        name: "ServiceUnavailable",
+      }),
+    });
+    const a = await args(await archive(true), () => store);
+    await expect(refuseIfArchiveSourceLive(a)).rejects.toMatchObject({
+      code: "restore.stream_source_unchecked",
+      params: { reason: "bucket" },
+    });
+    await expectStateUntouched(a.stateDir);
+  });
+
+  it("passes the clock's own refusal through as it came", async () => {
+    const store = await bucket({ lastChangeAt: new Date(NOW.getTime() - 2 * 60_000) });
+    store.failNext({ operation: "put", error: new Error("denied") });
+    const a = await args(await archive(true), () => store);
+    await expect(refuseIfArchiveSourceLive(a)).rejects.toMatchObject({
+      code: "restore.stream_source_unchecked",
+      params: { reason: "clock" },
     });
     await expectStateUntouched(a.stateDir);
   });
