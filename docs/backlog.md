@@ -3003,10 +3003,10 @@ image constraints under *Detail → Box image*.
     ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)", "Task 8", "(SP-B2.1)"), as do three
     `session-activity.test.ts` titles ("(C3)").
   - Found by #620 (`apps/server` part h1), not fixable in a comments-only change.
-    **The demo seed does not refuse a production stamp**: with `WAITRON_ENV=production`,
-    `scripts/demo-seed/seed-sales.test.ts` fails its stamp check with `Received: "production"`
-    (measured); only `dev-setup.ts`'s header says it must never run against a production directory,
-    and whether `dev-setup`'s own process can inherit that variable is untested.
+    **The demo seed does not refuse a production stamp** — DONE (owner instruction 2026-09-25):
+    `demoSeedEnvironment` in `scripts/demo-seed/seed-sales.ts` refuses `production` with
+    `deployment.demo_data_refused` before `seedDemoRestaurant` or `seedSales` writes anything;
+    both guards proven by a test that first watched production-stamped sales get written.
     `redact-secrets.ts` was written against the PostgreSQL connection-string parser, and `pg` is now
     installed only for `bench/pglite-throughput`; whether a credential-bearing URL can still reach
     the log is unchecked. `apps/server/vitest.config.ts`'s `coverage.exclude` lists `scripts/**`,

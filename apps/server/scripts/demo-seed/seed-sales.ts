@@ -3,8 +3,8 @@
 // and never drains: the resulting `envios` rows stay pending.
 //
 // The `entorno` stamp comes from `deploymentEnvironment(process.env)`, which is `preproduction`
-// when `WAITRON_ENV` is unset. A demo seed must never run against a production chain; a wrong
-// stamp is unrecoverable (CLAUDE.md §5).
+// when `WAITRON_ENV` is unset; `demoSeedEnvironment` refuses `production` before any write, because
+// a wrong stamp on a production chain is unrecoverable (CLAUDE.md §5).
 //
 // A settable clock files each sale — its `issued_at` and its fiscal record's timestamp — into
 // the past.
@@ -22,6 +22,7 @@ import {
 } from "@waitron/catalogue";
 import type { VatClass } from "@waitron/catalogue";
 import {
+  AppError,
   addDecimal,
   decimal,
   divideDecimal,
@@ -36,6 +37,8 @@ import {
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "../../src/config.js";
+import type { DeploymentEnvironment } from "../../src/config.js";
+import "../../src/errors.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 
 /** `seriesId` is the standard series, the first of `applyVenue`'s `seriesIds`. */
@@ -137,11 +140,21 @@ function totalOf(breakdown: readonly VatBreakdownLine[]): Decimal {
   return sumDecimals(breakdown.flatMap((g) => [g.base, g.tax]));
 }
 
+/** The environment demo data may be written under. Production is refused before any write. */
+export function demoSeedEnvironment(env: NodeJS.ProcessEnv): DeploymentEnvironment {
+  const environment = deploymentEnvironment(env);
+  if (environment === "production") {
+    throw new AppError("deployment.demo_data_refused", { environment });
+  }
+  return environment;
+}
+
 /** Returns how many sales were recorded. */
 export async function seedSales(
   db: Database,
   { venue, locale, days, products, clock }: SeedSalesInput,
 ): Promise<{ count: number }> {
+  const environment = demoSeedEnvironment(process.env);
   if (days <= 0) {
     return { count: 0 };
   }
@@ -156,8 +169,8 @@ export async function seedSales(
   const backend = new VerifactuBackend({
     clock: backDating.clock,
     db,
-    environment: deploymentEnvironment(process.env),
-    deploymentEnvironment: deploymentEnvironment(process.env),
+    environment,
+    deploymentEnvironment: environment,
     // Never reached: `recordSale` does not contact AEAT.
     resolveClient: () =>
       Promise.reject(new Error("seed-sales: resolveClient must never be called by recordSale")),
