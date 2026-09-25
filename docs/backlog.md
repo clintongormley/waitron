@@ -124,9 +124,17 @@ approved encrypted object with temporary read authority, rechecks approval, then
 the existing cold restore. Its completion report follows actual local restore. The managed path
 excludes old backup destination credentials; local-file restore remains available. The Cloud
 integration proof exercises owner approval, restart, lost replies and the real target restore.
-Continuous complete-server recovery, planned final-write handover, production recovery, Cloud
-replacement enrolment, routing and fencing remain open. The Litestream stream's sealed-state
-restore and activation still need integration with Cloud storage and owner recovery. Connected does
+
+The restored test-server Cloud replacement path has landed (#638). You use the reported guided
+recovery request and its original approval link and code. The replacement stores fresh installation
+and WireGuard keys before contacting Cloud, then imports registration only after the original owner
+confirms it. The two-repository local proof covers replacement, a new capture, archive restore and
+refusal of the old installation's grant. Installing the new tunnel and TLS certificate remains an
+operator step. Continuous complete-server recovery, planned final-write handover and production
+recovery remain open. Cloud owns route placement and fencing in its backlog.
+
+The Litestream stream's sealed-state restore and activation still need integration with Cloud
+storage and owner recovery. Connected does
 not mean those services are configured. Cloud service ownership stays in the Cloud
 backlog; this repository owns its adapter, screen and node-side behavior. Public
 hosting, ingress controls and Cloud audit/retention remain deployment work.
@@ -6036,7 +6044,8 @@ abstraction, fan-out and AES-256-GCM artifact encryption; the single encrypted a
 series; the dashboard wizard. The image ships with backups OFF, deliberately.
 
 Whole-state-volume capture today: the fatal `RECOVERY_FILES` plus the optional `backup.env` and
-`modules.json`; the replacement's private `cloud-recovery.json` is outside that named capture set.
+`modules.json`; the replacement's private `cloud-recovery.json`, `cloud-replacement.json` and
+`cloud-connection.json` stay outside that named capture set and the captured ciphertext archive.
 The exclusion set for the deeper change is `backup-staging/`, `restore-staging/`,
 `logs/`, the per-hardware `instance.env`, `recovery.json`, and its lock file `recovery.lock` with the `recovery.lock-journal` SQLite keeps beside it while held. Touches BR-2, BR-3 and the recovery
 bundle. Named carry-forwards: a stale-`.tmp` sweep; confirm the `StorageBackend` key path-traversal
