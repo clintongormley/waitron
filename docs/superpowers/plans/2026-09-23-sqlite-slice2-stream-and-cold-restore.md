@@ -15783,11 +15783,14 @@ not as a refused setting."
 
 > 2026-09-25: as built, Task 8a (`apps/server/src/stream-api.ts`) differs from what this task
 > assumes. `StreamSettingsView` gained `recoveryKeySet`, true with a null `keyFingerprint` for a key
-> under the minimum length. Save can refuse with `backup.stream_config_unsafe {field}`,
-> `backup.recovery_key_too_short` and `backup.managed_by_environment`, and Test and Save with
-> `backup.request_invalid {field: "prefix"}` for a prefix of `-`; the screen needs wording for each.
-> `backup.stream_test_failed` carries the probe's `reason`. The kit download refuses with
-> `backup.recovery_key_missing`, whose existing wording, "Enter a recovery key", does not fit it.
+> under the minimum length. Test and Save can refuse with `backup.stream_config_unsafe {field}`, and
+> with `backup.request_invalid {field: "prefix"}` for a prefix of `-`; Save can also refuse with
+> `backup.recovery_key_too_short`, and with `backup.managed_by_environment` when the box holds no
+> key. `apps/dashboard/src/i18n/codes.ts` has no wording for `backup.stream_config_unsafe`; it has
+> wording for the other three, but the `backup.managed_by_environment` text ("there is nothing to
+> change here") may not fit a refused Save. `backup.stream_test_failed` carries the probe's
+> `reason`. The kit download refuses with `backup.recovery_key_missing`, whose existing wording,
+> "Enter a recovery key", does not fit it, and with `backup.recovery_key_too_short` (400).
 
 **Screen behaviour, stated once so the tests below have something to be checked against.**
 - The panel sits on the Backups screen under its own heading, beside the archive settings.
