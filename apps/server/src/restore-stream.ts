@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { loadKeyRing } from "@waitron/credentials";
@@ -41,9 +41,12 @@ export interface RestoredVenue {
   locationName: string;
 }
 
-/** The download folder, inside the state folder so a later move stays on one filesystem. */
-const SCRATCH = "stream-restore";
-const ARCHIVE_SCRATCH = "archive-source-check";
+/**
+ * Scratch folders are made fresh per run, inside the state folder so a later move stays on one
+ * filesystem; a fixed name would let two runs remove each other's copy.
+ */
+const SCRATCH = "stream-restore-";
+const ARCHIVE_SCRATCH = "archive-source-check-";
 const UNREADABLE = "the file could not be opened or read as a database";
 
 export interface PrepareStreamDeps {
@@ -68,7 +71,7 @@ export interface PreparedStream {
   nodeId: string;
   generation: string;
   venue: RestoredVenue;
-  /** Removes the scratch folder. */
+  /** Removes this preparation's scratch folder. */
   discard(): Promise<void>;
 }
 
@@ -164,9 +167,7 @@ export async function refuseIfArchiveSourceLive(args: {
     (entry) => entry.name === "secrets/secrets.env",
   );
   if (secrets === undefined) return;
-  const scratch = join(args.stateDir, ARCHIVE_SCRATCH);
-  await rm(scratch, { recursive: true, force: true });
-  await mkdir(scratch, { recursive: true, mode: 0o700 });
+  const scratch = await scratchFolder(args.stateDir, ARCHIVE_SCRATCH);
   try {
     await writeFile(join(scratch, "venue.db"), args.validated.dumpEntry.bytes, { mode: 0o600 });
     const copy = await openVenueDatabase(scratch);
@@ -203,6 +204,11 @@ export async function refuseIfArchiveSourceLive(args: {
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
+}
+
+async function scratchFolder(stateDir: string, prefix: string): Promise<string> {
+  await mkdir(stateDir, { recursive: true, mode: 0o700 });
+  return mkdtemp(join(stateDir, prefix));
 }
 
 async function readRestoredVenue(store: VenueDatabase, venueId: string): Promise<RestoredVenue> {
@@ -283,10 +289,8 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
     oldBoxGone: deps.oldBoxGone,
   });
 
-  const scratch = join(deps.stateDir, SCRATCH);
+  const scratch = await scratchFolder(deps.stateDir, SCRATCH);
   const discard = () => rm(scratch, { recursive: true, force: true });
-  await discard();
-  await mkdir(scratch, { recursive: true, mode: 0o700 });
   const databasePath = join(scratch, "venue.db");
   try {
     try {

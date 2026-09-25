@@ -427,7 +427,7 @@ describe("prepareStreamRestore", () => {
   });
 
   // Litestream refuses to restore over a non-empty output file.
-  it("clears what an interrupted restore left in the scratch folder before downloading", async () => {
+  it("downloads into an empty folder even when an interrupted restore left its copy behind", async () => {
     let seen: string[] | undefined;
     const deps = await prepareDeps(await bucket(), {
       restoreGeneration: async (args) => {
@@ -435,11 +435,25 @@ describe("prepareStreamRestore", () => {
         await copyFile(fixtureDb, args.outPath);
       },
     });
-    await mkdir(join(deps.stateDir, "stream-restore"));
-    await writeFile(join(deps.stateDir, "stream-restore", "venue.db"), "from a restore cut short");
+    await mkdir(join(deps.stateDir, "stream-restore-cutshort"));
+    await writeFile(
+      join(deps.stateDir, "stream-restore-cutshort", "venue.db"),
+      "from a restore cut short",
+    );
     const prepared = await prepareStreamRestore(deps);
     expect(seen).toEqual([]);
     await prepared.discard();
+  });
+
+  it("gives each preparation its own scratch folder, so discarding one leaves another's copy", async () => {
+    const deps = await prepareDeps(await bucket());
+    const first = await prepareStreamRestore(deps);
+    const second = await prepareStreamRestore(deps);
+    expect(second.databasePath).not.toBe(first.databasePath);
+    await first.discard();
+    expect((await stat(second.databasePath)).isFile()).toBe(true);
+    await second.discard();
+    await expectStateUntouched(deps.stateDir);
   });
 
   it("reports a Litestream that cannot be started as a failed download, leaving nothing behind", async () => {
@@ -848,9 +862,9 @@ describe("restoreFromStream (the command line's whole path)", () => {
       version: 1,
       source: "stream",
     });
-    await expect(stat(join(deps.stateDir, "stream-restore"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    expect(
+      (await readdir(deps.stateDir)).filter((name) => name.startsWith("stream-restore")),
+    ).toEqual([]);
   });
 
   // Plan Reconciliation N26: the operator sees whose copy this is before anything changes.
