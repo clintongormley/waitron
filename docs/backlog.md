@@ -2906,7 +2906,7 @@ image constraints under *Detail → Box image*.
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621, #622, #623, #624, #625, #629 and #653 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621, #622, #623, #624, #625, #629, #653 and #656 and left for the package that owns each, all
   still OPEN:
   - Found by the retroactive Codex reviews of #621–#626 and #629 (C3.18.12r, 2026-09-25; fixes
     landed as #632, #633, #635, #637 and #639; #626 and #629 came back clean), outside the files
@@ -2923,11 +2923,26 @@ image constraints under *Detail → Box image*.
     says "binds 0.0.0.0" while connecting only over loopback. `apps/server/src/rebuild-first-start.ts`
     (near line 121, lane A's file) says "The log carries the error's code only", the overclaim #637
     corrected in `health.ts` (`codeOf` logs `unknown` for a plain error carrying `code: "EIO"`).
-    `apps/server/src/backup-api.ts` (near line 335, from #557) says the rotate route rewrites "the
-    key alone"; it also writes the rotation time. "Empties every table" in
+    "Empties every table" in
     `packages/bookings/src/schema/bookings.test.ts` (near line 60) and
     `packages/catalogue/src/migrations.test.ts` (near line 304) is wider than the reset, which
     leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
+  - Found by #656 (`apps/server` part e2: the backup and restore files), outside its files or not
+    fixable in a comments-only change. `apps/server/src/errors.ts` still cites CLAUDE.md §5 for
+    things §5 does not say, on `backup.recovery_key_unstorable` ("unrecoverable (CLAUDE.md §5)") and
+    `restore.unexpected_entry` ("the cold-recovery path (CLAUDE.md §5)"). Test titles that still say
+    "R3" or "rejoin", though rejoin no longer calls `restore.ts` (`rejoin-command.ts` does not import
+    it): `restore.test.ts`'s `validateArtifact / writeValidated (R3 validate-before-wipe split)` and
+    `restore steps (R3 composition)` describes and its three `skipSecrets` "rejoin" cases, and
+    `restore-fiscal-e2e.test.ts`'s "skipSecrets:true (the rejoin shape)" control. No production
+    caller sets `skipSecrets` any more, so whether the option should go is open. `keyFingerprint`
+    (`backup-supervisor.ts`) is the first 8 hex characters of the recovery key's SHA-256, shown in
+    the backup status, so anyone who can read the status can test a guessed key against it (Codex's
+    probe matched one of three candidates); #656 deleted the comment calling it revealing nothing,
+    and whether to change what it shows is open. Read, not run: `reload()` clears
+    `#storedUnderCurrentKey` before it waits for the old sweep to stop, and the old sweep's
+    `onStored` does not check that it is still current, so a tick storing under the OLD key during
+    that wait could set `archiveUnderCurrentKey` early.
   - Found by #653 (`apps/server` part c2: `boot.ts`, `boot.test.ts`, `config.ts`), outside its
     files or not fixable in a comments-only change. `apps/server/README.md` (near line 230, the
     `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp can round a value "past" a bound, which it
@@ -2951,10 +2966,7 @@ image constraints under *Detail → Box image*.
     change. Comments in files the SQLite slice-2 plan still changes (fix them in e2, c2 or h2):
     `db-wipe.ts` (near its top) says the empty node-file fact is recorded where
     `rejoin-command.ts` and `break-glass-command.ts` open their handles, and #625 deleted it from
-    both; `restore.ts` and `errors.ts` call
-    backup "the cold-recovery path CLAUDE.md §5 says has to work", which §5 does not say, and
-    `backup-supervisor.ts`'s "must never brick the till (§5)" stretches §5's "nothing EXTERNAL may
-    block a sale". Docs: `docs/developers/conventions-ui.md` (the recovery page section) says a
+    both. Docs: `docs/developers/conventions-ui.md` (the recovery page section) says a
     caught error's own text goes to the container's stdout only, but the page's log tail can carry
     it (the file sink masks only credentials in a URL); `docs/developers/conventions-data.md`'s
     `busy_timeout` receipt, which `recovery-lock.ts` now points at, should carry the date and Node
@@ -3031,7 +3043,7 @@ image constraints under *Detail → Box image*.
     reader before deciding"; there are no row locks, the enable waits behind the unpair's write
     transaction. `apps/server/README.md` sends readers to "the `drain.complete` log line, the
     `incidents` table" for rejected fiscal records, a path only someone with a terminal can take.
-    Stale line pointers into moved schema files remain in `backup-api.route.test.ts`, and `working-order.ts`'s `splitOffCheck`
+    `working-order.ts`'s `splitOffCheck`
     points at "line ~221". Read only, not run: `WebhookDeps.nodeId` looks unread by `settleWebhook`;
     `receipt-order.ts` takes a `cfg` it never uses; `me-api.ts`'s profile save logs
     `account_email.send_failed` with the caught error's message. The lock-ordering and deadlock
@@ -5386,7 +5398,7 @@ Every synchronous `deriveKey` caller still blocks the event loop while it derive
 `encodeConfigurationBundle` (`apps/server/src/configuration-transfer.ts`, through
 `encryptArtifact`); everything reaching `decryptArtifact` (`apps/server/src/artifact-cipher.ts`) —
 `decodeConfigurationBundle` (`apps/server/src/configuration-transfer.ts`, on the request path,
-decoding an uploaded bundle), `apps/server/src/restore.ts:153` and `unsealNodeState`
+decoding an uploaded bundle), `validateArtifact` (`apps/server/src/restore.ts`) and `unsealNodeState`
 (`apps/server/src/sealed-state.ts:33`); and the recovery bundle's `encryptBundle` and
 `decryptBundle` (`apps/server/src/recovery-bundle.ts`). Task 2b moved the backup
 sweep's encryption and `sealNodeState` to `encryptArtifactAsync`.
