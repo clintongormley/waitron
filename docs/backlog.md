@@ -5426,7 +5426,7 @@ this node) still accepts it. Left open:
   trusts only the endorser would refuse those documents. Found by reading during this branch's
   review; not reproduced.
 
-Task 9b, restore from the bucket (PR_A24). `waitron-restore restore --from-bucket <kit-file>
+Task 9b, restore from the bucket (#642). `waitron-restore restore --from-bucket <kit-file>
 --confirm-venue <tax id> [--confirm-old-box-gone]` reads the bucket the recovery kit names, checks
 the pointer against the kit's signing key and venue, refuses when the live generation changed in the
 last ten minutes on the bucket's own clock (or when that clock cannot be measured) unless the old
