@@ -24,6 +24,7 @@ import {
   menuItemExtraItems,
   menuItemExtraLists,
 } from "./schema/extras.js";
+import { labels, productLabels } from "./schema/labels.js";
 import { optionLabels } from "./schema/options.js";
 import { productUnits, unitSeedStates, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
@@ -46,6 +47,8 @@ const TABLES = [
   "menu_items",
   "category_details",
   "product_categories",
+  "labels",
+  "product_labels",
   "units",
   "unit_seed_states",
   "product_units",
@@ -149,6 +152,8 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_items: "id",
       category_details: "category_id",
       product_categories: "product_id, category_id",
+      labels: "id",
+      product_labels: "product_id, label_id",
       units: "id",
       unit_seed_states: "id",
       product_units: "product_id",
@@ -183,6 +188,8 @@ describe("the catalogue migration set carries no tenant column", () => {
       "option_labels(list_id)": "option_lists(id) on delete cascade",
       "product_categories(category_id)": "categories(id) on delete restrict",
       "product_categories(product_id)": "products(id) on delete cascade",
+      "product_labels(label_id)": "labels(id) on delete cascade",
+      "product_labels(product_id)": "products(id) on delete cascade",
       "product_modifiers(extra_list_id)": "extra_lists(id) on delete cascade",
       "product_modifiers(option_list_id)": "option_lists(id) on delete cascade",
       "product_modifiers(product_id)": "products(id) on delete cascade",
@@ -250,8 +257,10 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_items_menu_product_key: { unique: true, columns: "menu_id, product_id" },
       menu_sections_menu_id_key: { unique: true, columns: "menu_id, id" },
       menu_sections_menu_order_idx: { unique: false, columns: "menu_id, display_order" },
+      labels_name_uq: { unique: true, columns: "name" },
       option_labels_list_sort_idx: { unique: false, columns: "list_id, sort" },
       product_categories_category_idx: { unique: false, columns: "category_id" },
+      product_labels_label_idx: { unique: false, columns: "label_id" },
       product_modifiers_product_extra_uq: { unique: true, columns: "product_id, extra_list_id" },
       product_modifiers_product_option_uq: { unique: true, columns: "product_id, option_list_id" },
       product_modifiers_product_sort_idx: { unique: false, columns: "product_id, sort" },
@@ -485,6 +494,28 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       () => db.insert(productCategories).values({ productId: c.productId, categoryId: missing }),
       "product_categories_category_fk",
     );
+  });
+
+  it("refuses a product label whose product or label does not exist, and a repeated label name", async () => {
+    const c = await catalogue();
+    const [label] = await db
+      .insert(labels)
+      .values({ name: "Alcoholic" })
+      .returning({ id: labels.id });
+    await refusal(
+      () => db.insert(productLabels).values({ productId: missing, labelId: label!.id }),
+      "product_labels_product_fk",
+    );
+    await refusal(
+      () => db.insert(productLabels).values({ productId: c.productId, labelId: missing }),
+      "product_labels_label_fk",
+    );
+    const repeated = await captureError(() => db.insert(labels).values({ name: "Alcoholic" }));
+    expect(isRefusal(repeated, UNIQUE_VIOLATION)).toBe(true);
+    // The accepting control: a real product and a real label.
+    await expect(
+      db.insert(productLabels).values({ productId: c.productId, labelId: label!.id }),
+    ).resolves.toBeDefined();
   });
 
   it("refuses a unit assignment whose product or unit does not exist", async () => {
