@@ -487,3 +487,62 @@ describe("staged restore requests, the edges", () => {
     expect(onManagedCloudRestored).toHaveBeenCalledWith(managedCloud);
   });
 });
+
+describe("restaging over an earlier request", () => {
+  const deps = (stateDir: string) => ({
+    stateDir,
+    venueDir: "/v",
+    migrationsRoot: null,
+    log: vi.fn(),
+  });
+
+  it("a second bucket request that fails part-way leaves no request, never the new copy with the old entries", async () => {
+    const stateDir = await fresh();
+    const scratch = join(stateDir, "scratch");
+    await mkdir(scratch);
+    await writeFile(join(scratch, "a.db"), "OLD-DB");
+    await stageRestoreRequest(stateDir, {
+      kind: "stream",
+      databasePath: join(scratch, "a.db"),
+      entries: [{ name: "manifest.json", bytes: Buffer.from("OLD-ENTRIES") }],
+      environment: "production",
+    });
+    await writeFile(join(scratch, "b.db"), "NEW-DB");
+    // A directory where the entries' working copy goes: the second request's entries write fails
+    // after its database has been moved in.
+    await mkdir(join(stateDir, "restore-request.entries.tmp", "in-the-way"), { recursive: true });
+    await expect(
+      stageRestoreRequest(stateDir, {
+        kind: "stream",
+        databasePath: join(scratch, "b.db"),
+        entries: [{ name: "manifest.json", bytes: Buffer.from("NEW-ENTRIES") }],
+        environment: "production",
+      }),
+    ).rejects.toThrow();
+    const archive = vi.fn(async () => {});
+    const stream = vi.fn(async () => {});
+    expect(await runStagedRestore(deps(stateDir), archive, stream)).toBe(false);
+    expect(stream).not.toHaveBeenCalled();
+    expect(archive).not.toHaveBeenCalled();
+  });
+
+  it("a second archive request that fails part-way leaves no request, never the new artifact with the old key", async () => {
+    const stateDir = await fresh();
+    await stageRestoreRequest(stateDir, {
+      artifact: Uint8Array.from([1]),
+      recoveryKey: "OLD-KEY",
+      environment: "production",
+    });
+    await mkdir(join(stateDir, "restore-request.key.tmp", "in-the-way"), { recursive: true });
+    await expect(
+      stageRestoreRequest(stateDir, {
+        artifact: Uint8Array.from([2]),
+        recoveryKey: "NEW-KEY",
+        environment: "production",
+      }),
+    ).rejects.toThrow();
+    const archive = vi.fn(async () => {});
+    expect(await runStagedRestore(deps(stateDir), archive)).toBe(false);
+    expect(archive).not.toHaveBeenCalled();
+  });
+});

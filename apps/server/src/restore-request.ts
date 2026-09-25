@@ -35,13 +35,17 @@ export interface StreamRestoreRequest {
 
 export type RestoreRequest = ArchiveRestoreRequest | StreamRestoreRequest;
 
-/** Write payloads first and the marker last, so the entrypoint never observes a partial request. */
+/**
+ * Remove any earlier marker, write the payloads, then the marker last, so the entrypoint never
+ * observes a partial request, nor one request's payload beside another's.
+ */
 export async function stageRestoreRequest<R extends RestoreRequest>(
   stateDir: string,
   request: R,
   validate?: (request: R) => Promise<void>,
 ): Promise<void> {
   await validate?.(request);
+  await rm(join(stateDir, MARKER), { force: true });
   if (request.kind === "stream") {
     await rename(request.databasePath, join(stateDir, STREAM_DB));
     await chmod(join(stateDir, STREAM_DB), 0o600);
