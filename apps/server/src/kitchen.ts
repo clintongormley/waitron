@@ -167,9 +167,7 @@ export async function updateStation(
 }
 
 /** Deactivate a station — never a hard delete, since a `ticket_items.station_id` snapshot may
- *  reference it. `is_default` is left as-is; firing's fallback requires an ACTIVE default, so once
- *  the only default is deactivated, a fire with any line that needs the fallback is refused with
- *  `station.no_default` until a new one is set. */
+ *  reference it. */
 export async function deactivateStation(
   tx: Transaction,
   _cfg: TillConfig,
