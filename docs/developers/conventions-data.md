@@ -1519,15 +1519,22 @@ exists. It now runs after `runStagedRestore` — the restore that replaces the v
 directory pass it, are stated at `runEntry` in `apps/server/src/node-entry.ts`.
 
 The GAP, stated so nobody assumes coverage: BOOT and the bucket rebuild are the only migrating paths
-carrying the check, and every other caller of `applyMigrations` runs without one. Re-grepped
-2026-09-25 (`grep -rn applyMigrations apps packages`, non-test files, leaving out the test helper
-`packages/db/src/testing/venue-db.ts`), those callers are the cold restore from an archive taken
-from the `waitron-restore` CLI (`apps/server/src/restore-command.ts`, which calls
-`apps/server/src/restore.ts`), `apps/server/src/rejoin-command.ts`,
+carrying the check, and every other path that migrates runs without one. Re-grepped 2026-09-25
+(`grep -rn applyMigrations apps packages`, non-test files, leaving out the test helper
+`packages/db/src/testing/venue-db.ts`), that grep finds only DIRECT callers besides boot:
+`apps/server/src/restore.ts`, `apps/server/src/rejoin-command.ts`,
 `apps/server/src/fiscal-readiness-runner.ts`, and eight scripts under `apps/server/scripts` —
-`dev-setup.ts`, `dev-onboard.ts`, `cloud-integration-fixture.ts` and the five demo scripts. An ahead database reached through any of
-them is still undetected. A restore staged
-at BOOT is the one case that IS covered, because the check runs after it. The `instance` command
+`dev-setup.ts`, `dev-onboard.ts`, `cloud-integration-fixture.ts` and the five demo scripts.
+`restore.ts` migrates on behalf of its own callers, found with
+`git grep -l "restoreFromArtifact\|writeValidated\|runStagedRestore" -- apps ':!*.test.ts'`: the
+cold restore from an archive taken from the `waitron-restore` CLI
+(`apps/server/src/restore-command.ts`), the staged restore (`runStagedRestore`,
+`apps/server/src/restore-request.ts`) run by boot and by
+`apps/server/scripts/cloud-recovery-client-fixture.ts`, the bucket rebuild
+(`apps/server/src/restore-stream.ts`), and `apps/server/scripts/cloud-backup-fixture.ts` through
+`writeValidated`. Of those, only the staged restore at BOOT and the bucket rebuild are checked; an
+ahead database reached through the CLI, the two Cloud fixture scripts or any other path above is
+still undetected. The `instance` command
 headed this list until 2026-09-22 and no longer exists. Cost: without the check, an ahead database
 re-migrates CLEANLY — drizzle applies nothing and throws nothing (measured with a control,
 2026-09-10) — so the mismatch showed up only as an unclassified driver error in whatever query first

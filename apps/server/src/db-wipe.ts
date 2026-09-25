@@ -58,8 +58,6 @@ const SIDECARS = ["", "-wal", "-shm"] as const;
  * success and not an `ENOENT`. What this costs is stated in `rejoin.ts`: nothing confirms that the
  * rows this node originated reached the carrier before the wipe, so the caller wipes without that
  * confirmation.
- *
- * Litestream's folder beside `venue.db`: slice-2 plan, Reconciliation L3.
  */
 export async function wipeVenueDatabases(venueDir: string): Promise<void> {
   for (const file of VENUE_FILES) {

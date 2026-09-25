@@ -2501,7 +2501,9 @@ image constraints under *Detail → Box image*.
 - **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.** No
   count belongs here: `conventions-data.md` holds the list, re-grepped 2026-09-25, and it is longer
   than what CLAUDE.md §3 names — it adds a readiness runner and the dev, demo and Cloud fixture
-  scripts under `apps/server/scripts`.
+  scripts under `apps/server/scripts`, two of the Cloud fixture scripts migrating through
+  `restore.ts` rather than calling `applyMigrations` themselves, which a grep for that name alone
+  does not find.
   `instance-apply.ts` is no longer among them: it went with `waitron-provision instance` when a venue
   became a directory of SQLite files, and with it the question of gating a migrate that could lock a
   trading shop's tables.
@@ -5469,8 +5471,10 @@ open:
 - The bucket client sets no time limit of its own: `createS3ObjectStore` (`packages/stream`) has
   none. The command line wraps it (`boundObjectStore`, which abandons a call but never cancels it),
   the first start's pointer read has its own 15-second race (`readBucketPointerTerm`,
-  `apps/server/src/rebuild-first-start.ts`, reported as `restore.pointer_unreadable`), and the
-  replication supervisor's calls have no bound at all. A per-call abort signal or request timeout
+  `apps/server/src/rebuild-first-start.ts`, reported as `restore.pointer_unreadable`), and every
+  other caller's calls have no bound at all: the replication supervisor's, and the bucket check the
+  backup settings screen's Test and Save buttons run (`probeBucket`, opened in
+  `apps/server/src/boot.ts`, called from `apps/server/src/stream-api.ts`). A per-call abort signal or request timeout
   inside `createS3ObjectStore` would bound and cancel every caller's calls.
 - Open question: the first start's pointer read and the command line's bucket calls use different
   limits (15 seconds and 60 seconds) and report different codes (`restore.pointer_unreadable` and

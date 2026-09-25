@@ -57,7 +57,7 @@ const IDENTITY_KEYS = [
 ] as const;
 /** The venue database file `openVenueStore` opens inside the venue directory. */
 const VENUE_FILE = "venue.db";
-/** A restore's `stagingDir` is this folder inside the state folder. */
+/** The folder inside the state folder that the restore command, the staged restore and boot pass as `stagingDir`. */
 export const RESTORE_STAGING_DIR = "restore-staging";
 /**
  * SQLite's write-ahead sidecars, kept beside the main file and named from its PATH. A committed row

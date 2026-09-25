@@ -245,9 +245,12 @@ command against it treat that entrypoint differently:
   before it changes the venue folder, the box's identity or its secrets. A restore's earlier steps
   run in temporary folders under the state folder, and the bucket form downloads the whole copy
   there first, then is refused only when it comes to place it — so stop the server before either
-  form. Each run makes its own folder (`stream-restore-` or `archive-source-check-` and six random
-  characters) and removes it when it ends; a run that is killed leaves it, holding a full copy of
-  the venue's database, and the next run does not remove it. Break-glass is the exception by design: it runs beside the
+  form. A run that downloads from the bucket, or checks a backup's bucket, makes its own folder
+  (`stream-restore-` or `archive-source-check-` and six random characters) and removes it when it
+  ends; a run that is killed leaves it, holding a full copy of the venue's database, and the next
+  run does not remove it. Once no restore is running, you can delete a leftover `stream-restore-*`
+  or `archive-source-check-*` folder from the top of the `state` volume
+  (`/var/lib/waitron/state` inside the container). Break-glass is the exception by design: it runs beside the
   server and takes no lock. Whatever holds the folder keeps a small file beside it,
   `venue.holder.json`, naming what kind of program it is and rewriting a heartbeat time every five
   seconds. A server start refused while that heartbeat is under 30 seconds old — a second copy of

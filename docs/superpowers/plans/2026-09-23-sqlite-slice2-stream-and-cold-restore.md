@@ -20180,7 +20180,8 @@ archive request unchanged, and waitron-restore gains --from-bucket."
 > { reason: "bucket" }`; a failure writing or listing the clock probe comes out as
 > `{ reason: "clock" }` (`measureBucketSkew`, `apps/server/src/restore-stream.ts`). Each run's
 > scratch folder is made fresh (`mkdtemp`: `<stateDir>/stream-restore-XXXXXX/`,
-> `<stateDir>/archive-source-check-XXXXXX/`) and removed when the run ends. `restoreFromStream`
+> `<stateDir>/archive-source-check-XXXXXX/`) and removed when the run ends; a killed run leaves it
+> behind (`docs/backlog.md`). `restoreFromStream`
 > requires `stagingDir`, and `checkIntegrity` takes an open database rather than a folder. The
 > command line refuses an unknown flag, any flag given twice, `--confirm-venue` without a value or
 > on the archive form, and an archive file given with `--from-bucket` (usage line, exit 2). The
