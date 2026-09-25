@@ -280,20 +280,22 @@ describe("restoreGeneration", () => {
     }
   });
 
-  it("passes on any other failure to write the configuration as it is", async () => {
+  it("reports any other failure to write the configuration as a failed restore, naming no path", async () => {
     const out = await mkdtemp(join(dir, "case-"));
     // A file where the configuration's folder goes: the folder cannot be made.
     await writeFile(join(out, "litestream"), "not a folder");
-    await expect(
-      restoreGeneration({
-        litestreamBin: bin,
-        bucket: BUCKET,
-        venueId: "v1",
-        generation: GENERATION,
-        outPath: join(out, "venue.db"),
-        configDir: join(out, "litestream"),
-      }),
-    ).rejects.toMatchObject({ code: "EEXIST" });
+    const error = await restoreGeneration({
+      litestreamBin: bin,
+      bucket: BUCKET,
+      venueId: "v1",
+      generation: GENERATION,
+      outPath: join(out, "venue.db"),
+      configDir: join(out, "litestream"),
+    }).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: "backup.stream_restore_failed" });
+    expect((error as { params: unknown }).params).toEqual({ exitCode: null, diskFull: false });
+    expect((error as Error).message).not.toContain(out);
+    await expect(stat(join(out, "argv"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("abandons a restore that outlives the absolute ceiling even while it grows", async () => {

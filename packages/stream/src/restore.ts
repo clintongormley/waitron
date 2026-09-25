@@ -74,10 +74,11 @@ export async function restoreGeneration(args: RestoreGenerationArgs): Promise<vo
     await rm(configPath, { force: true });
     await writeFile(configPath, config, { mode: 0o600 });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOSPC") {
-      throw new AppError("backup.stream_restore_failed", { exitCode: null, diskFull: true });
-    }
-    throw error;
+    // The raw error names the folder; the code carries no path.
+    throw new AppError("backup.stream_restore_failed", {
+      exitCode: null,
+      diskFull: (error as NodeJS.ErrnoException).code === "ENOSPC",
+    });
   }
   const child = spawnLitestream(
     args.litestreamBin,
