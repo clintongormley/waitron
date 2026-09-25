@@ -612,7 +612,12 @@ value applies and its blank languages show no hint.
   (in the product editor: `editor.unit_each` for the unit, `product.no_station` for the kitchen
   station, `product.no_course` for the course) is left out where the empty value already means
   "fall back": offering both would read as one thing and save as another.
-- **Any other control** (a category picker, the allergen and dietary picker, an image): a muted
+- **A single-choice `wt-combobox`** (the product editor's main category): its first option has an
+  empty value and reads "Same as &lt;fallback value&gt;", and so does its placeholder, which is what
+  it shows while the stored value is null; like a `<select>`, it has no separate hint line. A
+  variant's labels are not a field at all — it carries only its parent's — so they are shown as a
+  hint line alone.
+- **Any other control** (the allergen and dietary picker, an image): a muted
   hint line beside it reads "Same as &lt;fallback value&gt;" while the stored value is empty, and
   goes away once the record sets its own. An image shows the fallback picture itself under the hint
   (`dashboard-image-upload`'s `inheritedImage`), with no Remove action, because there is nothing of
@@ -1213,9 +1218,9 @@ needs the icon that means "more options here," not "open navigation" (see "Icons
 label that identifies the row, such as `Actions: Restaurant`. Put Create in a menu beside the table
 heading, and Edit, Delete or domain-specific actions in each row's menu. A screen may instead
 offer Create as a round icon-only `wt-button` (`shape="round"` with the `plus` icon and an
-`aria-label`) beside the heading — but **no screen does today**, so read this as a permission rather
-than a pattern with a home. The dashboard's one `shape="round"` button is not a screen's Create at
-all: it is the product editor's category picker. The menu uses a native
+`aria-label`) beside the heading — but **no screen does today**, and no dashboard control uses
+`shape="round"` at all, so read this as a permission rather than a pattern with a home. The menu
+uses a native
 popover: clicking outside or pressing Escape closes it. Its action buttons follow normal Tab
 navigation. Give every `wt-button` slotted into a `wt-row-actions` popover `align="start"` — a
 centred label reads oddly once the button has been stretched to the popover's full width, the way a
@@ -1258,7 +1263,7 @@ replacement history for defaults and invalid destinations, and push history for 
 Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`; Venue operations uses `status`,
-`departments`, `menus`, `zones` and `routing`. The dashboard preserves module-owned `view` segments
+`departments`, `menus`, `zones` and `routing`, and Categories uses `categories` and `labels`. The dashboard preserves module-owned `view` segments
 while the module validates its keys.
 
 Use `/manage/<section>` for dashboard destinations and `/tabs/<key>` for till tabs. Nested views,
