@@ -1,7 +1,7 @@
 # Menus, reusable categories and service home layouts
 
 **Status:** product decisions agreed with the owner on 2026-09-20; implementation deferred.
-Further owner decisions, 2026-09-25, are in §9.
+Further owner decisions, 2026-09-25, are in §9 and §10; §10 (after outside review) wins where they differ.
 **2026-09-25:** the owner lifted the wait on SQLite slice 2 and the dependency upgrades (the latter
 are finished); the implementation plan is
 [2026-09-25-menus-categories-home-layouts.md](../plans/2026-09-25-menus-categories-home-layouts.md).
@@ -165,7 +165,7 @@ in terms such as “Lemonade added under Drinks” or “Burger price changed fr
 There is one shared working catalogue, not a private category draft for each menu.
 
 Change detection follows what publishing would change, including nested dependencies. Renaming an
-organisational group does not by itself make a menu out of date. A product-price edit does not
+organisational group does not by itself make a menu out of date. *(2026-09-25: groups are dropped, §10.1.)* A product-price edit does not
 change an overridden effective price. A relevant category or product edit flags every affected menu,
 but publishing one clears only that menu's difference.
 
@@ -256,7 +256,7 @@ These are required future checks, not tests run as part of writing this specific
 7. Publish Lunch while Dinner has pending shared changes. Lunch adopts the complete reviewed
    version; Dinner retains its old version and pending-change indication. Failure during publication
    leaves the previous complete version live.
-8. Group-only edits do not flag a content change. Relevant nested content and home-layout edits do.
+8. *(2026-09-25: groups are dropped, §10.1; read "a reporting-category or label edit".)* Group-only edits do not flag a content change. Relevant nested content and home-layout edits do.
    Availability changes take effect without altering the published snapshot.
 9. A default home layout works at handheld and till widths in the same item order. A device can use
    an alternative for the same menu without changing prices, search or the full menu underneath.
@@ -286,7 +286,8 @@ left as it was written:
   new version, and content comparison identifies affected menus without false change flags.
 
 The product decisions above replace the single-parent category and separate menu-section direction
-for this future work. Earlier specifications remain historical records. The
+for this future work. *(2026-09-25: §10.1 reverses this for REPORTING — reporting categories keep a single parent; the
+reusable lists above are menu sections.)* Earlier specifications remain historical records. The
 [category integration guide](../../developers/product-categories.md) describes the existing
 implementation and must be audited when implementation begins.
 
@@ -335,3 +336,163 @@ set and snapshot; how reporting and station assignments stay explicit when categ
 how the service spec's public, staff-only and not-sold-separately setting enters the snapshot and
 its filtering; how source deletion and media retention keep live snapshots whole; and the
 concurrency, publication and device-adoption questions in §8's last item.
+
+## 10. Owner decisions after outside review, 2026-09-25
+
+The implementation plan written earlier on 2026-09-25 was put to outside review at the owner's
+request. The review brief, the discussion before it and the review's consolidated feedback are
+summarised in `docs/handoffs/2026-09-25-menus-categories-model-review-brief.md`, which is not
+committed. The owner then decided what follows. **Where this section disagrees with §1–§9, this
+section wins.**
+
+### 10.1 Three separate relationships
+
+Menus, reporting and the kitchen were being asked to share one "category". They now use three
+separate relationships:
+
+- **Reporting categories** form a strict tree. Each reporting category has at most one parent, and
+  each product has at most one *main reporting category*. Reports roll up along this tree, so a
+  parent's total is exactly the sum of its children. This is today's category model (a single
+  parent, plus the product's primary category) with the rule made explicit. The rules for
+  classifying a sale, and the category reports, are specified in
+  `2026-09-25-sales-classification-and-category-reports-design.md`.
+- **Menu sections** are what §1–§7 call "categories": ordered, reusable, nestable lists that
+  menus and home layouts are built from, with no cycles. **Read "category" in §1–§7 as "section".**
+  Sections are menu arrangement only. Adding, moving or removing a product or section on a menu
+  never changes its reporting classification or its kitchen routing. A menu's top level and its home
+  layouts remain lists the menu owns (§5). Sections are not recorded as classification on a sale.
+  Instead, the sale line records which menu and menu version it was sold from (the sales
+  classification spec, §3).
+- **Labels** are flat tags. A product can carry any number of them, for example "Happy hour
+  drinks" or "Alcoholic". They cannot nest, so they cannot form cycles, and any depth comes from the
+  reporting tree. Labels slice reports and will feed kitchen routing rules (§10.5). They are
+  specified with the sales classification.
+
+The spec's organisational **groups** (§2, "Groups organise categories …") are dropped; the three
+relationships above do the job groups were standing in for. A section and a label may share a name
+("Happy hour drinks"), but they are separate things with separate membership.
+
+### 10.2 Building sections without duplicate work
+
+- A section's **Add products** flow can filter by reporting category, including everything below it
+  in the tree, and select several products at once.
+- It marks which products are already on this menu and which are already in this section, as two
+  different marks.
+- **Creating a product** offers an optional "Add to menus…" step, which places it in chosen
+  sections. These are explicit placements. Like every other menu change, they become visible on a
+  till only when that menu is published.
+- There is **no automatic synchronisation** between reporting categories and sections for now. A
+  later refinement could let a section remember a reporting-category filter and suggest newly
+  created products that match it.
+
+### 10.3 Open orders: a line's price never changes after it is added
+
+This confirms §9's basket rule and extends it. An interim idea from the same day — to update unsent
+lines to a newly published price, with a warning — was considered and **withdrawn by the owner**.
+
+- **A line keeps the price and names it was given when it was added to an order**, whether the
+  order is a till's unsaved basket, a held order or a tab, and whether or not the kitchen has it.
+  Publishing a new version never changes a line already in an order, and nothing re-prices it later.
+  VAT is different: see §10.4.
+- **Editing prices only what the edit adds.**
+  - A line whose product (or variant) is changed is a new item, priced from the version the till is
+    showing.
+  - An extra added to a line is priced from that version.
+  - Extras already on the line keep their price.
+  - A note or an option carries no price.
+- **Editing work the kitchen already has** (owner, 2026-09-25): an order can in principle be changed
+  until the kitchen starts preparing it.
+  - **Not yet sent to the kitchen:** edit freely. That covers a line in a held course not yet fired,
+    a line recalled from the kitchen, a line with no preparation route (no kitchen work exists), and
+    a parked counter order.
+  - **Sent, and the kitchen has not started it:** the edit is allowed and is **never silent**. The
+    kitchen receives a recall for the old line and a new ticket for the changed one, on its screen or
+    as a printed slip. More of an item already sent goes to the kitchen as new work, never as a silent
+    change to the ticket it already has.
+  - **Started:** only a kitchen screen can report this. The edit is refused. Staff void the line, the
+    kitchen gets a VOID notice, and they add a new line, so the waste is visible.
+  - **A paper-only kitchen** never reports "started", so edits stay possible, always with the slip.
+    Checking with the kitchen is up to the staff.
+  - **The venue setting "Allow changes to items already sent to the kitchen"** is on by default. When
+    it is off, an item already sent can only be voided (with its VOID notice) and re-added.
+  - Extras lines follow their dish.
+- **Printing a pre-bill** (the bill before payment) never sends anything to the kitchen and never
+  fires held food. There is no pre-bill in the product today (asesor Q21 and Q14 are open); this is
+  the rule for when one is built.
+- **Availability:** a line not yet sent whose product has become unavailable cannot be sent or paid
+  for. Staff remove it, or replace it with something available. A sent line stays collectible
+  however its product's availability changes, because the work is committed. Where the venue splits
+  a bill, staff can pay the eligible lines and resolve the rest.
+- **A basket older than the menu's grace window:** a till's unsaved basket names the menu version
+  it was built from. If that version was replaced more than the grace window ago (the plan sets 12
+  hours), the till reloads the menu, shows which lines changed price, and staff confirm before paying.
+  That is the one case where a line's price changes, and it is shown, never silent.
+- **Later, with inventory:** adding a line to an order will reserve stock. A line already in an
+  order then stays payable even when the count reaches zero.
+
+### 10.4 Each field has its own lifetime
+
+No single "frozen" rule covers everything:
+
+| Field | Lifetime |
+| --- | --- |
+| Gross price (dish, variant, extras) | Fixed when the line is added (§10.3). |
+| Names on the line (staff, customer, kitchen) | Fixed when the line is added, as they are recorded today. |
+| VAT | **Taken at payment** (owner, 2026-09-25), from each product's current VAT class, for every line — walk-up, held order or tab. The customer pays the same gross price either way; only the VAT split, and so what is owed to the tax agency, follows the rate in force when the invoice is issued. Today a held order's lines are filed at the VAT stored when they were added (`priceStoredOrder`, `apps/server/src/working-order.ts`), so this is a change to the filing path. |
+| Allergens and diet | Always current wherever they are shown: on the till, on the kitchen screen, on printed allergen information and on a retrieved held order. |
+| Availability | Always current. It governs whether an unsent line can be sent or paid for (§10.3). |
+| Preparation destination | Decided by routing and recorded when the line is sent, as today (the ticket item's station). |
+
+Asesor question Q26 (`docs/compliance/asesor-questions.md`) asks the venue's tax adviser to confirm
+that the rate in force at payment is the right one, including across a legal rate change while a
+table is open.
+
+### 10.5 Kitchen routing becomes ordered rules — a later spec
+
+Routing will become an ordered, first-match list of rules. It is **not part of the menus work**,
+and it gets its own spec. What that spec must contain:
+
+- **Conditions:** a product, a reporting category (with everything below it), a label, the zone, and
+  the service mode where required. Time-of-day and device conditions wait for a concrete workflow.
+- **Outcome:** exactly one preparation station, or an explicit "no preparation", plus a clear
+  default.
+- **Safety:**
+  - a product-by-zone preview;
+  - warnings for rules that an earlier rule shadows;
+  - validation of each destination;
+  - a list of the products a change would reroute, shown before it is applied. A note in a category
+    editor is not enough protection against rerouting tonight's orders.
+- **Unchanged principles:** menu arrangement never alters routing, and the destination is recorded
+  when the work is sent.
+- **Separate concerns:** printer copies, and preparing one line at several stations. Check
+  fixed-price set menus early, including components prepared at different stations.
+
+### 10.6 What the first release leaves out
+
+- **Category analysis stays out of the frozen daily close (the Z report).** It is its own report,
+  with an option to print it alongside the close.
+- Elasticsearch or any other cloud analytics design, automatic menu synchronisation (§10.2) and any
+  classification cache all wait until they are needed.
+- **Historical classification snapshots are kept from the start**, because what they record cannot
+  be reconstructed later (the sales classification spec).
+
+### 10.7 Acceptance examples added after outside review
+
+These add to §7.
+
+1. **A basket across a publish:** a Lemonade is added at €3.00, the menu is republished at €2.50,
+   and a second Lemonade is added. The sale files €3.00 + €2.50.
+2. **Concurrent changes to one order:** two tills open the same held order, and each changes it and
+   saves. The second save, made from a copy the first save has since changed, is refused as out of
+   date, and that till reloads the order. Nothing is lost or re-priced silently, and no line either
+   till did not touch is deleted or re-inserted.
+3. **An edit to work the kitchen has:** a burger already sent is changed to "no onions" before the
+   kitchen starts it. The kitchen gets a recall and a new ticket, and the price is unchanged. Once a
+   kitchen screen marks it started, the edit is refused and staff must void and re-add. With the
+   venue setting off, it is refused from the start.
+4. **Held courses and a pre-bill** (when pre-bills exist): printing the bill while the mains are
+   held neither fires the mains nor marks them sent.
+5. **A partial payment:** a tab with one unsent line whose product became unavailable is split. The
+   other lines are paid, and the unavailable line must be removed before its part can be paid.
+6. **VAT at payment:** a held order's drink was added at 10%, and its VAT class is corrected to 21%
+   before payment. The invoice files it at 21%, and the customer pays the same gross price.

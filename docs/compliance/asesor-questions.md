@@ -9,7 +9,8 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-Last revised **2026-09-24** — Q25 (a void made on a later day: which VAT period the annulment lands
+Last revised **2026-09-25** — Q26 (a VAT change while an order is open: we apply the rate in force
+at payment — is that right?) added beside Q25. Before that, **2026-09-24** — Q25 (a void made on a later day: which VAT period the annulment lands
 in) added beside the filing questions. Before that, **2026-09-23** — Q21 (when a table's invoice
 is issued: pre-bill first, or the invoice when the bill is presented) added beside Q14; Q22 (printing the ticket only on request, or never) and
 Q23 (backup copies held abroad or by us) added; the preparation-environment question numbered Q24.
@@ -1199,6 +1200,46 @@ Primary-source boundary checked 2026-09-13:
 requires the cause for a non-subject operation; the committed AEAT
 `SuministroInformacion.xsd` defines the separate `N1` and `N2` values. Neither source determines the
 correct treatment for the venue's particular product.
+
+---
+
+### Q26. A VAT change while an order is still open — we apply the rate in force at payment; is that right? (added 2026-09-25)
+
+**Why it matters.** An order can stay open for hours: a table's tab, or an order held for
+collection. The owner decided on 2026-09-25 that every line's VAT is taken **at payment**, from the
+product's current VAT class, whenever the line was added (menus spec §10.4). The customer pays the
+same gross price either way, so only the VAT split changes. Today a held order's lines are filed at
+the rate stored when each line was added (`priceStoredOrder`, `apps/server/src/working-order.ts`;
+read, not run), so this is a change we are about to make, and we want it confirmed before
+production. Two different events are affected:
+
+- **A set-up error corrected mid-service**, for example a drink configured at 10% that should always
+  have been 21%. Under the new rule, lines already in open orders are filed at the corrected rate.
+- **A legal rate change effective from a given moment**, for example a change on 1 January while a
+  New Year's Eve table is still open after midnight. Under the new rule, everything paid after
+  midnight is filed at the new rate, including drinks served before it.
+
+A wrong rate on a filed invoice can only be corrected by a further record, so we want the rule
+confirmed before production, not after.
+
+> En nuestro TPV, el precio (IVA incluido) de cada línea de un pedido abierto (una mesa, o un pedido
+> pendiente de recoger) queda fijado cuando se añade. El tipo de IVA, en cambio, lo determinamos al
+> cobrar, según el tipo vigente del producto en ese momento, y la factura simplificada se emite con
+> ese tipo.
+>
+> **(a)** Si durante el servicio se corrige una configuración errónea (por ejemplo, una bebida dada
+> de alta al 10 % que debía estar al 21 %), ¿es correcto facturar al tipo corregido las líneas ya
+> añadidas a pedidos abiertos?
+>
+> **(b)** Si entra en vigor un cambio legal de tipo en un momento concreto (por ejemplo, el 1 de enero
+> a las 00:00) mientras una mesa sigue abierta con consumiciones servidas antes y después de ese
+> momento, ¿es correcto aplicar a todas el tipo vigente al emitir la factura, o debe aplicarse a cada
+> consumición el vigente cuando se sirvió (devengo)?
+>
+> **(c)** ¿Cambia algo si el cobro se hace días después (por ejemplo, un pedido de grupo facturado
+> más tarde)?
+
+This records a question; no enquiry has been sent.
 
 ---
 
