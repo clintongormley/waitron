@@ -13,7 +13,7 @@ import {
 } from "@waitron/stream";
 import { reissueBoxLeaf } from "./box-secrets.js";
 import type { Logger } from "./logger.js";
-import { mintNextMembershipDocument, readSignerEndorsements } from "./membership-mint.js";
+import { mintNextMembershipDocument } from "./membership-mint.js";
 import { readStreamSettings } from "./stream-host.js";
 
 /** Left in the state folder by `writeValidated` (restore.ts) whenever a restore takes on the
@@ -80,7 +80,6 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
       heldDocument: held,
       nodes,
       signerNodeId: deps.nodeId,
-      endorsements: await readSignerEndorsements(deps.db, deps.nodeId),
       ...(pointerTerm === null ? {} : { minTerm: pointerTerm + 1 }),
     },
   );

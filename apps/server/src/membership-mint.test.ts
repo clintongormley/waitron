@@ -1,9 +1,16 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
-import { CORE_MIGRATIONS, locations, type Database } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import {
+  CORE_MIGRATIONS,
+  locations,
+  nodes,
+  readMembershipTrustSet,
+  type Database,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import type { Endorsement } from "@waitron/membership";
+import { endorseKey, generateNodeKeyPair, verifyMembershipDocument } from "@waitron/membership";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -39,26 +46,29 @@ describe("mintNextMembershipDocument", () => {
     await establishNodeIdentity({ ownerDb: db, ring: RING }, nodeId);
   }, 60_000);
 
-  it("forwards endorsements onto the signed document", async () => {
-    const endorsement: Endorsement = {
-      nodeId,
-      publicKey: "b64pub",
-      endorsedBy: "primary-node",
-      signature: "b64sig",
-    };
-    const doc = await mintNextMembershipDocument(
-      { db, ring: RING },
-      {
-        heldDocument: null,
-        nodes: [{ nodeId, contactUrl: "", standing: "serving-primary" }],
-        signerNodeId: nodeId,
-        endorsements: [endorsement],
-      },
-    );
-    expect(doc.endorsements).toEqual([endorsement]);
+  it("carries the signer's stored endorsement without the caller passing it", async () => {
+    const endorser = generateNodeKeyPair();
+    const ownKey = (await readMembershipTrustSet(db))[nodeId]!;
+    const endorsement = endorseKey(nodeId, ownKey, "endorser-node", endorser.privateKey);
+    await db.update(nodes).set({ endorsement }).where(eq(nodes.id, nodeId));
+    try {
+      const doc = await mintNextMembershipDocument(
+        { db, ring: RING },
+        {
+          heldDocument: null,
+          nodes: [{ nodeId, contactUrl: "", standing: "serving-primary" }],
+          signerNodeId: nodeId,
+        },
+      );
+      expect(doc.endorsements).toEqual([endorsement]);
+      const verdict = verifyMembershipDocument(doc, { "endorser-node": endorser.publicKey });
+      expect(verdict.valid ? "valid" : verdict.reason).toBe("valid");
+    } finally {
+      await db.update(nodes).set({ endorsement: null }).where(eq(nodes.id, nodeId));
+    }
   });
 
-  it("defaults to no endorsements when none are given (R1 behaviour preserved)", async () => {
+  it("carries no endorsement when the signer's row holds none", async () => {
     const doc = await mintNextMembershipDocument(
       { db, ring: RING },
       {

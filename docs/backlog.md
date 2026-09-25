@@ -5502,12 +5502,17 @@ listener reads it, because the marker is still there — unless that start defer
 (fenced, mirror or adoption-pending), when the listener refuses the pair. The next membership
 document carries this node's stored endorsement, so a peer that trusts only the endorser (the
 primary that adopted this node) accepts it when the stored endorsement is valid for this node's
-key. Every signer except the term-0 seed (#643)
-(`apps/server/src/membership-seed.ts`) reads the signing node's stored endorsement through
-`readSignerEndorsements` (`apps/server/src/membership-mint.ts`): this first start, both promotions
-(`apps/server/src/promote.ts`), `retireSelf` (`apps/server/src/retire.ts`) and the chart append in
-`apps/server/src/mirror-bundle-api.ts`, which reads the row of the node it signs as,
-`designated.nodeId`. The cases "carries this node's stored endorsement, so a peer trusting only the
+key. Every signer carries the signing node's stored endorsement, because the shared signing
+function `mintNextMembershipDocument` (`apps/server/src/membership-mint.ts`) reads it itself and no
+caller passes one (A27b; before, each caller passed it and three had left it out, fixed by #643):
+this first start, both promotions (`apps/server/src/promote.ts`), `retireSelf`
+(`apps/server/src/retire.ts`), the chart append in `apps/server/src/mirror-bundle-api.ts`, which
+signs as `designated.nodeId`, and the term-0 seed (`apps/server/src/membership-seed.ts`). The seed
+signs for a primary set up fresh, and the only product code that writes a node's stored endorsement
+is adopt's `insertReservedNodeTx` (`packages/db/src/reserved-identity.ts`), onto a standby's own row,
+so the seed's document carries none — pinned in `apps/server/src/membership-seed.test.ts`. The case
+"carries the signer's stored endorsement without the caller passing it"
+(`apps/server/src/membership-mint.test.ts`) holds the shared function to it. The cases "carries this node's stored endorsement, so a peer trusting only the
 endorser accepts the eviction" (`apps/server/src/retire.test.ts`), "… accepts the new term"
 (`apps/server/src/promote.test.ts`, local secondary) and "carries the primary's stored endorsement,
 so a peer trusting only the endorser accepts the appended chart"

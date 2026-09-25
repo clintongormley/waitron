@@ -51,5 +51,6 @@ describe("seedTermZeroMembership", () => {
     ]);
     const trust = await readMembershipTrustSet(db);
     expect(verifyMembershipDocument(held!, trust).valid).toBe(true);
+    expect(held?.endorsements).toEqual([]);
   });
 });

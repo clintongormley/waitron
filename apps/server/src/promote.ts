@@ -19,7 +19,7 @@ import {
 } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
 import { refreshDeploymentHolders, type DeploymentHolders } from "./deployment-holders.js";
-import { mintNextMembershipDocument, readSignerEndorsements } from "./membership-mint.js";
+import { mintNextMembershipDocument } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 
 /**
@@ -93,7 +93,6 @@ export async function promoteLocalSecondaryToPrimary(
       heldDocument: held,
       nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
       signerNodeId: deps.nodeId,
-      endorsements: await readSignerEndorsements(deps.db, deps.nodeId),
     },
   );
 
@@ -176,7 +175,6 @@ export async function promoteMirrorToPrimary(
       heldDocument: held,
       nodes: nextStandings(held?.body.nodes ?? [], deps.nodeId),
       signerNodeId: deps.nodeId,
-      endorsements: await readSignerEndorsements(deps.db, deps.nodeId),
     },
   );
 
