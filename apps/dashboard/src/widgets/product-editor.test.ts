@@ -1705,7 +1705,7 @@ const parentValues: InheritedValues = {
   unitPrice: "9.00",
   vatClass: "reduced",
   unitId: litre.id,
-  labelIds: ["l-alc", "l-happy"],
+  labelIds: ["l-happy", "l-alc"],
   primaryCategoryId: "drinks",
   stationId: "bar",
   courseId: "mains",

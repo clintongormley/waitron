@@ -37,6 +37,28 @@ export function categoryPath(
   return names.join(" / ");
 }
 
+/** The collation `wt-data-table` sorts category names with, so a picker and the tables agree. */
+export function byCategoryLabel(a: { label: string }, b: { label: string }): number {
+  return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" });
+}
+
+export function categoryWithDescendants(
+  id: string,
+  categories: readonly CategorySummary[],
+): Set<string> {
+  const ids = new Set([id]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const category of categories)
+      if (category.parentId !== null && ids.has(category.parentId) && !ids.has(category.id)) {
+        ids.add(category.id);
+        grew = true;
+      }
+  }
+  return ids;
+}
+
 /** API writes belong to the host, so the same editor can create a category inside a product draft. */
 @customElement("dashboard-category-form")
 export class CategoryForm extends LitElement {
@@ -180,17 +202,9 @@ export class CategoryForm extends LitElement {
       },
     });
   }
-  #parents(): CategorySummary[] {
-    const excluded = new Set(this.value ? [this.value.id] : []);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const category of this.categories)
-        if (category.parentId && excluded.has(category.parentId) && !excluded.has(category.id)) {
-          excluded.add(category.id);
-          changed = true;
-        }
-    }
+  #parents(): readonly CategorySummary[] {
+    if (!this.value) return this.categories;
+    const excluded = categoryWithDescendants(this.value.id, this.categories);
     return this.categories.filter((category) => !excluded.has(category.id));
   }
   #colorSwatch(color: string) {
@@ -258,11 +272,7 @@ export class CategoryForm extends LitElement {
                 value: category.id,
                 label: categoryPath(category, this.categories, currentLocale(), this.languages),
               }))
-              // Same collation wt-data-table uses for these very names on the categories screen, so
-              // the dropdown and the tables agree: numeric runs in order, accents/case folded.
-              .sort((a, b) =>
-                a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" }),
-              ),
+              .sort(byCategoryLabel),
           ]}
           .value=${this.parentId ?? ""}
           .error=${errors.parent ?? ""}

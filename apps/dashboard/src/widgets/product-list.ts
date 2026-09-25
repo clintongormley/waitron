@@ -7,7 +7,7 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
 import { categoryPath } from "./category-form.js";
-import { labelNames } from "./classification-fields.js";
+import { labelsText } from "./classification-fields.js";
 import {
   modifierListName,
   modifierListNames,
@@ -132,9 +132,7 @@ export class ProductList extends LitElement {
   }
 
   #labels(row: ProductRow): string {
-    return labelNames(this.#values(row).labelIds, this.labels, t("editor.missing_choice"))
-      .sort((a, b) => a.localeCompare(b))
-      .join(", ");
+    return labelsText(this.#values(row).labelIds, this.labels, t("editor.missing_choice"));
   }
 
   #modifierNames(product: Product): string {

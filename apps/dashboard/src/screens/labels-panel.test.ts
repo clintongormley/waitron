@@ -1,5 +1,5 @@
 import { userEvent } from "vitest/browser";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { LabelsPanel } from "./labels-panel.js";
 import type { DashboardApi, LabelSummary } from "../api/client.js";
@@ -7,6 +7,8 @@ import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
 afterEach(cleanupWidgets);
+// The table remembers its sort in sessionStorage; a sort clicked by one test would reorder the next.
+beforeEach(() => sessionStorage.clear());
 afterEach(() => setLocale("es-ES"));
 
 const alcoholic: LabelSummary = { id: "l-alc", name: "Alcoholic", productCount: 3 };

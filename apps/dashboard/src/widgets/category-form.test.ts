@@ -1,7 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { CategoryForm, categoryPath } from "./category-form.js";
+import { CategoryForm, categoryPath, categoryWithDescendants } from "./category-form.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
 afterEach(cleanupWidgets);
@@ -326,6 +326,17 @@ it("names a category in a path by its id when it has no name in any enabled lang
     color: null,
   };
   expect(categoryPath(unnamed, [food, unnamed], "en")).toBe("Food / untitled");
+});
+
+it("gathers a category and every category below it, whatever order the list is in", () => {
+  const leaf: CategorySummary = { ...child, id: "leaf", parentId: "child" };
+  const other: CategorySummary = { ...food, id: "other" };
+  expect([...categoryWithDescendants("food", [leaf, other, child, food])].sort()).toEqual([
+    "child",
+    "food",
+    "leaf",
+  ]);
+  expect([...categoryWithDescendants("leaf", [leaf, other, child, food])]).toEqual(["leaf"]);
 });
 
 it("submits the chosen parent and returns to no parent when None is chosen", async () => {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { render, type TemplateResult } from "lit";
-import { categoryField, labelNames, labelsField } from "./classification-fields.js";
+import { categoryField, labelsField, labelsText } from "./classification-fields.js";
 import type { CategorySummary, Label } from "../api/client.js";
 
 let host: HTMLDivElement;
@@ -83,6 +83,33 @@ it("offers none and then every category by its path, sorted, with the chosen one
   expect(combobox.placeholder).toBe("Uncategorised");
 });
 
+it("orders numbered category paths by value, as the tables do", async () => {
+  const named = (id: string, name: string): CategorySummary => ({
+    id,
+    name: { es: name },
+    image: null,
+    color: null,
+    parentId: null,
+  });
+  const combobox = await mount(
+    categoryField({
+      name: "primary",
+      label: "Main category",
+      categories: [named("c10", "Cat 10"), named("c9", "Cat 9")],
+      languages,
+      value: null,
+      noneLabel: "Uncategorised",
+      disabled: false,
+      change: () => {},
+    }),
+  );
+  expect(combobox.options.map((option) => option.label)).toEqual([
+    "Uncategorised",
+    "Cat 9",
+    "Cat 10",
+  ]);
+});
+
 it("leaves out the excluded categories and shows the error it is given", async () => {
   const combobox = await mount(
     categoryField({
@@ -145,10 +172,9 @@ it("offers every label by name, sorted, and lists the chosen ones as lozenges", 
   expect(change).toHaveBeenCalledWith(["l-happy", "l-alc"]);
 });
 
-it("names labels in the order given and marks one that no longer exists", () => {
-  expect(labelNames(["l-happy", "gone", "l-alc"], [alcoholic, happy], "Missing")).toEqual([
-    "Happy hour drinks",
-    "Missing",
-    "Alcoholic",
-  ]);
+it("names a product's labels sorted by name, marking one that no longer exists", () => {
+  expect(labelsText(["l-happy", "gone", "l-alc"], [alcoholic, happy], "Missing")).toBe(
+    "Alcoholic, Happy hour drinks, Missing",
+  );
+  expect(labelsText([], [alcoholic, happy], "Missing")).toBe("");
 });

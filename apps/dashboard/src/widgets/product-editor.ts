@@ -24,7 +24,7 @@ import "./image-upload.js";
 import "./variant-form.js";
 import "./variant-table.js";
 import { categoryPath } from "./category-form.js";
-import { categoryField, labelNames, labelsField } from "./classification-fields.js";
+import { categoryField, labelsField, labelsText } from "./classification-fields.js";
 import {
   nonBlankNames,
   optionalTextFields,
@@ -656,7 +656,7 @@ export class ProductEditor extends LitElement {
           ? this.hint(
               "labels-hint",
               `${t("labels.field")}: ${this.sameAs(
-                labelNames(parent.labelIds, this.labels, t("editor.missing_choice")).join(", "),
+                labelsText(parent.labelIds, this.labels, t("editor.missing_choice")),
               )}`,
             )
           : labelsField({

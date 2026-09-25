@@ -1,7 +1,7 @@
 import { html, nothing } from "lit";
 import type { ContentLanguages } from "@waitron/shared";
 import type { CategorySummary, Label } from "../api/client.js";
-import { categoryPath } from "./category-form.js";
+import { byCategoryLabel, categoryPath } from "./category-form.js";
 import { currentLocale, t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-lozenge.js";
@@ -35,7 +35,7 @@ export function categoryField(options: CategoryFieldOptions) {
       value: category.id,
       label: categoryPath(category, options.categories, currentLocale(), options.languages),
     }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+    .sort(byCategoryLabel);
   return html`<wt-combobox
     name=${options.name}
     label=${options.label}
@@ -96,11 +96,14 @@ export function labelsField(options: LabelsFieldOptions) {
     }`;
 }
 
-/** Label names for ids, in the ids' order; an id no loaded label has reads as `missing`. */
-export function labelNames(
+/** A product's label names, sorted and joined; an id no loaded label has reads as `missing`. */
+export function labelsText(
   ids: readonly string[],
   labels: readonly Label[],
   missing: string,
-): string[] {
-  return ids.map((id) => labels.find((label) => label.id === id)?.name ?? missing);
+): string {
+  return ids
+    .map((id) => labels.find((label) => label.id === id)?.name ?? missing)
+    .sort((a, b) => a.localeCompare(b))
+    .join(", ");
 }

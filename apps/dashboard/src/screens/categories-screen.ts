@@ -24,8 +24,8 @@ import type {
 import { currentLocale, t } from "../i18n/t.js";
 import { codeOf, codeMessage } from "../i18n/codes.js";
 import { dashboardPath } from "../navigation.js";
-import { categoryPath } from "../widgets/category-form.js";
-import { categoryField, labelNames } from "../widgets/classification-fields.js";
+import { categoryPath, categoryWithDescendants } from "../widgets/category-form.js";
+import { categoryField, labelsText } from "../widgets/classification-fields.js";
 import "./labels-panel.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -393,20 +393,6 @@ export class CategoriesScreen extends LitElement {
     }
     await this.#load();
   }
-  /** The category and every category below it. */
-  #withDescendants(id: string): Set<string> {
-    const ids = new Set([id]);
-    let grew = true;
-    while (grew) {
-      grew = false;
-      for (const category of this.categories)
-        if (category.parentId !== null && ids.has(category.parentId) && !ids.has(category.id)) {
-          ids.add(category.id);
-          grew = true;
-        }
-    }
-    return ids;
-  }
   #mainCount(category: CategorySummary): number {
     return this.products.filter((product) => product.primaryCategoryId === category.id).length;
   }
@@ -526,9 +512,7 @@ export class CategoriesScreen extends LitElement {
     return this.categories.find((item) => item.id === product.primaryCategoryId);
   }
   #labelsText(product: Product): string {
-    return labelNames(product.labelIds, this.labels, t("editor.missing_choice"))
-      .sort((a, b) => a.localeCompare(b))
-      .join(", ");
+    return labelsText(product.labelIds, this.labels, t("editor.missing_choice"));
   }
   #productColumns(trailing?: DataTableColumn<Product>): DataTableColumn<Product>[] {
     const base: DataTableColumn<Product>[] = [
@@ -691,7 +675,7 @@ export class CategoriesScreen extends LitElement {
             "childrenTo",
             t("categories.children_to"),
             t("categories.top_level"),
-            this.#withDescendants(deleting.id),
+            categoryWithDescendants(deleting.id, this.categories),
           )}`,
       );
     }
@@ -750,7 +734,9 @@ export class CategoriesScreen extends LitElement {
   }
   #renderMembers(selected: string) {
     // Each table searches and filters its own rows, so this is the full member list.
-    const ids = this.includeDescendants ? this.#withDescendants(selected) : new Set([selected]);
+    const ids = this.includeDescendants
+      ? categoryWithDescendants(selected, this.categories)
+      : new Set([selected]);
     const members = this.products.filter(
       (product) => product.primaryCategoryId !== null && ids.has(product.primaryCategoryId),
     );
