@@ -34,9 +34,7 @@ export interface BackupApiDeps {
   /** Rewrites this node's sealed state row, which carries `backup.env` and is locked with the recovery
    * key. */
   sealedState: SealedStateRefresher;
-  /** The bucket copy's state, shown beside the archive's; off when undefined. Named even when
-   * absent, so a caller cannot leave the bucket copy out by forgetting it. */
-  readStream: (() => StreamView) | undefined;
+  readStream: () => StreamView;
 }
 
 /**
@@ -261,7 +259,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   const statusBody = async (keySet?: boolean) => ({
     ...projectStatus(await deps.supervisor.status()),
     recoveryKeySet: keySet ?? (await keyPresent()),
-    stream: deps.readStream?.() ?? { state: "off" },
+    stream: deps.readStream(),
   });
 
   // `apply` and `rotate` each read the held key and then write one. Run concurrently, one could write

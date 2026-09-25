@@ -2101,7 +2101,7 @@ export async function startServer(
     status: sealedStateStatus,
   });
   // Reached by every boot past setup and adoption, standby and mirror included: each node writes its
-  // own row (one row per node), so any node can be rebuilt.
+  // own row by design (one row per node; owner, 2026-09-24).
   await sealedState.refresh();
   // The live copy of venue.db to the owner's bucket, primary only. `start()` returns without
   // waiting for the bucket, so a bucket that never answers cannot hold boot or a sale.

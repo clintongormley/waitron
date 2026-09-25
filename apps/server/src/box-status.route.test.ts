@@ -124,7 +124,7 @@ function buildApp(
       now: () => opts.now,
       tlsCertPath: opts.tlsCertPath,
       readBackup: opts.readBackup,
-      readStream: opts.readStream,
+      readStream: opts.readStream ?? (() => ({ state: "off" })),
       readMode: () => "primary",
       readSingletonRole: () => "primary",
       readAwaitingFiscalCertificate: () => false,

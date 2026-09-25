@@ -708,8 +708,9 @@ declare module "@waitron/shared" {
     /** Neither an archive destination nor a bucket copy that is on and current: no copy of the data
      * is being kept. Built as data by the backups alert source, never thrown. */
     "backup.disabled": Record<string, never>;
-    /** The bucket copy's oldest change not yet in the bucket has waited fifteen minutes or more.
-     * `minutes` is that wait, whole. Built as data by the backups alert source, never thrown. */
+    /** The bucket copy's oldest change not yet in the bucket has waited `STREAM_BEHIND_AFTER_MS`
+     * (`alert-sources.ts`) or more. `minutes` is that wait, whole. Built as data by the backups
+     * alert source, never thrown. */
     "backup.stream_behind": { minutes: number };
     /** The bucket copy stopped Litestream at the side-file limit. Built as data by the backups alert
      * source, never thrown. */

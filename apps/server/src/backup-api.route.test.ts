@@ -16,6 +16,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
+import type { StreamView } from "@waitron/stream";
 import { mountBackupApi } from "./backup-api.js";
 import { loadBackupConfig, loadRecoveryKey, type BackupConfig } from "./backup-config.js";
 import { writeBackupEnv, writeRecoveryKey } from "./backup-env-writer.js";
@@ -23,7 +24,6 @@ import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
 import { loadBoxEnv } from "./box-env.js";
 import { parseEnvFile } from "./env-file.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
-import type { StreamView } from "./stream-host.js";
 import { isUnset } from "./env-value.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
@@ -122,7 +122,7 @@ function buildApp(
   readRecoveryKey = async (): Promise<string | undefined> =>
     loadRecoveryKey(await loadBoxEnv(base, stateDir)),
   sealedState: SealedStateRefresher = { refresh: async () => "sealed" },
-  readStream?: () => StreamView,
+  readStream: () => StreamView = () => ({ state: "off" }),
 ): Hono {
   const app = new Hono();
   mountManagementApi(

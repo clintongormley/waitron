@@ -66,7 +66,7 @@ export interface HealthState {
   duties: Record<string, DutyHealth>;
   /** Reported, never judged: `/health` failing on an external bucket would stall an install or an
    * update on someone else's outage (`deploy/waitron.sh` waits for a healthy container). */
-  readStream?: () => StreamView;
+  readStream: () => StreamView;
 }
 
 /**
@@ -79,7 +79,7 @@ export function createHealthState(startedAt: Date): HealthState {
   for (const duty of ALL_DUTIES) {
     duties[duty] = { lastOkAt: null, consecutiveFailures: 0, skipped: 0, parked: 0 };
   }
-  return { startedAt, lastPassAt: null, duties };
+  return { startedAt, lastPassAt: null, duties, readStream: () => ({ state: "off" }) };
 }
 
 /** What `recordPass` just recorded for one duty, returned so a caller can log it at a level the
@@ -251,7 +251,7 @@ export function healthSnapshot(
       startedAt: state.startedAt.toISOString(),
       lastPassAt: state.lastPassAt?.toISOString() ?? null,
       duties,
-      stream: streamHealth(state.readStream?.() ?? { state: "off" }),
+      stream: streamHealth(state.readStream()),
     },
   };
 }

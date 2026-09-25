@@ -54,7 +54,7 @@ export type BoxStatusReaders = {
   chain: () => Promise<ChainHeight>;
   singletonRole: () => Promise<SingletonRole>;
   backup: (() => Promise<BackupStatus>) | undefined;
-  stream?: () => StreamView;
+  stream: () => StreamView;
   duties: () => Record<string, unknown>;
 };
 
@@ -94,7 +94,7 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     chain,
     singletonRole,
     backup,
-    stream: readers.stream?.() ?? { state: "off" },
+    stream: readers.stream(),
     duties: readers.duties(),
   };
 }
@@ -107,8 +107,7 @@ export type BoxStatusDeps = {
   now: () => Date;
   tlsCertPath: string | undefined;
   readBackup: (() => Promise<BackupStatus>) | undefined;
-  /** Named even when absent, so a caller cannot leave the bucket copy out by forgetting it. */
-  readStream: (() => StreamView) | undefined;
+  readStream: () => StreamView;
   readMode: () => DeploymentMode;
   readSingletonRole: () => SingletonRole;
   /** Reads the awaiting-fiscal-certificate cell the fiscal pass writes (pass.ts's `AwaitingCertStatus`),

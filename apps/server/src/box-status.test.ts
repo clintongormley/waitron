@@ -10,6 +10,7 @@ const base: BoxStatusReaders = {
   awaitingFiscalCertificate: () => false,
   chain: async () => ({ height: 7, lastAt: "2026-08-29T10:00:00.000Z" }),
   backup: undefined,
+  stream: () => ({ state: "off" }),
   duties: () => ({ "fiscal.drain": { stale: false } }),
 };
 

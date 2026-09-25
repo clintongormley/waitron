@@ -18,8 +18,6 @@ import type { Logger } from "./logger.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import "./errors.js";
 
-export type { StreamView } from "@waitron/stream";
-
 /** The vault purpose holding the owner's bucket. */
 export const STREAM_PURPOSE = "backup.stream";
 
