@@ -11,7 +11,7 @@ import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { Agent } from "node:https";
 import { join } from "node:path";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import type { RestoreRequest } from "./restore-request.js";
+import type { ArchiveRestoreRequest } from "./restore-request.js";
 
 const MAX_BYTES = 512 * 1024 * 1024;
 const STATE_FILE = "cloud-recovery.json";
@@ -457,7 +457,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       });
     },
     async restore(
-      stage: (request: RestoreRequest) => Promise<void>,
+      stage: (request: ArchiveRestoreRequest) => Promise<void>,
       expectedPointId: string,
     ): Promise<void> {
       return locked(async () => {

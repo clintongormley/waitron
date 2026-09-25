@@ -29,7 +29,7 @@ import type {
   SetupOperationPhase,
   SetupOperationStore,
 } from "./setup-operation.js";
-import type { RestoreRequest } from "./restore-request.js";
+import type { ArchiveRestoreRequest } from "./restore-request.js";
 import type { createCloudRecoveryClient } from "./cloud-recovery.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
 import type { FiscalContribution } from "@waitron/fiscal";
@@ -107,7 +107,7 @@ export interface SetupDeps {
   /** Persistent first-boot serialization and progress, shared by provision, adoption and recovery. */
   operations?: SetupOperationStore;
   /** Stages an encrypted cold-recovery artifact for the entrypoint to restore after restart. */
-  stageRestore?: (request: RestoreRequest) => Promise<void>;
+  stageRestore?: (request: ArchiveRestoreRequest) => Promise<void>;
   /** Fresh replacement's private Cloud snapshot recovery client. */
   cloudRecovery?: Omit<
     ReturnType<typeof createCloudRecoveryClient>,
