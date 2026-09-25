@@ -76,8 +76,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta sección, o el elemento que contiene, ya no existe. Actualiza la lista.",
   },
   "menu_section.invalid": {
-    en: "Check the section's internal name, its colour, its image and the position chosen.",
-    es: "Revisa el nombre interno de la sección, su color, su imagen y la posición elegida.",
+    en: "Check the section's details and try again.",
+    es: "Revisa los datos de la sección y vuelve a intentarlo.",
+  },
+  "menu_section.translation_required": {
+    en: "Add the section's customer name in the default content language, or leave every customer name empty.",
+    es: "Añade el nombre de la sección para clientes en el idioma de contenido predeterminado, o deja vacíos todos los nombres para clientes.",
   },
   "menu_section.member_cycle": {
     en: "A section cannot contain itself, directly or through another section.",
@@ -88,12 +92,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta lista ya contiene ese elemento.",
   },
   "menu_section.not_library": {
-    en: "A menu's own list cannot be changed or placed here.",
-    es: "La lista propia de una carta no se puede cambiar ni colocar aquí.",
+    en: "A menu's own list cannot be changed this way.",
+    es: "La lista propia de una carta no se puede cambiar de esta forma.",
   },
   "menu_section.membership_invalid": {
-    en: "Some of the chosen items cannot be added. Refresh the list and try again.",
-    es: "Algunos de los elementos elegidos no se pueden añadir. Actualiza la lista e inténtalo de nuevo.",
+    en: "Some of the chosen items cannot be used. Refresh the list and try again.",
+    es: "Algunos de los elementos elegidos no se pueden usar. Actualiza la lista e inténtalo de nuevo.",
   },
   "label.invalid": {
     en: "Enter a label name, and choose each label only once.",

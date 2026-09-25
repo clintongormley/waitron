@@ -181,7 +181,7 @@ export class ImageLibrary extends LitElement {
   #text(value: Record<string, string>): string {
     return resolveEnabledContentText(value, currentLocale(), currentContentLanguages());
   }
-  /** A section has no screen to link to yet, so it is named without a link. */
+  /** No screen shows a single section, so a section is named without a link. */
   #usage(use: ImageUsage) {
     if (use.kind === "section") return use.internalName;
     const name = use.kind === "category" ? this.#text(use.names) : use.name;

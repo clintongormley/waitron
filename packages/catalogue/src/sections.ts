@@ -1,7 +1,8 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { catalogues, products, type Transaction } from "@waitron/db";
-import { AppError, contentLanguageCode } from "@waitron/shared";
+import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
 import { mediaImageExists } from "./categories.js";
+import { findContentTranslationGap } from "./content-languages.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 import {
   loadSectionGraph,
@@ -62,14 +63,24 @@ function internalNameOf(value: unknown): string {
   return name;
 }
 
-function namesOf(value: unknown): Record<string, string> {
+/** Customer names are optional, so `{}` is accepted; a map that is supplied needs text in the
+ * venue's default content language. */
+async function namesOf(
+  tx: Transaction,
+  value: unknown,
+  fallbackLanguage: string,
+): Promise<Record<string, string>> {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     throw new AppError("menu_section.invalid", { field: "names" });
-  for (const [language, text] of Object.entries(value)) {
-    contentLanguageCode(language);
-    if (typeof text !== "string") throw new AppError("content.translation_invalid", {});
-  }
-  return value as Record<string, string>;
+  const names = value as Record<string, string>;
+  if (Object.keys(names).length === 0) return names;
+  const gap = await findContentTranslationGap(tx, [names], fallbackLanguage);
+  if (gap !== null)
+    throw new AppError("menu_section.translation_required", {
+      field: "names",
+      language: gap.language,
+    });
+  return names;
 }
 
 function colorOf(value: unknown): string | null {
@@ -86,8 +97,8 @@ async function imageOf(tx: Transaction, value: unknown): Promise<string | null> 
   return value;
 }
 
-/** The list a generic member write may change: any but a home layout. A layout's tiles are to be
- * written only by the menus plan's Task 8 routes, which check the menu reaches each target. */
+/** Any list but a home layout: a layout may only hold what its menu reaches, which no check here
+ * establishes. */
 function requireWritableList(graph: SectionGraph, sectionId: string): void {
   const role = graph.role(sectionId);
   if (role === undefined) throw new AppError("menu_section.not_found", { sectionId });
@@ -98,6 +109,11 @@ function requireLibrary(graph: SectionGraph, sectionId: string): void {
   const role = graph.role(sectionId);
   if (role === undefined) throw new AppError("menu_section.not_found", { sectionId });
   if (role !== "library") throw new AppError("menu_section.not_library", { sectionId });
+}
+
+function replaceable(graph: SectionGraph, sectionId: string, memberId: string): SectionMember {
+  requireWritableList(graph, sectionId);
+  return heldMember(graph, sectionId, memberId);
 }
 
 function heldMember(graph: SectionGraph, sectionId: string, memberId: string): SectionMember {
@@ -195,9 +211,13 @@ export async function readSection(tx: Transaction, id: string): Promise<LibraryS
   return { ...row, members: await membersOf(tx, id) };
 }
 
-export async function createSection(tx: Transaction, input: SectionInput): Promise<LibrarySection> {
+export async function createSection(
+  tx: Transaction,
+  input: SectionInput,
+  fallbackLanguage: string = FALLBACK_LOCALE,
+): Promise<LibrarySection> {
   const internalName = internalNameOf(input.internalName);
-  const names = input.names === undefined ? {} : namesOf(input.names);
+  const names = input.names === undefined ? {} : await namesOf(tx, input.names, fallbackLanguage);
   const color = input.color === undefined ? null : colorOf(input.color);
   const image = input.image === undefined ? null : await imageOf(tx, input.image);
   const [created] = await tx
@@ -212,13 +232,14 @@ export async function updateSection(
   tx: Transaction,
   id: string,
   patch: SectionPatch,
+  fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<LibrarySection> {
   const [row] = await tx.select({ role: sections.role }).from(sections).where(eq(sections.id, id));
   if (!row) throw new AppError("menu_section.not_found", { sectionId: id });
   if (row.role !== "library") throw new AppError("menu_section.not_library", { sectionId: id });
   const values: SectionPatch = {};
   if (patch.internalName !== undefined) values.internalName = internalNameOf(patch.internalName);
-  if (patch.names !== undefined) values.names = namesOf(patch.names);
+  if (patch.names !== undefined) values.names = await namesOf(tx, patch.names, fallbackLanguage);
   if (patch.color !== undefined) values.color = colorOf(patch.color);
   if (patch.image !== undefined) values.image = await imageOf(tx, patch.image);
   if (Object.keys(values).length > 0)
@@ -273,7 +294,7 @@ export async function addMember(
   return added;
 }
 
-/** Appends each product the list does not hold yet, in the order given (spec §10.2). */
+/** Appends each product the list does not already hold, in the order given. */
 export async function addProducts(
   tx: Transaction,
   sectionId: string,
@@ -339,8 +360,7 @@ async function swapMember(
   memberId: string,
   ref: MemberRef,
 ): Promise<{ member: SectionMember; menus: string[] }> {
-  requireWritableList(graph, sectionId);
-  const current = heldMember(graph, sectionId, memberId);
+  const current = replaceable(graph, sectionId, memberId);
   await checkRef(tx, graph, sectionId, ref, current);
   await tx.update(sectionMembers).set(refColumns(ref)).where(eq(sectionMembers.id, memberId));
   return {
@@ -352,7 +372,7 @@ async function swapMember(
 
 /**
  * Swaps what a member holds, keeping its place, so a menu never passes through a state holding
- * neither the old ref nor the new one (D23). The hook is told once, after the swap.
+ * neither the old ref nor the new one. The hook is told once, after the swap.
  */
 export async function replaceMember(
   tx: Transaction,
@@ -374,7 +394,7 @@ export async function replaceMember(
 /**
  * Copies a library section's details and the chosen immediate members, in the source's order,
  * under a new internal name. A nested section is shared, not copied, and no product is made. With
- * `replaceIn` the copy also takes that member's place, in the caller's one transaction (D23).
+ * `replaceIn` the copy also takes that member's place, in the caller's one transaction.
  */
 export async function duplicateSection(
   tx: Transaction,
@@ -396,6 +416,7 @@ export async function duplicateSection(
     chosen.some((memberId) => !source.some((member) => member.id === memberId))
   )
     throw new AppError("menu_section.membership_invalid", {});
+  if (input.replaceIn) replaceable(graph, input.replaceIn.sectionId, input.replaceIn.memberId);
   const [row] = await tx.select(details).from(sections).where(eq(sections.id, sourceId));
   const [copy] = await tx
     .insert(sections)

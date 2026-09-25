@@ -116,17 +116,17 @@ declare module "@waitron/shared" {
     "product.variant_count_invalid": { minimum: number };
     /** `memberId` names a member the section's list does not hold. */
     "menu_section.not_found": { menuId?: string; sectionId: string; memberId?: string };
-    /** A section field is malformed; `field` names it (`"internalName"`, `"color"`, `"position"`). */
+    /** A section write's value is malformed; `field` names it. */
     "menu_section.invalid": { field: string };
+    /** A section's customer names have no text in the venue's default content language. */
+    "menu_section.translation_required": { field: string; language: string };
     /** Holding the child would let a section reach itself. */
     "menu_section.member_cycle": { sectionId: string; childSectionId: string };
     /** The list already holds that product or that section. */
     "menu_section.member_duplicate": { sectionId: string };
-    /** `sectionId` is a list a menu owns: it cannot be a member, and a home layout takes no generic
-     * member write. */
+    /** `sectionId` is a list a menu owns, which the write refused. */
     "menu_section.not_library": { sectionId: string };
-    /** A member selection names an unknown product, a variant, a member the section does not
-     * hold, or one of them twice. */
+    /** A member reference or selection names nothing the write can use. */
     "menu_section.membership_invalid": Record<string, never>;
     /** Not thrown: options-list authoring refuses as `options.invalid`. Kept because a shipped code
      * is never removed. */

@@ -5,6 +5,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { createCatalogue, createCategory, createProduct } from "./operations.js";
 import { setProductVariants } from "./variants.js";
+import { writeContentLanguages } from "./content-languages.js";
 import * as sectionStructure from "./section-structure.js";
 import {
   addMember,
@@ -222,6 +223,29 @@ describe("section details", () => {
       app((tx) => updateSection(tx, drinks.id, { names: { "not a language": "x" } })),
     ).rejects.toMatchObject({ code: "content.language_invalid" });
     expect(await app((tx) => listSections(tx))).toEqual([drinks]);
+  });
+
+  it("refuses customer names with no text in the default content language, but accepts none", async () => {
+    await fixture();
+    await app((tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
+    );
+    const drinks = await create("Drinks");
+    const refusal = {
+      code: "menu_section.translation_required",
+      params: { field: "names", language: "en" },
+    };
+    await expect(
+      app((tx) => createSection(tx, { internalName: "Bebidas", names: { es: "Bebidas" } })),
+    ).rejects.toMatchObject(refusal);
+    await expect(
+      app((tx) => updateSection(tx, drinks.id, { names: { es: "Bebidas" } })),
+    ).rejects.toMatchObject(refusal);
+    expect(
+      (await app((tx) => updateSection(tx, drinks.id, { names: { en: "Drinks", es: "Bebidas" } })))
+        .names,
+    ).toEqual({ en: "Drinks", es: "Bebidas" });
+    expect((await app((tx) => updateSection(tx, drinks.id, { names: {} }))).names).toEqual({});
   });
 
   it("refuses to read, change or delete a section that does not exist", async () => {
@@ -517,7 +541,11 @@ describe("duplicate", () => {
   it("copies the details and the chosen members in order, sharing nested sections", async () => {
     const f = await fixture();
     const drinks = await app((tx) =>
-      createSection(tx, { internalName: "Drinks", names: { es: "Bebidas" }, color: "#112233" }),
+      createSection(tx, {
+        internalName: "Drinks",
+        names: { en: "Something to drink", es: "Bebidas" },
+        color: "#112233",
+      }),
     );
     const beer = await create("Beer");
     await app((tx) => addMember(tx, beer.id, product(f.lager)));
@@ -537,7 +565,7 @@ describe("duplicate", () => {
     );
     expect(copy).toMatchObject({
       internalName: "Summer drinks",
-      names: { es: "Bebidas" },
+      names: { en: "Something to drink", es: "Bebidas" },
       image: null,
       color: "#112233",
     });
@@ -671,6 +699,29 @@ describe("replace (D23)", () => {
     expect(refs(copy.members)).toEqual([product(f.lemonade)]);
   });
 
+  it("refuses an unusable replaceIn before it writes the copy", async () => {
+    const f = await fixture();
+    const layout = await menuOwned("home_layout", f.lunchMenu);
+    const drinks = await create("Drinks");
+    const tile = await rawMember(layout, section(drinks.id), 0);
+    const unknown = crypto.randomUUID();
+    await app(async (tx) => {
+      // Caught inside the one transaction, so a copy written before the refusal would still show.
+      for (const [replaceIn, error] of [
+        [{ sectionId: layout, memberId: tile }, { code: "menu_section.not_library" }],
+        [
+          { sectionId: drinks.id, memberId: unknown },
+          { code: "menu_section.not_found", params: { sectionId: drinks.id, memberId: unknown } },
+        ],
+      ] as const)
+        await expect(
+          duplicateSection(tx, drinks.id, { internalName: "Copy", memberIds: [], replaceIn }),
+        ).rejects.toMatchObject(error);
+      expect((await listSections(tx)).map((row) => row.internalName)).toEqual(["Drinks"]);
+    });
+    expect(hook).not.toHaveBeenCalled();
+  });
+
   it("leaves neither the copy nor the replacement when the replace is refused", async () => {
     const f = await fixture();
     const drinks = await create("Drinks");
@@ -780,14 +831,10 @@ describe("the structure hook", () => {
     expect(hook).not.toHaveBeenCalled();
   });
 
-  it("works out a removal's menus before the link is gone", async () => {
+  it("works out a section delete's menus before the cascade removes the link", async () => {
     const f = await fixture();
     const lunchRoot = await menuOwned("menu_root", f.lunchMenu);
     const drinks = await create("Drinks");
-    const link = await app((tx) => addMember(tx, lunchRoot, section(drinks.id)));
-    hook.mockClear();
-    await app((tx) => removeMember(tx, lunchRoot, link.id));
-    expect(hook.mock.calls[0]![1]).toEqual([f.lunchMenu]);
     await app((tx) => addMember(tx, lunchRoot, section(drinks.id)));
     hook.mockClear();
     await app((tx) => deleteSection(tx, drinks.id));

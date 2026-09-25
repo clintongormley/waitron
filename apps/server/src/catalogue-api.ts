@@ -240,6 +240,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "product.variant_count_invalid": 400,
   "menu_section.not_found": 404,
   "menu_section.invalid": 400,
+  "menu_section.translation_required": 400,
   "menu_section.membership_invalid": 400,
   // 409: the body was well formed, and what the stored lists hold refused it.
   "menu_section.member_cycle": 409,
@@ -492,7 +493,7 @@ function mountListSurface<TList, TDependants>(
 }
 
 /** `/management-api/sections`: the reusable lists, their members, and a menu's own lists. */
-function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger): void {
+function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocale: string): void {
   const collection = "/management-api/sections";
   const one = `${collection}/:id` as const;
   const members = `${one}/members` as const;
@@ -508,7 +509,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger): void {
       const session = requireManagementSession(c);
       const input = sectionInput(await readJsonBody<Record<string, unknown>>(c), true);
       const created = await gated(session, (tx) =>
-        createSection(tx, input as SectionPatch & { internalName: string }),
+        createSection(tx, input as SectionPatch & { internalName: string }, venueLocale),
       );
       return c.json(created, 201);
     }),
@@ -525,7 +526,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger): void {
       const session = requireManagementSession(c);
       const id = sectionId(c);
       const patch = sectionInput(await readJsonBody<Record<string, unknown>>(c), false);
-      return c.json(await gated(session, (tx) => updateSection(tx, id, patch)));
+      return c.json(await gated(session, (tx) => updateSection(tx, id, patch, venueLocale)));
     }),
   );
   app.delete(one, (c) =>
@@ -728,7 +729,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     dependants: extraListDependants,
   });
 
-  mountSectionRoutes(app, gated, log);
+  mountSectionRoutes(app, gated, log, deps.venueLocale ?? FALLBACK_LOCALE);
 
   app.get("/management-api/content-languages", (c) =>
     run(c, log, async () => {
