@@ -196,7 +196,12 @@ confirm the deletion defaults (spec §2.1: products and subcategories go to the 
 top-level category, products become Uncategorised and subcategories top-level); whether label names
 should ignore capitals (today "Alcoholic" and "alcoholic" can both exist — a small migration if so);
 `Product.categoryId` and `primaryCategoryId` now always hold the same value; and the per-product
-label routes and `?descendants=1` on a category's products have no dashboard caller yet. The owner lifted the
+label routes and `?descendants=1` on a category's products have no dashboard caller yet.
+**Classification Task 2 (in progress, branch `feat/classification-sale-line-classification`):**
+every till filing path records each sale line's product, a variant's parent, its menu, its gross
+and its reporting chain and labels when the record is issued. `sale_lines.menu_version_id` stays
+null on every line until the menus plan's Task 7 (sell from the published version) fills it; that
+task wires it, because it lands second. The owner lifted the
 wait: the dependency upgrades are finished, and the work does not wait for SQLite slice 2. The
 menus plan's decisions D1–D23 settle the spec's open integration points; D6, D9, D10, D11, D12,
 D13 and D22 are the ones flagged for the owner. Menus Task 3 wipes existing venues (it rebuilds

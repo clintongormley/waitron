@@ -784,6 +784,25 @@ describe("the run wrapper (the shared error boundary Tasks 5 & 6 reuse)", () => 
     },
   );
 
+  // A catalogue whose data breaks the reporting tree refuses the issuance pass: not the till's fault,
+  // and permanent until the catalogue is fixed.
+  it("answers sale_classification.invalid with 409, keeping its code", async () => {
+    const app = new Hono();
+    app.get("/refused", (c) =>
+      run(c, collect([]), () =>
+        Promise.reject(
+          new AppError("sale_classification.invalid", {
+            productId: randomUUID(),
+            reason: "empty_name",
+          }),
+        ),
+      ),
+    );
+    const res = await app.request("/refused");
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "sale_classification.invalid" } });
+  });
+
   it("maps a non-AppError to an opaque 500 server.internal and logs it at error", async () => {
     const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
     const app = new Hono();

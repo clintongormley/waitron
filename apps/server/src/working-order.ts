@@ -88,6 +88,7 @@ import { formatInvoiceNumber, recordSale } from "@waitron/core";
 import type { FloorAnnotator, PreparationRoute } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
+import { issuancePass } from "./issuance-pass.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { enqueueCorrectionSlips, enqueueKitchenTickets } from "./kitchen-print.js";
@@ -2527,7 +2528,7 @@ export async function placeOrder(
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     let issuedOrderLabel: string | null | undefined;
     if (orderFlow === "invoice_first") {
-      const priced = await priceStoredOrder(tx, id);
+      const priced = await issuancePass(tx, cfg, id, await priceStoredOrder(tx, id));
       // The fiscal record's `till_id` is the DEVICE till, while the amendment below records the box's
       // CONFIGURED register. The chain is keyed by the node, not the device.
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {

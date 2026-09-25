@@ -45,6 +45,7 @@ import {
   toVatBreakdown,
 } from "./working-order.js";
 import type { LineExtras, TillSaleDeps } from "./working-order.js";
+import { issuancePass } from "./issuance-pass.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
@@ -509,10 +510,11 @@ async function fileImmediateSale(
   cfg: TillConfig,
   workingOrderId: string,
   tender: TillTender,
-  priced: PricedLines,
+  pricedLines: PricedLines,
   operatorId?: string,
   markCollected = false,
 ): Promise<TillSaleResult> {
+  const priced = await issuancePass(tx, cfg, workingOrderId, pricedLines);
   const isCard = tender.method === "card";
   const { settledAmount } = settlementFor(tender, priced.total);
 
@@ -705,6 +707,8 @@ export async function payWorkingOrderIntegrated(
     } else {
       priced = await priceStoredOrder(tx, req.id);
     }
+    // The record is issued from THIS pricing, in P3, whatever changes while the reader runs.
+    priced = await issuancePass(tx, cfg, req.id, priced);
     // A `placed` order here is a counter collect, so `finalizeCapture` stamps `collected_at`.
     return { kind: "collect" as const, priced, wasPlaced: locked?.status === "placed" };
   });
@@ -897,7 +901,7 @@ async function finalizeRecovery(
       };
     }
 
-    const priced = await priceStoredOrder(tx, req.id);
+    const priced = await issuancePass(tx, cfg, req.id, await priceStoredOrder(tx, req.id));
     const capturedAmount = decimal(captured.amount);
 
     if (compareDecimal(capturedAmount, priced.total) < 0) {
