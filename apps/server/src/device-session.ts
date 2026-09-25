@@ -234,7 +234,8 @@ export async function requireSaleTillId(
 /**
  * The handheld firewall: a handheld device may not reach a route that runs this guard. Enforced on
  * the server so the fence holds even if the client is bypassed. No device (an operator-session
- * till) and a non-handheld device both pass. `device` as in {@link requireSaleTillId}.
+ * till) and a non-handheld device both pass, so run it after the route's `requireSession` guard.
+ * `device` as in {@link requireSaleTillId}.
  */
 export async function assertNotHandheld(
   deps: { db: Database; devMode?: boolean },
@@ -251,7 +252,8 @@ export async function assertNotHandheld(
 /**
  * The device-capability firewall: a device whose profile does not declare `capability` is refused,
  * fail-closed, with `device.forbidden_action`. No device (an operator-session till) passes, as in
- * {@link assertNotHandheld}. `device` as in {@link requireSaleTillId}.
+ * {@link assertNotHandheld}, so run it after the route's `requireSession` guard. `device` as in
+ * {@link requireSaleTillId}.
  */
 export async function assertDeviceCapability(
   deps: { db: Database; devMode?: boolean },

@@ -70,10 +70,10 @@ export interface SetupDeps {
    * seat. */
   db?: Database;
   ring?: KeyRing;
-  /** Provision path only — a mirror seals none. */
+  /** Provision path only. */
   establishIdentity?: (nodeId: string) => Promise<void>;
   /** Mints the venue's term-0 membership document after `establishIdentity` seals the identity key.
-   * Provision path only — a mirror mints none. */
+   * Provision path only. */
   seedMembership?: (nodeId: string) => Promise<void>;
   /** Persists `trading.env` so the next boot enters trading mode. */
   persistTrading?: (cfg: TradingConfig) => Promise<void>;
@@ -442,8 +442,8 @@ function parseProvisionPayload(
   };
 }
 
-/** A direct structured error response mirroring the error boundary's `{ error: { code, params } }`
- * shape, for the two refusals that are returned OUTSIDE the boundary (the latch and the deps gate). */
+/** A structured error response mirroring the error boundary's `{ error: { code, params } }` shape,
+ * for a refusal a handler returns rather than throws. */
 function directError(
   c: Context,
   log: Logger,
@@ -516,11 +516,12 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     );
   });
 
-  // The one-shot setup latch, one per mount and so one per booted process. Every setup action shares
-  // it, so a start of one latches out a concurrent start of any other. `applyVenue` mints a FRESH
-  // SIF/hash chain on every run and `provisionVenue`'s tenant-exists check is not atomic with it, so
-  // two concurrent provisions could each start a second, unrecoverable chain (CLAUDE.md §5); the
-  // latch prevents the concurrent case, the tenant-exists check backstops a sequential re-POST.
+  // The one-shot setup latch, one per mount and so one per booted process. Every setup POST except
+  // cloud recovery's start and start-again checks it, so a start of one latches out a concurrent
+  // start of another. `applyVenue` mints a FRESH SIF/hash chain on every run and `provisionVenue`'s
+  // tenant-exists check is not atomic with it, so two concurrent provisions could each start a
+  // second, unrecoverable chain (CLAUDE.md §5); the latch prevents the concurrent case, the
+  // tenant-exists check backstops a sequential re-POST.
   let provisioning = false;
   let fiscalTesting = false;
   let configurationStaging = false;
@@ -582,8 +583,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
 
     // SYNCHRONOUS before ANY `await`, so this check+set completes before a second near-simultaneous
-    // POST's handler begins. Reset on ANY failure (below) so a corrected retry works; LEFT set on
-    // success — the box is about to restart.
+    // POST's handler begins. Reset when `execute` fails (below) so a corrected retry works; LEFT set
+    // on success — the box is about to restart.
     if (provisioning || fiscalTesting || configurationStaging) {
       return directError(c, log, "setup.already_provisioning", 409);
     }

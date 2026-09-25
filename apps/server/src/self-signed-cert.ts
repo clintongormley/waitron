@@ -26,7 +26,9 @@ export interface MintOptions {
 
 /**
  * The CA's permitted name space: `waitron.local`, `localhost`, loopback and the three RFC1918
- * ranges. Nothing public is in it, so the root can never vouch for an outside name.
+ * ranges. OpenSSL, the macOS system checker and Chrome 152 on macOS refused the root for an outside
+ * name; Chrome on the one Android phone measured accepted one under the user-installed root
+ * (docs/superpowers/specs/2026-09-08-lan-https-install-and-name-constraints-spike.md §6, §7).
  */
 const PERMITTED_DNS = ["waitron.local", "localhost"];
 const PERMITTED_IPV4_CIDRS: Array<[string, number]> = [
@@ -59,9 +61,8 @@ function ipv4ToInt(ip: string): number | undefined {
 }
 
 /**
- * Whether `ip` sits inside one of the CA's permitted IPv4 subtrees. A leaf's iPAddress SANs must
- * be a subset of that set, or `ca.verify(leaf)` fails and the box serves no HTTPS at all, so an
- * address outside it is dropped from the SAN list rather than added.
+ * Whether `ip` sits inside one of the CA's permitted IPv4 subtrees. OpenSSL 3.6.3 refused the WHOLE
+ * leaf, hostnames included, when any one address was outside them.
  */
 export function isPermittedLeafIpv4(ip: string): boolean {
   const ipInt = ipv4ToInt(ip);
@@ -130,10 +131,7 @@ function randomSerial(): string {
   return bytes.toString("hex");
 }
 
-/**
- * Refuses an empty `hostnames` before any RSA-2048 generation: a leaf with no dNSName SAN
- * authenticates no request.
- */
+/** Refuses an empty `hostnames` before any RSA-2048 generation. */
 function keypairFor(
   hostnames: string[],
   keypair: (() => forge.pki.rsa.KeyPair) | undefined,

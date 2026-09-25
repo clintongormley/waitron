@@ -81,13 +81,12 @@ const exists = (p: string): Promise<boolean> =>
 
 /**
  * Write the box's self-signed CA, leaf and vault key ring ONCE under `stateDir`, then reuse them on
- * every later boot. Presence is the whole idempotency contract: each write is guarded on its target
- * being absent, because a fresh CA would break every already-trusting setup client and a fresh key
- * ring would strand every sealed credential.
+ * every later boot, because a fresh CA would break every already-trusting setup client and a fresh
+ * key ring would strand every sealed credential. `server.key` guards all four TLS PEMs (when it is
+ * absent all four are re-minted over whatever exists); `secrets.env` guards only itself.
  *
- * The four PEMs and `secrets.env` are created 0600 and the `tls/` directory 0700; a `stateDir`
- * that already exists keeps its mode. The file mode is applied when the file is created, not by a
- * later `chmod`: a reused file is never rewritten.
+ * Each file is written 0600 through a newly created working copy; `tls/` is created 0700, and a
+ * directory that already exists keeps its mode.
  */
 export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxTlsFiles> {
   const mint = deps.mint ?? mintSelfSignedServerCert;

@@ -492,8 +492,8 @@ declare module "@waitron/shared" {
      */
     "join_request.not_found": Record<string, never>;
     /**
-     * A self-signed server certificate was asked for with an empty `hostnames` list. A leaf with no
-     * `dNSName` SAN can never complete a handshake, so the minter refuses before generating a key.
+     * A self-signed server certificate was asked for with an empty `hostnames` list. The minter
+     * refuses before generating a key.
      */
     "setup.cert_hostnames_empty": Record<string, never>;
     /**

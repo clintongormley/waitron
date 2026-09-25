@@ -9,7 +9,9 @@ export const NODE_KEY_PURPOSE = "membership.node_key";
 /**
  * Seal the node's Ed25519 private key in the box vault and stamp the public half on
  * `nodes.public_key`, the trust anchor `readMembershipTrustSet` reads, in one transaction: the two
- * halves must land together or not at all. The handle is named `ownerDb` because `nodes` is
+ * halves must land together or not at all. Run it only after the node's row exists:
+ * `setNodePublicKeyTx` is an update with no row-count check, so an early call seals the key and
+ * stamps nothing, without error. The handle is named `ownerDb` because `nodes` is
  * one of the tables `scripts/write-path-tables.json` lists, which request code may read and never
  * write; nothing in the engine enforces that.
  */
