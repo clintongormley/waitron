@@ -23,7 +23,7 @@ import "./errors.js";
 export const STREAM_PURPOSE = "backup.stream";
 
 /** How the vault stores an absent optional field: it refuses empty strings. */
-const ABSENT = "-";
+export const ABSENT = "-";
 
 export interface StreamSettings {
   venueId: string;

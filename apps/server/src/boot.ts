@@ -191,6 +191,9 @@ import { readVenueTimeZone } from "./venue-time-zone.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
 import { buildServeOptions, watchTlsFiles } from "./tls.js";
 import { StreamHost } from "./stream-host.js";
+import { mountStreamApi } from "./stream-api.js";
+import { writeRecoveryKey } from "./backup-env-writer.js";
+import { createS3ObjectStore, probeBucket } from "@waitron/stream";
 import { Server as HttpsServer } from "node:https";
 import "./errors.js";
 // `DEFAULTS` is NOT imported: `loadConfig` already applied the scheduler's defaults, so reaching for
@@ -2242,6 +2245,23 @@ export async function startServer(
       readRecoveryKey,
       sealedState,
       readStream: () => streamHost.status(),
+    },
+    log,
+  );
+  mountStreamApi(
+    app,
+    {
+      db,
+      ring,
+      stream: streamHost,
+      nodeId: till.nodeId,
+      venueId: till.locationId,
+      isPrimary: () => holders.singletonRole.current === "primary",
+      readRecoveryKey,
+      writeRecoveryKey: (recoveryKey) =>
+        writeRecoveryKey(config.stateDir, { recoveryKey, keyRotatedAt: undefined }),
+      sealedState,
+      probe: (bucket) => probeBucket(createS3ObjectStore(bucket)),
     },
     log,
   );

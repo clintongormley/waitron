@@ -675,6 +675,14 @@ declare module "@waitron/shared" {
      * `rotate` finds no destination loaded and no key held. `field` names the offending field, never
      * the value, which could be the recovery key. */
     "backup.request_invalid": { field: string };
+    /** The stream settings' Test, or the same check Save runs first, refused the owner's bucket.
+     * `reason` is `probeBucket`'s short reason (`@waitron/stream`), naming which check failed. */
+    "backup.stream_test_failed": { reason: string };
+    /** A recovery kit was asked for while no bucket is configured. */
+    "backup.stream_not_configured": Record<string, never>;
+    /** A recovery kit was asked for on a node with no membership public key (`nodes.public_key`),
+     * so a rebuild could not verify the pointer this node signs. */
+    "backup.stream_signer_missing": Record<string, never>;
     /**
      * `apply` was given a recovery key different from the one this box already holds. One recovery
      * key per venue; `rotate` is the way to change it. No params — the keys are secrets. */
