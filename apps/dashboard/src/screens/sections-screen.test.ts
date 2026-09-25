@@ -11,7 +11,7 @@ import type {
 } from "../api/client.js";
 import type { MemberListEditor } from "../widgets/member-list-editor.js";
 import type { SectionAddProducts } from "../widgets/section-add-products.js";
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
 afterEach(cleanupWidgets);
@@ -423,6 +423,51 @@ it("opens the section a ?section= link names, once, and ignores an unknown one",
   expect(modal(other, "editor").open).toBe(false);
 });
 
+it("keeps the table's columns while the editor is typed in, and rebuilds them for a new language", async () => {
+  const el = await mount();
+  const columns = table(el).columns;
+  await openEditor(el, "s-drinks");
+  await table(el).updateComplete;
+  const render = vi.spyOn(table(el) as unknown as { render: () => unknown }, "render");
+  await type(field(el, "internalName"), "Drinks bar");
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(table(el).columns).toBe(columns);
+  expect(render).not.toHaveBeenCalled();
+  render.mockRestore();
+  const label = () => (table(el).columns[0] as unknown as { label: string }).label;
+  expect(label()).toBe(t("sections.internal_name", "es-ES"));
+  setLocale("en-GB");
+  try {
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(label()).toBe(t("sections.internal_name", "en-GB"));
+    expect(label()).not.toBe(t("sections.internal_name", "es-ES"));
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+it("shows a changed place of use in the table even when the sections themselves did not change", async () => {
+  // The same list both times, so only the usages read can bring the table up to date.
+  const listed = sections();
+  const moved = { ...usages(), "s-specials": { menus: [lunch], sections: [] } };
+  const client = api({
+    listSections: vi.fn().mockResolvedValue(listed),
+    listSectionUsages: vi.fn().mockResolvedValueOnce(usages()).mockResolvedValue(moved),
+  });
+  const el = await mount(client);
+  const cell = () =>
+    table(el)
+      .shadowRoot.querySelector('tr[data-row-key="s-specials"] [data-test="used-in"]')!
+      .textContent!.trim();
+  expect(cell()).toBe(t("sections.not_used"));
+  await openEditor(el, "s-specials");
+  click(el, '[data-test="editor-save"]');
+  await vi.waitFor(() => expect(client.listSectionUsages).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(cell()).toBe("Lunch Menu"));
+});
+
 it("says so when there are no sections yet", async () => {
   const el = await mount(api({ listSections: vi.fn().mockResolvedValue([]) }));
   expect((table(el) as unknown as { emptyMessage: string }).emptyMessage).toBe(t("sections.empty"));
@@ -524,6 +569,9 @@ it("says a section is not used anywhere yet, and says so when its use cannot be 
       t("sections.used_nowhere"),
     ),
   );
+  expect(inModal(el, "editor", '[data-test="editor-used-in"]')!.getAttribute("role")).toBe(
+    "status",
+  );
   click(el, '[data-test="editor-cancel"]');
   await openEditor(el, "s-drinks");
   await vi.waitFor(() =>
@@ -531,6 +579,7 @@ it("says a section is not used anywhere yet, and says so when its use cannot be 
       t("sections.usages_error"),
     ),
   );
+  expect(inModal(el, "editor", '[data-test="editor-used-in"]')!.getAttribute("role")).toBe("alert");
 });
 
 it("ignores a usages answer that arrives after the editor moved on to another section", async () => {
@@ -625,6 +674,8 @@ it("puts a server refusal beside the field it names, keeping the typed values", 
   await vi.waitFor(() =>
     expect(field(el, "names-es").error).toBe(codeMessage("menu_section.translation_required")),
   );
+  expect(field(el, "names-es").invalid).toBe(true);
+  expect(field(el, "names-en").invalid).toBe(false);
   expect(await summary(el, "editor")).toEqual([codeMessage("menu_section.translation_required")]);
   expect(field(el, "names-en").value).toBe("Something to drink");
 
@@ -708,6 +759,8 @@ it("closes on Cancel and on the modal's own close, but not while a save is in fl
   await openEditor(el, "s-drinks");
   click(el, '[data-test="editor-save"]');
   await el.updateComplete;
+  expect(field(el, "internalName").disabled).toBe(true);
+  expect(field(el, "names-es").disabled).toBe(true);
   emit(modal(el, "editor"), "wt-close", {});
   click(el, '[data-test="editor-cancel"]');
   const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
@@ -1024,6 +1077,50 @@ it("changes nothing when a refused move answers for a section no longer open", a
   expect(inModal(el, "editor", '[data-test="member-error"]')).toBeNull();
   expect(client.listSectionMembers).not.toHaveBeenCalled();
   expect(memberList(el).members.map((member) => member.id)).toEqual(["m-lager-2"]);
+});
+
+it.each(["answers", "fails"] as const)(
+  "does not apply a refused move's reload that %s after another section was opened",
+  async (outcome) => {
+    const reload = deferred<SectionMember[]>();
+    const client = api({
+      moveSectionMember: vi.fn().mockRejectedValue({ code: "menu_section.not_found" }),
+      listSectionMembers: vi.fn().mockReturnValue(reload.promise),
+    });
+    const el = await mount(client);
+    await openEditor(el, "s-drinks");
+    emit(memberList(el), "wt-member-move", { memberId: "m-lager", to: 1 });
+    await vi.waitFor(() => expect(client.listSectionMembers).toHaveBeenCalledOnce());
+    click(el, '[data-test="editor-cancel"]');
+    await el.updateComplete;
+    await openEditor(el, "s-beer");
+    if (outcome === "answers") reload.resolve(sections()[0]!.members);
+    else reload.reject(new Error("down"));
+    await reload.promise.catch(() => undefined);
+    // Yields one macrotask so the reload's answer is handled before asserting.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(memberList(el).members.map((member) => member.id)).toEqual(["m-lager-2"]);
+    expect(inModal(el, "editor", '[data-test="members-reload-error"]')).toBeNull();
+  },
+);
+
+it("does not let a refused move from a closed section drop a move made in the section opened next", async () => {
+  const old = deferred<SectionMember[]>();
+  const client = api({
+    moveSectionMember: vi.fn().mockReturnValueOnce(old.promise).mockResolvedValue([]),
+  });
+  const el = await mount(client);
+  await openEditor(el, "s-drinks");
+  emit(memberList(el), "wt-member-move", { memberId: "m-lager", to: 1 });
+  await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
+  click(el, '[data-test="editor-cancel"]');
+  await el.updateComplete;
+  await openEditor(el, "s-fav");
+  emit(memberList(el), "wt-member-move", { memberId: "m-fav-lemonade", to: 1 });
+  old.reject({ code: "menu_section.not_found" });
+  await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledTimes(2));
+  expect(client.moveSectionMember.mock.calls[1]).toEqual(["s-fav", "m-fav-lemonade", 1]);
 });
 
 // ---------------------------------------------------------------------------

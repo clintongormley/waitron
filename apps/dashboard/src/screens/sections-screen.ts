@@ -10,10 +10,10 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "../widgets/image-upload.js";
-import "../widgets/member-list-editor.js";
+import { memberKindLabel, memberName } from "../widgets/member-list-editor.js";
 import "../widgets/section-add-products.js";
 import { colorField, colorFieldStyles } from "../widgets/color-field.js";
-import type { AddableProduct } from "../widgets/section-add-products.js";
+import { optionalTextFields, textField, type FieldContext } from "../widgets/form-fields.js";
 import type {
   CategorySummary,
   DashboardApi,
@@ -37,6 +37,9 @@ interface Occurrence {
 }
 
 type Use = "menu" | "unused" | "sections";
+
+const occurrenceKey = (row: Occurrence) => row.key;
+const occurrenceParent = (row: Occurrence) => row.parentKey;
 
 const NO_USAGES: SectionUsages = { menus: [], sections: [] };
 
@@ -221,11 +224,18 @@ export class SectionsScreen extends LitElement {
   );
 
   #occurrences: Occurrence[] = [];
+  /** Built only when what the cells read changes: the table sorts, filters and searches every row
+   * each time it renders, and any new property value makes it render, so a keystroke in the editor
+   * must not hand it new columns. Keyed on the UI language too, because the labels are translated
+   * when the columns are built. */
+  #columns: DataTableColumn<Occurrence>[] = [];
+  #columnsLocale = "";
   #byId = new Map<string, LibrarySection>();
-  #memberProducts: { id: string; name: string }[] = [];
+  #sectionNames = new Map<string, string>();
+  #memberProducts: Product[] = [];
   #productNames = new Map<string, string>();
-  #addable: AddableProduct[] = [];
-  #sectionChoices: { id: string; internalName: string }[] = [];
+  #addable: Product[] = [];
+  #inSection: string[] = [];
   #excluded: string[] = [];
 
   /** Counts each time the editor opens a section or closes, so an answer for an earlier one is
@@ -235,9 +245,11 @@ export class SectionsScreen extends LitElement {
   /** Member writes run one after another, in the order asked. */
   #chain: Promise<void> = Promise.resolve();
   #pending = 0;
-  /** Bumped when a move is refused: the moves queued behind it were made against an order the
-   * server never reached, so they are dropped. */
+  /** Bumped when a move is refused: the moves queued behind it in the same editor session were made
+   * against an order the server never reached, so they are dropped. A move made in a later session
+   * starts from what that session loaded, so it is kept. */
   #moveGeneration = 0;
+  #refusedSession = -1;
   #membersChanged = false;
 
   override connectedCallback(): void {
@@ -248,24 +260,32 @@ export class SectionsScreen extends LitElement {
   protected override willUpdate(changed: PropertyValues): void {
     if (changed.has("sections")) {
       this.#byId = new Map(this.sections.map((section) => [section.id, section]));
+      this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
       this.#occurrences = this.#tree();
-      this.#sectionChoices = this.sections.map(({ id, internalName }) => ({ id, internalName }));
     }
+    if (
+      changed.has("usages") ||
+      changed.has("locales") ||
+      this.#columnsLocale !== currentLocale()
+    ) {
+      this.#columnsLocale = currentLocale();
+      this.#columns = this.#buildColumns();
+    }
+    if (changed.has("editorMembers"))
+      this.#inSection = this.editorMembers.flatMap(({ ref }) =>
+        ref.kind === "product" ? [ref.productId] : [],
+      );
     // The picker offers Active products; an Inactive one the list already holds is passed too, only
     // so its row keeps its name (the editor never offers a product the list holds).
     if (changed.has("products") || changed.has("editorMembers")) {
-      const held = new Set(
-        this.editorMembers.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : [])),
+      const held = new Set(this.#inSection);
+      this.#memberProducts = this.products.filter(
+        (product) => product.active || held.has(product.id),
       );
-      this.#memberProducts = this.products
-        .filter((product) => product.active || held.has(product.id))
-        .map(({ id, name }) => ({ id, name }));
     }
     if (changed.has("products")) {
       this.#productNames = new Map(this.products.map(({ id, name }) => [id, name]));
-      this.#addable = this.products
-        .filter((product) => product.active)
-        .map(({ id, name, categoryId }) => ({ id, name, categoryId }));
+      this.#addable = this.products.filter((product) => product.active);
     }
     if (changed.has("sections") || changed.has("editorId")) this.#excluded = this.#holders();
   }
@@ -356,14 +376,6 @@ export class SectionsScreen extends LitElement {
 
   #customerName(section: LibrarySection): string {
     return resolveEnabledContentText(section.names, currentLocale(), this.locales!);
-  }
-
-  #memberName(ref: MemberRef): string {
-    const name =
-      ref.kind === "product"
-        ? this.#productNames.get(ref.productId)
-        : this.#byId.get(ref.sectionId)?.internalName;
-    return name ?? t("members.missing");
   }
 
   // ── Editor ────────────────────────────────────────────────────────────────────────────────────
@@ -474,12 +486,16 @@ export class SectionsScreen extends LitElement {
     else void this.#load();
   }
 
-  async #reloadMembers(sectionId: string): Promise<void> {
+  async #reloadMembers(sectionId: string, session: number): Promise<void> {
+    let members: SectionMember[] | null = null;
     try {
-      this.editorMembers = await this.api.listSectionMembers(sectionId);
+      members = await this.api.listSectionMembers(sectionId);
     } catch {
-      this.membersReloadError = true;
+      // Reported below, once the answer is known to belong to the open section.
     }
+    if (session !== this.#session) return;
+    if (members) this.editorMembers = members;
+    else this.membersReloadError = true;
   }
 
   /** Not `busy`: that would disable the handle the keyboard user is on and drop their focus. */
@@ -489,7 +505,7 @@ export class SectionsScreen extends LitElement {
     const generation = this.#moveGeneration;
     this.memberError = null;
     this.#enqueue(async () => {
-      if (generation !== this.#moveGeneration) return;
+      if (session === this.#refusedSession && generation !== this.#moveGeneration) return;
       try {
         const ordered = await this.api.moveSectionMember(sectionId, memberId, to);
         this.#wrote(session);
@@ -497,9 +513,10 @@ export class SectionsScreen extends LitElement {
         if (session === this.#session && this.#pending === 1) this.editorMembers = ordered;
       } catch (error) {
         this.#moveGeneration++;
+        this.#refusedSession = session;
         if (session !== this.#session) return;
         this.memberError = codeMessage(codeOf(error));
-        await this.#reloadMembers(sectionId);
+        await this.#reloadMembers(sectionId, session);
       }
     });
   }
@@ -521,7 +538,7 @@ export class SectionsScreen extends LitElement {
       }
       this.#wrote(session);
       done?.();
-      await this.#reloadMembers(sectionId);
+      await this.#reloadMembers(sectionId, session);
       this.busy = false;
     });
   }
@@ -603,7 +620,7 @@ export class SectionsScreen extends LitElement {
 
   // ── Rendering ────────────────────────────────────────────────────────────────────────────────
 
-  #columns(): DataTableColumn<Occurrence>[] {
+  #buildColumns(): DataTableColumn<Occurrence>[] {
     return [
       {
         key: "name",
@@ -703,9 +720,9 @@ export class SectionsScreen extends LitElement {
         collapseLabel=${t("sections.collapse")}
         expandLabel=${t("sections.expand")}
         .rows=${this.#occurrences}
-        .columns=${this.#columns()}
-        .rowKey=${(row: Occurrence) => row.key}
-        .rowParent=${(row: Occurrence) => row.parentKey}
+        .columns=${this.#columns}
+        .rowKey=${occurrenceKey}
+        .rowParent=${occurrenceParent}
         .emptyMessage=${t("sections.empty")}
       ></wt-data-table>`;
   }
@@ -718,20 +735,17 @@ export class SectionsScreen extends LitElement {
   }
 
   #renderUsedIn() {
-    const text = this.editorUsagesError
-      ? t("sections.usages_error")
-      : this.editorUsages === null
+    if (this.editorUsagesError)
+      return html`<p class="error" role="alert" data-test="editor-used-in">
+        ${t("sections.usages_error")}
+      </p>`;
+    const text =
+      this.editorUsages === null
         ? t("sections.usages_loading")
         : this.editorUsages.menus.length + this.editorUsages.sections.length === 0
           ? t("sections.used_nowhere")
           : t("sections.used_in_note").replace("{list}", usedInText(this.editorUsages));
-    return html`<p
-      class=${this.editorUsagesError ? "error" : "note"}
-      data-test="editor-used-in"
-      role="status"
-    >
-      ${text}
-    </p>`;
+    return html`<p class="note" data-test="editor-used-in" role="status">${text}</p>`;
   }
 
   #renderMemberError() {
@@ -758,7 +772,7 @@ export class SectionsScreen extends LitElement {
       <dashboard-member-list-editor
         .members=${this.editorMembers}
         .products=${this.#memberProducts}
-        .sections=${this.#sectionChoices}
+        .sections=${this.sections}
         .excludeSectionIds=${this.#excluded}
         .busy=${this.busy}
         label=${t("sections.members_label").replace("{name}", this.internalName)}
@@ -796,9 +810,17 @@ export class SectionsScreen extends LitElement {
       </div>`;
   }
 
+  #fields(errors: Record<string, string>): FieldContext {
+    return {
+      busy: this.busy,
+      locales: this.locales!.languages,
+      error: (key) => errors[key] ?? "",
+    };
+  }
+
   #renderDetails() {
     const errors = this.fieldErrors;
-    const languages = this.locales!.languages;
+    const context = this.#fields(errors);
     return html`<div class="fields" ?inert=${this.busy}>
         ${this.#summary([...Object.values(errors), ...(this.memberError ? [this.memberError] : [])])}
         <div
@@ -810,36 +832,31 @@ export class SectionsScreen extends LitElement {
             )}
         >
           <div class="field">
-            <wt-input
-              name="internalName"
-              required
-              label=${t("sections.internal_name")}
-              .value=${this.internalName}
-              .error=${errors.internalName ?? ""}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                event.stopPropagation();
-                this.internalName = event.detail.value;
+            ${textField(
+              context,
+              "internalName",
+              t("sections.internal_name"),
+              this.internalName,
+              (value) => {
+                this.internalName = value;
                 const remaining = { ...this.fieldErrors };
                 delete remaining.internalName;
                 this.fieldErrors = remaining;
-              }}
-            ></wt-input>
+              },
+              true,
+            )}
             <p class="help">${t("sections.internal_name_help")}</p>
           </div>
           <fieldset class="names" aria-describedby="section-names-error">
             <legend>${t("sections.customer_names")}</legend>
-            ${languages.map(
-              (language) =>
-                html`<wt-input
-                  name=${`names-${language}`}
-                  label=${`${t("sections.customer_name")} (${language})`}
-                  .value=${this.names[language] ?? ""}
-                  .error=${errors[`names-${language}`] ?? ""}
-                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                    event.stopPropagation();
-                    this.names = { ...this.names, [language]: event.detail.value };
-                  }}
-                ></wt-input>`,
+            ${optionalTextFields(
+              context,
+              "names",
+              t("sections.customer_name"),
+              this.names,
+              (names) => {
+                this.names = names;
+              },
             )}
             <span class="field-error" id="section-names-error">${errors.names ?? nothing}</span>
           </fieldset>
@@ -876,14 +893,11 @@ export class SectionsScreen extends LitElement {
   }
 
   #renderAddProducts() {
-    const held = this.editorMembers.flatMap(({ ref }) =>
-      ref.kind === "product" ? [ref.productId] : [],
-    );
     return html`${this.#renderMemberError()}
       <dashboard-section-add-products
         .products=${this.#addable}
         .categories=${this.categories}
-        .inSection=${held}
+        .inSection=${this.#inSection}
         .onMenu=${null}
         .busy=${this.busy}
         @wt-add-products=${(event: CustomEvent<{ productIds: string[] }>) => {
@@ -1011,14 +1025,8 @@ export class SectionsScreen extends LitElement {
                           this.duplicating = { ...duplicating, chosen };
                         }}
                       />
-                      <span>${this.#memberName(member.ref)}</span>
-                      <span class="kind"
-                        >${t(
-                          member.ref.kind === "product"
-                            ? "members.kind_product"
-                            : "members.kind_section",
-                        )}</span
-                      >
+                      <span>${memberName(member.ref, this.#productNames, this.#sectionNames)}</span>
+                      <span class="kind">${memberKindLabel(member.ref)}</span>
                     </label>`,
                 )}
               </fieldset>

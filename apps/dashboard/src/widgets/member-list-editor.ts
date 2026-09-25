@@ -15,6 +15,21 @@ interface Choice {
   label: string;
 }
 
+/** A member's staff-facing name, or a placeholder when the product or section is not known here. */
+export function memberName(
+  ref: MemberRef,
+  productNames: ReadonlyMap<string, string>,
+  sectionNames: ReadonlyMap<string, string>,
+): string {
+  const name =
+    ref.kind === "product" ? productNames.get(ref.productId) : sectionNames.get(ref.sectionId);
+  return name ?? t("members.missing");
+}
+
+export function memberKindLabel(ref: MemberRef): string {
+  return t(ref.kind === "product" ? "members.kind_product" : "members.kind_section");
+}
+
 /**
  * One ordered list of products and sections. The host owns the list and every write: each action
  * leaves as an event, and a move is shown at once so a keyboard user's focus stays on the row.
@@ -136,12 +151,7 @@ export class MemberListEditor extends LitElement {
   }
 
   #name(member: SectionMember): string {
-    const { ref } = member;
-    const name =
-      ref.kind === "product"
-        ? this.#productNames.get(ref.productId)
-        : this.#sectionNames.get(ref.sectionId);
-    return name ?? t("members.missing");
+    return memberName(member.ref, this.#productNames, this.#sectionNames);
   }
 
   #choices(): { products: Choice[]; sections: Choice[] } {
@@ -235,9 +245,7 @@ export class MemberListEditor extends LitElement {
     return html`<tr data-member=${member.id}>
       <td class="handle-cell">${this.#reorder.handle(member.id)}</td>
       <td class="name" data-test="name">${name}</td>
-      <td class="kind" data-test="kind">
-        ${t(ref.kind === "product" ? "members.kind_product" : "members.kind_section")}
-      </td>
+      <td class="kind" data-test="kind">${memberKindLabel(ref)}</td>
       <td class="actions-cell">
         <wt-row-actions
           align="end"
