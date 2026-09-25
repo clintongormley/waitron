@@ -5269,9 +5269,11 @@ another start writes can still push a server restarting at that moment onto the 
 recognised — a wrapped one, or the store's raw `VenueInUseError`, would still count (no path wraps
 them today). Left by #608, no behaviour change decided: the watchdog appends its line to
 `waitron.log` without creating the log folder, so on a machine with no such folder that line is
-lost (the JSON report and stderr still carry it; a box's `logs` volume always exists); the
-recovery page has Spanish wording for the stalled-holder row only, every other row is English;
-only a store's `close()` waits for the watchdog thread to end, not a bare `release()`. Also
+lost (the JSON report and stderr still carry it; a box's `logs` volume always exists); only a
+store's `close()` waits for the watchdog thread to end, not a bare `release()`. The recovery page,
+English-only apart from the stalled-holder row when #608 landed, is now written in English and
+translated into Spanish, one language per page chosen from the browser's `Accept-Language`
+(this change); its Spanish has not been read by a native speaker. Also
 left by #566's review, no behaviour change: the migrator's lock and
 the venue lock use one technique in two copies, and the test helper that holds the lock from another
 process is copied into several test files.
