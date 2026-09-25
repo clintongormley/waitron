@@ -5113,7 +5113,7 @@ back), landed as #557. Until Task 8b the Backups screen's setup form
 enabled) sent a freshly made key unless the operator pasted one, so on a box that holds a key while
 backups are off — for instance one whose venue failed to open, which clears the running config while
 `backup.env` keeps the key — the apply was refused with that code. Task 8b made the form read
-`recoveryKeySet` and make and send no key when the box holds one. That does not rescue the
+`recoveryKeySet` and make and send no key when the screen's last status read says the box holds one. That does not rescue the
 failed-venue box: an apply there that reuses the held key takes the path a pasted held key took
 before — it writes, reloads, the venue fails to open again, and the route answers
 `backup.effective_mismatch` (read from the route, not run, for Task 8b). The edit-settings form can also meet
@@ -5185,7 +5185,7 @@ each answers, is not established; a provider that refuses it with any other stat
 prune, which is logged as `stream.prune_failed`. `probeBucket` (`packages/stream/src/probe.ts`),
 which the supervisor runs before opening a generation, again while streaming (at most every ten
 minutes after a failed bucket read or while a bucket problem is flagged, otherwise once a day), and
-which the settings screen's Test button is to run, deletes one object at a time, so neither can reveal such a provider. Open: having the bucket check
+which the bucket-copy panel's Test and Save both run, deletes one object at a time, so neither can reveal such a provider. Open: having the bucket check
 delete its test object through `deleteMany` would reveal one. The other
 choice #569 left, one code for a listed file outside the folder asked for, is taken: the S3 store
 now reports it as `backup.stream_name_invalid` with `field: "listedKey"`, the code and field
@@ -5290,9 +5290,10 @@ Left open: the pointer write left open under
 Task 6, item (2), one from a process that has since died, landing after the restart.
 Task 8b, the Backups screen's bucket-copy panel and the archive setup reusing a held recovery key
 (this branch). The panel (`apps/dashboard/src/screens/stream-settings-panel.ts`) takes the bucket's
-settings with Test and Save, shows the copy's state, how many minutes of changes wait and the last
-confirmed copy, and the recovery kit with a copy button and a download; when the recovery key
-changes it fetches the kit again and tells the owner to keep the old one for seven days. A refusal
+settings with Test and Save, turns the copy off after a second, confirming tap, shows the copy's
+state, how many minutes of changes wait and the last confirmed copy, and the recovery kit with a copy
+button and a download; when a settings read of a set-up copy shows a different recovery key, it
+fetches the kit again and tells the owner to keep the old one for seven days. A refusal
 naming a bucket setting is shown beside that field; a failed Test names the failed check in words,
 and a check with no sentence of its own falls back to the refusal's own wording rather than the
 reason's text. The archive setup form no longer makes or sends a key when the box already holds one.

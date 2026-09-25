@@ -941,7 +941,7 @@ export interface BackupApplyBody {
   retention: { count: number; days: number };
 }
 
-/** LOCAL copy of `@waitron/stream`'s `StreamStatus`: a running supervisor's state. */
+/** LOCAL copy of `@waitron/stream`'s `StreamStatus`: a supervisor's state, running or stopped. */
 export interface StreamSupervisorStatus {
   state: "off" | "opening" | "streaming" | "paused" | "refused";
   generation: string | null;
@@ -952,7 +952,7 @@ export interface StreamSupervisorStatus {
   lastConfirmedUploadAt: string | null;
 }
 
-/** LOCAL copy of `@waitron/stream`'s `StreamView`: a running supervisor's status; a copy whose
+/** LOCAL copy of `@waitron/stream`'s `StreamView`: a supervisor's status; a copy whose
  * settings are stored but that has no supervisor, with why; or plain off. */
 export type StreamStatusView =
   StreamSupervisorStatus | { state: "off"; reason: string; stateSince: string } | { state: "off" };

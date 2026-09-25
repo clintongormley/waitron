@@ -129,7 +129,7 @@ the filled-background idiom only for a colour that is itself the data, never as 
 ### Structure
 
 `--wt-space-1` … `--wt-space-6` (4–32px), `--wt-radius-sm|md|lg`, `--wt-font-family`,
-`--wt-font-family-mono` (a key or recovery kit the owner copies character by character),
+`--wt-font-family-mono` (text read or copied character by character, such as a key or a log line),
 `--wt-font-size-sm|md|lg|xl`, `--wt-font-weight-normal|bold`, `--wt-shadow-1|2`,
 `--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-modal-max-width`,
 `--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-cell-name-max-width`,

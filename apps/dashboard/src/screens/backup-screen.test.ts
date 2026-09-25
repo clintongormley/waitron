@@ -154,7 +154,7 @@ describe("backup-screen", () => {
     expect(q(el, "[role=alert]")!.textContent).toContain(codeMessage("backup.recovery_key_exists"));
   });
 
-  it("shows the bucket copy under the archive settings, handing it the api and the running key's fingerprint", async () => {
+  it("shows the bucket copy panel, handing it the screen's api", async () => {
     const api = stubApi({}, ENABLED);
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
     await flush(el);

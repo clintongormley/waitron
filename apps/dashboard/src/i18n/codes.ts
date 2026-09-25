@@ -628,16 +628,16 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La clave guardada no se aplicó; inténtalo de nuevo",
   },
   "backup.recovery_key_exists": {
-    en: "This box already has a recovery key, and backups use it. To replace it, use “Change the recovery key”.",
-    es: "Este equipo ya tiene una clave de recuperación y las copias la usan. Para sustituirla, usa «Cambiar la clave de recuperación».",
+    en: "This box already has a recovery key, and backups use it. To replace it, turn backups on, then use “Change the recovery key”.",
+    es: "Este equipo ya tiene una clave de recuperación y las copias la usan. Para sustituirla, activa las copias y después usa «Cambiar la clave de recuperación».",
   },
   "backup.reload_in_progress": {
     en: "The box is still applying an earlier change. Wait a moment and try again.",
     es: "El equipo todavía está aplicando un cambio anterior. Espera un momento y vuelve a intentarlo.",
   },
   "backup.stream_config_unsafe": {
-    en: "The bucket copy cannot use one of these settings as written. The bucket name may use only lowercase letters, digits, dots and hyphens.",
-    es: "La copia en el bucket no puede usar uno de estos ajustes tal como está escrito. El nombre del bucket solo puede llevar minúsculas, cifras, puntos y guiones.",
+    en: "The bucket copy cannot use one of these settings as written.",
+    es: "La copia en el bucket no puede usar uno de estos ajustes tal como está escrito.",
   },
   "backup.stream_test_failed": {
     en: "The bucket failed the test. Check the address, the key and the bucket's permissions.",

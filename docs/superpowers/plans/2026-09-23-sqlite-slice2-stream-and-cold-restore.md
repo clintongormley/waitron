@@ -15769,18 +15769,28 @@ not as a refused setting."
 > off) and `StreamSettingsView` carries `recoveryKeySet`. The state line says "Not running" for any
 > off state, keeps "another server is writing" for `pointer_changed` and `pointer_newer_term` only,
 > and says "the bucket settings cannot be used" for any other refusal; the lag and last-copy rows show
-> only for a running supervisor, a lag under a minute reads "Under a minute waiting", and a failing
-> bucket check gets its own row. A Test or Save refusal naming a bucket setting
+> for any supervisor's status, a stopped one included, a lag under a minute reads "Under a minute
+> waiting", and a failing bucket check gets its own row. A Test or Save refusal naming a bucket setting
 > (`backup.stream_config_unsafe` or `backup.request_invalid` with a `field`) goes beside that field
 > and focus moves there. An unknown probe reason shows the refusal's own wording, never the reason's
 > text. Each required field has its own sentence rather than one "Fill this in.". The secret's
 > show/hide button is an icon with its own label. The panel sets no width of its own (the Backups
-> screen wraps it in its card) and reads a new `--wt-font-family-mono` token for the kit. Two refusals
-> get panel wording: `backup.managed_by_environment` on Save and `backup.recovery_key_missing` on the
-> kit. `codes.ts` also gained `backup.stream_config_unsafe` and `backup.reload_in_progress`;
+> screen wraps it in its card) and reads a new `--wt-font-family-mono` token for the kit. Three
+> refusals get panel wording: `backup.managed_by_environment` on Save, `backup.recovery_key_too_short`,
+> and `backup.recovery_key_missing` on the kit. `codes.ts` also gained `backup.stream_config_unsafe` and `backup.reload_in_progress`;
 > `backup.stream_failed` needs none, as it is a log tag and the wire answer is `server.internal`. The
-> kit is re-fetched from `willUpdate`, not `updated`, and the panel sits after the archive section's
-> error line, not before it.
+> panel sits after the archive section's error line, not before it. Two Step 2 strings read
+> differently: `backup.key.existing` names "Change the recovery key" rather than "rotate the key", and
+> `backup.recovery_key_exists` says "turn backups on, then use “Change the recovery key”". After
+> review:
+>
+> - The panel notices a key change from the fingerprint in its own settings read and fetches the kit
+>   again; the Backups screen no longer passes it a fingerprint.
+> - Save and the Backups screen's key change both invalidate `backup_status`.
+> - Turn off takes a second, confirming tap.
+> - `stream.status.minutes` became `stream.status.lag_minutes`, one sentence with a `{minutes}`
+>   placeholder.
+> - A refusal because the box's key is too short gets a panel sentence of its own.
 
 **Branch:** `feat/sqlite-slice2-stream-settings-screen` (one pull request)
 
@@ -24153,6 +24163,9 @@ stated so a reviewer comparing plan to spec does not read them as drift:
    carries. 8b shows the "your recovery key changed — download the new kit" banner when that
    happens, so nothing is silently lost, but the owner may prefer the archive wizard to REUSE the
    streaming key instead of minting one. That is a change to the backup wizard, not to these tasks.
+   _2026-09-25: Task 8b's branch settled this: when the screen's last status read says the box holds
+   a key, the Backups form sends none and the server keeps that key, so no new key is made and no
+   banner shows._
 
 ---
 
