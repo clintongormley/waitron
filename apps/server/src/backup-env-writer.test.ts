@@ -58,8 +58,6 @@ describe("writeBackupEnv", () => {
       WAITRON_BACKUP_RETAIN_DAYS: "30",
       WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-09T00:00:00.000Z",
     });
-    // The whole record is pinned by the `toEqual` above, so a key added here fails that, not a
-    // per-key absence check: the wizard writes these seven and nothing else.
     // Owner-only perms, like the other secret writers.
     expect((await stat(join(dir, "backup.env"))).mode & 0o777).toBe(0o600);
   });
@@ -81,12 +79,9 @@ describe("writeBackupEnv", () => {
   });
 
   it("rejects a destinationDir with an embedded newline and injects NOTHING", async () => {
-    // Security: only the recovery key was round-trip guarded, so a destinationDir carrying a newline
-    // slipped through validation and `formatEnvFile` wrote it verbatim — the injected second line
-    // then parsed back as a REAL env var. Every free string must be guarded, and no env file may be
-    // written that does not round-trip. The payload below is the variable the original fault
-    // planted; it names no live setting any more, which does not weaken the case — what is asserted
-    // is that NO file is written at all.
+    // Security: every free string is guarded, not only the recovery key — a newline in destinationDir
+    // would inject a second line that parses back as a REAL env var. What is asserted is that NO file
+    // is written at all.
     const dir = tempDir();
     await expect(
       writeBackupEnv(dir, {
@@ -97,7 +92,6 @@ describe("writeBackupEnv", () => {
         keyRotatedAt: undefined,
       }),
     ).rejects.toMatchObject({ code: "backup.destinations_invalid" });
-    // The guard fires BEFORE the write, so there is no file at all — hence no injected DB url.
     await expect(readFile(join(dir, "backup.env"), "utf8")).rejects.toThrow();
   });
 });

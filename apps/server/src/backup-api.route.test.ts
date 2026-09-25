@@ -2,8 +2,6 @@
 // lifecycle. The supervisor is pointed at a throwaway venue directory because these tests exercise
 // the ROUTES, not what a backup contains; the supervisor's own lifecycle is covered in
 // `backup-supervisor.test.ts`.
-//
-// Nothing here establishes what the deployment role, which no longer exists, may read or write.
 import { mkdtempSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -191,18 +189,8 @@ async function setupTenant(): Promise<void> {
     { db: suite.db, modules: ALL_MODULES },
   );
   await withTransaction(suite.db, async (tx) => {
-    // Through drizzle rather than the raw `insert into persons` this seeded on PostgreSQL, and not
-    // for tidiness: `persons.id` and `persons.created_at` used to be filled by the COLUMN and are
-    // now filled by drizzle's `$defaultFn` instead, so a statement that names neither is refused.
-    // Measured on this tree — `NOT NULL constraint failed: persons.id`, then, once an id is
-    // supplied, `NOT NULL constraint failed: persons.created_at`. The two sides, each read inside
-    // the `persons` block rather than grepped file-wide:
-    // `aabdde6a8^:packages/identity/drizzle/0000_identity_baseline.sql:44,:60` carried
-    // `DEFAULT gen_random_uuid()` and `DEFAULT now()`;
-    // `packages/identity/drizzle/0000_baseline.sql:46,:62` carry a bare `NOT NULL`, because the
-    // defaults moved to `packages/identity/src/schema/persons.ts:27,:67`. The insert the PRODUCT
-    // uses is this one, so the fixture now takes the same route — the shape the converted siblings
-    // use (`catalogue-api.test.ts`, `till-api.test.ts`).
+    // Through drizzle, not raw SQL: `persons.id` and `persons.created_at` are filled by drizzle's
+    // `$defaultFn`, so a statement that names neither is refused.
     await tx.insert(persons).values({
       displayName: "The Manager",
       email: MANAGER_EMAIL,
@@ -337,10 +325,8 @@ describe("backup admin routes", () => {
     expect(body.enabled).toBe(true);
     expect(body.keyFingerprint).toBe(keyFingerprint(KEY_1));
     expect(body.recoveryKey).toBeUndefined(); // the status projection NEVER carries the key
-    // The apply RESPONSE is the COMPLETE status the dashboard reads (not the sync snapshot): it
-    // carries `backupStatus` and `archiveUnderCurrentKey`, or the screen has no `backupStatus` after a
-    // successful save. `configured` is true (a destination is now wired); the freshness of the very
-    // first dump is not asserted here (the poll below covers it) — only that the fields are present.
+    // The apply RESPONSE is the COMPLETE status the dashboard reads (not the sync snapshot). Only the
+    // fields' presence is asserted here; the poll below covers the first dump.
     expect(body.backupStatus.configured).toBe(true);
     expect(typeof body.archiveUnderCurrentKey).toBe("boolean");
     // `apply` wrote backup.env verbatim (no restart needed) and the effective config picked it up.

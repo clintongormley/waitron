@@ -1,6 +1,6 @@
 // Every database here is a real venue DIRECTORY migrated by the product's own `applyMigrations`,
-// which is what makes this an end-to-end proof rather than a fixture: the append-only triggers on
-// `registros_facturacion`, and the schema every assertion reads, are the ones a box would carry.
+// so the append-only triggers on `registros_facturacion`, and the schema every assertion reads,
+// are the ones a box would carry.
 import { createHash } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -148,13 +148,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   });
 }
 
-/**
- * The uploaded image, written through the table definitions so the fixture's bytes are exactly
- * `BASELINE_MEDIA`. What this suite asserts is that the RESTORE carries an image's metadata and
- * bytes across, and the read side still goes through the real `readImageBytes`. The filename has
- * the shape `media_images_filename_ck` requires, sha256 hex plus an extension; a `.jpg` row is one
- * configuration transfer can still bring in.
- */
+/** The filename has the shape `media_images_filename_ck` requires: sha256 hex plus an extension. */
 async function seedImage(db: Database): Promise<void> {
   const filename = `${createHash("sha256").update(BASELINE_MEDIA).digest("hex")}.jpg`;
   const [row] = await db
@@ -205,7 +199,6 @@ async function drive(dirs: { stateDir: string; venueDir: string }, artifact = ar
   return restoreFromArtifact(await restoreDepsFor(dirs, artifact));
 }
 
-/** The node's series as the assertions read them, oldest code first, booleans mapped in JavaScript. */
 async function seriesOfNode(
   db: Database,
 ): Promise<{ code: string; retired: boolean; next: number }[]> {
@@ -221,7 +214,6 @@ async function seriesOfNode(
   return rows.map(({ code, retiredAt, next }) => ({ code, retired: retiredAt !== null, next }));
 }
 
-/** How many series are retired, whole table — counted in JavaScript, not by `count(*)` in SQL. */
 async function retiredSeriesCount(db: Database): Promise<number> {
   const rows = await db.select({ retiredAt: invoiceSeries.retiredAt }).from(invoiceSeries);
   return rows.filter((row) => row.retiredAt !== null).length;
@@ -261,8 +253,6 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
         (older ? 1 : 0),
     );
 
-    // The engine's own copy statement. This is the shape `restoreDatabase` expects the archive's
-    // `db.dump` entry to be — a whole SQLite venue file, not a `pg_dump` archive (`restore.ts`).
     const dumpPath = join(scratchRoot, `baseline-${older}.dump`);
     await store.venue.archiveTo(dumpPath);
     const entries: ArchiveEntry[] = [
@@ -298,12 +288,9 @@ beforeAll(async () => {
     });
   }
 
-  // The OLDER artifact needs a database one core migration behind the code it is restored with.
-  // Rewinding the journal table cannot express that: no shipped core migration adds
-  // `invoice_series.retired_at` (the baseline creates it), so no shipped step could re-add the
-  // one the dump lacks. Instead the older restore gets its OWN
-  // root: the shipped sets plus one extra core step that re-adds the column its dump lacks. The
-  // dump is then genuinely one migration behind that root, and only the extra step replays.
+  // The OLDER artifact needs a database one core migration behind the code it is restored with,
+  // and no shipped core migration adds `invoice_series.retired_at` (the baseline creates it). So
+  // the older restore gets its OWN root: the shipped sets plus one extra core step re-adding it.
   olderMigrationsRoot = join(scratchRoot, "migrations-older");
   await cp(migrationsRoot, olderMigrationsRoot, { recursive: true });
   const coreSet = ALL_MODULES.find((m) => m.name === "core")!.migrations;
@@ -321,8 +308,7 @@ beforeAll(async () => {
     idx: journal.entries.length,
     version: "6",
     // Drizzle replays an entry only when its `when` is later than the newest applied row's
-    // created_at, and every shipped `when` was stamped at `db:generate` time — in the past. The
-    // SQLite dialect does the same arithmetic the PostgreSQL one did
+    // created_at, and every shipped `when` is in the past
     // (`drizzle-orm@0.45.2/sqlite-core/dialect.js:660`).
     when: Date.now(),
     tag: extraTag,
@@ -378,9 +364,7 @@ describe("fiscal restore, end to end", () => {
       const env = parseEnvFile(await readFile(join(dirs.stateDir, "trading.env"), "utf8"));
       expect(env.WAITRON_TILL_SERIES_ID).toBe(await readStandardSeriesId(db, F.nodeId));
       expect(env.WAITRON_TILL_NODE_ID).toBe(F.nodeId);
-      // A key the rewrite does not touch survives it. `DATABASE_URL` used to stand here; it is
-      // retired on this engine (`config.ts` reads no such value), and asserting a key the product
-      // no longer has would be asserting nothing.
+      // A key the rewrite does not touch survives it.
       expect(env.WAITRON_ENV).toBe("preproduction");
       expect(env.WAITRON_TILL_TILL_ID).toBe(F.tillId);
       expect(await readFile(join(dirs.stateDir, "secrets.env"), "utf8")).toBe(
@@ -406,17 +390,8 @@ describe("fiscal restore, end to end", () => {
         .select({ huella: registrosFacturacion.huella })
         .from(registrosFacturacion);
       expect(ledger).toHaveLength(1);
-      // The restored ledger still REFUSES a rewrite. On PostgreSQL that refusal arrived as
-      // SQLSTATE `WT001`; here it is the engine's own `SQLITE_CONSTRAINT_TRIGGER` carrying the
-      // installer's message.
-      //
-      // WHERE to read it from depends on which call you make, which is why this is pinned rather
-      // than described. The same UPDATE was sent both ways against this restored database on
-      // 2026-09-22, Node v26.7.0: through `execute()` it comes back a plain `Error` with
-      // `errcode: 1811`, `code: "ERR_SQLITE_ERROR"` and NO `cause`; through `run()` it comes back
-      // a `DrizzleError` whose `cause.errcode` is 1811. `execute()` is this adapter's own method
-      // (`packages/store/src/node-sqlite-adapter.ts`); `run()` is drizzle's, and drizzle wraps.
-      // `restore-fiscal-receipt.test.ts` reads `.cause` because it calls `run()`.
+      // `execute()` throws the engine's error itself; drizzle's `run()` wraps it, so
+      // `restore-fiscal-receipt.test.ts` reads `.cause` instead.
       const blocked = ((): { errcode?: number; message?: string } | undefined => {
         try {
           db.execute(sql`update registros_facturacion set huella = ${"E".repeat(64)}`);
@@ -463,10 +438,8 @@ describe("fiscal restore, end to end", () => {
     }
     // Control: with the migrate step stubbed out the hook reads a column the older dump lacks.
     const controlDirs = await arrangeDirs();
-    // The refusal arrives with `errcode` and `message` on the error itself and no `.cause` — the
-    // same place `execute()`'s refusals land in the case above. `errcode: 1` is SQLite's catch-all
-    // `SQL logic error`, shared with a syntax error and a missing table (measured in #489), so the
-    // column NAME in the message is what discriminates.
+    // `errcode: 1` is SQLite's catch-all `SQL logic error`, shared with a syntax error and a
+    // missing table, so the column NAME in the message is what discriminates.
     await expect(
       restoreFromArtifact({
         ...(await restoreDepsFor(controlDirs, olderArtifactPath)),

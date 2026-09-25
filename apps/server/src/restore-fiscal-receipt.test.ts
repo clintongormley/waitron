@@ -22,32 +22,9 @@ import { registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { restoreDatabase } from "./restore.js";
 
 /**
- * THE FISCAL RECEIPT, rebuilt for SQLite.
- *
- * This replaces the real-container case that lived in `pg-restore.test.ts`, which proved five
- * things about `pg_restore` reconstructing `registros_facturacion`:
- * the copy did not trip the append-only guard, the row landed, the `huella` survived byte for byte,
- * the triggers were present on the restored table, and — the control the case existed for, because
- * a trigger being PRESENT is not the same as it being ACTIVE — an UPDATE of the restored row was
- * refused. `docs/handoffs/2026-09-21-f1-step25-disposition.md` says this must be REBUILT rather
- * than retired, and all five are reachable on this engine.
- *
- * THE TRIGGER STATEMENTS IN `setup` BELOW ARE REDUNDANT, stated so nobody reads them as a claim
- * about the product. `useVenueDb` pairs each migration set with `installAppendOnlyTriggers` over the
- * tables that set declared (`packages/db/src/testing/venue-db.ts`), and
- * `migrationOptionsFor` carries the declared list through
- * (`packages/migrations/src/manifest.ts`), so this database already refuses what the box
- * refuses before a case runs. Measured 2026-09-23, with the control in the other direction: with the
- * `setup` loop below doing nothing the one case still passes, and with the declared list emptied as
- * well it fails (`expected [ …(22) ] to deeply equal ArrayContaining{…}`). The statements are
- * `create trigger if not exists`, which is why the duplicate is silent; their text is copied rather
- * than imported because `apps/server` does not depend on `@waitron/store`. The product's own
- * migrating paths install the same pair from the same list
- * (`migrateEverySet` in `packages/migrations/src/apply.ts`, which `applyMigrations` calls).
- * What the INSTALLER produces is pinned by `scripts/append-only-triggers.test.ts`; what is pinned
- * HERE is the restore — and the "present in the copy" assertion below compares the copy's whole
- * trigger set against the SOURCE's rather than against a hand-written list, so it says the same
- * thing whatever triggers the source carries.
+ * The trigger statements in `setup` are redundant: `useVenueDb` already installs each set's
+ * declared append-only triggers. They are `create trigger if not exists`, so the duplicate is
+ * silent, and copied rather than imported because `apps/server` does not depend on `@waitron/store`.
  */
 const LEDGER_TABLE = "registros_facturacion";
 
@@ -145,7 +122,6 @@ const suite = useVenueDb({
   timeoutMs: 120_000,
 });
 
-/** Every trigger a venue file carries, name and statement, in name order. */
 function triggersOf(db: Database): { name: string; sql: string }[] {
   return db.all<{ name: string; sql: string }>(
     sql`select name, sql from sqlite_master where type = 'trigger' order by name`,
@@ -158,16 +134,11 @@ describe("a restored venue keeps its fiscal ledger immutable", () => {
     const archivePath = join(scratch, "db.dump");
     const venueDir = join(scratch, "venue");
     try {
-      // 1. The copy is not refused. `VACUUM INTO` copies pages; the append-only triggers are on
-      //    UPDATE and DELETE, and a page copy is neither — but that is the claim, so it is run.
+      // 1. The copy is not refused.
       await suite.db.archiveTo(archivePath);
       const sourceTriggers = triggersOf(suite.db);
-      // The ledger's own pair is PRESENT — a containment check, not an exhaustive list of every
-      // trigger in the database. The exhaustive form was only ever true because nothing else
-      // created one; the triggers the migration files write — core's behavioural rules
-      // (`packages/db/drizzle/0001_behavioural_triggers.sql`) among them — are legitimately here
-      // too, and a list that grows with them says nothing about this ledger. What this case is for is
-      // unchanged, and step 4 below still compares the WHOLE set across the restore.
+      // A containment check: the migration files create other triggers too, and step 4 compares
+      // the WHOLE set across the restore.
       expect(sourceTriggers.map((t) => t.name)).toEqual(
         expect.arrayContaining([
           `${LEDGER_TABLE}_append_only_delete`,
@@ -195,9 +166,7 @@ describe("a restored venue keeps its fiscal ledger immutable", () => {
         expect(triggersOf(restored.venue)).toEqual(sourceTriggers);
 
         // 5. THE CONTROL, and the reason step 4 is not enough: trigger present ≠ trigger active.
-        //    An UPDATE of the restored record must be REFUSED by the engine itself.
-        //    Drizzle wraps a driver error in a `DrizzleQueryError` whose `errcode` and text live on
-        //    `.cause` — the same indirection the PostgreSQL case had to describe for its SQLSTATE.
+        //    `run()` wraps the engine's error, so its `errcode` and text are on `.cause`.
         const refusal = (() => {
           try {
             restored.venue.run(

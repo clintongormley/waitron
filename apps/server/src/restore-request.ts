@@ -122,7 +122,7 @@ export async function stageStreamRestore(
 
 export interface StagedRestoreDeps {
   stateDir: string;
-  /** The directory holding `venue.db` and `node.db` — what the restore places the archive into. */
+  /** The directory holding `venue.db` and `node.db`. */
   venueDir: string;
   migrationsRoot: string | null;
   log: Logger;
@@ -143,7 +143,8 @@ async function clearStagedRestore(stateDir: string): Promise<void> {
   ]);
 }
 
-/** Run a staged cold restore before any server pool opens. Returns false when no request exists. */
+/** Run a staged cold restore; the caller runs it before anything in this process opens the venue
+ * database. Returns false when no request exists. */
 export async function runStagedRestore(
   deps: StagedRestoreDeps,
   restore: Restore = restoreFromArtifact,

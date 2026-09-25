@@ -145,13 +145,8 @@ const MANIFEST: BackupManifest = {
 };
 
 /**
- * Stands in for the archive's database entry in every case below that does not OPEN it.
- *
- * The orchestration cases inject `migrate` and `openDb`, so nothing here ever opens what
- * `restoreDatabase` placed — which is exactly what makes these bytes enough: the assertion is that
- * the archive's bytes reached `venue.db` unchanged, or that they never did. The cases that DO open
- * the restored file build a real database (see `a real SQLite venue file` and
- * `restore-fiscal-receipt.test.ts`).
+ * Stands in for the archive's database entry in every case below that does not OPEN it: those
+ * cases inject `migrate` and `openDb`, so nothing opens what `restoreDatabase` placed.
  */
 const VENUE_BYTES = Buffer.from("SQLite format 3\u0000 — placed, never opened by this suite");
 const MEDIA = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]); // jpeg-ish binary
@@ -184,12 +179,6 @@ let venueDir: string;
 const venueFile = (): string => join(venueDir, "venue.db");
 const incomingFile = (): string => `${venueFile()}.incoming`;
 
-/**
- * What every case that used to assert `runRestore` was not called asserts instead.
- *
- * The injected runner is gone (`restore.ts`), so "the database was not restored" is now a claim
- * about the venue directory rather than about a mock — which is what those cases always meant.
- */
 async function expectVenueUntouched(): Promise<void> {
   await expect(stat(venueFile())).rejects.toMatchObject({ code: "ENOENT" });
 }
@@ -221,9 +210,7 @@ function useTempDirs(prefix: string): void {
   beforeEach(async () => {
     stateDir = await mkdtemp(join(tmpdir(), `${prefix}state-`));
     stagingDir = await mkdtemp(join(tmpdir(), `${prefix}staging-`));
-    // Made by `mkdtemp` and then REMOVED, so each case starts with the venue directory absent —
-    // the shape a cold-recovery box is in, and the one where a leftover `venue.db` could not be
-    // mistaken for the one this restore placed.
+    // Made by `mkdtemp` and then REMOVED, so each case starts with the venue directory absent.
     venueDir = await mkdtemp(join(tmpdir(), `${prefix}venue-`));
     await rm(venueDir, { recursive: true, force: true });
   });
@@ -386,9 +373,7 @@ setInterval(() => db, 1000);`;
   });
 
   it("rejects an unrecognised top-level entry (fail-visible) BEFORE any restore or write", async () => {
-    // A future second non-DB source id would pack `<source>/...` blobs the orchestrator does not
-    // route. Today it must fail LOUD rather than silently drop the entry (CLAUDE.md §5) — proven
-    // here with a `documents/x` entry alongside a valid `db.dump`.
+    // An entry the restore does not route fails loud rather than being silently dropped.
     const artifact = buildArtifact([
       { name: "db.dump", bytes: VENUE_BYTES },
       { name: "documents/x", bytes: Buffer.from("orphan") },
@@ -401,8 +386,6 @@ setInterval(() => db, 1000);`;
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  // Plan Reconciliation N23: the archive's old-box check runs after validation and before anything
-  // is placed.
   it("stops before anything is placed when the source check refuses", async () => {
     await writeFile(join(stateDir, "trading.env"), TRADING_ENV);
     const checkSourceLive = vi.fn(async () => {
@@ -538,8 +521,6 @@ describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", ()
   }
 
   it("validateArtifact throws on a wrong recovery key and writes NOTHING", async () => {
-    // The commonest DR operator error. `validateArtifact` decrypts and must reject before any write —
-    // so R3 can run it BEFORE the irreversible wipe. No database or secret writes.
     await expect(validateArtifact(deps({ recoveryKey: "the-wrong-key" }))).rejects.toMatchObject({
       code: "recovery.passphrase_invalid",
     });
@@ -569,9 +550,6 @@ describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", ()
   });
 
   it("validateArtifact returns the classified pieces and writeValidated then writes them", async () => {
-    // The two halves compose to exactly restoreFromArtifact's behaviour: validate returns the pieces,
-    // write consumes them. writeValidated is the ONLY writer — the gate/guard live solely in validate,
-    // so the security pass is single-sourced.
     const validated = await validateArtifact(deps());
     expect(validated.dumpEntry.bytes).toEqual(VENUE_BYTES);
     expect(validated.secretEntries.map((e) => e.name)).toEqual([
@@ -654,10 +632,8 @@ describe("restore steps (R3 composition)", () => {
  * The two ways putting a venue file in place goes silently wrong, each against a REAL SQLite file.
  *
  * Neither is visible to a case whose writer was CLOSED rather than killed or left open: a clean
- * `close()` checkpoints the write-ahead file and deletes both sidecars, so the broken implementation
- * and the correct one behave identically. That is why these two cases exist and why they are built
- * the awkward way — a killed child process, and a connection deliberately left open. Leave the
- * side files where they are in `restoreDatabase` and both fail; the readings are in its comment.
+ * `close()` checkpoints the write-ahead file and deletes both sidecars, which is why these cases use
+ * a killed child process and a connection deliberately left open.
  */
 describe("restoreDatabase places a REAL venue file (the two silent failures)", () => {
   useTempDirs("waitron-place-");
@@ -874,9 +850,6 @@ describe("restore hooks (identity phase)", () => {
   });
 
   it("migrates AFTER the venue file is in place and BEFORE any hook; hooks run BEFORE secrets are written", async () => {
-    // The database restore has no callback to record any more, so its position in the order is read
-    // off the filesystem instead: `migrate` asserts that `venue.db` already holds the archive's
-    // bytes at the moment it runs, which is a stronger claim than the call order it replaces.
     const order: string[] = [];
     const migrate = vi.fn(async () => {
       expect(await readFile(venueFile())).toEqual(VENUE_BYTES);
@@ -930,9 +903,8 @@ describe("restore hooks (identity phase)", () => {
   });
 
   it("a pre-existing VALID identity is set aside BEFORE the venue file is replaced", async () => {
-    // Proven by stopping the restore AT the placement: the venue directory cannot be made (its
-    // parent is a file), so nothing after `restoreDatabase` runs at all. The identity being gone by
-    // then is what "set aside before the first irreversible step" means.
+    // The venue directory cannot be made (its parent is a file), so nothing after
+    // `restoreDatabase` runs.
     const existing = formatEnvFile({
       ...parseEnvFile(TRADING_ENV),
       WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
@@ -1185,12 +1157,8 @@ describe("restore hooks (identity phase)", () => {
   });
 });
 
-// Task 5: the sweep captures `backup.env` + `modules.json` as `secrets/<name>` entries; the restore
-// needs NO change (it writes back every `secrets/*` entry via `restoreSecrets`/`unpackBundleToDir`).
-// These pin that round-trip and the two exceptions that matter: `skipSecrets` (rejoin) restores
-// neither, and a restore that MISSES `modules.json` makes the box REFUSE TO BOOT rather than silently
-// flip regime. The two files are disk-only config, so this suite never opens what the restore
-// placed — `migrate` and `openDb` are both injected.
+// The two files are disk-only config, so this suite never opens what the restore placed — `migrate`
+// and `openDb` are both injected.
 describe("optional state (backup.env + modules.json) round-trip", () => {
   useTempDirs("waitron-optstate-");
   beforeEach(resetSeries); // the round-trips run the identity phase; re-arm the node's one live series
@@ -1204,16 +1172,13 @@ describe("optional state (backup.env + modules.json) round-trip", () => {
   ];
 
   it("restores both onto a FRESH state dir, leaving the box's OWN recovery.json untouched", async () => {
-    // `recovery.json` is this box's own escalation counter (`recovery-state.ts:48,:69`), written by
-    // the entrypoint and deliberately NEVER captured — the restored box keeps its own. Write a
-    // distinct one into the fresh target and prove the restore does not overwrite it.
+    // `recovery.json` is this box's own escalation counter and is never captured.
     await writeFile(join(stateDir, "recovery.json"), '{"failures":2}\n');
     await restoreFromArtifact(
       makeRestoreDeps({ artifact: buildArtifact([...FULL_ENTRIES, ...OPTIONAL_ENTRIES]) }),
     );
     expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(BACKUP_ENV);
     expect(await readFile(join(stateDir, "modules.json"), "utf8")).toBe(MODULES_JSON);
-    // Per-box safety: recovery.json is not in the archive, so it is left exactly as it was.
     expect(await readFile(join(stateDir, "recovery.json"), "utf8")).toBe('{"failures":2}\n');
   });
 
@@ -1243,11 +1208,8 @@ describe("optional state (backup.env + modules.json) round-trip", () => {
   });
 
   it("a restore that MISSES modules.json makes the box REFUSE TO BOOT (fiscal slot ambiguous), not a silent regime flip", async () => {
-    // The enabled set is on-disk config, not a DB row. A restore WITHOUT modules.json leaves the box at
-    // the all-enabled default, where BOTH fiscal-slot members (fiscal-verifactu + fiscal-none) are on —
-    // and boot's fiscalSlot refuses that LOUD rather than silently picking a regime. That is exactly
-    // what makes modules.json worth capturing. Asserted through the real boot path:
-    // readModuleConfig → enabledModules → fiscalSlot.
+    // Without modules.json the box is at the all-enabled default, where both fiscal-slot members are
+    // on, and boot's `fiscalSlot` refuses rather than picking a regime.
     await restoreFromArtifact(makeRestoreDeps({ artifact: buildArtifact([...FULL_ENTRIES]) }));
     await expect(stat(join(stateDir, "modules.json"))).rejects.toMatchObject({ code: "ENOENT" });
     const missing = await readModuleConfig(stateDir);
@@ -1259,8 +1221,6 @@ describe("optional state (backup.env + modules.json) round-trip", () => {
     }
     expect(isAppError(ambiguous) && ambiguous.code).toBe("module.fiscal_slot_ambiguous");
 
-    // Contrast: the SAME restore WITH modules.json (disabling fiscal-none) resolves the slot to the one
-    // enabled regime, so boot proceeds.
     await restoreFromArtifact(
       makeRestoreDeps({ artifact: buildArtifact([...FULL_ENTRIES, ...OPTIONAL_ENTRIES]) }),
     );
