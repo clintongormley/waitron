@@ -705,9 +705,32 @@ declare module "@waitron/shared" {
     /** A backup destination's most recent attempt failed. `destination` is the backend id (never a
      * secret). Built as data by the backups alert source, never thrown. */
     "backup.destination_failed": { destination: string };
-    /** No backup destination is configured, so no data is being protected. Built as data by the
-     * backups alert source, never thrown. */
+    /** Neither an archive destination nor a bucket copy that is on and current: no copy of the data
+     * is being kept. Built as data by the backups alert source, never thrown. */
     "backup.disabled": Record<string, never>;
+    /** The bucket copy's oldest change not yet in the bucket has waited fifteen minutes or more.
+     * `minutes` is that wait, whole. Built as data by the backups alert source, never thrown. */
+    "backup.stream_behind": { minutes: number };
+    /** The bucket copy stopped Litestream at the side-file limit. Built as data by the backups alert
+     * source, never thrown. */
+    "backup.stream_paused": Record<string, never>;
+    /** The bucket copy stopped because the pointer changed under it, or names a newer term: another
+     * box is writing this venue. Built as data by the backups alert source, never thrown. */
+    "backup.stream_refused": Record<string, never>;
+    /** The bucket copy refused to start because a value bound for Litestream could not be written
+     * into its configuration safely. Built as data by the backups alert source, never thrown. */
+    "backup.stream_settings_unusable": Record<string, never>;
+    /** The bucket refuses this box's key, or fails the bucket check. Built as data by the backups
+     * alert source, never thrown. */
+    "backup.stream_bucket_unusable": Record<string, never>;
+    /** The bucket copy is set up but not running, and nobody stopped it: its supervisor failed, the
+     * pinned Litestream cannot run, it could not start, or it refused for a reason with no wording
+     * of its own. `reason` is the status's short tag. Built as data by the backups alert source,
+     * never thrown. */
+    "backup.stream_stopped": { reason: string | null };
+    /** This node's last attempt to rewrite its sealed state row failed, so the row a rebuild reads
+     * is out of date or missing. Built as data by the sealed-state alert source, never thrown. */
+    "backup.sealed_state_failed": Record<string, never>;
     /**
      * The restore gate (`restore-gate.ts`) refused: the backup's environment differs from the
      * restoring binary's. One database per environment (CLAUDE.md §5): a cross-environment restore

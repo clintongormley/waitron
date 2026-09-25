@@ -34,6 +34,7 @@ const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 const NODE_ID = "node-a";
+const AT = new Date("2026-09-15T11:00:00.000Z");
 const SETTINGS = {
   venueId: "venue-1",
   endpoint: "-",
@@ -178,12 +179,21 @@ describe("the live copy's wiring", () => {
 
     // The generation name and the pointer carry the membership term, so without a document there is
     // no term to stream under.
+    // Off, but not "not set up": the settings are stored, so the reason reaches the alerts.
     it("starts nothing, and says so, before this node holds a membership document", async () => {
       logs = [];
       const litestream = new FakeLitestream();
-      const rt = runtime({ spawn: litestream.spawn, store: new SwitchableStore(() => new Date()) });
+      const rt = runtime({
+        spawn: litestream.spawn,
+        store: new SwitchableStore(() => new Date()),
+        now: () => AT,
+      });
       await rt.start();
-      expect(rt.status()).toEqual({ state: "off" });
+      expect(rt.status()).toEqual({
+        state: "off",
+        reason: "no_membership",
+        stateSince: AT.toISOString(),
+      });
       expect(litestream.children).toHaveLength(0);
       expect(logs).toContain("stream.no_membership");
     });
@@ -195,10 +205,32 @@ describe("the live copy's wiring", () => {
         WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xe).toString("base64"),
         WAITRON_CREDENTIALS_KEY_VERSION: "1",
       });
-      const rt = runtime({ ring: otherRing, spawn: new FakeLitestream().spawn });
+      const rt = runtime({ ring: otherRing, spawn: new FakeLitestream().spawn, now: () => AT });
       await expect(rt.start()).resolves.toBeUndefined();
-      expect(rt.status()).toEqual({ state: "off" });
+      expect(rt.status()).toEqual({
+        state: "off",
+        reason: "start_failed",
+        stateSince: AT.toISOString(),
+      });
       expect(logs).toContain("stream.start_failed");
+    });
+
+    it("forgets why it could not start once a later start has nothing to start", async () => {
+      let primary = true;
+      const otherRing = loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xe).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      });
+      const rt = runtime({
+        ring: otherRing,
+        spawn: new FakeLitestream().spawn,
+        isPrimary: () => primary,
+      });
+      await rt.start();
+      expect(rt.status()).toMatchObject({ state: "off", reason: "start_failed" });
+      primary = false;
+      await rt.reload();
+      expect(rt.status()).toEqual({ state: "off" });
     });
 
     describe("and a membership document", () => {

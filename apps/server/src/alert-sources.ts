@@ -12,13 +12,92 @@ import {
   cardReaders,
 } from "@waitron/payments";
 import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
+import type { StreamView } from "@waitron/stream";
 import type { BackupStatus } from "./backup-status.js";
 import type { AwaitingCertStatus } from "./pass.js";
+import type { SealedStateStatus } from "./sealed-state.js";
 import type { TtlCache } from "./ttl-cache.js";
 import "./errors.js";
 
 /** The dashboard screen a backup alert links to. */
 export const BACKUP_SCREEN = "backup";
+
+/** How long a change may wait for the bucket before `backup.stream_behind` (slice 2 spec §4.5). */
+export const STREAM_BEHIND_AFTER_MS = 15 * 60_000;
+
+/** A supervisor that is off for one of these stopped by itself, not because it was told to. */
+const STOPPED_BY_ITSELF: ReadonlySet<string | null> = new Set([
+  "supervisor_failed",
+  "litestream_unavailable",
+]);
+
+/** Each alert is written out whole, so `scripts/ongoing-alert-codes.test.ts` can read its code. */
+function streamAlerts(stream: StreamView, now: Date): OngoingAlert[] {
+  if (!("reason" in stream)) return [];
+  const stopped = {
+    key: "backup.stream_stopped",
+    code: "backup.stream_stopped",
+    params: { reason: stream.reason },
+    severity: "error",
+    since: stream.stateSince,
+    screen: BACKUP_SCREEN,
+  } as const;
+  if (!("lagMs" in stream)) return [stopped];
+  const alerts: OngoingAlert[] = [];
+  if (stream.lagMs >= STREAM_BEHIND_AFTER_MS) {
+    alerts.push({
+      key: "backup.stream_behind",
+      code: "backup.stream_behind",
+      params: { minutes: Math.floor(stream.lagMs / 60_000) },
+      severity: "error",
+      since: new Date(now.getTime() - stream.lagMs).toISOString(),
+      screen: BACKUP_SCREEN,
+    });
+  }
+  if (stream.state === "paused") {
+    alerts.push({
+      key: "backup.stream_paused",
+      code: "backup.stream_paused",
+      params: {},
+      severity: "error",
+      since: stream.stateSince,
+      screen: BACKUP_SCREEN,
+    });
+  }
+  const refused = stream.state === "refused";
+  if (refused && (stream.reason === "pointer_changed" || stream.reason === "pointer_newer_term")) {
+    alerts.push({
+      key: "backup.stream_refused",
+      code: "backup.stream_refused",
+      params: {},
+      severity: "error",
+      since: stream.stateSince,
+      screen: BACKUP_SCREEN,
+    });
+  } else if (refused && stream.reason === "config_unsafe") {
+    alerts.push({
+      key: "backup.stream_settings_unusable",
+      code: "backup.stream_settings_unusable",
+      params: {},
+      severity: "error",
+      since: stream.stateSince,
+      screen: BACKUP_SCREEN,
+    });
+  } else if (refused || (stream.state === "off" && STOPPED_BY_ITSELF.has(stream.reason))) {
+    alerts.push(stopped);
+  }
+  if (stream.bucketProblem !== null) {
+    alerts.push({
+      key: "backup.stream_bucket_unusable",
+      code: "backup.stream_bucket_unusable",
+      params: {},
+      severity: "error",
+      since: stream.bucketProblem.since,
+      screen: BACKUP_SCREEN,
+    });
+  }
+  return alerts;
+}
 
 /**
  * The last backup outcome per destination, in memory. A destination with an entry here failed its
@@ -44,36 +123,47 @@ export function recordBackupOutcome(
 }
 
 /**
- * The backups alert source. Surfaces three states, each needing an operator's attention:
- * backups not configured at all (`backup.disabled`), a destination whose newest good backup is older
+ * The backups alert source. Surfaces the archive's states and the bucket copy's, each needing an
+ * operator's attention: no copy kept at all (`backup.disabled`: neither an archive destination nor a
+ * bucket copy that is on and current), a destination whose newest good backup is older
  * than allowed (`backup.destination_overdue`, `since` = that last good backup), and a destination
  * whose most recent attempt failed (`backup.destination_failed`, `since` = when it failed). Overdue
  * reads the per-request freshness listing; failed reads the in-process outcome holder — a fresh
- * destination can still carry a failed last attempt, so both are reported.
+ * destination can still carry a failed last attempt, so both are reported. The bucket copy's come
+ * from its status: behind by {@link STREAM_BEHIND_AFTER_MS} or more (`backup.stream_behind`), paused
+ * at the side-file limit (`backup.stream_paused`), refused because another box moved the pointer
+ * (`backup.stream_refused`) or because its settings cannot be used safely
+ * (`backup.stream_settings_unusable`), refused by its bucket (`backup.stream_bucket_unusable`), or
+ * stopped by itself or never started although set up (`backup.stream_stopped`).
  */
 export function backupAlertSource(deps: {
   listStatus: () => Promise<BackupStatus>;
   outcomes: BackupOutcomeHolder;
   now: () => Date;
+  readStream: () => StreamView;
 }): AlertSource {
   return {
     area: "backup",
     permission: "system.manage",
     async read(): Promise<readonly OngoingAlert[]> {
       const status = await deps.listStatus();
+      const stream = deps.readStream();
+      const alerts = streamAlerts(stream, deps.now());
+      const streamCurrent =
+        "lagMs" in stream && stream.state === "streaming" && stream.lagMs < STREAM_BEHIND_AFTER_MS;
       if (!status.configured) {
-        return [
-          {
+        if (!streamCurrent) {
+          alerts.push({
             key: "backup.disabled",
             code: "backup.disabled",
             params: {},
             severity: "warning",
             since: null,
             screen: BACKUP_SCREEN,
-          },
-        ];
+          });
+        }
+        return alerts;
       }
-      const alerts: OngoingAlert[] = [];
       for (const d of status.destinations) {
         if (d.stale) {
           alerts.push({
@@ -98,6 +188,31 @@ export function backupAlertSource(deps: {
         }
       }
       return alerts;
+    },
+  };
+}
+
+/**
+ * The sealed-state alert source: raised while this node's last attempt to rewrite its sealed state
+ * row failed (`holder` is the refresher's own, `sealed-state.ts`), so a box rebuilt from the bucket
+ * would come back with an out-of-date row, or none.
+ */
+export function sealedStateAlertSource(holder: SealedStateStatus): AlertSource {
+  return {
+    area: "backup",
+    permission: "system.manage",
+    async read(): Promise<readonly OngoingAlert[]> {
+      if (holder.failedSince === null) return [];
+      return [
+        {
+          key: "backup.sealed_state_failed",
+          code: "backup.sealed_state_failed",
+          params: {},
+          severity: "error",
+          since: holder.failedSince,
+          screen: BACKUP_SCREEN,
+        },
+      ];
     },
   };
 }

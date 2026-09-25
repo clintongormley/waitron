@@ -37,7 +37,7 @@ import {
   type VenueDatabase,
 } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { deleteCredential, loadKeyRing, putCredential } from "@waitron/credentials";
 import { emptyDrainResult } from "@waitron/fiscal";
 // The exact test-only entry point `packages/fiscal-verifactu`'s OWN tests use to seed a due
 // `envios` row — mirroring the established cross-package convention (e.g.
@@ -72,6 +72,7 @@ import { DRAIN_DUTY } from "./pass.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { unsealNodeState } from "./sealed-state.js";
+import { STREAM_PURPOSE } from "./stream-host.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
@@ -2290,6 +2291,55 @@ describe("startServer, against a migrated venue directory", () => {
     const streamStopped = events.indexOf("stream.stopped");
     expect(streamStopped).toBeGreaterThan(-1);
     expect(streamStopped).toBeLessThan(events.indexOf("server.stopped"));
+  }, 60_000);
+
+  // Plain off is also /health's default, so only a copy that is set up and not running tells the
+  // wiring apart from its absence. This venue holds no membership document, so the copy stops
+  // before it runs Litestream or calls the bucket.
+  it("reports a bucket copy that is set up but not running on /health", async () => {
+    const port = await freePort();
+    await withTransaction(sharedDb, (tx) =>
+      putCredential(tx, loadKeyRing(KEY_ENV), {
+        purpose: STREAM_PURPOSE,
+        value: {
+          venueId: "venue-1",
+          endpoint: "https://127.0.0.1:1",
+          region: "eu-south-2",
+          bucket: "venue-copies",
+          prefix: "-",
+          accessKeyId: "AKIAEXAMPLE",
+          secretAccessKey: "secret-example",
+        },
+      }),
+    );
+    try {
+      const server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      });
+      try {
+        await awaitListening(port);
+        let stream: { state?: string; reason?: string } = {};
+        for (let i = 0; i < POLL_TRIES && stream.reason === undefined; i += 1) {
+          const body = (await (await fetch(`http://127.0.0.1:${port}/health`)).json()) as {
+            stream: typeof stream;
+          };
+          stream = body.stream;
+          if (stream.reason === undefined) await delay(POLL_INTERVAL_MS);
+        }
+        expect(stream).toEqual({
+          state: "off",
+          reason: "no_membership",
+          stateSince: expect.any(String),
+        });
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await withTransaction(sharedDb, (tx) => deleteCredential(tx, { purpose: STREAM_PURPOSE }));
+    }
   }, 60_000);
   // DELETED, not converted: "boots and TRADES when the backup DB is unreachable — the read-privilege
   // probe failure disables backup, never aborts boot (§5)". It drove `startServer` with a good main

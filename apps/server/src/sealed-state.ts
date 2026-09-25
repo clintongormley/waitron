@@ -66,6 +66,15 @@ function failureFields(err: unknown): Record<string, string> {
 
 export type SealedStateOutcome = "sealed" | "no_key" | "failed";
 
+/**
+ * Since when this node's refreshes have failed, read by `sealedStateAlertSource`: the first
+ * failure's time, kept across repeats; null again after a refresh that seals, or that finds no
+ * recovery key, when no row is expected at all.
+ */
+export interface SealedStateStatus {
+  failedSince: string | null;
+}
+
 export interface SealedStateDeps {
   readonly db: Database;
   readonly nodeId: string;
@@ -77,6 +86,7 @@ export interface SealedStateDeps {
   readonly readRecoveryKey: () => Promise<string | undefined>;
   readonly now: () => Date;
   readonly log: Logger;
+  readonly status: SealedStateStatus;
 }
 
 export interface SealedStateRefresher {
@@ -131,12 +141,20 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
     }
     return outcome;
   };
+  const record = (outcome: SealedStateOutcome): SealedStateOutcome => {
+    if (outcome !== "failed") deps.status.failedSince = null;
+    else deps.status.failedSince ??= deps.now().toISOString();
+    return outcome;
+  };
   let tail: Promise<SealedStateOutcome> = Promise.resolve("sealed");
   return {
     refresh: () => {
       // Reached only when building a failure's log fields throws, as reading an unreadable `code`
       // does; without it one rejection would reject every later refresh in the chain unrun.
-      tail = tail.then(once).catch((): SealedStateOutcome => "failed");
+      tail = tail
+        .then(once)
+        .catch((): SealedStateOutcome => "failed")
+        .then(record);
       return tail;
     },
   };

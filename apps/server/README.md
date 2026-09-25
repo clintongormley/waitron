@@ -360,6 +360,14 @@ otherwise:
     "lockedAt": "2026-07-26T08:00:00Z",
     "heartbeatAt": "2026-07-26T09:14:00Z",
     "stale": false
+  },
+  "stream": {
+    "state": "streaming",
+    "reason": null,
+    "stateSince": "2026-07-26T08:00:03Z",
+    "bucketProblem": null,
+    "lagMs": 0,
+    "lastConfirmedUploadAt": "2026-07-26T09:13:58Z"
   }
 }
 ```
@@ -369,6 +377,17 @@ keeps beside `venue.lock`. It gives the holder's kind, when it took the folder, 
 and whether that heartbeat is stale, meaning 30 seconds or more away from the current time in
 either direction. That is the parser and the limit a refused start uses (`src/node-entry.ts`). It is `null` when there is no readable file, carries no process id or host,
 and never changes the status code.
+
+`stream` is the bucket copy. It reads `{ "state": "off" }` when no bucket copy is set up on this box,
+or the box is not the primary. When one is set up but did not start it reads `off` with a `reason`
+(`no_membership`, `start_failed`) and a `stateSince`. Otherwise it is the running copy's own status:
+its `state` (`opening`, `streaming`, `paused`, `refused`, or `off` with the reason it stopped),
+`lagMs` (how long the oldest change not yet in the bucket has waited), `lastConfirmedUploadAt` (the
+newest file seen in the bucket, by the bucket's clock) and `bucketProblem`. The name of the
+generation being written is left out, because it carries the node id. `stream` never changes the
+status code: the container's healthcheck reads it (`deploy/compose.yml`), and an install or update
+waits for a healthy container (`deploy/waitron.sh`), so a bucket outage must not hold either. The
+dashboard's alerts report the bucket copy instead.
 
 **A `503` is the single most important signal this process can produce.** It means one of four
 things — three visible in the body above without needing the logs, one that needs them:

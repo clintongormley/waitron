@@ -85,6 +85,7 @@ import { createAlertRegistry } from "./alerts.js";
 import {
   awaitingCertAlertSource,
   backupAlertSource,
+  sealedStateAlertSource,
   type BackupOutcomeHolder,
   batteryAlertSource,
   printingAlertSource,
@@ -170,7 +171,7 @@ import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { mountBackupApi } from "./backup-api.js";
-import { createSealedStateRefresher } from "./sealed-state.js";
+import { createSealedStateRefresher, type SealedStateStatus } from "./sealed-state.js";
 import { loadBackupConfig, loadRecoveryKey } from "./backup-config.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
@@ -2085,6 +2086,7 @@ export async function startServer(
     log,
   });
   await backupSupervisor.reload();
+  const sealedStateStatus: SealedStateStatus = { failedSince: null };
   // After migrations, so the row's manifest names the schema the database holds.
   const sealedState = createSealedStateRefresher({
     db,
@@ -2096,7 +2098,10 @@ export async function startServer(
     readRecoveryKey,
     now,
     log,
+    status: sealedStateStatus,
   });
+  // Reached by every boot past setup and adoption, standby and mirror included: each node writes its
+  // own row (one row per node), so any node can be rebuilt.
   await sealedState.refresh();
   // The live copy of venue.db to the owner's bucket, primary only. `start()` returns without
   // waiting for the bucket, so a bucket that never answers cannot hold boot or a sale.
@@ -2112,10 +2117,11 @@ export async function startServer(
     isPrimary: () => holders.singletonRole.current === "primary",
   });
   await streamHost.start();
+  health.readStream = () => streamHost.status();
 
   // Dashboard alerts. Mounted HERE, after the backup supervisor exists, because the backups source
   // reads the supervisor's live status; the claims list comes from every module, but the ongoing
-  // checks run only for the enabled set (whose tables are migrated) plus the four server-owned
+  // checks run only for the enabled set (whose tables are migrated) plus the server-owned
   // sources below. Route mounts are order-independent among themselves, so sitting beside the other
   // management-api mounts is fine as long as it precedes any catch-all handler.
   //
@@ -2136,9 +2142,11 @@ export async function startServer(
       backupCache.get("status", () => backupSupervisor.status().then((s) => s.backupStatus)),
     outcomes: backupOutcomes,
     now,
+    readStream: () => streamHost.status(),
   });
   const serverAlertSources: AlertSource[] = [
     backupSource,
+    sealedStateAlertSource(sealedStateStatus),
     awaitingCertAlertSource(awaitingFiscalCert),
     printingAlertSource(),
     batteryAlertSource({
@@ -2174,6 +2182,7 @@ export async function startServer(
       // `configured: false` when no destination is configured, exactly the N/A placeholder box-status
       // expects for the undefined-reader case.
       readBackup: () => backupSupervisor.status().then((s) => s.backupStatus),
+      readStream: () => streamHost.status(),
       // Report the effective mode the box is actually serving as — the same holder the read-only gate
       // and mirror-session middlewares read — so the status matches what the box enforces and tracks a
       // live promotion the same way, rather than issuing a fresh DB read of its own.
@@ -2232,6 +2241,7 @@ export async function startServer(
       stateDir: config.stateDir,
       readRecoveryKey,
       sealedState,
+      readStream: () => streamHost.status(),
     },
     log,
   );

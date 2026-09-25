@@ -31,6 +31,7 @@ export type { ChildHandle, SpawnFn } from "./litestream-process.js";
 export { DEFAULT_WAL_LIMIT_BYTES, L0_RETENTION_MS, StreamSupervisor } from "./supervisor.js";
 export type {
   StreamLog,
+  StreamNotStarted,
   StreamState,
   StreamStatus,
   StreamView,

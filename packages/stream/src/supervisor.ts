@@ -59,8 +59,18 @@ export interface StreamStatus {
   lastConfirmedUploadAt: string | null;
 }
 
-/** What the server's readers take: a supervisor's status, or off when there is none. */
-export type StreamView = StreamStatus | { state: "off" };
+/** A copy with bucket settings stored here that has no supervisor running; `reason` says why. */
+export interface StreamNotStarted {
+  state: "off";
+  reason: string;
+  stateSince: string;
+}
+
+/**
+ * What the server's readers take: a supervisor's status; a copy set up but not started; or plain
+ * off, when no copy is set up on this box or it is not the one that sends it.
+ */
+export type StreamView = StreamStatus | StreamNotStarted | { state: "off" };
 
 type StreamCore = Omit<StreamStatus, "lagMs" | "lastConfirmedUploadAt">;
 

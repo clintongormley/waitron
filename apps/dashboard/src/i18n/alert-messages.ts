@@ -31,8 +31,36 @@ export const ALERT_MESSAGES: Readonly<
     es: "La última copia de seguridad en «{destination}» falló. Abre la página de Copias para reintentar.",
   },
   "backup.disabled": {
-    en: "Backups are not set up. Configure a destination on the Backups page so your data is protected.",
-    es: "Las copias de seguridad no están configuradas. Configura un destino en la página de Copias para proteger tus datos.",
+    en: "No copy of your data is being kept: there are no scheduled backups, and the bucket copy is off or not up to date. Set one up on the Backups page.",
+    es: "No se está guardando ninguna copia de tus datos: no hay copias de seguridad programadas, y la copia en el bucket está desactivada o no está al día. Configura una en la página de Copias.",
+  },
+  "backup.stream_behind": {
+    en: "The bucket copy is {minutes} minutes behind: your most recent sales are not in it yet. Sales continue. Check the box's internet connection, and the bucket on the Backups page.",
+    es: "La copia en el bucket lleva {minutes} minutos de retraso: tus ventas más recientes aún no están en ella. Las ventas continúan. Revisa la conexión a internet del equipo y el bucket en la página de Copias.",
+  },
+  "backup.stream_paused": {
+    en: "The bucket copy is paused: the bucket could not be reached for so long that the box stopped copying to protect its disk. Sales continue. Check the box's internet connection, and the bucket on the Backups page.",
+    es: "La copia en el bucket está en pausa: no se ha podido contactar con el bucket durante tanto tiempo que el equipo ha dejado de copiar para proteger su disco. Las ventas continúan. Revisa la conexión a internet del equipo y el bucket en la página de Copias.",
+  },
+  "backup.stream_refused": {
+    en: "The bucket copy has stopped because another box is writing this venue's copy to the same bucket. Two boxes must never sell for one venue. Contact support.",
+    es: "La copia en el bucket se ha detenido porque otro equipo está escribiendo la copia de este local en el mismo bucket. Nunca deben vender dos equipos para un mismo local. Contacta con soporte.",
+  },
+  "backup.stream_settings_unusable": {
+    en: "The bucket copy has not started because its settings cannot be used safely. Check the bucket settings on the Backups page, and contact support if they look right.",
+    es: "La copia en el bucket no se ha iniciado porque sus ajustes no se pueden usar de forma segura. Revisa los ajustes del bucket en la página de Copias y, si parecen correctos, contacta con soporte.",
+  },
+  "backup.stream_bucket_unusable": {
+    en: "Your bucket is refusing this box: its access key may no longer work, or the bucket may no longer support the check Waitron uses to stop two boxes overwriting each other's copy. Check the bucket settings on the Backups page.",
+    es: "Tu bucket está rechazando este equipo: puede que su clave de acceso ya no funcione, o que el bucket ya no admita la comprobación que usa Waitron para evitar que dos equipos sobrescriban la copia del otro. Revisa los ajustes del bucket en la página de Copias.",
+  },
+  "backup.stream_stopped": {
+    en: "The bucket copy has stopped, so new changes are not reaching your bucket. Sales continue. Contact support.",
+    es: "La copia en el bucket se ha detenido, así que los cambios nuevos no llegan a tu bucket. Las ventas continúan. Contacta con soporte.",
+  },
+  "backup.sealed_state_failed": {
+    en: "The box could not update the locked copy of its own keys and settings that it keeps with your data. A box rebuilt from your bucket would come back without its current keys, including the one that opens the passwords and access keys it stores. Sales continue. Contact support.",
+    es: "El equipo no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un equipo reconstruido desde tu bucket volvería sin sus claves actuales, entre ellas la que abre las contraseñas y claves de acceso que guarda. Las ventas continúan. Contacta con soporte.",
   },
   "chain.verification_failed": {
     en: "The invoice record chain failed its integrity check on a sale. Contact support.",

@@ -8,6 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
+import type { StreamView } from "@waitron/stream";
 import { createHealthState } from "./health.js";
 import { readBackupStatus, type BackupStatus } from "./backup-status.js";
 import { mountBoxStatusApi } from "./box-status.js";
@@ -98,6 +99,7 @@ function buildApp(
     now: Date;
     tlsCertPath: string | undefined;
     readBackup?: () => Promise<BackupStatus>;
+    readStream?: () => StreamView;
   },
 ): Hono {
   const app = new Hono();
@@ -122,6 +124,7 @@ function buildApp(
       now: () => opts.now,
       tlsCertPath: opts.tlsCertPath,
       readBackup: opts.readBackup,
+      readStream: opts.readStream,
       readMode: () => "primary",
       readSingletonRole: () => "primary",
       readAwaitingFiscalCertificate: () => false,
@@ -170,8 +173,27 @@ describe("GET /api/box/status", () => {
     expect(body.environment).toBe("preproduction");
     expect(body.cert).toEqual({ available: false }); // tlsCertPath undefined
     expect(body.backup).toEqual({ configured: false });
+    expect(body.stream).toEqual({ state: "off" });
     expect(body.configConflicts).toBeUndefined();
     expect(body.time.source).toMatch(/timedatectl|unavailable/);
+  });
+
+  it("carries the bucket copy's state from its reader", async () => {
+    const stream: StreamView = {
+      state: "off",
+      reason: "no_membership",
+      stateSince: "2026-08-29T09:00:00.000Z",
+    };
+    const { nodeId } = await setupTenant();
+    const streamApp = buildApp(nodeId, {
+      now: new Date("2026-08-29T10:00:00Z"),
+      tlsCertPath: undefined,
+      readStream: () => stream,
+    });
+    const cookie = await login(streamApp, MANAGER_EMAIL);
+    const res = await streamApp.request("/api/box/status", { headers: { cookie } });
+    expect(res.status).toBe(200);
+    expect((await res.json()).stream).toEqual(stream);
   });
 
   it("flows the per-destination backup shape through the route, reading a .backup.enc artifact as FRESH", async () => {

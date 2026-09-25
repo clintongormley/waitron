@@ -16,6 +16,7 @@ import {
   unsealNodeState,
   writeSealedStateRow,
   type SealedStateDeps,
+  type SealedStateStatus,
 } from "./sealed-state.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 
@@ -68,6 +69,7 @@ const deps = (over: Partial<SealedStateDeps> = {}): SealedStateDeps => ({
   readRecoveryKey: async () => KEY,
   now: () => new Date("2026-09-23T10:00:00.000Z"),
   log: vi.fn(),
+  status: { failedSince: null },
   ...over,
 });
 
@@ -218,6 +220,36 @@ describe("createSealedStateRefresher", () => {
     );
   });
 
+  it("remembers since when refreshes have failed, and forgets once one seals", async () => {
+    let at = new Date("2026-09-23T10:00:00.000Z");
+    const status: SealedStateStatus = { failedSince: null };
+    const refresher = createSealedStateRefresher(deps({ status, now: () => at }));
+    await rm(join(stateDir, "secrets.env"));
+    expect(await refresher.refresh()).toBe("failed");
+    expect(status.failedSince).toBe("2026-09-23T10:00:00.000Z");
+    at = new Date("2026-09-23T11:00:00.000Z");
+    expect(await refresher.refresh()).toBe("failed");
+    expect(status.failedSince).toBe("2026-09-23T10:00:00.000Z");
+    await writeFile(join(stateDir, "secrets.env"), "secrets.env-contents");
+    expect(await refresher.refresh()).toBe("sealed");
+    expect(status.failedSince).toBeNull();
+  });
+
+  // Without a key no row is expected, so there is nothing out of date to warn about.
+  it("forgets a failure once the box has no recovery key", async () => {
+    let key: string | undefined = KEY;
+    const status: SealedStateStatus = { failedSince: null };
+    const refresher = createSealedStateRefresher(
+      deps({ status, readRecoveryKey: async () => key }),
+    );
+    await rm(join(stateDir, "secrets.env"));
+    expect(await refresher.refresh()).toBe("failed");
+    expect(status.failedSince).not.toBeNull();
+    key = undefined;
+    expect(await refresher.refresh()).toBe("no_key");
+    expect(status.failedSince).toBeNull();
+  });
+
   it("logs a system error's code beside its own, and never its message or path", async () => {
     const log = vi.fn();
     const refresher = createSealedStateRefresher(deps({ log }));
@@ -274,6 +306,7 @@ describe("createSealedStateRefresher", () => {
   });
 
   it("answers failed without rejecting when the thrown value's code cannot be read, and the next refresh still runs", async () => {
+    const status: SealedStateStatus = { failedSince: null };
     const unreadable = {
       get code(): never {
         throw new Error("no code");
@@ -287,9 +320,11 @@ describe("createSealedStateRefresher", () => {
           if (reads === 1) throw unreadable;
           return KEY;
         },
+        status,
       }),
     );
     expect(await refresher.refresh()).toBe("failed");
+    expect(status.failedSince).toBe("2026-09-23T10:00:00.000Z");
     expect(await refresher.refresh()).toBe("sealed");
   });
 
