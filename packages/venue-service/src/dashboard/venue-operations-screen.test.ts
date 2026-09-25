@@ -840,6 +840,40 @@ describe("venue operations screen", () => {
     expect(api.removeMenuMember).not.toHaveBeenCalled();
   });
 
+  // A real click lets the screen re-render between its own click handler and the menu's: the
+  // save it starts disables every action, which the menu must not read as a disabled click.
+  it.each([
+    ["menus", "switch-offer-i2"],
+    ["zones", "default-assignment-m2"],
+  ])("closes the row menu when a %s action saves straight away", async (tab, key) => {
+    const api = {
+      load: vi.fn().mockResolvedValue({
+        ...nestedModel,
+        zoneMenus: [
+          ...model.zoneMenus,
+          { zoneId: "z1", menuId: "m2", displayOrder: 1, isDefault: false },
+        ],
+      }),
+      // Still in flight, as a real request is while the menu decides whether to close.
+      updateMenuItem: vi.fn(() => new Promise(() => {})),
+      allowMenu: vi.fn(() => new Promise(() => {})),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, tab);
+    if (tab === "zones") await action(el, "zone-menus-z1");
+    const button = find(el, `[data-test="${key}"]`)!;
+    const menu = button.closest("wt-row-actions")!;
+    const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    expect(popup.matches(":popover-open")).toBe(true);
+    await userEvent.click(button);
+    await settle(el);
+    expect(
+      vi.mocked(api.updateMenuItem).mock.calls.length + vi.mocked(api.allowMenu).mock.calls.length,
+    ).toBe(1);
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
   it("says a product removed from the top level stays on the menu through its section", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(nestedModel),

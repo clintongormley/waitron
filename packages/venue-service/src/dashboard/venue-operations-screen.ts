@@ -389,6 +389,9 @@ export class VenueOperationsScreen extends LitElement {
             @click=${(event: Event) => {
               const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions")!;
               this.#opener = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+              // An action that saves at once disables every action before the menu sees this click,
+              // and the menu stays open for a click on a disabled action.
+              menu.hide();
               action.run();
             }}
             >${action.label}</wt-button
