@@ -20,6 +20,7 @@ import {
   type PrepareStreamDeps,
   type WriteStreamArgs,
 } from "./restore-stream.js";
+import "./errors.js";
 
 const ARTIFACT = "restore-request.artifact";
 const KEY = "restore-request.key";
