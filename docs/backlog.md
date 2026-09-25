@@ -6148,12 +6148,13 @@ What the preparation tasks left, with F1's own answers where it found them:
     **DONE 2026-09-24 (PR #583)** — the same edge as the #531 entry above, fixed
     there. The receipt (same review): `decimalToCents` checked the money bound BEFORE rounding to
     cents, so `decimalToCents("999999999999.995")` returned `100000000000000`, an amount with thirteen integer
-    digits that `assertMoney` refuses (measured 2026-09-23 on #529's branch). `main` then checked in
+    digits that `assertMoney` refused (measured 2026-09-23 on #529's branch). `main` then checked in
     the same order (`toScale(assertMoney(value), MONEY_SCALE)`), so it predated #529.
-    **OPEN** (left by PR #583, owner's call): `assertMoney` (`packages/shared/src/money.ts`) now has
-    no product caller — only its export and its own tests. It checks the digits BEFORE rounding, the
-    order #583 removed from `decimalToCents`, so a caller reaching for it as "the money bound" would
-    bring the edge back. Codex's review recommended deleting it in its own change. Default: delete it.
+    **DONE 2026-09-26 (lane A's A32, branch `chore/delete-assert-money`):** `assertMoney` is
+    deleted, with its export from `packages/shared/src/index.ts` and its tests. After #583 it had no
+    product caller, and it checked the digits BEFORE rounding, the order #583 removed from
+    `decimalToCents`. The money bound is `decimalToCents`'s, pinned in
+    `packages/shared/src/cents.test.ts`.
   - P4a's hand-written holder/waiter contention scaffold and its slow lock-clause negative control —
     **no longer applicable**: both lived in `packages/db/src/job-claim.pg.test.ts`, a real-PostgreSQL
     contention suite, and the file that was to share the scaffold, `packages/db/src/testing/lifecycle.ts`,

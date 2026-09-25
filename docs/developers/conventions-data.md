@@ -544,8 +544,7 @@ whenever a money column is added:
   twelve-INTEGER-digits split in its own comment but does not hold it down: it neither imports
   `decimalToCents` nor reads `MAX_MONEY_INTEGER_DIGITS`, and what it would catch is those two fiscal
   columns ceasing to be `text`. The bound on the write path is pinned in
-  `packages/shared/src/cents.test.ts` (`decimalToCents`, after rounding); `money.test.ts` pins
-  `assertMoney`, which no product code calls.
+  `packages/shared/src/cents.test.ts` (`decimalToCents`, after rounding).
 
 **Every document written before 2026-09-20 that states a money column as `numeric(12, 2)`
 describes the old storage.** There are dozens, nearly all dated plans and specs recording what was

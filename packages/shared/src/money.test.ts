@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "./errors.js";
 import {
   addDecimal,
-  assertMoney,
   compareDecimal,
   decimal,
   divideDecimal,
@@ -260,36 +259,5 @@ describe("toScale", () => {
 
   it("narrows to zero decimal places", () => {
     expect(toScale(decimal("2.5"), 0)).toBe("3");
-  });
-});
-
-describe("assertMoney", () => {
-  it("accepts the widest amount the money bound admits", () => {
-    expect(assertMoney(decimal("999999999999.99"))).toBe("999999999999.99");
-  });
-
-  it("rejects a value with more than twelve integer digits", () => {
-    expect(() => assertMoney(decimal("1000000000000.00"))).toThrowError(AppError);
-  });
-
-  it("rejects a negative value past the same bound", () => {
-    expect(() => assertMoney(decimal("-1000000000000.00"))).toThrowError(AppError);
-  });
-
-  it("reports the value and the digit limit in the error params", () => {
-    try {
-      assertMoney(decimal("1000000000000.00"));
-      expect.unreachable("assertMoney should have thrown");
-    } catch (error) {
-      expect((error as AppError).code).toBe("shared.decimal_overflow");
-      expect((error as AppError).params).toEqual({
-        value: "1000000000000.00",
-        maxIntegerDigits: 12,
-      });
-    }
-  });
-
-  it("accepts a value whose extra decimals are within the integer bound", () => {
-    expect(assertMoney(decimal("1.23456"))).toBe("1.23456");
   });
 });
