@@ -45,8 +45,9 @@ export class SetupRoleScreen extends LitElement {
       <h1>Join or recover an existing restaurant</h1>
       <p class="intro">
         Restore a backup onto this server when no other server is still running with newer
-        restaurant data. Adding this server as a mirror does not work in this version — the card
-        below says what happens if you try.
+        restaurant data, or rebuild onto it from the continuous copy in your own storage bucket when
+        the old server is gone. Adding this server as a mirror does not work in this version — the
+        card below says what happens if you try.
       </p>
 
       <div class="choices">

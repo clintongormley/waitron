@@ -143,7 +143,7 @@ const BUCKET_ERROR_MESSAGES: Record<string, string> = {
   "restore.stream_state_missing":
     "The copy in the bucket does not hold the old server's locked settings, so it cannot be rebuilt from.",
   // One sentence for all three, as the command line gives (`DECRYPT_PHASE_CODES`,
-  // apps/server/src/restore-command.ts): which of them it was would help someone guessing the key.
+  // apps/server/src/restore-command.ts).
   "recovery.passphrase_invalid": KEY_DOES_NOT_OPEN,
   "backup.artifact_invalid": KEY_DOES_NOT_OPEN,
   "backup.archive_invalid": KEY_DOES_NOT_OPEN,
