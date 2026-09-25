@@ -385,3 +385,75 @@ it("accepts an ordered modifiers list in the product contract and reads it back"
   const list = await send(app, "GET", `/management-api/catalogues/${menu.id}/products`, cookie);
   expect(await list.json()).toMatchObject([{ id: product.id, modifiers: ordered }]);
 });
+
+describe("sections and the reporting and routing they do not touch", () => {
+  it("adds, moves and removes a routed product and deletes its section, and the product keeps its category and routes", async () => {
+    const v = await setupVenue();
+    const app = mountApp();
+    const catalogueId = await createCatalogue(app, v.managerCookie, "Carta");
+    const categoryId = await createCategory(app, v.managerCookie, { [LOCALE]: "Bebidas" });
+    const productId = await createProduct(app, v.managerCookie, catalogueId, "Agua");
+    expect(
+      (
+        await send(
+          app,
+          "POST",
+          `/management-api/categories/${categoryId}/products`,
+          v.managerCookie,
+          {
+            productIds: [productId],
+          },
+        )
+      ).status,
+    ).toBe(204);
+    await suite.db.insert(preparationRoutes).values([
+      { locationId: v.locationId, categoryId, noPreparation: true },
+      { locationId: v.locationId, productId, noPreparation: true },
+    ]);
+    const routes = async () =>
+      (
+        await suite.db.execute<{
+          id: string;
+          category_id: string | null;
+          product_id: string | null;
+        }>(sql`select id, category_id, product_id from preparation_routes order by id`)
+      ).rows;
+    const categoryOf = async () =>
+      (
+        await suite.db.execute<{ category_id: string | null }>(
+          sql`select category_id from products where id = ${productId}`,
+        )
+      ).rows[0]!.category_id;
+    const before = await routes();
+    expect(before).toHaveLength(2);
+
+    const created = await send(app, "POST", "/management-api/sections", v.managerCookie, {
+      internalName: "Bebidas (sección)",
+    });
+    expect(created.status).toBe(201);
+    const sectionId = ((await created.json()) as { id: string }).id;
+    const members = `/management-api/sections/${sectionId}/members`;
+    const add = async () => {
+      const response = await send(app, "POST", members, v.managerCookie, {
+        ref: { kind: "product", productId },
+      });
+      expect(response.status).toBe(201);
+      return ((await response.json()) as { id: string }).id;
+    };
+    const memberId = await add();
+    expect(
+      (await send(app, "PUT", `${members}/${memberId}/position`, v.managerCookie, { to: 0 }))
+        .status,
+    ).toBe(200);
+    expect((await send(app, "DELETE", `${members}/${memberId}`, v.managerCookie)).status).toBe(204);
+    expect(await categoryOf()).toBe(categoryId);
+    expect(await routes()).toEqual(before);
+    await add();
+    expect(
+      (await send(app, "DELETE", `/management-api/sections/${sectionId}`, v.managerCookie)).status,
+    ).toBe(204);
+
+    expect(await categoryOf()).toBe(categoryId);
+    expect(await routes()).toEqual(before);
+  });
+});

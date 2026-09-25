@@ -71,6 +71,30 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Choose a place outside this category and its subcategories.",
     es: "Elige un destino fuera de esta categoría y de sus subcategorías.",
   },
+  "menu_section.not_found": {
+    en: "This section, or the item in it, no longer exists. Refresh the list.",
+    es: "Esta sección, o el elemento que contiene, ya no existe. Actualiza la lista.",
+  },
+  "menu_section.invalid": {
+    en: "Check the section's internal name, its colour, its image and the position chosen.",
+    es: "Revisa el nombre interno de la sección, su color, su imagen y la posición elegida.",
+  },
+  "menu_section.member_cycle": {
+    en: "A section cannot contain itself, directly or through another section.",
+    es: "Una sección no puede contenerse a sí misma, ni directamente ni a través de otra sección.",
+  },
+  "menu_section.member_duplicate": {
+    en: "This list already contains that item.",
+    es: "Esta lista ya contiene ese elemento.",
+  },
+  "menu_section.not_library": {
+    en: "A menu's own list cannot be changed or placed here.",
+    es: "La lista propia de una carta no se puede cambiar ni colocar aquí.",
+  },
+  "menu_section.membership_invalid": {
+    en: "Some of the chosen items cannot be added. Refresh the list and try again.",
+    es: "Algunos de los elementos elegidos no se pueden añadir. Actualiza la lista e inténtalo de nuevo.",
+  },
   "label.invalid": {
     en: "Enter a label name, and choose each label only once.",
     es: "Introduce un nombre de etiqueta y elige cada etiqueta una sola vez.",

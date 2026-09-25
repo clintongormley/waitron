@@ -25,6 +25,20 @@ import {
   deleteLabel,
   readProductLabels,
   setProductLabels,
+  listSections,
+  readSection,
+  createSection,
+  updateSection,
+  deleteSection,
+  addMember,
+  addProducts,
+  removeMember,
+  moveMember,
+  replaceMember,
+  duplicateSection,
+  sectionUsages,
+  type MemberRef,
+  type SectionPatch,
   type CategoryInput,
   type CategoryReassignment,
   createMenuItem,
@@ -151,6 +165,52 @@ function categoryInput(body: Record<string, unknown>, creating: boolean): Partia
   return result;
 }
 
+/** A section body's fields, shape only: `createSection`/`updateSection` trim the name and check the
+ * language codes, the colour's format and that the image exists. */
+function sectionInput(body: Record<string, unknown>, creating: boolean): SectionPatch {
+  const result: SectionPatch = {};
+  if (creating || body.internalName !== undefined) {
+    if (typeof body.internalName !== "string")
+      throw new AppError("management.request_invalid", { field: "internalName" });
+    result.internalName = body.internalName;
+  }
+  if (body.names !== undefined) {
+    if (!isPlainObject(body.names))
+      throw new AppError("management.request_invalid", { field: "names" });
+    result.names = body.names as Record<string, string>;
+  }
+  for (const field of ["image", "color"] as const) {
+    const value = body[field];
+    if (value === undefined) continue;
+    if (value !== null && typeof value !== "string")
+      throw new AppError("management.request_invalid", { field });
+    result[field] = value;
+  }
+  return result;
+}
+
+function memberRef(value: unknown): MemberRef {
+  if (isPlainObject(value)) {
+    if (value.kind === "product" && typeof value.productId === "string" && isUuid(value.productId))
+      return { kind: "product", productId: value.productId };
+    if (value.kind === "section" && typeof value.sectionId === "string" && isUuid(value.sectionId))
+      return { kind: "section", sectionId: value.sectionId };
+  }
+  throw new AppError("management.request_invalid", { field: "ref" });
+}
+
+function uuidList(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || !isUuid(entry)))
+    throw new AppError("management.request_invalid", { field });
+  return value as string[];
+}
+
+/** A position or index, shape only: the section writes refuse a negative or fractional one. */
+function numberField(value: unknown, field: string): number {
+  if (typeof value !== "number") throw new AppError("management.request_invalid", { field });
+  return value;
+}
+
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
@@ -179,6 +239,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // code stays registered.
   "product.variant_count_invalid": 400,
   "menu_section.not_found": 404,
+  "menu_section.invalid": 400,
+  "menu_section.membership_invalid": 400,
+  // 409: the body was well formed, and what the stored lists hold refused it.
+  "menu_section.member_cycle": 409,
+  "menu_section.member_duplicate": 409,
+  "menu_section.not_library": 409,
   // The product editor's kitchen routing: an id that names no LIVE station or course of this venue.
   "station.not_found": 404,
   "course.not_found": 404,
@@ -425,6 +491,142 @@ function mountListSurface<TList, TDependants>(
   );
 }
 
+/** `/management-api/sections`: the reusable lists, their members, and a menu's own lists. */
+function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger): void {
+  const collection = "/management-api/sections";
+  const one = `${collection}/:id` as const;
+  const members = `${one}/members` as const;
+  const member = `${members}/:memberId` as const;
+  const sectionId = (c: Context) => requireUuidParam(c.req.param("id")!, "SectionId");
+  const memberId = (c: Context) => requireUuidParam(c.req.param("memberId")!, "SectionMemberId");
+
+  app.get(collection, (c) =>
+    run(c, log, async () => c.json(await gated(requireManagementSession(c), listSections))),
+  );
+  app.post(collection, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const input = sectionInput(await readJsonBody<Record<string, unknown>>(c), true);
+      const created = await gated(session, (tx) =>
+        createSection(tx, input as SectionPatch & { internalName: string }),
+      );
+      return c.json(created, 201);
+    }),
+  );
+  app.get(one, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = sectionId(c);
+      return c.json(await gated(session, (tx) => readSection(tx, id)));
+    }),
+  );
+  app.patch(one, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = sectionId(c);
+      const patch = sectionInput(await readJsonBody<Record<string, unknown>>(c), false);
+      return c.json(await gated(session, (tx) => updateSection(tx, id, patch)));
+    }),
+  );
+  app.delete(one, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = sectionId(c);
+      await gated(session, (tx) => deleteSection(tx, id));
+      return c.body(null, 204);
+    }),
+  );
+  app.get(members, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = sectionId(c);
+      return c.json(await gated(session, async (tx) => (await readSection(tx, id)).members));
+    }),
+  );
+  app.post(members, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = sectionId(c);
+      const body = await readJsonBody<{ ref?: unknown; position?: unknown }>(c);
+      const ref = memberRef(body.ref);
+      const position =
+        body.position === undefined ? undefined : numberField(body.position, "position");
+      return c.json(await gated(session, (tx) => addMember(tx, id, ref, position)), 201);
+    }),
+  );
+  app.post(`${members}/products`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = sectionId(c);
+      const body = await readJsonBody<{ productIds?: unknown }>(c);
+      const productIds = uuidList(body.productIds, "productIds");
+      return c.json(await gated(session, (tx) => addProducts(tx, id, productIds)));
+    }),
+  );
+  app.delete(member, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = sectionId(c);
+      const held = memberId(c);
+      await gated(session, (tx) => removeMember(tx, id, held));
+      return c.body(null, 204);
+    }),
+  );
+  app.put(`${member}/position`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = sectionId(c);
+      const held = memberId(c);
+      const body = await readJsonBody<{ to?: unknown }>(c);
+      const to = numberField(body.to, "to");
+      return c.json(await gated(session, (tx) => moveMember(tx, id, held, to)));
+    }),
+  );
+  app.post(`${member}/replace`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = sectionId(c);
+      const held = memberId(c);
+      const ref = memberRef((await readJsonBody<{ ref?: unknown }>(c)).ref);
+      return c.json(await gated(session, (tx) => replaceMember(tx, id, held, ref)));
+    }),
+  );
+  app.post(`${one}/duplicate`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = sectionId(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      if (typeof body.internalName !== "string")
+        throw new AppError("management.request_invalid", { field: "internalName" });
+      const input = {
+        internalName: body.internalName,
+        memberIds: uuidList(body.memberIds, "memberIds"),
+        ...(body.replaceIn === undefined ? {} : { replaceIn: replaceTarget(body.replaceIn) }),
+      };
+      return c.json(await gated(session, (tx) => duplicateSection(tx, id, input)), 201);
+    }),
+  );
+  app.get(`${one}/usages`, (c) =>
+    run(c, log, async () => {
+      const session = requireManagementSession(c);
+      const id = sectionId(c);
+      return c.json(await gated(session, (tx) => sectionUsages(tx, id)));
+    }),
+  );
+}
+
+function replaceTarget(value: unknown): { sectionId: string; memberId: string } {
+  if (
+    !isPlainObject(value) ||
+    typeof value.sectionId !== "string" ||
+    !isUuid(value.sectionId) ||
+    typeof value.memberId !== "string" ||
+    !isUuid(value.memberId)
+  )
+    throw new AppError("management.request_invalid", { field: "replaceIn" });
+  return { sectionId: value.sectionId, memberId: value.memberId };
+}
+
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
   // Every `/management-api` route's DB work goes through here, so the gate is applied in exactly
   // one place.
@@ -525,6 +727,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     // delete rather than blocking it, so this is information, never a refusal.
     dependants: extraListDependants,
   });
+
+  mountSectionRoutes(app, gated, log);
 
   app.get("/management-api/content-languages", (c) =>
     run(c, log, async () => {
