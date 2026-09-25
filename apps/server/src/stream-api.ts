@@ -33,7 +33,7 @@ export interface StreamApiDeps {
   /** The venue the stream writes under; Save stores it with the settings. */
   venueId: string;
   isPrimary: () => boolean;
-  /** True when `WAITRON_BACKUP_*` variables in the environment would override `backup.env`. */
+  /** True when the environment sets a backup variable, so the environment owns the backup settings. */
   isManagedByEnvironment: () => boolean;
   readRecoveryKey: () => Promise<string | undefined>;
   writeRecoveryKey: (key: string) => Promise<void>;
