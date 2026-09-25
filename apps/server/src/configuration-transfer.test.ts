@@ -228,14 +228,9 @@ describe("configuration transfer database path", () => {
         },
         {},
       );
-      // Every row below is written through its table definition rather than as raw SQL, the change
-      // `apps/server/src/testing/fiscal-fixtures.ts` took for the same reason: the timestamp
-      // columns (`created_at`, `updated_at`, `opened_at`, `enrolled_at`) are `$defaultFn`
-      // generators on this engine, which a raw insert never reaches, and each is NOT NULL — the raw
-      // form stopped at `NOT NULL constraint failed: persons.created_at`. It is also what encodes
-      // the JSON columns (`categories.name`, `sales.vat_breakdown`) and the JSON-array
-      // `invoice_locales`, whose `::jsonb` cast and `array[...]` constructor are syntax this engine
-      // refuses. `payment_policy` is the one exception below and says why.
+      // Rows are written through their table definitions: the NOT NULL timestamp columns are
+      // `$defaultFn` generators a raw insert never reaches, and the definition encodes the JSON
+      // columns. `payment_policy` is the one exception below.
       await tx.insert(persons).values({
         id: "12121212-aaaa-aaaa-aaaa-121212121212",
         displayName: "Second admin",
@@ -311,10 +306,8 @@ describe("configuration transfer database path", () => {
         id: "99999999-aaaa-aaaa-aaaa-999999999999",
         locationId: source.locationId,
       });
-      // `payment_policy` is the one raw statement left in this block: `@waitron/payments` does not
-      // export its table definition (`packages/payments/src/index.ts` re-exports `payments` and
-      // `cardReaders`, not `paymentPolicy`), so the two `$defaultFn` timestamps are supplied here
-      // instead. Adding that export is a change to another package and is not made from a test.
+      // Raw because `@waitron/payments` does not export `paymentPolicy`, so the two `$defaultFn`
+      // timestamps are supplied here.
       const policyStamp = new Date().toISOString();
       await tx.execute(sql`
         insert into payment_policy (offline_mode, offline_amount_cap, created_at, updated_at)
@@ -428,10 +421,8 @@ describe("configuration transfer database path", () => {
       expect(bytes?.bytes).toEqual(photo.bytes);
       const attached = await tx.execute<{ image: string }>(sql`select image from products `);
       expect(attached.rows[0]!.image).toBe(metadata!.filename);
-      // The category's translated name is read through the TABLE, not the raw select below: `name`
-      // is a `json` column and the decode belongs to drizzle's read mapping, which a raw select
-      // goes around — through raw SQL this engine hands back the stored text
-      // `{"es":"Panader\u00eda"}`.
+      // Read through the TABLE, not the raw select below: `name` is a `json` column, and a raw
+      // select hands back the stored text.
       const named = await tx.select({ name: categories.name }).from(categories);
       expect(named).toEqual([{ name: { es: "Panadería" } }]);
       const category = await tx.execute<{
@@ -454,10 +445,8 @@ describe("configuration transfer database path", () => {
         cross join products p
         where p.name = 'Café'
       `);
-      // 1, not `true`: both are SQL EXPRESSIONS rather than declared columns, so the `flag` helper's
-      // boolean mapping (`packages/db/src/schema/columns.ts`) never reaches them, and this engine
-      // has no boolean type of its own. A category the product did NOT belong to would answer 0
-      // here, so the case still separates a copied relationship from a missing one.
+      // 1, not `true`: both are SQL expressions, which the `flag` helper's boolean mapping never
+      // reaches. A category the product did NOT belong to would answer 0.
       expect(category.rows).toEqual([
         {
           image: metadata!.filename,
@@ -584,10 +573,8 @@ describe("configuration transfer database path", () => {
         },
       ),
     );
-    // `first_record` is 1, not `true`: `primer_registro` is a `flag` column, and the boolean read
-    // mapping that helper carries (`packages/db/src/schema/columns.ts`) belongs to a drizzle select
-    // over the column, which this raw statement goes around. The property is unchanged — a
-    // CONTINUED chain would answer 0 here and carry a non-null `anterior_huella`.
+    // `first_record` is 1, not `true`: this raw statement goes around the `flag` column's boolean
+    // read mapping. A CONTINUED chain would answer 0 here and carry a non-null `anterior_huella`.
     const firstLive = await targetSuite.db.execute<{
       invoice_number: number;
       first_record: number;
@@ -649,8 +636,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       "es",
     );
     // The default names a label of the same list, so the import has to remap BOTH and keep them
-    // pointing at each other — the property the old option-group round trip checked with
-    // `defaultChoiceId`.
+    // pointing at each other.
     const withDefault = await updateOptionList(
       tx,
       optionList.id,

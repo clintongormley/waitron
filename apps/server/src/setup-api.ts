@@ -230,8 +230,7 @@ const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_fail
  * The adopt route's 4xx/5xx contract (the provision map's mirror-side sibling). `mirror.bundle_fetch_failed`
  * is the one code that is NOT a client fault: the operator's request is well-formed, but the mirror's
  * UPSTREAM — the primary it was pointed at — failed to serve or return a parseable bundle, so it maps to
- * HTTP 502 (the mirror is a gateway; its upstream failed), the status `mirror.bundle_fetch_failed`'s own
- * doc comment in errors.ts assigns it. `setup.request_invalid` (a missing/mistyped `primaryUrl`/`credential`)
+ * HTTP 502 (the mirror is a gateway; its upstream failed). `setup.request_invalid` (a missing/mistyped `primaryUrl`/`credential`)
  * and `mirror.primary_url_invalid` (a `primaryUrl` the SSRF guard refused) are both CLIENT faults that
  * default to 400 anyway but are enumerated so this map is the surface's whole contract. `setup.not_ready`/
  * `setup.already_provisioning` are NOT here — like provision's, they are returned directly, outside the

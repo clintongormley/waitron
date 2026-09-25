@@ -194,7 +194,7 @@ async function setupTenant(): Promise<void> {
     // `packages/identity/drizzle/0000_baseline.sql:46,:62` carry a bare `NOT NULL`, because the
     // defaults moved to `packages/identity/src/schema/persons.ts:27,:67`. The insert the PRODUCT
     // uses is this one, so the fixture now takes the same route — the shape the converted siblings
-    // use (`catalogue-api.test.ts:60`, `till-api.test.ts:146`).
+    // use (`catalogue-api.test.ts`, `till-api.test.ts`).
     await tx.insert(persons).values({
       displayName: "The Manager",
       email: MANAGER_EMAIL,

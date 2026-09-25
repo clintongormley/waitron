@@ -16,30 +16,9 @@ import { ALL_MODULES } from "./modules.js";
 /**
  * The device-profile CRUD routes end to end, over HTTP, with the manager and staff sessions a real
  * sign-in mints.
- *
- * ## What went with PostgreSQL
- *
- * SQLite has no roles and no grants, and every call below runs on the one handle. Nothing here
- * now says anything about which identity the routes reach the database as. The 403 and 401 gates
- * are `authorizeManager` and `requireManagementSession` rather than privileges, so they are
- * unaffected — and still pass.
- *
- * **One deletion receipt written into a case below is retired by the column types, and is flagged
- * where it sits** (the malformed-`canvasId` screen in the POST body case). `device_profiles.canvas_id`
- * is `text` with a foreign key to `canvases`
- * (`packages/db/drizzle/0000_baseline.sql:492,:497`), so a non-UUID string reaching the column
- * cannot raise the `22P02` that screen was recorded as forestalling. The screen still fires first,
- * so the case still pins the response.
- *
- * The `device_profile.in_use` case is NOT in that category and keeps its subject: the
- * `devices.device_profile_id` → `device_profiles.id` key survived the regeneration with `ON DELETE
- * restrict`, the store opens with `pragma foreign_keys = on` (`packages/store/src/index.ts`), and
- * `translateWriteError` already reads this engine's restrict code
- * (`packages/layouts/src/device-profile-store.test.ts`, "translates a restrict refusal to
- * device_profile.in_use").
  */
 const LOCALE = "es-ES";
-const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
+const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 
@@ -49,32 +28,24 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-/** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// One NIF per provisioned venue: `resetPerTest` is off, so tenants accumulate for the life of the
-// file and the country + tax id pair is unique.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(75_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** A profile (or canvas) name unique within the tenant, so tests are order-independent
- *  (CLAUDE.md §4) — `resetPerTest` is off, so the profile set accumulates across tests and `(name)`
- *  is unique, so a fixed name could collide across tests. */
+/** Profile and canvas names are unique and the database is not reset between tests. */
 function uniqueName(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
 
-/** A valid phone canvas with a distinguishing title, so a stored canvas seeded here to bind a profile
- *  to is never mistaken for a default. Mirrors `management-api.canvases.test.ts`'s helper. */
 function phoneCanvas(title: string): CanvasDef {
   const base = DEFAULT_CANVASES["phone-portrait"];
   return { ...base, tabs: [{ ...base.tabs[0]!, title }, ...base.tabs.slice(1)] };
 }
 
-/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<void> {
   await applyVenue(
     planVenue(
@@ -110,9 +81,8 @@ async function setupTenant(): Promise<void> {
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  // Seeded through the table definition, not by raw SQL: `persons.id` and `persons.created_at` are
-  // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
-  // NOT NULL (`packages/identity/src/schema/persons.ts`).
+  // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`
+  // generators, which a raw SQL insert never reaches.
   await withTransaction(suite.db, async (tx) => {
     for (const [displayName, email, role] of [
       ["The Manager", MANAGER_EMAIL, "manager"],
@@ -135,9 +105,6 @@ function mountApp(): Hono {
     app,
     {
       db: suite.db,
-      // nodeId sentinel: the device-profile management routes never read cfg.nodeId, but
-      // mountManagementApi's cfg requires it (identity-config flow-down, #195). Matches the sibling
-      // management tests (management-api.canvases.test.ts, …-status/-passkey).
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       secureCookies: false,
       rpId: "localhost",
@@ -148,7 +115,6 @@ function mountApp(): Hono {
   return app;
 }
 
-/** Log in over HTTP by `email`, returning the `waitron_management_session=…` cookie pair. */
 async function login(app: Hono, email: string): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
@@ -170,7 +136,6 @@ type ProfileRow = {
   inactivityTimeoutSeconds: number | null;
 };
 
-/** Seed a canvas through the management canvas route so a profile can bind to a REAL `canvasId`. */
 async function seedCanvas(app: Hono, cookie: string, name: string): Promise<string> {
   const res = await app.request("/management-api/canvases", {
     method: "POST",
@@ -193,7 +158,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const app = mountApp();
     const name = uniqueName("Front counter");
 
-    // CREATE → 201, the stored row (canvasId null, the two till capabilities).
+    // CREATE → 201, the stored row.
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -213,7 +178,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       formFactor: "till",
       canvasId: null,
       capabilities: ["integrated-card-payment", "open-cash-drawer"],
-      // No `inactivityTimeoutSeconds` in the body → the route defaults it to null (the app default).
       inactivityTimeoutSeconds: null,
     });
     const { id } = row;
@@ -302,8 +266,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
 
   it("POST + PUT persist inactivityTimeoutSeconds; PUT wipes it when the key is omitted (full-replace)", async () => {
     const app = mountApp();
-    // CREATE a `phone-portrait` (handheld) profile carrying a 300 s auto-logout timeout — the store
-    // keeps a positive integer for a non-kds form factor. The created row echoes it.
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -341,7 +303,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     expect(updated.status).toBe(200);
     expect(((await updated.json()) as ProfileRow).inactivityTimeoutSeconds).toBe(120);
 
-    // PUT with the key OMITTED wipes the value to null — full-replace, matching `canvasId`'s convention.
+    // PUT with the key OMITTED stores null: the PUT is a full replacement.
     const wiped = await app.request(`/management-api/device-profiles/${id}`, {
       method: "PUT",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -358,8 +320,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
 
   it("POST with a non-positive inactivityTimeoutSeconds → 400 device_profile.invalid (the store's domain rule)", async () => {
     const app = mountApp();
-    // 0 and -5 clear the server SHAPE screen (both integers) and reach the store, whose
-    // `validateInactivityTimeout` rejects a non-null value < 1 → device_profile.invalid.
+    // 0 and -5 pass the route's shape screen and are refused by the store's domain rule.
     for (const bad of [0, -5]) {
       const res = await app.request("/management-api/device-profiles", {
         method: "POST",
@@ -383,8 +344,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
 
   it("POST with a non-integer-typed inactivityTimeoutSeconds → 400 management.request_invalid (the server shape screen)", async () => {
     const app = mountApp();
-    // A string and a fractional number are neither null nor an integer number, so the server SHAPE
-    // screen refuses them naming the field — before the store's domain rule is reached.
+    // A string and a fraction are refused by the route's shape screen, naming the field.
     for (const bad of ["300", 12.5]) {
       const res = await app.request("/management-api/device-profiles", {
         method: "POST",
@@ -411,8 +371,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
 
   it("POST a kds profile coerces inactivityTimeoutSeconds to null even when a value is sent", async () => {
     const app = mountApp();
-    // A kds display has no operator session to log out, so the store forces the timeout to null
-    // regardless of the body value (validateInactivityTimeout returns null for `kds`).
+    // A kds display has no operator session to log out, so the store stores null whatever the body.
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -522,11 +481,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
 
   it("DELETE a profile a device still references → 409 device_profile.in_use, profile survives", async () => {
     const app = mountApp();
-    // Create a profile, then bind a device to it (fixture setup), reusing the venue's provisioned
-    // location. The `device_profile_id` key is ON DELETE restrict, so the DELETE trips the engine's
-    // restrict refusal, which the store translates to device_profile.in_use → the house 409
-    // (`packages/layouts/src/device-profile-store.test.ts`, "translates a restrict refusal to
-    // device_profile.in_use").
+    // `devices.device_profile_id` is ON DELETE RESTRICT.
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -541,12 +496,9 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const { id } = (await created.json()) as ProfileRow;
 
     const location = await suite.db.execute<{ id: string }>(sql`select id from locations  limit 1`);
-    // The profile is a `till` form factor, so `device_binding_rule_insert / _update` requires the device to carry a
-    // till_id (and no station) — bind the venue's provisioned till (fixture setup).
+    // A `till` profile's device must carry a till id (`device_binding_rule_insert`).
     const till = await suite.db.execute<{ id: string }>(sql`select id from tills  limit 1`);
-    // Through the table definition: `devices.id`, `enrolled_at` and `created_at` are `$defaultFn`
-    // generators on NOT NULL columns, which a raw insert never reaches
-    // (`packages/db/src/schema/devices.ts`).
+    // Through the table definition, whose `$defaultFn` generators a raw SQL insert never reaches.
     await suite.db.insert(devices).values({
       locationId: location.rows[0]!.id,
       tillId: till.rows[0]!.id,
@@ -563,7 +515,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "device_profile.in_use" },
     });
-    // The profile survived the refused delete (RESTRICT): GET still returns it.
     const got = await app.request(`/management-api/device-profiles/${id}`, {
       headers: { cookie: managerCookie },
     });
@@ -642,8 +593,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     });
 
     // A canvasId that is a string but NOT a UUID → the UUID-shape screen (`requireBodyUuid`).
-    // The downstream consequence this case recorded — a `22P02` 500 on a `uuid` column — is retired
-    // by `canvas_id` now being `text` (see the header). The screen still fires first.
     const malformedCanvas = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -660,8 +609,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       error: { code: "management.request_invalid", params: { field: "canvasId" } },
     });
 
-    // A missing OR out-of-set formFactor → the closed-set screen (`requireEnum` over FORM_FACTORS),
-    // naming the field — so the `device_form_factor` enum column never sees a value it cannot hold.
+    // A missing OR out-of-set formFactor → the closed-set screen (`requireEnum` over FORM_FACTORS).
     for (const formFactor of [undefined, "watch"]) {
       const res = await app.request("/management-api/device-profiles", {
         method: "POST",
@@ -749,8 +697,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
   it("refuses every device-profile route for a STAFF-role session with 403 (the authorizeManager gate)", async () => {
     const app = mountApp();
     const staffCookie = await login(app, STAFF_EMAIL);
-    // Seed a profile as the manager so the GET-by-id / PUT / DELETE targets exist (the 403 must fire
-    // regardless — the gate runs before any read/write).
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },

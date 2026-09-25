@@ -9,15 +9,8 @@ import { mountPurchasingApi } from "./purchasing-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 
-// The purchase-invoice ROUTES end to end in-process: the request/response boundary, the body +
-// id/date screens, the permission-gate wiring and the STATUS map, the same way
-// `catalogue-api.test.ts` proves the catalogue routes. The purchase-invoice tables live in
-// CORE_MIGRATIONS and the management session/persons in IDENTITY_MIGRATIONS, so those two sets are
-// what this suite migrates rather than the whole manifest.
-//
-// There are no roles on this engine, and every call below runs on the one handle, so the
-// refusals here are the route gate alone and nothing checks that a deployment role's grants back
-// them up. The wider five-route sweep is `purchasing-api.gate-sweep.test.ts`, which says the same.
+// The purchase-invoice ROUTES end to end in-process: the body, id and date screens, the permission
+// gate and the STATUS map. The gate over all five routes is `purchasing-api.gate-sweep.test.ts`.
 const noopLog: Logger = () => {};
 
 let managerCookie: string;
@@ -29,14 +22,9 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTenant(db);
-    // Seed a MANAGER (role `manager`, holds `purchase.manage`) and a STAFF person (role `staff`, holds
-    // nothing) under the tenant, then mint a live management session for each so the route tests can
-    // drive the gate through a real cookie. `pin_hash` is NOT NULL, so a value is supplied even
-    // though these sessions are minted directly rather than via a PIN/password login.
-    //
-    // Through the table definition, not raw SQL: `persons.id` is a JavaScript `$defaultFn` generator
-    // on a NOT NULL column (`packages/identity/src/schema/persons.ts`), which a raw insert never
-    // reaches — the refusal is `NOT NULL constraint failed: persons.id`.
+    // A MANAGER (holds `purchase.manage`) and a STAFF person (holds nothing), each with a live
+    // management session. Through the table definition, not raw SQL: `persons.id` is a `$defaultFn`
+    // generator, which a raw insert never reaches.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [mgr] = await tx
         .insert(persons)
@@ -275,9 +263,8 @@ describe("mountPurchasingApi — create request-shape screens", () => {
   });
 
   it("POST with a MALFORMED body → 400 management.request_invalid naming header (never a 500)", async () => {
-    // `c.req.json()` throws on a malformed body; `readJsonBody` coerces that throw to `{}` → the same
-    // header-screen 400 as the null-body test above, not an opaque 500. Sent raw, since `send` would
-    // JSON.stringify a valid body.
+    // `readJsonBody` coerces a malformed body to `{}`, so the header screen refuses it. Sent raw,
+    // since `send` would JSON.stringify a valid body.
     const res = await mountApp().request("/management-api/purchase-invoices", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: managerCookie },
@@ -289,9 +276,8 @@ describe("mountPurchasingApi — create request-shape screens", () => {
     ).toMatchObject({ error: { code: "management.request_invalid", params: { field: "header" } } });
   });
 
-  // The amount screens. Every money and rate field arrives as a STRING and `requireString` checks
-  // only its type, so each one goes through `decimal()` before any DB work: a malformed amount is
-  // refused, never stored. What it cost when nothing screened them: docs/backlog.md → Track C.
+  // The amount screens: every money and rate field arrives as a STRING and goes through `decimal()`
+  // before any DB work, so a malformed amount is refused, never stored.
   it("POST with a blank base stores NO row", async () => {
     const app = mountApp();
     const res = await send(app, "POST", "/management-api/purchase-invoices", {
@@ -311,9 +297,8 @@ describe("mountPurchasingApi — create request-shape screens", () => {
   });
 
   // Each case carries its OWN `supplierInvoiceNumber`, because this suite does not reset between
-  // tests: on a shared one, a regression in the amount screens lets the first case store its row and
-  // every later case with a well-formed header answer 409 `purchase.duplicate`, which sends whoever is
-  // chasing the regression to the duplicate index instead of the screen that stopped working.
+  // tests: on a shared one, a regression in the amount screens would surface as 409
+  // `purchase.duplicate` rather than at the screen that stopped working.
   it.each([
     ["a blank total", withHeader({ total: "" }, "DEC-TOTAL-BLANK")],
     ["a whitespace total", withHeader({ total: "   " }, "DEC-TOTAL-WS")],
@@ -600,7 +585,6 @@ describe("mountPurchasingApi — delete", () => {
   });
 });
 
-// ── Test-body builders (kept below the suites that read them) ───────────────────────────────────────
 function goodHeader(): Record<string, unknown> {
   return {
     supplierTaxId: "B12345678",

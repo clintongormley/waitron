@@ -1096,7 +1096,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // ACTIVE printer in the till's OWN location (the picker's source) — absent/inactive/foreign/other-location
   // → `printer.not_found` (404, reused from Slice A), which also keeps the foreign key from refusing
   // with an opaque 500. An unknown till, and a body missing `printerId` entirely, are `management.request_invalid`
-  // (400) — there is no `till.*` code (retired at the node-id rekey, errors.ts), and naming a
+  // (400) — there is no `till.*` code (retired at the node-id rekey), and naming a
   // non-existent till in a config PATCH is a request-shape fault, the generic code these routes already use.
   app.patch("/management-api/tills/:id/receipt-printer", (c) =>
     run(c, log, async () => {

@@ -233,9 +233,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "sale.unsupported_tender": 400,
   "sale.tender_shortfall": 400,
   "quantity.invalid": 400,
-  // Every id column is plain `text` (`packages/db/src/schema/columns.ts`), so a malformed id meets
-  // no database refusal: a by-id read matches no row and a write stores it. The `isUuid` screens in
-  // this app's routes are the only refusal.
+  // Every id column is plain `text` (`packages/db/src/schema/columns.ts`), so the database does not
+  // refuse a malformed id by its shape: a by-id read matches no row, and a write into a column with
+  // no foreign key stores it. The `isUuid` screens in this app's routes refuse it by shape.
   "shared.invalid_id": 400,
   "authorization.not_permitted": 403,
   // The fiscal filing refuses the record: not a malformed request, and permanent for the same

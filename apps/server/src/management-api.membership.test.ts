@@ -17,25 +17,9 @@ import { mountManagementApi } from "./management-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 /**
- * GET /management-api/membership — how a returning box fetches its cloud peer's CURRENT signed
- * membership chart (Ruling C7, the boot-time replacement for the deleted gossip). It returns THIS
- * node's held `node_membership` document, authenticated by the SAME credential shape + primitives
- * the mirror-bundle endpoint uses: `loginManagerById` (personId + password + totp) then the
- * admin-only `mirror.create` authorization. Because a GET carries no body in this runtime (undici
- * refuses one), the credential rides in the `x-waitron-peer-credential` header as JSON — the same
- * three fields, the same login/authorize primitives, not a new auth mechanism.
- *
- * ## What went with PostgreSQL
- *
- * **The role is gone and is replaced by nothing:** SQLite has no roles and `connectAs` has no
- * counterpart. Nothing here now says anything about which identity the endpoint reaches the
- * database as.
- *
- * The claim that was ALSO in the old header — that the two refusals are unobservable without the
- * role — is false, and the measurement is this file: converted onto the one handle, the 403
- * (`authorization.not_permitted`) and all three 401s (`password.invalid`) still fail when they
- * should, because both gates live in `loginManagerById` and `authorizeManager` and never in a
- * GRANT. Run 2026-09-22: 5 passed, 0 failed.
+ * GET /management-api/membership returns this node's held signed membership chart to a peer
+ * presenting an admin credential (`loginManagerById`, then `mirror.create`) in the
+ * `x-waitron-peer-credential` header.
  */
 const ADMIN_PASSWORD = "dashPass123";
 const STAFF_PASSWORD = "staffPass123";
@@ -45,9 +29,6 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-// A distinct NIF per provisioned venue. The per-test reset empties `tenants` (see
-// `packages/db/src/testing/venue-db.ts`), so this no longer has to dodge an accumulating table; it
-// stays because two venues inside ONE test would still collide.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
@@ -56,8 +37,7 @@ function nextNif(): string {
 
 let db: Database;
 
-/** Provision a fresh venue (as the owner), returning the designated ids and the seeded admin's id.
- * `applyVenue` seeds ONE `role='admin'` person carrying ADMIN_PASSWORD (admin holds `mirror.create`). */
+/** `applyVenue` seeds one admin carrying ADMIN_PASSWORD; admin holds `mirror.create`. */
 async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -105,13 +85,9 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
   return { designated, adminPersonId };
 }
 
-/** Insert a NON-admin (staff) person carrying a dashboard password — staff lacks `mirror.create`, so it
- * authenticates but fails authorization → 403.
- *
- * Seeded through the table definition rather than by raw SQL, the change
- * `apps/server/src/testing/fiscal-fixtures.ts` took: `persons.id` and `persons.created_at` are
- * `$defaultFn` generators on this engine, which a raw `insert into persons (...)` never reaches
- * while the columns are NOT NULL — measured here, `NOT NULL constraint failed: persons.id`. */
+/** Staff lacks `mirror.create`, so it authenticates and then fails authorization. Seeded through
+ * the table definition: `persons.id` and `persons.created_at` are `$defaultFn` generators, which a
+ * raw SQL insert never reaches. */
 async function seedStaff(): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const [person] = await tx
@@ -127,8 +103,6 @@ async function seedStaff(): Promise<string> {
   });
 }
 
-/** Mount the management API on a fresh Hono app for one tenant. The membership route reads only
- * `deps.db`; the other deps are inert here (no route under test touches them). */
 function mountApp(designated: AdoptResult): Hono {
   const app = new Hono();
   mountManagementApi(
@@ -145,8 +119,7 @@ function mountApp(designated: AdoptResult): Hono {
   return app;
 }
 
-/** GET the membership endpoint with the credential in the `x-waitron-peer-credential` header (a GET has
- * no body in this runtime). `credential === undefined` sends no header at all. */
+/** `credential === undefined` sends no header at all. */
 async function getMembership(app: Hono, credential: unknown): Promise<Response> {
   const headers: Record<string, string> =
     credential === undefined ? {} : { "x-waitron-peer-credential": JSON.stringify(credential) };
@@ -161,9 +134,7 @@ beforeAll(async () => {
 describe("GET /management-api/membership", () => {
   it("returns this node's held signed membership document for an authorised admin credential", async () => {
     const { designated, adminPersonId } = await setupVenue();
-    // A held chart naming this node serving-primary — the current authoritative chart a peer fetches.
-    // `node_membership` is a whole-database singleton, so seed one past whatever term is held rather
-    // than at 0.
+    // `node_membership` is a singleton, so seed one past whatever term is held rather than at 0.
     const seedTerm = ((await readNodeMembership(suite.db))?.body.term ?? -1) + 1;
     const doc = signedMembershipDoc(seedTerm, {
       signerNodeId: designated.nodeId,
@@ -180,8 +151,6 @@ describe("GET /management-api/membership", () => {
 
     const res = await getMembership(app, { personId: adminPersonId, password: ADMIN_PASSWORD });
     expect(res.status).toBe(200);
-    // The endpoint returns the held document verbatim — the same blob the caller then runs its accept
-    // fence over. Round-trips through JSON identically to what `readNodeMembership` reads back.
     expect(await res.json()).toEqual({ document: doc });
   });
 
@@ -225,7 +194,7 @@ describe("GET /management-api/membership", () => {
     expect(garbage.status).toBe(401);
     expect((await garbage.json()).error.code).toBe("password.invalid");
 
-    // Well-formed JSON but a non-UUID personId — the same screen the mirror-bundle route applies.
+    // Well-formed JSON but a non-UUID personId.
     const badShape = await getMembership(app, { personId: "not-a-uuid", password: "x" });
     expect(badShape.status).toBe(401);
     expect((await badShape.json()).error.code).toBe("password.invalid");

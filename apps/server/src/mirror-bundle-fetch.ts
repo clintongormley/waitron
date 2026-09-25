@@ -35,9 +35,8 @@ import "./errors.js";
  * ANY failure — a network error reaching the primary, a non-2xx response, or a body that does not
  * parse as JSON — maps to `mirror.bundle_fetch_failed` (Task 6), which the adopt route reports to the
  * operator as HTTP 502 (the mirror is a gateway and its upstream, the primary, failed). The upstream
- * error is NEVER echoed (its `.message` can embed a URL or connection detail — the same no-leak
- * discipline `errors.ts` states for `mirror.no_relay` and `node.read_only`), and the `credential` is
- * never logged.
+ * error is NEVER echoed (its `.message` can embed a URL or connection detail), and the `credential`
+ * is never logged.
  */
 export async function fetchMirrorBundle(
   primaryUrl: string,

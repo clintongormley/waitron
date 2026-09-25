@@ -1,14 +1,3 @@
-// Side-effect only: loads this host's errors.ts augmentation for `management.request_invalid` — the
-// code the body/query screens below throw directly (declared in `./errors.js`), under the "every file
-// that throws one of these imports ./errors.js" convention. `shared.invalid_id` (thrown by
-// `requireUuidParam`), `shared.invalid_decimal` (thrown by `decimal()` in the amount screens) and
-// `shared.decimal_overflow` (answered by the STATUS map below, but raised downstream by the op's
-// cents conversion, not by this file) are declared in `@waitron/shared` and load via its
-// value imports below; the `purchase.*` codes this file throws (`purchase.not_found` in the
-// GET/PATCH/DELETE routes, and `purchase.duplicate`/`purchase.invalid` raised by the ops) are
-// declared in `@waitron/purchasing`'s own errors.ts and load transitively through the value imports
-// of its CRUD ops below — the same transitive-reachability shape `catalogue-api.ts` relies on for the
-// `media.*` codes. So this one line is all this file needs.
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -40,31 +29,13 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 
-/**
- * Everything the dashboard's purchase-invoice routes need: `db` is what every `withTransaction`
- * below runs on. The deployment holds one taxpayer per database. No
- * `nodeId` (unlike `CatalogueApiDeps`): these routes need no write-path node id. No card provider,
- * clock or media store either — they touch only the two purchase-invoice tables via the headless
- * `@waitron/purchasing` ops.
- */
 export interface PurchasingApiDeps {
   db: Database;
 }
 
-/**
- * The ONE permission that gates every purchase-invoice route — the catalogue §3 seam, one named
- * constant referenced at every route rather than an inline literal, so a future re-mapping is a
- * one-line swap here. Realised (unlike the catalogue's placeholder `person.manage`) as the
- * domain-named `purchase.manage`, which maps to `manager` + `admin` — the dashboard's audience.
- */
+/** The one permission that gates every purchase-invoice route. */
 const PURCHASE_WRITE_PERMISSION: Permission = "purchase.manage";
 
-/**
- * Every AppError CODE these routes answer, and the HTTP status it maps to — the purchase parallel of
- * `catalogue-api.ts`'s `STATUS`. CLIENT faults only: anything reaching `run` as a NON-AppError —
- * a driver error, a bug in this file, anything a dependency throws raw — becomes an opaque 500. A
- * registered code absent from this table defaults to 400 via `run`.
- */
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
@@ -72,39 +43,21 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
-  // A malformed amount, refused by `decimal()` in the three screens below — `screenHeaderCreate`,
-  // `screenHeaderPatch` and `screenLines`, which is every screen that reads an amount.
   "shared.invalid_decimal": 400,
-  // An amount past the money scale's twelve integer digits, thrown inside the op's
-  // `decimalToCents` (`packages/purchasing/src/operations.ts`, for the header `total` and each line's
-  // `base` and `tax`, on create and update alike) — raised AFTER these screens, not by them. The op's
-  // basis-point conversion raises the same code on its own narrower bound, but nothing reaches it from
-  // here: a too-wide `rate` or `deductibleProportion` meets the op's 0–100 range check first.
-  // Measured 2026-09-21 through this route, with this entry ABSENT so the `?? 400` default answered:
-  // `total`, line `base` and line `tax` of `1234567890123.00` each answered 400
-  // `shared.decimal_overflow`; `rate: "1000.00"` answered `purchase.invalid` `rate_out_of_range` and
-  // `deductibleProportion: "1000.00"` answered `proportion_out_of_range`. Listed explicitly anyway, as
-  // the house style requires.
+  // Raised by the op's `decimalToCents`, after these screens, not by them.
   "shared.decimal_overflow": 400,
   "purchase.not_found": 404,
   "purchase.duplicate": 409,
   "purchase.invalid": 400,
 };
 
-// The one error boundary every purchase-invoice route wraps its handler in — the shared
-// `createErrorBoundary` closed over this surface's `STATUS` map and its `purchase.failed` log tag.
 const run = createErrorBoundary(STATUS, "purchase.failed");
 
-/** True for a non-null, non-array object — the shape a JSON `header` must take before its fields are
- * screened (the same guard `catalogue-api.ts` applies to its object fields). */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Screen the `regime` value — one of the two `purchase_regime` members, else
- * `management.request_invalid`. A typeof-only pass would let a foreign string reach the column, where
- * its check constraint refuses it as an opaque 500, so the two members are checked here for a clean
- * 400. */
+/** Checked here so a foreign value is a 400 naming the field, not the column's check refusal. */
 function requireRegime(v: unknown): PurchaseRegime {
   if (v !== "general" && v !== "equivalence_surcharge") {
     throw new AppError("management.request_invalid", { field: "regime" });
@@ -112,8 +65,6 @@ function requireRegime(v: unknown): PurchaseRegime {
   return v;
 }
 
-/** Screen a line's `kind` enum — one of the two `purchase_vat_kind` members, else
- * `management.request_invalid` (the `requireRegime` reasoning, for the per-line enum). */
 function requireVatKind(v: unknown): PurchaseVatKind {
   if (v !== "ordinary" && v !== "capital") {
     throw new AppError("management.request_invalid", { field: "kind" });
@@ -121,29 +72,14 @@ function requireVatKind(v: unknown): PurchaseVatKind {
   return v;
 }
 
-/** Screen a money or rate field: a STRING (a non-string is `management.request_invalid` naming the
- * field) whose characters form a well-formed decimal literal (anything else is
- * `shared.invalid_decimal` -> 400). The pair every amount on this surface goes through, named once
- * beside the two enum screens rather than written out at each one. */
 function requireDecimal(v: unknown, field: string): Decimal {
   return decimal(requireString(v, field));
 }
 
 /**
- * Screen the create body's `header`: every REQUIRED scalar present and well-typed, the two dates a real
- * calendar day (`requirePeriod`), the optional `regime`/`deductibleProportion`/`note` screened only
- * when present. Every amount goes through `requireDecimal`, so a value that is not a well-formed
- * decimal literal is refused here with `shared.invalid_decimal` -> 400, before any DB work.
- *
- * Screening the LITERAL is this boundary's job. The RANGE checks are NOT symmetric, which is worth
- * naming here because "the op re-validates" is not true of every field. The op
- * (`packages/purchasing/src/operations.ts`) refuses a `deductibleProportion` outside 0–100 and, per
- * line, a negative `base`, a negative `tax` and a `rate` outside 0–100, all as `purchase.invalid`.
- * The header's `total` has no range check on either side and no column constraint: measured
- * 2026-09-21 through this route, a POST carrying `total: "-121.00"` answered 201 and the row read
- * back `-121.00`. That is INTENDED and not a gap to close: a negative total is a supplier credit
- * note (owner ruling 2026-09-21, docs/backlog.md → Track C). The dashboard form refuses one anyway,
- * which the same entry records as an open consequence of the ruling.
+ * This screens the decimal LITERAL; the op range-checks `deductibleProportion` and each line. The
+ * header's `total` is not checked for sign on the server, deliberately: a negative total is a
+ * supplier credit note (owner ruling 2026-09-21, docs/backlog.md → Track C).
  */
 function screenHeaderCreate(v: unknown): PurchaseInvoiceHeaderInput {
   if (!isPlainObject(v)) throw new AppError("management.request_invalid", { field: "header" });
@@ -163,11 +99,6 @@ function screenHeaderCreate(v: unknown): PurchaseInvoiceHeaderInput {
   return header;
 }
 
-/**
- * Screen a PATCH body's `header`: any subset of the create fields, each screened ONLY when present (a
- * PATCH touches only what it names), so an absent field is left unchanged by the op. Same per-field
- * checks as `screenHeaderCreate`.
- */
 function screenHeaderPatch(v: unknown): Partial<PurchaseInvoiceHeaderInput> {
   if (!isPlainObject(v)) throw new AppError("management.request_invalid", { field: "header" });
   const header: Partial<PurchaseInvoiceHeaderInput> = {};
@@ -189,12 +120,7 @@ function screenHeaderPatch(v: unknown): Partial<PurchaseInvoiceHeaderInput> {
   return header;
 }
 
-/**
- * Screen the VAT desglose: an array (an empty one passes the shape screen and reaches the op, which
- * throws `purchase.invalid` `no_lines`), each element an object with well-typed `rate`/`base`/`tax`
- * strings and an optional `kind` enum. Amounts go through `requireDecimal`, as `screenHeaderCreate`
- * describes.
- */
+/** An empty list passes this screen; the op refuses it with `purchase.invalid` `no_lines`. */
 function screenLines(v: unknown): PurchaseInvoiceLineInput[] {
   if (!Array.isArray(v)) throw new AppError("management.request_invalid", { field: "lines" });
   return v.map((line) => {
@@ -209,18 +135,8 @@ function screenLines(v: unknown): PurchaseInvoiceLineInput[] {
   });
 }
 
-/**
- * The deployment holds one tenant per database. Mounts the dashboard's gated purchase-invoice
- * write group on an existing Hono app — `mountCatalogueApi`'s sibling, attached to the SAME app
- * (the `mountWebhook`/`mountTillApi` convention). Every route wraps its handler in `run`, calls
- * `requireManagementSession(c)` (→ 401 before any DB work) and then, inside `withTransaction`,
- * `authorizeManager(...)` (→ 403) before the headless `@waitron/purchasing` op, in this database.
- * The `purchase.manage` gate runs on every route through one constant.
- */
 export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logger): void {
-  // Open a transaction, confirm the caller's management session carries
-  // PURCHASE_WRITE_PERMISSION, then run `fn`. Every route funnels its DB work through here so the gate
-  // is applied identically and in exactly one place — the catalogue §3 seam.
+  // Every route's DB work goes through here, so the gate is applied in exactly one place.
   const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
     withTransaction(deps.db, async (tx) => {
       await authorizeManager(tx, {
@@ -230,12 +146,10 @@ export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logg
       return fn(tx);
     });
 
-  // ── List ─────────────────────────────────────────────────────────────────────────────────────────
   app.get("/management-api/purchase-invoices", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // Optional half-open `received_on` window (the deduction-period bound). Each query param, when
-      // present, is screened to a real calendar day; absent leaves the bound off.
+      // An optional half-open `received_on` window: `from` inclusive, `to` exclusive.
       const opts: ListPurchaseInvoicesInput = {};
       const from = c.req.query("from");
       const to = c.req.query("to");
@@ -246,26 +160,19 @@ export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logg
     }),
   );
 
-  // ── Get one ──────────────────────────────────────────────────────────────────────────────────────
   app.get("/management-api/purchase-invoices/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PurchaseInvoiceId");
       const invoice = await gated(sessionId, (tx) => getPurchaseInvoice(tx, id));
-      // The deployment holds one tenant per database. A well-formed id that names no visible row
-      // is a clean 404, not a 200 null body — the op returns null, so this route makes it
-      // explicit.
       if (invoice === null) throw new AppError("purchase.not_found", { id });
       return c.json(invoice);
     }),
   );
 
-  // ── Create ───────────────────────────────────────────────────────────────────────────────────────
   app.post("/management-api/purchase-invoices", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // Read via `readJsonBody` so an empty/malformed/`null`/non-object body reaches the header screen as
-      // a 400 (naming `header`) rather than becoming an opaque 500 — the catalogue null-body convention.
       const body = await readJsonBody<{ header?: unknown; lines?: unknown }>(c);
       const header = screenHeaderCreate(body.header);
       const lines = screenLines(body.lines);
@@ -274,14 +181,12 @@ export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logg
     }),
   );
 
-  // ── Update ───────────────────────────────────────────────────────────────────────────────────────
   app.patch("/management-api/purchase-invoices/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PurchaseInvoiceId");
-      // Both `header` and `lines` are OPTIONAL; the body is coerced to `{}` by `readJsonBody` so an
-      // empty/malformed/`null` body is a legitimate no-op that still bumps `updated_at` (and 404s a
-      // missing id, via the op). `lines` present ⇒ a FULL replacement of the desglose (the op's contract).
+      // An empty body is a no-op that still bumps `updated_at`; `lines` present replaces the whole
+      // desglose.
       const body = await readJsonBody<{ header?: unknown; lines?: unknown }>(c);
       const patch: UpdatePurchaseInvoiceInput = {};
       if (body.header !== undefined) patch.header = screenHeaderPatch(body.header);
@@ -291,13 +196,10 @@ export function mountPurchasingApi(app: Hono, deps: PurchasingApiDeps, log: Logg
     }),
   );
 
-  // ── Delete ───────────────────────────────────────────────────────────────────────────────────────
   app.delete("/management-api/purchase-invoices/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PurchaseInvoiceId");
-      // The op throws `purchase.not_found` (→ 404) when the id matches no visible row; its VAT lines
-      // cascade on delete.
       await gated(sessionId, (tx) => deletePurchaseInvoice(tx, id));
       return c.body(null, 204);
     }),

@@ -25,40 +25,11 @@ import { mountManagementApi } from "./management-api.js";
  * `/management-api` surface, end to end over HTTP with the manager and staff sessions a real
  * sign-in mints.
  *
- * ## What went with PostgreSQL
- *
- * SQLite has no roles and no grants, and every call below runs on the one handle. Nothing here
- * now says anything about which identity the routes reach the database as. The 403 and 401 gates
- * are unaffected: both are `authorizeManager` and `requireManagementSession`, never a privilege,
- * and every one of those cases still passes.
- *
- * **Six deletion receipts written into the cases below are retired by the column types, and are
- * flagged where they sit** — each recorded an `isUuid`/`requireTableId` screen as forestalling a
- * `22P02` on a `uuid` column. The id and reference columns are `text` now
- * (`packages/db/drizzle/0000_baseline.sql:160-178` for `dining_tables`), so there is no `22P02` to
- * forestall. Measured 2026-09-22 on Node v26.7.0 against `node:sqlite` directly, over a `text`
- * primary key with a `text` reference column: `where id = 'not-a-uuid'` returns zero rows rather
- * than raising, and `'not-a-uuid'` is stored unchanged in the reference column; the control in the
- * other direction, an insert of a null primary key, raises `NOT NULL constraint failed` (errcode
- * 1299), so the probe can tell a refusal from an acceptance. Each screen still fires FIRST, so
- * every one of those cases still pins its response — what is gone is the proof that dropping the
- * screen would be worse than a 404.
- *
- * ## Two cases this header used to declare red are green
- *
- * The two `zoneId that names no zone` cases answered 500 instead of 404 `zone.not_found`, because
- * `createTable` / `updateTable` identified the zone key from the table and column a refusal NAMES,
- * and on this engine a foreign-key refusal names neither: a bad `zone_id` and a bad `location_id`
- * both report `"FOREIGN KEY constraint failed"`, errcode 787, byte-identical. `apps/server/src/tables.ts`
- * reads the zone row first now (`requireZone`) rather than reading the refusal, so the two cases
- * assert what they always did and pass. The file is green — run on its own, 2026-09-22.
+ * The malformed-id and malformed-`zoneId` cases pin the response only: a `text` id column matches no
+ * row for a malformed id, so none of them tells its screen from its absence.
  */
 const LOCALE = "es-ES";
-const PASSWORD = "correct horse"; // ≥ MIN_PASSWORD_LENGTH; the manager's & staff's seeded password.
-// Dashboard sign-in resolves the person by EMAIL (not a client-supplied id), so each seeded person
-// carries a login email. `persons_tenant_email_uq` is unique on `lower(email)` across the WHOLE
-// database, so these constants are safe here because `setupTenant()` runs ONCE for the file (this
-// suite sets `resetPerTest: false`) — not because anything scopes them per tenant.
+const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
 
@@ -68,26 +39,20 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-/** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
-// One NIF per provisioned venue: `resetPerTest` is off, so tenants accumulate for the life of the
-// file and the country + tax id pair is unique.
 let nifCounter = 0;
 function nextNif(): string {
   nifCounter += 1;
   return `${String(74_000_000 + nifCounter).padStart(8, "0")}K`;
 }
 
-/** A name/label unique within the tenant+location, so tests are order-independent (CLAUDE.md §4):
- *  `resetPerTest` is off, so the zone/table set accumulates across tests and `(location, name|label)`
- *  is unique, so a fixed value would collide. Every list assertion is therefore a membership check,
- *  never an exact-list one. */
+/** Names are unique and the database is not reset between tests, so every list assertion is a
+ *  membership check. */
 function unique(base: string): string {
   return `${base}-${randomUUID().slice(0, 8)}`;
 }
 
-/** Provision a venue as owner and seed the people and sessions this route fixture needs. */
 async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; staffId: string }> {
   const venue = await applyVenue(
     planVenue(
@@ -123,9 +88,8 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  // Seeded through the table definition, not by raw SQL: `persons.id` and `persons.created_at` are
-  // `$defaultFn` generators on this engine, which a raw insert never reaches while the columns are
-  // NOT NULL (`packages/identity/src/schema/persons.ts`).
+  // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`
+  // generators, which a raw SQL insert never reaches.
   const { managerId, staffId } = await withTransaction(suite.db, async (tx) => {
     const seed = async (displayName: string, email: string, role: "manager" | "staff") => {
       const [person] = await tx
@@ -148,9 +112,6 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
   return { venue, managerId, staffId };
 }
 
-/** Build the venue's `TillConfig` from an `applyVenue` result — the tenant + location the zone/table
- *  config verbs scope to (the other fiscal ids are inert on the config surface). Mirrors the same
- *  helper in `move-merge.filing.test.ts`; `boot.ts` threads the real `till` config here in production. */
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
     tillId: brandTillId(venue.tillId),
@@ -171,7 +132,6 @@ function mountApp(venue: VenueResult): Hono {
     {
       db: suite.db,
       cfg: { nodeId: venue.nodeId },
-      // The venue's own config (tenant + location) the zone/table config routes scope to.
       venueCfg: tillConfigFromVenue(venue),
       secureCookies: false,
       rpId: "localhost",
@@ -182,7 +142,6 @@ function mountApp(venue: VenueResult): Hono {
   return app;
 }
 
-/** Log in over HTTP by `email`, returning just the `waitron_management_session=…` cookie pair. */
 async function login(app: Hono, email: string): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
@@ -193,10 +152,6 @@ async function login(app: Hono, email: string): Promise<string> {
   return res.headers.get("set-cookie")!.split(";")[0];
 }
 
-// One provisioned tenant + a manager and a staff cookie, shared across the tests. Each test uses UNIQUE
-// zone/table names so the accumulating sets never collide (CLAUDE.md §4). `venue` is kept at module
-// scope too so the placement tests can read `dining_tables` back directly under its tenant (see
-// `readPlacement`).
 let app: Hono;
 let venue: VenueResult;
 let managerCookie: string;
@@ -211,7 +166,6 @@ beforeAll(async () => {
   staffCookie = await login(app, STAFF_EMAIL);
 });
 
-/** Request a `/management-api<path>` route with the given cookie. */
 async function req(path: string, init: RequestInit, cookie?: string): Promise<Response> {
   return app.request(`/management-api${path}`, {
     ...init,
@@ -219,7 +173,6 @@ async function req(path: string, init: RequestInit, cookie?: string): Promise<Re
   });
 }
 
-/** Create a zone as the manager and return its id — a helper for the table tests that assign one. */
 async function createZone(name: string): Promise<string> {
   const res = await req(
     "/zones",
@@ -337,8 +290,6 @@ describe("/management-api/zones", () => {
     expect(unknown.status).toBe(404);
     expect(await unknown.json()).toMatchObject({ error: { code: "zone.not_found" } });
 
-    // The `if (!isUuid(id))` screen turns a malformed :id into the same 404 an unknown one gets.
-    // What dropping it would produce is no longer stated: see the header's retired receipts.
     const malformed = await req(
       "/zones/not-a-uuid",
       { method: "PATCH", body: JSON.stringify({ name: unique("X") }) },
@@ -349,7 +300,7 @@ describe("/management-api/zones", () => {
   });
 
   it("PATCH body screens: array → body; non-string name; bad displayOrder; non-boolean active", async () => {
-    const id = randomUUID(); // well-formed uuid, so the isUuid screen passes and the body screens fire
+    const id = randomUUID();
 
     const arrayBody = await req(`/zones/${id}`, { method: "PATCH", body: "[]" }, managerCookie);
     expect(arrayBody.status).toBe(400);
@@ -405,13 +356,12 @@ describe("/management-api/zones", () => {
     expect(del.status).toBe(204);
     expect(await del.text()).toBe("");
 
-    // listZones returns only ACTIVE zones, so a deactivated one drops out entirely.
     const afterDel = (await (await req("/zones", { method: "GET" }, managerCookie)).json()) as {
       id: string;
     }[];
     expect(afterDel.find((z) => z.id === id)).toBeUndefined();
 
-    // Reactivating via PATCH proves it was a soft-delete, not a hard delete.
+    // Reactivating via PATCH shows it was a soft delete.
     await req(
       `/zones/${id}`,
       { method: "PATCH", body: JSON.stringify({ active: true }) },
@@ -439,9 +389,7 @@ describe("/management-api/zones", () => {
   });
 
   it("a STAFF session is refused on every zone route (403 authorization.not_permitted)", async () => {
-    // A staff person CAN log in but holds no `venue.configure`, so each route's `authorizeManager`
-    // refuses it 403 — after the session guard + body/id screens, before any write. Dropping the
-    // authorize call from a route flips its case to a 2xx (the gate deletion-proof).
+    // A staff person can log in but holds no `venue.configure`.
     const someId = randomUUID();
     const cases = [
       req("/zones", { method: "GET" }, staffCookie),
@@ -490,8 +438,7 @@ describe("POST /management-api/session (email login)", () => {
   });
 
   it("unknown email returns 401 password.invalid, no cookie", async () => {
-    // An email that resolves to no person is indistinguishable from a wrong password: both are
-    // `password.invalid`, so the response never reveals which addresses have accounts.
+    // An unknown email gets the same `password.invalid` as a wrong password.
     const res = await app.request("/management-api/session", {
       method: "POST",
       headers: json,
@@ -525,10 +472,7 @@ describe("/management-api/tables", () => {
   });
 
   it("GET projects a placed table's FP-2 placement columns (posX/posY/shape/rotation)", async () => {
-    // Route-level place-then-read receipt for the Task-7b gap: the config GET /tables surface now
-    // projects the four placement columns (listTables), so the Plano editor sees a placed table as
-    // placed on reload instead of snapping it back to the unplaced tray. Proven by the POSITIVE read
-    // of real values, not merely that nulls pass (CLAUDE.md §1).
+    // Real values, so the case cannot pass on nulls.
     const zoneId = await createZone(unique("GetPlaceZone"));
     const { id } = (await (
       await req(
@@ -591,10 +535,6 @@ describe("/management-api/tables", () => {
   });
 
   it("POST with a MALFORMED zoneId → 404 zone.not_found (the isUuid guard)", async () => {
-    // A present, string-typed but non-UUID `zoneId` passes the `typeof` screen (that catches only the
-    // WRONG-TYPE case, e.g. `123`) and is screened by `isUuid` to the SAME `zone.not_found` a
-    // well-formed-but-missing zoneId gets (test above). The receipt for what the screen forestalls
-    // is retired: see the header.
     const res = await req(
       "/tables",
       { method: "POST", body: JSON.stringify({ label: unique("z"), zoneId: "not-a-uuid" }) },
@@ -605,8 +545,7 @@ describe("/management-api/tables", () => {
   });
 
   it("POST body screens: null → field label, array → field body, non-string label/zoneId, bad capacity", async () => {
-    // A `null` body coerces to `{}` (`?? {}`), then the label screen fires (field "body" is only for a
-    // non-object truthy body such as an array) — the same null-body discipline the sibling routes follow.
+    // A `null` body is read as `{}`, so the label screen fires, not the "body" one.
     const nullBody = await req("/tables", { method: "POST", body: "null" }, managerCookie);
     expect(nullBody.status).toBe(400);
     expect(await nullBody.json()).toMatchObject({
@@ -696,7 +635,6 @@ describe("/management-api/tables", () => {
     expect(await malformed.json()).toMatchObject({ error: { code: "table.not_found" } });
   });
 
-  // KNOWN FAILING, and deliberately left so — the header's "Two cases left RED" states why.
   it("PATCH with a zoneId that names no zone → 404 zone.not_found", async () => {
     const { id } = (await (
       await req(
@@ -715,9 +653,6 @@ describe("/management-api/tables", () => {
   });
 
   it("PATCH with a MALFORMED zoneId → 404 zone.not_found (the isUuid guard)", async () => {
-    // The twin of the POST screen above: a present, string-typed but non-UUID `zoneId` in the patch is
-    // screened to `zone.not_found` (→ 404) BEFORE `updateTable`, the SAME code a well-formed-but-missing
-    // zoneId gets.
     const { id } = (await (
       await req(
         "/tables",
@@ -735,7 +670,7 @@ describe("/management-api/tables", () => {
   });
 
   it("PATCH body screens: array → body; non-string label/zoneId; bad capacity; empty → 204 no-op", async () => {
-    const id = randomUUID(); // well-formed uuid, so the isUuid screen passes and the body screens fire
+    const id = randomUUID();
 
     const arrayBody = await req(`/tables/${id}`, { method: "PATCH", body: "[]" }, managerCookie);
     expect(arrayBody.status).toBe(400);
@@ -773,7 +708,6 @@ describe("/management-api/tables", () => {
       error: { code: "management.request_invalid", params: { field: "capacity" } },
     });
 
-    // A null / empty body carries no mutable field → a 204 no-op (never Drizzle's "No values to set" 500).
     const nullBody = await req(`/tables/${id}`, { method: "PATCH", body: "null" }, managerCookie);
     expect(nullBody.status).toBe(204);
     const emptyBody = await req(`/tables/${id}`, { method: "PATCH", body: "{}" }, managerCookie);
@@ -854,18 +788,6 @@ describe("/management-api/tables", () => {
   });
 });
 
-// ── FP-2 spatial placement (dashboard) ──────────────────────────────────────────────────────────────
-// The manager-gated PUT/DELETE that place a table on / remove it from the floor-plan canvas, thin
-// wrappers over Task 2's `setTablePlacement` / `clearPlacement`. Same gate + `run` mapping as the FP-1
-// zone/table routes above (`requireManagementSession` 401 first, then `withVenueAuth`'s
-// `authorizeManager(venue.configure)` 403). These placement tests read the row back with a DIRECT
-// `dining_tables` read (`readPlacement`) — a tight row receipt for exactly the four columns the
-// PUT/DELETE write. The management `GET /tables` surface (`listTables`) DOES now project those columns
-// (Task 7b), verified end-to-end by the "GET projects a placed table's placement columns" case in the
-// `/management-api/tables` describe above; the direct read here keeps this describe focused on the verb.
-
-/** The canonical placement body — the exact values the brief pins. `zoneId` varies per test (each needs
- *  its own LIVE zone), so it is a parameter. */
 function place(zoneId: string): {
   zoneId: string;
   posX: number;
@@ -876,8 +798,6 @@ function place(zoneId: string): {
   return { zoneId, posX: 500, posY: 250, shape: "square", rotation: 0 };
 }
 
-/** Read a table's four placement columns straight off the row. All four are `integer`/`text`
- *  (`packages/db/drizzle/0000_baseline.sql:170-173`), so a raw read needs no decoding. */
 async function readPlacement(tableId: string): Promise<{
   posX: number | null;
   posY: number | null;
@@ -897,7 +817,7 @@ async function readPlacement(tableId: string): Promise<{
 }
 
 describe("/management-api/tables/:id/placement", () => {
-  /** A fresh ACTIVE table + ACTIVE zone — `setTablePlacement` requires BOTH live. */
+  /** `setTablePlacement` requires both the table and the zone live. */
   async function tableAndZone(): Promise<{ tableId: string; zoneId: string }> {
     const zoneId = await createZone(unique("PlaceZone"));
     const { id: tableId } = (await (
@@ -913,7 +833,6 @@ describe("/management-api/tables/:id/placement", () => {
   it("manager places a table (204) + read-back shows it; staff is 403; no session is 401", async () => {
     const { tableId, zoneId } = await tableAndZone();
 
-    // No session → 401 before any DB work.
     const unauth = await req(`/tables/${tableId}/placement`, {
       method: "PUT",
       body: JSON.stringify(place(zoneId)),
@@ -921,9 +840,7 @@ describe("/management-api/tables/:id/placement", () => {
     expect(unauth.status).toBe(401);
     expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
 
-    // A staff session CAN log in but holds no `venue.configure`, so `authorizeManager` (inside
-    // `withVenueAuth`) refuses it 403 — the gate deletion-proof: dropping that authorize call flips
-    // this case to 204.
+    // A staff person can log in but holds no `venue.configure`.
     const staff = await req(
       `/tables/${tableId}/placement`,
       { method: "PUT", body: JSON.stringify(place(zoneId)) },
@@ -931,10 +848,8 @@ describe("/management-api/tables/:id/placement", () => {
     );
     expect(staff.status).toBe(403);
     expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-    // The refused staff attempt wrote nothing.
     expect(await readPlacement(tableId)).toMatchObject({ posX: null, posY: null, shape: null });
 
-    // A manager places it → 204, and the placement lands on the row.
     const ok = await req(
       `/tables/${tableId}/placement`,
       { method: "PUT", body: JSON.stringify(place(zoneId)) },
@@ -952,7 +867,6 @@ describe("/management-api/tables/:id/placement", () => {
 
   it("manager clears a placement (204) + read-back nulls it; staff is 403; no session is 401", async () => {
     const { tableId, zoneId } = await tableAndZone();
-    // Place it first (manager), so DELETE has something to clear.
     await req(
       `/tables/${tableId}/placement`,
       { method: "PUT", body: JSON.stringify(place(zoneId)) },
@@ -966,7 +880,6 @@ describe("/management-api/tables/:id/placement", () => {
     const staff = await req(`/tables/${tableId}/placement`, { method: "DELETE" }, staffCookie);
     expect(staff.status).toBe(403);
     expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-    // The refused staff attempt did not clear it.
     expect(await readPlacement(tableId)).toMatchObject({ posX: 500, posY: 250, shape: "square" });
 
     const ok = await req(`/tables/${tableId}/placement`, { method: "DELETE" }, managerCookie);
@@ -983,7 +896,6 @@ describe("/management-api/tables/:id/placement", () => {
   it("PUT a malformed :id → 404 table.not_found; an unknown id → 404 too", async () => {
     const zoneId = await createZone(unique("PZ"));
 
-    // Malformed :id → requireTableId throws table.not_found at the route.
     const malformed = await req(
       "/tables/not-a-uuid/placement",
       { method: "PUT", body: JSON.stringify(place(zoneId)) },
@@ -992,7 +904,6 @@ describe("/management-api/tables/:id/placement", () => {
     expect(malformed.status).toBe(404);
     expect(await malformed.json()).toMatchObject({ error: { code: "table.not_found" } });
 
-    // Well-formed but unknown id → the verb's active-table read finds nothing → table.not_found.
     const unknown = await req(
       "/tables/00000000-0000-4000-8000-000000000000/placement",
       { method: "PUT", body: JSON.stringify(place(zoneId)) },
@@ -1031,8 +942,6 @@ describe("/management-api/tables/:id/placement", () => {
     expect(missing.status).toBe(404);
     expect(await missing.json()).toMatchObject({ error: { code: "zone.not_found" } });
 
-    // A present, string-typed but non-UUID zoneId is screened to zone.not_found at the route, the
-    // sibling table-route shape.
     const malformed = await req(
       `/tables/${tableId}/placement`,
       { method: "PUT", body: JSON.stringify({ ...place("x"), zoneId: "not-a-uuid" }) },
@@ -1043,12 +952,10 @@ describe("/management-api/tables/:id/placement", () => {
   });
 
   it("PUT body screens: array → body; non-string zoneId; non-number posX/posY/rotation; non-string shape", async () => {
-    const id = randomUUID(); // well-formed uuid, so requireTableId passes and the body screens fire
+    const id = randomUUID();
     const base = { zoneId: randomUUID(), posX: 500, posY: 250, shape: "square", rotation: 0 };
 
-    // A `null` body coerces to `{}` (`?? {}`), then the first field screen fires (field "body" is only
-    // for a non-object TRUTHY body such as an array) — the same null-body discipline the sibling routes
-    // follow.
+    // A `null` body is read as `{}`, so the first field screen fires, not the "body" one.
     const nullBody = await req(
       `/tables/${id}/placement`,
       { method: "PUT", body: "null" },
@@ -1103,9 +1010,7 @@ describe("/management-api/tables/:id/placement", () => {
   });
 });
 
-// Kitchen-station routing configuration and its manager authorization.
 describe("/management-api/stations (KDS-1 config)", () => {
-  /** Create a station as the manager and return its id. */
   async function createStation(
     name: string,
     extra: { isDefault?: boolean; displayOrder?: number } = {},
@@ -1119,7 +1024,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
     return ((await res.json()) as { id: string }).id;
   }
 
-  /** The venue's ACTIVE stations, as the manager sees them. */
   async function listStations(): Promise<
     { id: string; name: string; displayOrder: number; isDefault: boolean; active: boolean }[]
   > {
@@ -1175,7 +1079,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
 
   it("POST { isDefault:true } adopts the default; POST /:id/default flips it atomically to another", async () => {
     const first = await createStation(unique("Def1"), { isDefault: true });
-    // A second default clears the prior (the `WHERE is_default` partial unique tolerates only one).
+    // A second default clears the prior one.
     const second = await createStation(unique("Def2"), { isDefault: true });
     let list = await listStations();
     expect(list.find((s) => s.id === first)!.isDefault).toBe(false);
@@ -1210,17 +1114,13 @@ describe("/management-api/stations (KDS-1 config)", () => {
       managerCookie,
     );
     expect(patch.status).toBe(204);
-    // Deactivated → drops off the active list; read the row back directly to see the edit landed.
-    // Through the table definition: `active` is an integer column with a boolean read mapping on
-    // this engine, so a raw `select active` would hand back 0 and the assertion would compare a
-    // number with `false`.
+    // Through the table definition: a raw `select active` returns the stored integer, not a boolean.
     const [row] = await suite.db
       .select({ displayOrder: kitchenStations.displayOrder, active: kitchenStations.active })
       .from(kitchenStations)
       .where(eq(kitchenStations.id, id));
     expect(row).toMatchObject({ displayOrder: 7, active: false });
 
-    // A rename onto an existing name collides.
     const taken = unique("Taken");
     await createStation(taken);
     const active = await createStation(unique("Active"));
@@ -1232,7 +1132,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(collide.status).toBe(409);
     expect(await collide.json()).toMatchObject({ error: { code: "station.name_taken" } });
 
-    // An empty patch is a 204 no-op (never reaches updateStation's empty `.set()`).
     const empty = await req(`/stations/${active}`, { method: "PATCH", body: "{}" }, managerCookie);
     expect(empty.status).toBe(204);
 
@@ -1302,8 +1201,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       forgotten_after_minutes: 12,
     });
 
-    // A non-positive (or non-integer) value is a single-field fault — caught before the trio is ever
-    // considered as a group.
+    // A non-positive or non-integer value is refused on its own field, before the trio is checked.
     const nonPositive = await req(
       `/stations/${id}`,
       {
@@ -1321,8 +1219,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
       error: { code: "management.request_invalid", params: { field: "warmAfterMinutes" } },
     });
 
-    // An out-of-order set (warm >= overdue) is a group fault — the CHECK it would otherwise trip
-    // (`kitchen_stations_thresholds_ordered`) is never reached.
     const outOfOrder = await req(
       `/stations/${id}`,
       {
@@ -1343,8 +1239,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       },
     });
 
-    // A partial trio (one of the three given without its siblings) cannot be ordered-checked at all,
-    // so it is refused the same way as an out-of-order set — the same compound field name.
+    // A partial trio is refused like an out-of-order one, under the same compound field name.
     const partial = await req(
       `/stations/${id}`,
       { method: "PATCH", body: JSON.stringify({ warmAfterMinutes: 3 }) },
@@ -1358,7 +1253,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
       },
     });
 
-    // The row is unchanged by every rejected attempt above.
     const after = await suite.db.execute<{
       warm_after_minutes: number;
       overdue_after_minutes: number;
@@ -1419,7 +1313,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
 
   it("PUT /categories/:id/station and /products/:id/station set + clear the route; bad body/station → 400/404; a malformed target is a no-op", async () => {
     const stationId = await createStation(unique("Route"));
-    // Seed a real category + product to route.
     const { categoryId, productId } = await withTransaction(suite.db, async (tx) => {
       const catalogue = await createCatalogue(tx, {
         name: unique("Carta"),
@@ -1442,8 +1335,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       table: "categories" | "products",
       id: string,
     ): Promise<string | null> => {
-      // Two explicit reads rather than an interpolated table name (no `sql.raw`): the value is a
-      // compile-time literal here, but the house rule is uniform (never build SQL by concatenation).
+      // Two explicit reads rather than an interpolated table name: SQL is never built by concatenation.
       const r =
         table === "categories"
           ? await suite.db.execute<{ station_id: string | null }>(
@@ -1455,7 +1347,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
       return r.rows[0]!.station_id;
     };
 
-    // The two routes are near-identical; run the same battery against each.
     for (const [base, table, targetId] of [
       ["categories", "categories", categoryId],
       ["products", "products", productId],
@@ -1463,31 +1354,25 @@ describe("/management-api/stations (KDS-1 config)", () => {
       const put = (body: unknown, id = targetId) =>
         req(`/${base}/${id}/station`, { method: "PUT", body: JSON.stringify(body) }, managerCookie);
 
-      // Set → the column carries the station.
       expect((await put({ stationId })).status).toBe(204);
       expect(await stationOf(table, targetId)).toBe(stationId);
-      // Clear (null) → the column nulls.
       expect((await put({ stationId: null })).status).toBe(204);
       expect(await stationOf(table, targetId)).toBeNull();
-      // A non-string stationId is a request-shape fault.
       const badType = await put({ stationId: 5 });
       expect(badType.status).toBe(400);
       expect(await badType.json()).toMatchObject({
         error: { code: "management.request_invalid", params: { field: "stationId" } },
       });
-      // A malformed stationId names no station.
       const badStation = await put({ stationId: "not-a-uuid" });
       expect(badStation.status).toBe(404);
       expect(await badStation.json()).toMatchObject({ error: { code: "station.not_found" } });
-      // A malformed TARGET id names nothing — the verb's unknown-id no-op, a clean 204 (no code exists).
+      // A malformed TARGET id gets the verb's unknown-id no-op, a 204.
       expect((await put({ stationId }, "not-a-uuid")).status).toBe(204);
     }
   });
 
   it("a STAFF session is refused on every station/routing route (403 authorization.not_permitted)", async () => {
-    // A staff person CAN log in but holds no `venue.configure`, so each route's `authorizeManager` refuses
-    // it 403 — after the session guard + body/id screens, before any write. Dropping the authorize call
-    // from `withVenueAuth` flips each case to a 2xx (the gate deletion-proof).
+    // A staff person can log in but holds no `venue.configure`.
     const someId = randomUUID();
     const cases = [
       req("/stations", { method: "GET" }, staffCookie),
@@ -1553,7 +1438,6 @@ describe("/management-api/stations (KDS-1 config)", () => {
 });
 
 describe("/management-api/courses + product course + fire-control (KDS-2 config)", () => {
-  /** Create a course as the manager and return its id. */
   async function createCourse(
     name: string,
     extra: { displayOrder?: number } = {},
@@ -1567,7 +1451,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     return ((await res.json()) as { id: string }).id;
   }
 
-  /** The venue's ACTIVE courses, as the manager sees them (by display_order then name). */
   async function listCourses(): Promise<
     { id: string; name: string; displayOrder: number; active: boolean }[]
   > {
@@ -1619,15 +1502,13 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
       managerCookie,
     );
     expect(patch.status).toBe(204);
-    // Deactivated → drops off the active list; read the row back directly to see the edit landed.
-    // Through the table definition, for the same reason the station twin above states.
+    // Through the table definition, as in the station twin above.
     const [row] = await suite.db
       .select({ displayOrder: kitchenCourses.displayOrder, active: kitchenCourses.active })
       .from(kitchenCourses)
       .where(eq(kitchenCourses.id, id));
     expect(row).toMatchObject({ displayOrder: 9, active: false });
 
-    // A rename onto an existing name collides.
     const taken = unique("Taken");
     await createCourse(taken);
     const active = await createCourse(unique("Active"));
@@ -1639,11 +1520,9 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     expect(collide.status).toBe(409);
     expect(await collide.json()).toMatchObject({ error: { code: "course.name_taken" } });
 
-    // An empty patch is a 204 no-op (never reaches updateCourse's empty `.set()`).
     const empty = await req(`/courses/${active}`, { method: "PATCH", body: "{}" }, managerCookie);
     expect(empty.status).toBe(204);
 
-    // A non-object PATCH body → management.request_invalid naming "body".
     const arrayBody = await req(
       `/courses/${active}`,
       { method: "PATCH", body: "[]" },
@@ -1710,7 +1589,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
 
   it("PUT /products/:id/course sets + clears the product's default course; bad body → 400; a bad/retired course → 404; a malformed product is a no-op", async () => {
     const courseId = await createCourse(unique("Course"));
-    // Seed a real product to route.
     const { productId } = await withTransaction(suite.db, async (tx) => {
       const catalogue = await createCatalogue(tx, {
         name: unique("Carta"),
@@ -1738,32 +1616,26 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     const put = (body: unknown, id = productId) =>
       req(`/products/${id}/course`, { method: "PUT", body: JSON.stringify(body) }, managerCookie);
 
-    // Set → the column carries the course.
     expect((await put({ courseId })).status).toBe(204);
     expect(await courseOf(productId)).toBe(courseId);
-    // Clear (null) → the column nulls.
     expect((await put({ courseId: null })).status).toBe(204);
     expect(await courseOf(productId)).toBeNull();
-    // A non-string courseId is a request-shape fault.
     const badType = await put({ courseId: 5 });
     expect(badType.status).toBe(400);
     expect(await badType.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "courseId" } },
     });
-    // A malformed courseId names no course.
     const badCourse = await put({ courseId: "not-a-uuid" });
     expect(badCourse.status).toBe(404);
     expect(await badCourse.json()).toMatchObject({ error: { code: "course.not_found" } });
-    // A well-formed-but-unknown courseId also names no live course (requireLiveCourse in the verb).
     const missingCourse = await put({ courseId: randomUUID() });
     expect(missingCourse.status).toBe(404);
     expect(await missingCourse.json()).toMatchObject({ error: { code: "course.not_found" } });
-    // A malformed PRODUCT id names nothing — the verb's unknown-id no-op, a clean 204 (no code exists).
+    // A malformed PRODUCT id gets the verb's unknown-id no-op, a 204.
     expect((await put({ courseId }, "not-a-uuid")).status).toBe(204);
   });
 
   it("GET /fire-control reads the venue setting (defaults 'waiter'); PUT sets it; a bad value → 400", async () => {
-    // The setting defaults to 'waiter' on a fresh venue (the KDS-2 column default).
     const initial = await req("/fire-control", { method: "GET" }, managerCookie);
     expect(initial.status).toBe(200);
     expect(await initial.json()).toEqual({ mode: "waiter" });
@@ -1776,7 +1648,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     expect(set.status).toBe(204);
     const after = await req("/fire-control", { method: "GET" }, managerCookie);
     expect(await after.json()).toEqual({ mode: "kitchen" });
-    // The write also lands on the location row.
     const row = await suite.db.execute<{ fire_control: string }>(
       sql`select fire_control from locations where id = ${venue.locationId}`,
     );
@@ -1800,9 +1671,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
   });
 
   it("PUT /fire-control accepts the KDS-3 'expo' mode and round-trips it", async () => {
-    // The third fire_control_mode member (KDS-3): under `expo` the fire action lives on the expo display
-    // (Task 6), not the tab or the station queue. The validator must accept it (until it did not — the
-    // union-drift the plan flagged) and it must land on the location row.
     const set = await req(
       "/fire-control",
       { method: "PUT", body: JSON.stringify({ mode: "expo" }) },
@@ -1824,9 +1692,7 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
   });
 
   it("a STAFF session is refused on every course/product-course/fire-control route (403 authorization.not_permitted)", async () => {
-    // A staff person CAN log in but holds no `venue.configure`, so each route's `authorizeManager` refuses
-    // it 403 — after the session guard + body/id screens, before any write. Dropping the authorize call
-    // from `withVenueAuth` flips each case to a 2xx (the gate deletion-proof).
+    // A staff person can log in but holds no `venue.configure`.
     const someId = randomUUID();
     const cases = [
       req("/courses", { method: "GET" }, staffCookie),

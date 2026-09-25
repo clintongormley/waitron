@@ -21,12 +21,8 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
-// This suite proves the ROUTES — the request/response boundary, the body + id screens, the
-// permission gate wiring — end to end in-process, the same way `till-api.test.ts` proves the till
-// routes. The catalogue tables live in CORE_MIGRATIONS and the management session/persons in
-// IDENTITY_MIGRATIONS, and every DB touch runs `withTransaction` exactly as production does. The
-// gate-by-DELETION proof (removing `authorizeManager` turns the staff refusals green→red) is
-// `catalogue-api.full-manifest.test.ts`.
+// The catalogue ROUTES end to end in-process: the body and id screens and the permission gate. The
+// staff refusal over every write route is in `catalogue-api.full-manifest.test.ts`.
 const noopLog: Logger = () => {};
 
 let locationId: string;
@@ -40,20 +36,15 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     await seedLegacySellingUnits(db);
-    // One location for the tenant, seeded as the owner (fixture setup like seedTenant) so
-    // the location↔menu membership routes have a `:locationId` to act on. Minimal required columns only.
-    // Through the table definition: `locations.id` is a `$defaultFn` generator on this engine, which
-    // a raw insert never reaches, and `invoice_locales` is encoded by the column's own write mapping
-    // — the `array[...]` constructor it replaces is a syntax error here.
+    // One location, so the location↔menu routes have a `:locationId` to act on. Through the table
+    // definition: `locations.id` is a `$defaultFn` generator, which a raw insert never reaches.
     const [loc] = await db
       .insert(locations)
       .values({ name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    // Seed a MANAGER (role `manager`, holds `person.manage`) and a STAFF person (role `staff`,
-    // holds nothing) under the tenant, then mint a live management session for each so the route
-    // tests can drive the gate through a real cookie. `pin_hash` is NOT NULL, so a value is
-    // supplied even though these sessions are minted directly rather than via a PIN/password login.
+    // A MANAGER (holds `person.manage`) and a STAFF person (holds nothing), each with a live
+    // management session.
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [mgr] = await tx
         .insert(persons)
@@ -504,9 +495,8 @@ describe("mountCatalogueApi — categories", () => {
     expect(((await cleared.json()) as { color: string | null }).color).toBeNull();
   });
 
-  // A colour the operation refuses is a CLIENT fault: `category.color_invalid` at 400, not the
-  // opaque 500 an unmapped code would take. A non-string never reaches the operation — the body
-  // screen refuses it as `management.request_invalid` naming the field, as `image` is screened.
+  // A colour the operation refuses is `category.color_invalid`; a non-string never reaches the
+  // operation — the body screen refuses it as `management.request_invalid` naming the field.
   it.each([
     ["red", "category.color_invalid"],
     ["#B12525", "category.color_invalid"],
@@ -543,7 +533,7 @@ describe("mountCatalogueApi — categories", () => {
       children: [{ id: childId, name: { es: "Vinos" } }],
       parentId: null,
       // The venue-service module is not migrated in this suite, so the optional route table is
-      // absent and the read's `to_regclass` guard answers with an empty list rather than a 500.
+      // absent and the read answers with an empty list.
       routes: [],
     });
   });
@@ -799,8 +789,6 @@ describe("mountCatalogueApi — products", () => {
       body: { name: { es: "Cafés" } },
     });
     const categoryId = ((await category.json()) as { id: string }).id;
-    // An OPTIONS list, not the old text modifier: the editor body's flat `modifierIds` is now an
-    // ordered `modifiers` list naming a list and its kind.
     const optionList = await send(app, "POST", "/management-api/modifiers/options", {
       body: { name: "Nota", labels: [{ name: "Sin azúcar" }] },
     });
@@ -1569,8 +1557,7 @@ describe("mountCatalogueApi — products", () => {
   });
 
   // Spec §15.6: Available "never hides the item from the dashboard", so the menu management route
-  // keeps a sold-out product's offer; an Inactive product's offer stays hidden, as it was before
-  // the two states were split.
+  // keeps a sold-out product's offer; an Inactive product's offer stays hidden.
   it("keeps an Unavailable product's offer on the management offers route and hides an Inactive one", async () => {
     const app = mountApp("es-ES");
     const catalogueId = await createCatalogueVia(app, "Management offers");
@@ -1669,7 +1656,7 @@ describe("mountCatalogueApi — products", () => {
     });
     expect(rejected.status).toBe(404);
     expect(await rejected.json()).toMatchObject({ error: { code: "station.not_found" } });
-    // A malformed id is the same refusal, not an opaque 500 from a uuid cast.
+    // A malformed id is the same refusal.
     const malformed = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
       body: await editorBody(app, { stationId: "not-a-uuid" }),
     });
@@ -1760,7 +1747,7 @@ describe("mountCatalogueApi — products", () => {
     });
     expect(explicit.status).toBe(201);
     expect((await explicit.json()) as { active: boolean }).toMatchObject({ active: true });
-    // Omitting `active` preserves today's behaviour: an active product.
+    // Omitting `active` creates an active product.
     const omitted = await send(app, "POST", "/management-api/products", {
       body: {
         catalogueId,
@@ -1925,7 +1912,7 @@ describe("mountCatalogueApi — products", () => {
     });
     expect(res.status).toBe(201);
     // The management product read exposes the staff override distinctly (the diet twin of
-    // `manualAllergens`), so the dashboard's diet-override editor (Task 8b) can seed from it.
+    // `manualAllergens`), so the dashboard's diet-override editor can seed from it.
     const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
     const products = (await list.json()) as { dietOverride: unknown }[];
     expect(products[0]!.dietOverride).toEqual({ vegan: "no", halal: "yes", addContains: ["meat"] });
@@ -2104,10 +2091,7 @@ describe("mountCatalogueApi — products", () => {
   });
 
   it("PATCH /management-api/products/:id naming no stored product → authorization.not_permitted 403", async () => {
-    // Pins the route's existing refusal, which is the pre-read's alone: `updateProduct`
-    // (packages/catalogue/src/operations.ts) runs a bare `update products … where id = $1` and
-    // reports nothing when no row matches, so without the pre-read this body would answer 204
-    // having written nothing.
+    // The refusal is the pre-read's alone: `updateProduct` reports nothing when no row matches.
     const res = await send(
       mountApp(),
       "PATCH",
@@ -2148,7 +2132,7 @@ describe("mountCatalogueApi — products", () => {
 const DUMMY_UUID = "00000000-0000-0000-0000-000000000000";
 
 describe("mountCatalogueApi — product request-shape screens", () => {
-  // The screens run BEFORE the tenant transaction, so these need no real rows — a uuid-shaped id and a
+  // The screens run BEFORE the transaction, so these need no real rows — a uuid-shaped id and a
   // string catalogueId pass their own checks and the target field throws first.
   const productBase = {
     catalogueId: DUMMY_UUID,
@@ -2292,9 +2276,8 @@ describe("mountCatalogueApi — product request-shape screens", () => {
 });
 
 describe("mountCatalogueApi — null request bodies map to the route's own 4xx, never a 500", () => {
-  // A literal JSON `null` body parses to `null`; each write route coerces it with `?? {}` so a field
-  // access is the route's documented 4xx (or, for PATCH, the empty-body 204) rather than a TypeError →
-  // opaque 500 — the same guard the management routes carry (management-api.accounts-and-receipt-config.test.ts).
+  // `readJsonBody` turns a literal `null` body into `{}`, so each write route answers its own 4xx
+  // (or, for PATCH, the empty-body 204).
   it("POST /catalogues null body → 400 management.request_invalid", async () => {
     const res = await send(mountApp(), "POST", "/management-api/catalogues", { body: null });
     expect(res.status).toBe(400);
@@ -2327,9 +2310,8 @@ describe("mountCatalogueApi — null request bodies map to the route's own 4xx, 
     expect(res.status).toBe(204);
   });
 
-  // A malformed body makes `c.req.json()` throw; the shared `readJsonBody` coerces that throw to `{}`,
-  // the same shape the null-body cases above rely on, so POST hits the field-screen 400 and PATCH the
-  // empty-body 204 — never an opaque 500. Sent raw — `send` would JSON.stringify a valid body.
+  // `readJsonBody` coerces a malformed body to `{}` too. Sent raw — `send` would JSON.stringify a
+  // valid body.
   it("POST /products and PATCH /products/:id with a malformed body → 400 / 204 (never a 500)", async () => {
     const app = mountApp();
     const headers = { "content-type": "application/json", cookie: managerCookie };
@@ -2436,11 +2418,9 @@ describe("mountCatalogueApi — attaching extras and options lists to products",
   });
 
   it("answers the 201 with the list as STORED, not as sent, when a list id arrives in upper case", async () => {
-    // `writeProductModifiers` lower-cases every list id before it writes (product-modifiers.ts), so
-    // a 201 echoing the request would tell the caller its attachments are held in a casing the
-    // database does not have — and the caller's own next read would disagree with the answer it
-    // was just given. The `expect(created).not.toEqual(sent)` line is the control: it fails if the
-    // fixture stops being upper-cased and the case silently stops testing anything.
+    // `writeProductModifiers` lower-cases every list id before it writes, so a 201 echoing the
+    // request would disagree with the caller's next read. The `expect(created).not.toEqual(sent)`
+    // line is the control: it fails if the fixture stops being upper-cased.
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Menú en mayúsculas");
     const options = await createOptionsListVia(app, {
@@ -2563,8 +2543,7 @@ describe("mountCatalogueApi — attaching extras and options lists to products",
     "POST /products refuses the legacy %s field, naming it",
     async (legacy) => {
       // Naming the legacy field, not `modifiers`: a caller still on the old contract needs to be told
-      // which of its fields is the one that went away. Same choice `parseProductEditorInput`
-      // (packages/catalogue/src/product-editor-input.ts) makes on the editor body.
+      // which of its fields is the one that went away.
       const app = mountApp();
       const catalogueId = await createCatalogueVia(app, `Legacy ${legacy}`);
       const res = await send(app, "POST", "/management-api/products", {
@@ -2588,9 +2567,7 @@ describe("mountCatalogueApi — attaching extras and options lists to products",
   it.each(["POST", "PATCH"])(
     "%s /products rejects a malformed uuid in modifiers → shared.invalid_id 400",
     async (method) => {
-      // Same treatment `requireUuidParam` gives a path id, and for the same reason: a string that is
-      // not uuid-shaped would otherwise reach the `uuid` column as a `22P02` driver error, which the
-      // STATUS map has nothing for and which surfaces as an opaque 500.
+      // Same treatment `requireUuidParam` gives a path id.
       const app = mountApp();
       const catalogueId = await createCatalogueVia(app, `Bad uuid attach ${method}`);
       const modifiers = [{ kind: "extras", id: "not-a-uuid" }];
@@ -2631,8 +2608,7 @@ describe("mountCatalogueApi — option lists", () => {
   // Every describe in this file shares one database (`resetPerTest: false`), so a content-language
   // configuration another describe left behind would decide what `createOptionList` demands of the
   // customer-facing name maps below. Emptying the table puts `readContentLanguages` on the mounted
-  // venue locale, `es` — the one language every map here fills. Insurance, not a repair: measured,
-  // the file still passes with this `beforeEach` deleted.
+  // venue locale, `es` — the one language every map here fills.
   beforeEach(async () => {
     await suite.db.execute(sql`delete from content_languages`);
   });
@@ -2767,9 +2743,8 @@ describe("mountCatalogueApi — option lists", () => {
     const list = await createListVia(app, { ...doneness(), name: "Lista vigilada" });
     const collection = "/management-api/modifiers/options";
     const path = `${collection}/${list.id}`;
-    // Every gated route, as [method, path, body] — the table shape `print-api.test.ts`'s gate suite
-    // uses. Each route is checked BOTH ways, so a route missing one of the two refusals cannot hide
-    // behind a sibling that has it.
+    // Every gated route, as [method, path, body]. Each route is checked BOTH ways, so a route missing
+    // one of the two refusals cannot hide behind a sibling that has it.
     const routes: ["GET" | "POST" | "PATCH" | "DELETE", string, unknown?][] = [
       ["GET", collection],
       ["POST", collection, doneness()],
@@ -3225,9 +3200,8 @@ describe("menu-section translations", () => {
   it("updates translations with default-language validation and rejects unknown section ids", async () => {
     const app = mountApp("en-GB");
     const seedSection = async () => {
-      // Through the table definitions: both ids are `$defaultFn` generators here, and `name` is a
-      // JSON column whose own write mapping encodes the object — the `'{…}'::jsonb` literal it
-      // replaces carries a cast this engine refuses.
+      // Through the table definitions: both ids are `$defaultFn` generators, and `name` is a JSON
+      // column whose own write mapping encodes the object.
       const [menu] = await suite.db
         .insert(catalogues)
         .values({ name: "Section edit" })
@@ -3240,8 +3214,7 @@ describe("menu-section translations", () => {
     };
     const sectionId = await seedSection();
     // `content_languages` is a singleton keyed on id = 1 (`content_languages_singleton_ck`), so the
-    // upsert targets that primary key. `languages` is a JSON list column here, not a PostgreSQL
-    // array, so it goes over as an array and the column encodes it.
+    // upsert targets that primary key.
     await suite.db
       .insert(contentLanguages)
       .values({ defaultLanguage: "en", languages: ["en", "fr"] })
@@ -3276,10 +3249,8 @@ describe("menu-section translations", () => {
         ).status,
       ).toBe(404);
       expect((await send(app, "PATCH", path, { body: input })).status).toBe(204);
-      // Read back through the table definition, not as raw SQL. `name` is a JSON column stored as
-      // TEXT on this engine, and a raw `select name` hands back the stored string
-      // (`{"en":"Drinks",…}`) — only the column's own read mapping parses it. The assertion is
-      // unchanged; the decode moved from the driver to the column.
+      // Read back through the table definition: a raw `select name` hands back the stored JSON
+      // text, and only the column's own read mapping parses it.
       const own = await suite.db
         .select({ name: menuSections.name })
         .from(menuSections)
@@ -3378,12 +3349,9 @@ it("authors translated hierarchy and shares full membership replacement through 
 });
 
 // A negative CATALOGUE price is never a valid one (owner ruling, 2026-09-21) — the scope matters,
-// because a corrective invoice's prices are deliberately negative elsewhere in the tree. The
-// catalogue's price-carrying routes were driven with `"-1.00"` before the screen was written. Four
-// answered wrongly: the two product writes stored the value, and the two menu-item writes answered
-// 500. The rest already refused with a clean 400 of their own. The two blocks below cover both --
-// the four fixed here, and the already-refusing ones, pinned so a later change cannot quietly lose
-// them. The second block is a sample of that second group and does not claim to be all of it.
+// because a corrective invoice's prices are deliberately negative elsewhere in the tree. This block
+// pins the routes `refuseNegativePrice` screens; the next pins a sample of those that refuse a
+// negative through their own checks.
 describe("a negative price is refused at the catalogue request boundary", () => {
   it("POST /management-api/products refuses a negative unitPrice and stores no row", async () => {
     const app = mountApp();
@@ -3401,7 +3369,6 @@ describe("a negative price is refused at the catalogue request boundary", () => 
     expect(await res.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "unitPrice" } },
     });
-    // Measured on main before the screen: this answered 201 and the row read back `unitPrice: "-1.00"`.
     const stored = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
     expect(await stored.json()).toEqual([]);
     // The control that separates "refuses a negative" from "refuses a non-positive": zero is a
@@ -3436,7 +3403,6 @@ describe("a negative price is refused at the catalogue request boundary", () => 
     expect(await res.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "unitPrice" } },
     });
-    // Measured on main before the screen: this answered 204 and overwrote the price with `-1.00`.
     const rows = (await (
       await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`)
     ).json()) as { id: string; unitPrice: string }[];
@@ -3460,8 +3426,6 @@ describe("a negative price is refused at the catalogue request boundary", () => 
     const sectionId = ((await section.json()) as { id: string }).id;
     const items = `/management-api/catalogues/${catalogueId}/items`;
 
-    // Measured on main before the screen: both of these answered 500 `server.internal`, because
-    // `menu_items_gross_price_ck` refused the row and the route could not classify a driver error.
     const badCreate = await send(app, "POST", items, {
       body: { productId, sectionId, grossPrice: "-1.00", displayOrder: 0 },
     });
@@ -3590,11 +3554,10 @@ describe("a negative price is refused at the catalogue request boundary", () => 
   });
 });
 
-// Catalogue write routes that already refused a negative before this branch, each through
-// `isProductPrice` (`packages/catalogue/src/modifier-limits.ts:12`), whose pattern carries no sign.
-// They are pinned at the ROUTE here, which is what the package tests on the operations behind them
-// cannot cover: without these, a later change could drop the wiring and nothing would notice. This
-// is the set that was checked, not a claim that no other route carries a price.
+// Catalogue write routes that refuse a negative through `isProductPrice`
+// (`packages/catalogue/src/modifier-limits.ts`), whose pattern carries no sign. Pinned at the ROUTE,
+// which the package tests on the operations behind them cannot cover. This is the set that was
+// checked, not a claim that no other route carries a price.
 describe("catalogue routes that already refused a negative price", () => {
   it("the product-editor, offer-variant and extras-list writes each answer their own 400", async () => {
     const app = mountApp();
@@ -3704,9 +3667,7 @@ describe("catalogue routes that already refused a negative price", () => {
       error: { code: "extras.invalid", params: { field: "items.0.price" } },
     });
 
-    // The two the first pass of this enumeration missed, added after a reviewer drove them: the
-    // extras list UPDATE (the create's sibling, which reaches the same screen), and a negative
-    // VARIANT price on the editor UPDATE (the editor tests above vary the product price there).
+    // The extras list UPDATE, and a negative VARIANT price on the editor UPDATE.
     const goodExtra = await send(app, "POST", "/management-api/modifiers/extras", {
       body: {
         name: "Extras buenos",
