@@ -1,16 +1,20 @@
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { kitchenStations, type Transaction } from "@waitron/db";
 import { preparationRoutes } from "@waitron/venue-service";
 import {
   addCatalogueToLocation,
+  addMember,
+  addProductToMenu,
+  addProducts,
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
   createLabel,
-  createMenuItem,
-  createMenuSection,
   createProduct,
+  createSection,
   createUnit,
+  menuItems,
+  readMenuStructure,
   setProductLabels,
   setProductVariants,
   writeContentLanguages,
@@ -106,7 +110,8 @@ export async function seedCatalogues(
         update catalogues set name = ${data.name[locale]}
         where id = ${existingMenuId}`);
     }
-    for (const [categoryIndex, cat] of data.categories.entries()) {
+    const { rootSectionId } = await readMenuStructure(tx, catalogue.id);
+    for (const cat of data.categories) {
       const category = await createCategory(tx, { name: cat.name });
       if (cat.station !== null) {
         // The create op takes no station.
@@ -120,12 +125,13 @@ export async function seedCatalogues(
         stationId: cat.station === null ? null : stationIds[cat.station],
         noPreparation: cat.station === null,
       });
-      const section = await createMenuSection(tx, {
-        menuId: catalogue.id,
-        name: cat.name,
-        displayOrder: categoryIndex,
-      });
-      for (const [productIndex, product] of cat.products.entries()) {
+      const section = await createSection(
+        tx,
+        { internalName: cat.name[locale], names: cat.name },
+        locale,
+      );
+      const productIds: string[] = [];
+      for (const product of cat.products) {
         const unitId = product.unit
           ? (
               await createUnit(
@@ -151,15 +157,7 @@ export async function seedCatalogues(
           unitPrice: product.unitPrice,
           vatClass: product.vatClass,
         });
-        const menuItem = await createMenuItem(tx, {
-          menuId: catalogue.id,
-          productId: created.id,
-          sectionId: section.id,
-          // Blank: the menu charges the product's own price and follows it when it changes.
-          grossPrice: null,
-          displayOrder: productIndex,
-        });
-        menuItemsByProduct.set(created.id, menuItem.id);
+        productIds.push(created.id);
         if (product.variants?.length) {
           await setProductVariants(
             tx,
@@ -181,6 +179,17 @@ export async function seedCatalogues(
           );
         }
         productsByImage.set(product.image, created.id);
+      }
+      await addProducts(tx, section.id, productIds);
+      await addMember(tx, rootSectionId, { kind: "section", sectionId: section.id });
+      // Each product's row sets no menu price, so the menu charges the product's own price and
+      // follows it when it changes.
+      for (const productId of productIds) {
+        const [menuItem] = await tx
+          .select({ id: menuItems.id })
+          .from(menuItems)
+          .where(and(eq(menuItems.menuId, catalogue.id), eq(menuItems.productId, productId)));
+        menuItemsByProduct.set(productId, menuItem!.id);
       }
     }
     return catalogue.id;
@@ -207,18 +216,7 @@ export async function seedCatalogues(
 
   const negroniId = productsByImage.get("negroni.png");
   if (negroniId === undefined) throw new Error("demo-seed: Negroni product was not created");
-  const cocktailSection = await createMenuSection(tx, {
-    menuId: diaId,
-    name: { en: "Cocktails", es: "Cócteles" },
-    displayOrder: MENU_DEL_DIA.categories.length,
-  });
-  await createMenuItem(tx, {
-    menuId: diaId,
-    productId: negroniId,
-    sectionId: cocktailSection.id,
-    grossPrice: "9.00",
-    displayOrder: 0,
-  });
+  await addProductToMenu(tx, { menuId: diaId, productId: negroniId, grossPrice: "9.00" });
 
   await assignCatalogueToLocation(tx, locationId, casaId);
   await addCatalogueToLocation(tx, locationId, diaId);

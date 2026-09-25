@@ -14,7 +14,10 @@ import { hashPassword, hashPin } from "@waitron/identity";
 import {
   listAccessibleCatalogues,
   listAvailableProducts,
+  listMenuOffers,
+  listSections,
   readContentLanguages,
+  readMenuStructure,
 } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
 
@@ -72,6 +75,33 @@ async function provisionVenue(): Promise<{ locationId: string }> {
 }
 
 describe("seedCatalogues", () => {
+  it("builds each menu's top level from library sections named after its categories", async () => {
+    const { locationId } = await provisionVenue();
+    const read = await withTransaction(suite.db, async (tx) => {
+      const { menuIds, productsByImage } = await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const library = new Map((await listSections(tx)).map((row) => [row.id, row.internalName]));
+      const topLevel = async (menuId: string) =>
+        (await readMenuStructure(tx, menuId)).nodes.map(({ ref }) =>
+          ref.kind === "section" ? library.get(ref.sectionId) : ref.productId,
+        );
+      const negroni = productsByImage.get("negroni.png")!;
+      const lunchNegroni = (await listMenuOffers(tx, [menuIds.lunch])).find(
+        (offer) => offer.productId === negroni,
+      );
+      return {
+        negroni,
+        restaurant: await topLevel(menuIds.restaurant),
+        lunch: await topLevel(menuIds.lunch),
+        deli: await topLevel(menuIds.deli),
+        lunchNegroni,
+      };
+    });
+    expect(read.restaurant).toEqual(["Tapas", "Sharing plates", "Mains", "Desserts", "Drinks"]);
+    expect(read.lunch).toEqual(["Starters", "Mains", read.negroni]);
+    expect(read.deli).toEqual(["Charcuterie", "Cheeses", "Conserves"]);
+    expect(read.lunchNegroni).toMatchObject({ grossPrice: "9.00", placements: [[]] });
+  });
+
   it("creates restaurant, lunch and deli menus and routes each category to its preparation station", async () => {
     const { locationId } = await provisionVenue();
 
