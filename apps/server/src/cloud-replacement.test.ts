@@ -1,5 +1,5 @@
 import { createPublicKey, generateKeyPairSync, randomUUID, verify } from "node:crypto";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -146,6 +146,18 @@ it("persists new keys before sending dual signatures and reuses them after a los
         Buffer.from(signature!, "base64url"),
       ),
     ).toBe(true);
+});
+
+it("refuses a saved replacement file made group-readable after creation", async () => {
+  const f = await fixture();
+  const client = createCloudReplacement({ ...f.options, connection: f.connection });
+  await client.prepare();
+  const path = join(f.stateDir, "cloud-replacement.json");
+  await chmod(path, 0o640);
+  expect((await stat(path)).mode & 0o777).toBe(0o640);
+  await expect(client.status()).rejects.toMatchObject({
+    code: "cloud.replacement_state_invalid",
+  });
 });
 
 it("reports a Cloud refusal separately from a transport outage", async () => {
