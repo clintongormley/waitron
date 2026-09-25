@@ -3894,20 +3894,21 @@ three branches bookings' coverage still leaves uncovered. **Next action:** decid
 does when its tables change under it (re-pick the first, or close) and fix it test-first; the fix
 may make one or both of those branches reachable, or show they can go.
 
-**The till reports a failed list refresh after a SUCCESSFUL write as a failed write — OPEN (found
-2026-09-25 by the retroactive Codex review of #621; its comment fixes landed as #632).** CLAUDE.md
-§3 says a successful write followed by a failed refresh is a load failure, not a failed save; three
-handlers in `apps/till/src/till-app.ts` put the refresh inside the write's `try`:
-`#onParkOrder` clears the basket and then awaits `#refreshHeldOrders`, so a refresh failure shows
-`held.park_error` with the basket already gone (Codex's probe, stubbed API: `lines 0`,
-`held.park_error`); `#onConfirmPayment` shows the ticket and then refreshes, so a network failure of
-that refresh shows `sale.unconfirmed` over a sale whose answer arrived (probe: ticket shown,
-`sale.unconfirmed`); and `#onPlaceOrder` sets the `collect` stage and then awaits
-`#refreshStationQueue` under the same catch (read, not run). **Next action:** test-first, move each
-refresh out of the write's `try` and give its failure a load-error message of its own, which needs
-new English and Spanish strings. Beside it, not changeable in a comments-only PR: the test title at
-`apps/till/src/till-app.test.ts` "a failing listStaff leaves the roster empty…" is true only of the
-first login — a later login's failure keeps the roster it had (#632).
+**The till reports a failed list refresh after a SUCCESSFUL write as a failed write — DONE
+(2026-09-25, `fix/till-refresh-after-save`; found by the retroactive Codex review of #621, whose
+comment fixes landed as #632).** The park, cash-sale, card-sale and place handlers in
+`apps/till/src/till-app.ts` now hand the list refresh behind a successful write to
+`#refreshAfterWrite`, so its failure never reaches the write's own error (`held.park_error`,
+`sale.unconfirmed`, `place.error`). It shows what succeeded, that the list could not refresh, a
+countdown and a Try now button, and retries after 5 s, 10 s, then every 30 s until a refresh of that
+list succeeds, the operator signs out, or the till re-boots (a server move). The owner's request of
+2026-09-25 also said "or leaves the screen"; the retry deliberately keeps running when the operator
+moves between tabs, because the held list and the kitchen queue are shown on the counter the
+operator comes back to.
+The card-sale path (`#onCollectCard`) had the same shape and is included. Tests: the "a failed list
+refresh after a successful write (B12)" block in `apps/till/src/till-app.test.ts`, and its a11y case
+in `till-app.a11y.test.ts`. The listStaff test title that #632 recorded as too wide now says "on
+the first login".
 
 **The units screen puts a missing abbreviation's refusal beside the name — OPEN (found
 2026-09-23, dashboard coverage, PR #538).** `apps/dashboard/src/screens/units-screen.ts` (about

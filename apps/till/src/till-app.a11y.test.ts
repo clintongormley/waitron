@@ -1,8 +1,9 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
 import type { TillApi, TillProduct } from "./api/client.js";
+import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 
 const defaultMenu = { id: "cat-default", name: "Carta", isDefault: true };
 
@@ -147,6 +148,60 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
       }),
     );
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations while a failed refresh after a successful hold is retried", async () => {
+    const api = stubApi({
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
+      getTill: vi.fn().mockResolvedValue({
+        locale: "es-ES",
+        venueName: "Bar Pepe",
+        nif: "B12345678",
+        orderFlow: "prepay",
+        courses: [],
+        capabilities: [],
+        canvas: {
+          formFactor: "till",
+          tabs: [
+            {
+              key: "counter",
+              title: "Counter",
+              columns: 12,
+              cards: [
+                { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
+                { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
+                { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+              ],
+            },
+          ],
+        },
+      }),
+      parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const { el, host } = await mountWidget<TillApp>("till-app", { api }, theme);
+    await flush(el);
+    el.shadowRoot!.querySelector("till-lock-screen")!.dispatchEvent(
+      new CustomEvent("logged-in", {
+        detail: { personId: "p1", displayName: "Ana" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+    counter.store.addProduct({ ...products[0]!, menuItemId: "menu-item-p1" }, "1");
+    counter.dispatchEvent(
+      new CustomEvent("park-order", { detail: {}, bubbles: true, composed: true }),
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-refresh-retry]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

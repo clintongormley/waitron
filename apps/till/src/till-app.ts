@@ -86,6 +86,19 @@ type Drill = { kind: "table-order" | "ticket" | TillDestination };
 /** A handheld's screens, in order; `#onLoggedIn` lands it on `HANDHELD_FACES[1]`. */
 const HANDHELD_FACES: Screen[] = ["lock", "floor", "table-order"];
 
+type RefreshList = "held" | "station";
+
+interface RefreshRetry {
+  /** What the write that preceded the failed refresh achieved. */
+  messageKey: StringKey;
+  failures: number;
+  secondsLeft: number;
+  inFlight: boolean;
+}
+
+/** Seconds before each automatic retry: 5, then 10, then every 30. */
+const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
+
 /** A whole-count unit's three-place server quantity reads "2", not "2.000". */
 function displayQuantity(product: TillProduct, quantity: string): string {
   if (productUnit(product).precision !== 0 || !quantity.includes(".")) return quantity;
@@ -139,6 +152,31 @@ export class TillApp extends LitElement {
         color: var(--wt-color-on-danger);
         font-weight: var(--wt-font-weight-bold);
         text-align: center;
+      }
+
+      .refresh-message {
+        margin: 0;
+      }
+
+      .refresh-notice[data-active] {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2) var(--wt-space-3);
+        margin: 0 0 var(--wt-space-3);
+        padding: var(--wt-space-3);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-warning);
+        color: var(--wt-color-on-warning);
+      }
+
+      .refresh-notice[data-active] .refresh-message {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .refresh-countdown {
+        flex: 1;
+        margin: 0;
       }
 
       /* The compact waiting-for-promotion banner (till-reroute §4.4), muted so it informs without the
@@ -242,6 +280,7 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#stopRefreshRetries();
     this.#contentLanguageGeneration++;
     clearTimeout(this.#contentLanguageTimer);
     this.#detach();
@@ -409,6 +448,9 @@ export class TillApp extends LitElement {
   @state() private parking = false;
   /** Re-entry guard for {@link TillApp.#onPlaceOrder}; also disables Place while in flight. */
   @state() private placing = false;
+  /** A list whose refresh failed after a successful write, with its automatic retry's countdown. */
+  @state() private refreshRetries: Partial<Record<RefreshList, RefreshRetry>> = {};
+  #refreshTimers = new Map<RefreshList, ReturnType<typeof setTimeout>>();
 
   readonly #url = new UrlStateController(this, () => this.#onHistory(), tillPath);
 
@@ -486,6 +528,7 @@ export class TillApp extends LitElement {
   }
 
   async #boot(): Promise<void> {
+    this.#stopRefreshRetries();
     clearTimeout(this.#contentLanguageTimer);
     const contentGeneration = ++this.#contentLanguageGeneration;
     try {
@@ -636,9 +679,15 @@ export class TillApp extends LitElement {
 
   async #refreshHeldOrders(): Promise<void> {
     this.heldOrders = await this.api.listWorkingOrders();
+    this.#endRefreshRetry("held");
   }
 
   async #refreshStationQueue(): Promise<void> {
+    await this.#loadStationQueue();
+    this.#endRefreshRetry("station");
+  }
+
+  async #loadStationQueue(): Promise<void> {
     if (this.orderFlow === "prepay") return;
     if (this.stations.length === 0) this.stations = await this.api.listStations();
     const defaultStation = this.stations.find((station) => station.isDefault);
@@ -647,6 +696,131 @@ export class TillApp extends LitElement {
       return;
     }
     this.stationQueue = await this.api.getStationQueue(defaultStation.id);
+  }
+
+  /**
+   * For the refresh behind a write that has already succeeded: its failure is a load failure, so it
+   * never reaches the write's own error handling. It is reported beside the write's success and retried.
+   */
+  async #refreshAfterWrite(list: RefreshList, messageKey: StringKey): Promise<void> {
+    try {
+      await this.#refreshList(list);
+    } catch {
+      this.#startRefreshRetry(list, messageKey);
+    }
+  }
+
+  #refreshList(list: RefreshList): Promise<void> {
+    return list === "held" ? this.#refreshHeldOrders() : this.#refreshStationQueue();
+  }
+
+  /** One loop per list: a failure while one is pending only updates what the message says succeeded. */
+  #startRefreshRetry(list: RefreshList, messageKey: StringKey): void {
+    const pending = this.refreshRetries[list];
+    if (pending !== undefined) {
+      this.#setRefreshRetry(list, { ...pending, messageKey });
+      return;
+    }
+    this.#setRefreshRetry(list, {
+      messageKey,
+      failures: 0,
+      secondsLeft: REFRESH_RETRY_SECONDS[0],
+      inFlight: false,
+    });
+    this.#armRefreshTick(list);
+  }
+
+  #setRefreshRetry(list: RefreshList, retry: RefreshRetry | undefined): void {
+    const next = { ...this.refreshRetries };
+    if (retry === undefined) delete next[list];
+    else next[list] = retry;
+    this.refreshRetries = next;
+  }
+
+  #armRefreshTick(list: RefreshList): void {
+    clearTimeout(this.#refreshTimers.get(list));
+    this.#refreshTimers.set(
+      list,
+      setTimeout(() => this.#onRefreshTick(list), 1000),
+    );
+  }
+
+  #onRefreshTick(list: RefreshList): void {
+    const retry = this.refreshRetries[list];
+    if (retry === undefined) return;
+    if (retry.secondsLeft > 1) {
+      this.#setRefreshRetry(list, { ...retry, secondsLeft: retry.secondsLeft - 1 });
+      this.#armRefreshTick(list);
+      return;
+    }
+    void this.#retryRefresh(list);
+  }
+
+  /** Called by the countdown and by "Try now"; an attempt already in flight is not doubled. */
+  async #retryRefresh(list: RefreshList): Promise<void> {
+    const retry = this.refreshRetries[list];
+    if (retry === undefined || retry.inFlight) return;
+    clearTimeout(this.#refreshTimers.get(list));
+    this.#setRefreshRetry(list, { ...retry, inFlight: true });
+    try {
+      await this.#refreshList(list);
+    } catch {
+      const pending = this.refreshRetries[list];
+      if (pending === undefined) return;
+      const failures = pending.failures + 1;
+      this.#setRefreshRetry(list, {
+        ...pending,
+        failures,
+        inFlight: false,
+        secondsLeft: REFRESH_RETRY_SECONDS[Math.min(failures, REFRESH_RETRY_SECONDS.length - 1)]!,
+      });
+      this.#armRefreshTick(list);
+    }
+  }
+
+  #endRefreshRetry(list: RefreshList): void {
+    clearTimeout(this.#refreshTimers.get(list));
+    this.#refreshTimers.delete(list);
+    if (this.refreshRetries[list] !== undefined) this.#setRefreshRetry(list, undefined);
+  }
+
+  #stopRefreshRetries(): void {
+    for (const timer of this.#refreshTimers.values()) clearTimeout(timer);
+    this.#refreshTimers.clear();
+    this.refreshRetries = {};
+  }
+
+  #renderRefreshNotice(list: RefreshList): TemplateResult {
+    const retry = this.refreshRetries[list];
+    // The status region stays in the page and holds only the message, so the countdown's ticks never
+    // change what it announces.
+    return html`<div
+      class="refresh-notice"
+      data-refresh-notice=${list}
+      ?data-active=${retry !== undefined}
+    >
+      <p class="refresh-message" role="status">${retry === undefined ? "" : t(retry.messageKey)}</p>
+      ${
+        retry === undefined
+          ? nothing
+          : html`<p class="refresh-countdown">
+                ${
+                  retry.inFlight
+                    ? t("refresh.retrying")
+                    : retry.secondsLeft === 1
+                      ? t("refresh.retry_in_one")
+                      : t("refresh.retry_in").replace("{n}", String(retry.secondsLeft))
+                }
+              </p>
+              <wt-button
+                variant="secondary"
+                data-refresh-retry
+                .loading=${retry.inFlight}
+                @click=${() => void this.#retryRefresh(list)}
+                >${t("refresh.try_now")}</wt-button
+              >`
+      }
+    </div>`;
   }
 
   #defaultStationId(): string | undefined {
@@ -749,7 +923,7 @@ export class TillApp extends LitElement {
       this.result = await this.api.recordSale(lines, tender, id);
       this.#showTicket(id);
       // A just-paid retrieved order must drop off the held list.
-      await this.#refreshHeldOrders();
+      await this.#refreshAfterWrite("held", "refresh.held_after_sale");
     } catch (error) {
       // The basket stays intact. `sale.refused` is permanent, and its message covers refunding a manual
       // terminal charge; `sale.unconfirmed` means the fiscal call was reached, so the sale may have
@@ -796,7 +970,7 @@ export class TillApp extends LitElement {
       if (out.outcome === "captured") {
         this.result = out.ticket;
         this.#showTicket(id, this.orderFlow !== "invoice_first");
-        await this.#refreshHeldOrders();
+        await this.#refreshAfterWrite("held", "refresh.held_after_sale");
       } else {
         this.cardOutcome = out.outcome;
       }
@@ -869,7 +1043,7 @@ export class TillApp extends LitElement {
       reachedFiscal = true;
       await this.api.placeOrder(id);
       this.stage = "collect";
-      await this.#refreshStationQueue();
+      await this.#refreshAfterWrite("station", "refresh.station_after_place");
     } catch (error) {
       // `place.refused`, not `sale.refused`: placing takes no tender, so its message says nothing
       // about refunds.
@@ -990,7 +1164,7 @@ export class TillApp extends LitElement {
       }
       this.#store.clear();
       this.cardOutcome = undefined;
-      await this.#refreshHeldOrders();
+      await this.#refreshAfterWrite("held", "refresh.held_after_park");
     } catch {
       this.errorKey = "held.park_error";
     } finally {
@@ -1657,6 +1831,7 @@ export class TillApp extends LitElement {
     this.#url.write({ "till-zone": null }, true);
     this.#floorLoaded = false;
     this.errorKey = undefined;
+    this.#stopRefreshRetries();
     this.#setScreen("lock");
     this.#configureSessionActivity();
     try {
@@ -1919,6 +2094,7 @@ export class TillApp extends LitElement {
               </p>`
         }
         ${this.errorKey ? html`<p class="error" role="alert">${t(this.errorKey)}</p>` : nothing}
+        ${this.#renderRefreshNotice("held")} ${this.#renderRefreshNotice("station")}
         <!-- The waiting-for-promotion banner (till-reroute §4.4). On the shell surface (an operator
              mid-shift), the lock-screen's own status line is not visible, so the shell surfaces the same
              server.waiting_promotion copy compactly here while the router reports no server is accepting
