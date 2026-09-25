@@ -108,8 +108,8 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
       }}
     ></button>`;
   return html`<fieldset class="color">
-    <legend>${t("categories.color")}</legend>
-    <div class="color-options" role="radiogroup" aria-label=${t("categories.color")}>
+    <legend>${t("editor.color")}</legend>
+    <div class="color-options" role="radiogroup" aria-label=${t("editor.color")}>
       <button
         type="button"
         class="swatch none ${color === null ? "on" : ""}"
@@ -122,7 +122,7 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
           change(null);
         }}
       >
-        ${t("categories.color_none")}
+        ${t("editor.color_none")}
       </button>
       <div class="swatches">
         ${PALETTE_GROUPS.map(
@@ -131,7 +131,7 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
       </div>
     </div>
     <label class="custom"
-      >${t("categories.color_custom")}
+      >${t("editor.color_custom")}
       <input
         type="color"
         name=${name}

@@ -4,9 +4,14 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 // Value import: pulls the module in for its `@customElement` side effect.
 import { SectionAddProducts } from "./section-add-products.js";
 import type { CategorySummary } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { setContentLanguages } from "@waitron/ui";
+import { setLocale, t } from "../i18n/t.js";
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("es-ES");
+  setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
+});
 
 const category = (
   id: string,
@@ -227,4 +232,24 @@ it("returns to every category when the chosen one is deleted", async () => {
   await el.updateComplete;
   expect(q<HTMLSelectElement>(el, 'select[name="category"]').value).toBe("");
   expect(listed(el)).toHaveLength(5);
+});
+
+it("widens the chosen filter when a category is added beneath it", async () => {
+  const el = await mount({
+    products: [...products, { id: "p-cider", name: "Cider", categoryId: "c-cider" }],
+  });
+  await filterBy(el, "c-drinks");
+  expect(listed(el)).toEqual(["p-ipa", "p-lager", "p-lemonade"]);
+  el.categories = [...categories, category("c-cider", "Cider", "Sidra", "c-drinks")];
+  await el.updateComplete;
+  expect(listed(el)).toEqual(["p-cider", "p-ipa", "p-lager", "p-lemonade"]);
+  expect(q(el, 'option[value="c-cider"]').textContent!.trim()).toBe("Bebidas / Sidra");
+});
+
+it("names the categories in the language in force when it next renders", async () => {
+  const el = await mount();
+  setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
+  setLocale("en");
+  await search(el, "a");
+  expect(q(el, 'option[value="c-beer"]').textContent!.trim()).toBe("Drinks / Beer");
 });

@@ -133,6 +133,10 @@ export class SectionAddProducts extends LitElement {
   @state() private selected: ReadonlySet<string> = new Set();
   @state() private error = false;
   #sorted: AddableProduct[] = [];
+  #options: { id: string; path: string }[] = [];
+  #optionsLanguage = "";
+  /** Null when no category is chosen. */
+  #within: ReadonlySet<string> | null = null;
 
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("products"))
@@ -144,6 +148,24 @@ export class SectionAddProducts extends LitElement {
       !this.categories.some((category) => category.id === this.categoryId)
     )
       this.categoryId = "";
+    const language = currentLocale();
+    const config = currentContentLanguages();
+    // The paths are resolved in the display and content languages, which can change without the
+    // categories changing.
+    const optionsLanguage = JSON.stringify([language, config]);
+    if (changed.has("categories") || optionsLanguage !== this.#optionsLanguage) {
+      this.#optionsLanguage = optionsLanguage;
+      this.#options = this.categories
+        .map((category) => ({
+          id: category.id,
+          path: categoryPath(category, this.categories, language, config),
+        }))
+        .sort((a, b) => byLabel(a.path, b.path));
+    }
+    if (changed.has("categories") || changed.has("categoryId"))
+      this.#within = this.categoryId
+        ? categoryWithDescendants(this.categoryId, this.categories)
+        : null;
   }
 
   #chosen(): string[] {
@@ -151,9 +173,7 @@ export class SectionAddProducts extends LitElement {
   }
 
   #visible(): AddableProduct[] {
-    const within = this.categoryId
-      ? categoryWithDescendants(this.categoryId, this.categories)
-      : null;
+    const within = this.#within;
     const needle = this.search.trim().toLocaleLowerCase();
     return this.#sorted.filter(
       (product) =>
@@ -185,17 +205,6 @@ export class SectionAddProducts extends LitElement {
         composed: true,
       }),
     );
-  }
-
-  #categoryOptions() {
-    const language = currentLocale();
-    const config = currentContentLanguages();
-    return this.categories
-      .map((category) => ({
-        id: category.id,
-        path: categoryPath(category, this.categories, language, config),
-      }))
-      .sort((a, b) => byLabel(a.path, b.path));
   }
 
   #item(product: AddableProduct, inSection: Set<string>, onMenu: Set<string>) {
@@ -257,7 +266,7 @@ export class SectionAddProducts extends LitElement {
             <option value="" .selected=${this.categoryId === ""}>
               ${t("add_products.all_categories")}
             </option>
-            ${this.#categoryOptions().map(
+            ${this.#options.map(
               (option) =>
                 html`<option value=${option.id} .selected=${option.id === this.categoryId}>
                   ${option.path}

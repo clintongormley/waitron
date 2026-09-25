@@ -61,6 +61,11 @@ function order(el: TestReorderHost) {
     row.getAttribute("data-choice"),
   );
 }
+function press(el: LitElement, id: string, key: string): void {
+  el.shadowRoot!.querySelector(`[data-test="drag-${id}"]`)!.dispatchEvent(
+    new KeyboardEvent("keydown", { key, bubbles: true }),
+  );
+}
 
 it("labels each handle and marks it for the reorder test hook", async () => {
   const el = await mount();
@@ -89,13 +94,9 @@ it("moves a row down with the keyboard and announces its new position politely",
 
 it("leaves the order and the live region untouched at an end, on another key, and while busy", async () => {
   const el = await mount();
-  const press = (id: string, key: string) =>
-    el
-      .shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)!
-      .dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
-  press("a", "ArrowUp"); // already first
+  press(el, "a", "ArrowUp"); // already first
   await el.updateComplete;
-  press("a", "ArrowLeft"); // not a move key
+  press(el, "a", "ArrowLeft"); // not a move key
   await el.updateComplete;
   expect(order(el)).toEqual(["a", "b", "c"]);
   expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent!.trim()).toBe("");
@@ -104,7 +105,7 @@ it("leaves the order and the live region untouched at an end, on another key, an
   expect(el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="drag-a"]')!.disabled).toBe(
     true,
   );
-  press("a", "ArrowDown");
+  press(el, "a", "ArrowDown");
   await el.updateComplete;
   expect(order(el)).toEqual(["a", "b", "c"]);
 });
@@ -189,10 +190,13 @@ class VolatileReorderHost extends LitElement {
   @property({ attribute: false }) items: { id: string; name: string }[] = [];
   @property({ type: Boolean }) dropOnMove = false;
   readonly moves: [string, number][] = [];
+  readonly vias: ("key" | "pointer")[] = [];
+  readonly drops: string[] = [];
   readonly #reorder = new ReorderController(this, {
     order: () => this.items.map((item) => item.id),
-    move: (id, to) => {
+    move: (id, to, via) => {
       this.moves.push([id, to]);
+      this.vias.push(via);
       this.items = this.dropOnMove
         ? this.items.filter((item) => item.id !== id)
         : reorder(
@@ -200,6 +204,9 @@ class VolatileReorderHost extends LitElement {
             this.items.findIndex((item) => item.id === id),
             to,
           );
+    },
+    drop: (id) => {
+      this.drops.push(id);
     },
     label: (id) => this.items.find((item) => item.id === id)?.name ?? id,
     busy: () => false,
@@ -229,24 +236,25 @@ declare global {
     "test-reorder-volatile-host": VolatileReorderHost;
   }
 }
+async function mountVolatile(props: Partial<VolatileReorderHost> = {}) {
+  return (
+    await mountWidget<VolatileReorderHost>("test-reorder-volatile-host", {
+      items: three(),
+      ...props,
+    })
+  ).el;
+}
 
 it("announces nothing when the host's move discards the row", async () => {
-  const { el } = await mountWidget<VolatileReorderHost>("test-reorder-volatile-host", {
-    items: three(),
-    dropOnMove: true,
-  });
-  el.shadowRoot!.querySelector('[data-test="drag-a"]')!.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
-  );
+  const el = await mountVolatile({ dropOnMove: true });
+  press(el, "a", "ArrowDown");
   await el.updateComplete;
   expect(el.moves).toEqual([["a", 1]]);
   expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe("");
 });
 
 it("moves nothing when the table body vanishes mid-drag", async () => {
-  const { el } = await mountWidget<VolatileReorderHost>("test-reorder-volatile-host", {
-    items: three(),
-  });
+  const el = await mountVolatile();
   const y = rowCentre(el, "b");
   pointer(el.shadowRoot!.querySelector('[data-test="drag-a"]')!, "pointerdown", 1);
   el.items = [];
@@ -255,4 +263,44 @@ it("moves nothing when the table body vanishes mid-drag", async () => {
   pointer(document, "pointermove", 1, y);
   expect(el.moves).toEqual([]);
   pointer(document, "pointerup", 1);
+});
+
+it("tells the model a key asked for a key move and the pointer for a drag move", async () => {
+  const el = await mountVolatile();
+  press(el, "a", "ArrowDown");
+  await el.updateComplete;
+  expect(el.vias).toEqual(["key"]);
+  pointer(el.shadowRoot!.querySelector('[data-test="drag-c"]')!, "pointerdown", 1);
+  pointer(document, "pointermove", 1, rowCentre(el, "b"));
+  pointer(document, "pointerup", 1);
+  await el.updateComplete;
+  expect(el.moves).toEqual([
+    ["a", 1],
+    ["c", 0],
+  ]);
+  expect(el.vias).toEqual(["key", "pointer"]);
+});
+
+it("calls drop once with the dragged row when a drag is released, and again when one is cancelled", async () => {
+  const el = await mountVolatile();
+  pointer(el.shadowRoot!.querySelector('[data-test="drag-a"]')!, "pointerdown", 1);
+  pointer(document, "pointermove", 1, rowCentre(el, "b"));
+  pointer(document, "pointerup", 2); // another pointer's release
+  expect(el.drops).toEqual([]);
+  pointer(document, "pointerup", 1);
+  pointer(document, "pointerup", 1); // the gesture has already ended
+  expect(el.drops).toEqual(["a"]);
+  await el.updateComplete;
+  pointer(el.shadowRoot!.querySelector('[data-test="drag-c"]')!, "pointerdown", 3);
+  pointer(document, "pointercancel", 3);
+  pointer(document, "pointercancel", 3);
+  expect(el.drops).toEqual(["a", "c"]);
+});
+
+it("does not call drop for a key move", async () => {
+  const el = await mountVolatile();
+  press(el, "b", "ArrowUp");
+  await el.updateComplete;
+  expect(el.moves).toEqual([["b", 0]]);
+  expect(el.drops).toEqual([]);
 });
