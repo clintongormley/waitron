@@ -614,10 +614,11 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   starts with `grep -rn 'dialect.js'`.
 - **`applyMigrations` refuses to report success on a short set**, throwing `migrations.incomplete`
   rather than serving a half-migrated schema.
-- **The box's BOOT path carries an ahead-of-image check; no other migrating path does, and
-  `waitron.sh install <ref>` is a one-way door.** `assertNotAhead` throws
+- **The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating
+  path does, and `waitron.sh install <ref>` is a one-way door.** `assertNotAhead` throws
   `provisioning.database_ahead`. The GAP, stated so nobody assumes coverage: every other migrating
-  path runs without the check — the cold restore, `rejoin-command` and `dev-setup` among them, and
+  path runs without the check — the cold restore from an archive, `rejoin-command` and `dev-setup`
+  among them, and
   [conventions-data.md](docs/developers/conventions-data.md) holds the full list. Cost: without it an
   ahead database re-migrates CLEANLY and surfaces later as an unclassified driver error.
 - **An empty value is a valid value** — to whatever receives it, so a reader must turn `""` into

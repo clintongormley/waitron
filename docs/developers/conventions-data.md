@@ -1357,7 +1357,7 @@ false` wrongly, or a new command that changes the folder's files without `lockVe
 by nothing.
 
 **Every caller, and what it does** (from `grep -rln "openVenueStore\|openVenueDatabase"` over `apps`,
-`packages`, `scripts` and `bench`, non-test files, 2026-09-24):
+`packages`, `scripts` and `bench`, non-test files, 2026-09-25):
 
 | Caller | Runs | Decision |
 | --- | --- | --- |
@@ -1365,6 +1365,7 @@ by nothing.
 | `apps/server/src/backup-supervisor.ts` (`reload`) | inside the server | shares the server's hold |
 | `apps/server/src/node-entry.ts` (`assertNotAhead`) and the staged restore it runs | the container entrypoint, the same process as the server | locks, one after the other, before the server opens |
 | `apps/server/src/restore.ts` (`writeValidated`) | `waitron-restore` (server stopped) and the staged restore | takes the lock before its first change and holds it to the end; its migrate and hook open share it. Refused while another process holds the folder |
+| `apps/server/src/restore-stream.ts` (`refuseIfArchiveSourceLive`, and `readRestoredCopy` inside `prepareStreamRestore`) | `waitron-restore`, before `writeValidated` | each locks (default) its own scratch folder under the state folder, made fresh per run (`archive-source-check-XXXXXX` for the archive's copy, `stream-restore-XXXXXX` for the download, which is opened once), never the venue folder; no contention |
 | `apps/server/src/rejoin-command.ts` | `waitron-rejoin` (server stopped) | takes the lock before its first read and holds it through the wipe and re-migrate. Refused while another process holds the folder |
 | `packages/migrations/src/apply.ts` | boot, restore, rejoin, dev scripts | locks (default), inside its own `migrations.lock` |
 | `packages/provisioning/src/bin.ts` (`waitron-provision venue`) | once per venue | locks; refused while another process holds the folder, printed as `provisioning.database_in_use {"database":…}` |
@@ -1376,6 +1377,7 @@ by nothing.
 | `apps/server/scripts/record-one-sale.ts`, `settle-invoice-first.ts` | write sales for a running server to drain | `exclusive: false` |
 | `apps/server/scripts/cloud-backup-fixture.ts` `capture` | the Cloud repository's local-backups runner (`test-local-backups.mjs` in its scripts folder), while the fixture server on the same folder is still running (it stops the servers only after every capture: read, not run) | `exclusive: false` |
 | `apps/server/scripts/cloud-backup-fixture.ts` `restore` | the same runner, on a fresh folder with no server (read, not run) | locks (default), through `writeValidated`, then its own open |
+| `apps/server/scripts/cloud-capture-client-fixture.ts` (`schedule`), `cloud-recovery-client-fixture.ts` (`restore`, `prepareReplacement`, `statusReplacement`) | Cloud's integration runners, on a folder under the system's temporary directory; whether a server holds the same folder at that moment was not checked | locks (default); the recovery fixture's `restore` also locks through `runStagedRestore` first |
 | `apps/server/scripts/cloud-integration-fixture.ts` | Cloud's runners start it as the server; a restart waits for the old process to exit before relaunching on the same folder (`stop` awaits the child's `exit` before `launch`: Cloud's runner scripts, read, not run) | locks (default); its first open runs before `startServer` in the same process |
 | `apps/server/src/fiscal-readiness-runner.ts` | its own directory | locks; no contention |
 | `*-demo.ts` scripts, `apps/server/scripts/testing/venue.ts`, `useVenueDb` | their own temporary directories | locks; no contention |
@@ -1497,7 +1499,7 @@ failure. Pointer: `packages/migrations/src/apply-complete.test.ts`.
 
 **Provisioning and boot**
 
-## The box's BOOT path carries an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door
+## The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door
 
 `assertNotAhead` (`@waitron/provisioning`) compares the database's journal hashes against the image's
 files and throws `provisioning.database_ahead`; there is no backward migration, so installing an
@@ -1506,22 +1508,33 @@ older ref after a newer one has already migrated the database can fail to boot w
 `waitron.sh reset` wipes the database and is the clean way back to a working box; on a production box
 the script refuses to suggest that (a reset there would destroy the fiscal chain) and says to install
 a newer ref instead (`docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md` §3 step 6,
-§4.1). Its only caller anywhere is `apps/server/src/node-entry.ts` (`grep -rn assertNotAhead` before
-believing otherwise), and WHERE it sits changed with the storage switch. It used to run after
+§4.1). It has two callers (`grep -rn assertNotAhead` before believing otherwise): boot, in
+`apps/server/src/node-entry.ts`, and the bucket rebuild's preparation, `prepareStreamRestore` in
+`apps/server/src/restore-stream.ts`, which checks the downloaded copy before anything is placed
+(2026-09-25, slice 2 Task 9b). WHERE boot's call sits changed with the storage switch. It used to run after
 `ensureInstance`, which had already migrated a behind database forward; `ensureInstance` no longer
 exists. It now runs after `runStagedRestore` — the restore that replaces the venue files — and BEFORE
 `startServer`, so it reads a database nothing has migrated yet, because boot owns the migration now
 (`apps/server/src/boot.ts`). The ordering, and the one-direction comparison that lets a virgin venue
 directory pass it, are stated at `runEntry` in `apps/server/src/node-entry.ts`.
 
-The GAP, stated so nobody assumes coverage: BOOT is the only migrating path carrying the check, and
-every other caller of `applyMigrations` runs without one. Re-grepped 2026-09-22, those callers are
-the cold restore taken from the `waitron-restore` CLI (`apps/server/src/restore-command.ts`, which
-calls `apps/server/src/restore.ts`), `apps/server/src/rejoin-command.ts`,
-`apps/server/src/fiscal-readiness-runner.ts`, and seven scripts under `apps/server/scripts` —
-`dev-setup.ts`, `dev-onboard.ts` and the five demo scripts. An ahead database reached through any of
-them is still undetected. A restore staged
-at BOOT is the one case that IS covered, because the check runs after it. The `instance` command
+The GAP, stated so nobody assumes coverage: BOOT and the bucket rebuild are the only migrating paths
+carrying the check, and every other path that migrates runs without one. Re-grepped 2026-09-25
+(`grep -rn applyMigrations apps packages`, non-test files, leaving out the test helper
+`packages/db/src/testing/venue-db.ts`), that grep finds only DIRECT callers besides boot:
+`apps/server/src/restore.ts`, `apps/server/src/rejoin-command.ts`,
+`apps/server/src/fiscal-readiness-runner.ts`, and eight scripts under `apps/server/scripts` —
+`dev-setup.ts`, `dev-onboard.ts`, `cloud-integration-fixture.ts` and the five demo scripts.
+`restore.ts` migrates on behalf of its own callers, found with
+`git grep -l "restoreFromArtifact\|writeValidated\|runStagedRestore" -- apps ':!*.test.ts'`: the
+cold restore from an archive taken from the `waitron-restore` CLI
+(`apps/server/src/restore-command.ts`), the staged restore (`runStagedRestore`,
+`apps/server/src/restore-request.ts`) run by boot and by
+`apps/server/scripts/cloud-recovery-client-fixture.ts`, the bucket rebuild
+(`apps/server/src/restore-stream.ts`), and `apps/server/scripts/cloud-backup-fixture.ts` through
+`writeValidated`. Of those, only the staged restore at BOOT and the bucket rebuild are checked; an
+ahead database reached through the CLI, the two Cloud fixture scripts or any other path above is
+still undetected. The `instance` command
 headed this list until 2026-09-22 and no longer exists. Cost: without the check, an ahead database
 re-migrates CLEANLY — drizzle applies nothing and throws nothing (measured with a control,
 2026-09-10) — so the mismatch showed up only as an unclassified driver error in whatever query first

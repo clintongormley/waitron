@@ -219,9 +219,38 @@ command against it treat that entrypoint differently:
   The same `--entrypoint node` applies to `docker compose run app /app/bin-rejoin.js …`, to
   `/app/bin-recovery.js unpack …`, and to any bare `docker run` against this image.
 
+- **A restore takes one of two sources.** `restore <backup-file>` restores an encrypted backup
+  file, with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`. `restore --from-bucket <kit-file>`
+  rebuilds the box from the copy the old box kept in the owner's bucket; the recovery kit file
+  holds the bucket's key and the recovery key, so nothing secret goes on the command line. The file
+  must be visible inside the container and readable by the image's user, `waitron` (uid 10001):
+  `sudo chown 10001 kit.txt` keeps it private at mode 0600. Otherwise the command stops with
+  `cannot read kit file: /kit.txt`.
+
+  ```bash
+  docker compose run --rm -v "$PWD/kit.txt:/kit.txt:ro" --entrypoint node app \
+    /app/bin-restore.js restore --from-bucket /kit.txt --confirm-venue <tax-id>
+  ```
+
+  It prints the business name, tax id and location of the copy it found, and restores nothing
+  unless `--confirm-venue` names that tax id. If the old box wrote to the bucket in the last ten
+  minutes, or that cannot be checked, it stops and says so; add `--confirm-old-box-gone` only when
+  the old box is switched off for good. A backup file whose box was copying to a bucket gets the
+  same check. Each form takes only its own flags, each once: `--confirm-venue` belongs to the
+  bucket form alone, and a backup file given together with `--from-bucket` is refused. Anything
+  else prints the usage line and exits 2.
+
   Restore and rejoin are refused while another process, usually the running server, is using the
   venue folder (`provisioning.database_in_use`): rejoin before it reads or wipes anything, restore
-  before it writes, moves or removes any database, identity or secret file. Break-glass is the exception by design: it runs beside the
+  before it changes the venue folder, the box's identity or its secrets. A restore's earlier steps
+  run in temporary folders under the state folder, and the bucket form downloads the whole copy
+  there first, then is refused only when it comes to place it — so stop the server before either
+  form. A run that downloads from the bucket, or checks a backup's bucket, makes its own folder
+  (`stream-restore-` or `archive-source-check-` and six random characters) and removes it when it
+  ends; a run that is killed leaves it, holding a full copy of the venue's database, and the next
+  run does not remove it. Once no restore is running, you can delete a leftover `stream-restore-*`
+  or `archive-source-check-*` folder from the top of the `state` volume
+  (`/var/lib/waitron/state` inside the container). Break-glass is the exception by design: it runs beside the
   server and takes no lock. Whatever holds the folder keeps a small file beside it,
   `venue.holder.json`, naming what kind of program it is and rewriting a heartbeat time every five
   seconds. A server start refused while that heartbeat is under 30 seconds old — a second copy of

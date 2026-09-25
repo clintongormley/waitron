@@ -19,6 +19,7 @@ import {
   type VenueLock,
 } from "@waitron/db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
+import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { orderedMigrationSets, type ProvisionedNode, type WaitronModule } from "@waitron/module";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { writeFileAtomic } from "./fs-atomic.js";
@@ -56,6 +57,8 @@ const IDENTITY_KEYS = [
 ] as const;
 /** The venue database file `openVenueStore` opens inside the venue directory. */
 const VENUE_FILE = "venue.db";
+/** The folder inside the state folder that the restore command, the staged restore and boot pass as `stagingDir`. */
+export const RESTORE_STAGING_DIR = "restore-staging";
 /**
  * SQLite's write-ahead sidecars, kept beside the main file and named from its PATH. A committed row
  * can live in `-wal` alone, so these are part of the database, not scratch.
@@ -92,8 +95,14 @@ export interface RestoreDeps extends ValidationDeps {
   readonly lockVenue?: (directory: string) => Promise<VenueLock>;
   /** Recorded in the first-start marker. Default `"archive"`. */
   readonly rebuildSource?: RebuildSource;
+  /** Runs after validation and before the restore changes the venue folder, the box's identity or
+   * its secrets; not run with `skipSecrets`. Refusing stops the restore. */
+  readonly checkSourceLive?: (validated: ValidatedArtifact) => Promise<void>;
   readonly log: Logger;
 }
+
+/** What writing an already validated artifact reads. */
+export type PlacementDeps = Omit<RestoreDeps, "artifact" | "recoveryKey">;
 
 /**
  * What {@link validateArtifact} reads, and nothing else.
@@ -161,8 +170,19 @@ export interface ValidatedArtifact {
  */
 export async function validateArtifact(deps: ValidationDeps): Promise<ValidatedArtifact> {
   const plaintext = decryptArtifact(deps.artifact, deps.recoveryKey);
-  const entries = unpackArchive(plaintext);
+  return validateEntries(unpackArchive(plaintext), deps);
+}
 
+export type EntryValidationDeps = Omit<ValidationDeps, "artifact" | "recoveryKey">;
+
+/**
+ * {@link validateArtifact} after its decrypt and unpack, so every source of opened entries runs the
+ * same GATE and GUARD rather than a copy of them.
+ */
+export async function validateEntries(
+  entries: ArchiveEntry[],
+  deps: EntryValidationDeps,
+): Promise<ValidatedArtifact> {
   // Rejection precedence is the statement order below: missing manifest → missing dump →
   // compatibility gate → unexpected entry → path guard / duplicate destination → identity
   // completeness. `??=` only fixes which entry a repeated name is classified as; a repeated
@@ -236,7 +256,7 @@ export async function validateArtifact(deps: ValidationDeps): Promise<ValidatedA
  * {@link restoreDatabase} writes its incoming file beside the target and removes it itself on a
  * failed write.
  */
-async function placeValidated(validated: ValidatedArtifact, deps: RestoreDeps): Promise<void> {
+async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps): Promise<void> {
   const { log } = deps;
   if (!deps.skipSecrets) await setAsideExistingIdentity(deps.stateDir, log);
   await restoreDatabase({
@@ -279,13 +299,12 @@ async function placeValidated(validated: ValidatedArtifact, deps: RestoreDeps): 
 /**
  * Writes a validated artifact ({@link placeValidated}) holding the venue folder, so a restore
  * started while another process holds the folder is refused `provisioning.database_in_use` before
- * any database, identity or secret file is written, moved or removed. (`validateArtifact`, which
- * runs first, has already created `stagingDir` and `stateDir` if they were absent.) The hook's own
- * open and the migrate inside share the hold.
+ * it changes the venue folder, the box's identity or its secrets. The hook's own open and the
+ * migrate inside share the hold.
  */
 export async function writeValidated(
   validated: ValidatedArtifact,
-  deps: RestoreDeps,
+  deps: PlacementDeps,
 ): Promise<void> {
   const lock = await (deps.lockVenue ?? lockRestoreTarget)(deps.venueDir);
   try {
@@ -329,6 +348,7 @@ async function lockRestoreTarget(directory: string): Promise<VenueLock> {
  */
 export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
   const validated = await validateArtifact(deps);
+  if (!deps.skipSecrets) await deps.checkSourceLive?.(validated);
   await writeValidated(
     deps.managedCloud
       ? {
@@ -375,11 +395,12 @@ export async function restoreFromArtifact(deps: RestoreDeps): Promise<void> {
  * observed half-written.
  *
  * **`node.db` IS LEFT ALONE, and that differs from the wipe — deliberately recorded rather than
- * discovered.** `db-wipe.ts` removes both files of the venue directory; this replaces `venue.db` and
- * its two sidecars only. The node file is created empty and holds no table (`applyMigrations` sends
- * every set to the venue handle, `packages/migrations/src/apply.ts`), and slice 2 keeps it that way:
- * a node's own rows are keyed by node id inside `venue.db` (slice-2 spec §2). A slice that puts
- * tables into `node.db` has to decide here whether a restore carries, clears or keeps them.
+ * discovered.** `db-wipe.ts` removes both files of the venue directory; this replaces `venue.db`,
+ * its two sidecars and Litestream's folder beside it, and nothing else. The node file is created
+ * empty and holds no table (`applyMigrations` sends every set to the venue handle,
+ * `packages/migrations/src/apply.ts`), and slice 2 keeps it that way: a node's own rows are keyed
+ * by node id inside `venue.db` (slice-2 spec §2). A slice that puts tables into `node.db` has to
+ * decide here whether a restore carries, clears or keeps them.
  */
 export async function restoreDatabase(args: {
   dumpBytes: Uint8Array;
@@ -394,6 +415,9 @@ export async function restoreDatabase(args: {
   await rm(incoming, { force: true });
   try {
     await writeFile(incoming, args.dumpBytes, { mode: VENUE_FILE_MODE, flag: "w" });
+    // Litestream's record of what it uploaded describes the database being replaced. Removed
+    // before that database, so a folder that cannot be removed leaves it in place.
+    await rm(litestreamMetaDir(target), { recursive: true, force: true });
     for (const suffix of ["", ...VENUE_SIDECARS]) {
       await rm(`${target}${suffix}`, { force: true });
     }

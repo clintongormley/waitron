@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -387,6 +387,42 @@ setInterval(() => db, 1000);`;
     await expectVenueUntouched();
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  // Plan Reconciliation N23: the archive's old-box check runs after validation and before anything
+  // is placed.
+  it("stops before anything is placed when the source check refuses", async () => {
+    await writeFile(join(stateDir, "trading.env"), TRADING_ENV);
+    const checkSourceLive = vi.fn(async () => {
+      throw new AppError("restore.stream_source_live", {
+        lastChangeAt: "2026-09-23T11:58:00.000Z",
+      });
+    });
+    await expect(restoreFromArtifact(deps({ checkSourceLive }))).rejects.toMatchObject({
+      code: "restore.stream_source_live",
+    });
+    expect(checkSourceLive).toHaveBeenCalledOnce();
+    expect(checkSourceLive).toHaveBeenCalledWith(
+      expect.objectContaining({ dumpEntry: expect.objectContaining({ name: "db.dump" }) }),
+    );
+    await expectVenueUntouched();
+    await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
+    await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("does not run the source check for a restore that keeps the box's own identity", async () => {
+    const checkSourceLive = vi.fn(async () => {});
+    await restoreFromArtifact(deps({ skipSecrets: true, checkSourceLive }));
+    expect(checkSourceLive).not.toHaveBeenCalled();
+    await expectVenueRestored();
+  });
+
+  it("restores once the source check lets it through", async () => {
+    const checkSourceLive = vi.fn(async () => {});
+    await restoreFromArtifact(deps({ checkSourceLive }));
+    expect(checkSourceLive).toHaveBeenCalledOnce();
+    await expectVenueRestored();
+  });
 });
 
 describe("the first-start marker (rebuild-first-start.ts)", () => {
@@ -691,6 +727,21 @@ describe("restoreDatabase places a REAL venue file (the two silent failures)", (
       log: noopLog,
     });
 
+    expect(await markersIn(venueDir)).toEqual(["FROM-ARCHIVE"]);
+  });
+
+  it("removes Litestream's own folder beside the replaced database, so a stale record cannot describe it", async () => {
+    const ltx = join(venueDir, ".venue.db-litestream", "ltx", "0");
+    await mkdir(ltx, { recursive: true });
+    await writeFile(join(ltx, "0000000000000005-0000000000000005.ltx"), "from the old database");
+    await restoreDatabase({
+      dumpBytes: await archiveBytes("FROM-ARCHIVE"),
+      venueDir,
+      log: noopLog,
+    });
+    await expect(stat(join(venueDir, ".venue.db-litestream"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     expect(await markersIn(venueDir)).toEqual(["FROM-ARCHIVE"]);
   });
 
@@ -1225,6 +1276,25 @@ describe("restore steps — failures part-way", () => {
     await expect(stat(incomingFile())).rejects.toMatchObject({ code: "ENOENT" });
     expect((await stat(join(venueFile(), "held"))).isDirectory()).toBe(true);
     expect(logged).toEqual([]);
+  });
+
+  it("restoreDatabase keeps the OLD database when Litestream's folder cannot be removed", async () => {
+    await mkdir(venueDir, { recursive: true });
+    await writeFile(venueFile(), "THE-DATABASE-THAT-WAS-ALREADY-THERE");
+    // A folder its owner cannot write: the recursive removal cannot unlink the file inside it.
+    const locked = join(venueDir, ".venue.db-litestream", "ltx", "0");
+    await mkdir(locked, { recursive: true });
+    await writeFile(join(locked, "0000000000000005-0000000000000005.ltx"), "old");
+    await chmod(locked, 0o500);
+    try {
+      await expect(
+        restoreDatabase({ dumpBytes: VENUE_BYTES, venueDir, log: noopLog }),
+      ).rejects.toMatchObject({ code: "EACCES" });
+    } finally {
+      await chmod(locked, 0o700);
+    }
+    expect(await readFile(venueFile(), "utf8")).toBe("THE-DATABASE-THAT-WAS-ALREADY-THERE");
+    await expect(stat(incomingFile())).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("setAsideExistingIdentity rethrows a failure other than a missing identity, leaving the identity in place", async () => {

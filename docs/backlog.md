@@ -2498,9 +2498,12 @@ image constraints under *Detail → Box image*.
   and the `db:generate` hazard went with it: run on 2026-09-23 in a throwaway checkout whose schema
   and migration files are `main`'s at `9cd2fda58`, `pnpm --filter @waitron/db db:generate` printed `No schema changes, nothing to migrate` and
   wrote no file.
-- **Every migrating path but boot runs with no ahead-of-image check.** No count belongs here:
-  `conventions-data.md` holds the list, re-grepped 2026-09-22, and it is longer than what CLAUDE.md
-  §3 names — it adds a readiness runner and the dev and demo scripts under `apps/server/scripts`.
+- **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.** No
+  count belongs here: `conventions-data.md` holds the list, re-grepped 2026-09-25, and it is longer
+  than what CLAUDE.md §3 names — it adds a readiness runner and the dev, demo and Cloud fixture
+  scripts under `apps/server/scripts`, two of the Cloud fixture scripts migrating through
+  `restore.ts` rather than calling `applyMigrations` themselves, which a grep for that name alone
+  does not find.
   `instance-apply.ts` is no longer among them: it went with `waitron-provision instance` when a venue
   became a directory of SQLite files, and with it the question of gating a migrate that could lock a
   trading shop's tables.
@@ -5454,6 +5457,60 @@ this node) still accepts it. Left open:
   former mirror can become a local secondary again, for which no path was found). A peer that
   trusts only the endorser would refuse those documents. Found by reading during this branch's
   review; not reproduced.
+
+Task 9b, restore from the bucket (#642). `waitron-restore restore --from-bucket <kit-file>
+--confirm-venue <tax id> [--confirm-old-box-gone]` reads the bucket the recovery kit names, checks
+the pointer against the kit's signing key and venue, refuses when the live generation changed in the
+last ten minutes on the bucket's own clock (or when that clock cannot be measured) unless the old
+box is confirmed gone, downloads the generation with `litestream restore` into a scratch folder made
+fresh for each run, `<stateDir>/stream-restore-XXXXXX/` (abandoned after 2 minutes without progress,
+6 hours at most), runs SQLite's `integrity_check`, the newer-software check and the locked secrets
+row's unlock, and then asks for the copy's tax id before placing it through the archive path's own
+`writeValidated`, which leaves the first-start marker (`apps/server/src/restore-stream.ts`). Every
+bucket call the command makes through the object store gives up after 60 seconds
+(`apps/server/src/bounded-store.ts`), without cancelling the request. A command-line archive restore
+whose database holds bucket settings runs the same old-box check first, reading those settings from
+a scratch copy in its own `<stateDir>/archive-source-check-XXXXXX/`; the setup wizard's archive
+restore does not run it yet — Task 9c adds it (plan, Reconciliation N23). The staged restore request
+now carries either an archive or a bucket copy (`apps/server/src/restore-request.ts`); the command
+line places the copy itself, and nothing stages a bucket request yet — Task 9c's wizard will. The
+wipe and the archive placement also remove Litestream's own `.venue.db-litestream/` folder. Left
+open:
+- A copy over 2 GiB cannot be restored: `restoreFromStream` reads the downloaded file whole, and
+  Node refuses a file that size (`ERR_FS_FILE_TOO_LARGE`, measured on Node v26.7.0 during this
+  task's review). Archive creation has the same limit (`apps/server/src/backup-sweep.ts`). The
+  root is that placement (`restoreDatabase`) takes bytes, not a file. Letting it take a source path
+  and rename it into place on the same filesystem would remove the read into memory on the bucket
+  path, and also the archive form's extra full copy: `refuseIfArchiveSourceLive` writes the whole
+  database to a scratch folder only to read the bucket settings from it.
+- `pragma integrity_check` is one blocking statement, and the venue watchdog kills a process after
+  120 seconds without a timer turn. The review measured 6.0 s on a 1.36 GB database on NVMe; box
+  storage has not been measured.
+- A staged request whose marker is invalid, or whose payload cannot be read, throws before the
+  request is cleared, so every start fails the same way. I believe this predates the branch: the
+  archive request's reads sat outside the `try` before it (from the diff, not a run).
+- A copy with no `tenants` row reads an empty tax id, which the command line never accepts as
+  confirmed, so it cannot be restored. The command line prints its own message for it, but no
+  dedicated error code names that case.
+- An interrupted bucket rebuild or archive check leaves its scratch folder, a full copy of the
+  venue database, under the state folder; the next run makes a new one and does not remove it.
+- The placement step can lose the old database. `restoreDatabase` (`apps/server/src/restore.ts`)
+  removes `venue.db` before its sidecars, and if a sidecar cannot be removed the cleanup also
+  deletes the incoming copy, leaving neither. The run-it review reproduced it with a directory at
+  `venue.db-wal` (`{ error: 'ERR_FS_EISDIR', old: 'ENOENT' }`), and reproduced the same result with
+  the base commit's placement order, so I believe it predates this branch; both restore forms go
+  through it.
+- The bucket client sets no time limit of its own: `createS3ObjectStore` (`packages/stream`) has
+  none. The command line wraps it (`boundObjectStore`, which abandons a call but never cancels it),
+  the first start's pointer read has its own 15-second race (`readBucketPointerTerm`,
+  `apps/server/src/rebuild-first-start.ts`, reported as `restore.pointer_unreadable`), and every
+  other caller's calls have no bound at all: the replication supervisor's, and the bucket check the
+  backup settings screen's Test and Save buttons run (`probeBucket`, opened in
+  `apps/server/src/boot.ts`, called from `apps/server/src/stream-api.ts`). A per-call abort signal or request timeout
+  inside `createS3ObjectStore` would bound and cancel every caller's calls.
+- Open question: the first start's pointer read and the command line's bucket calls use different
+  limits (15 seconds and 60 seconds) and report different codes (`restore.pointer_unreadable` and
+  `backup.stream_request_failed`). Neither the code nor the plan says why they differ.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence

@@ -1,31 +1,62 @@
-import { readFile, rm } from "node:fs/promises";
+import { chmod, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { isAppError } from "@waitron/shared";
+import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { writeFileAtomic } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import { restoreFromArtifact, type RestoreDeps } from "./restore.js";
+import { RESTORE_STAGING_DIR, restoreFromArtifact, type RestoreDeps } from "./restore.js";
+import { writeStreamRestore, type WriteStreamArgs } from "./restore-stream.js";
 
 const ARTIFACT = "restore-request.artifact";
 const KEY = "restore-request.key";
+const STREAM_DB = "restore-request.db";
+const STREAM_ENTRIES = "restore-request.entries";
 const MARKER = "restore-request.json";
 const SETUP_OPERATION = "setup-operation.json";
 
-export interface RestoreRequest {
+export interface ArchiveRestoreRequest {
+  kind?: "archive";
   artifact: Uint8Array;
   recoveryKey: string;
   environment: DeploymentEnvironment;
   managedCloud?: { requestId: string; pointId: string };
 }
 
-/** Write payloads first and the marker last, so the entrypoint never observes a partial request. */
-export async function stageRestoreRequest(
+/** A rebuild from the bucket: the downloaded database and the unlocked secrets row's entries. */
+export interface StreamRestoreRequest {
+  kind: "stream";
+  /** Moved, not copied, into the state folder, so it must be on the same filesystem. */
+  databasePath: string;
+  entries: ArchiveEntry[];
+  environment: DeploymentEnvironment;
+}
+
+export type RestoreRequest = ArchiveRestoreRequest | StreamRestoreRequest;
+
+/**
+ * Remove any earlier marker, write the payloads, then the marker last, so the entrypoint never
+ * observes a partial request, nor one request's payload beside another's.
+ */
+export async function stageRestoreRequest<R extends RestoreRequest>(
   stateDir: string,
-  request: RestoreRequest,
-  validate?: (request: RestoreRequest) => Promise<void>,
+  request: R,
+  validate?: (request: R) => Promise<void>,
 ): Promise<void> {
   await validate?.(request);
+  await rm(join(stateDir, MARKER), { force: true });
+  if (request.kind === "stream") {
+    await rename(request.databasePath, join(stateDir, STREAM_DB));
+    await chmod(join(stateDir, STREAM_DB), 0o600);
+    await writeFileAtomic(join(stateDir, STREAM_ENTRIES), packArchive(request.entries), 0o600);
+    await writeFileAtomic(
+      join(stateDir, MARKER),
+      JSON.stringify({ version: 1, environment: request.environment, kind: "stream" }),
+      0o600,
+    );
+    return;
+  }
   await writeFileAtomic(join(stateDir, ARTIFACT), request.artifact, 0o600);
   await writeFileAtomic(join(stateDir, KEY), request.recoveryKey, 0o600);
   await writeFileAtomic(
@@ -49,6 +80,7 @@ export interface StagedRestoreDeps {
 }
 
 type Restore = (deps: RestoreDeps) => Promise<void>;
+type RestoreStream = (args: WriteStreamArgs) => Promise<void>;
 
 async function clearStagedRestore(stateDir: string): Promise<void> {
   await Promise.all([
@@ -56,6 +88,8 @@ async function clearStagedRestore(stateDir: string): Promise<void> {
     rm(join(stateDir, SETUP_OPERATION), { force: true }),
     rm(join(stateDir, ARTIFACT), { force: true }),
     rm(join(stateDir, KEY), { force: true }),
+    rm(join(stateDir, STREAM_DB), { force: true }),
+    rm(join(stateDir, STREAM_ENTRIES), { force: true }),
   ]);
 }
 
@@ -63,6 +97,7 @@ async function clearStagedRestore(stateDir: string): Promise<void> {
 export async function runStagedRestore(
   deps: StagedRestoreDeps,
   restore: Restore = restoreFromArtifact,
+  restoreStream: RestoreStream = writeStreamRestore,
 ): Promise<boolean> {
   let raw: string;
   try {
@@ -74,11 +109,14 @@ export async function runStagedRestore(
   const marker = JSON.parse(raw) as {
     version?: unknown;
     environment?: unknown;
+    kind?: unknown;
     managedCloud?: unknown;
   };
   if (
     marker.version !== 1 ||
     (marker.environment !== "production" && marker.environment !== "preproduction") ||
+    (marker.kind !== undefined && marker.kind !== "stream") ||
+    (marker.kind === "stream" && marker.managedCloud !== undefined) ||
     (marker.managedCloud !== undefined &&
       (marker.environment !== "preproduction" ||
         typeof marker.managedCloud !== "object" ||
@@ -92,25 +130,40 @@ export async function runStagedRestore(
   ) {
     throw new Error("invalid staged restore request");
   }
-  const [artifact, recoveryKey] = await Promise.all([
-    readFile(join(deps.stateDir, ARTIFACT)),
-    readFile(join(deps.stateDir, KEY), "utf8"),
-  ]);
+  const environment: DeploymentEnvironment = marker.environment;
+  const common = {
+    venueDir: deps.venueDir,
+    stateDir: deps.stateDir,
+    stagingDir: join(deps.stateDir, RESTORE_STAGING_DIR),
+    migrationsRoot: deps.migrationsRoot,
+    modules: ALL_MODULES,
+    environment,
+    log: deps.log,
+  };
+  let run: () => Promise<void>;
+  if (marker.kind === "stream") {
+    const [databaseBytes, packed] = await Promise.all([
+      readFile(join(deps.stateDir, STREAM_DB)),
+      readFile(join(deps.stateDir, STREAM_ENTRIES)),
+    ]);
+    run = () => restoreStream({ ...common, databaseBytes, entries: unpackArchive(packed) });
+  } else {
+    const [artifact, recoveryKey] = await Promise.all([
+      readFile(join(deps.stateDir, ARTIFACT)),
+      readFile(join(deps.stateDir, KEY), "utf8"),
+    ]);
+    run = () =>
+      restore({
+        ...common,
+        artifact,
+        recoveryKey,
+        ...(marker.managedCloud
+          ? { managedCloud: marker.managedCloud as { requestId: string; pointId: string } }
+          : {}),
+      });
+  }
   try {
-    await restore({
-      artifact,
-      recoveryKey,
-      venueDir: deps.venueDir,
-      stateDir: deps.stateDir,
-      stagingDir: join(deps.stateDir, "restore-staging"),
-      migrationsRoot: deps.migrationsRoot,
-      modules: ALL_MODULES,
-      environment: marker.environment,
-      ...(marker.managedCloud
-        ? { managedCloud: marker.managedCloud as { requestId: string; pointId: string } }
-        : {}),
-      log: deps.log,
-    });
+    await run();
   } catch (error) {
     // The lock refuses before the restore places the database or touches the identity, so the
     // request stays for a boot that gets the folder.

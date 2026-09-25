@@ -1,5 +1,6 @@
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
+import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 
 /**
  * The two database files `openVenueStore` opens in a venue directory
@@ -64,4 +65,5 @@ export async function wipeVenueDatabases(venueDir: string): Promise<void> {
       await rm(join(venueDir, `${file}${suffix}`), { force: true });
     }
   }
+  await rm(litestreamMetaDir(join(venueDir, "venue.db")), { recursive: true, force: true });
 }
