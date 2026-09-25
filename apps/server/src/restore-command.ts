@@ -267,6 +267,13 @@ function sharedRefusal(err: unknown): string {
   if (hasCode(err, "restore.hook_failed")) {
     return `restore failed: restore.hook_failed (module ${err.params.module}: ${err.params.code})`;
   }
+  if (hasCode(err, "restore.placement_failed")) {
+    const failed =
+      "restore failed: restore.placement_failed — the restored database could not be put in place";
+    return err.params.kept === "previous"
+      ? `${failed}; this server's previous database is unchanged`
+      : `${failed}, and the previous database could not all be put back: what was not is in the folder ${err.params.folder} inside the venue folder; move everything in it back into the venue folder before starting the server`;
+  }
   if (/^(restore|recovery|backup)\./.test(err.code)) return `restore failed: ${err.code}`;
   return "restore failed";
 }
