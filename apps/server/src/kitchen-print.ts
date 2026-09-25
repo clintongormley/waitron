@@ -172,7 +172,6 @@ async function buildTicketItems(
         qty: row.quantity,
         unit: row.unitName == null ? undefined : ticketName(row.unitName, cfg.locale),
         name: kitchenPresentationName(row),
-        // `?? undefined` so a line without a note carries no `note` key.
         note: row.note ?? undefined,
         modifiers: [
           ...optionSnapshotLabels(row.optionSnapshots),
