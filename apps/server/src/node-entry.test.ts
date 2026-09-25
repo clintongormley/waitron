@@ -8,7 +8,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
-import { openVenueDatabase, type VenueDatabase, type VenueHolder } from "@waitron/db";
+import { openVenueDatabase, type VenueHolder } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   FRESH,
@@ -1376,9 +1376,9 @@ setInterval(() => {}, 1000);`;
 describe("a start with a folder a restore set the old database aside into", () => {
   const CHALLENGE_TIMEOUT_MS = 10_000;
   const dirs: string[] = [];
-  const stores: VenueDatabase[] = [];
+  const openStores: (() => Promise<void>)[] = [];
   afterEach(async () => {
-    await Promise.all(stores.splice(0).map((store) => store.close()));
+    for (const close of openStores.splice(0)) await close();
     await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
   });
 
@@ -1500,14 +1500,14 @@ try {
             await new Promise((resolve) => setImmediate(resolve));
             whileStarting = secondProcessAsks(venueDir);
             const store = await openVenueDatabase(venueDir);
-            stores.push(store);
+            openStores.push(() => store.close());
             return { close: () => store.close() };
           }),
         }),
       );
       expect(whileStarting).toBe("refused");
       expect(secondProcessAsks(venueDir)).toBe("refused");
-      await stores.pop()!.close();
+      await openStores.pop()!();
       expect(secondProcessAsks(venueDir)).toBe("admitted");
 
       const failedStarts = [
