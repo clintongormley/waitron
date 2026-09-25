@@ -5209,7 +5209,12 @@ backups are off — for instance one whose venue failed to open, which clears th
 `recoveryKeySet` and make and send no key when the screen's last status read says the box holds one. That does not rescue the
 failed-venue box: an apply there that reuses the held key takes the path a pasted held key took
 before — it writes, reloads, the venue fails to open again, and the route answers
-`backup.effective_mismatch` (read from the route, not run, for Task 8b). The edit-settings form can also meet
+`backup.effective_mismatch` (read from the route, not run, for Task 8b). A held key shorter than
+the 12-character minimum also took that reuse path and was refused with
+`backup.recovery_key_too_short`, so such a box could never turn archives on from the dashboard; fixed,
+for a box whose backup settings its environment does not own, in #649: the status now says `recoveryKeyTooShort`,
+the form then makes and sends a new key with a note that it replaces the short one, and `apply`
+writes it in the short key's place (a key long enough to use is still never replaced there). The edit-settings form can also meet
 `backup.recovery_key_exists`, when a rotate (from another tab or admin) lands after it fetched the
 key. Left open: the
 "key rotated" date `rotate` writes is dropped by a later `apply`, because `readApplyBody` always

@@ -16,6 +16,7 @@ const OFF: BackupStatusView = {
   backupStatus: { configured: false },
   archiveUnderCurrentKey: false,
   recoveryKeySet: false,
+  recoveryKeyTooShort: false,
 };
 
 const ENABLED: BackupStatusView = {
@@ -34,6 +35,7 @@ const ENABLED: BackupStatusView = {
   },
   archiveUnderCurrentKey: true,
   recoveryKeySet: true,
+  recoveryKeyTooShort: false,
 };
 
 const MANAGED: BackupStatusView = { ...OFF, managedByEnvironment: true };
@@ -121,12 +123,14 @@ function setNativeInput(el: BackupScreen, sel: string, value: string): void {
 describe("backup-screen", () => {
   it("turning backups on with a recovery key already held mints none and sends none", async () => {
     const api = stubApi({}, { ...OFF, recoveryKeySet: true });
+    const invalidate = vi.spyOn(api.liveData, "invalidate");
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
     await flush(el);
     expect(api.mintBackupKey).not.toHaveBeenCalled();
     expect(q(el, "[data-test=minted-key]")).toBeNull();
     expect(q(el, "[data-test=saved-it]")).toBeNull();
     expect(q(el, "[data-test=existing-key]")!.textContent!.trim()).toBe(t("backup.key.existing"));
+    expect(q(el, "[data-test=short-key]")).toBeNull();
     expect((q(el, "[data-test=apply]") as HTMLElement & { disabled: boolean }).disabled).toBe(true);
     setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
     await el.updateComplete;
@@ -138,6 +142,36 @@ describe("backup-screen", () => {
       schedule: { kind: "wall-clock", days: "daily", at: "auto" },
       retention: { count: 7, days: 30 },
     });
+    expect(invalidate).not.toHaveBeenCalledWith([{ type: "backup_status" }]);
+    expect(el.shadowRoot!.textContent).toContain("/mnt/usb/waitron");
+  });
+
+  it("replaces a held key too short to use with a new one, saying so", async () => {
+    const api = stubApi({}, { ...OFF, recoveryKeySet: true, recoveryKeyTooShort: true });
+    const invalidate = vi.spyOn(api.liveData, "invalidate");
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    expect(q(el, "[data-test=short-key]")!.textContent!.trim()).toBe(t("backup.key.too_short"));
+    expect(q(el, "[data-test=existing-key]")).toBeNull();
+    expect(q(el, "[data-test=minted-key]")!.textContent).toBe("MINTED-KEY-abcdef012345");
+    const apply = () => q(el, "[data-test=apply]") as HTMLElement & { disabled: boolean };
+    expect(apply().disabled).toBe(true);
+    setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+    await el.updateComplete;
+    expect(apply().disabled).toBe(true);
+    tickCheckbox(el, "[data-test=saved-it]");
+    await el.updateComplete;
+    expect(apply().disabled).toBe(false);
+    apply().click();
+    await flush(el);
+    expect(api.applyBackup).toHaveBeenCalledWith({
+      destinationDir: "/mnt/usb/waitron",
+      recoveryKey: "MINTED-KEY-abcdef012345",
+      schedule: { kind: "wall-clock", days: "daily", at: "auto" },
+      retention: { count: 7, days: 30 },
+    });
+    // The bucket copy's panel reads the same key.
+    expect(invalidate).toHaveBeenCalledWith([{ type: "backup_status" }]);
   });
 
   it("explains a refused second recovery key in words", async () => {
@@ -357,6 +391,11 @@ describe("backup-screen", () => {
 
   it("apply sends the destination + key + policy and refreshes the status", async () => {
     const api = stubApi();
+    vi.mocked(api.applyBackup).mockImplementation(async () => {
+      vi.mocked(api.getBackupStatus).mockResolvedValue(ENABLED);
+      return ENABLED;
+    });
+    const invalidate = vi.spyOn(api.liveData, "invalidate");
     const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
     await flush(el);
     setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
@@ -370,8 +409,9 @@ describe("backup-screen", () => {
       schedule: { kind: "wall-clock", days: "daily", at: "auto" },
       retention: { count: 7, days: 30 },
     });
-    // Refreshed to the enabled status returned by apply.
+    // Refreshed to the enabled status.
     expect(el.shadowRoot!.textContent).toContain("/mnt/usb/waitron");
+    expect(invalidate).toHaveBeenCalledWith([{ type: "backup_status" }]);
   });
 
   it("surfaces a rejected apply as a localised role=alert (never the raw code)", async () => {

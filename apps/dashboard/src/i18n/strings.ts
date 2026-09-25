@@ -845,6 +845,8 @@ export const en = {
   "backup.key.title": "Recovery key",
   "backup.key.existing":
     "Backups will use the recovery key this box already has. If you set up the bucket copy, it is the key inside your recovery kit. To change it, turn backups on, then use “Change the recovery key”.",
+  "backup.key.too_short":
+    "The recovery key this box holds is too short to protect backups. The new key below replaces it.",
   "backup.key.minted_note":
     "This is your recovery key. Save it now — it is shown only once, and without it a backup cannot be restored.",
   "backup.key.copy": "Copy",
@@ -2254,6 +2256,8 @@ export const es: Record<StringKey, string> = {
   "backup.key.title": "Clave de recuperación",
   "backup.key.existing":
     "Las copias usarán la clave de recuperación que este equipo ya tiene. Si has configurado la copia en el bucket, es la clave que va dentro de tu kit de recuperación. Para cambiarla, activa las copias y después usa «Cambiar la clave de recuperación».",
+  "backup.key.too_short":
+    "La clave de recuperación que tiene este equipo es demasiado corta para proteger las copias. La clave nueva de abajo la sustituye.",
   "backup.key.minted_note":
     "Esta es tu clave de recuperación. Guárdala ahora: solo se muestra una vez y, sin ella, no se puede restaurar una copia.",
   "backup.key.copy": "Copiar",
