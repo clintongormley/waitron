@@ -1,9 +1,9 @@
-import { copyFile, mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import {
@@ -91,6 +91,16 @@ const ENTRIES: ArchiveEntry[] = [
   },
 ];
 
+const dirs: string[] = [];
+async function fresh(prefix: string): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), prefix));
+  dirs.push(dir);
+  return dir;
+}
+afterEach(async () => {
+  await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
 const signer = generateNodeKeyPair();
 /** A real venue file, as Litestream would restore it. */
 let fixtureDb: string;
@@ -129,6 +139,10 @@ beforeAll(async () => {
   } finally {
     withLitestream.close();
   }
+});
+
+afterAll(async () => {
+  await rm(dirname(fixtureDb), { recursive: true, force: true });
 });
 
 const KIT: RecoveryKit = {
@@ -186,7 +200,7 @@ async function prepareDeps(
 ): Promise<PrepareStreamDeps> {
   return {
     kit: KIT,
-    stateDir: await mkdtemp(join(tmpdir(), "waitron-stream-state-")),
+    stateDir: await fresh("waitron-stream-state-"),
     migrationsRoot: null,
     litestreamBin: "/unused",
     oldBoxGone: false,
@@ -622,7 +636,7 @@ describe("refuseIfArchiveSourceLive", () => {
     secrets = true,
     settingsBucket: BucketConfig = KIT.bucket,
   ): Promise<ValidatedArtifact> {
-    const file = join(await mkdtemp(join(tmpdir(), "waitron-archive-db-")), "venue.db");
+    const file = join(await fresh("waitron-archive-db-"), "venue.db");
     await suite.db.archiveTo(file);
     if (withSettings) {
       const store = await openVenueDatabase(dirname(file));
@@ -652,7 +666,7 @@ describe("refuseIfArchiveSourceLive", () => {
     oldBoxGone = false,
   ) => ({
     validated,
-    stateDir: await mkdtemp(join(tmpdir(), "waitron-archive-state-")),
+    stateDir: await fresh("waitron-archive-state-"),
     oldBoxGone,
     now: () => NOW,
     openStore,
@@ -780,7 +794,7 @@ async function integrityOf(dir: string): Promise<string[]> {
 
 describe("checkIntegrity", () => {
   it("passes a healthy venue file", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "waitron-integrity-"));
+    const dir = await fresh("waitron-integrity-");
     await copyFile(fixtureDb, join(dir, "venue.db"));
     expect(await integrityOf(dir)).toEqual([]);
   });
@@ -803,7 +817,7 @@ describe("checkIntegrity", () => {
   });
 
   it("reports a copy it cannot read, without throwing", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "waitron-integrity-"));
+    const dir = await fresh("waitron-integrity-");
     await copyFile(fixtureDb, join(dir, "venue.db"));
     const store = await openVenueDatabase(dir);
     await store.close();
@@ -813,7 +827,7 @@ describe("checkIntegrity", () => {
   });
 
   it("reports what SQLite's check finds in a database that opens but is damaged", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "waitron-integrity-"));
+    const dir = await fresh("waitron-integrity-");
     const file = join(dir, "venue.db");
     await copyFile(fixtureDb, file);
     const db = new DatabaseSync(file);
@@ -845,7 +859,7 @@ describe("checkIntegrity", () => {
 
 describe("restoreFromStream (the command line's whole path)", () => {
   it("a failed integrity check leaves the box's own database and identity exactly as they were", async () => {
-    const venueDir = await mkdtemp(join(tmpdir(), "waitron-stream-venue-"));
+    const venueDir = await fresh("waitron-stream-venue-");
     await writeFile(join(venueDir, "venue.db"), "the box's own database");
     const deps = await prepareDeps(await bucket(), { checkIntegrity: async () => ["corrupt"] });
     await writeFile(join(deps.stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=someone-else\n");
@@ -867,7 +881,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
   });
 
   it("places the restored database, writes the identity and leaves the first-start marker naming the stream", async () => {
-    const venueDir = await mkdtemp(join(tmpdir(), "waitron-stream-venue-"));
+    const venueDir = await fresh("waitron-stream-venue-");
     const deps = await prepareDeps(await bucket());
     await restoreFromStream({
       ...deps,
@@ -900,7 +914,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
 
   // Plan Reconciliation N26: the operator sees whose copy this is before anything changes.
   it("shows the restored venue and changes nothing when the operator does not confirm it", async () => {
-    const venueDir = await mkdtemp(join(tmpdir(), "waitron-stream-venue-"));
+    const venueDir = await fresh("waitron-stream-venue-");
     await writeFile(join(venueDir, "venue.db"), "the box's own database");
     const deps = await prepareDeps(await bucket());
     const seen: unknown[] = [];
