@@ -2717,7 +2717,7 @@ image constraints under *Detail → Box image*.
 ### B9. CI and test infra
 
 - **`scripts/waitron-sh.test.mjs` failed at random when its temporary folder's name held a word it
-  matched — DONE (2026-09-26, lane A's A31b, branch `test/waitron-sh-up-matcher`).** Two cases
+  matched — DONE (2026-09-26, lane A's A31b, **PR #661**, main `cccf8a926`).** Two cases
   matched a word anywhere on a recorded `docker compose` line, and the line carries the sandbox's
   `mkdtemp` path: "when the pull fails" (`/docker compose .*up/`, red on `main`'s CI run for
   `47ee3a7ba`) and "asks compose to remove orphans" (`\b(up -d|down)\b`). Reproduced 2026-09-25:
