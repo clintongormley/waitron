@@ -4,40 +4,31 @@ import { certificate, type CertExtension } from "@waitron/server-kit/certificate
 import forge from "node-forge";
 import "./errors.js";
 
-/**
- * A private CA and the server certificate it signs, both PEM-encoded — everything the box needs to
- * serve setup-mode HTTPS from a self-signed identity it mints on first boot.
- */
+/** A private CA and the leaf server certificate it signs, all PEM-encoded. */
 export interface SelfSignedMaterial {
-  /** The CA certificate, PEM. A setup client trusts THIS to accept the server cert below. */
+  /** A setup client trusts THIS to accept the leaf. */
   caCertPem: string;
-  /** The CA private key, PEM. Kept for {@link reissueServerLeaf}. */
+  /** Kept for {@link reissueServerLeaf}. */
   caKeyPem: string;
-  /** The leaf server certificate, PEM. Served as `cert` to `node:https`. */
   serverCertPem: string;
-  /** The leaf's private key, PEM. Served as `key` to `node:https`. */
   serverKeyPem: string;
 }
 
 export interface MintOptions {
-  /** dNSName SANs on the leaf, e.g. ["waitron.local", "localhost"]. At least one required. */
+  /** dNSName SANs on the leaf. At least one required. */
   hostnames: string[];
-  /** iPAddress SANs on the leaf, e.g. ["127.0.0.1", "192.168.1.50"]. May be empty. */
+  /** iPAddress SANs on the leaf. May be empty. */
   ipAddresses: string[];
-  /** Clock, injected so the validity window is deterministic in tests. */
   now: Date;
-  /**
-   * Keypair factory, injected so a test can reuse one keypair instead of paying RSA-2048 generation
-   * twice per mint. Defaults to `forge.pki.rsa.generateKeyPair(2048)`.
-   */
+  /** Lets a test reuse one keypair instead of paying RSA-2048 generation twice per mint. */
   keypair?: () => forge.pki.rsa.KeyPair;
 }
 
 /**
- * The CA's permitted name space. Loopback + the three RFC1918 ranges are in the set (the box leaf
- * carries `localhost`/`127.0.0.1` SANs and a LAN address); nothing public is, so the root can never
- * vouch for an outside name. Android ignores this extension on a user root (spike §7) — kept anyway
- * because it constrains on desktop and iOS and costs nothing.
+ * The CA's permitted name space: `waitron.local`, `localhost`, loopback and the three RFC1918
+ * ranges. OpenSSL, the macOS system checker and Chrome 152 on macOS refused the root for an outside
+ * name; Chrome on the one Android phone measured accepted one under the user-installed root
+ * (docs/superpowers/specs/2026-09-08-lan-https-install-and-name-constraints-spike.md §6, §7).
  */
 const PERMITTED_DNS = ["waitron.local", "localhost"];
 const PERMITTED_IPV4_CIDRS: Array<[string, number]> = [
@@ -47,19 +38,15 @@ const PERMITTED_IPV4_CIDRS: Array<[string, number]> = [
   ["192.168.0.0", 16],
 ];
 
-/** IPv4 dotted-quad → 4 bytes. */
 function ipv4Bytes(addr: string): number[] {
   return addr.split(".").map((o) => Number(o) & 0xff);
 }
 
-/** A /n prefix length → 4 mask bytes. */
 function ipv4Mask(prefix: number): number[] {
   const bits = 0xffffffff & (prefix === 0 ? 0 : ~0 << (32 - prefix));
   return [(bits >>> 24) & 0xff, (bits >>> 16) & 0xff, (bits >>> 8) & 0xff, bits & 0xff];
 }
 
-/** A dotted-quad string → its unsigned 32-bit value, or `undefined` when it is not a well-formed IPv4
- * address (an IPv6 literal, a hostname, an out-of-range or malformed octet). */
 function ipv4ToInt(ip: string): number | undefined {
   const octets = ip.split(".");
   if (octets.length !== 4) return undefined;
@@ -74,13 +61,8 @@ function ipv4ToInt(ip: string): number | undefined {
 }
 
 /**
- * Whether `ip` sits inside one of the CA's permitted IPv4 subtrees ({@link PERMITTED_IPV4_CIDRS}).
- * The invariant: a leaf's iPAddress SANs must be a SUBSET of the CA's permitted set, or the CA cannot
- * vouch for the leaf and `ca.verify(leaf)` fails on a permitted-subtree violation — the box then
- * cannot serve HTTPS at all. `box-secrets.ts` filters its candidate IP SANs through this so an
- * out-of-set interface address (a Tailscale 100.64/10 CGNAT address, a 169.254/16 link-local, a
- * public IP, or an IPv6 address) is dropped from the SAN rather than poisoning the whole cert. A
- * non-IPv4 string is never permitted. Loopback (127.0.0.1) is inside 127.0.0.0/8 and so retained.
+ * Whether `ip` sits inside one of the CA's permitted IPv4 subtrees. OpenSSL 3.6.3 refused the WHOLE
+ * leaf, hostnames included, when any one address was outside them.
  */
 export function isPermittedLeafIpv4(ip: string): boolean {
   const ipInt = ipv4ToInt(ip);
@@ -125,9 +107,8 @@ function nameConstraintsExtension(): CertExtension {
   const nameConstraints = asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [permitted]);
   return {
     name: "nameConstraints",
-    // The LITERAL OID: node-forge 1.4.0 registers only id→name for 2.5.29.30, so
-    // `forge.pki.oids.nameConstraints` is undefined and `setExtensions` would throw "Extension ID
-    // not specified." Do not "simplify" this to the oids lookup.
+    // The literal OID: node-forge 1.4.0 registers only id→name for 2.5.29.30, so
+    // `forge.pki.oids.nameConstraints` is undefined and `setExtensions` would throw.
     id: "2.5.29.30",
     critical: true,
     value: asn1.toDer(nameConstraints).getBytes(),
@@ -135,27 +116,22 @@ function nameConstraintsExtension(): CertExtension {
 }
 
 const DAY_MS = 86_400_000;
-/** ~10 years. The box is a long-lived appliance; a short leaf would strand a running venue. */
+/** The box is a long-lived appliance; a short leaf would strand a running venue. */
 const VALIDITY_DAYS = 3650;
 /** The CA's subject CN, reused as the leaf's issuer CN so `ca.verify(leaf)` chains. */
 const CA_COMMON_NAME = "waitron-setup-ca";
 
 /**
- * A fresh, positive X.509 serial as a hex string. The same CA signs again when a restored box
- * re-issues its leaf ({@link reissueServerLeaf}) — a hardcoded leaf serial would collide with
- * itself the second time that CA signs, which violates X.509 serial uniqueness per issuer. Random
- * (rather than counter-based) sidesteps needing any persisted state to avoid that collision.
+ * Random rather than fixed: the same CA signs again on every re-issue, and X.509 serials must be
+ * unique per issuer.
  */
 function randomSerial(): string {
   const bytes = randomBytes(16);
-  bytes[0] &= 0x7f; // clear the high bit so the ASN.1 INTEGER is positive (node-forge would otherwise treat it as negative)
+  bytes[0] &= 0x7f; // keeps the ASN.1 INTEGER positive
   return bytes.toString("hex");
 }
 
-/**
- * The key-pair factory a mint or re-issue uses, after refusing an empty `hostnames`: a leaf with no
- * dNSName SAN authenticates no request, and the refusal comes before any RSA-2048 generation.
- */
+/** Refuses an empty `hostnames` before any RSA-2048 generation. */
 function keypairFor(
   hostnames: string[],
   keypair: (() => forge.pki.rsa.KeyPair) | undefined,
@@ -180,7 +156,7 @@ function signLeaf(
   ipAddresses: string[],
   validity: { notBefore: Date; notAfter: Date },
 ): forge.pki.Certificate {
-  // type 2 is dNSName, type 7 is iPAddress, so a client can dial either a hostname or an IP.
+  // type 2 is dNSName, type 7 is iPAddress.
   const altNames = [
     ...hostnames.map((value) => ({ type: 2, value })),
     ...ipAddresses.map((ip) => ({ type: 7, ip })),
@@ -201,15 +177,8 @@ function signLeaf(
 }
 
 /**
- * Mint a private CA and a leaf server certificate signed by it, for the box to serve setup-mode
- * HTTPS. The leaf carries every `hostnames` entry as a `dNSName` SAN and every `ipAddresses` entry
- * as an `iPAddress` SAN, its CN is `hostnames[0]`, and it is `serverAuth`-only; the CA is a
- * `cA:true` signer. Both are valid from a day before `now` (clock-skew slack) to `VALIDITY_DAYS`
- * after it, and carry distinct, cryptographically random serials (see `randomSerial` below).
- *
- * Throws `setup.cert_hostnames_empty` when `hostnames` is empty — a leaf with no `dNSName`
- * authenticates no request, so it is refused BEFORE any keypair is generated (the guard costs no
- * RSA keygen).
+ * Mint a private CA and a leaf server certificate signed by it. The leaf's CN is `hostnames[0]`.
+ * Throws `setup.cert_hostnames_empty` when `hostnames` is empty.
  */
 export function mintSelfSignedServerCert(opts: MintOptions): SelfSignedMaterial {
   const { hostnames, ipAddresses, now } = opts;

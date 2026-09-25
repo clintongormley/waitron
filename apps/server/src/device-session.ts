@@ -8,49 +8,32 @@ import type { Database } from "@waitron/db";
 import { kindOfFormFactor } from "@waitron/layouts";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import { verifySecret } from "@waitron/identity";
-// Side-effect only: keeps this host's `device.unauthorized` code (errors.ts) reachable from the file
-// that throws it — the reachability convention `till-session.ts` follows for its host `session.required`
-// code (a bare import, no value used here). See the note atop `errors.ts`.
+// Side-effect only: keeps `device.unauthorized` (errors.ts) reachable from the file that throws it.
 import "./errors.js";
 import { isUuid } from "./till-session.js";
 
-/**
- * The name of the trusted-device cookie (device-identity-1 §3c) — a kitchen screen's parallel for the
- * till's `waitron_till_session`. One constant so the set/read/clear/require helpers below cannot drift
- * on the spelling. Named `waitron_device` per the spec (§3c), NOT `_session`: unlike the operator and
- * management SESSION cookies, this is a long-lived DEVICE identity, so it earns its own distinct name.
- */
+/** The trusted-device cookie: a long-lived DEVICE identity, unlike the session cookies. */
 export const DEVICE_COOKIE = "waitron_device";
 
-/**
- * How stale a recorded sighting has to be before an authenticated read writes a fresh one.
- *
- * It was the SQL literal `interval '1 minute'`; it is a named millisecond count because the cutoff
- * is computed in JavaScript and bound now, not built in SQL — see the gate in {@link tryReadDevice}.
- */
+/** How stale a recorded sighting has to be before an authenticated read writes a fresh one. */
 const SIGHTING_INTERVAL_MS = 60_000;
 
 /**
- * The DEV-ONLY per-tab device override header (SP-C). When this host runs in `devMode` (config), a
- * request carrying `x-waitron-dev-device: <deviceId>` is authenticated AS that device WITHOUT a token
- * — a deliberate dev backdoor that lets one browser run several device identities in separate tabs.
- * NEVER read unless `deps.devMode` is true, so it is byte-for-byte inert in preproduction/production.
- * Lowercase kebab, matching `x-request-id`.
+ * DEV-ONLY: in `devMode`, a request carrying this header is authenticated AS the named device
+ * WITHOUT a token, so one browser can run several device identities in separate tabs. NEVER read
+ * unless `deps.devMode` is true.
  */
 export const DEV_DEVICE_HEADER = "x-waitron-dev-device";
 
-/** How long the device cookie stays valid — one year in seconds (§3c). A kitchen display must remain
- * enrolled across reboots and power cuts, so — unlike the operator/management session cookies, which
- * carry NO `Max-Age` and die with the browser session — this one is deliberately long-lived. Instant
- * revocation does not depend on it: `requireDevice` rejects a `active = false` device regardless of the
- * cookie's remaining lifetime, so there is no token TTL to wait out. */
+/** One year: a kitchen display must stay enrolled across reboots and power cuts. Revocation does
+ * not wait on it: `requireDevice` rejects an `active = false` device whatever the cookie's
+ * lifetime. */
 const DEVICE_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 
 /**
- * The `Domain` a device cookie is scoped to (till-reroute design §3.5; the invariant lives on
- * ServerConfig.tenantDomain): the tenant domain when the request host is it or a subdomain of it, and
- * host-only otherwise (`waitron.local`, loopback dev). The comparison strips the port and ignores
- * case; the leading-dot check is what stops `notdeli.waitron.app` from matching `deli.waitron.app`.
+ * The `Domain` a device cookie is scoped to: the tenant domain when the request host is it or a
+ * subdomain of it, and host-only otherwise. The leading-dot check is what stops
+ * `notdeli.waitron.app` from matching `deli.waitron.app`.
  */
 export function cookieDomainFor(
   host: string | undefined,
@@ -62,17 +45,9 @@ export function cookieDomainFor(
 }
 
 /**
- * Writes the device credential into the cookie. The value is the `${deviceId}.${token}` pair the enrol
- * route mints (§3c) — a SELECTOR (the row id) plus a VALIDATOR (the scrypt-checked token). Attributes
- * mirror the session cookies: `httpOnly` so no browser script can read the bearer token, `sameSite:
- * "Strict"` so it never rides a cross-site request, `path: "/"` so it covers the whole till app.
- * `secure` is caller-supplied — TRUE on a production HTTPS host, FALSE on loopback dev where there is
- * no TLS to attach it to. The `maxAge` is the ONE deviation from `setManagementCookie`/`setSessionCookie`
- * (long-lived — see `DEVICE_COOKIE_MAX_AGE_SECONDS`). The `Domain` is resolved HERE from `tenantDomain`
- * and the request host via {@link cookieDomainFor} — present ⇒ `Domain=<it>`, absent ⇒ host-only (§3.5)
- * — so the set and {@link clearDeviceCookie} compute the SAME scope by construction, not by two call
- * sites repeating one expression (an un-enrol that cleared a differently-scoped cookie would fail to
- * delete it).
+ * The value is `${deviceId}.${token}`: the row id selects, the scrypt-checked token validates. The
+ * `Domain` is resolved here, as {@link clearDeviceCookie} resolves it, so both compute the SAME
+ * scope — an un-enrol that cleared a differently-scoped cookie would fail to delete it.
  */
 export function setDeviceCookie(
   c: Context,
@@ -91,64 +66,33 @@ export function setDeviceCookie(
   });
 }
 
-/**
- * Clears the device cookie (un-enrol / revoke on this browser). `path` — and `Domain`, resolved from
- * `tenantDomain` and the request host the SAME way {@link setDeviceCookie} resolves it (till-reroute
- * §3.5) — must match what the set wrote, or the browser keeps the original alongside the expiry the
- * delete emits.
- */
+/** `path` and `Domain` must match what {@link setDeviceCookie} wrote, or the browser keeps the
+ * original cookie. */
 export function clearDeviceCookie(c: Context, tenantDomain?: string): void {
   const domain = cookieDomainFor(c.req.header("host"), tenantDomain);
   deleteCookie(c, DEVICE_COOKIE, { path: "/", ...(domain === undefined ? {} : { domain }) });
 }
 
-/** The raw device credential carried by the request's cookie, or `null` when the cookie is absent. The
- * non-throwing read `requireDevice` builds its shape check on. */
 export function readDeviceCookie(c: Context): string | null {
   return getCookie(c, DEVICE_COOKIE) ?? null;
 }
 
-/** The identity a `requireDevice` call resolves the cookie to: which device it is, its `formFactor`
- * (read from the device's profile — the kind is DERIVED from it via `kindOfFormFactor`, there is no
- * longer a kind column), its human `label` (surfaced as the device NAME on `/api/device/me`), and the
- * single station it is bound to (NULL for a non-station form factor). The device-authenticated
- * KDS routes (Task 5) scope every read/bump to this `stationId` — a device cannot name another's.
- *
- * SP-A.2 §16 widened this with the device's assigned TILL + static HARDWARE bindings, all read
- * straight off the row so the boot reads (`/api/device/me`, `/api/till`) can surface them. `tillId` —
- * the `tills` row a sale-capable device rings against (§16.4; NULL for a `kds_station`). The hardware
- * bindings — the per-device `receiptPrinterId` (NULL when none) and `hasCashDrawer`. The reader default
- * lives in `device_card_readers`, not on this row. */
+/** The identity a `requireDevice` call resolves the cookie to. The reader default lives in
+ * `device_card_readers`, not on this row. */
 export interface DeviceBinding {
   deviceId: string;
-  // The device's FORM FACTOR, read from its profile (a device is DEFINED by its profile now). The
-  // device KIND is derived from it on demand via `kindOfFormFactor` (e.g. `assertNotHandheld`); there
-  // is no kind column any more.
+  // Read from the device's profile; the device KIND is derived from it via `kindOfFormFactor`.
   formFactor: FormFactor;
-  // The device's human label ("Pantalla Cocina"), surfaced as the device NAME by `/api/device/me` so
-  // the till's login screen can show which box this is.
   label: string;
   stationId: string | null;
   tillId: string | null;
-  // The assigned DEVICE PROFILE (device-profile design 2026-09-05 §5): the reusable bundle a device
-  // resolves its canvas AND capabilities THROUGH — the SOLE canvas binding since the Task 10 cutover
-  // dropped the direct device→canvas column. NULL when unassigned ⇒ the capability firewall fails
-  // closed (no profile → no capabilities → refuse) and the render canvas falls back to the form-factor
-  // default with `capabilities: []` (`GET /api/till`).
   deviceProfileId: string | null;
   receiptPrinterId: string | null;
   hasCashDrawer: boolean;
-  // The device PROFILE's declared capability set (device-profile §5.3), carried here off the SAME
-  // `device_profile_id` join that resolves `formFactor` — so the capability firewall
-  // (`assertDeviceCapability`) reads it straight off the binding rather than opening a second
-  // transaction to re-read the profile. `[]` for a profile that declares none.
   capabilities: CapabilityFlag[];
 }
 
-// The device→profile join and the binding projection, defined once and reused by both `tryReadDevice`
-// selects (and the device-api list read): `devices ⨝ device_profiles ON device_profile_id`.
-// The join always matches — `device_profile_id` is NOT NULL with a RESTRICT FK — so the
-// binding always carries the profile's `formFactor` and `capabilities`.
+// The join always matches: `device_profile_id` is NOT NULL with a RESTRICT foreign key.
 const deviceProfileJoin = eq(deviceProfiles.id, devices.deviceProfileId);
 const deviceBindingColumns = {
   formFactor: deviceProfiles.formFactor,
@@ -162,16 +106,13 @@ const deviceBindingColumns = {
 };
 
 /**
- * Maps a selected device row's non-secret binding columns onto a {@link DeviceBinding}. Shared by the
- * cookie and the dev-override read paths in {@link tryReadDevice} so the two cannot drift on the field
- * list — a select that omits a binding column fails to typecheck here. Carries NO authentication: the
- * caller has already fetched an `active` row (and, on the cookie path, verified the token). The param
- * is typed to the binding's own fields, so a `tokenHash` on the passed row is never copied through.
+ * Carries NO authentication: the caller has already fetched an `active` row and, on the cookie
+ * path, verified the token. A `tokenHash` on the passed row is never copied through.
  */
 function toDeviceBinding(
   deviceId: string,
-  // `capabilities` arrives as `unknown` — the column is PLAIN jsonb (device-profiles.ts keeps it
-  // un-`$type`d on purpose), so it is cast here, the one place the raw row becomes a binding.
+  // `capabilities` arrives as `unknown` (device-profiles.ts leaves the column untyped), so it is
+  // cast here.
   row: Omit<DeviceBinding, "deviceId" | "capabilities"> & { capabilities: unknown },
 ): DeviceBinding {
   return {
@@ -188,52 +129,24 @@ function toDeviceBinding(
 }
 
 /**
- * Reads and authenticates the request's device cookie against the database, returning the binding on
- * success or `null` at EVERY miss (device-identity-1 §3c) — the non-throwing core `requireDevice` and
- * `assertNotHandheld` share. A caller that needs the cookie present throws; a caller that only needs to
- * know WHETHER (and what KIND of) device is present — the handheld firewall guard `assertNotHandheld` —
- * branches on the `null`.
- *
- * The cookie is `${deviceId}.${token}`: the id SELECTS the row (scrypt is per-row-salted, so the id is
- * needed to fetch the salt) and the token VALIDATES it. Every miss — a missing or malformed cookie, an
- * unknown or REVOKED (`active = false`) device, or a token that does not `verifySecret` against the
- * stored hash — returns the SAME `null`, so `requireDevice`'s `device.unauthorized` confirms neither a
- * device's existence nor its revocation state to whoever asked (the fail-closed reasoning in `errors.ts`).
- *
- * The deployment holds one tenant per database. The lookup runs inside `withTransaction` and
- * filters by id and active state only. The `active = true` filter makes
- * revocation INSTANT: a revoked row is simply not found, with no token lifetime to expire.
- * `verifySecret` (scrypt, `@waitron/identity`) is constant-time — the token is NEVER compared
- * with `===`. On a successful COOKIE read the sighting is recorded (`last_seen_at` stamped from this
- * process's clock, gated
- * to at most one write per minute — see the UPDATE below) and the binding returned; nothing is
- * logged, and the token never leaves this function. That `last_seen_at` write happens ONLY on the
- * cookie success path, so a firewall probe on a non-device request is a pure read — and so is the
- * devMode override branch above, which resolves the binding by id and writes nothing.
- *
- * `deps` carries the database and the devMode flag and nothing else — matching `requireSession` — so
- * any route group can gate on it without contriving a full till config.
+ * Reads and authenticates the request's device, returning the binding or `null` at EVERY miss — a
+ * missing or malformed cookie, an unknown or revoked device, or a token that does not verify — so
+ * `requireDevice`'s `device.unauthorized` confirms neither a device's existence nor its revocation
+ * state. The id selects the row because scrypt is per-row-salted; the token validates it. Only a
+ * successful cookie read writes (the `last_seen_at` sighting); every other path is a pure read.
  */
 export async function tryReadDevice(
   deps: { db: Database; devMode?: boolean },
   c: Context,
 ): Promise<DeviceBinding | null> {
-  // SP-C dev override: in devMode ONLY, an `x-waitron-dev-device: <id>` header authenticates AS
-  // that device with NO token check. The header WINS over the cookie and does not fall back to it
-  // — an override that names a bad device is a clean miss (`null` → `device.unauthorized`), not a
-  // silent switch to the cookie's identity. Resolved by the SAME id-selected, `active = true`
-  // read the cookie path uses below, minus `verifySecret` AND minus the `last_seen_at`
-  // sighting write that path performs — intentional: the dev backdoor is a pure read, mutating no
-  // real device's last-seen state.
+  // The dev header WINS over the cookie and does not fall back to it: an override naming a bad
+  // device is a clean miss, not a silent switch to the cookie's identity.
   if (deps.devMode === true) {
     const override = c.req.header(DEV_DEVICE_HEADER);
     if (override !== undefined) {
       if (!isUuid(override)) return null;
       return withTransaction(deps.db, async (tx) => {
         const [row] = await tx
-          // The form factor AND capabilities come from the device's profile (a device is DEFINED by its
-          // profile) — the shared `device_profile_id` inner join, which always matches since
-          // device_profile_id is NOT NULL and its FK is RESTRICT.
           .select(deviceBindingColumns)
           .from(devices)
           .innerJoin(deviceProfiles, deviceProfileJoin)
@@ -246,52 +159,30 @@ export async function tryReadDevice(
 
   const raw = readDeviceCookie(c);
   if (raw === null) return null;
-  // Split on the FIRST `.` only: the id is a UUID (no dots) and a base64url token has none either, but
-  // splitting on the first separator keeps a token that somehow carried one intact rather than truncated.
   const dot = raw.indexOf(".");
-  // `dot <= 0` rejects both a missing separator (indexOf → -1) and an empty selector (dot at index 0);
-  // `dot === raw.length - 1` rejects an empty token. Either malformed shape is a miss.
   if (dot <= 0 || dot === raw.length - 1) return null;
   const deviceId = raw.slice(0, dot);
   const token = raw.slice(dot + 1);
-  // Screen the selector's SHAPE before the DB: `devices.id` is plain `text`, so a non-UUID id would
-  // be looked up without complaint and simply match nothing (the `shared.invalid_id` note in
-  // `till-api.ts`). This screen is what keeps a forged cookie a clean miss.
   if (!isUuid(deviceId)) return null;
 
   return withTransaction(deps.db, async (tx) => {
     const [row] = await tx
-      // `tokenHash` (verified below) plus the shared binding projection: the profile's formFactor +
-      // capabilities and the till/hardware bindings (SP-A.2 §16), read here so the boot reads echo them
-      // without a second query. All non-secret config, never credentials — `tokenHash` is dropped by
-      // `toDeviceBinding`, which only copies the binding fields.
       .select({ tokenHash: devices.tokenHash, ...deviceBindingColumns })
       .from(devices)
       .innerJoin(deviceProfiles, deviceProfileJoin)
-      // `active = true` is the revocation filter: a revoked device is simply not found. Parameterised
-      // by Drizzle — `id` and the boolean both bind as `$n`, never string-concatenated.
+      // `active = true` is the revocation filter: a revoked device is simply not found.
       .where(and(eq(devices.id, deviceId), eq(devices.active, true)));
     if (row === undefined) return null;
-    // Constant-time scrypt check (REUSED, never home-rolled): the token is never compared with `===`.
+    // Constant-time: the token is never compared with `===`.
     if (!verifySecret(token, row.tokenHash)) return null;
 
-    // Record the sighting, but SKIP the write when `last_seen_at` is already within the last minute:
-    // this read runs on EVERY authenticated request (the auth hot path), and the sole consumer
-    // renders last-seen only to the MINUTE (`devices-screen.ts`'s `#lastSeen` slices to `HH:MM`), so a
-    // sub-minute re-write is invisible write amplification. The gate keeps the FIRST sighting (NULL →
-    // written, the differential proof the test pins) and one write per minute thereafter. Deferring the
-    // write until `last_seen_at` is ≥1 minute stale means the DISPLAYED last-seen can lag true activity by
-    // up to ~1 minute (not strictly sub-minute) — an acceptable bound for a coarse "last seen" indicator.
-    // Parameterised by Drizzle — the id and both stamps bind, never user input and never
-    // concatenated.
+    // At most one sighting write a minute: this runs on every authenticated request, and the
+    // dashboard shows last-seen only to the minute (`devices-screen.ts`'s `#lastSeen`).
     //
-    // `last_seen_at` is a text column, so `<` on it is a STRING comparison, and that orders two
-    // instants correctly only for the one spelling every writer of this column uses: `toISOString()`,
-    // which is what `nowIso` returns and what `devices.created_at` takes its own default from. The
-    // clock is read once so the stamp written and the staleness cutoff are the same moment — which
-    // is what PostgreSQL's `now()`, being transaction-start time, gave for free. This is the shape
-    // `packages/printing/src/agent.ts` already gates its own sighting write with, and its comment
-    // carries the measurement of the three spellings that sort wrong.
+    // `last_seen_at` is a text column, so `<` on it is a STRING comparison, which orders two
+    // instants correctly only for the one spelling its writer uses: `toISOString()`, which is what
+    // `nowIso` returns. The clock is read once so the stamp written and the staleness cutoff are
+    // the same moment.
     const seenAt = nowIso();
     const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
     await tx
@@ -309,13 +200,8 @@ export async function tryReadDevice(
   });
 }
 
-/**
- * Authenticates the request's device cookie, or throws `device.unauthorized` (device-identity-1 §3c) —
- * the guard every device-authenticated route runs first. A thin throwing wrapper over
- * {@link tryReadDevice}: every miss the core returns `null` for folds into the SAME
- * `device.unauthorized`, so the response confirms neither a device's existence nor its revocation state.
- * All the authentication and the `last_seen_at` book-keeping live in `tryReadDevice`.
- */
+/** Throwing wrapper over {@link tryReadDevice}: every miss becomes the SAME
+ * `device.unauthorized`. */
 export async function requireDevice(
   deps: { db: Database; devMode?: boolean },
   c: Context,
@@ -326,35 +212,13 @@ export async function requireDevice(
 }
 
 /**
- * Resolve the `till_id` a SALE files under from the AUTHENTICATED enrolled device (SP-A.2
- * §16.4/§16.5 — the H2 fiscal cutover). Before this, a sale's till came from `cfg.tillId` (env
- * `WAITRON_TILL_TILL_ID`); now it comes from the device the request carries, so a re-homed or
- * re-profiled box files under the till its OWN enrolment names, never a stale env value. The four
- * sale routes (`/api/sales`, `/api/pay`, `/api/working-orders/:id/place`,
- * `/api/working-orders/:id/collect`) call this once and thread the result into a per-request
- * `saleCfg = {...cfg, tillId }`. Only `tillId` changes: `nodeId`/`seriesId` STAY `cfg` (a {@link
- * DeviceBinding} carries no node/series — the SIF/chain key is the node, not the device).
+ * The `till_id` a SALE files under, taken from the authenticated device, so a box files under the
+ * till its own enrolment names. A {@link DeviceBinding} carries no node or series: the chain is
+ * keyed by the node, not the device. Both refusals are setup preconditions — a sellable box must be
+ * an enrolled, till-bound device — not a per-sale block (CLAUDE.md §5).
  *
- * Modelled on {@link requireDevice}/{@link assertDeviceCapability}: it reads the binding via
- * {@link tryReadDevice} and fails CLOSED. Both refusals are documented
- * SETUP preconditions (§16.5) — a sellable box MUST be an enrolled, till-bound device — analogous
- * to the boot-time `server.till_config_missing`, NOT a per-sale block (a mis-provisioned box is a
- * setup fault surfaced before the fiscal write, not the sale itself failing, CLAUDE.md §5):
- * - No `waitron_device` cookie (`tryReadDevice` → `null`) ⇒ `device.unauthorized` — the existing
- *   device-auth code (an ordinary env-only till is no longer a sellable box on its own).
- * - A device with no till (`tillId === null`, e.g. a `kds_station`, which rings no sale) ⇒
- *   `device.till_required` — a till-less device cannot ring a sale.
- *
- * On success the row's `till_id` is branded `TillId` via the shared `tillId` guard
- * (UUID-validated, `packages/shared/src/ids.ts`), the SAME brand `loadTillConfig` applies to the
- * env value it replaces (`till-config.ts`).
- *
- * `device` is an OPTIONAL pre-resolved binding: a route that also runs a device/capability guard
- * reads the binding ONCE (`tryReadDevice`) and threads it to both, so scrypt + the `withTransaction`
- * read run once per request instead of twice. Passing `null` means "resolved, no device"
- * (fail-closed → `unauthorized`); OMITTING it preserves the original behaviour — this reads the
- * binding itself. Undefined (omitted), not null, is the "read it yourself" signal, so the
- * fail-closed null path is unchanged either way.
+ * `device` is an optional pre-resolved binding, so a route running several device guards reads it
+ * once: `null` means "resolved, no device"; omitted (`undefined`) means read it here.
  */
 export async function requireSaleTillId(
   deps: { db: Database; devMode?: boolean },
@@ -368,24 +232,10 @@ export async function requireSaleTillId(
 }
 
 /**
- * The handheld firewall (spec §5, decision 0.1; owner reversal 2026-08-30, widened same day): a handheld
- * device may not reach THIS fiscal/cash route at all. A handheld takes and fires orders, and settles a
- * sale on `POST /api/sales` for cash OR a manual card tender — both file under the node's SIF (`nodeId`),
- * not the till (record-sale.ts:79-82), so that route runs NO handheld guard. But every route that runs
- * THIS guard — the INTEGRATED card reader (`/api/pay`), reprint, drawer, place, collect, cancel — settles
- * at the fixed till and is refused outright. Enforced ON THE SERVER so the fence holds even if the client
- * were bypassed, guarding an UNRECOVERABLE fiscal record (CLAUDE.md §5). Called AFTER the route's session
- * guard, on the SAME request.
- *
- * Absence of a device cookie — an ordinary till, which authenticates by operator SESSION and carries no
- * `waitron_device` — passes (`tryReadDevice` → `null`). A non-handheld device (a KDS station, which
- * never posts to a sale route anyway) also passes. ONLY an active `handheld` binding is refused, with
- * `device.forbidden_action` naming the attempted `action`.
- *
- * `device` is an OPTIONAL pre-resolved binding (see {@link requireSaleTillId}): a settlement route reads
- * the binding ONCE and threads it here and to `requireSaleTillId`, so scrypt runs once per request. `null`
- * means "resolved, no device" (passes, like an absent cookie); OMITTING it preserves the original
- * behaviour — this reads the binding itself.
+ * The handheld firewall: a handheld device may not reach a route that runs this guard. Enforced on
+ * the server so the fence holds even if the client is bypassed. No device (an operator-session
+ * till) and a non-handheld device both pass, so run it after the route's `requireSession` guard.
+ * `device` as in {@link requireSaleTillId}.
  */
 export async function assertNotHandheld(
   deps: { db: Database; devMode?: boolean },
@@ -394,46 +244,16 @@ export async function assertNotHandheld(
   device?: DeviceBinding | null,
 ): Promise<void> {
   const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
-  // The device's kind is DERIVED from its profile's form factor (there is no kind column): a phone- or
-  // tablet-form-factor device is a `handheld`. An absent cookie (`null`) passes, as before.
   if (resolved !== null && kindOfFormFactor(resolved.formFactor) === "handheld") {
     throw new AppError("device.forbidden_action", { action });
   }
 }
 
 /**
- * The device-capability firewall (SP-A.2 §16 / design §5 layer 2) — the generalisation of {@link
- * assertNotHandheld} from a hardcoded KIND check to a DECLARED capability, resolved through the
- * device's PROFILE (device-profile design 2026-09-05 §5.3, Task 9). A route that requires a
- * server-enforced device capability (the INTEGRATED card reader ⇒ `integrated-card-payment`;
- * opening the cash drawer ⇒ `open-cash-drawer`) runs this right after its `requireSession` guard,
- * on the SAME request, so the fence holds even if the client were bypassed — the identical
- * placement and reasoning as `assertNotHandheld`. The drawer route also refuses handhelds. It
- * guards UNRECOVERABLE fiscal records (CLAUDE.md §5), so it fails CLOSED: any device that cannot
- * be shown to hold the capability is refused with `device.forbidden_action` naming the attempted
- * `action`.
- *
- * The branches, in order:
- * 1. No device cookie (`tryReadDevice` → `null`) — an ordinary env-configured/legacy till, which
- *    authenticates by operator SESSION and carries no `waitron_device`. It PASSES, exactly as
- *    `assertNotHandheld`'s absent-cookie branch does: "nothing blocks a sale" on a cookie-less
- *    till.
- * 2. Otherwise the device's capability set — carried on the binding by `tryReadDevice`'s profile
- *    join (every device has a profile: `device_profile_id` is NOT NULL) — decides pass vs refuse:
- *    a set omitting the required flag is refused, fail-closed. A capability-less profile (the old
- *    handheld's shape) is therefore still refused pay + drawer.
- *
- * Capabilities relocated OFF the canvas onto the device profile (device-profile design 2026-09-05
- * §5.3, Task 9): a canvas is the display, capabilities are facts about the box. A handheld
- * carrying a capability-less profile is therefore still refused pay + drawer — the handheld-firewall
- * behaviour is PRESERVED, now enforced by the profile's capability set.
- *
- * The capability set rides the binding itself ({@link DeviceBinding.capabilities}), resolved by
- * `tryReadDevice`'s profile join, so this reads it straight off `resolved` — no second transaction.
- * `device` is an OPTIONAL pre-resolved binding (see {@link requireSaleTillId}): `/api/pay` reads the
- * binding ONCE and threads it here and to `requireSaleTillId`, so the read + scrypt run once per
- * request; `null` means "resolved, no device" (passes, branch 1); OMITTING it preserves the original
- * behaviour — this reads the binding itself.
+ * The device-capability firewall: a device whose profile does not declare `capability` is refused,
+ * fail-closed, with `device.forbidden_action`. No device (an operator-session till) passes, as in
+ * {@link assertNotHandheld}, so run it after the route's `requireSession` guard. `device` as in
+ * {@link requireSaleTillId}.
  */
 export async function assertDeviceCapability(
   deps: { db: Database; devMode?: boolean },
@@ -443,11 +263,7 @@ export async function assertDeviceCapability(
   device?: DeviceBinding | null,
 ): Promise<void> {
   const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
-  // (1) Absent cookie ⇒ the env-till / legacy caller — pass, matching `assertNotHandheld`.
   if (resolved === null) return;
-  // (2) The profile's declared capability set — carried on the binding, so no second read. A profile
-  // declaring no capabilities (or none matching this action) is refused, fail-closed. The device always
-  // carries a profile (`device_profile_id` is NOT NULL), so there is no no-profile branch.
   if (!resolved.capabilities.includes(capability)) {
     throw new AppError("device.forbidden_action", { action });
   }

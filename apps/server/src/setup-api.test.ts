@@ -94,7 +94,6 @@ describe("mountSetup — setup-mode routes for an unprovisioned box", () => {
   });
 });
 
-// The four VenueResult ids the provision route threads into the response + persisted trading config.
 const LOCATION_ID = "22222222-2222-2222-2222-222222222222";
 const TILL_ID = "33333333-3333-3333-3333-333333333333";
 const NODE_ID = "44444444-4444-4444-4444-444444444444";
@@ -206,14 +205,9 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
   });
   const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });
   const assertFiscalReady = vi.fn().mockResolvedValue(undefined);
-  // The regime's provisioning-secret seal runs `withTransaction(db, …)` — i.e. `db.transaction(cb)`. A fake
-  // db that RECORDS the seal (in order, into `calls`) and resolves stands in for the real vault write.
-  // The seal's DB correctness — the sealed row, the right tenant, the round-trip — is covered by the
-  // regime's `provisioning-secret.test.ts` and boot.ts's end-to-end live-seal test; here we only assert
-  // the orchestration reaches the seal in order, exactly what the old injected `sealAeat` spy asserted.
-  // `ring` is a sentinel: the recording db never invokes the callback that would use it. The seam
-  // is `withWriteLock`, not `transaction` — on this engine the transaction IS the write lock
-  // (`packages/db/src/tenancy.ts`), and a fake supplying `transaction` alone is never called.
+  // A fake db that RECORDS the seal in order into `calls`; the seal's own database write is the
+  // regime's `provisioning-secret.test.ts`'s to test. The seam is `withWriteLock` because
+  // `withTransaction` IS the write lock (`packages/db/src/tenancy.ts`).
   const db = {
     withWriteLock: async () => {
       calls.push("sealAeat");
@@ -441,10 +435,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       "requestRestart",
     ]);
 
-    // Membership identity is established for the freshly-minted node (design §4), after provision
-    // returns and before the trading config is persisted — with the VenueResult's node id.
-    // The term-0 membership document is then seeded for that same node (design §6 R1), before the
-    // trading config is persisted.
     expect(establishIdentity).toHaveBeenCalledWith(NODE_ID);
     expect(seedMembership).toHaveBeenCalledWith(NODE_ID);
 
@@ -459,7 +449,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(verifyPin("1357", req.venue.admin.pinHash)).toBe(true);
     expect(verifyPassword("correct-horse-battery", req.venue.admin.passwordHash)).toBe(true);
 
-    // The persisted trading config is composed from the VenueResult ids + the injected DB URLs.
     expect(persistTrading.mock.calls[0][0]).toEqual({
       tillId: TILL_ID,
       nodeId: NODE_ID,
@@ -488,11 +477,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     });
   });
 
-  // The admin's dashboard-login email is captured at onboarding, NORMALIZED (trim + lowercase) at this
-  // boundary, and threaded into the provisioning `admin` shape. It is NOT a secret, so it is not hashed
-  // — it reaches `provision` verbatim (normalized) so the seeded `persons` row carries it and the
-  // email-based dashboard login can resolve it. Deletion-proof: drop the `normalizeAndValidateEmail`
-  // call in setup-api.ts and this goes RED (the stored value keeps the request's mixed case).
   it("normalizes the admin email and threads it into the provision request", async () => {
     const app = new Hono();
     const { deps, provisionRequests } = makeDeps();
@@ -509,8 +493,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   });
 
   it("threads the admin's real names through to the provision request", async () => {
-    // The wizard asks for both; `parseVenue` used to build a fresh admin object from four named
-    // reads, so they were dropped between the request body and the `persons` row.
     const app = new Hono();
     const { deps, provisionRequests } = makeDeps();
     mountSetup(app, deps, noopLog);
@@ -525,10 +507,8 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     });
   });
 
-  // A person's stored language is what the till and account emails use, falling back to the venue
-  // default (Spanish for a Spanish venue) when there is none. These three pin the chain the setup
-  // boundary runs to fill it: the browser's language wins, and a language Waitron does not ship
-  // loses to the venue's own locale.
+  // The browser's language wins, and a language Waitron does not ship loses to the venue's own
+  // locale.
   it("gives the admin the language their browser asked for", async () => {
     const app = new Hono();
     const { deps, provisionRequests } = makeDeps();
@@ -544,8 +524,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   });
 
   it("falls back to the venue's own language when the browser asks for one we do not ship", async () => {
-    // A Madrid venue, so the geography chain lands on the Spain pack's own `es-ES` rather than on
-    // the `en-GB` floor — which is what makes this test able to tell the two apart.
+    // A Madrid venue, so the answer `es-ES` differs from the `en-GB` floor.
     const app = new Hono();
     const { deps, provisionRequests } = makeDeps();
     mountSetup(app, deps, noopLog);
@@ -570,10 +549,8 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   });
 
   it("only ever stores a language the apps can render", async () => {
-    // The stored value is written straight to `persons.locale`, which has no enum behind it (the
-    // column's only constraint is non-empty). A code nothing has a catalogue for would render as
-    // missing strings, so the resolver's output must stay inside the shipped set whatever the
-    // browser asks for — including a header that names a language and a region we do not ship.
+    // `persons.locale` has no enum behind it, so a code with no catalogue would render as missing
+    // strings.
     const app = new Hono();
     const { deps, provisionRequests } = makeDeps();
     mountSetup(app, deps, noopLog);
@@ -588,8 +565,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   it.each(["admin.firstNames", "admin.lastNames"] as const)(
     "refuses an empty %s rather than storing it",
     async (field) => {
-      // The column's check refuses an empty string, so the boundary does too rather than letting the
-      // write fail deep inside `applyVenue`.
       const app = new Hono();
       const { deps, provision } = makeDeps();
       mountSetup(app, deps, noopLog);
@@ -609,9 +584,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   it.each(["admin.firstNames", "admin.lastNames"] as const)(
     "refuses a %s that is only whitespace, exactly as it refuses an empty one",
     async (field) => {
-      // The column's check counts `" "` as a length of one and would store it. Identity's own write
-      // boundary trims and refuses what is left when empty (`requiredText`,
-      // packages/identity/src/staff.ts), so provisioning refuses it here too.
+      // The column's check counts `" "` as a length of one and would store it.
       const app = new Hono();
       const { deps, provision } = makeDeps();
       mountSetup(app, deps, noopLog);
@@ -628,11 +601,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     },
   );
 
-  // A malformed or empty POST body must surface as the clean "body" request-shape refusal (400), never
-  // as an opaque 500. `c.req.json()` THROWS a `SyntaxError` on both, so the parse is read through
-  // `readRawJsonBody`, which maps that (and a literal JSON `null`) to `null`; `parseProvisionPayload`
-  // then refuses `null` as field "body". This pins that refusal for both body-reading routes so the
-  // narrow parse can never silently regress to a 500.
   it.each([
     { route: "/setup-api/provision", label: "provision" },
     { route: "/setup-api/fiscal-test", label: "fiscal-test" },
@@ -695,8 +663,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   });
 
   it("accepts a provision with no real names and passes them through as null", async () => {
-    // `waitron-provision venue` never prompts for them, so an absent field is legitimate and must
-    // reach the planner as `null`, not as a refusal.
+    // `waitron-provision venue` never prompts for them, so an absent field is legitimate.
     const app = new Hono();
     const { deps, provisionRequests } = makeDeps();
     mountSetup(app, deps, noopLog);
@@ -816,10 +783,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(provision).not.toHaveBeenCalled();
   });
 
-  // A present-but-malformed email fails identity's `normalizeAndValidateEmail` at the write boundary,
-  // refused with the domain-named `person.email_invalid` (400) — the same code the management API's
-  // create/edit-email paths raise — BEFORE anything is provisioned. Deletion-proof: drop the
-  // `normalizeAndValidateEmail` call in setup-api.ts and this goes RED (the bad email reaches `provision`).
   it("refuses a malformed admin email with 400 person.email_invalid, without provisioning", async () => {
     const app = new Hono();
     const { deps, provision, requestRestart } = makeDeps();
@@ -844,9 +807,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     const res = await postProvision(app, liveBody());
 
     expect(res.status).toBe(400);
-    // Renamed from `setup.aeat_cert_required` when the cert moved behind the provisioning-secret seat;
-    // the module id names which regime demanded it (Veri*Factu here), resolved from the request's
-    // ES-common territory via the composition list.
     expect(await res.json()).toEqual({
       error: { code: "setup.provisioning_secret_required", params: { module: "verifactu" } },
     });
@@ -877,10 +837,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(res.status).toBe(200);
     await tick();
     expect(provisionRequests[0].environment).toBe("production");
-    // The seal (recorded by the fake db, above) runs AFTER provision mints the tenant and BEFORE the
-    // trading config is persisted; identity establishment and the term-0 membership seed sit between
-    // provision and the seal (design §4 + §6 R1). Its DB write + right-tenant are covered by the
-    // regime's provisioning-secret.test.ts and boot.ts's end-to-end live-seal test.
     expect(calls).toEqual([
       "provision",
       "establishIdentity",
@@ -891,15 +847,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     ]);
   });
 
-  // Symmetric to the secret-required gate above: the AEAT signing cert is meaningful ONLY for a
-  // provision whose regime demands it (a LIVE ES-common venue). A demo/preproduction box files
-  // nothing to AEAT, so a demo body carrying a cert is an invalid request — refused defense-in-depth
-  // so a real AEAT signing cert can never be sealed into a preproduction tenant's vault, even though
-  // the 2c client now gates the cert on live mode and never sends it otherwise. Refused BEFORE
-  // `provision`, so NOTHING is stamped/minted/sealed. Deletion-proof: remove the
-  // `if (!expected && present) invalidRequest("aeatCert")` line in setup-api.ts (where
-  // `present === (body.aeatCert !== undefined)`) and this goes RED — the cert reaches `provision`
-  // and then the seal on a preproduction tenant.
+  // A real AEAT signing cert must never be sealed into a preproduction tenant's vault.
   it("refuses a demo provision carrying an AEAT cert (400 setup.request_invalid, field aeatCert), without provisioning or sealing", async () => {
     const app = new Hono();
     const { deps, provision, calls, requestRestart } = makeDeps();
@@ -911,7 +859,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     const json = await res.json();
     expect(json.error.code).toBe("setup.request_invalid");
     expect(json.error.params.field).toBe("aeatCert");
-    // NOTHING stamped, minted or sealed — the cert was rejected before `provision` ran.
     expect(provision).not.toHaveBeenCalled();
     expect(calls).not.toContain("sealAeat");
     await tick();
@@ -933,13 +880,8 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(calls).not.toContain("sealAeat");
   });
 
-  // The presence gate (Copilot, backlog i): a non-expected request carrying a MALFORMED cert must
-  // reject with the CLEAN "cert not expected" fault naming `aeatCert`, and must NOT run the regime's
-  // `validate` seat at all — no wasted validation on a cert that is refused regardless. The cert below
-  // has a non-base64 `pfxBase64`: were `validate` reached first, it would throw naming `pfxBase64`
-  // (see the regime's own direct validator tests). The field being EXACTLY `aeatCert` is the proof the
-  // PRESENCE gate fired before any parse. Deletion-proof: move the `if (expected) secret!.validate(…)`
-  // line in setup-api.ts above the presence gate and this test flips to field `pfxBase64` (RED).
+  // The presence gate runs before the regime's `validate` seat: a cert that is refused regardless
+  // is never validated.
   it("refuses a demo provision carrying a MALFORMED aeatCert with field EXACTLY 'aeatCert' (not a validator sub-field like 'pfxBase64'), without validating/provisioning/sealing", async () => {
     const app = new Hono();
     const { deps, provision, calls, requestRestart } = makeDeps();
@@ -955,8 +897,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error.code).toBe("setup.request_invalid");
-    // EXACTLY "aeatCert" — not "pfxBase64", which the regime's validator would have named had the
-    // reject fired only AFTER validation. That distinguishes the presence gate from a value-level reject.
+    // "pfxBase64" is what the regime's validator would have named.
     expect(json.error.params.field).toBe("aeatCert");
     expect(json.error.params.field).not.toBe("pfxBase64");
     expect(provision).not.toHaveBeenCalled();
@@ -965,14 +906,9 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(requestRestart).not.toHaveBeenCalled();
   });
 
-  // CRITICAL fiscal guard: a malformed AEAT cert must be refused BEFORE `provision` runs. Without the
-  // upfront `secret.validate(body.aeatCert)` (the regime's `provisioningSecret.validate` seat), a live
-  // production provision with `certKind:"bogus"` or a non-base64 `pfxBase64` would run `provision`
-  // first — stamping production and minting the SIF/hash chain (UNREPAIRABLE, CLAUDE.md §5) — and only
-  // THEN 400 inside the seal, wedging the box permanently (a corrected retry then hits
-  // `setup.already_provisioned` 409 forever). The 0 provision calls below are the proof that NOTHING
-  // was stamped or minted. Deletion-proof: remove the `if (expected) secret!.validate(body.aeatCert)`
-  // line in `setup-api.ts` and these go RED — the bogus cert reaches `provision`.
+  // A malformed cert must be refused BEFORE `provision` stamps production and mints the chain
+  // (unrepairable, CLAUDE.md §5); refused only at the seal, a corrected retry would meet
+  // `setup.already_provisioned` for good.
   it.each<[string, Record<string, unknown>]>([
     ["a certKind outside {sello, representante}", { ...CERT, certKind: "bogus" }],
     ["a non-base64 pfxBase64", { ...CERT, pfxBase64: "not valid base64!!!" }],
@@ -987,7 +923,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
 
       expect(res.status).toBe(400);
       expect((await res.json()).error.code).toBe("setup.request_invalid");
-      // NOTHING stamped or minted — the malformed cert was rejected before `provision` ran.
       expect(provision).not.toHaveBeenCalled();
       await tick();
       expect(requestRestart).not.toHaveBeenCalled();
@@ -1035,8 +970,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(JSON.stringify(body)).not.toContain("correct-horse-battery");
   });
 
-  // Each structural guard names the offending field and refuses BEFORE provisioning. Covers the
-  // onboarding `mode` choice, the object/array/nullable/string-array shape screens, and nested paths.
   it.each<[string, string, (body: Record<string, unknown>) => void]>([
     ["an unknown mode", "mode", (b) => void (b.mode = "bogus")],
     ["a string venue", "venue", (b) => void (b.venue = "nope")],
@@ -1103,7 +1036,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     const { deps } = makeDeps({ provision });
     mountSetup(app, deps, noopLog);
 
-    // Fire the first POST but do NOT await it — its provision hangs on `pending`.
     const first = postProvision(app, demoBody());
     await tick(); // let the first request reach + set the latch (its provision is now pending)
 
@@ -1114,7 +1046,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     });
     expect(provision).toHaveBeenCalledTimes(1); // the second never reached provision
 
-    // Let the first finish so nothing dangles.
     release(makeVenueResult());
     expect((await first).status).toBe(200);
     await tick();
@@ -1134,7 +1065,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     await tick();
     expect(requestRestart).not.toHaveBeenCalled(); // a failed provision never restarts
 
-    // The latch was reset on failure, so a second POST runs rather than being refused 409.
     const second = await postProvision(app, demoBody());
     expect(second.status).toBe(200);
     await tick();
@@ -1142,10 +1072,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   });
 
   it("keeps the latch SET after a SUCCESSFUL provision — a second POST is 409 while the box restarts", async () => {
-    // The success arm of the latch: unlike a FAILED provision (which resets it above), a successful one
-    // LEAVES the latch set — the box is on its way down to restart into trading mode, so a second POST
-    // arriving in that window must not start a second, unrecoverable chain. It is refused 409
-    // `setup.already_provisioning` and never reaches `provision`.
+    // A second POST arriving while the box restarts must not start a second, unrecoverable chain.
     const app = new Hono();
     const { deps, provision } = makeDeps();
     mountSetup(app, deps, noopLog);
@@ -1159,7 +1086,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(await second.json()).toEqual({
       error: { code: "setup.already_provisioning", params: {} },
     });
-    // Only the first POST reached provision — the latch refused the second synchronously.
     expect(provision).toHaveBeenCalledTimes(1);
   });
 
@@ -1199,8 +1125,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
   });
 
-  // Each individual dep is load-bearing: with all others wired, omitting ONE still yields 503 — the
-  // box is up but not ready to provision. Also covers each arm of the synchronous deps gate.
   it.each([
     ["provision"],
     ["seedDemo"],
@@ -1222,13 +1146,8 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   });
 });
 
-// The regime's own rules on the fields the operator typed, reached through the contract seat
-// (`FiscalContribution.venueFields`) — the subject file imports no regime package. The rules
-// themselves are the regime's to test (`packages/fiscal-verifactu/src/venue-fields.test.ts`); what
-// belongs here is that the boundary RUNS them, threads the offending field name back, and mints
-// nothing when it refuses. Deletion-proof: drop the `contribution.venueFields?.validate(…)` call
-// from `parseProvisionPayload` and every refusal case below goes RED (the bad venue reaches
-// `provision`).
+// The rules themselves are the regime's to test (`packages/fiscal-verifactu/src/venue-fields.test.ts`);
+// this pins that the boundary RUNS them, names the offending field, and mints nothing when it refuses.
 describe("POST /setup-api/provision — the regime's rules on the operator's venue fields", () => {
   it.each<[string, string, (body: Record<string, unknown>) => void]>([
     [
@@ -1246,12 +1165,8 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
       "location.operationDescription",
       (b) => void (asRec(asRec(b.venue).location).operationDescription = "Barra\u0007principal"),
     ],
-    // `legalName` is the one seat field nothing else pins. Crossing the two series codes makes a
-    // row above report the wrong field, and wiring either of them to the legal name turns the
-    // acceptance case below red (the demo venue's legal name has spaces, which a series code may
-    // not). The legal name is only checked for control characters, so without this row it could be
-    // wired to any other string field — `venue.location.name`, say — and every test would still
-    // pass while a legal name the tax agency rejects reached the till as a refused first sale.
+    // Without this row `legalName` could be wired to any other string field and every test would
+    // still pass: the legal name is only checked for control characters.
     [
       "a legal name carrying a character XML forbids",
       "legalName",
@@ -1268,16 +1183,11 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
 
     expect(res.status).toBe(400);
     expect((await res.json()).error).toEqual({ code: "setup.request_invalid", params: { field } });
-    // The tenant, node, SIF and hash chain are unrepairable once minted (CLAUDE.md §5), so the
-    // property that matters is that the mint was never reached at all.
     expect(provision).not.toHaveBeenCalled();
   });
 
-  // The two routes SHARE `parseProvisionPayload`, so they now agree about which venues are
-  // acceptable. That agreement is the point: were the check on the provision route alone, an
-  // operator could pass the explicit fiscal test and then be refused at provisioning by the very
-  // same value — and the test would meanwhile have opened a live connection to the tax agency
-  // carrying a series code it rejects.
+  // Were the check on the provision route alone, an operator could pass the fiscal test and then be
+  // refused at provisioning by the same value.
   it("refuses the explicit fiscal test too, before any submission is attempted", async () => {
     const app = new Hono();
     const runFiscalTest = vi.fn().mockResolvedValue({ status: "accepted" });
@@ -1299,16 +1209,11 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
       code: "setup.request_invalid",
       params: { field: "seriesCode" },
     });
-    // The assertion carrying the value: no submission was attempted. The status alone would not
-    // distinguish this refusal from any other 400 on the route.
     expect(runFiscalTest).not.toHaveBeenCalled();
   });
 
-  // Pins the ORDER, which the call site's comment claims but nothing else checks: the venue-field
-  // seat runs BEFORE the provisioning-secret gate. This body is wrong in both ways at once — a bad
-  // series code and no certificate on a live (production) provision — so whichever check runs first
-  // decides the answer. Move the seat call below `secret!.validate(…)` in setup-api.ts and this goes
-  // RED with `setup.provisioning_secret_required`.
+  // Pins that the venue-field seat runs BEFORE the provisioning-secret gate: this body is wrong in
+  // both ways, so whichever check runs first decides the answer.
   it("names the bad field ahead of the missing certificate when a live body is wrong in both ways", async () => {
     const app = new Hono();
     const { deps, provision } = makeDeps();
@@ -1339,22 +1244,11 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
   });
 });
 
-// The upfront cert-shape validator (`parseAeatCert`/`validateAeatCert`) moved into the regime with the
-// cert itself (fiscal-none slice): its direct tests — including the empty-passphrase branch unreachable
-// through the endpoint — now live in `packages/fiscal-verifactu/src/provisioning-secret.test.ts`.
-
-// Slice 2c: when a built setup-wizard dir is configured, `mountSetup` serves it as the setup surface's
-// root catch-all via `mountSpa` (basePath "" = origin root, exactly like the till) INSTEAD of the
-// inline placeholder shell — but the routes registered BEFORE it (`/setup-api/status`,
-// `/setup-api/provision`, and any earlier `/health`) must still win their own paths, because that
-// catch-all is registered LAST. This is the route-ORDERING regression guard: moving the SPA/catch-all
-// above the `/setup-api/status` registration makes the first test below go RED (the `GET *` swallows
-// `/setup-api/status`, serving the wizard index.html instead of the JSON fact sheet).
+// The route-ORDERING guard: the wizard's catch-all is registered LAST, so the routes registered
+// before it still win their own paths.
 describe("mountSetup — serving a built setup wizard when setupAppDir is configured", () => {
-  // A throwaway built-wizard dir (index.html only) stands in for the real Vite output; a distinctive
-  // marker so serving the wizard is unambiguously distinguished from the inline placeholder shell
-  // (whose body reads "…needs setup"). Both strings match the placeholder tests' `/set ?up/i`, so the
-  // assertions below key on the DISTINCT substrings, not that loose regex.
+  // Both this marker and the placeholder match `/set ?up/i`, so assertions key on the distinct
+  // substrings.
   let wizardDir: string | undefined;
 
   beforeAll(() => {
@@ -1363,8 +1257,6 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
   });
 
   afterAll(() => {
-    // Guarded teardown (CLAUDE.md §4): a beforeAll that threw before `mkdtempSync` returned must not be
-    // followed by an `rmSync(undefined)` reported as a second failure beside the real one.
     if (wizardDir !== undefined) rmSync(wizardDir, { recursive: true, force: true });
   });
 
@@ -1439,24 +1331,14 @@ describe("mountSetup — serving a built setup wizard when setupAppDir is config
   });
 });
 
-// The mirror-side sibling of `/setup-api/provision` (C2b Task 9): fetch the primary's bundle
-// server-side, adopt the venue, then restart (into adoption-pending, not a working mirror — see
-// `apps/server/src/finish-adoption.ts`). It REUSES the same one-shot latch, the
-// same deps gate + `setup.not_ready`/`setup.already_provisioning` refusals, and the same
-// deferred-restart shape provision uses — these tests copy those tests' shape.
 const PRIMARY_URL = "https://primary.example";
-// The admin login the primary authenticates, carried as a STRUCTURED `AdoptCredential` object end to
-// end (the connect screen sends `{ personId, password, totp? }` directly — see mirror-bundle-fetch.ts).
 const ADOPT_CREDENTIAL: AdoptCredential = {
   personId: "88888888-8888-8888-8888-888888888888",
   password: "correct-horse-battery",
 };
-// The break-glass secret `adoptFromPrimary` mints and returns once; the route surfaces it in the
-// connect response and must never log it.
 const BREAK_GLASS_SECRET = "break-glass-secret-abc123DEF456";
 
-/** Adopt deps, each a spy. An adopt-only box wires just `adopt` + `requestRestart` (the two the adopt
- * route's gate needs); the provision deps are irrelevant to this route and left unwired. */
+/** An adopt-only box wires just the two deps the adopt route's gate needs. */
 function makeAdoptDeps(overrides: Partial<SetupDeps> = {}): {
   deps: SetupDeps;
   adopt: ReturnType<typeof vi.fn>;
@@ -1920,7 +1802,7 @@ describe("POST /setup-api/restore-bucket", () => {
     expect(seen).toEqual(cases.map(([error, status]) => [error.code, status]));
   });
 
-  // Reconciliation N26: the owner sees whose copy it is before anything is staged.
+  // The owner sees whose copy it is before anything is staged.
   it("answers an unconfirmed venue with 409 and its names, and stages the retry that names its tax id", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-bucket-"));
     try {
@@ -1962,8 +1844,7 @@ describe("POST /setup-api/restore-bucket", () => {
     }
   });
 
-  // Reconciliation N23: the archive restore asks the same old-box question when its database holds
-  // bucket settings; the confirmation travels in a header, beside the recovery key's.
+  // The confirmation travels in a header, beside the recovery key's.
   it("passes the archive restore's old-box confirmation through, and answers its refusal with 409", async () => {
     const stageRestore = vi
       .fn()
@@ -2115,18 +1996,15 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
 
     const res = await postAdopt(app, adoptBody());
     expect(res.status).toBe(200);
-    // The connect response surfaces the minted break-glass secret ONCE, alongside the adopted tenant.
     expect(await res.json()).toEqual({
       adopted: true,
       breakGlassSecret: BREAK_GLASS_SECRET,
       restarting: true,
     });
 
-    // `adopt` saw exactly the operator's `{ primaryUrl, credential }` — no reshaping at the boundary.
     expect(adopt).toHaveBeenCalledTimes(1);
     expect(adoptRequests[0]).toEqual({ primaryUrl: PRIMARY_URL, credential: ADOPT_CREDENTIAL });
 
-    // The restart is deferred to the next macrotask so the 200 flushes first (provision's shape).
     expect(requestRestart).not.toHaveBeenCalled();
     await tick();
     expect(requestRestart).toHaveBeenCalledTimes(1);
@@ -2140,11 +2018,8 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
 
     const res = await postAdopt(app, adoptBody());
     expect(res.status).toBe(200);
-    // The secret is on the wire once...
     expect((await res.json()).breakGlassSecret).toBe(BREAK_GLASS_SECRET);
     await tick();
-    // ...but no log line — at any level, in any event name or field value — carries it. Serialize every
-    // captured line and assert the secret never appears (mirror-bundle sync-token discipline).
     const logged = JSON.stringify(lines);
     expect(logged).not.toContain(BREAK_GLASS_SECRET);
   });
@@ -2176,7 +2051,6 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const { deps } = makeAdoptDeps({ adopt });
     mountSetup(app, deps, noopLog);
 
-    // Fire the first POST but do NOT await it — its adopt hangs on `pending`.
     const first = postAdopt(app, adoptBody());
     await tick(); // let the first request reach + set the shared latch
 
@@ -2249,9 +2123,8 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     },
   );
 
-  // Per-field credential validation happens at the MIRROR's own boundary (400), so a wrong-shape login
-  // never reaches the fetcher to fail the primary and surface as an opaque 502. `credential.password`'s
-  // value is NEVER echoed — the error names the field only. A non-object credential is rejected too.
+  // A wrong-shape login is refused at the mirror's own boundary rather than failing at the primary
+  // as a 502, and the error names the field, never its value.
   it.each([
     ["credential.personId", (c: Record<string, unknown>) => delete c.personId],
     ["credential.password", (c: Record<string, unknown>) => delete c.password],
@@ -2286,11 +2159,8 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     expect(adopt).not.toHaveBeenCalled();
   });
 
-  // SSRF guard: `/setup-api/adopt` is UNAUTHENTICATED, so an operator-supplied `primaryUrl` pointing at
-  // the cloud metadata endpoint, an internal host, or a non-http scheme must be refused HERE — before
-  // `adopt` runs `fetchBundle` — with 400 `mirror.primary_url_invalid` and NO fetch attempted. Proven by
-  // deletion: remove the `assertSafePrimaryUrl(primaryUrl)` call in setup-api.ts and these go red (the
-  // bad URL then reaches `adopt`).
+  // SSRF guard: the route is UNAUTHENTICATED, so a `primaryUrl` pointing at a metadata endpoint, an
+  // internal host or a non-http scheme is refused before `adopt` fetches anything.
   it.each([
     ["the cloud metadata endpoint", "http://169.254.169.254/latest/meta-data"],
     ["an https private literal IP", "https://10.0.0.5"],
@@ -2330,10 +2200,8 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     await tick();
   });
 
-  // The one-shot latch is SHARED across provision and adopt (a box is set up as a primary XOR a mirror),
-  // so a start of either verb must latch out a concurrent start of the OTHER. Untested cross-route, a
-  // mutation splitting the shared `provisioning` into two independent latches passed every same-route
-  // test — this pins that they are one latch, in both directions.
+  // Pins that provision and adopt share ONE latch, in both directions; same-route tests cannot tell
+  // one shared latch from two independent ones.
   it("shares the one-shot latch across routes: provision in flight blocks adopt, and adopt blocks provision", async () => {
     // provision in flight → a concurrent adopt is refused 409
     {
@@ -2397,8 +2265,6 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     const res = await postAdopt(app, adoptBody());
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
-    // The dep was overridden to `undefined` on `deps`, so the gate refused before the route body — the
-    // captured spy (still returned here) was therefore never reached.
     expect(adopt).not.toHaveBeenCalled();
   });
 
