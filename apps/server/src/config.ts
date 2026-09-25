@@ -22,14 +22,9 @@ export interface SchedulerConfig {
 
 export interface ServerConfig {
   environment: DeploymentEnvironment;
-  /**
-   * Whether this host runs in DEV mode (`WAITRON_ENV=dev`) — the switch the dev per-tab device
-   * switcher (SP-C) gates the override header + dev routes on. Set from {@link isDevMode}; distinct
-   * from `environment`, which is fiscally two-valued and maps `dev` to `preproduction`. Never `true`
-   * on a production host.
-   */
+  /** `WAITRON_ENV=dev` only ({@link isDevMode}); `environment` maps `dev` to `preproduction`. */
   devMode: boolean;
-  /** Why this fresh primary was created. Undefined during setup, and on mirrors or older state. */
+  /** Why this fresh primary was created; undefined when `WAITRON_ONBOARDING_INTENT` is unset. */
   onboardingIntent: OnboardingIntent | undefined;
   /** Explicitly enables preproduction submissions on a dedicated integration-test target. */
   fiscalTestSubmissions: boolean;
@@ -37,121 +32,67 @@ export interface ServerConfig {
   paymentTestProviders: boolean;
   httpPort: number;
   /**
-   * The plain-HTTP trust/landing listener's port (default 80); `0` disables it. A SECOND listener,
-   * distinct from `httpPort` (which serves HTTPS), so the two never conflict. It exists because a
-   * phone hitting the box's HTTPS origin on an untrusted self-signed leaf gets the browser's
-   * interstitial before any of our JS runs — the landing page is served over plain HTTP so the CA
-   * download link resolves without a trust step. `boot.ts` starts it only when this is non-zero AND
-   * the box serves its own minted leaf (`mintedBoxLeaf`); an operator-TLS box needs no such page.
+   * The plain-HTTP trust/landing listener's port; `0` disables it. A phone meets the browser's
+   * interstitial for the untrusted self-signed leaf before any page runs, so the CA download is
+   * served over plain HTTP.
    */
   landingPort: number;
-  /** Defaults to loopback. `/health` (spec §9) is deliberately unauthenticated, which is fine on a
-   * loopback listener and less fine on every interface — the body is operational metadata, not a
-   * secret, but there is no reason to serve it beyond the host `apps/server` runs on by default. */
+  /** Defaults to loopback, because `/health` is unauthenticated. */
   httpHost: string;
   minTickMs: number;
   maxTickMs: number;
-  /** How long after a skipped tenant or pair either duty reports work due again. ONE value for
-   * BOTH duties: they are independently defaulted in their own packages (no invariant ties them),
-   * and this host deliberately presents a single operator-visible skip cadence. */
+  /** How long after a skipped tenant or pair either duty reports work due again; one value for
+   * both duties. */
   skipRetryMs: number;
   /** Undefined means "let the neutral layer apply its own seven days" — not zero. */
   settlementLagMs: number | undefined;
   migrationsRoot: string;
-  /**
-   * The Litestream binary the stream supervisor runs (`WAITRON_LITESTREAM_BIN`), resolved by
-   * `@waitron/stream`'s `resolveLitestreamBin`. Unset or empty means `litestream`, found on PATH, where the box image puts the pinned one. A developer
-   * points it at `pnpm setup:litestream`'s download.
-   */
+  /** `WAITRON_LITESTREAM_BIN`; unset or empty means `litestream`, found on PATH. */
   litestreamBin: string;
   /**
-   * The persisted directory the box owns its self-signed cert PEMs and generated secrets under —
-   * resolved to an ABSOLUTE path at load (`resolve`) so callers
-   * that materialise and read those files join onto a settled base, not one whose meaning shifts with
-   * the process's cwd. `WAITRON_STATE_DIR` overrides the boot-computed `defaultStateRoot` threaded
-   * into `loadConfig` (see `boot.ts`); an unset OR EMPTY value falls back to that default via
-   * `isUnset` — never `resolve("")`, which is cwd (the "empty value is a valid value" trap,
-   * CLAUDE.md §3). Deployment (#9) sets it to a durable, protected path (e.g. `/var/lib/waitron`);
-   * the dev default lives beside the bundle and is gitignored, because it holds secrets.
+   * The directory the box keeps its TLS files and generated secrets under, absolute so it does not
+   * shift with the cwd. `WAITRON_STATE_DIR` overrides `defaultStateRoot`; an unset OR EMPTY value
+   * falls back to it via `isUnset`, never `resolve("")`, which is the cwd (CLAUDE.md §3).
    */
   stateDir: string;
   /**
-   * The directory holding this venue's databases — the `directory` `openVenueStore` creates
-   * `venue.db` and `node.db` in (`packages/store/src/index.ts`). Defaults to
-   * `join(stateDir, "venue")` so the databases live under the same durable, protected root as the
-   * box's other persisted state; `WAITRON_VENUE_DIR` overrides it. An unset OR EMPTY value falls
-   * back to the default via `isUnset` — never `resolve("")`, which is cwd (the "empty value is a
-   * valid value" trap, CLAUDE.md §3). An override is `resolve`d, like `stateDir`'s and unlike
-   * `logDir`'s: these files are opened by path for the life of the process, so the path must not
-   * shift with the process's cwd.
+   * Where `openVenueStore` creates `venue.db` and `node.db`. Defaults to `join(stateDir, "venue")`;
+   * `WAITRON_VENUE_DIR` overrides it. An unset OR EMPTY value falls back to the default via
+   * `isUnset`, never `resolve("")`; an override is `resolve`d so it does not shift with the cwd.
    */
   venueDir: string;
   /**
-   * The addresses this box advertises — the iPAddress SANs of its self-signed leaf, the IP-QR the
-   * trust page encodes, and the A records its mDNS responder answers with. Undefined means "read the
-   * host's interfaces" (`listBoxIpv4`), which is right for a box on the venue's own network and wrong
-   * for a container behind bridge networking, whose interface address no device on the LAN can reach.
-   * `WAITRON_BOX_ADDRESSES` supplies it as a comma-separated IPv4 list; an unset OR empty value falls
-   * back to the interfaces (the `VAR=`-means-unset rule, CLAUDE.md §3).
+   * The addresses this box advertises: its leaf's IP SANs, the trust page's QR and its mDNS A
+   * records. Undefined means the host's interfaces (`listBoxIpv4`), which a container behind bridge
+   * networking cannot use. From `WAITRON_BOX_ADDRESSES`, a comma-separated IPv4 list; unset or
+   * empty → undefined.
    *
-   * OPERATOR CAVEAT: the self-signed leaf is minted once and then reused (`ensureBoxSecrets`
-   * treats `<stateDir>/tls/server.key` as the presence sentinel); the only other time it is replaced
-   * is the first trading start after a restore (`rebuild-first-start.ts`). So setting or changing
-   * this on a box that has ALREADY booted does not re-mint its SANs — the QR and mDNS move to the new
-   * address while the certificate still covers the old one. Set it on the first boot of a state dir,
-   * or delete the `tls/` quartet to force a re-mint.
+   * The leaf is minted once and reused, so changing this on a box that has already booted moves the
+   * QR and mDNS but not the certificate. Delete the `tls/` quartet to force a re-mint.
    */
   boxAddresses?: string[];
   /**
-   * Where the box writes its rotating structured logs — the directory `createRotatingFileSink` appends
-   * `waitron.log` (+ rotated `.1`..`.N`) into, and `createLogReader` reads back for the diagnostics
-   * `/recent` surface. Defaults to `join(stateDir, "logs")` so the logs live beside the box's other
-   * persisted state under one durable, protected root; `WAITRON_LOG_DIR` overrides it. An unset OR EMPTY
-   * value falls back to the default via `isUnset` — never `resolve("")`, which is cwd (the "empty value
-   * is a valid value" trap, CLAUDE.md §3). Kept as-is (not `resolve`d) like `stateDir` derives it: the
-   * default is already absolute (built from the absolute `stateDir`), and an operator override is used
-   * verbatim as the sink's `dir`, which `mkdirSync(dir, { recursive: true })`s it on first write.
+   * Where the rotating log sink writes `waitron.log`. Defaults to `join(stateDir, "logs")`;
+   * `WAITRON_LOG_DIR` overrides it (`resolveLogDir`). An unset OR EMPTY value falls back to the
+   * default, never `resolve("")`; an override is used verbatim.
    */
   logDir: string;
-  /** The rotation ceiling in bytes: once the current `waitron.log` would exceed this, the sink rotates
-   * before appending. Default 10_000_000; `WAITRON_LOG_MAX_BYTES` overrides it (a positive integer). */
+  /** The rotation ceiling in bytes; `WAITRON_LOG_MAX_BYTES`. */
   logMaxBytes: number;
-  /** How many rotated files the sink keeps (`waitron.log.1`..`.N`) and the reader reads back. Default 5;
-   * `WAITRON_LOG_MAX_FILES` overrides it (a positive integer). */
+  /** How many rotated files the sink keeps and the reader reads back; `WAITRON_LOG_MAX_FILES`. */
   logMaxFiles: number;
-  /**
-   * Operator-supplied PEM files. BOTH-or-NEITHER (loadConfig refuses a half-configured pair).
-   * They override the box leaf persisted under `stateDir`; with neither source, loopback development
-   * uses plain HTTP. `boot.ts` resolves that same choice for the listener and cookie security.
-   */
+  /** Operator-supplied PEM files, both or neither; they override the box leaf under `stateDir`. */
   tls?: { certFile: string; keyFile: string };
-  /** WHICH till this process is — the fiscal identity provisioning stamped into the environment,
-   * resolved once here via `tryLoadTillConfig`. `Omit<…, "orderFlow">`: the pay-timing mode is a
-   * per-LOCATION column, not an env var, so `boot.ts` reads it via `readOrderFlow` and spreads it in
-   * to form the full `TillConfig` handed to the till API (see `till-config.ts`'s `orderFlow` note).
-   *
-   * OPTIONAL (slice 1b): an unprovisioned box has no venue, so the four `WAITRON_TILL_*_ID` are
-   * absent and this is `undefined` — SETUP MODE. `tryLoadTillConfig` returns it undefined when NONE
-   * of the four are set, the loaded identity when ALL are, and throws on a PARTIAL set (a
-   * half-configured server is a bug, never a setup box). Boot branches on `config.till === undefined`
-   * to enter setup mode, and otherwise narrows it once (an early return) before its trading-only
-   * consumers. */
+  /** This till's fiscal identity (`tryLoadTillConfig`); `orderFlow` is a per-location column, not
+   * an env var. Undefined when none of the four `WAITRON_TILL_*_ID` are set — SETUP MODE; a partial
+   * set throws. */
   till?: Omit<TillConfig, "orderFlow">;
-  /** The WebAuthn Relying Party ID the dashboard's passkey ceremonies are bound to — the registrable
-   * domain the browser scopes credentials to (e.g. `dashboard.example.com`, no scheme or port). A
-   * passkey is bound to its RP ID at registration and only offered back on that same RP ID, so this
-   * is deployment config, never a hardcoded constant in `@waitron/identity` (spec §4c). Threaded
-   * through `boot.ts` into `ManagementApiDeps.rpId`. Defaults to `localhost` for loopback dev/tests;
-   * REQUIRED in production (`loadConfig` throws `server.config_missing` if unset). */
+  /** The WebAuthn Relying Party ID: a bare domain, no scheme or port. A passkey is only offered
+   * back on the RP ID it was registered under. Defaults to `localhost`; REQUIRED in production. */
   managementRpId: string;
-  /** The exact origin the dashboard is served from (scheme + host + optional port, e.g.
-   * `https://dashboard.example.com`) — what `@simplewebauthn/server` verifies each ceremony's
-   * `response` against as `expectedOrigin`. Distinct from `managementRpId`: the RP ID is the bare
-   * domain, the origin carries scheme and port and must match the served URL byte-for-byte or
-   * verification fails. Threaded into `ManagementApiDeps.origin`. Defaults to the Vite dev server's
-   * `http://localhost:5191` for dev/tests; REQUIRED in production (same guard as `managementRpId`), and
-   * validated as a bare http(s) origin (`bareOrigin`) in EVERY environment — a trailing slash, a path
-   * or an explicit default port is refused as `server.config_invalid`, not merely absent-checked. */
+  /** The exact origin the dashboard is served from, which each passkey ceremony must match
+   * byte-for-byte. Defaults to `http://localhost:5191`; REQUIRED in production, and in every
+   * environment refused unless a bare http(s) origin (`bareOrigin`). */
   managementOrigin: string;
   /** Optional Google login client. The callback is derived from the validated management origin so
    * the configured Google redirect and the server route cannot drift. */
@@ -159,117 +100,59 @@ export interface ServerConfig {
   /** Optional restaurant privacy notice shown during account setup and in Your profile. */
   privacyNoticeUrl?: string;
   /**
-   * The origin tills route on for THIS node (till-reroute design §3.3): what the node publishes as
-   * its `contactUrl` in the membership document, and what the CORS allow-list treats as "self". From
-   * `WAITRON_ADVERTISED_ORIGIN`; unset or empty (the `isUnset` rule) → `managementOrigin`. Both
-   * variables are validated as bare http(s) origins (`bareOrigin`), each under its own name.
+   * The origin tills route on for this node: its `contactUrl` in the membership document, and what
+   * the CORS allow-list treats as "self". From `WAITRON_ADVERTISED_ORIGIN`; unset or empty →
+   * `managementOrigin`.
    */
   advertisedOrigin: string;
   /**
-   * The registrable domain the device cookie's `Domain` is scoped to when the request host is under it
-   * (till-reroute design §3.5) — so the same httpOnly credential rides to every one of the venue's
-   * servers (`box.<tenant>…`, `cloud.<tenant>…`) after a promotion, instead of being pinned host-only to
-   * the box the till first enrolled against. From `WAITRON_TENANT_DOMAIN`; unset OR empty → undefined
-   * (host-only cookies, the loopback-dev default), lower-cased for the case-insensitive host comparison
-   * `cookieDomainFor` (device-session.ts) makes. A value carrying `/`, `:` or whitespace is not a bare
-   * domain and is refused (`server.config_invalid`, `reason: "not_a_domain"`) rather than reaching a
-   * Set-Cookie `Domain` malformed. Threaded into `DeviceApiDeps.tenantDomain`.
+   * The device cookie's `Domain` when the request host is under it, so one credential reaches
+   * every one of the venue's servers after a promotion. From `WAITRON_TENANT_DOMAIN`, lower-cased;
+   * unset OR empty → undefined (host-only cookies); a value carrying `/`, `:` or whitespace is
+   * refused.
    */
   tenantDomain?: string;
   /**
-   * The built `till` SPA directory this box serves at the origin root "/", or `undefined` to not
-   * serve it (dev leaves it unset and uses the Vite dev server). When set, `boot.ts` mounts it as the
-   * root catch-all — LAST, after every API route — so it never shadows `/api`, `/management-api`,
-   * `/media`, `/health` or the sync routes. From `WAITRON_TILL_APP_DIR`; absent OR empty → undefined
-   * (the `isUnset` rule every optional variable here follows), never `""` — an empty dir would make
-   * boot's `join(dir, "index.html")` a relative path under cwd (the "empty value is a valid value"
-   * trap, CLAUDE.md §3). Stored VERBATIM in config (not `resolve`d here): boot `existsSync`-checks it
-   * and hands it to `mountSpa`, which normalises it once with `resolve` and serves every file from
-   * that canonical base — so a relative or trailing-slash dir works. Deployment (#9) sets an absolute
-   * path regardless.
+   * The built `till` SPA served at "/", mounted after every API route so it shadows none. From
+   * `WAITRON_TILL_APP_DIR`; absent OR empty → undefined (not served), never `""`. Stored
+   * verbatim.
    */
   tillAppDir?: string;
-  /**
-   * The built `dashboard` SPA directory this box serves at "/manage", or `undefined` to not serve it
-   * (dev uses the Vite dev server). Mounted BEFORE the till root catch-all so `/manage/*` wins. From
-   * `WAITRON_DASHBOARD_APP_DIR`; absent OR empty → undefined, stored verbatim — same rules as
-   * `tillAppDir` above.
-   */
+  /** The built `dashboard` SPA served at "/manage"; `WAITRON_DASHBOARD_APP_DIR`, as
+   * `tillAppDir`. */
   dashboardAppDir?: string;
   /**
-   * The built `setup` wizard SPA directory this box serves at the origin root "/" while in SETUP MODE
-   * (unprovisioned), or `undefined` to serve the inline placeholder shell instead (dev leaves it unset
-   * and uses the Vite dev server). When set, `mountSetup` serves it as the setup surface's LAST
-   * catch-all — after `/setup-api/*`, the discovery/CA/trust routes and `/health` — so it never shadows
-   * them. Trading-mode only ever sees this via the `assertBuiltApp` fail-fast check; the MOUNT happens
-   * only in the setup branch, so a provisioned box never serves it. From `WAITRON_SETUP_APP_DIR`; absent
-   * OR empty → undefined, stored verbatim — same rules as `tillAppDir` above.
+   * The built `setup` wizard SPA served at "/" in SETUP MODE; undefined serves the inline
+   * placeholder shell. `WAITRON_SETUP_APP_DIR`, as `tillAppDir`.
    */
   setupAppDir?: string;
   scheduler: SchedulerConfig;
 }
 
-/** A liveness floor, not a performance knob: `drain`'s hourly duty must not be lengthened by a
- * quiet ledger, so no sleep may exceed this however far away the next due time looks. Exported
- * for `health.ts`'s `DUTY_BUDGET_MS`: drain's staleness budget must exceed the longest sleep this
- * value can produce, and importing the SAME constant is what keeps that true by construction
- * rather than by two independently-chosen literals that happen to agree — which is how they
- * disagreed before (both were one hour, so an idle host flipped 503 once an hour by construction). */
+/** A liveness floor: `drain`'s hourly duty must not be lengthened by a quiet ledger. `health.ts`
+ * builds drain's staleness budget from this same constant, so the budget exceeds the longest sleep
+ * this default allows. */
 export const DEFAULT_MAX_TICK_MS = 60 * 60 * 1000;
-/** Stops a hot loop when a duty reports `now` — `runDue`'s `deferred > 0` branch (capped work is
- * genuinely runnable immediately, `packages/scheduler/src/run.ts`), and a whole-duty throw
- * (`pass.ts`'s `attempt` catch, which deliberately still reports `now` — it has no other honest
- * answer). Neither duty reports `now` for merely SKIPPED work any more — see `skipRetryMs` above,
- * and `drain` has no `deferred` concept at all. */
+/** Stops a hot loop when a duty reports `now`. */
 const DEFAULT_MIN_TICK_MS = 5_000;
-/** Exported for `node-entry.ts`'s recovery path, which resolves the same variable WITHOUT calling
- * `loadConfig` — a box is in recovery precisely when its configuration may be what is broken, so a
- * config that throws must not take the page down with it. One constant, not two, so the page and
- * the server can never disagree about where an operator will look for it. */
+/** Exported for `node-entry.ts`'s recovery path, which runs without `loadConfig` because the
+ * configuration may be what is broken. */
 export const DEFAULT_HTTP_PORT = 8080;
-/** The plain-HTTP trust/landing listener's port when `WAITRON_HTTP_LANDING_PORT` is unset — port 80,
- * where a phone lands by typing the box's bare address. `0` disables the listener entirely. Exported
- * because `node-entry.ts`'s recovery path builds its own landing config without running `loadConfig`. */
+/** Port 80, where a phone lands by typing the box's bare address. Exported for recovery. */
 export const DEFAULT_HTTP_LANDING_PORT = 80;
-/** The rotating log file's size ceiling when WAITRON_LOG_MAX_BYTES is unset — 10 MB, a full file that
- * still opens instantly in an editor. */
 const DEFAULT_LOG_MAX_BYTES = 10_000_000;
-/** How many rotated log files the sink keeps + the reader reads back when WAITRON_LOG_MAX_FILES is
- * unset. Five × 10 MB is a bounded, small on-disk footprint. */
 const DEFAULT_LOG_MAX_FILES = 5;
-/** The bind host when `WAITRON_HTTP_HOST` is unset — loopback, so an unconfigured box never binds a
- * public interface (the box image sets `0.0.0.0`). Exported for `node-entry.ts`'s recovery landing
- * config, built without `loadConfig`. */
+/** Loopback, so an unconfigured box never binds a public interface. Exported for recovery. */
 export const DEFAULT_HTTP_HOST = "127.0.0.1";
-/** The highest port TCP/`net.Server.listen` accepts. Without this bound, `positiveInt` alone lets
- * a value like `999999` reach `serve()` (`boot.ts`), which throws a raw, unformatted
- * `RangeError [ERR_SOCKET_BAD_PORT]` straight out of `startServer` — not the structured
- * `server.config_invalid` this file promises for every other bad input, and not what
- * `apps/server/README.md`'s "every value is validated once, at boot" line claims either. Exported
- * for the same reason `DEFAULT_HTTP_PORT` above is: `node-entry.ts`'s recovery path needs the same
- * bound, and an unbounded copy there would throw that same raw `RangeError` out of the one call
- * that serves the page. */
+/** The highest port `net.Server.listen` accepts; above it `serve()` throws a raw `RangeError`
+ * instead of `server.config_invalid`. Exported for the recovery path. */
 export const MAX_HTTP_PORT = 65_535;
-/** Loopback defaults for the passkey Relying Party, so dev and every test resolve a working RP ID +
- * origin without setting either variable. These apply in preproduction/dev ONLY: in production both
- * are REQUIRED (`requiredInProduction` below throws `server.config_missing` if either is unset), so a
- * real deployment can never silently ship the loopback default and bind passkeys to `localhost`.
- * Presence is not the only check on the origin: whatever value resolves — the operator's or this
- * default — must be a bare http(s) origin in every environment (`bareOrigin`, `server.config_invalid`
- * with `reason: "not_an_origin"`). A
- * production deployment sets both to its served domain (`WAITRON_MANAGEMENT_RP_ID`) and URL
- * (`WAITRON_MANAGEMENT_ORIGIN`) — see the `ServerConfig` fields. The origin default is the dashboard
- * Vite dev server's port (slice 1c), so a browser served from it verifies against the same value this
- * host hands the ceremonies. */
+/** Loopback passkey defaults, outside production only (`requiredInProduction`). The origin is the
+ * dashboard's Vite dev server. */
 const DEFAULT_MANAGEMENT_RP_ID = "localhost";
 const DEFAULT_MANAGEMENT_ORIGIN = "http://localhost:5191";
 
 type Env = Record<string, string | undefined>;
-
-// `isUnset` (absent OR empty string is "unset") lives in `./env-value.js` so `config.ts` and
-// `till-config.ts` share the ONE definition without an import cycle — see the note atop that module.
-// `required` below reads the same rule the other way round: a variable with no usable value is
-// missing, so `VAR=` is reported as missing rather than accepted as the empty string.
 
 function required(env: Env, variable: string): string {
   const value = env[variable];
@@ -280,25 +163,17 @@ function required(env: Env, variable: string): string {
 }
 
 /**
- * Resolve a directory-valued config variable the ONE way `loadConfig` here and `runRestore`
- * (`restore-command.ts`) both need: an unset OR empty `raw` (`isUnset`) falls back to `fallback`,
- * and a genuinely-set value is made absolute via `resolve` — never `resolve("")`, which is cwd (the
- * "empty value is a valid value" trap, CLAUDE.md §3). Shared so the callers' `stateDir`
- * handling cannot drift. NOT used for `migrationsRoot`, which is deliberately stored VERBATIM (no
- * `resolve`) in both callers — see its own `isUnset` fallback in `loadConfig`.
+ * An unset OR empty `raw` falls back to `fallback`; a set value is made absolute — never
+ * `resolve("")`, which is the cwd. Shared so the callers' directory handling cannot drift.
  */
 export function resolveConfigDir(raw: string | undefined, fallback: string): string {
   return isUnset(raw) ? fallback : resolve(raw);
 }
 
 /**
- * A variable that is OPTIONAL in preproduction/dev — falling back to `devDefault`, a loopback value
- * safe only on localhost — but REQUIRED in production. Shipping the loopback default to a real
- * deployment is a silent misconfiguration that surfaces far downstream: a passkey RP ID / origin left
- * at `localhost` makes every login ceremony fail its origin check with an opaque 401, not a loud boot
- * error. So in production an unset OR empty value (`required`'s own `isUnset` rule) is
- * `server.config_missing`, naming the variable the operator must supply; everywhere else `devDefault`
- * applies via the same `isUnset` fallback the inline defaults in `loadConfig` use.
+ * Optional outside production, falling back to the loopback `devDefault`; required in production,
+ * where a passkey RP ID or origin left at `localhost` would fail every login with an opaque 401
+ * rather than failing boot.
  */
 function requiredInProduction(
   env: Env,
@@ -312,16 +187,9 @@ function requiredInProduction(
 }
 
 /** Whether `value` is a bare http(s) origin (`scheme://host[:port]`, nothing else): a till concatenates
- * paths onto it and a browser's `Origin` header is compared to it byte-for-byte. `host:port` with no
- * scheme parses as a non-special scheme whose origin is the literal "null", so the round-trip
- * comparison catches it. An EXPLICIT default port (`https://h:443`, `http://h:80`) is refused by that
- * same comparison, because WHATWG `URL` normalises the port away and `parsed.origin` then differs from
- * the value — consistent with a browser `Origin` header, which never carries a default port.
- *
- * Exported so the primary can hold the same line on a value a STANDBY advertised (`mirror-bundle-api.ts`
- * signs it into the org chart and every till dials it) rather than re-deriving the rule. `""` is not a
- * bare origin — `URL.parse("")` is `null` — so a caller that accepts an empty value screens for it
- * before asking. */
+ * paths onto it and a browser's `Origin` header is compared to it byte-for-byte. The round-trip
+ * comparison also refuses an explicit default port, which a browser `Origin` never carries.
+ * `""` is not a bare origin. */
 export function isBareOrigin(value: string): boolean {
   const parsed = URL.parse(value);
   return (
@@ -331,10 +199,8 @@ export function isBareOrigin(value: string): boolean {
   );
 }
 
-/** The config-boot form of `isBareOrigin`: returns the value or throws `server.config_invalid` naming
- * the variable. Unlike every other validator here it takes a RESOLVED value rather than `(env,
- * variable)`, because the value it checks may have come from a fallback (`advertisedOrigin` defaults
- * to `managementOrigin`) and must be reported under the variable the operator actually set. */
+/** Takes a resolved value rather than `(env, variable)`, because the value may have come from a
+ * fallback and must be reported under the variable the operator actually set. */
 function bareOrigin(value: string, variable: string): string {
   if (!isBareOrigin(value)) {
     throw new AppError("server.config_invalid", { variable, reason: "not_an_origin" });
@@ -359,10 +225,6 @@ function secureManagementOrigin(value: string): string {
   return origin;
 }
 
-/** `WAITRON_TENANT_DOMAIN` as the cookie `Domain` (see ServerConfig.tenantDomain): unset OR empty →
- * undefined, a set value lower-cased, and a value carrying `/`, `:` or whitespace refused loudly at
- * boot (`server.config_invalid`, `reason: "not_a_domain"`) rather than handed to a Set-Cookie
- * malformed. */
 function loadTenantDomain(env: Env): string | undefined {
   const raw = env.WAITRON_TENANT_DOMAIN;
   if (isUnset(raw)) return undefined;
@@ -383,26 +245,16 @@ export interface TunnelConfig {
   poolSize: number;
 }
 
-/** Standing outbound connections the box pre-dials to the relay when WAITRON_TUNNEL_POOL_SIZE is
- * unset. */
+/** Standing outbound connections the box pre-dials to the relay. */
 const DEFAULT_TUNNEL_POOL_SIZE = 4;
 
 /**
- * The outbound cloud-mirror tunnel (sub-project B) is enabled iff `WAITRON_TUNNEL_RELAY_URL` is set
- * to a parseable url naming the relay's host and port. Then the box id and per-box token are
- * required, and a blank one fails closed (CLAUDE.md §3): a blank token must never mean "no auth", and
- * a blank box id names no box to the relay. Absent OR empty relay url → `undefined` → no tunnel is
- * dialed, so a host that sets no tunnel env (every existing boot) is unaffected. A PRESENT-but-unparseable
- * relay url THROWS rather than silently
- * disabling the tunnel: "an empty connection string is a valid connection string" (CLAUDE.md §3) —
- * the empty value is off by returning `undefined` (never reaching a dialer as `""`), but a malformed
- * ADDRESS an operator actually supplied is a boot-time refusal, never a degenerate value handed on.
+ * The outbound tunnel is on iff `WAITRON_TUNNEL_RELAY_URL` is set; an unset or empty url turns it
+ * off, and a malformed one throws rather than disabling it. When on, a blank box id or token is
+ * refused: a blank token must never mean "no auth".
  */
 export function loadTunnelConfig(env: Env): TunnelConfig | undefined {
   const rawUrl = env.WAITRON_TUNNEL_RELAY_URL;
-  // Absent OR empty → tunnel off (undefined), via `isUnset`. Returning undefined is how the empty
-  // value never reaches a dialer as `""` (CLAUDE.md §3); a present-but-malformed url is failed closed
-  // just below.
   if (isUnset(rawUrl)) return undefined;
   let url: URL;
   try {
@@ -413,26 +265,15 @@ export function loadTunnelConfig(env: Env): TunnelConfig | undefined {
       reason: "not_a_url",
     });
   }
-  // A url can parse yet name no host — `relay.example:9000` (no scheme) is read as scheme
-  // `relay.example` + opaque path, so `.hostname` is `""`. A blank relayHost is exactly the `""` a
-  // dialer must never see, so it fails closed as `not_a_url` too rather than being handed on.
+  // `relay.example:9000` (no scheme) parses as scheme `relay.example` with an empty hostname.
   if (url.hostname === "") {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_TUNNEL_RELAY_URL",
       reason: "not_a_url",
     });
   }
-  // A well-formed url can still fail to name a USABLE port, two ways, both yielding `relayPort: 0` —
-  // the degenerate value the dialer must never see (you cannot connect to port 0): it OMITS the port
-  // (`tcp://relay.example` → `.port` is `""`, `Number("")` is `0`) or it names port ZERO explicitly
-  // (`tcp://relay.example:0` → `.port` is `"0"`). `Number(url.port) === 0` catches BOTH (a parsed
-  // `url.port` is only ever `""` or a valid `"0".."65535"`, since `new URL` rejects an out-of-range or
-  // non-numeric port), so both fail closed HERE at boot — the mirror image of the hostname guard above.
-  // A dedicated `no_port` reason, not `not_a_url`: the url IS valid, it just lacks the usable port we
-  // require, so "not a url" would mislead the operator (CLAUDE.md §1). Use a NON-SPECIAL scheme
-  // (`tcp://`, which the mechanism expects): WHATWG `URL` strips a port equal to a SPECIAL scheme's
-  // default, so `https://relay:443` parses to `.port === ""` and would be refused here — `tcp://relay:443`
-  // keeps its port.
+  // Catches an omitted port (`.port` is `""`) and port 0 alike. Use a non-special scheme such as
+  // `tcp://`: WHATWG `URL` strips a special scheme's default port, so `https://relay:443` has none.
   if (Number(url.port) === 0) {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_TUNNEL_RELAY_URL",
@@ -462,13 +303,6 @@ export function loadTunnelConfig(env: Env): TunnelConfig | undefined {
   };
 }
 
-/**
- * The shared parse+validate step behind both `positiveInt` and `optionalPositiveInt` below:
- * `undefined` when the variable is unset, the parsed value otherwise, throwing
- * `server.config_invalid` for anything that is not a positive integer. Neither caller needs a
- * fallback to reach this far — that is each one's OWN concern, applied after this returns — so
- * this function does not take one, and cannot be asked to validate one it was never given.
- */
 function parsePositiveInt(env: Env, variable: string): number | undefined {
   const raw = env[variable];
   if (isUnset(raw)) return undefined;
@@ -479,10 +313,7 @@ function parsePositiveInt(env: Env, variable: string): number | undefined {
   return value;
 }
 
-// Exported so `backup-config.ts` (a sibling opt-in config loader, slice 4b-ii) validates
-// `WAITRON_BACKUP_*` positive-integer knobs against the SAME rule — throwing the SAME
-// `server.config_invalid`/`not_a_positive_integer` this file's own knobs do — rather than keeping a
-// second copy that could drift.
+// Exported so `backup-config.ts` validates its knobs by the same rule.
 export function positiveInt(env: Env, variable: string, fallback: number): number {
   return parsePositiveInt(env, variable) ?? fallback;
 }
@@ -491,13 +322,7 @@ function optionalPositiveInt(env: Env, variable: string): number | undefined {
   return parsePositiveInt(env, variable);
 }
 
-/**
- * A port in the inclusive range `0..MAX_HTTP_PORT`, where `0` is a meaningful value ("disabled"),
- * unlike every other port in this file. Deliberately NOT `positiveInt`/`parsePositiveInt`, which
- * reject `0` as non-positive — the landing listener uses `0` to mean "do not bind". An unset or empty
- * value takes `fallback`; anything that is not an integer in range throws `port_out_of_range`, the
- * same reason `httpPort`'s own upper-bound guard uses.
- */
+/** A port in `0..MAX_HTTP_PORT`, where `0` means "disabled", so not `positiveInt`. */
 function boundedPort(env: Env, variable: string, fallback: number): number {
   const raw = env[variable];
   if (isUnset(raw)) return fallback;
@@ -510,22 +335,16 @@ function boundedPort(env: Env, variable: string, fallback: number): number {
 
 /**
  * Which environment this whole deployment belongs to — AEAT's endpoints, and the Stripe key mode
- * a tenant's credential must match. ONE setting, not one per provider: there is no legitimate
- * mixed pair. AEAT pre-production with a live Stripe key means taking real money without filing
- * it; AEAT production with a test key means filing invoices for money never taken.
- *
- * Exported so one-shot scripts that build their own backend resolve this the same way the host
- * does — the safe default below is not one for a caller to re-derive.
+ * a tenant's credential must match. ONE setting, not one per provider: AEAT pre-production with a
+ * live Stripe key takes real money without filing it; AEAT production with a test key files
+ * invoices for money never taken.
  */
 export function deploymentEnvironment(env: Env): DeploymentEnvironment {
   const raw = env.WAITRON_ENV;
-  // The DEFAULT is preproduction and production must be typed out. Architecture §9: production
-  // numbering can never be reused, even for a test invoice, so this is the one default in the file
-  // whose mistake is irreversible.
+  // Unset means preproduction; production must be typed out, because production numbering can
+  // never be reused, even for a test invoice.
   if (isUnset(raw)) return "preproduction";
-  // `dev` is a DEV-ONLY input: it enables the dev device switcher (see `isDevMode`) but is
-  // fiscally identical to preproduction — the stamp, AEAT endpoints and Stripe mode never see it,
-  // so no migration and no widening of the fiscal `DeploymentEnvironment`/`Entorno` union.
+  // `dev` only switches on `isDevMode`; fiscally it is preproduction.
   if (raw === "dev") return "preproduction";
   if (raw !== "production" && raw !== "preproduction") {
     throw new AppError("server.config_invalid", {
@@ -537,12 +356,9 @@ export function deploymentEnvironment(env: Env): DeploymentEnvironment {
 }
 
 /**
- * Whether this host runs in DEV mode — `WAITRON_ENV=dev`, the only input that enables the dev per-tab
- * device switcher (SP-C). Distinct from {@link deploymentEnvironment}, which maps `dev` to
- * `preproduction`: `devMode` is the switch the override header + dev routes gate on, so it is `true`
- * for the literal `dev` alone and `false` for `production`, `preproduction`, and unset. Because it
- * requires `WAITRON_ENV=dev` while `production` requires `WAITRON_ENV=production`, a host is never
- * both production and devMode.
+ * Whether this host runs in DEV mode: `WAITRON_ENV=dev` exactly, which gates the dev routes and the
+ * dev device switcher. {@link deploymentEnvironment} maps `dev` to `preproduction`, so a host is
+ * never both production and dev mode.
  */
 export function isDevMode(env: Env): boolean {
   return env.WAITRON_ENV === "dev";
@@ -605,14 +421,8 @@ export function loadConfig(
 ): ServerConfig {
   const minTickMs = positiveInt(env, "WAITRON_MIN_TICK_MS", DEFAULT_MIN_TICK_MS);
   const maxTickMs = positiveInt(env, "WAITRON_MAX_TICK_MS", DEFAULT_MAX_TICK_MS);
-  // Checked here rather than left to `clamp`, whose Math.min/Math.max composition would silently
-  // resolve an impossible range to whichever bound happened to win.
-  //
-  // Both variables and both effective values ride in `params` (F6 of the 2026-07-27 pre-merge
-  // review), not just the one this guard happens to key off: an operator who set only
-  // `WAITRON_MAX_TICK_MS` below the default `WAITRON_MIN_TICK_MS` would otherwise get an error
-  // naming a variable they never touched, with the one actually at fault unnamed. Same shape for
-  // all three tick-cadence guards in this function.
+  // Checked here because the sleep clamp would silently resolve an impossible range. All three
+  // tick-cadence guards name both variables, since the operator may have set only the other one.
   if (minTickMs > maxTickMs) {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_MIN_TICK_MS",
@@ -623,14 +433,8 @@ export function loadConfig(
     });
   }
   const skipRetryMs = positiveInt(env, "WAITRON_SKIP_RETRY_MS", DEFAULTS.skipRetryMs);
-  // Checked here rather than left to `sleepMsFor`'s clamp (`loop.ts`): that clamp's
-  // `Math.max(minTickMs, wait)` would silently round a too-low value back UP to `minTickMs`, which
-  // reproduces exactly the failure this variable exists to remove — a skipped tenant (a certificate
-  // only a human can provision, say) reporting its retry at the 5-second floor, forever, with no
-  // error anywhere: not from `loadConfig`, not from the loop, not from `/health`. A boot failure is
-  // loud and immediate; a silently-restored spin is neither. Strictly `<`, not `<=`: equal to
-  // `minTickMs` IS the floor, so the clamp leaves it untouched and nothing the operator configured
-  // is lost — only a value the clamp would actually RAISE is rejected.
+  // `sleepMsFor`'s clamp (`loop.ts`) would silently raise a too-low value to `minTickMs`, restoring
+  // the retry-at-the-floor spin this variable exists to remove.
   if (skipRetryMs < minTickMs) {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_SKIP_RETRY_MS",
@@ -640,17 +444,7 @@ export function loadConfig(
       reason: "below_min_tick",
     });
   }
-  // F1 of the 2026-07-27 pre-merge review: the symmetric half of the guard above, closing a gap
-  // the design doc once claimed did not exist. `sleepMsFor`'s `Math.min(maxTickMs, wait)` clamps a
-  // too-HIGH `skipRetryMs` back DOWN — and when `maxTickMs` is itself at or below `minTickMs`
-  // (an operator sets only `WAITRON_MAX_TICK_MS`, low), that clamped-down value can land BELOW
-  // `minTickMs` too, restoring exactly the 5-second-forever spin this design removes, with every
-  // OTHER guard in this file passing: `minTickMs > maxTickMs` is false when both equal `maxTickMs`
-  // or below it via their own defaults, and `skipRetryMs < minTickMs` is false because the
-  // (unclamped) configured `skipRetryMs` is still >= `minTickMs`. Only the clamp — which this
-  // function does not apply, `sleepMsFor` does, at runtime — exposes the problem. Strictly `>`, not
-  // `>=`: equal to `maxTickMs` is the clamp's own no-op boundary, so nothing configured is lost
-  // there either.
+  // Likewise the clamp would silently lower a value above `maxTickMs`.
   if (skipRetryMs > maxTickMs) {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_SKIP_RETRY_MS",
@@ -661,9 +455,6 @@ export function loadConfig(
     });
   }
   const httpPort = positiveInt(env, "WAITRON_HTTP_PORT", DEFAULT_HTTP_PORT);
-  // `positiveInt` alone only rejects zero, negative and non-integer input — it has no notion of a
-  // PORT's own upper bound, because none of its other callers (tick clamps, scheduler tunables)
-  // have one. See `MAX_HTTP_PORT`'s own comment above for what reaching `serve()` unbounded does.
   if (httpPort > MAX_HTTP_PORT) {
     throw new AppError("server.config_invalid", {
       variable: "WAITRON_HTTP_PORT",
@@ -672,17 +463,11 @@ export function loadConfig(
   }
   const migrationsDir = env.WAITRON_MIGRATIONS_DIR;
   const stateDir = env.WAITRON_STATE_DIR;
-  // The effective (absolute) state dir, computed once so `logDir`'s default reads the SAME value the
-  // returned `stateDir` field carries — `join(stateDir, "logs")` must sit under whatever state root
-  // actually won (the resolved override, or the boot-computed default), never a second derivation.
+  // Computed once so `venueDir` and `logDir` default under the returned `stateDir`.
   const resolvedStateDir = resolveConfigDir(stateDir, defaultStateRoot);
   const httpHost = env.WAITRON_HTTP_HOST;
-  // BOTH-or-NEITHER: a certificate with no private key cannot complete a TLS handshake, and a key
-  // with no certificate has nothing to present — a half-configured pair is refused here rather than
-  // silently falling back to plain HTTP, which an operator who set exactly one of the two would
-  // never intend. `isUnset` (empty string == absent) is deliberate: `WAITRON_TLS_CERT_FILE=` beside
-  // a real key is half-configured, the same `VAR=`-means-unset rule every other variable in this
-  // file follows. The error names the MISSING variable — the one the operator still has to supply.
+  // A half-configured pair is refused rather than silently falling back to plain HTTP; the error
+  // names the missing variable.
   const certFile = env.WAITRON_TLS_CERT_FILE;
   const keyFile = env.WAITRON_TLS_KEY_FILE;
   let tls: { certFile: string; keyFile: string } | undefined;
@@ -694,13 +479,9 @@ export function loadConfig(
       reason: "tls_requires_cert_and_key",
     });
   }
-  // Resolved once here so the return object and the production-required RP guard below read the same
-  // value (rather than calling `deploymentEnvironment` three times inline).
   const environment = deploymentEnvironment(env);
-  // `managementOrigin` is resolved before the literal because `advertisedOrigin` defaults to it and
-  // an object literal cannot reference its own sibling. `managementRpId` comes with it, in this
-  // order, so a production host missing BOTH still reports the RP ID first — the order the literal
-  // evaluated them in, and the one the "naming the missing variable" guard was written around.
+  // Resolved before the literal because `advertisedOrigin` defaults to `managementOrigin`. The RP
+  // ID first, so a production host missing both reports the RP ID.
   const managementRpId = requiredInProduction(
     env,
     "WAITRON_MANAGEMENT_RP_ID",
@@ -737,8 +518,6 @@ export function loadConfig(
     fiscalTestSubmissions: fiscalTestSubmissions(env),
     paymentTestProviders: paymentTestProviders(env),
     httpPort,
-    // The plain-HTTP landing listener's port (default 80, `0` = disabled). Its OWN bounded parser
-    // (not `positiveInt`), because `0` is a valid value here and `positiveInt` rejects it.
     landingPort: boundedPort(env, "WAITRON_HTTP_LANDING_PORT", DEFAULT_HTTP_LANDING_PORT),
     httpHost: isUnset(httpHost) ? DEFAULT_HTTP_HOST : httpHost,
     minTickMs,
@@ -747,33 +526,15 @@ export function loadConfig(
     settlementLagMs: optionalPositiveInt(env, "WAITRON_SETTLEMENT_LAG_MS"),
     migrationsRoot: isUnset(migrationsDir) ? defaultMigrationsRoot : migrationsDir,
     litestreamBin: resolveLitestreamBin(env),
-    // Unset or empty values use the default, never the current working directory.
     stateDir: resolvedStateDir,
-    // Where `openVenueStore` creates `venue.db` and `node.db`. Defaults under whichever state root
-    // won above (`resolvedStateDir`), so the databases sit beside the box's other persisted state;
-    // `resolveConfigDir` applies the shared unset-or-empty fallback and resolves an override.
     venueDir: resolveConfigDir(env.WAITRON_VENUE_DIR, join(resolvedStateDir, "venue")),
-    // The operator's override for the addresses the box advertises; undefined leaves every consumer
-    // on `listBoxIpv4`. Validated at load (`parseBoxAddresses`) so a typo fails boot rather than
-    // minting a certificate for an address that is not an address.
+    // Validated at load so a typo fails boot rather than minting a certificate for it.
     boxAddresses: parseBoxAddresses(env.WAITRON_BOX_ADDRESSES),
-    // The rotating-log directory, by the rule that also places the venue watchdog's report files
-    // (`resolveLogDir`). An operator override is used verbatim (the sink `mkdirSync`s it).
     logDir: resolveLogDir(env, resolvedStateDir),
     logMaxBytes: positiveInt(env, "WAITRON_LOG_MAX_BYTES", DEFAULT_LOG_MAX_BYTES),
     logMaxFiles: positiveInt(env, "WAITRON_LOG_MAX_FILES", DEFAULT_LOG_MAX_FILES),
-    // Conditionally present, never present-but-undefined. This is only the operator override;
-    // trading boot may still resolve the persisted box leaf under `stateDir`.
     ...(tls === undefined ? {} : { tls }),
-    // The till's own fiscal identity, resolved the same way every other caller does — see
-    // `till-config.ts`.
-    // `tryLoadTillConfig` (not `loadTillConfig`): NONE of the four ids set → undefined (setup mode),
-    // ALL set → the loaded identity, a PARTIAL set → throws (a half-configured server is a bug).
     till: tryLoadTillConfig(env),
-    // The dashboard's passkey RP ID + origin: loopback defaults in preproduction/dev, but REQUIRED in
-    // production so a real deployment can never silently bind passkeys to `localhost` (see
-    // `requiredInProduction` and the `DEFAULT_MANAGEMENT_*` note). Same `isUnset` empty-string rule
-    // `httpHost` above follows, applied inside the helper.
     managementRpId,
     managementOrigin,
     ...(hasGoogleId && hasGoogleSecret
@@ -786,22 +547,10 @@ export function loadConfig(
         }
       : {}),
     ...(!isUnset(privacyNoticeUrl) ? { privacyNoticeUrl } : {}),
-    // The origin tills route on for this node — defaulting to the origin the dashboard is already
-    // served from, so a box that configures nothing still advertises a reachable address. Both
-    // variables are validated as bare origins under their own names, so neither can reach a till
-    // malformed.
     advertisedOrigin: isUnset(env.WAITRON_ADVERTISED_ORIGIN)
       ? managementOrigin
       : bareOrigin(env.WAITRON_ADVERTISED_ORIGIN, "WAITRON_ADVERTISED_ORIGIN"),
-    // The registrable domain the device cookie's `Domain` is scoped to (see ServerConfig.tenantDomain).
-    // Present-but-undefined when absent, the shape `settlementLagMs`/`tillAppDir` above take.
     tenantDomain: loadTenantDomain(env),
-    // The built front-end dirs the box serves same-origin (slice 1a). Absent OR empty → undefined
-    // (the same `isUnset` rule `settlementLagMs` above and every other optional here follow): dev
-    // leaves them unset and uses the Vite dev servers, so `boot.ts` mounts nothing. Stored verbatim
-    // — never `resolve("")`, which is cwd (the "empty value is a valid value" trap, CLAUDE.md §3);
-    // boot `existsSync`-checks the dir and hands it to `mountSpa`, which normalises it once via
-    // `resolve` when serving (so a relative or trailing-slash dir works).
     tillAppDir: isUnset(env.WAITRON_TILL_APP_DIR) ? undefined : env.WAITRON_TILL_APP_DIR,
     dashboardAppDir: isUnset(env.WAITRON_DASHBOARD_APP_DIR)
       ? undefined

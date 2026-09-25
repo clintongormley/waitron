@@ -40,10 +40,6 @@ import {
 import { isAppError } from "@waitron/shared";
 import { deleteCredential, loadKeyRing, putCredential } from "@waitron/credentials";
 import { emptyDrainResult } from "@waitron/fiscal";
-// The exact test-only entry point `packages/fiscal-verifactu`'s OWN tests use to seed a due
-// `envios` row — mirroring the established cross-package convention (e.g.
-// `@waitron/payments/test/seed.js` from `packages/payments-stripe`'s suites): no `exports` map
-// restricts either package, so the deep import resolves the same way a same-package one would.
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import {
   applyMigrations,
@@ -85,21 +81,11 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEV_DEVICE_HEADER } from "./device-session.js";
 
 /**
- * F4 (2026-07-27 fix wave): the ONE test below that provisions a tenant with a usable
- * `fiscal.aeat` credential needs `resolveClient` (`aeat-transport.ts`) to actually build a real
- * mTLS `Agent`, so `closeAll` has something genuine to release — but `startServer` takes only
- * `env`, with no seam to point `aeatEndpointFor`/`mtlsFetch` at a local test double the way
- * `aeat-transport.test.ts`'s own suite does directly against `aeatClientResolver`. The only other
- * route to a real endpoint is AEAT's actual preproduction host — reachable from this sandbox, but
- * not something an automated suite should be dialling on every run. Module-mocking `undici`'s
- * `fetch` keeps the resulting SOAP POST from ever leaving this process; `Agent` is spread through
- * untouched, so `mtlsFetch` (aeat-transport.ts, unmodified) still constructs a genuine TLS
- * connection pool for that test's `Agent.prototype.close` spy to observe. Confirmed this does
- * not affect any OTHER test in this file: none of them seed a usable `fiscal.aeat` credential
- * (boot.ts's own comment on its `drain` closure), so `resolveClient` never reaches `mtlsFetch` in
- * any of them, and the plain global `fetch(...)` calls this file uses against its own
- * local `/health` server resolve through Node's OWN built-in fetch, a separate module identity
- * from the `"undici"` npm package specifier this mock intercepts.
+ * The one test below that provisions a usable `fiscal.aeat` credential needs the AEAT transport to
+ * build a real mTLS `Agent`, and `startServer` has no seam to point it at a test double. Mocking
+ * `undici`'s `fetch` keeps that SOAP POST inside this process; `Agent` passes through untouched, so
+ * the test's `Agent.prototype.close` spy observes a genuine pool. The global `fetch` this file
+ * uses against its own server is Node's built-in one, which this mock does not replace.
  */
 vi.mock("undici", async (importOriginal) => {
   const actual = await importOriginal<typeof import("undici")>();
@@ -114,13 +100,9 @@ vi.mock("undici", async (importOriginal) => {
 });
 
 /**
- * `boot.ts` starts the outbound cloud-mirror tunnel client via `runTunnelClient`, imported directly
- * (no injection seam). The tunnel tests below observe the CALL
- * (was it started, with which relay host/port/boxId/token, with `localPort === config.httpPort`, and
- * under the boot AbortSignal close() aborts) via this spy, which calls THROUGH to the real client so
- * close()'s teardown is exercised for real — the client resolves on abort, tearing every live socket
- * down. Every OTHER test in this file sets no `WAITRON_TUNNEL_*`, so `loadTunnelConfig` returns
- * undefined and the spy is never called there.
+ * `boot.ts` imports `runTunnelClient` directly, with no injection seam. The tunnel tests observe the
+ * call through this spy, which calls through to the real client so `close()`'s teardown runs for
+ * real.
  */
 vi.mock("@waitron/tunnel", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/tunnel")>();
@@ -145,152 +127,49 @@ vi.mock("./bounded-store.js", async (importOriginal) => {
   };
 });
 
-// The tunnel-worker spy accumulates calls across tests (one shared module mock), so clear it before
-// each so the call-count/args assertions below are order-independent — this file's own rule.
-// `mockClear` resets only `mock.calls`, keeping the spy's `vi.fn(actual.*)` call-through implementation.
+// The tunnel spy is one shared module mock, so its calls accumulate across tests.
 beforeEach(() => {
   vi.mocked(runTunnelClient).mockClear();
 });
 
 /**
- * `startServer`'s only test subject. Everything else in this package tests one composed piece
- * (`pass.db.test.ts` builds its own, separate wiring around the composed PASS); nothing before
- * this file called `startServer` itself, so the field mapping in
- * `boot.ts` — `config.scheduler.*` into `SchedulerDeps`, `minTickMs`/`maxTickMs`, `onPass` into
- * `recordPass`, the `settlementLagMs` conditional spread, the migrations-root default, and the
- * whole `close()` sequence — had no test at all.
+ * `startServer` end to end: the field mapping in `boot.ts` — `config.scheduler.*` into
+ * `SchedulerDeps`, `minTickMs`/`maxTickMs`, `onPass` into `recordPass`, the `settlementLagMs`
+ * conditional spread, the migrations-root default — and the whole `close()` sequence.
  *
  * A passing pass alone does not pin `minTickMs`/`maxTickMs`: `loop.ts` runs the first pass before
- * any sleep, so a swapped or defaulted mapping in `boot.ts` would still let a pass complete and
- * `/health` come back `200`. The first test below additionally captures the real, hardcoded stdout
- * `boot.ts` logs to (deliberately not injectable — see its own doc comment) and asserts the logged
- * `loop.sleeping` line's `sleepMs`, which `sleepMsFor` derives from `maxTickMs` alone whenever
- * nothing is due — exactly this suite's own case, with no due work seeded for either duty.
+ * any sleep. The first test therefore captures boot's stdout and asserts the logged `loop.sleeping`
+ * line's `sleepMs`, which `sleepMsFor` derives from `maxTickMs` alone when nothing is due.
  *
- * ## What the move off PostgreSQL took out of this file
- *
- * **The whole connection-string surface is gone, and with it the role split.** Neither
- * `DATABASE_URL` nor `WAITRON_MIGRATIONS_DATABASE_URL` exists any more —
- * `grep -c "DATABASE_URL" apps/server/src/config.ts` returns 0, and `config.venueDir` is what boot
- * opens. There are no roles on this engine either: every statement runs on the one handle
- * `openVenueStore` hands out. Each boot below therefore names `WAITRON_VENUE_DIR` and nothing else.
- * One case LOSES its subject outright and is deleted, with what it stopped proving written where it
- * stood: the least-privileged-pool case. One case KEEPS a clause the role split used to carry — the
- * "runs no migration" half of "refuses to start, and runs no migration" — on a different lever, and
- * that test's own comment states the lever and the control run both ways.
- *
- * ## SIX CASES BELOW WERE RED ON TWO BROKEN PRODUCT FUNCTIONS, AND ALL SIX PASS NOW
- *
- * Two SQL functions the product called were created by no migration, and SQLite has no
- * user-defined functions to find them in. Measured 2026-09-22 against a directory migrated by
- * `applyMigrations(dir, migrationOptionsFor(manifestSets(), null))`, each statement run with its
- * `::timestamptz` cast removed: `no such function: envios_work_due` and
- * `no such function: credential_tenants`, `errcode` 1 each. The control in the other direction, in
- * the same probe: `select count(*) as n from envios` answers `0`, so the migration set that would
- * have carried the function DID run and it was the FUNCTION that was missing, not the schema.
- *
- * Both are ordinary queries now — `packages/credentials/src/store.ts`'s `credentialProvisioned` and
- * `packages/fiscal-verifactu/src/drain.ts`'s `workIsDue` — and this file reports 37 passed, with no
- * case edited. What each of the six used to cost is kept below, because it is the reading that
- * showed the two functions apart:
- *
- * - `credential_tenants` is called from `boot.ts` on EVERY reconcile pass, with no gate in front of
- *   it, so `payments.reconcile.stripe` failed on every trading boot in this file.
- * - `envios_work_due` is reached through `workIsDue` only when the submission policy lets the REAL
- *   drain run. `runFiscalDrain` (`apps/server/src/onboarding-policy.ts`) returns
- *   `emptyDrainResult()` without calling it when `fiscalDrainEnabled` is false — which preproduction
- *   is, unless fiscal test submissions are switched on.
- *
- * **That second bullet corrects a claim three sibling suites stated more widely.** They said every
- * real `drain()` throws, which was true of `drain()`, and read as though every boot's drain duty
- * did. It did not. Measured then, one case each, counting the `pass.complete` duty outcomes:
- * a `WAITRON_ENV=preproduction` trading boot reported `fiscal.drain ok:true` 3 times out of 3 and
- * `payments.reconcile.stripe ok:false` 3 out of 3; a `WAITRON_ENV=production` one reported BOTH
- * `ok:false`, 201 out of 201. So `credential_tenants` alone was enough to hold `/health` at 503 on
- * every trading boot, and it was the only thing doing so on a preproduction one.
- *
- * What that cost, case by case:
- *
- * 1. `boots, pins the tick-clamp mapping…` (production) — `sleeping.sleepMs` read 1000
- *    (`minTickMs`) where the case pins 94327 (`maxTickMs`). Its premise is that with nothing due
- *    both duties report `nextDueAt: null`; a FAILING duty asks to be retried at once instead, so
- *    `sleepMsFor` clamped to the floor. The mapping the case exists to pin was unobservable until
- *    both duties could succeed.
- * 2-4. The three that call `fetchHealthOk` — `/health` stays 503 until EACH duty's first clean pass
- *    sets `lastOkAt` (`health.ts`), and the reconcile duty never had one. One of the three
- *    (`boots in trading mode over HTTPS…`) is preproduction, so its drain was fine and
- *    `credential_tenants` was its whole cause.
- * 5. `sleeps on WAITRON_SKIP_RETRY_MS…` (production) — no `drain.tenant_skipped` line, because
- *    `drain` threw in `workIsDue` before it enumerated a tenant at all.
- * 6. `closes the mTLS transport…` (production) — `Agent.prototype.close` was never called, for the
- *    same reason: the throw was upstream of `resolveClient`.
- *
- * Three other suites recorded the drain half in their own header comments: `boot.mirror.test.ts`,
- * `boot.promote.test.ts`, `promote-endpoint-e2e.test.ts`. Only `boot.promote.test.ts` still has a
- * red case, and it is red on a THIRD PostgreSQL leftover — see that file.
- *
- * **The suite owns a venue DIRECTORY, not a database.** `useVenueDb` never exposes the directory it
- * makes and boot needs one, so the shared fixture below is a `mkdtemp` + `applyMigrations` +
- * `openVenueDatabase`, the shape `boot.singleton.test.ts` and `boot.reconcile.test.ts` already use.
- * The suite's own handle stays open across the file. That is safe for READS beside a running server
- * (write-ahead mode), and the two places that WRITE while a server is up — the passive-read probe's
- * `last_seen_at` backdating and the image upload — both work, each measured directly: the image
- * upload case passes, and the passive-read sequence was run against a booted server in a throwaway
- * probe on 2026-09-22, answering 200/200/200 with `last_seen_at` unchanged on the passive read and
- * bumped on the other two.
- *
- * One COST of the second handle, seen rather than assumed: a suite write beside a running server
- * makes the server's own pending-card-payment sweep lose the write lock, and it logs
- * `resolve_pending.failed` with `Error: database is locked` and carries on (`boot.ts:370`). One
- * such line appears per full run of this file. The 5s `busy_timeout`
- * (`packages/store/src/index.ts`, `BUSY_TIMEOUT_MS`) did not absorb it; WHY it did not is not
- * established here — no probe was run for that — so treat the mechanism as open. Nothing here
- * depends on that sweep, and production opens the directory once, from one process — so this is a
- * property of the ARRANGEMENT this file chose, not a finding about the box.
+ * The suite owns a venue DIRECTORY, because boot needs one and `useVenueDb` does not expose its own.
+ * The suite's handle stays open across the file; reads beside a running server are safe in
+ * write-ahead mode. A suite write beside a running server can make the server's pending-card-payment
+ * sweep log `resolve_pending.failed` with `database is locked`; nothing here depends on that sweep.
  */
-// The till's fiscal identity. `loadConfig` resolves `config.till` OPTIONALLY via `tryLoadTillConfig`
-// (undefined when none of the four ids are set — setup mode, slice 1b); it is boot's TRADING branch
-// that REQUIRES a venue, so every provisioned-boot test in this suite must carry these. Distinct per
-// field, matching till-config.test.ts's convention. Folded into `KEY_ENV` below so every trading boot
-// in this suite carries one; the two config-guard tests at the bottom, which omit `KEY_ENV` on purpose
-// to reach `server.config_invalid` / `credentials.key_missing`, spread it directly to stay in trading
-// mode (a bare `config.till === undefined` would branch to setup mode and never reach either).
-// A minimal tenant, location and node for these ids IS seeded in `beforeAll` — `startServer` reads
-// the till's pay-timing mode from its location and its filing module from its node at boot
-// (`readOrderFlow`/`readFilingModule`), so both rows must exist for a successful boot. No staff are
-// seeded, so `GET /api/staff` still returns `[]`.
+// The till's fiscal identity. Boot's trading branch requires a till, so every trading boot carries
+// these through `KEY_ENV`; `beforeAll` seeds the tenant, location and node they name, which boot reads
+// at startup.
 const TILL_ENV = {
   WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
-// Every trading boot in this suite carries a `modules.json` that resolves the fiscal slot to Veri*Factu
-// (disabling the no-regime `fiscal-none`) — the shape a real ES provision persists. `ALL_MODULES` now
-// holds TWO fiscal-slot members, so the default-on set (an absent file) would enable both and boot would
-// refuse `module.fiscal_slot_ambiguous` at `makeFiscalBackend`. Folded into `KEY_ENV` so every trading
-// boot reads it; setup-mode tests build their own env (no `KEY_ENV`, no `config.till`) and never reach
-// the fiscal slot. Written synchronously so the `KEY_ENV` const below can reference the dir; a test that
-// needs a DIFFERENT set overrides `WAITRON_STATE_DIR` after the `...KEY_ENV` spread with its own dir.
+// Resolves the fiscal slot to Veri*Factu: `ALL_MODULES` holds two fiscal-slot members, so the
+// default-on set would refuse `module.fiscal_slot_ambiguous`. A test needing a different set overrides
+// `WAITRON_STATE_DIR` after the `...KEY_ENV` spread.
 const TRADING_STATE_DIR = mkdtempSync(join(tmpdir(), "waitron-boot-trading-state-"));
 writeFileSync(
   join(TRADING_STATE_DIR, "modules.json"),
   JSON.stringify({ modules: { "fiscal-none": false } }),
 );
 const KEY_ENV = {
-  // Task 3: keep the plain-HTTP landing listener (default port 80) OUT of every boot test — 80 is
-  // privileged, and a root CI container would otherwise stand up a live service on it. Its own
-  // behaviour is proven directly in landing-listener.test.ts.
+  // Keeps the plain-HTTP landing listener (default port 80, privileged) out of every boot test.
   WAITRON_HTTP_LANDING_PORT: "0",
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
   WAITRON_STATE_DIR: TRADING_STATE_DIR,
-  // The passkey Relying Party ID + origin, now REQUIRED by `loadConfig` in production — every
-  // real-host boot in this suite that sets `WAITRON_ENV: "production"` would otherwise throw
-  // `server.config_missing` before reaching the behaviour it tests. Folded into `KEY_ENV` for the
-  // same reason as the credentials key and till identity above: it is boot config every production
-  // host must carry. The two bottom config-guard tests spread `TILL_ENV` (preproduction), where these
-  // stay optional, so they are unaffected.
+  // Required by `loadConfig` in production.
   WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
   WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example.com",
   ...TILL_ENV,
@@ -298,13 +177,8 @@ const KEY_ENV = {
 
 /**
  * The shared, migrated venue directory every boot below points `WAITRON_VENUE_DIR` at, plus the
- * suite's own open handle on it.
- *
- * It replaces a per-file clone of a shared PostgreSQL `manifest` template. The migration run is
- * this suite's, not boot's, because the identity rows have to exist before boot reads them; boot's
- * own `applyMigrations` over the same directory then finds nothing to do. Unlike
- * `boot.singleton.test.ts`, the handle is NOT closed after seeding: several tests read the database
- * back while their server is up, which write-ahead mode allows.
+ * suite's own open handle on it. The suite migrates it, not boot, because the identity rows have to
+ * exist before boot reads them.
  */
 let migrationsRoot: string;
 let sharedVenueDir: string;
@@ -312,37 +186,19 @@ let sharedStore: VenueDatabase;
 let sharedDb: Database;
 
 /**
- * A venue directory this process cannot open, for the three tests whose subject is a refusal that
- * must fire BEFORE any storage is touched.
- *
- * It replaces `postgres://unused:unused@localhost/unused`. A merely absent path is NOT the
- * equivalent: `openVenueStore` does `mkdir(config.directory, { recursive: true })`
- * (`packages/store/src/index.ts`), so one would simply be created and the boot would carry on
- * past the point these tests claim it never reaches. A path UNDER a non-directory is refused —
- * `mkdir("/dev/null/venue", { recursive: true })` throws `ENOTDIR`, measured on this host with
- * `node -e` on 2026-09-22 — so a boot that got that far would fail with `ENOTDIR` rather than with
- * the classified refusal each of these three asserts.
+ * A venue directory this process cannot open, for the tests whose refusal must fire before any
+ * storage is touched. An absent path would not do: `openVenueStore` creates its directory.
  */
 const UNOPENABLE_VENUE_DIR = "/dev/null/venue";
 
 beforeAll(async () => {
-  // The venue directory: migrated through the manifest, then seeded. Held open for the rest of the
-  // file — the reads and the two writes it serves beside a running server are described in this
-  // file's header.
   sharedVenueDir = await mkdtemp(join(tmpdir(), "waitron-boot-venue-"));
   await applyMigrations(sharedVenueDir, migrationOptionsFor(manifestSets(), null));
   sharedStore = await openVenueDatabase(sharedVenueDir);
   sharedDb = sharedStore.venue;
 
-  // The till's own tenant, location, node and till. `startServer` reads the location's `order_flow`
-  // at boot (`readOrderFlow`) to complete the `TillConfig` it hands the routes, so the location must
-  // exist or every successful-boot test would fail at that read. `order_flow` defaults to `prepay`.
-  // A distinctive NIF (90M base) stays clear of every other seed generator.
-  //
-  // Each row goes in through its TABLE DEFINITION, the same change `packages/db/src/testing/seed.ts`
-  // and `testing/fiscal-fixtures.ts` took. Two reasons: a raw insert reaches no `$defaultFn`
-  // generator, and `created_at` on `tenants`, `nodes` and `tills` is one of those on this engine;
-  // and `array['es-ES']` is PostgreSQL array syntax the engine refuses at prepare.
+  // `startServer` reads the location's `order_flow` at boot (`readOrderFlow`), so the location must
+  // exist. A distinctive NIF (90M base) stays clear of every other seed generator.
   await sharedDb
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90000000K", legalName: "Boot Till SL" });
@@ -352,10 +208,8 @@ beforeAll(async () => {
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
-  // The till's own NODE, stamped with the regime provisioning would have recorded: `startServer`
-  // reads `nodes.filing_module` at boot (`readFilingModule`) and cross-checks it against the enabled
-  // fiscal module, so the row must exist and must agree with `verifactu` or every successful-boot
-  // test would fail there. The unstamped (null) node is covered in `till-config.filing.test.ts`.
+  // `startServer` reads `nodes.filing_module` at boot (`readFilingModule`) and cross-checks it
+  // against the enabled fiscal module.
   await sharedDb.insert(nodes).values({
     id: TILL_ENV.WAITRON_TILL_NODE_ID,
     locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
@@ -368,12 +222,8 @@ beforeAll(async () => {
     name: "Boot Till",
   });
 
-  // `boot.ts`'s own default migrations root is `<dirname of boot.ts>/drizzle` — under source (this
-  // test, not the bundle) that resolves to `apps/server/src/drizzle`, which does not exist; only
-  // `scripts/copy-migrations.mjs` builds that layout, and only beside `dist/server.js`. Mirroring
-  // that script here (real journal content, not the synthetic `{}` fixture `migrations.test.ts`
-  // uses for the RESOLUTION-only cases) is what lets `WAITRON_MIGRATIONS_DIR` point `startServer`'s
-  // own `applyMigrations` at something that actually exists, run from source.
+  // `boot.ts`'s default migrations root exists only beside the bundle, where
+  // `scripts/copy-migrations.mjs` builds it; this builds the same layout for `WAITRON_MIGRATIONS_DIR`.
   const fromSource = migrationOptionsFor(manifestSets(), null);
   migrationsRoot = await mkdtemp(join(tmpdir(), "waitron-boot-migrations-"));
   for (const [index, set] of manifestSets().entries()) {
@@ -383,33 +233,19 @@ beforeAll(async () => {
   }
 }, 180_000);
 
-// Every directory here is this suite's own now — no helper owns any of them. Guarded the same way
-// as before: a `beforeAll` that threw before a `mkdtemp` returned must not be followed by an
-// `rm(undefined)` reported as a second failure beside the real one. Guard:
-// `scripts/guarded-teardowns.test.ts`.
+// A `beforeAll` that threw before a `mkdtemp` returned must not add an `rm(undefined)` failure beside
+// the real one.
 afterAll(async () => {
   if (sharedStore !== undefined) await sharedStore.close();
   if (sharedVenueDir !== undefined) await rm(sharedVenueDir, { recursive: true, force: true });
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
-  // `TRADING_STATE_DIR` is created synchronously at module load (always defined), so
-  // no undefined guard — `force: true` also absorbs the case where a boot's own nested subdir was
-  // already removed.
   await rm(TRADING_STATE_DIR, { recursive: true, force: true });
 });
 
 /**
- * A fresh, migrated venue directory of its own, plus an open handle on it — the per-test isolation
- * the three provision tests below need.
- *
- * It replaces a fresh clone of the shared PostgreSQL `manifest` template. `provisionVenue` stamps
- * the `deployment` singleton AND mints a venue, either of which would fix or pollute the shared
- * directory every other test in this file boots against (CLAUDE.md §4). The ownership half of the
- * old comment is gone rather than reworded: there is no owner connection to arrange, because there
- * are no roles — `applyVenue` runs on the one handle `openVenueStore` gives out.
- *
- * The handle is returned OPEN and stays open while the server runs, because each of the three reads
- * the database back mid-test. Reads beside a running server are what write-ahead mode allows; these
- * three make no writes of their own.
+ * A fresh, migrated venue directory and an open handle on it, for the provision tests:
+ * `provisionVenue` stamps the `deployment` singleton and mints a venue, which would pollute the
+ * shared directory every other test boots against.
  */
 async function freshVenue(): Promise<{ directory: string; store: VenueDatabase }> {
   const directory = await mkdtemp(join(tmpdir(), "waitron-boot-provision-venue-"));
@@ -417,10 +253,7 @@ async function freshVenue(): Promise<{ directory: string; store: VenueDatabase }
   return { directory, store: await openVenueDatabase(directory) };
 }
 
-/** An OS-assigned port, released before use. `WAITRON_HTTP_PORT` rejects `"0"` as not a positive
- * integer (config.test.ts pins that on purpose — see loadConfig's `positiveInt`), so this test
- * cannot ask the host itself to bind an ephemeral port; asking the OS directly and handing back a
- * real number is the same "let the OS assign one" idea without touching that validation. */
+/** An OS-assigned port, released before use: `WAITRON_HTTP_PORT` rejects `"0"`. */
 async function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const probe = createServer();
@@ -433,16 +266,8 @@ async function freePort(): Promise<number> {
 }
 
 /**
- * Waits until `port` accepts a TCP connection — the listener is actually up.
- *
- * `startServer` resolves before its listener has bound: `serve()` returns while the socket binds
- * asynchronously, and nothing in `startServer` waits for Node's `listening` callback. Closing a
- * server whose socket is still unbound rejects with `ERR_SERVER_NOT_RUNNING` ("Server is not
- * running."), which `close()` propagates — measured 2026-09-22 on one trading boot: closing at
- * once rejected with it, closing after a 50ms delay or after one `fetch` did not. A test calls
- * this after `startServer` so that its next step, whether a close or a dial, meets a bound
- * listener. A TCP connect rather than a `fetch`, so it observes the bind and nothing about what
- * the app answers.
+ * Waits until `port` accepts a TCP connection. `startServer` resolves before its listener has bound,
+ * and closing an unbound server rejects with `ERR_SERVER_NOT_RUNNING`.
  */
 async function awaitListening(port: number): Promise<void> {
   for (let i = 0; i < POLL_TRIES; i += 1) {
@@ -463,12 +288,7 @@ async function awaitListening(port: number): Promise<void> {
   throw new Error(`the listener never bound 127.0.0.1:${port} within the poll budget`);
 }
 
-/**
- * A `fetch` init that trusts `ca` for an HTTPS dial against a self-signed leaf — the same
- * `undici` `Agent` + cast the two HTTPS boot tests below each need, differing only in which CA
- * they trust (the box-minted one vs. an operator-supplied one). `close()` wraps the dispatcher's
- * own `close()` so callers still tear it down explicitly in their `finally`, alongside the server.
- */
+/** A `fetch` init that trusts `ca` for an HTTPS dial against a self-signed leaf. */
 function httpsVia(ca: string | Buffer): {
   via: RequestInit & { dispatcher: Agent };
   close: () => Promise<void>;
@@ -493,13 +313,7 @@ async function servedCertificate(port: number, ca: Buffer): Promise<X509Certific
   });
 }
 
-/**
- * Polls `predicate` up to `POLL_TRIES` times, `POLL_INTERVAL_MS` apart, returning its first
- * defined result, or `undefined` once the budget is spent. The budget (200 x 50ms = 10s) lives
- * here once for `waitForPass`, `waitForExit` and `waitForEvent` below, all three of which are
- * waiting on the same background loop but differ in what they're waiting for — each raises its
- * own assertion or error on an `undefined` result so the failure message stays specific to that.
- */
+/** Polls `predicate` for its first defined result, or `undefined` once the budget is spent. */
 const POLL_TRIES = 200;
 const POLL_INTERVAL_MS = 50;
 
@@ -513,13 +327,8 @@ async function poll<T>(predicate: () => T | undefined): Promise<T | undefined> {
 }
 
 /**
- * GETs `url` (a /health endpoint) until it answers 200, reusing the same POLL_TRIES x
- * POLL_INTERVAL_MS budget as `poll`. /health returns 503 until each duty's first clean pass
- * refreshes its wall-clock `lastOkAt` (health.ts), so an assert-before-condition fetch can land in
- * a transient-503 window on a slow runner — the documented boot.test.ts 503-not-200 flake. This
- * waits for the readiness condition instead; the budget-exhausted throw still fails a real
- * regression where /health never reaches 200 (and names /health rather than a generic undefined).
- * `poll`'s predicate is synchronous, so the async fetch loop lives here rather than inside it.
+ * GETs a `/health` URL until it answers 200: `/health` answers 503 until each duty's first clean
+ * pass (`health.ts`), which a slow runner can still be waiting on.
  */
 async function fetchHealthOk(url: string, init?: RequestInit): Promise<Response> {
   let lastError: unknown;
@@ -527,12 +336,10 @@ async function fetchHealthOk(url: string, init?: RequestInit): Promise<Response>
     try {
       const r = await fetch(url, init);
       if (r.status === 200) return r;
-      // Release the socket for reuse: an unconsumed undici body pins the connection, and across
-      // POLL_TRIES that would starve the pool and reintroduce the very flake this helper removes.
+      // An unconsumed body pins its connection, and across POLL_TRIES that would starve the pool.
       await r.body?.cancel();
     } catch (error) {
-      // A transient network error before the listener is up (ECONNREFUSED/ECONNRESET during
-      // startup) IS the not-ready condition we poll through — not a reason to fail fast.
+      // A connection error before the listener is up is the not-ready condition being polled for.
       lastError = error;
     }
     await delay(POLL_INTERVAL_MS);
@@ -549,13 +356,8 @@ async function waitForPass(state: { lastPassAt: Date | null }): Promise<void> {
   expect(state.lastPassAt).not.toBeNull();
 }
 
-/** `boot.ts`'s listen-failure handler now calls `process.exit` from `process.stdout.write`'s own
- * completion callback, not synchronously right after logging (see its own comment — exiting before
- * the write actually went out risked truncating the line on a piped stdout). That callback fires on
- * a later tick than the synchronous `lines.push` `withCapturedStdout`'s mock does, so a test that
- * found the `server.listen_failed` line and immediately asserted on `exits` could observe it still
- * empty — this polls for the exit call via the same `poll` helper `waitForPass` builds on, rather
- * than assuming an ordering the fix deliberately no longer guarantees synchronously. */
+/** `boot.ts`'s listen-failure handler exits from `process.stdout.write`'s completion callback, a
+ * later tick than the logged line, so a test polls for the exit. */
 async function waitForExit(exits: readonly (number | undefined)[]): Promise<void> {
   await poll(() => (exits.length === 0 ? undefined : exits.length));
   expect(exits.length).toBeGreaterThan(0);
@@ -567,11 +369,8 @@ interface LogLine {
 }
 
 /**
- * `boot.ts` hardcodes `process.stdout.write` as its log sink (deliberately — see its own doc
- * comment: no test-only injection seam in production code), so this is the only way to observe what
- * it actually logs. Every chunk is still forwarded to the real writer, so nothing else watching this
- * process's output — including vitest's own reporter — sees anything different; only `fn` sees the
- * captured lines, via the array handed to it, live as they arrive.
+ * `boot.ts` logs to `process.stdout.write` with no injection seam. Every chunk is still forwarded to
+ * the real writer; `fn` sees the captured lines live as they arrive.
  */
 async function withCapturedStdout<T>(fn: (lines: string[]) => Promise<T>): Promise<T> {
   const original = process.stdout.write.bind(process.stdout);
@@ -587,13 +386,7 @@ async function withCapturedStdout<T>(fn: (lines: string[]) => Promise<T>): Promi
   }
 }
 
-/**
- * `boot.ts`'s listen-failure handler calls `process.exit(1)` directly — the identical hardcoded-sink
- * design `withCapturedStdout` above already works around for stdout, applied to the one other real
- * side effect this file needs to observe without letting it actually kill the vitest worker. Every
- * call is recorded rather than silently swallowed, so a test can assert exactly how many times, and
- * with what code, `startServer` decided to exit.
- */
+/** Records `process.exit` calls instead of letting the listen-failure handler end the worker. */
 async function withMockedExit<T>(fn: (exits: (number | undefined)[]) => Promise<T>): Promise<T> {
   const original = process.exit;
   const exits: (number | undefined)[] = [];
@@ -609,12 +402,8 @@ async function withMockedExit<T>(fn: (exits: (number | undefined)[]) => Promise<
 }
 
 /**
- * `boot.ts`'s setup branch defaults `requestRestart` to `process.kill(process.pid, "SIGTERM")` — the
- * identical hardcoded-side-effect design `withMockedExit` above already works around for
- * `process.exit`, applied to the one restart side effect this file needs to observe WITHOUT actually
- * signalling the vitest worker (no `bin.ts` SIGTERM handler is installed under vitest, so a real
- * SIGTERM would terminate it). Every call is recorded — pid + signal — so the provision test can
- * assert the restart fired exactly once, with what, after the 200.
+ * Records `process.kill` calls instead of letting the setup branch's default `requestRestart`
+ * SIGTERM this process.
  */
 async function withMockedKill<T>(
   fn: (kills: { pid: number; signal: string | number | undefined }[]) => Promise<T>,
@@ -632,10 +421,8 @@ async function withMockedKill<T>(
   }
 }
 
-/** A valid ES-common venue body for `POST /setup-api/provision`, with PLAINTEXT admin secrets (the
- * endpoint hashes them at its boundary). Mirrors `provision.test.ts`'s fixture shape; shared by the
- * two provision full-boot tests below, which differ only in the `taxId` and whether an `aeatCert`
- * rides alongside it. */
+/** A valid ES-common venue body for `POST /setup-api/provision`, with plaintext admin secrets (the
+ * endpoint hashes them). */
 function provisionVenueBody(taxId: string) {
   return {
     country: "ES",
@@ -666,9 +453,7 @@ function provisionVenueBody(taxId: string) {
   };
 }
 
-/** Parse a `KEY=value\n` env file's lines (split on the FIRST `=`, so a value's own `=` — a base64
- * pad or a URI query — survives), for reading `trading.env` back. Mirrors `writeTradingEnv`'s writer
- * and the shared `env-file.ts` `parseEnvFile`. */
+/** Parses a `KEY=value` env file, splitting on the FIRST `=` so a value's own `=` survives. */
 function parseEnvLines(text: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const raw of text.split("\n")) {
@@ -705,8 +490,6 @@ async function waitForEvent(lines: readonly string[], event: string): Promise<Lo
 }
 
 async function assertPassiveManagementReads(port: number): Promise<void> {
-  // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn` values on
-  // this engine rather than SQL DEFAULTs, and a raw insert reaches neither.
   const [person] = await sharedDb
     .insert(persons)
     .values({ displayName: "Passive read probe", pinHash: hashPin("1234"), role: "manager" })
@@ -716,11 +499,8 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     const session = await withTransaction(sharedDb, (tx) =>
       startManagementSession(tx, { personId }),
     );
-    // Ten minutes back from the clock, subtracted on a `Date` and bound: this engine has neither
-    // `now()` nor an interval type. `toISOString()` is the spelling `@waitron/identity`'s own
-    // writers of this `tsString` column use, which is what makes the keepalive's staleness
-    // comparison on it a correct time ordering. The `::text` the two reads carried is gone rather
-    // than rewritten as a cast: the column IS text here, so it converted nothing.
+    // Backdated in JavaScript, in the `toISOString()` spelling `@waitron/identity`'s own writers of
+    // this column use, which is what makes the keepalive's staleness comparison a time ordering.
     const BACKDATE_MS = 10 * 60_000;
     const age = async (): Promise<string> => {
       const staleSeenAt = new Date(Date.now() - BACKDATE_MS).toISOString();
@@ -801,9 +581,7 @@ describe("startServer, against a migrated venue directory", () => {
   });
   it("boots, pins the tick-clamp mapping, folds settlementLagMs, threads environment, runs a pass, serves /health and shuts down cleanly", async () => {
     const port = await freePort();
-    // A throwaway log dir so this real boot's assembled rotating file sink writes somewhere isolated —
-    // the assertion below reads `<logDir>/waitron.log` back to prove the sink is wired into `startServer`
-    // (not just constructable in a unit test), end to end through the tee'd `log`.
+    // Read back below to show the rotating file sink is wired into `startServer`.
     const logDir = await mkdtemp(join(tmpdir(), "waitron-boot-logs-"));
     const [server, sleeping, listening] = await withCapturedStdout(async (lines) => {
       const started = await startServer({
@@ -812,54 +590,33 @@ describe("startServer, against a migrated venue directory", () => {
         WAITRON_HTTP_PORT: String(port),
         WAITRON_LOG_DIR: logDir,
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        // Distinctive and far apart on purpose: a swapped minTickMs/maxTickMs mapping in boot.ts
-        // would make the assertion below see 1000, not 94327 — the two values must not be
-        // confusable with each other, or with sleepMsFor's own clamp bounds by coincidence.
+        // Distinctive and far apart, so a swapped mapping shows as 1000 rather than 94327.
         WAITRON_MIN_TICK_MS: "1000",
         WAITRON_MAX_TICK_MS: "94327",
-        // Within [minTickMs, maxTickMs] only to satisfy `loadConfig`'s guard (F1 of the 2026-07-27
-        // pre-merge review) — no due work is seeded for either duty below, so neither drain nor
-        // reconcile ever reports a skip, and this value plays no part in `sleeping.sleepMs` below.
+        // Within [minTickMs, maxTickMs] only to satisfy `loadConfig`; nothing due is seeded, so it
+        // plays no part in `sleeping.sleepMs`.
         WAITRON_SKIP_RETRY_MS: "9000",
         WAITRON_SETTLEMENT_LAG_MS: "1000",
-        // Set explicitly to the NON-default value: `config.test.ts` already proves `loadConfig`
-        // parses this correctly, and `preproduction` is both the default AND what a silently
-        // hardcoded `aeatEndpointFor` argument would also produce, so leaving this unset here would
-        // assert nothing I4 didn't already have. "production" only appears on the logged line below
-        // if `config.environment` genuinely reached `boot.ts`'s runtime, not merely `loadConfig`'s
-        // return value in isolation.
+        // The non-default value: `preproduction` is also what a hardcoded argument would produce.
         WAITRON_ENV: "production",
       });
-      // loop.ts logs "loop.sleeping" strictly AFTER onPass runs (its own source order, no await in
-      // between), so finding this line is also proof the first pass — and onPass -> recordPass —
-      // already completed, not just evidence about the sleep duration.
+      // `loop.ts` logs `loop.sleeping` after `onPass` runs, so this also shows the first pass done.
       const event = await waitForEvent(lines, "loop.sleeping");
       const listeningEvent = await waitForEvent(lines, "server.listening");
       return [started, event, listeningEvent] as const;
     });
 
     try {
-      // `sleepMsFor(null, now, minTickMs, maxTickMs)` returns `maxTickMs` verbatim (loop.ts) — and
-      // with zero tenants enrolled for either duty, both drain and reconcile report `nextDueAt:
-      // null`, which is exactly this branch. So the logged sleepMs pins config.maxTickMs -> LoopDeps
-      // .maxTickMs -> sleepMsFor end to end; it is 94327 only if boot.ts's mapping is not swapped.
+      // With nothing due, both duties report `nextDueAt: null`, for which `sleepMsFor` returns
+      // `maxTickMs` verbatim.
       expect(sleeping.sleepMs).toBe(94327);
 
-      // I4: `aeatEndpointFor(config.environment)` is the one config value spec §10 calls irreversible
-      // (production numbering can never be reused), and nothing observed it reaching `boot.ts` at
-      // all before this assertion — a hardcoded `aeatEndpointFor("production")` would have passed
-      // every other test in the repository. This does not observe the endpoint the resolver itself
-      // selects (that needs a seeded `fiscal.aeat` credential and due `envios` work, which this
-      // suite deliberately has none of — see the 2026-07-27 addendum to the server-host spec §14),
-      // but it does prove `config.environment` is not silently dropped between `loadConfig` and the
-      // log line `aeatClientResolver` is built from the same config field beside.
+      // Pins that `config.environment` reaches boot's runtime, not only `loadConfig`'s return value.
       expect(listening.environment).toBe("production");
       expect(listening.port).toBe(port);
 
       expect(server.health.startedAt).toBeInstanceOf(Date);
       expect(server.health.lastPassAt).not.toBeNull();
-      // `onPass` -> `recordPass` ran: with zero tenants enrolled for either duty, the pass still
-      // reports both as `ok`, which is what flips /health to 200 below.
       expect(
         Object.values(server.health.duties).every((duty) => duty.consecutiveFailures === 0),
       ).toBe(true);
@@ -870,23 +627,16 @@ describe("startServer, against a migrated venue directory", () => {
       // The booted server holds its own venue folder, so it reports itself, from the holder file.
       expect(body.venueHolder).toMatchObject({ stale: false });
 
-      // The deployment holds one tenant per database. The till API is mounted on the same app
-      // (`mountTillApi` in `boot.ts`). `GET /api/staff` is the unauthenticated roster route — it
-      // needs no session: in this database (seeded minimally in `beforeAll`, with NO staff) it
-      // returns an empty array rather than 404, which is the proof the route exists. A 404 here
-      // would mean `mountTillApi` never ran.
+      // `GET /api/staff` needs no session and, with no staff seeded, answers `[]`; a 404 would mean
+      // `mountTillApi` never ran.
       const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
       expect(staff.status).toBe(200);
-      // The request-id middleware is live and wraps every route mounted after it (registered on the
-      // shared app before all the API mounts): this mounted route echoes a generated `x-request-id`
-      // matching the safe charset. Proof `requestIdMiddleware` is mounted, not merely importable.
+      // `requestIdMiddleware` wraps the routes mounted after it.
       expect(staff.headers.get("x-request-id")).toMatch(/^[A-Za-z0-9._-]+$/);
       expect(await staff.json()).toEqual([]);
       await assertPassiveManagementReads(port);
 
-      // The catalogue write group is mounted on the same app (`mountCatalogueApi` in `boot.ts`). It is
-      // fully gated, so an UNAUTHENTICATED `GET /management-api/catalogues` answers 401
-      // (`management_session.required`) rather than 404 — a 404 here would mean the mount never ran.
+      // Fully gated, so 401 rather than 404; a 404 would mean `mountCatalogueApi` never ran.
       const catalogues = await fetch(`http://127.0.0.1:${port}/management-api/catalogues`);
       expect(catalogues.status).toBe(401);
       expect((await catalogues.json()) as { error: { code: string } }).toMatchObject({
@@ -898,10 +648,7 @@ describe("startServer, against a migrated venue directory", () => {
       );
       expect(recipe.status).toBe(404);
 
-      // The recovery-bundle download (slice 4b-i) is mounted on the same app (`mountRecoveryBundleApi`
-      // in `boot.ts`), gated by the SAME management session as box-status. An UNAUTHENTICATED
-      // `POST /api/box/recovery-bundle` answers 401 (`management_session.required`) rather than 404 — a
-      // 404 here would mean the mount never ran, a 200 that a secret download is ungated.
+      // A 404 would mean `mountRecoveryBundleApi` never ran; a 200, that a secret download is ungated.
       const recovery = await fetch(`http://127.0.0.1:${port}/api/box/recovery-bundle`, {
         method: "POST",
       });
@@ -910,23 +657,14 @@ describe("startServer, against a migrated venue directory", () => {
         error: { code: "management_session.required" },
       });
 
-      // The rotating FILE sink is wired into the assembled logger: `server.listening` is an `info`
-      // event, above the default verbosity, so the tee'd sink appended it to `<logDir>/waitron.log`.
-      // Reading it back proves the file half of the `tee(stdout, fileSink)` is live in a real boot —
-      // the stdout half is what `withCapturedStdout` already observes above.
+      // `server.listening` is an `info` event, so the file half of the tee'd logger appended it.
       expect(existsSync(join(logDir, "waitron.log"))).toBe(true);
       const logText = await readFile(join(logDir, "waitron.log"), "utf8");
       expect(logText).toContain('"event":"server.listening"');
 
-      // TRADING MODE ran the shared migration seam (boot.ts's one `applyMigrations`, before the
-      // mode branch): every module's `__drizzle_migrations_<name>` journal is populated to the
-      // version its shipped folder declares. This is the SAME seam SP-1a inverted to derive its set
-      // list from `ALL_MODULES` — asserted here over `orderedMigrationSets(ALL_MODULES)` (the new
-      // source) so a conversion that dropped or reordered a set surfaces as a mismatch. It is a
-      // consistency check, not the from-empty probe: this directory was pre-migrated by the suite's
-      // own `beforeAll`, so the distinguishing "boot is the sole migrator" proof lives in the setup-mode
-      // fresh-database test below; both modes reach the identical seam line, so proving it once from
-      // empty and confirming trading mode leaves the same nine journals consistent covers both.
+      // Trading mode ran boot's one `applyMigrations`, before the mode branch. A consistency check:
+      // `beforeAll` pre-migrated this directory, so the from-empty proof is the setup-mode
+      // fresh-database test below.
       for (const set of orderedMigrationSets(ALL_MODULES)) {
         const expected = expectedSchemaVersion(set, migrationsRoot);
         // `fiscal-none` owns an EMPTY migration set (it has no tables), so its version is legitimately
@@ -940,9 +678,6 @@ describe("startServer, against a migrated venue directory", () => {
       await rm(logDir, { recursive: true, force: true });
     }
 
-    // A second, concurrent-in-effect close() (the previous one already resolved, but the guard
-    // covers this "already closed" case identically to a genuinely racing pair) must not throw
-    // pg-pool's "Called end on pool more than once" — the idempotency guard this task added.
     await expect(server.close()).resolves.toBeUndefined();
 
     // The listener actually closed: a request against the same port now fails to connect rather
@@ -951,19 +686,9 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("boots in setup mode over HTTPS from a minted self-signed cert, serves /setup-api/status, refuses plain HTTP, and does not mount the trading routes", async () => {
-    // SETUP MODE (slice 1b): `config.till === undefined`, reached by omitting all four
-    // WAITRON_TILL_*_ID AND the credentials key. The DB is still migrated (the shared prefix runs
-    // applyMigrations in both modes, ready for slice 2's wizard), but boot mounts ONLY /health + the
-    // unauthenticated setup surface — no key ring, no reconciler/duty, no readOrderFlow, no trading
-    // routes, no sync transport, no drain/reconcile workers. The shared venue directory is already
-    // migrated, so boot's own applyMigrations runs idempotently over it.
-    //
-    // NEW in slice 2a: the box serves this surface over HTTPS from a self-signed cert it MINTS + then
-    // reuses on later boots (`ensureBoxSecrets`), and generates its box secrets (key ring + node
-    // token) alongside. A fresh `WAITRON_STATE_DIR` (mkdtemp, cleaned up below) gives it somewhere to
-    // write; we read the minted CA back to trust the leaf, dial every route over HTTPS, then confirm a
-    // plain-HTTP dial to the same port now FAILS — proof this is HTTPS, not the plain HTTP slice 1b
-    // served. `WAITRON_STATE_DIR` is REQUIRED here, not optional: without it `ensureBoxSecrets` would
+    // Setup mode: no `WAITRON_TILL_*` ids and no credentials key. Boot still migrates, but mounts only
+    // /health and the unauthenticated setup surface, over HTTPS from a cert it mints
+    // (`ensureBoxSecrets`). `WAITRON_STATE_DIR` is required here: without it `ensureBoxSecrets` would
     // write into `boot.ts`'s from-source default (`apps/server/src/state`) and pollute the checkout.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-state-"));
@@ -973,18 +698,13 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
       WAITRON_ENV: "preproduction",
-      WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
+      WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
     });
-    // Trust the CA the box just minted, so the self-signed leaf verifies. `undici`'s `Agent` is real
-    // (this file mocks only `undici`'s `fetch`, not `Agent` — see the header comment), and Node's
-    // GLOBAL `fetch` (a separate module identity from the mocked `"undici"` specifier) honours a
-    // `dispatcher` on its init. The leaf carries `127.0.0.1` as an iPAddress SAN (ensureBoxSecrets adds
-    // it unconditionally), so a loopback dial verifies.
+    // The leaf carries `127.0.0.1` as an IP SAN, so a loopback dial verifies against the minted CA.
     const ca = await readFile(join(stateDir, "tls", "ca.crt"));
     const { via, close } = httpsVia(ca);
     try {
-      // The setup status fact sheet (Task 2's `mountSetup`), over HTTPS — proof `config.environment`
-      // threaded through the setup branch into `mountSetup`, and that the minted cert actually serves.
+      // `config.environment` threads through the setup branch into `mountSetup`.
       const publicStatus = await fetch(`https://127.0.0.1:${port}/public/availability`, via);
       expect(publicStatus.status).toBe(503);
       expect(await publicStatus.json()).toEqual({ available: false });
@@ -1002,43 +722,30 @@ describe("startServer, against a migrated venue directory", () => {
       expect(root.headers.get("content-type")).toContain("text/html");
       expect(await root.text()).toMatch(/set ?up/i);
 
-      // /health still answers — `createHealthState` + `healthApp` are in the shared prefix. It reports
-      // 503 (never-passed: a setup box runs no duty loop, so `lastPassAt` stays null), not a
-      // route-missing failure; the assertion is only that it ANSWERS (status < 600).
+      // /health still answers (503: a setup box runs no duty loop); only that it answers is asserted.
       const health = await fetch(`https://127.0.0.1:${port}/health`, via);
       expect(health.status).toBeLessThan(600);
 
-      // The trading routes are NOT mounted: /api/staff is answered by the setup catch-all (the HTML
-      // placeholder), NOT the trading roster route — which would return the JSON `[]` the trading-mode
-      // test below asserts. A 200 text/html placeholder here proves the trading route never registered.
+      // The trading routes are not mounted: /api/staff falls to the setup catch-all's HTML, not the
+      // trading roster's JSON.
       const staff = await fetch(`https://127.0.0.1:${port}/api/staff`, via);
       expect(staff.status).toBe(200);
       expect(staff.headers.get("content-type")).toContain("text/html");
       expect(await staff.text()).toMatch(/set ?up/i);
 
-      // The box minted + persisted its secrets alongside the cert (`ensureBoxSecrets` writes
-      // secrets.env with the credentials key ring, 0600), ready for slice 2b to load.
       expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toMatch(
         /WAITRON_CREDENTIALS_KEY=/,
       );
 
-      // A plain-HTTP dial to the same port now FAILS: the listener speaks TLS, so an http:// request
-      // never completes a valid handshake (it is HTTPS now, not the plain HTTP slice 1b served). No
-      // dispatcher — a bare global fetch against the TLS port is torn down mid-request.
+      // A plain-HTTP dial to the TLS port is torn down.
       await expect(fetch(`http://127.0.0.1:${port}/setup-api/status`)).rejects.toThrow();
     } finally {
       await server.close();
       await close();
       await rm(stateDir, { recursive: true, force: true });
     }
-    // close() is correct and idempotent for the setup branch (no workers/sync to abort): a second
-    // close() resolves without throwing, and the listener is genuinely gone. This probe TRUSTS the
-    // box's CA (a fresh dispatcher — the one built above was already closed in the `finally`), so a
-    // still-listening server would SUCCEED here (e.g. a 503 from /health) rather than rejecting on a
-    // TLS-verification failure regardless of whether the listener stopped. `rejects.toThrow()`
-    // therefore passes ONLY when the connection is genuinely refused, i.e. the listener is truly gone
-    // — a bare (CA-blind) fetch against a self-signed HTTPS endpoint would reject either way and prove
-    // nothing about close().
+    // The probe trusts the box's CA, so a still-listening server would answer rather than reject; a
+    // CA-blind fetch would reject either way.
     await expect(server.close()).resolves.toBeUndefined();
     const afterClose = httpsVia(ca);
     try {
@@ -1049,15 +756,9 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("boots in trading mode over HTTPS from the box's minted leaf and refuses plain HTTP", async () => {
-    // The run-it phone proof caught this: a provisioned box served the SETUP surface over HTTPS but
-    // then dropped to plain HTTP once it entered trading, so an already-trusting phone/till got an
-    // EPROTO handshake error and the box looked dead. The two trading `startListening` sites did not
-    // fall back to the minted leaf the way the setup branch and the recovery page already do; a box
-    // never sets `WAITRON_TLS_*`, so `config.tls` was unset and the listener spoke plain HTTP.
-    //
-    // A trading state dir carrying a REAL minted leaf (the shape a box has after one setup boot):
-    // `ensureBoxSecrets` mints the tls/ quartet exactly as the setup branch does, and the same dir
-    // carries the `modules.json` every trading boot in this suite needs (fiscal-none disabled).
+    // A box never sets `WAITRON_TLS_*`, so trading must fall back to the minted leaf; plain HTTP there
+    // gives every phone and till already trusting the box a handshake error. The state dir carries a
+    // real minted leaf, the shape a box has after one setup boot.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-trading-tls-"));
     await writeFile(
@@ -1077,15 +778,11 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",
-      WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
+      WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
     });
-    // Trust the CA the box minted, so its self-signed leaf verifies on a loopback dial (the leaf
-    // carries 127.0.0.1 as an iPAddress SAN unconditionally — `ensureBoxSecrets`).
     const ca = await readFile(join(stateDir, "tls", "ca.crt"));
     const { via, close } = httpsVia(ca);
     try {
-      // An HTTPS dial to a trading route succeeds — proof the trading listener now speaks TLS with
-      // the box's own leaf, not plain HTTP. `fetchHealthOk` polls through the transient-503 window.
       const health = await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
       expect(health.status).toBe(200);
 
@@ -1099,8 +796,7 @@ describe("startServer, against a migrated venue directory", () => {
       }
       expect((await fetch(`https://127.0.0.1:${port}/setup-api/discovery`, via)).status).toBe(404);
 
-      // The control: a plain-HTTP dial to the SAME port is torn down mid-handshake, because the
-      // listener speaks TLS now. This is the regression the phone proof hit, inverted.
+      // The control: a plain-HTTP dial to the same port is torn down.
       await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
     } finally {
       await server.close();
@@ -1375,17 +1071,14 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  // The only suite that observes boot's own wiring of the advertised addresses: `box-secrets.test.ts`
-  // injects its own `listIpv4` and never calls `startServer`, so it stays green if this wiring is
-  // deleted. Here the override has to travel env -> loadConfig -> the ensureBoxSecrets call for the
-  // leaf on disk to carry it, which is what a containerised box depends on — and the same boot's
-  // /setup-api/discovery answer proves the SECOND consumer, `mountDiscovery`'s deps, is wired too.
+  // The only suite that observes boot's own wiring of the advertised addresses
+  // (`box-secrets.test.ts` injects its own `listIpv4`): the override must reach both the leaf on disk
+  // and `mountDiscovery`'s deps.
   it("setup mode mints the leaf for WAITRON_BOX_ADDRESSES and serves it as the discovery address", async () => {
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-box-addresses-"));
-    // A private RFC1918 address (inside the box CA's permitted name space, self-signed-cert.ts) that
-    // this host is overwhelmingly unlikely to actually hold, which is what makes the negative
-    // assertion below meaningful — the override must be what lands in the SAN, not a resolved interface.
+    // A private address inside the box CA's permitted name space that this host is unlikely to hold,
+    // so the negative assertion below shows the override, not a resolved interface, is in the SAN.
     const override = "10.1.2.3";
     const server = await startServer({
       WAITRON_VENUE_DIR: sharedVenueDir,
@@ -1393,27 +1086,22 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
       WAITRON_ENV: "preproduction",
-      WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
+      WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
       WAITRON_BOX_ADDRESSES: override,
     });
     try {
       const leaf = new X509Certificate(await readFile(join(stateDir, "tls", "server.crt"), "utf8"));
       const san = leaf.subjectAltName ?? "";
-      // The box's own CA, so the dial below verifies the leaf it just minted. The loopback SAN
-      // `ensureBoxSecrets` always adds is what makes a 127.0.0.1 dial verify against a leaf whose
-      // only other address is the override.
       const ca = await readFile(join(stateDir, "tls", "ca.crt"));
       expect(san).toContain(override);
-      // 127.0.0.1 is added unconditionally by `ensureBoxSecrets` and is internal, so it is never in
-      // `listBoxIpv4()`; every address that IS must be absent, or boot resolved the interfaces
-      // despite the override.
+      // Every address `listBoxIpv4()` finds must be absent, or boot resolved the interfaces despite
+      // the override.
       for (const address of listBoxIpv4()) {
         expect(san).not.toContain(address);
       }
 
-      // The discovery document (and the QR the trust page builds from `qrTarget`) reads the same
-      // override, through `mountDiscovery`'s deps into `buildReachInfo` — a separate call site from
-      // the cert above, so this fails on its own if only that one is wired.
+      // Discovery reads the override through `mountDiscovery`'s deps, a separate call site from the
+      // cert above.
       const { via, close } = httpsVia(ca);
       try {
         const discovery = await fetch(`https://127.0.0.1:${port}/setup-api/discovery`, via);
@@ -1431,31 +1119,12 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("setup mode migrates every module set from an EMPTY database — boot is the sole migrator (SP-1a)", async () => {
-    // The from-empty probe SP-1a's inversion needs (spec §6, §4 pin 2): boot, and only boot, must
-    // migrate every module set the composition list carries. The other boot tests share a venue
-    // directory this suite migrated, so their journals are populated whether or not boot's seam ran
-    // — a measurement where both answers look alike (CLAUDE.md §1). This test boots against an EMPTY
-    // directory, so each `__drizzle_migrations_<name>` table exists and is populated ONLY because
-    // boot's `applyMigrations` created it.
-    //
-    // Setup mode (all four WAITRON_TILL_*_ID omitted) reaches the SAME single seam trading mode does
-    // — `boot.ts`'s one `applyMigrations` runs in the shared prefix, before the mode branch — and it
-    // needs no seeded venue (no `readOrderFlow`), so it is the mode that can boot a fresh database.
-    // The deployment probe that runs BEFORE migrations reads `null` on an unmigrated database
-    // (`assertDeploymentMatches`) and passes — the probe asks `sqlite_master` whether the table
-    // exists rather than catching a refusal (`packages/migrations/src/schema-version.ts`).
-    //
-    // Regression visibility: were the converted seam to derive fewer sets (a broken import, an empty
-    // list), the missing set's journal would be absent and `appliedSchemaVersion` would read 0
-    // against a non-zero `expectedSchemaVersion` — this test goes RED. Run against the pre-change
-    // boot (seam still on `manifestSets()`) it is GREEN, because the pin makes the two lists equal.
+    // Boot alone must migrate every module set. The other boot tests share a directory this suite
+    // migrated, so their journals are populated whether or not boot's migration ran; this one starts
+    // from an empty directory. Setup mode needs no seeded venue, so it is the mode that can boot a
+    // fresh database, and the deployment probe that runs before migrations reads `null` on it.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-empty-state-"));
-    // An EMPTY venue directory — the `template0` clone's counterpart. Nothing has migrated it, so
-    // the two files it will hold do not exist yet and nothing but boot's own migration run can
-    // create the journals read below. `openVenueStore` creates the directory itself
-    // (`packages/store/src/index.ts`), so handing boot a path that does not exist is enough;
-    // the `mkdtemp` is only so the teardown has one thing to remove.
     const venueDir = await mkdtemp(join(tmpdir(), "waitron-boot-empty-venue-"));
     let server: StartedServer | undefined;
     let probe: VenueDatabase | undefined;
@@ -1466,14 +1135,12 @@ describe("startServer, against a migrated venue directory", () => {
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_STATE_DIR: stateDir,
         WAITRON_ENV: "preproduction",
-        WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
+        WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
       });
 
       probe = await openVenueDatabase(venueDir);
-      // Every one of the module sets `ALL_MODULES` derives — the new source boot.ts reads — is migrated
-      // to its shipped-folder head. `expected > 0` is the control: a set with an empty journal would make
-      // `0 === 0` pass without boot having migrated anything (CLAUDE.md §1) — except `fiscal-none`, which
-      // ships NO migrations by design, so its version is legitimately 0.
+      // `expected > 0` is the control: an empty journal would make `0 === 0` pass. `fiscal-none`
+      // ships no migrations, so its version is legitimately 0.
       const sets = orderedMigrationSets(ALL_MODULES);
       expect(sets).toHaveLength(13);
       for (const set of sets) {
@@ -1491,32 +1158,17 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("trading mode migrates ONLY the modules.json-enabled sets, skipping a disabled toggleable module (SP-1b)", async () => {
-    // SP-1b's trading-mode filter (architecture §1.3): on a trading boot the migration seam migrates only the
-    // sets the on-box `<stateDir>/modules.json` enables, not every module. An EMPTY venue directory
-    // is the ONLY harness that can PROVE a skip — the shared directory already carries every
-    // `__drizzle_migrations_<name>` journal, so a filtered run there could never make one ABSENT
-    // (a measurement where both answers look alike measures nothing, CLAUDE.md §1). Here `scheduler` is
-    // disabled, so its journal exists after boot ONLY if the filter failed to skip it — which is exactly
-    // the prove-by-deletion target (revert `setsToMigrate` to an unconditional `ALL_MODULES` and this
-    // goes RED, the scheduler table reappears).
-    //
-    // A disabled statically-wired module can break a FULL trading boot (SP-1b does not claim a module
-    // can be turned off and still boot-and-trade), and this pristine clone carries no seeded venue for
-    // `readOrderFlow` either — both throw AFTER the shared migration seam and the drift log have already
-    // run. So the boot is wrapped in try/catch and the assertion is on the RESULTING migration-table
-    // state, not on boot success (assert what actually happened, CLAUDE.md §1).
+    // A trading boot migrates only the sets `<stateDir>/modules.json` enables. Only an empty directory
+    // can show a skip: the shared one already carries every journal. This boot throws after the
+    // migration seam (a disabled module, and no seeded venue for `readOrderFlow`), so the assertion is
+    // on the resulting journals, not on boot success.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-modules-filter-state-"));
-    // Disable one toggleable module. `core` is never disableable (`parseModuleConfig` refuses it);
-    // `scheduler` is `tier: "toggleable"` in ALL_MODULES and owns `__drizzle_migrations_scheduler`, so
-    // its absence/presence is an unambiguous witness of whether the filter ran.
+    // `scheduler` is toggleable and owns `__drizzle_migrations_scheduler`.
     await writeFile(
       join(stateDir, "modules.json"),
       JSON.stringify({ modules: { scheduler: false } }),
     );
-    // An EMPTY venue directory, the `template0` clone's counterpart: nothing has migrated it, so a
-    // journal below exists only because boot's (now filtered) migration run created it. As in the
-    // setup-from-empty test above, the deployment probe reads `null` on the unmigrated files.
     const venueDir = await mkdtemp(join(tmpdir(), "waitron-boot-filter-venue-"));
     let server: StartedServer | undefined;
     let probe: VenueDatabase | undefined;
@@ -1529,35 +1181,26 @@ describe("startServer, against a migrated venue directory", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
-          WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
+          WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
         });
       } catch {
-        // Expected: this empty directory seeds no venue, so the trading branch's `readOrderFlow` (and a
-        // disabled statically-wired module's own wiring) throws AFTER the migration seam this test
-        // asserts. The throw is swallowed deliberately — the seam's effect is already committed.
+        // Expected: the throw comes after the migration seam this test asserts.
       }
       probe = await openVenueDatabase(venueDir);
-      // The disabled module's journal is ABSENT — the filter skipped its set entirely (only its own
-      // migration run would create the table). `to_regclass` has no counterpart here, so the same
-      // question is put to `sqlite_master`; a SCALAR SUBQUERY keeps the shape `to_regclass` had —
-      // one row whose column is NULL when the relation is missing — rather than an empty result,
-      // which would let a query that selected nothing at all read as a pass.
+      // A scalar subquery answers one row whose column is NULL when the table is missing, where an
+      // empty result would also be what a query selecting nothing at all returns.
       const schedulerReg = await probe.venue.execute<{ reg: string | null }>(
         sql.raw(
           `select (select name from sqlite_master where type = 'table' and name = '__drizzle_migrations_scheduler') as reg`,
         ),
       );
       expect(schedulerReg.rows[0]!.reg).toBeNull();
-      // A DIFFERENT toggleable module's journal IS present and populated to its shipped head — the
-      // filter kept every ENABLED set. `payments` is enabled (absent from the override map = default-on)
-      // and owns its own journal; `expected > 0` is the control (an empty journal would let `0 === 0`
-      // pass without the set having been migrated at all, CLAUDE.md §1).
+      // The filter kept every enabled set: `payments` is enabled by default.
       const payments = ALL_MODULES.find((m) => m.name === "payments")!;
       const paymentsExpected = expectedSchemaVersion(payments.migrations, migrationsRoot);
       expect(paymentsExpected).toBeGreaterThan(0);
       expect(await appliedSchemaVersion(probe.venue, payments.migrations)).toBe(paymentsExpected);
-      // `core` (mandatory, never disableable — its table is `__drizzle_migrations_db`) migrated too:
-      // `enabledModules` never drops it whatever modules.json says.
+      // `enabledModules` never drops `core`, whatever modules.json says.
       const core = ALL_MODULES.find((m) => m.name === "core")!;
       const coreExpected = expectedSchemaVersion(core.migrations, migrationsRoot);
       expect(coreExpected).toBeGreaterThan(0);
@@ -1571,18 +1214,12 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("trading mode logs module.reconcile drift naming a soft-disabled module (SP-1b spec §3)", async () => {
-    // The drift-log half of SP-1b (spec §3): a module the DATABASE has migrated but modules.json no
-    // longer enables is `softDisabled` — its data is kept, it is simply not migrated — and boot logs
-    // the reconcile outcome at `info` so an operator sees it. The shared venue directory is
-    // already migrated for every module AND carries the seeded venue, so a trading boot with
-    // `scheduler` disabled BOOTS SUCCESSFULLY (no throw): the filtered migration is a no-op for the 8
-    // enabled sets (already applied, idempotent) and never touches scheduler's still-present table
-    // (migrations never drop — its data is kept), so the drift read finds scheduler `migrated ∧
-    // ¬enabled` = softDisabled and logs it. Captured on stdout below.
+    // A module the database has migrated but modules.json no longer enables is `softDisabled`, and
+    // boot logs it at `info`. The shared directory is migrated for every module and seeded, so this
+    // boot succeeds.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-drift-state-"));
-    // `fiscal-none` disabled too, so the enabled set resolves the fiscal slot to Veri*Factu (the seeded
-    // node's stamped regime) and this boot SUCCEEDS — the drift being tested is scheduler's, not the slot.
+    // `fiscal-none` disabled too, so the fiscal slot resolves to the seeded node's Veri*Factu.
     await writeFile(
       join(stateDir, "modules.json"),
       JSON.stringify({ modules: { scheduler: false, "fiscal-none": false } }),
@@ -1601,18 +1238,12 @@ describe("startServer, against a migrated venue directory", () => {
           WAITRON_MAX_TICK_MS: "200",
           WAITRON_SKIP_RETRY_MS: "100",
         });
-        // The reconcile line is logged in the shared prefix, before the listener — so it is already
-        // captured by the time `startServer` resolves. Reuse the file's `waitForEvent` helper rather
-        // than re-implementing the find-a-JSON-log-line-by-event loop.
         const found = await waitForEvent(lines, "module.reconcile");
         return [s, found] as const;
       });
       server = started;
       // The listener may not have bound yet, so the close would refuse — see `awaitListening`.
       await awaitListening(port);
-      // Names the soft-disabled module — the operator-visible signal that scheduler's schema is in the
-      // DB but no longer enabled. `toMigrate` is empty: every ENABLED set was already migrated in the
-      // shared DB, so nothing is pending.
       expect(reconcileLine.softDisabled).toEqual(["scheduler"]);
       expect(reconcileLine.toMigrate).toEqual([]);
     } finally {
@@ -1622,21 +1253,9 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("refuses a trading boot whose enabled set drops a dependency (identity off, workforce on) BEFORE migrating (SP-1c)", async () => {
-    // SP-1c (spec §4/§8): boot must REFUSE an enabled set that is not dependency-complete, and do so
-    // BEFORE `applyMigrations` — not fail mid-migration on a missing relation. `workforce` is
-    // `tier: "toggleable"` and `requires` `identity` (modules.ts) via its `persons` FK; `identity` is
-    // itself toggleable. Disabling `identity` while `workforce` stays enabled (default-on) is the
-    // trippable-today case: the enabled set contains `workforce` but not the `identity` it needs, so
-    // `orderedMigrationSets(enabledModules(ALL_MODULES, moduleConfig))` throws `module.dependency_missing`
-    // at boot.ts's migration seam (boot.ts:543, the arg to `applyMigrations`) — the stamp probe has
-    // already closed and the long-lived pool is not yet open, so this rejection leaks nothing.
-    //
-    // The shared venue directory (already migrated + seeded) is enough: the refusal fires before
-    // the migration run and before `readOrderFlow`, so no pristine clone is needed (the negative control
-    // — that the default all-enabled set migrates all nine sets — is the trading migration-journal test
-    // at the top of this describe, which stays green). `...KEY_ENV` (carrying `TILL_ENV`) keeps this in
-    // TRADING mode; a bare config would branch to setup mode, which migrates the FULL set and never
-    // filters (boot.ts:540), so the refusal could not fire.
+    // Boot must refuse an enabled set that is not dependency-complete before `applyMigrations`, not
+    // fail mid-migration. `workforce` requires `identity`, and both are toggleable. `...KEY_ENV` keeps
+    // this in trading mode; setup mode migrates the full set and never filters.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-depmissing-state-"));
     try {
@@ -1644,9 +1263,6 @@ describe("startServer, against a migrated venue directory", () => {
         join(stateDir, "modules.json"),
         JSON.stringify({ modules: { identity: false } }),
       );
-      // `module` (not `module.name`), `requires` name the offending edge (packages/module/src/module.ts's
-      // throw) — asserting them proves the refusal is the dropped-dependency one, not some other AppError
-      // on the boot path.
       await expect(
         startServer({
           ...KEY_ENV,
@@ -1655,7 +1271,7 @@ describe("startServer, against a migrated venue directory", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
-          WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
+          WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
         }),
       ).rejects.toMatchObject({
         code: "module.dependency_missing",
@@ -1667,19 +1283,10 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("refuses a trading boot whose enabled set fills no fiscal slot (fiscal off) — module.fiscal_slot_empty", async () => {
-    // SP-3c: the till's fiscal backend comes from whichever ENABLED module fills the `fiscal` seat
-    // (boot.ts's `makeFiscalBackend(setsToMigrate, …)` → `fiscalSlot`). Disabling BOTH fiscal-slot
-    // members (`fiscal-verifactu` and the no-regime `fiscal-none`) leaves the enabled set with no
-    // contributor, and a trading boot must REFUSE rather than mount the till routes with no way to chain
-    // a sale (§5 — a sale needs its record). Both are `provision-only`, and nothing `requires` them, so
-    // the enabled set stays dependency-complete: the refusal that fires is the slot's, not SP-1c's.
-    // (Disabling only Veri*Factu would leave `fiscal-none` filling the slot, and the seeded node stamped
-    // `verifactu` would then refuse with `fiscal_slot_mismatch` — a different, node-specific refusal.)
-    //
-    // The shared suite DB (already migrated + seeded) is enough, exactly as the drift-log case above:
-    // the filtered migration is a no-op for the enabled sets and never drops fiscal's tables, so the
-    // boot gets as far as building the backend. `...KEY_ENV` keeps this in TRADING mode; setup mode
-    // never builds a backend at all.
+    // The fiscal backend comes from whichever enabled module fills the `fiscal` seat; with neither
+    // fiscal-slot member enabled, a trading boot must refuse rather than mount till routes that
+    // cannot chain a sale. Disabling only Veri*Factu would leave `fiscal-none` in the slot, and the
+    // seeded `verifactu` node would refuse with `fiscal_slot_mismatch` instead.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-fiscaloff-state-"));
     try {
@@ -1695,7 +1302,7 @@ describe("startServer, against a migrated venue directory", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
-          WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
+          WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
         }),
       ).rejects.toMatchObject({ code: "module.fiscal_slot_empty" });
     } finally {
@@ -1704,16 +1311,8 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("setup mode serves the built setup wizard at / end-to-end when WAITRON_SETUP_APP_DIR is configured", async () => {
-    // The end-to-end proof that `config.setupAppDir` threads config → boot's SETUP branch → `mountSetup`
-    // → `mountSpa`: a real `startServer` boot in setup mode (all four WAITRON_TILL_*_ID omitted) with
-    // WAITRON_SETUP_APP_DIR pointed at a marked throwaway dir. `GET /` must return that marker (the built
-    // wizard), NOT the inline placeholder shell — the setup-mode analogue of the till/dashboard
-    // end-to-end SPA test below. This is the missing wire-up proof: the other setup tests are a
-    // `mountSetup`-direct unit test (bypasses config/boot) plus a full-boot test for only the
-    // missing-index FAILURE path. Deletion-proof: mutate boot.ts's `setupAppDir: config.setupAppDir` to
-    // `undefined` (or to `config.tillAppDir`, unset here) and this goes RED — `GET /` falls back to the
-    // placeholder. Same HTTPS setup-mode harness the status test above uses (the box mints + serves its
-    // own self-signed cert), so `/` is dialled over https trusting the box CA.
+    // `config.setupAppDir` threads through boot's setup branch into `mountSetup`'s `mountSpa`, so
+    // `GET /` serves the built wizard rather than the inline placeholder.
     const wizardApp = mkdtempSync(join(tmpdir(), "waitron-boot-setup-spa-"));
     writeFileSync(join(wizardApp, "index.html"), "<html>setup-wizard-served-e2e</html>");
     const port = await freePort();
@@ -1724,13 +1323,12 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
       WAITRON_ENV: "preproduction",
-      WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
+      WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
       WAITRON_SETUP_APP_DIR: wizardApp,
     });
     const ca = await readFile(join(stateDir, "tls", "ca.crt"));
     const { via, close } = httpsVia(ca);
     try {
-      // GET / serves the built wizard bundle, not the placeholder — the whole config→boot→mountSpa wire.
       const root = await fetch(`https://127.0.0.1:${port}/`, via);
       expect(root.status).toBe(200);
       expect(root.headers.get("content-type")).toContain("text/html");
@@ -1759,16 +1357,8 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("fails the boot LOUDLY when WAITRON_SETUP_APP_DIR is set but holds no index.html, naming the var", async () => {
-    // Slice 2c: the setup-wizard app dir joins the till/dashboard app dirs in the `assertBuiltApp`
-    // fail-fast group, which runs in the SHARED prefix BEFORE any pool is opened. A configured-but-
-    // never-built wizard dir must therefore throw `server.config_invalid` naming WAITRON_SETUP_APP_DIR
-    // before boot ever touches the database — the same LOUD posture the other two app dirs get
-    // (spa-api.test.ts unit-tests `assertBuiltApp` itself; THIS proves boot wires it for the setup
-    // dir). No storage needed: the throw precedes the stamp probe's `openVenueDatabase`, so the
-    // unopenable venue directory below is never opened and no handle leaks — and if the throw ever
-    // moved after it, the failure would be `ENOTDIR`, not the assertion below. Deletion-proof: remove the `assertBuiltApp(config.setupAppDir,
-    // …)` line in boot.ts and this goes RED (the mis-built dir reaches `mountSpa`, 404ing every page
-    // load instead of failing the boot).
+    // A configured-but-unbuilt wizard dir fails the boot before storage is touched; were the check to
+    // run after the stamp probe, the unopenable venue directory would fail with `ENOTDIR` instead.
     const emptyDir = mkdtempSync(join(tmpdir(), "waitron-boot-setup-noindex-"));
     try {
       let caught: unknown;
@@ -1855,7 +1445,7 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_STATE_DIR: stateDir,
       WAITRON_ENV: "preproduction",
-      WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
+      WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
     });
     const ca = await readFile(join(stateDir, "tls", "ca.crt"));
     const { via, close } = httpsVia(ca);
@@ -1887,26 +1477,13 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("setup mode serves an operator-supplied WAITRON_TLS_* cert while STILL generating its own box secrets", async () => {
-    // The operator brings their own cert: `config.tls` is set from WAITRON_TLS_CERT_FILE/_KEY_FILE, so
-    // the setup branch serves THAT leaf as the front door. But `ensureBoxSecrets` runs on EVERY setup
-    // boot regardless (its two halves are independently presence-gated), so the box STILL mints its own
-    // self-signed fallback cert AND generates `secrets.env` — the vault key slice 2b needs must exist
-    // whichever front-door cert is served. Both facts are asserted below: the operator leaf verifies
-    // (its CA, not the box CA), and `secrets.env` is written.
-    //
-    // Prove-by-deletion target for "operator wins": forcing the code to ignore `config.tls` (serve the
-    // ensured BOX leaf instead) makes the operator-CA-trusting client's handshake fail
-    // (`CERT_SIGNATURE_FAILURE`) — the box leaf is not signed by the operator CA.
+    // The operator's `WAITRON_TLS_*` cert is the front door, but `ensureBoxSecrets` runs on every setup
+    // boot, so `secrets.env` is still written.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-op-tls-"));
     const certDir = await mkdtemp(join(tmpdir(), "waitron-boot-op-cert-"));
-    // A pre-minted operator cert pair signed by a SEPARATE, UNCONSTRAINED CA (`mintMtlsMaterial`'s
-    // `waitron-test-ca`), NOT the box's own name-constrained self-signed CA — a real operator brings a
-    // cert from their own/public CA, so the box's minter must not stand in for it here. The
-    // discriminator this test turns on is the CA SIGNATURE, not the hostname: the client below trusts
-    // ONLY the operator CA, so a completed handshake proves the operator leaf (not the box's own leaf,
-    // signed by the box CA) was served. The fixture's leaf carries a 127.0.0.1 SAN so the loopback
-    // dial verifies against it.
+    // Signed by a separate, unconstrained CA, as a real operator's would be. The client trusts only
+    // that CA, so a completed handshake shows the operator leaf was served.
     const material = mintMtlsMaterial();
     const certFile = join(certDir, "operator.crt");
     const keyFile = join(certDir, "operator.key");
@@ -1921,13 +1498,10 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_TLS_CERT_FILE: certFile,
       WAITRON_TLS_KEY_FILE: keyFile,
       WAITRON_ENV: "preproduction",
-      WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
+      WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
     });
-    // Trust the OPERATOR CA (not the box-minted one): a completed handshake here proves the OPERATOR
-    // leaf is what the box served. Dialling with the BOX CA would be the wrong-direction control.
     const { via, close } = httpsVia(material.caPem);
     try {
-      // (a) HTTPS serves from the OPERATOR cert — the operator-CA client completes the handshake.
       const publicStatus = await fetch(`https://127.0.0.1:${port}/public/availability`, via);
       expect(publicStatus.status).toBe(503);
       expect(await publicStatus.json()).toEqual({ available: false });
@@ -1935,15 +1509,13 @@ describe("startServer, against a migrated venue directory", () => {
       expect(status.status).toBe(200);
       expect(await status.json()).toMatchObject({ provisioned: false });
 
-      // (b) The box STILL generated its own secrets under operator TLS — `secrets.env` carries the
-      // vault key slice 2b loads. This is the finding this fix decoupled: gating the whole
-      // `ensureBoxSecrets` call on `config.tls === undefined` would have stranded this box with none.
+      // The box still generated its own secrets under operator TLS.
       expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toMatch(
         /WAITRON_CREDENTIALS_KEY=/,
       );
 
-      // The box's OWN fallback leaf was minted too (the always-mint half), even though the operator's
-      // cert is the one served — so a later boot that drops the operator vars still has a cert to serve.
+      // The box's own fallback leaf was minted too, so a later boot that drops the operator vars still
+      // has a cert to serve.
       expect(existsSync(join(stateDir, "tls", "server.crt"))).toBe(true);
       const discovery = await fetch(`https://127.0.0.1:${port}/setup-api/discovery`, via);
       expect(await discovery.json()).toMatchObject({ caDownloadAvailable: false });
@@ -1961,17 +1533,9 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("setup mode: closes the app pool and rejects when startListening fails (missing operator TLS file)", async () => {
-    // Copilot round 3: before this fix, the SETUP branch opened `db` (the shared prefix) but did not
-    // guard against a throw inside the branch — unlike the TRADING branch's own `loadKeyRing` guard
-    // just below it. `ensureBoxSecrets` itself does not throw here (it mints the box's own fallback
-    // cert + secrets successfully, as the operator-TLS test above shows it always does); the throw
-    // comes one line later, from `startListening` -> `buildServeOptions` -> `readFileSync` (`tls.ts`),
-    // because `config.tls` is wired from `WAITRON_TLS_CERT_FILE`/`WAITRON_TLS_KEY_FILE` naming files
-    // that do not exist (`config.tls` WINS over the box's own ensured leaf — same precedence the
-    // operator-TLS test above exercises on the happy path). That reaches the new
-    // `catch (error) { await db.close(); throw error; }` in the setup branch. This test only pins the
-    // externally-observable half — `startServer` rejects — since the pool itself has no public "is it
-    // closed" surface to assert on directly; the line coverage on the catch body is what proves it ran.
+    // `config.tls` names files that do not exist, so `startListening` throws inside the setup branch,
+    // after it opened `db`. The branch must close `db` and rethrow; the store has no public "is it
+    // closed" surface, so only the rejection is asserted.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-tls-missing-"));
     try {
@@ -1981,18 +1545,14 @@ describe("startServer, against a migrated venue directory", () => {
           WAITRON_HTTP_PORT: String(port),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
-          // Neither path exists — `loadConfig` stores WAITRON_TLS_* verbatim with no existence check
-          // (config.ts), so this reaches `readFileSync` inside `buildServeOptions` rather than failing
-          // any earlier config-validation guard.
+          // `loadConfig` does not check these paths exist, so the throw comes from reading them.
           WAITRON_TLS_CERT_FILE: join(stateDir, "does-not-exist.crt"),
           WAITRON_TLS_KEY_FILE: join(stateDir, "does-not-exist.key"),
           WAITRON_ENV: "preproduction",
-          WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
+          WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
         }),
       ).rejects.toThrow();
-      // ensureBoxSecrets ran (and succeeded) BEFORE the failing startListening call — it is
-      // unconditional in the setup branch — so the box's own secrets were generated even though the
-      // boot as a whole rejected.
+      // `ensureBoxSecrets` runs before `startListening`, so the secrets exist though the boot rejected.
       expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toMatch(
         /WAITRON_CREDENTIALS_KEY=/,
       );
@@ -2002,16 +1562,9 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("setup mode: POST /setup-api/provision provisions a demo venue, writes trading.env, stamps preproduction, and requests a restart", async () => {
-    // The slice-2b full-boot proof: boot unprovisioned over HTTPS (as the 2a test above does), then
-    // drive the whole provisioning flow through the real endpoint — validate + hash, `provisionVenue`
-    // (stamp + `applyVenue` as the OWNER connection boot now wires), persist `trading.env`, request the
-    // restart. A FRESH venue directory (`freshVenue`, not the file-shared one) keeps this isolated:
-    // `provisionVenue` stamps the `deployment` singleton AND mints a venue, either of which would fix
-    // or pollute every other test's shared directory (CLAUDE.md §4).
-    //
-    // `requestRestart` defaults to `process.kill(process.pid, "SIGTERM")` (boot.ts) — which, with no
-    // `bin.ts` SIGTERM handler installed under vitest, would kill this worker. `withMockedKill`
-    // intercepts it the identical way `withMockedExit` intercepts the listen-failure `process.exit`.
+    // The whole provisioning flow through the real endpoint, on a fresh venue directory:
+    // `provisionVenue` stamps the `deployment` singleton and mints a venue, which would pollute the
+    // shared one.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-provision-state-"));
     const venue = await freshVenue();
@@ -2024,14 +1577,11 @@ describe("startServer, against a migrated venue directory", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
-          WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
-          // Deliberately DISTINCT from the `managementOrigin` this boot falls back to
-          // (`http://localhost:5191`, the dev default — WAITRON_MANAGEMENT_ORIGIN is unset here), so
-          // the contactUrl assertion below tells the two apart: a seed wired to `managementOrigin`
-          // would write that localhost default instead.
+          WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
+          // Distinct from the `managementOrigin` default (`http://localhost:5191`), so the contactUrl
+          // assertion below tells the two apart.
           WAITRON_ADVERTISED_ORIGIN: "https://box.deli.test",
         });
-        // Trust the CA the box minted, so the self-signed leaf verifies over the loopback dial.
         const ca = await readFile(join(stateDir, "tls", "ca.crt"));
         const { via, close } = httpsVia(ca);
         try {
@@ -2047,15 +1597,7 @@ describe("startServer, against a migrated venue directory", () => {
           const json = (await response.json()) as { provisioned: boolean };
           expect(json.provisioned).toBe(true);
 
-          // `trading.env` was written with the four till ids + `WAITRON_ENV`, so the next boot enters
-          // trading mode. Parsed (not substring-matched) so a missing key really fails.
-          //
-          // DROPPED with the storage switch: `expect(trading.DATABASE_URL).toBe(pg.uri)`. The field
-          // no longer exists — `TradingConfig` names no database at all, and `writeTradingEnv`
-          // (`apps/server/src/trading-config.ts:43`) writes only the six keys above, because boot
-          // derives the venue directory from the state root the supervisor hands both processes.
-          // The absence is pinned in the other direction by `trading-config.test.ts`'s
-          // whole-file exact-equality case, which is stronger than the assertion removed here.
+          // Parsed, not substring-matched, so a missing key really fails.
           const trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
           for (const key of [
             "WAITRON_TILL_TILL_ID",
@@ -2067,9 +1609,6 @@ describe("startServer, against a migrated venue directory", () => {
           }
           expect(trading.WAITRON_ENV).toBe("preproduction");
 
-          // The database is now stamped preproduction and holds exactly one venue (one tenant, one
-          // node/SIF). `check` is this test's own handle on the same directory the server has open;
-          // both reads below are reads.
           expect(await readDeploymentEnvironment(check)).toBe("preproduction");
           const tenants = await check.execute<{ n: number }>(
             sql`select cast(count(*) as int) as n from tenants`,
@@ -2080,19 +1619,14 @@ describe("startServer, against a migrated venue directory", () => {
           );
           expect(nodes.rows[0]!.n).toBe(1);
 
-          // Slice 4: the provision path established the primary node's membership identity — a keypair
-          // was generated, the private half sealed, and the public half stamped on `nodes.public_key`
-          // — so the freshly-minted node is the venue's SOLE trust anchor. `readMembershipTrustSet`
-          // returns every keyed node, which here is exactly that one. RED before boot
-          // wires `establishIdentity`: `public_key` is null and the trust set is empty.
+          // Provisioning established the node's membership identity: its public key makes it the
+          // venue's sole trust anchor.
           const trust = await readMembershipTrustSet(check);
           expect(Object.keys(trust)).toHaveLength(1);
           expect(Object.values(trust)[0]).toMatch(/.+/);
 
-          // The term-0 document the same provision seeded names this primary at the origin tills
-          // route on (till-reroute design §3.3) — `config.advertisedOrigin`, NOT `managementOrigin`.
-          // The two are distinct here on purpose (see WAITRON_ADVERTISED_ORIGIN above), so a seed
-          // reading the wrong one shows up as `http://localhost:5191`, and an unwired one as `""`.
+          // The term-0 document names this primary at `config.advertisedOrigin`, the origin tills
+          // route on, not `managementOrigin`.
           const held = await readNodeMembership(check);
           expect(held?.body.nodes).toEqual([
             {
@@ -2102,8 +1636,7 @@ describe("startServer, against a migrated venue directory", () => {
             },
           ]);
 
-          // The restart was requested exactly once, AFTER the 200 flushed (setTimeout(0) in
-          // setup-api.ts), as a SIGTERM to this process — the graceful-shutdown latch bin.ts installs.
+          // The restart is requested after the 200 flushes, as a SIGTERM to this process.
           await poll(() => (kills.length > 0 ? kills.length : undefined));
           expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
         } finally {
@@ -2119,15 +1652,9 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("setup mode: a DEMO provision carrying an AEAT cert is REFUSED (400) — nothing provisioned or sealed", async () => {
-    // Defense-in-depth over the full boot (CLAUDE.md §5): the AEAT signing cert is meaningful ONLY for
-    // a LIVE ES-common venue, so a demo/preproduction body carrying one is an invalid request that the
-    // endpoint refuses BEFORE `provision`. This pins that the box never seals a real AEAT signing cert
-    // into a preproduction tenant's vault — the whole point of the server-side reject even though the
-    // 2c client already gates the cert on live mode. FRESH-clone isolation as the demo test above.
-    // Reuses `mintMtlsMaterial`'s PKCS#12 fixture (already imported for the mTLS-transport test): a
-    // well-formed cert, so the refusal is the symmetric `aeatCert`-not-expected gate, not a malformed
-    // cert being rejected by `validateAeatCert`. (Before this fix the same body sealed the cert and
-    // returned 200 — this test was INVERTED with the behaviour change.)
+    // The AEAT signing cert is meaningful only for a live ES-common venue, so a demo body carrying one
+    // is refused before `provision`: the box never seals a real AEAT cert into a preproduction vault.
+    // The cert is well-formed, so the refusal is the not-expected gate, not `validateAeatCert`.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-provision-reject-state-"));
     const venue = await freshVenue();
@@ -2141,7 +1668,7 @@ describe("startServer, against a migrated venue directory", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
-          WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
+          WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
         });
         const ca = await readFile(join(stateDir, "tls", "ca.crt"));
         const { via, close } = httpsVia(ca);
@@ -2168,9 +1695,6 @@ describe("startServer, against a migrated venue directory", () => {
           expect(json.error.code).toBe("setup.request_invalid");
           expect(json.error.params.field).toBe("aeatCert");
 
-          // Nothing was minted and nothing was sealed — the request was refused before
-          // `provision`. `check` is this test's own handle on the same directory the server has
-          // open; both observations below are reads.
           const tenants = await check.execute<{ n: number }>(
             sql`select cast(count(*) as int) as n from tenants`,
           );
@@ -2180,7 +1704,6 @@ describe("startServer, against a migrated venue directory", () => {
           );
           expect(sealed.rows[0]!.n).toBe(0);
 
-          // A refused provision never schedules the restart (the setTimeout fires only on success).
           await delay(50);
           expect(kills).toEqual([]);
         } finally {
@@ -2196,23 +1719,13 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("setup mode: an accepted fiscal test lets LIVE ES-common seal its certificate, stamp production and restart", async () => {
-    // The legitimate readiness + seal path end-to-end. A LIVE ES-common venue files to AEAT, so its cert
-    // IS expected (`expected` in setup-api.ts): the fiscal-test endpoint records a sample through the
-    // real backend, an accepted contribution result authorizes activation, and provisioning seals the cert through the fiscal
-    // contribution's `provisioningSecret.seal` seat, wired to boot.ts's real `db: ownerDb` + `ring`
-    // injection — the ONLY full-boot exercise of that binding, and of the ring `boot.ts` reads back off
-    // `secrets.env` (a broken recovery would
-    // throw here). Reuses `mintMtlsMaterial`'s PKCS#12 fixture, as the mTLS-transport test does.
+    // A live ES-common venue files to AEAT, so its cert is expected: an accepted fiscal test
+    // authorizes activation, and provisioning seals the cert through the fiscal contribution's
+    // `provisioningSecret.seal` seat with the `ring` boot reads back off `secrets.env`. The drain is
+    // replaced with one accepted record, so no AEAT call is made.
     //
-    // No real AEAT call is made: the contribution's drain result is replaced with one accepted record.
-    // Its normal transport behavior remains covered by the fiscal package and the explicit preproduction test.
-    //
-    // The box boots with `WAITRON_ENV: "preproduction"` (as the demo tests above) even though this
-    // provision stamps PRODUCTION: `provisionVenue` stamps `req.environment` — the endpoint's
-    // mode-derived value (live → production, provision.ts:94) — NOT `config.environment`, which
-    // `boot.ts` (line 695) never threads into `provisionVenue`. So this isolates the SEAL without
-    // dragging in the production `loadConfig` surface (RP id/origin, credentials key). The production
-    // stamp is asserted below, which proves the live fork end-to-end from the preproduction-booted box.
+    // The box boots preproduction, yet the live provision stamps production: `provisionVenue` stamps
+    // the endpoint's mode-derived environment, not `config.environment`.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-provision-live-seal-state-"));
     const venue = await freshVenue();
@@ -2230,7 +1743,7 @@ describe("startServer, against a migrated venue directory", () => {
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
-          WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
+          WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
         });
         const ca = await readFile(join(stateDir, "tls", "ca.crt"));
         const { via, close } = httpsVia(ca);
@@ -2262,13 +1775,8 @@ describe("startServer, against a migrated venue directory", () => {
           const json = (await response.json()) as { provisioned: boolean };
           expect(json.provisioned).toBe(true);
 
-          // The live fork stamped PRODUCTION (mode-derived, not the box's preproduction boot
-          // env). `check` is this test's own handle on the same directory; both are reads.
           expect(await readDeploymentEnvironment(check)).toBe("production");
 
-          // Exactly one `fiscal.aeat` credential was sealed, in the database holding the tenant just
-          // provisioned — the real provisioning-secret seal seat (fed boot.ts's `db: ownerDb` + `ring`)
-          // ran end-to-end.
           const sealed = await check.execute<{ n: number }>(
             sql`select cast(count(*) as int) as n from tenant_credentials where purpose = 'fiscal.aeat'`,
           );
@@ -2278,7 +1786,6 @@ describe("startServer, against a migrated venue directory", () => {
           );
           expect(provisioned.rows).toEqual([{ id: "1" }]);
 
-          // The restart fires once after the seal + persist, as for the plain demo above.
           await poll(() => (kills.length > 0 ? kills.length : undefined));
           expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
         } finally {
@@ -2295,14 +1802,7 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("boots in trading mode when a venue is bound: mounts the trading API and NOT the setup routes", async () => {
-    // The regression guard for the branch: a provisioned box (all four WAITRON_TILL_*_ID + a
-    // credentials key, via KEY_ENV) runs today's exact trading flow — the till API is mounted — and the
-    // setup routes are NOT mounted (so /setup-api/status is a bare 404, never the setup fact sheet).
-    // This is the prove-by-deletion target: forcing `config.till` always-undefined takes the setup
-    // branch, so /setup-api/status returns the 200 fact sheet (failing the 404 assertion below) and
-    // /api/staff is answered by `mountSetup`'s `GET *` catch-all as a 200 text/html placeholder (a bare
-    // 404 is impossible while that catch-all is mounted — the sibling test above says so) — which fails
-    // this test at `await staff.json()`, a parse error on HTML, not at the status assertion.
+    // A provisioned box mounts the till API and not the setup routes.
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
@@ -2315,25 +1815,16 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_SKIP_RETRY_MS: "100",
     });
     try {
-      // The deployment holds one tenant per database. The trading surface is live: the
-      // unauthenticated roster route returns this till's (empty) staff list in this database —
-      // 200 [], not 404 — exactly as the first test in this block asserts.
       const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
       expect(staff.status).toBe(200);
       expect(await staff.json()).toEqual([]);
 
-      // The setup surface is absent in trading mode: /setup-api/status is a bare Hono 404 (no setup
-      // routes, and no till SPA catch-all here since WAITRON_TILL_APP_DIR is unset), never the
-      // { provisioned: false, ... } fact sheet a setup box serves.
+      // A bare 404: no setup routes, and no till SPA catch-all since WAITRON_TILL_APP_DIR is unset.
       const status = await fetch(`http://127.0.0.1:${port}/setup-api/status`);
       expect(status.status).toBe(404);
 
-      // The role probe a till reroutes on (till-reroute design §3.1), mounted in the trading branch
-      // beside mountTillApi: this box is unfenced at (mode, singleton_role) = (primary, primary), so
-      // it answers `acceptingSales: true` under its own node id. `environment` pins that
-      // `config.environment` — not a hardcoded literal — reaches the probe: this boot sets
-      // WAITRON_ENV=production, so a probe wired to the "preproduction" default would read that here.
-      // The mirror and fence suites hold the other two arms (both false).
+      // The role probe a till reroutes on. `environment` pins that `config.environment`, not the
+      // "preproduction" default, reaches the probe.
       const probe = await fetch(`http://127.0.0.1:${port}/api/node`);
       expect(probe.status).toBe(200);
       expect(await probe.json()).toMatchObject({
@@ -2369,13 +1860,9 @@ describe("startServer, against a migrated venue directory", () => {
     try {
       const disc = await fetch(`http://127.0.0.1:${port}/setup-api/discovery`);
       expect(disc.status).toBe(404);
-      // And the CA download + trust page are equally absent in trading mode.
       expect((await fetch(`http://127.0.0.1:${port}/setup-api/ca.crt`)).status).toBe(404);
       expect((await fetch(`http://127.0.0.1:${port}/setup/trust`)).status).toBe(200);
 
-      // The deployment holds one tenant per database. The trading surface is unchanged: the
-      // unauthenticated roster route answers this till's empty staff list in this database (200
-      // [], not 404), and /health still answers its JSON.
       const staff = await fetch(`http://127.0.0.1:${port}/api/staff`);
       expect(staff.status).toBe(200);
       expect(await staff.json()).toEqual([]);
@@ -2388,13 +1875,9 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("serves the built till at / and dashboard at /manage when the app dirs are configured, without shadowing the APIs", async () => {
-    // The one boot that sets WAITRON_TILL_APP_DIR / WAITRON_DASHBOARD_APP_DIR — every other boot in
-    // this suite leaves them unset (the dev/Vite case), so this is what drives boot.ts's two SPA-mount
-    // branches and `mountSpa`'s wiring end to end. Two throwaway built-SPA dirs (index.html + a
-    // dashboard asset) stand in for Task 1's real Vite output; distinctive markers so a swapped
-    // /manage-vs-/ mapping would be caught. `boot.spa-mount.test.ts` pins the mount ORDER at the Hono
-    // level; this proves the same wiring survives a real startServer and does not shadow /health or
-    // /api/staff (the till root catch-all is registered LAST, after every API route).
+    // The one boot that sets WAITRON_TILL_APP_DIR and WAITRON_DASHBOARD_APP_DIR. Distinctive markers
+    // catch a swapped /manage-vs-/ mapping; `boot.spa-mount.test.ts` pins the mount order, and this
+    // shows the catch-alls do not shadow /health or /api/staff in a real boot.
     const tillApp = mkdtempSync(join(tmpdir(), "waitron-boot-till-spa-"));
     const dashApp = mkdtempSync(join(tmpdir(), "waitron-boot-dash-spa-"));
     writeFileSync(join(tillApp, "index.html"), "<html>till-spa-root</html>");
@@ -2412,7 +1895,6 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_DASHBOARD_APP_DIR: dashApp,
     });
     try {
-      // The till at the origin root, the dashboard at /manage — the two SPA branches both mounted.
       const till = await fetch(`http://127.0.0.1:${port}/`);
       expect(till.status).toBe(200);
       expect(till.headers.get("content-type")).toContain("text/html");
@@ -2437,8 +1919,6 @@ describe("startServer, against a migrated venue directory", () => {
       expect(asset.status).toBe(200);
       expect(await asset.text()).toContain("dashboard-spa-asset");
 
-      // The catch-all did NOT shadow the APIs or /health: /health still answers its JSON, and the
-      // unauthenticated roster route still returns its empty array (200, not the SPA's index.html).
       const health = await fetchHealthOk(`http://127.0.0.1:${port}/health`);
       expect((await health.json()) as { ok: boolean }).toMatchObject({ ok: true });
 
@@ -2453,14 +1933,8 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("dials the outbound cloud-mirror tunnel to config.httpPort when WAITRON_TUNNEL_* is set, and close() aborts it", async () => {
-    // The tunnel is enabled by WAITRON_TUNNEL_RELAY_URL (loadTunnelConfig). The relay is unreachable
-    // (127.0.0.1:1), so the real call-through client's pool slots just fail to establish and back off —
-    // all this test needs from the client, which it drives through realSleep exactly as the sync test
-    // drives the pull worker against an unreachable peer. What it asserts is the boot WIRING: the client
-    // is started once with the configured relay host/port/boxId/token, the box's OWN served port as
-    // localPort (config.httpPort — the same listener startListening binds), the operator's pool size,
-    // and the boot AbortSignal. close() then aborts that signal (its stopWork path), which is what tears
-    // the client down.
+    // The relay is unreachable, so the real client just backs off; what is asserted is boot's wiring
+    // of the call, and that `close()` aborts its signal.
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
@@ -2468,10 +1942,7 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "production",
-      // A relay url whose host + port the box dials out to. Unreachable on purpose (port 1), so the
-      // call-through client backs off rather than pairing — the same unreachable-endpoint shape the sync
-      // worker test uses. A distinctive pool size so the pass-through assertion below cannot pass by
-      // coincidence with the client's own default (4).
+      // A pool size distinct from the client's own default.
       WAITRON_TUNNEL_RELAY_URL: "tcp://127.0.0.1:1",
       WAITRON_TUNNEL_BOX_ID: "box-mirror-7",
       WAITRON_TUNNEL_TOKEN: "tunnel-secret",
@@ -2489,7 +1960,7 @@ describe("startServer, against a migrated venue directory", () => {
       expect(deps.poolSize).toBe(3); // WAITRON_TUNNEL_POOL_SIZE, threaded through so the knob is live
       // The boot signal, not yet aborted while the host runs.
       expect(deps.signal.aborted).toBe(false);
-      // ...and close() aborts exactly that signal (stopWork), which is what tears the client down.
+      // ...and `close()` aborts exactly that signal, which is what tears the client down.
       await server.close();
       expect(deps.signal.aborted).toBe(true);
     } finally {
@@ -2498,10 +1969,6 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("does not dial the tunnel when WAITRON_TUNNEL_* is unset", async () => {
-    // The off-switch: no WAITRON_TUNNEL_RELAY_URL, so loadTunnelConfig returns undefined and boot dials
-    // nothing (it logs the tunnel-off line and starts no client). Every other boot in this suite is this
-    // case; asserting it explicitly here — with the beforeEach-cleared spy — pins that a plain trading
-    // boot never starts the tunnel worker.
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
@@ -2520,13 +1987,6 @@ describe("startServer, against a migrated venue directory", () => {
   }, 60_000);
 
   it("does not schedule the backup sweep when WAITRON_BACKUP_DIR is unset, and boots unaffected", async () => {
-    // The backup off-switch (slice 4b-ii): no WAITRON_BACKUP_DIR, so loadBackupConfig returns
-    // undefined and boot does not run the sweep — it logs the backup-off line and leaves backup
-    // OFF. Every OTHER trading boot in this suite is this same case (none sets WAITRON_BACKUP_*),
-    // so the real guard is that they all still pass; this asserts the off branch explicitly. Proven
-    // via the logged backup.disabled event (the wiring ran the else branch) plus a clean shutdown.
-    // Box-status's own configured:false report on this branch is covered directly by
-    // box-status.route.test.ts.
     const port = await freePort();
     const [server, disabled] = await withCapturedStdout(async (lines) => {
       const started = await startServer({
@@ -2622,17 +2082,6 @@ describe("startServer, against a migrated venue directory", () => {
       await withTransaction(sharedDb, (tx) => deleteCredential(tx, { purpose: STREAM_PURPOSE }));
     }
   }, 60_000);
-  // DELETED, not converted: "boots and TRADES when the backup DB is unreachable — the read-privilege
-  // probe failure disables backup, never aborts boot (§5)". It drove `startServer` with a good main
-  // database and a deliberately refused backup connection (`WAITRON_BACKUP_DATABASE_URL` at port 1),
-  // and asserted the box still traded with backup off.
-  //
-  // The lever is gone rather than moved: the backup duty no longer has a connection of its own to
-  // point somewhere bad — it opens the box's OWN venue directory — so there is no way to break the
-  // backup duty in a boot that is otherwise healthy. What survives is narrower and not through
-  // `startServer`: `backup-supervisor.test.ts`'s "a venue directory that will not open leaves backup
-  // off and never throws at the caller". So the §5 claim is still asserted, at the supervisor rather
-  // than at boot; nothing now proves boot ITSELF survives a backup duty that cannot start.
 
   it("boots without WAITRON_SETTLEMENT_LAG_MS, taking the neutral layer's own default", async () => {
     const port = await freePort();
@@ -2643,16 +2092,15 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_MIN_TICK_MS: "50",
       WAITRON_MAX_TICK_MS: "200",
-      // Within [minTickMs, maxTickMs]: the default (300000) sits above maxTickMs here and would
-      // now fail `loadConfig`'s guard (F1 of the 2026-07-27 pre-merge review).
+      // Within [minTickMs, maxTickMs]: the default (300000) would fail `loadConfig`'s guard here.
       WAITRON_SKIP_RETRY_MS: "100",
     });
 
     try {
       await waitForPass(server.health);
     } finally {
-      // Two GENUINELY concurrent calls this time, not one-after-the-other: without the idempotency
-      // guard, the loser reaches `db.close()` a second time and throws.
+      // Two concurrent calls: without the idempotency guard, the loser closes the store a second time
+      // and throws.
       await Promise.all([server.close(), server.close()]);
     }
   }, 60_000);
@@ -2690,14 +2138,13 @@ describe("startServer, against a migrated venue directory", () => {
       expect(image.headers.get("content-type")).toBe("image/webp");
       expect(new Uint8Array(await image.arrayBuffer())).toEqual(prepared.bytes);
 
-      // A traversal attempt is refused by the mounted route's own regex guard — a bare 404, from a
-      // real boot, not just the in-process suite.
+      // A traversal attempt is refused by the mounted route's own guard.
       const escape = await fetch(
         `http://127.0.0.1:${port}/media/${encodeURIComponent("../../etc/passwd")}`,
       );
       expect(escape.status).toBe(404);
 
-      // §3.4 CORS covers the media surface too, even though it sits outside `/api/*`: a cross-origin
+      // CORS covers the media surface too, even though it sits outside `/api/*`: a cross-origin
       // fetch from the venue's own advertised origin gets the Allow-Origin echo, a stranger gets none.
       // `config.advertisedOrigin` falls back to `WAITRON_MANAGEMENT_ORIGIN` here (KEY_ENV), so that is
       // the venue's own origin for this boot.
@@ -2716,10 +2163,8 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  // I5 / I7: a bind failure must log a structured code and exit non-zero (spec §8's "everything
-  // escapes" applied to the one boot failure that cannot literally throw — see boot.ts's own
-  // comment on `server.on("error", ...)`), and `WAITRON_HTTP_HOST` must actually reach `serve()`'s
-  // `hostname` option rather than being computed by `loadConfig` and then silently dropped.
+  // A bind failure cannot throw out of `startServer`, so it must log a structured code and exit
+  // non-zero; and `WAITRON_HTTP_HOST` must reach `serve()`'s `hostname` option.
   describe("a listener that fails to bind", () => {
     it("logs server.listen_failed and exits(1) on EADDRINUSE — the common case, a fixed port already taken", async () => {
       const port = await freePort();
@@ -2740,8 +2185,7 @@ describe("startServer, against a migrated venue directory", () => {
               WAITRON_MIGRATIONS_DIR: migrationsRoot,
               WAITRON_MIN_TICK_MS: "1000",
               WAITRON_MAX_TICK_MS: "2000",
-              // Within [minTickMs, maxTickMs]: the default (300000) sits above maxTickMs here and
-              // would now fail `loadConfig`'s guard (F1 of the 2026-07-27 pre-merge review).
+              // Within [minTickMs, maxTickMs]: the default (300000) would fail `loadConfig`'s guard.
               WAITRON_SKIP_RETRY_MS: "1500",
             });
             const event = await waitForEvent(lines, "server.listen_failed");
@@ -2755,13 +2199,7 @@ describe("startServer, against a migrated venue directory", () => {
           // second, spurious exit call here would mean something in the error handler re-fires.
           expect(exits).toEqual([1]);
         } finally {
-          // `close()` on a server whose listener never bound rejects — Node's own `http.Server`
-          // invokes `close()`'s callback with an error when the server never started listening
-          // (confirmed empirically against this exact scenario), which is exactly the branch
-          // `vitest.config.ts`'s coverage comment on `boot.ts`'s own `close()` used to record as
-          // unreachable "without forging it". This test reaches it for real. `db.close()` still
-          // runs regardless — it is in `close()`'s own `finally`, not after the rejection — so the
-          // pool and the loop are torn down either way; only the rejection itself needs catching.
+          // `close()` on a server whose listener never bound rejects.
           if (started !== undefined) await expect(started.close()).rejects.toThrow();
         }
       });
@@ -2779,15 +2217,13 @@ describe("startServer, against a migrated venue directory", () => {
               ...KEY_ENV,
               WAITRON_VENUE_DIR: sharedVenueDir,
               WAITRON_HTTP_PORT: String(port),
-              // Every other test in this file binds the DEFAULT host (127.0.0.1) successfully —
-              // an unresolvable one failing to bind HERE is what proves `config.httpHost` reaches
-              // `serve()`'s own `hostname` option rather than being computed and then ignored.
+              // Every other boot binds the default host, so a failure here shows `config.httpHost`
+              // reaches `serve()`.
               WAITRON_HTTP_HOST: "not-a-real-hostname.invalid",
               WAITRON_MIGRATIONS_DIR: migrationsRoot,
               WAITRON_MIN_TICK_MS: "1000",
               WAITRON_MAX_TICK_MS: "2000",
-              // Within [minTickMs, maxTickMs]: the default (300000) sits above maxTickMs here and
-              // would now fail `loadConfig`'s guard (F1 of the 2026-07-27 pre-merge review).
+              // Within [minTickMs, maxTickMs]: the default (300000) would fail `loadConfig`'s guard.
               WAITRON_SKIP_RETRY_MS: "1500",
             });
             const event = await waitForEvent(lines, "server.listen_failed");
@@ -2816,36 +2252,13 @@ describe("startServer, against a migrated venue directory", () => {
     expect(isAppError(error) && error.code).toBe("provisioning.second_venue");
   });
 
-  // I1 of the 2026-07-27 whole-branch review: nothing PINS which config field reaches which duty,
-  // and nothing proves this branch's headline behaviour end to end. `boot.ts` passes
-  // `skipRetryMs: config.skipRetryMs` to both `drain` and `runDue` — `tsc` only pins that the
-  // field is PRESENT, `config.test.ts` pins parsing, and the fold unit tests
-  // (`drain.test.ts`'s "nextDueAt is folded as a minimum, never assigned" block, `run.test.ts`) pin
-  // behaviour GIVEN a value. None of them would notice
-  // `skipRetryMs: config.minTickMs` at either call site: 13/13 typecheck, every unit test and 100%
-  // coverage would all stay green while silently reintroducing the exact 5-second spin this branch
-  // exists to remove. This test seeds a real, due `envios` row for a tenant with no `fiscal.aeat`
-  // credential — the expected shape of the first deployment (degraded-pass design §1) — and reads
-  // the loop's own logged sleep duration back, the same "prove the mapping via the LOGGED effect,
-  // not the call site" technique the very first test in this describe block already uses for
-  // `minTickMs`/`maxTickMs`.
-  //
-  // The seeded tenant is never provisioned a `fiscal.aeat` credential, so — left in place — its
-  // `envios` row would stay due FOREVER against the one venue directory this whole describe block
-  // shares (`beforeAll` above): `drain.tenant_skipped` fires on `resolveClient` itself, before any
-  // per-row retry state is ever touched, so nothing about this row's own due-ness ever advances.
-  // The tests above assert `consecutiveFailures === 0` against this SAME directory and
-  // used to pass only because they were declared, and therefore ran, earlier — order-dependent on
-  // this test staying last, which `--sequence.shuffle` (or a later `it` added after this one)
-  // breaks. The `finally` below deletes the seeded `envios` row regardless of how this test
-  // finishes, which is what actually fixes that rather than merely relying on position — verified
-  // by running this suite with `--sequence.shuffle` repeatedly.
+  // Pins which config field reaches the drain: a `config.minTickMs` passed as `skipRetryMs` would pass
+  // the typecheck and every unit test. A due `envios` row is seeded with no `fiscal.aeat` credential,
+  // and the loop's logged sleep is read back. That row would stay due forever in the shared directory,
+  // where other tests assert `consecutiveFailures === 0`, so the `finally` deletes it.
   it("sleeps on WAITRON_SKIP_RETRY_MS, not WAITRON_MIN_TICK_MS, for a tenant with due fiscal work and no fiscal.aeat credential", async () => {
     const port = await freePort();
-    // `seedPendingEnvios`'s own fixed `proximo_intento_en` ('2026-07-21T00:00:00Z') is always in
-    // the past relative to `startServer`'s real wall clock (`boot.ts` hardcodes `new Date()`,
-    // deliberately not injectable — see its own doc comment), so this tenant is due the instant
-    // the first pass runs. Seeded on the suite's own handle, with no server up.
+    // `seedPendingEnvios`'s fixed `proximo_intento_en` is in the past, so the row is due at once.
     const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
@@ -2868,11 +2281,8 @@ describe("startServer, against a migrated venue directory", () => {
           // Preparation intentionally performs no fiscal submissions. Use production here because
           // this test exercises the live drain's missing-credential retry schedule.
           WAITRON_ENV: "production",
-          // Distinctive on purpose: not 5000 (`WAITRON_MIN_TICK_MS`'s own default — the old floor
-          // this branch exists to stop reporting), not 300000 (`@waitron/scheduler`'s own
-          // `DEFAULTS.skipRetryMs`, which this test must not pass by coincidence with the fallback),
-          // and strictly between `WAITRON_MIN_TICK_MS` and `WAITRON_MAX_TICK_MS` above so neither
-          // clamp can produce this same number by accident either.
+          // Distinctive: not `WAITRON_MIN_TICK_MS`'s default, not the scheduler's
+          // `DEFAULTS.skipRetryMs`, and strictly between the two clamps.
           WAITRON_SKIP_RETRY_MS: "45678",
         });
         const skippedEvent = await waitForEvent(lines, "drain.tenant_skipped");
@@ -2881,35 +2291,19 @@ describe("startServer, against a migrated venue directory", () => {
       });
 
       try {
-        // Proof #1: the seeded tenant really was skipped for a missing credential, not silently
-        // dropped some other way — a passing `sleepMs` assertion below would prove nothing about
-        // THIS branch's behaviour if the tenant were never enumerated at all.
+        // The row was reached and skipped for its missing credential, not dropped some other way.
         expect(skipped.errorCode).toBe("credentials.missing");
 
-        // THE assertion. `config.skipRetryMs` reached `drain` via `boot.ts`'s `drain` closure and
-        // folded into `nextDueAt` as `now + WAITRON_SKIP_RETRY_MS` (`drain.ts`'s own fold — no other
-        // tenant has earlier work this pass, and reconcile has no enrolled `payments.stripe` tenants
-        // at all, so nothing pulls the folded answer earlier). `sleepMsFor` then clamps that against
-        // `[minTickMs, maxTickMs]`, and 45678 sits strictly inside both, so it survives close to
-        // verbatim — not EXACTLY 45678, because `sleepMsFor` (`loop.ts`) subtracts a SECOND,
-        // freshly-read `now()` from `nextDueAt`, taken after the pass itself ran, so the reported
-        // `sleepMs` is `45678` minus whatever real wall-clock time the pass took (confirmed live: a
-        // few milliseconds). A generous 5-second tolerance absorbs that real timing noise while
-        // staying two orders of magnitude away from `config.minTickMs` (1000) — the value
-        // `skipRetryMs: config.minTickMs` at either `boot.ts` call site would report instead. This
-        // test's own header comment records that the swap was verified live: making that edit turned
-        // this into ~1000, watching it fail, then reverting it.
+        // `config.skipRetryMs` folds into `nextDueAt`, and 45678 sits inside both clamps. `sleepMsFor`
+        // subtracts a `now()` read after the pass ran, so the tolerance absorbs the pass's duration
+        // while staying far from `minTickMs` (1000), which a swapped field would report.
         expect(sleeping.sleepMs).toBeLessThanOrEqual(45678);
         expect(sleeping.sleepMs).toBeGreaterThan(45678 - 5000);
       } finally {
         await server.close();
       }
     } finally {
-      // The ONLY row that keeps this database perpetually due: `envios_work_due` (drain.ts) reads
-      // `envios`, not `tenants`/`tills`/`registros_facturacion`/`sales`/`registro_sif`, so deleting
-      // just this is what stops the drain from finding work again. Runs regardless of how the block
-      // above finishes, so a failed assertion still leaves the directory clean for whatever test
-      // runs next.
+      // Only the `envios` row keeps the directory due.
       await sharedDb.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
     }
   }, 60_000);
@@ -2960,18 +2354,9 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  // F4 (2026-07-27 fix wave): `boot.ts`'s `drain` closure builds a fresh `aeatClientResolver`
-  // every pass and releases it via `finally { await resolver.closeAll() }` — the fix this whole
-  // branch exists to land, and the one line of it with no test at all before this one. Every OTHER
-  // test in this describe block either seeds no due `fiscal.drain` work at all, or (the test just
-  // above) seeds due work with NO usable `fiscal.aeat` credential — in both cases
-  // `resolveClient` never reaches `mtlsFetch`, so no real `Agent` is ever built for
-  // `closeAll` to release. This seeds BOTH: due `envios` work (`seedPendingEnvios`, as above) AND
-  // a usable credential, reusing `aeat-transport.test.ts`'s own TLS/PKCS#12 fixture
-  // (`mintMtlsMaterial`) rather than inventing a new one — so `resolveClient` succeeds and a
-  // genuine undici `Agent` gets constructed. See this file's own header comment for why `undici`'s
-  // `fetch` is module-mocked (no seam to point `startServer` at a local AEAT double, and this
-  // process has no business dialling the real one) while `Agent` itself stays real.
+  // The Veri*Factu drain builds an AEAT client resolver each pass and releases it in `finally`
+  // (`packages/fiscal-verifactu/src/slot.ts`). Only this test seeds both due work and a usable
+  // `fiscal.aeat` credential, so only here is a real `Agent` built for that release to close.
   it("closes the mTLS transport it built for a tenant with due fiscal work and a usable fiscal.aeat credential", async () => {
     const port = await freePort();
     const seeded = await seedPendingEnvios(sharedDb, {
@@ -2983,9 +2368,6 @@ describe("startServer, against a migrated venue directory", () => {
       },
     });
     const material = mintMtlsMaterial();
-    // Same shape as `aeat-transport.test.ts`'s own `provision(certKind)` helper, against the
-    // TENANT `seedPendingEnvios` just seeded rather than a fresh one of its own — this test needs
-    // ONE tenant carrying both due work and a usable credential, not two separate tenants.
     await withTransaction(sharedDb, (tx) =>
       putCredential(tx, loadKeyRing(KEY_ENV), {
         purpose: "fiscal.aeat",
@@ -2997,9 +2379,7 @@ describe("startServer, against a migrated venue directory", () => {
       }),
     );
 
-    // The only observable proof, through a real boot, that the transport this pass built was
-    // actually released rather than leaked for the process lifetime — `startServer`'s public
-    // surface exposes no handle onto `aeatClientResolver`'s own `open` list.
+    // `startServer` exposes no handle on the transport a pass built, so its release is observed here.
     const closeSpy = vi.spyOn(Agent.prototype, "close");
     try {
       const server = await startServer({
@@ -3009,16 +2389,8 @@ describe("startServer, against a migrated venue directory", () => {
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
         WAITRON_MIN_TICK_MS: "1000",
         WAITRON_MAX_TICK_MS: "600000",
-        // `seedPendingEnvios`'s default `entorno` is `"production"` (`DEFAULT_ENTORNO`,
-        // drain-fixtures.ts) — without this, `deploymentEnvironment` resolves its own default,
-        // `"preproduction"`, the seeded row's `entorno` disagrees, and `claimBatch`'s
-        // deployment-environment guard refuses it before `resolveClient` (and hence `mtlsFetch`)
-        // is ever reached FOR THAT ROW. This test's assertion happened to still pass either way —
-        // `resolveClient` is called once per PASS that has any due work at all, ahead of and
-        // regardless of that per-row check (`packages/fiscal-verifactu/src/drain.ts:181-187`) — but a passing assertion for the
-        // wrong reason is not what this test claims to cover. Set explicitly so the scenario
-        // actually exercised is "a real submission attempt", not "a refused row that happens to
-        // share a pass with a resolved transport".
+        // Matches `seedPendingEnvios`'s default `entorno`, so the drain's environment guard does not
+        // refuse the row and the pass makes a real submission attempt.
         WAITRON_ENV: "production",
       });
       try {
@@ -3029,46 +2401,17 @@ describe("startServer, against a migrated venue directory", () => {
       }
     } finally {
       closeSpy.mockRestore();
-      // Same reasoning as the skip-retry test above: only the `envios` row keeps the database
-      // perpetually due, so deleting it is enough to keep this test order-independent. The
-      // `tenant_credentials` row this test also inserted is not read by `envios_work_due` and is
-      // left in place, matching every other credential this file's suite seeds.
-      //
-      // `incidents` also needs cleanup here, unlike the skip-retry test above: with `WAITRON_ENV`
-      // now agreeing with the seeded `entorno`, the mocked `undici` fetch (this file's own header
-      // comment) still makes the real submission attempt fail, and `drain`'s `client.submit` catch
-      // backs the batch off rather than raising an incident — but this cleanup is kept anyway,
-      // rather than assumed absent, so a future change to that failure path does not silently
-      // leave a row behind for a LATER test sharing this directory to trip over.
+      // Only the `envios` row keeps the directory due. `incidents` is cleared too, so a change to how
+      // a failed submission is handled cannot leave a row behind for a later test.
       await sharedDb.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
       await sharedDb.execute(sql`delete from incidents `);
     }
   }, 60_000);
 
-  // Task 3: the boot guard (deployment-guard.ts). `stampDeployment` is permanent (a second,
-  // different value is refused, not overwritten — see its own doc comment), so the row this test
-  // writes is deleted in `finally`, the same pattern the seeded `envios` rows above use — this test
-  // is order-independent, not reliant on running last: a stamp left behind would make every LATER
-  // test booting with `WAITRON_ENV: "production"` (the very first test in this
-  // block) fail this same guard for real, which is exactly the order-dependence the "sleeps on
-  // WAITRON_SKIP_RETRY_MS" test above was fixed to no longer have — not a precedent for keeping it
-  // here.
-  //
-  // The SECOND clause — "runs no migration" — needs a lever that makes a migration run VISIBLE, or a
-  // guard firing too LATE would produce this same error and pass this same assertion (CLAUDE.md §1,
-  // both answers look alike). The lever the role split used is gone with the roles. Its replacement
-  // was already here and unremarked: this boot, alone in the file, sets NO `WAITRON_MIGRATIONS_DIR`,
-  // so the migration seam would resolve `boot.ts`'s from-source default
-  // `apps/server/src/drizzle` — a directory that does not exist — and throw `migrations.set_missing`
-  // out of `resolveExistingMigrationsFolder`. Reaching `deployment.environment_mismatch` therefore
-  // means the stamp guard ran BEFORE the seam.
-  //
-  // The control was run in the other direction rather than reasoned about. Two boots, 2026-09-22,
-  // against one migrated directory stamped `preproduction`, printing the classified code each
-  // rejected with: `WAITRON_ENV=production` → `deployment.environment_mismatch`;
-  // `WAITRON_ENV=preproduction`, everything else identical → `migrations.set_missing`. So the lever
-  // is live and the assertion below discriminates — a guard that ran after the seam would print the
-  // second code here, not the first.
+  // `stampDeployment` is permanent, so the stamp is deleted in `finally`: left behind, it would fail
+  // every later production boot against this directory. This boot sets no `WAITRON_MIGRATIONS_DIR`,
+  // so a migration run would throw `migrations.set_missing` from boot's from-source default; reaching
+  // `deployment.environment_mismatch` instead shows the stamp guard ran before the migration seam.
   it("refuses to start, and runs no migration, against another environment's database", async () => {
     await stampDeployment(sharedDb, "preproduction");
 
@@ -3087,14 +2430,10 @@ describe("startServer, against a migrated venue directory", () => {
   });
 });
 
-// The REJECT test below needs no storage: an at-or-above-budget `WAITRON_MAX_TICK_MS` is rejected by
-// this guard at the very top of `startServer`, before it ever reaches the stamp probe or
-// `applyMigrations` — an UNOPENABLE venue directory proves that (an openable one would make the
-// rejection ambiguous between this guard and a storage failure that happened to also throw). The
-// ACCEPT test DOES need the migrated directory `beforeAll` builds for the suite above: since slice 1b
-// `loadKeyRing` lives at the top of boot's trading branch — AFTER the stamp probe and migrations — so
-// the below-budget value's proof (reaching `credentials.key_missing` at `loadKeyRing`) only lands once
-// those have run against a real database.
+// The reject test needs no storage: the guard runs at the top of `startServer`, and an unopenable
+// venue directory keeps a storage failure from passing for it. The accept test needs the migrated
+// directory: its proof is reaching `credentials.key_missing` at `loadKeyRing`, which runs after the
+// stamp probe and migrations. No credentials key is set, so that is where a boot past the guard stops.
 describe("startServer's maxTickMs-vs-drain-budget guard", () => {
   it("rejects WAITRON_MAX_TICK_MS at or above drain's staleness budget, before touching any infrastructure", async () => {
     const error = await captureError(() =>
@@ -3112,14 +2451,6 @@ describe("startServer's maxTickMs-vs-drain-budget guard", () => {
   });
 
   it("lets a maxTickMs comfortably below the budget past this guard", async () => {
-    // The guard is at the very top of `startServer`, but `loadKeyRing` now lives at the top of boot's
-    // TRADING branch — after the shared deployment-stamp probe and `applyMigrations` — so proving a
-    // below-budget value passes the guard means reaching that later throw against a REACHABLE database.
-    // `...TILL_ENV` makes `config.till` present (trading mode) while every WAITRON_CREDENTIALS_KEY*
-    // variable is omitted, so a boot that gets past the guard, the stamp probe and migrations (against
-    // the real, unstamped directory) throws `credentials.key_missing` at `loadKeyRing`. Reaching THAT
-    // error, not `server.config_invalid`/`at_or_above_drain_budget`, is what proves the guard let this
-    // value through rather than rejecting it for the wrong reason.
     const error = await captureError(() =>
       startServer({
         ...TILL_ENV,
@@ -3135,36 +2466,21 @@ describe("startServer's maxTickMs-vs-drain-budget guard", () => {
 describe("MAX_UPLOAD_BYTES", () => {
   it("is 20 MiB — the image-library upload ceiling", () => {
     // Bounds how large an upload the server will buffer; MAX_INPUT_PIXELS bounds the decode.
-    // Pinned so a later edit cannot move the ceiling without this failing.
     expect(MAX_UPLOAD_BYTES).toBe(20 * 1024 * 1024);
   });
 });
 
 describe("SP-C dev override reaches the live device routes only under devMode", () => {
-  // The end-to-end proof that Task 6's boot wiring threads `config.devMode` all the way to the live
-  // routes: `mountDeviceApi` must receive `devMode: config.devMode`, and the `/api/device/me` route
-  // (which reconstructs a NARROW `{ db, cfg }` for `requireDevice`) must forward `devMode` so the
-  // `x-waitron-dev-device` override header is honoured. The security invariant is the fail-closed
-  // half: a NON-dev boot (`WAITRON_ENV=preproduction`) must IGNORE the header entirely — proven at
-  // the HTTP layer, not reasoned about. Both boots are TRADING mode (all four WAITRON_TILL_*_ID via
-  // KEY_ENV), so `mountDeviceApi` is mounted; only `WAITRON_ENV` differs between them.
-  //
-  // Two devices are enrolled (bound to two DIFFERENT tills) so the assertion proves the header
-  // SELECTS a specific device rather than defaulting to whatever one device happens to exist:
-  // `/api/device/me` returns device-2's id AND device-2's bound `tillId`, not device-1's. Enrolled
-  // via the genuine knock-then-accept path (`enrolDeviceForTest`) under the tenant, exactly as
-  // `sale-till-source.receipt.test.ts` does — though the override path never checks the token, the
-  // real enrol path proves the wiring against a genuinely-provisioned device.
+  // `config.devMode` must reach the live device routes: under devMode the `x-waitron-dev-device`
+  // header authenticates as the named device, and a non-dev boot must ignore it (fail closed). Two
+  // devices bound to different tills show the header selects a specific device.
   let deviceId1: string;
   let deviceId2: string;
   let till2: string;
 
   beforeAll(async () => {
     const cfg: TillConfig = { ...loadTillConfig(TILL_ENV), orderFlow: "prepay" };
-    // Two `tills` rows in this till's own location. The (till_id) FK on `devices` requires a real
-    // row per bound device. Through the table definition, like the seeds in `beforeAll`: `tills.id`
-    // and `tills.created_at` are `$defaultFn` generators on NOT NULL columns
-    // (`packages/db/src/schema/tenants.ts:232,:245`), which a raw insert reaches neither of.
+    // The FK on `devices` needs a real `tills` row per bound device.
     const insertTill = async (name: string): Promise<string> => {
       const [row] = await sharedDb
         .insert(tills)
@@ -3174,15 +2490,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
     };
     const till1 = await insertTill("SP-C dev override till 1");
     till2 = await insertTill("SP-C dev override till 2");
-    // Enrol a `till`-kind device bound to `boundTillId` and return its id — the mint->redeem runs
-    // under the tenant (the production enrol path), so `tryReadDevice`'s id-selected,
-    // `active = true` read resolves a genuine binding.
     const enrolTillDevice = async (boundTillId: string): Promise<string> => {
-      // Since Task 7 a `till` device auto-creates its OWN register; binding a SPECIFIC existing register
-      // is the sale-capable handheld leg (`registerId`). The dev-override read below only cares that the
-      // device resolves to its own bound till, which a handheld carries.
-      // Through the table definition for the same reason as `insertTill` above: `id`, `created_at`
-      // and `updated_at` are `$defaultFn` generators (`packages/db/src/schema/device-profiles.ts`).
       const [profile] = await sharedDb
         .insert(deviceProfiles)
         .values({ name: `Override device ${boundTillId}`, formFactor: "phone-portrait" })
@@ -3214,9 +2522,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       });
       try {
         expect(lines.some((line) => line.includes('"event":"mdns.responding"'))).toBe(false);
-        // The header names device-2; the response is device-2's binding — proof the override reached
-        // `requireDevice` through the reconstructed `{ db, cfg }` (with `devMode` now forwarded), and
-        // that it SELECTED the named device (its own bound `tillId`), not device-1 or a default.
+        // Device-2's binding: the override selected the named device, not device-1 or a default.
         const res = await fetch(`http://127.0.0.1:${port}/api/device/me`, {
           headers: { [DEV_DEVICE_HEADER]: deviceId2 },
         });
@@ -3238,15 +2544,13 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
       WAITRON_ENV: "preproduction",
-      WAITRON_HTTP_LANDING_PORT: "0", // Task 3: no privileged port-80 bind in tests.
+      WAITRON_HTTP_LANDING_PORT: "0", // No privileged port-80 bind in tests.
       WAITRON_MIN_TICK_MS: "50",
       WAITRON_MAX_TICK_MS: "200",
       WAITRON_SKIP_RETRY_MS: "100",
     });
     try {
-      // Same header, same enrolled device — but `config.devMode` is false, so the override is
-      // byte-for-byte inert: `tryReadDevice` never reads the header and, with no cookie, folds to
-      // `device.unauthorized` (401). This is the fail-closed security invariant at the HTTP layer.
+      // With `config.devMode` false the header is inert, and with no cookie the read is refused.
       const res = await fetch(`http://127.0.0.1:${port}/api/device/me`, {
         headers: { [DEV_DEVICE_HEADER]: deviceId1 },
       });
@@ -3259,13 +2563,8 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
 
 describe("DEFAULT_MIGRATIONS_ROOT", () => {
   it("resolves to an absolute path named drizzle, the layout scripts/copy-migrations.mjs builds beside the bundle", () => {
-    // 100% statement coverage on this expression proves nothing about whether it is CORRECT — it is
-    // exercised either way, being a function argument at startServer's own loadConfig call. These
-    // are the two ways it actually breaks: a RELATIVE root would resolve to apps/server/drizzle
-    // under the bundle — the non-existent path the whole manifest indirection exists to avoid — and
-    // a WRONG basename would miss the folders scripts/copy-migrations.mjs actually copies. Both are
-    // asserted directly against the real exported constant `startServer` passes to `loadConfig`, not
-    // a second copy of the same expression that could silently drift from it.
+    // Coverage says nothing about this expression's correctness: a relative root or a wrong basename
+    // would miss the folders `scripts/copy-migrations.mjs` copies beside the bundle.
     expect(isAbsolute(DEFAULT_MIGRATIONS_ROOT)).toBe(true);
     expect(basename(DEFAULT_MIGRATIONS_ROOT)).toBe("drizzle");
   });
@@ -3799,8 +3098,8 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 60_000);
 
-  // Slice-2 plan N23: an archive whose database holds bucket settings may be a copy of a server
-  // still selling, so staging it checks that server's bucket first.
+  // An archive whose database holds bucket settings may be a copy of a server still selling, so
+  // staging it checks that server's bucket first.
   it("asks whether the old server is gone when an archive's bucket never answers, staging nothing", async () => {
     const venue = await freshVenue();
     const source = await freshVenue();
