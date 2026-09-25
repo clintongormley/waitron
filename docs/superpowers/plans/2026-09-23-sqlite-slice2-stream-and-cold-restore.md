@@ -4794,6 +4794,9 @@ describe the same module list. Later tasks reuse this one `sealedState` value: T
 settings route and Task 9a's first-start routine each call `sealedState.refresh()`, never a second
 refresher, so the one-at-a-time rule holds across all of them.
 
+> 2026-09-25: as built, Task 9a's first start calls no refresher. It runs earlier in the same trading
+> start, and boot's own `await sealedState.refresh();` (`apps/server/src/boot.ts`) seals the new leaf.
+
 The order in `boot.ts` is fixed: `await backupSupervisor.reload();`, then `await sealedState.refresh();`,
 then Task 6's `await streamHost.start();`. The sealed-state refresh comes BEFORE the stream starts, so
 the first copy the stream takes already holds this start's sealed row.
@@ -17140,6 +17143,15 @@ recovery kit stays valid. Only Rotate makes a new key."
 ---
 
 ### Task 9a: The first start after a rebuild or a restore — a certificate for this machine, and the next membership term
+
+> 2026-09-25: as built, where the code departs from this task's (see also the dated notes under
+> Interfaces and at N23; Steps 10 to 12 below show the earlier shapes). `boot.ts` runs the first
+> start after the adoption-pending return, the returned-box reconciliation with the cloud peer and
+> the fence decision, not straight after `loadKeyRing`. A mirror or a fenced node calls
+> `deferFirstStart` instead, which re-issues and signs nothing, keeps the marker and holds the copy.
+> `boot.ts` starts `streamHost` unconditionally: `StreamHost` takes a `mayStream` dep and holds the
+> copy itself at each start, after reading the bucket settings. `reissueBoxLeaf` takes `listIpv4` as
+> a required dep. `docs/backlog.md`'s Task 9a entry states the rest.
 
 **Branch:** `feat/sqlite-slice2-rebuild-first-start` (one pull request)
 

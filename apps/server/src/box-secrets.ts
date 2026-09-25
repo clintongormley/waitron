@@ -15,8 +15,8 @@ import type { TlsFiles } from "./tls.js";
 /**
  * The three TLS file paths `node:https` needs to serve setup-mode HTTPS from the box's self-signed
  * identity — `cert`/`key` are the leaf, `caCertFile` is the CA a setup client trusts to accept it.
- * The CA private key (`ca.key`) is written to disk too, so the same CA can later re-sign a rotated
- * leaf, but it is not a server input, so it is not returned.
+ * The CA private key (`ca.key`) is written to disk too, for {@link reissueBoxLeaf}, but it is not a
+ * server input, so it is not returned.
  */
 export interface BoxTlsFiles {
   certFile: string;
@@ -58,8 +58,8 @@ function leafIpv4s(listIpv4: () => string[]): string[] {
  * The box's own minted leaf (`<stateDir>/tls/server.{crt,key}`), or `undefined` when it has never
  * completed a setup boot. The ONE source of truth for the leaf-path convention, shared by every
  * serve site that falls back to it: the recovery page (`node-entry.ts`) AND the trading branches
- * (`boot.ts`), which must present the same leaf setup already serves so an already-trusting phone or
- * till reaches the box over HTTPS with no new trust step. `server.key` is `ensureBoxSecrets`'s own
+ * (`boot.ts`). A phone or till trusts the box's CA, not the leaf, so a new leaf the same CA signs
+ * needs no new trust step. `server.key` is `ensureBoxSecrets`'s own
  * presence sentinel (written last of the quartet); both halves are checked because `buildServeOptions`
  * reads both and a half-written pair would throw inside the one serve call. A leaf-less box falls back
  * to plain HTTP, the honest limit — refusing to serve would hand the operator nothing.
@@ -107,7 +107,7 @@ const exists = (p: string): Promise<boolean> =>
  * Materialise the box's self-signed cert + secrets ONCE under `stateDir`, then reuse them on every
  * later boot. Presence is the whole idempotency contract: each write is guarded on the target being
  * absent, so a second call returns byte-identical files and never regenerates a key —
- * the tell a POS depends on, since a fresh cert on every boot would break every already-trusting
+ * the tell a POS depends on, since a fresh CA on every boot would break every already-trusting
  * setup client and a fresh key ring would strand every sealed credential.
  *
  * Layout written/read — the four PEMs and secrets.env are each written 0600 (owner-only), which is

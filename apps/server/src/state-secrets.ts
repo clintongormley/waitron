@@ -7,10 +7,10 @@ import "./errors.js";
 
 /**
  * The fixed set of state-dir secret/identity files a recovery bundle carries — the box's UNRECOVERABLE
- * material (the vault master key in `secrets.env`), its fiscal identity (`trading.env`), and the CA +
- * leaf that let a restored box keep the same trusted identity so already-trusting devices need not
- * re-trust. Relative to `stateDir`, posix-slashed. NOT the database — that is a separate scheduled
- * backup (slice 4b-ii). Cloud installation keys are excluded: a replacement pairs with its own key.
+ * material (the vault master key in `secrets.env`), its fiscal identity (`trading.env`), the CA (with
+ * its key), which already-trusting devices keep trusting after a restore, and the leaf it signed.
+ * Relative to `stateDir`, posix-slashed. NOT the database — that is a separate scheduled backup
+ * (slice 4b-ii). Cloud installation keys are excluded: a replacement pairs with its own key.
  * The layout mirrors `box-secrets.ts`/`trading-config.ts` which WROTE these.
  */
 export const RECOVERY_FILES = [

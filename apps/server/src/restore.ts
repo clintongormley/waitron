@@ -291,7 +291,7 @@ export async function writeValidated(
   try {
     // A restored identity finishes on its first trading start (rebuild-first-start.ts). Written
     // before anything is placed, so a box that trades after this restore finds it; a restore that
-    // throws removes it while the lock is still held (plan Reconciliation N16).
+    // throws removes it while the lock is still held (slice-2 plan, Reconciliation N16).
     const marker = join(deps.stateDir, REBUILD_MARKER);
     if (!deps.skipSecrets) {
       await writeFileAtomic(

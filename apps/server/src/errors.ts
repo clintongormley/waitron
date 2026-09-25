@@ -747,8 +747,8 @@ declare module "@waitron/shared" {
      * is out of date or missing. Built as data by the sealed-state alert source, never thrown. */
     "backup.sealed_state_failed": Record<string, never>;
     /** A restored box's first start (a certificate for this machine, the next membership term)
-     * failed, so the box sells but does not copy to the bucket. Built as data by the backups alert
-     * source, never thrown. */
+     * failed, so the box sells but does not copy to the bucket. Built as data by
+     * `firstStartAlertSource`, never thrown. */
     "restore.first_start_failed": Record<string, never>;
     /** A restored box's first start found bucket settings but could not learn the term the
      * bucket's pointer names: the bucket did not answer within the bound, or opening or reading it

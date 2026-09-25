@@ -11,7 +11,7 @@ import "./errors.js";
 export interface SelfSignedMaterial {
   /** The CA certificate, PEM. A setup client trusts THIS to accept the server cert below. */
   caCertPem: string;
-  /** The CA private key, PEM. Kept so the same CA can later re-sign a rotated leaf. */
+  /** The CA private key, PEM. Kept for {@link reissueServerLeaf}. */
   caKeyPem: string;
   /** The leaf server certificate, PEM. Served as `cert` to `node:https`. */
   serverCertPem: string;
