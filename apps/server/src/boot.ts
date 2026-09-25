@@ -1059,7 +1059,8 @@ export async function startServer(
       // operator-typed configuration rather than a secret, which is why it may be echoed. The name
       // the receiving side gives this — `database` — is unchanged.
       const ownerDatabaseName = config.venueDir;
-      // A setup request waits on these calls, so none may wait on a bucket that never answers.
+      // Bounds each object-store call the setup restores make; the Litestream download that
+      // follows is limited by restoreGeneration's own stall and ceiling times.
       const openBoundedBucket = (bucket: BucketConfig) =>
         boundObjectStore(createS3ObjectStore(bucket));
       // The setup surface, now with the slice-2b provisioning deps bound. `db`/`ring` are handed to

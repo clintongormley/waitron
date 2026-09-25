@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { AppError } from "@waitron/shared";
 import { mountSetup } from "./setup-api.js";
 import type { CloudRecoveryView } from "./cloud-recovery.js";
 import { createSetupOperationStore } from "./setup-operation.js";
@@ -85,9 +86,56 @@ describe("setup Cloud recovery", () => {
       managedCloud: { requestId, pointId },
     };
     await wrappedStage(candidate);
-    expect(stageRestore).toHaveBeenCalledWith(candidate);
+    expect(stageRestore).toHaveBeenCalledWith(candidate, { oldBoxGone: false });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(requestRestart).toHaveBeenCalledOnce();
+  });
+  // Slice-2 plan N23: a snapshot whose database holds bucket settings gets the old-box check.
+  it.each([
+    [new AppError("restore.stream_source_live", { lastChangeAt: "2026-09-24T11:58:00.000Z" })],
+    [new AppError("restore.stream_source_unchecked", { reason: "bucket" })],
+  ])("answers a refused old-box check (%s) with 409 and releases the setup lock", async (error) => {
+    for (const keepsProgress of [false, true]) {
+      const dir = await mkdtemp(join(tmpdir(), "waitron-cloud-setup-refused-"));
+      try {
+        const { cloudRecovery, requestRestart } = setup();
+        cloudRecovery.restore.mockImplementation(async (stage) => {
+          await stage({
+            artifact: Uint8Array.from([1]),
+            recoveryKey: "key",
+            environment: "preproduction",
+            managedCloud: { requestId, pointId },
+          });
+        });
+        const stageRestore = vi.fn().mockRejectedValueOnce(error).mockResolvedValueOnce(undefined);
+        const app = new Hono();
+        mountSetup(
+          app,
+          {
+            environment: "preproduction",
+            cloudRecovery,
+            stageRestore,
+            requestRestart,
+            ...(keepsProgress ? { operations: createSetupOperationStore(dir) } : {}),
+          },
+          vi.fn(),
+        );
+        const send = () =>
+          app.request("/setup-api/cloud-recovery/restore", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ pointId }),
+          });
+        const refused = await send();
+        expect([keepsProgress, refused.status]).toEqual([keepsProgress, 409]);
+        expect(await refused.json()).toEqual({ error: { code: error.code, params: error.params } });
+        expect(stageRestore).toHaveBeenLastCalledWith(expect.anything(), { oldBoxGone: false });
+        const retried = await send();
+        expect([keepsProgress, retried.status]).toEqual([keepsProgress, 202]);
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    }
   });
   it("refuses a different valid snapshot without an operation store", async () => {
     const { app, cloudRecovery, stageRestore, requestRestart } = setup();

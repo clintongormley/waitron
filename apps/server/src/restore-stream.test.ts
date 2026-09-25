@@ -997,6 +997,15 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     await expectStateUntouched(deps.stateDir);
   });
 
+  it("refuses a confirmation naming another tax id, staging nothing", async () => {
+    const deps = await stageDeps({ venueConfirmed: "B00000000" });
+    await expect(stageStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.stream_venue_unconfirmed",
+      params: VENUE,
+    });
+    await expectStateUntouched(deps.stateDir);
+  });
+
   it("never confirms a copy that names no tax id, even against an empty confirmation", async () => {
     const deps = await stageDeps({
       venueConfirmed: "",

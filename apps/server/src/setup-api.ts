@@ -957,6 +957,8 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         if (binding.pointId !== pointId) throw new AppError("setup.operation_conflict", {});
         const execute = async () => {
           await deps.cloudRecovery!.restore(
+            // No override for a Cloud snapshot: a refusal changes nothing on the box, and the
+            // owner still has the bucket and archive restores, which ask the old-box question.
             (request) => deps.stageRestore!(request, { oldBoxGone: false }),
             pointId,
           );
@@ -964,14 +966,14 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           setTimeout(() => deps.requestRestart!(), 0);
           return response;
         };
-        if (!deps.operations) return execute();
+        if (!deps.operations) return await execute();
         const requestHash = createHash("sha256")
           .update("cloud-recovery:")
           .update(binding.requestId)
           .update(":")
           .update(pointId)
           .digest("hex");
-        return deps.operations.run("restore", requestHash, async (operation) => {
+        return await deps.operations.run("restore", requestHash, async (operation) => {
           if (operation.phase === "complete") {
             setTimeout(() => deps.requestRestart!(), 0);
             return c.json({ restoreStaged: true, restarting: true }, 202);
