@@ -26,6 +26,7 @@ export {
   ENV_ACCESS_KEY_ID,
   ENV_SECRET_ACCESS_KEY,
   LITESTREAM_VERSION,
+  checkLitestreamSettings,
   resolveLitestreamBin,
 } from "./litestream.js";
 export type { ChildHandle, SpawnFn } from "./litestream-process.js";
@@ -40,6 +41,8 @@ export type {
 } from "./supervisor.js";
 export { COMMIT_GRANULARITY_MS, CommitLog, computeLag } from "./freshness.js";
 export type { LagInput } from "./freshness.js";
+export { KIT_PREFIX, encodeRecoveryKit, parseRecoveryKit } from "./kit.js";
+export type { RecoveryKit } from "./kit.js";
 
 // Side-effect only: keeps errors.ts's registry augmentation reachable from this barrel
 // (guarded tree-wide by scripts/errors-reachable.test.ts).

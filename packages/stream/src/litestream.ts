@@ -89,19 +89,13 @@ export function litestreamConfig(input: { dbPath: string; replicaUrl: string }):
 }
 
 /**
- * Litestream's `s3://` address for one generation, and the only place it is built: the same key
- * {@link bucketKey} gives the object store, so the supervisor, its listings and the restore all name
- * one folder. With an endpoint Litestream defaults to path-style addressing
- * (`s3/replica_client.go:175-183` at the pinned tag), which non-Amazon stores need.
- *
- * Litestream reads the path through Go's `url.Parse` and then `path.Clean`
- * (`replica_url.go:106` at the pinned tag). Each segment is percent-encoded so `#` and `?` stay in
- * the path, and a prefix holding an empty, `.` or `..` segment is refused, because cleaning would
- * move Litestream to a folder the object store does not write to. Half a surrogate pair is refused
- * too: `encodeURIComponent` throws on it. The bucket is the host, which is not encoded, so only
- * S3's bucket-name characters are let through there.
+ * Litestream reads the replica address's path through Go's `url.Parse` and then `path.Clean`
+ * (`replica_url.go:106` at the pinned tag), so a prefix holding an empty, `.` or `..` segment is
+ * refused: cleaning would move Litestream to a folder the object store does not write to. Half a
+ * surrogate pair is refused too: `encodeURIComponent` throws on it. The bucket is the address's
+ * host, which is not encoded, so only S3's bucket-name characters are let through there.
  */
-export function replicaUrl(bucket: BucketConfig, venueId: string, generation: string): string {
+function checkBucketAndPrefix(bucket: Pick<BucketConfig, "bucket" | "prefix">): void {
   if (!BUCKET_NAME.test(bucket.bucket)) {
     throw new AppError("backup.stream_config_unsafe", { field: "bucket" });
   }
@@ -114,6 +108,26 @@ export function replicaUrl(bucket: BucketConfig, venueId: string, generation: st
   ) {
     throw new AppError("backup.stream_config_unsafe", { field: "prefix" });
   }
+}
+
+/**
+ * Every refusal the supervisor's Litestream configuration would make of these settings, made
+ * before any bucket is contacted.
+ */
+export function checkLitestreamSettings(bucket: BucketConfig): void {
+  checkBucketAndPrefix(bucket);
+  litestreamEnv(bucket);
+}
+
+/**
+ * Litestream's `s3://` address for one generation, and the only place it is built: the same key
+ * {@link bucketKey} gives the object store, so the supervisor, its listings and the restore all name
+ * one folder. With an endpoint Litestream defaults to path-style addressing
+ * (`s3/replica_client.go:175-183` at the pinned tag), which non-Amazon stores need. Each path
+ * segment is percent-encoded so `#` and `?` stay in the path.
+ */
+export function replicaUrl(bucket: BucketConfig, venueId: string, generation: string): string {
+  checkBucketAndPrefix(bucket);
   const path = bucketKey(bucket, `${venuePrefix(venueId)}${generation}`)
     .split("/")
     .map(encodeURIComponent)
