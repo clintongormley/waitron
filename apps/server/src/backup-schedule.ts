@@ -1,6 +1,5 @@
 // Next-fire math for the backup sweep's wall-clock cadence, with no time zone library: `Intl` gives
-// an instant's local parts, and a fixed point over the zone's offset gives the inverse. A local time
-// skipped by a spring-forward night resolves an hour later.
+// an instant's local parts, and a fixed point over the zone's offset gives the inverse.
 
 import { createHash } from "node:crypto";
 import type { BackupSchedule } from "./backup-config.js";

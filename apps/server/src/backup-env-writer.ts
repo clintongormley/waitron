@@ -69,8 +69,8 @@ export async function writeBackupEnv(stateDir: string, input: BackupEnvInput): P
   await writeFileAtomic(join(stateDir, "backup.env"), formatEnvFile(record), 0o600);
 }
 
-/** Sets the recovery key, keeping every other setting the file holds, so a box with no archive
- * destination can still hold a key. */
+/** Sets the recovery key (and its rotation time when one is given), keeping every other setting the
+ * file holds, so a box with no archive destination can still hold a key. */
 export async function writeRecoveryKey(
   stateDir: string,
   input: { recoveryKey: string; keyRotatedAt: string | undefined },
