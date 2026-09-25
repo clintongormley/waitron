@@ -2960,11 +2960,6 @@ image constraints under *Detail → Box image*.
     ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)", "Task 8", "(SP-B2.1)"), as do three
     `session-activity.test.ts` titles ("(C3)").
   - Found by #620 (`apps/server` part h1), not fixable in a comments-only change.
-    **`CLAUDE.md` §2's "shard can exit 1" trap is stale on Vitest 4**: it says the worker-to-main
-    reporting call has a sixty-second timeout nothing can raise, but Vitest 4.1.11 passes
-    `timeout: -1` for that call (`rpc.MzXet3jl.js:117`) and its bundled birpc starts a timer only for
-    a timeout of zero or more; `docs/developers/ci-and-gates.md` already says so. Read by two review
-    seats, not run; `CLAUDE.md` takes the normal PR flow (question in lane B's questions file).
     **The demo seed does not refuse a production stamp**: with `WAITRON_ENV=production`,
     `scripts/demo-seed/seed-sales.test.ts` fails its stamp check with `Received: "production"`
     (measured); only `dev-setup.ts`'s header says it must never run against a production directory,
@@ -3669,14 +3664,20 @@ image constraints under *Detail → Box image*.
   same harness with no reset, with `packages/ui/src/components/wt-button.test.ts` ending a test
   hovering a button, so the same flake is waiting there.
 - **A sixth: a CI shard exits 1 with every one of its tests passing (2026-09-18, PR #414,
-  `test-server (3)`, job 105632564989).** The shard printed `Tests 1313 passed (1313)`, then vitest's
-  worker-to-main reporting call (`onTaskUpdate`) timed out on birpc's 60-second default — which nothing
-  in this repository can raise on vitest 3.2.7 — failing the shard on its own and taking the aggregate
-  `ci` job with it. **What is still unexplained is why one worker's `onTaskUpdate` went unanswered:**
-  the main process did not stall (completed files printed continuously through the minute) and the
-  shard is not the heavy one, so starvation is a weaker suspect than it looks. Written up in
-  [ci-and-gates.md](developers/ci-and-gates.md) rather than fixed (owner decision 2026-09-18); keep the
-  job log on the next sighting — it is the cheapest evidence there is.
+  `test-server (3)`, job 105632564989) — the exit-1 path CLOSED by the Vitest 4.1.11 upgrade
+  (#437), measured 2026-09-25; why the call went unanswered still open.** The shard printed
+  `Tests 1313 passed (1313)` and one unhandled error: vitest's worker-to-main reporting call
+  (`onTaskUpdate`) had timed out on birpc's 60-second default under vitest 3.2.7, failing the shard
+  on its own and taking the aggregate `ci` job with it. **On Vitest 4.1.11 that timeout is gone,
+  measured 2026-09-25**: a reporter withholding its answer for 75 seconds left the run waiting and
+  passing, while the same probe failed at 60 seconds on 3.2.7 and on a 4.1.11 copy edited back to a
+  60-second timeout. **What is still unexplained is why one worker's `onTaskUpdate` went
+  unanswered:** the main process never went more than 22 seconds without printing (its longest gap,
+  during startup) and the shard is not the heavy one, so starvation is a weaker suspect than it
+  looks. On 4.1.11 an answer that never came would leave the shard waiting until the job's
+  15-minute `timeout-minutes` cancelled it, rather than failing it when the run ends. Written up in [ci-and-gates.md](developers/ci-and-gates.md) rather than fixed
+  (owner decision 2026-09-18); keep the job log on the next sighting — it is the cheapest evidence
+  there is.
 - **What the grants refuse ONE OPERATION AT A TIME is not guarded (2026-09-19).**
   `scripts/write-path-tables.test.ts` (LANDED #430, 2026-09-19) covers the tables request code may
   read and never write — those `scripts/write-path-tables.json` lists, `tenants`, `nodes`,

@@ -172,11 +172,6 @@ hook, or how tests are scheduled:
   against a bar of 95 — red until a unit suite was written for the moved code — and the file became
   the package's largest mutation subject, whose shard runtime nobody has measured. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
-- **A shard can exit 1 with every one of its tests passing.** Vitest's worker-to-main reporting call
-  has a sixty-second timeout that no config key or environment variable in this repository can raise,
-  and it fails the shard on its own. Keep the job log before re-running, and read the test counts
-  before reading the diff. Cost: an unattended run stopped to ask whether a green-looking branch had
-  broken `apps/server`.
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
   `packages` outputs before treating a green PR as evidence about the workspace.
 - **No front-end bundle is built by a pull request that did not touch `deploy/`.** In CI the SPAs
