@@ -2841,12 +2841,19 @@ image constraints under *Detail → Box image*.
   recovery, rejoin, restore-entry-guard, restore-gate and retire files, part e1 (#625, about 3,090 to
   about 760 over the 64 files, parse-tree walk, tests included; the 14 part-e files the SQLite
   slice-2 plan's Tasks 8a–10 name are held back as e2). #625 also deleted the false "the verb is the
-  whole guard" note from `tables.ts`, `management-api.ts` (five copies) and `till-api.ts`.
+  whole guard" note from `tables.ts`, `management-api.ts` (five copies) and `till-api.ts`. Then
+  `apps/server`'s `box-status.ts` and `awaiting-fiscal-cert.test.ts`, two held-back files the
+  SQLite slice-2 plan's remaining tasks no longer name, part x (#629, 91 to 16 comment lines).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
-  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621, #622, #623, #624 and #625 and left for the package that owns each, all
+  #579, #581, #585, #589, #592, #597, #598, #600, #601, #602, #603, #604, #606, #607, #609, #610, #611, #612, #613, #614, #615, #616, #617, #618, #620, #621, #622, #623, #624, #625 and #629 and left for the package that owns each, all
   still OPEN:
+  - Found by #629 (`apps/server` part x), for `boot.ts`'s own prune (c2, held back while the SQLite
+    slice-2 plan changes it): the comment near line 1491 says a promoted primary has no
+    `fiscal.aeat` cert "until the cert-distribution slice lands", which is plan history; the one
+    near lines 2188–2190 carries a "(B3)" history tag and refers to "the N/A placeholder
+    box-status" reports — a term only the `BoxStatus` comment #629 deleted defined.
   - Found by #625 (`apps/server` part e1), outside its files or not fixable in a comments-only
     change. Comments in files the SQLite slice-2 plan still changes (fix them in e2, c2 or h2):
     `db-wipe.ts` (near its top) says the empty node-file fact is recorded where
@@ -5036,11 +5043,10 @@ any of this code, so you can still read how something worked under PostgreSQL.
   `installAppendOnlyTriggers` (`:117`). The header also cites `venue-db.ts:169` and
   `migrate.ts:37-40`. Whether the suite still has another reason to migrate through the product's own
   `applyMigrations` is the open question; restate that reason, or delete the claim.
-- **A suite header in `apps/server` says its suite is RED, and it passes.**
-  `apps/server/src/awaiting-fiscal-cert.test.ts` ("This suite is RED") — run 2026-09-23, 1 of 1
-  passed. Delete the paragraph. (#624 deleted `boot.promote.test.ts`'s matching "One case below is
-  RED"; `awaiting-fiscal-cert.test.ts` is held back from comment pruning while the SQLite slice-2
-  plan changes it.)
+- **A suite header in `apps/server` says its suite is RED, and it passes — DONE (2026-09-25, #629
+  deleted the paragraph).** `apps/server/src/awaiting-fiscal-cert.test.ts` ("This suite is RED") —
+  run 2026-09-23, 1 of 1 passed. (#624 deleted `boot.promote.test.ts`'s matching "One case below is
+  RED".)
 - **Bounding the offline write-ahead log is an open design question, and the lever risk 9 names is not
   one.** Measured: while a litestream daemon is attached AND cannot reach its store, the log's space
   cannot be reclaimed at all — `PRAGMA wal_checkpoint(TRUNCATE)` blocks for seconds and shrinks
