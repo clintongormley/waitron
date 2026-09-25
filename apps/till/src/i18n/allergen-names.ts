@@ -5,8 +5,9 @@ import { pickLocale } from "./t.js";
 // `apps/till`, not `@waitron/catalogue`, because the Spanish names are user-facing translation and
 // `apps/*` is outside the english-only guard.
 //
-// The `es` names are the Annex's official Spanish noun phrases, except `gluten`, which shortens
-// "Cereales que contengan gluten" for a compact allergen chip.
+// The `es` names are the opening words of each item in the Annex's official Spanish text (Diario
+// Oficial de la Unión Europea, L 304/43, 22.11.2011), except `gluten`, which shortens "Cereales
+// que contengan gluten" for a compact allergen chip.
 export const ALLERGEN_NAMES: Record<AllergenCode, { en: string; es: string }> = {
   gluten: { en: "Cereals containing gluten", es: "Cereales con gluten" },
   crustaceans: { en: "Crustaceans", es: "Crustáceos" },

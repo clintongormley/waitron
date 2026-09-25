@@ -3,7 +3,6 @@ import { asServedDiet, asServedAllergens } from "./as-served.js";
 import type { OrderLine } from "./working-order.js";
 import type { DietDerivation, DietOverride, OfferedExtraItem, TillProduct } from "../api/client.js";
 
-/** Its three names are DIFFERENT. */
 function item(productId: string): OfferedExtraItem {
   return {
     productId,

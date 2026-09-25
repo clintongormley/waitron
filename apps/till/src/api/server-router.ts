@@ -39,7 +39,6 @@ interface Tracked extends ServerEntry {
  * answered `acceptingSales: true`, the highest `term` if several; if none did, it stays put and the
  * till keeps probing, with no failure count (owner decision, 2026-09-05). The page's own origin is
  * always listed, so a stale or empty cache still reaches the box.
- * Design: docs/superpowers/specs/2026-09-05-till-reroute-design.md §4.1.
  */
 export class ServerRouter extends EventTarget {
   #servers: Tracked[];
@@ -186,7 +185,8 @@ export class ServerRouter extends EventTarget {
     const next: Tracked[] = [];
     const push = (e: ServerEntry) => {
       const parsed = new URL(e.url);
-      // Opaque-origin URLs (mailto:/data:/file:) have the literal origin "null".
+      // Only an http(s) URL names a server to probe; an opaque-origin one such as mailto: or data:
+      // has the literal origin "null".
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return;
       const url = parsed.origin;
       if (next.some((n) => n.url === url)) return;

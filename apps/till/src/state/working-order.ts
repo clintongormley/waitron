@@ -175,7 +175,7 @@ export class WorkingOrderStore {
 
   /**
    * The previewed VAT-inclusive total, summed from each line's {@link lineGross} because that adds the
-   * extras picks, which `priceBasket` does not see. The server re-prices at pay time.
+   * extras picks, which `priceBasket` does not see.
    */
   get total(): Decimal {
     if (this.#total === null) {

@@ -3,8 +3,8 @@ import { deriveOptionSelections } from "./held-options.js";
 import type { OfferedModifier } from "../api/client.js";
 import type { OptionSnapshot } from "@waitron/shared";
 
-/** Its three names, and each label's three, DIFFER, so a match made on the wrong one of the six
- *  fails. */
+/** The list's three names, and each label's three, DIFFER, so a match made on the wrong one of the
+ *  six fails. */
 function list(id: string, staff: string, labels: [string, string][]): OfferedModifier {
   return {
     kind: "options",

@@ -36,7 +36,7 @@ function combinedPickQuantity(line: OrderLine, extra: PricedPick): Decimal {
   return multiplyDecimal(decimal(line.quantity), decimal(String(extra.quantity)));
 }
 
-/** WITHOUT any extras pick. */
+/** The dish alone, WITHOUT any extras pick. */
 export function dishGross(line: OrderLine): Decimal {
   return grossOf(line.product.unitPrice, line.quantity);
 }
@@ -46,10 +46,11 @@ export function extraGross(line: OrderLine, extra: PricedPick): Decimal {
 }
 
 /**
- * A product with variants is never sold as itself, so a variant is a question too. The basket's Edit
- * button does NOT use this: it gates on the offered lists alone, because `setLineModifiers` never
- * changes a line's product. A dish with variants AND an offered list still loses a re-picked variant
- * there; see `docs/backlog.md`, the entry beginning "Reopening the picker".
+ * Whether adding this product must ask something first: an offered list, or a variant, since a
+ * product with variants is never sold as itself. The basket's Edit button does NOT use this: it
+ * gates on the offered lists alone, because `setLineModifiers` never changes a line's product. A
+ * dish with variants AND an offered list still loses a re-picked variant there; see
+ * `docs/backlog.md`, the entry beginning "Reopening the picker".
  */
 export function needsModifierPicker(
   product: Pick<TillProduct, "variants" | "offeredModifiers">,

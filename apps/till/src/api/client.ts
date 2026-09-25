@@ -7,9 +7,9 @@ import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
  * error-envelope shapes: they call a typed method and get back a typed payload, or a rejected
  * `{ code }`.
  *
- * Most response interfaces below are LOCAL copies of the server's JSON shapes. A RUNTIME import from a
- * server package would drag its barrel — and through it `@waitron/db` — into the browser bundle, so a
- * mismatch with the server is not a compile break.
+ * Most response interfaces below are LOCAL copies of the server's JSON shapes, because a RUNTIME
+ * import from a server package would drag its barrel — and through it `@waitron/db` — into the
+ * browser bundle. The cost is that a mismatch with the server is not a compile break.
  *
  * The OFFER and MENU shapes are the exception: `TillMenuOffer`, `TillMenu` and `OfferedModifier` are
  * `import type` aliases from catalogue's type-only leaf `@waitron/catalogue/src/menu-types.js`, which
@@ -734,7 +734,7 @@ export interface DeviceStation {
 
 /**
  * The dev-only `GET /api/dev/devices` list: this venue's ACTIVE enrolled devices, each with its derived
- * `kind`. `kind` is a plain `string`, so a new device kind never breaks the chooser.
+ * `kind`.
  */
 export interface DevDevice {
   id: string;
@@ -1621,8 +1621,8 @@ export class TillApi {
    * `fetchImpl` is read into a local so it is invoked as a free function, not as a method of `this`
    * (which would rebind a native `fetch`).
    *
-   * A 2xx with an EMPTY body resolves to `undefined` rather than being JSON-parsed, on which
-   * `res.json()` would throw; those callers type `T` as `void`.
+   * A 2xx with an EMPTY body resolves to `undefined`, where `res.json()` would throw; a method
+   * whose route answers one types `T` as `void`.
    */
   async #request<T>(path: string, method: string, body?: unknown): Promise<T> {
     const fetchImpl = this.#fetchImpl;
