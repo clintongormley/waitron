@@ -323,7 +323,6 @@ export class TillApp extends LitElement {
   @state() private operatorName = "";
   /** The schedule screen leaves the operator out of the colleague picker. */
   @state() private operatorPersonId = "";
-  /** A failed roster fetch keeps whatever roster the picker already had rather than blocking the counter. */
   @state() private staff: StaffMember[] = [];
   /** Every open working order in the venue, across tills. */
   @state() private heldOrders: HeldOrderSummary[] = [];
@@ -353,7 +352,6 @@ export class TillApp extends LitElement {
   @state() private defaultReaderId?: string;
   /** Where the current basket sits in an order-then-collect flow; unused under prepay. */
   @state() private stage: "order" | "collect" = "order";
-  /** Fetched lazily and cached for the session; the counter's queue reads the default station. */
   @state() private stations: Station[] = [];
   /** The default station's queue. Prepay enqueues nothing automatically, so a prepay till never fetches it. */
   @state() private stationQueue: StationQueueGroup[] = [];
@@ -640,10 +638,6 @@ export class TillApp extends LitElement {
     this.heldOrders = await this.api.listWorkingOrders();
   }
 
-  /**
-   * Prepay enqueues nothing automatically, so a prepay till never fetches the queue. A station list
-   * already loaded is not fetched again: the default station does not change mid-shift.
-   */
   async #refreshStationQueue(): Promise<void> {
     if (this.orderFlow === "prepay") return;
     if (this.stations.length === 0) this.stations = await this.api.listStations();
@@ -746,8 +740,6 @@ export class TillApp extends LitElement {
     const lines = this.#currentSaleLines();
     const label = this.#store.label;
     this.errorKey = undefined;
-    // A network failure of the preliminary save filed nothing and is `sale.error`; one from `recordSale`
-    // or anything after it is `sale.unconfirmed` (the sale may have filed).
     let reachedFiscal = false;
     try {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
@@ -879,8 +871,8 @@ export class TillApp extends LitElement {
       this.stage = "collect";
       await this.#refreshStationQueue();
     } catch (error) {
-      // The basket and its stage stay intact. `place.refused`, not `sale.refused`: placing takes no
-      // tender, so its message says nothing about refunds.
+      // `place.refused`, not `sale.refused`: placing takes no tender, so its message says nothing
+      // about refunds.
       this.errorKey = isPermanentSaleRefusal(error)
         ? "place.refused"
         : reachedFiscal && isNetworkFailure(error)
@@ -977,8 +969,7 @@ export class TillApp extends LitElement {
   /**
    * A fresh basket is parked under the store's id; a retrieved one is saved only if edited, never
    * re-parked (see {@link TillApp.#onPlaceOrder}). On success `clear()` re-mints the id, and
-   * `cardOutcome` is cleared so a decline never carries over to the next customer. A refused park or
-   * save leaves the basket and its outcome intact.
+   * `cardOutcome` is cleared so a decline never carries over to the next customer.
    */
   async #onParkOrder(event: Event): Promise<void> {
     if (this.parking) return;
