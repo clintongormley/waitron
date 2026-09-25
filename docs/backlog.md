@@ -2301,8 +2301,8 @@ ongoing overhaul listed at the top of Track A.
   or several (`multiple`), and optionally offer to add what was typed when nothing matches. It landed
   with nothing using it; #362 (2026-09-14) is the first adopter, for the
   category form's parent picker (`apps/dashboard/src/widgets/category-form.ts`) and the
-  product-categories editor's category and reporting-category dropdowns
-  (`apps/dashboard/src/widgets/category-membership-picker.ts`). Left out on purpose, per its
+  product's main-category and labels pickers
+  (`apps/dashboard/src/widgets/classification-fields.ts`). Left out on purpose, per its
   [design](superpowers/specs/2026-09-13-wt-combobox-design.md): searching on the server, disabling
   single options, taking part in a native `<form>`, and showing chosen options as chips (it shows a
   count instead). **Undecided:** how it relates to the `wt-select` row above. The combobox does not

@@ -370,9 +370,11 @@ validation error opens itself and cannot be collapsed until the error is fixed â
 `wt-disclosure`'s `has-error`, described in
 [the design system](design-system.md).
 
-Categories are chosen through the same `dashboard-category-membership-picker` the Categories screen
-uses, opened in a `wt-modal` from any of the category lozenges. The editor no longer has category
-controls of its own. See [Product categories](product-categories.md).
+The main category and the labels are chosen in the editor itself, through the two field templates
+in `apps/dashboard/src/widgets/classification-fields.ts`: a single-choice main-category picker and a
+labels picker. The Categories screen uses the same main-category picker when it moves a product. A
+variant shows its parent's main category as "Same as â€¦" and its parent's labels as a note, because
+it carries no labels of its own. See [Product categories](product-categories.md).
 
 ## One save, one transaction
 
