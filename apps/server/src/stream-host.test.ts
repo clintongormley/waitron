@@ -128,6 +128,24 @@ describe("the live copy's wiring", () => {
     ).toMatchObject({ endpoint: "https://e", prefix: "p/" });
   });
 
+  // "-" is how an empty prefix is stored, so a prefix of "-" would read back as none at all.
+  it("refuses a prefix of a single hyphen, naming the field", () => {
+    expect(() =>
+      streamSettingsPayload({
+        venueId: "venue-1",
+        bucket: {
+          region: "eu-south-2",
+          bucket: "b",
+          prefix: "-",
+          accessKeyId: "A",
+          secretAccessKey: "S",
+        },
+      }),
+    ).toThrow(
+      expect.objectContaining({ code: "backup.request_invalid", params: { field: "prefix" } }),
+    );
+  });
+
   describe("with a bucket stored", () => {
     beforeAll(async () => {
       await withTransaction(db, (tx) =>

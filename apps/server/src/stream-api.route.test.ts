@@ -6,6 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   deleteCredential,
   loadKeyRing,
+  putCredential,
   tryGetCredential,
   type KeyRing,
 } from "@waitron/credentials";
@@ -21,11 +22,11 @@ import {
   type StreamStatus,
 } from "@waitron/stream";
 import { keyFingerprint } from "./backup-supervisor.js";
-import { createTurns } from "./backup-turns.js";
+import { createTurns, type Turns } from "./backup-turns.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountStreamApi, type StreamApiDeps } from "./stream-api.js";
-import { readStreamSettings, type StreamSettings } from "./stream-host.js";
+import { readStreamSettings, streamSettingsPayload, type StreamSettings } from "./stream-host.js";
 
 // The route calls `putCredential` itself, so the harness sees the credential write through this
 // pass-through wrapper.
@@ -55,14 +56,6 @@ const LOCALE = "es-ES";
 const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
 const VENUE_ID = "c0000000-0000-4000-8000-000000000002";
-const BODY = {
-  endpoint: "https://s3.example.net",
-  region: "eu-west-1",
-  bucket: "venue-copy",
-  prefix: "",
-  accessKeyId: "AKIAEXAMPLE",
-  secretAccessKey: "not-a-real-secret-0123456789",
-};
 const BUCKET: BucketConfig = {
   endpoint: "https://s3.example.net",
   region: "eu-west-1",
@@ -71,6 +64,7 @@ const BUCKET: BucketConfig = {
   accessKeyId: "AKIAEXAMPLE",
   secretAccessKey: "not-a-real-secret-0123456789",
 };
+const BODY = { ...BUCKET };
 const STREAMING: StreamStatus = {
   state: "streaming",
   generation: "gen-0-n-20260923T101500Z",
@@ -188,6 +182,7 @@ function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Har
     nodeId,
     venueId: VENUE_ID,
     isPrimary: () => true,
+    isManagedByEnvironment: () => false,
     readRecoveryKey: async () => key.value,
     writeRecoveryKey: vi.fn(async (k: string) => {
       order.push("write-key");
@@ -487,6 +482,112 @@ describe("stream settings routes", () => {
     expect(deps.writeRecoveryKey).toHaveBeenCalledTimes(1);
   });
 
+  // As `apply` and `rotate` refuse to write backup.env on such a box.
+  it("Save that would set a recovery key is refused while backups are managed by the environment", async () => {
+    await clearBucket();
+    const { app, deps, reload } = harness({ isManagedByEnvironment: () => true });
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "backup.managed_by_environment" } });
+    expect(deps.probe).not.toHaveBeenCalled();
+    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+    expect(await storedBucket()).toBeNull();
+  });
+
+  it("Save on a box whose backups the environment manages proceeds when a key is already held", async () => {
+    await clearBucket();
+    const { app, deps, reload } = harness(
+      { isManagedByEnvironment: () => true },
+      "recovery-key-one-strong",
+    );
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+    expect(res.status).toBe(200);
+    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(await storedBucket()).toMatchObject({ bucket: BUCKET.bucket });
+  });
+
+  /** A queue held shut by an earlier turn, and a promise that settles once a request joins it. */
+  function heldTurns() {
+    const inner = createTurns();
+    let release!: () => void;
+    const held = inner(() => new Promise<void>((resolve) => (release = resolve)));
+    let joined!: () => void;
+    const waiting = new Promise<void>((resolve) => (joined = resolve));
+    const turns: Turns = (body) => {
+      joined();
+      return inner(body);
+    };
+    return { turns, waiting, release: () => (release(), held) };
+  }
+
+  it("Save is refused when the environment takes over backups while it waits its turn", async () => {
+    await clearBucket();
+    const queue = heldTurns();
+    let managed = false;
+    const { app, deps, reload } = harness({
+      isManagedByEnvironment: () => managed,
+      turns: queue.turns,
+    });
+    const cookie = await login(app);
+    const pending = app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+    await Promise.race([queue.waiting, pending]);
+    managed = true;
+    await queue.release();
+    const res = await pending;
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "backup.managed_by_environment" } });
+    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+    expect(await storedBucket()).toBeNull();
+  });
+
+  it("Save is refused when this node stops being the primary while it waits its turn", async () => {
+    await clearBucket();
+    const queue = heldTurns();
+    let primary = true;
+    const { app, deps, reload } = harness(
+      { isPrimary: () => primary, turns: queue.turns },
+      "recovery-key-one-strong",
+    );
+    const cookie = await login(app);
+    const pending = app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+    await Promise.race([queue.waiting, pending]);
+    primary = false;
+    await queue.release();
+    const res = await pending;
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "backup.not_primary" } });
+    expect(deps.sealedState.refresh).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+    expect(await storedBucket()).toBeNull();
+  });
+
+  it("switching off is refused when this node stops being the primary while it waits its turn", async () => {
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, {
+        purpose: "backup.stream",
+        value: streamSettingsPayload({ venueId: VENUE_ID, bucket: BUCKET }),
+      }),
+    );
+    const queue = heldTurns();
+    let primary = true;
+    const { app, reload } = harness({ isPrimary: () => primary, turns: queue.turns });
+    const cookie = await login(app);
+    const pending = app.request("/api/backup/stream", { method: "DELETE", headers: { cookie } });
+    await Promise.race([queue.waiting, pending]);
+    primary = false;
+    await queue.release();
+    const res = await pending;
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "backup.not_primary" } });
+    expect(reload).not.toHaveBeenCalled();
+    expect(await storedBucket()).not.toBeNull();
+  });
+
   it("Save is refused on a node that is not the primary, before any probe", async () => {
     const { app, deps } = harness({ isPrimary: () => false });
     const cookie = await login(app);
@@ -511,6 +612,8 @@ describe("stream settings routes", () => {
       pointerSignerPublicKey: publicKey,
     });
     expect(body.keyFingerprint).toBe(keyFingerprint("recovery-key-one-strong"));
+    // It carries the recovery key and the bucket's secret key.
+    expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
   it("offers no kit while no bucket is configured", async () => {

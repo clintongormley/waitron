@@ -5268,8 +5268,9 @@ Task 8a, the server side of the bucket-copy settings, landed as #TBD. Routes und
 `/api/backup/stream`, behind the manager login, read the settings, test a bucket, save and switch
 the copy on, switch it off, and hand out the recovery kit: one string holding the bucket's details,
 the venue id, the recovery key and the public key that signs the pointer
-(`packages/stream/src/kit.ts`). Save sets a recovery key when the box holds none, refreshes the
-sealed-state row, stores the settings, and reloads the copy only after that commits; Saves and
+(`packages/stream/src/kit.ts`). Save sets a recovery key when the box holds none (refused with
+`backup.managed_by_environment` when a `WAITRON_BACKUP_*` variable is set, as `apply` and `rotate`
+are), refreshes the sealed-state row, stores the settings, and reloads the copy only after that commits; Saves and
 switch-offs take turns with each other and with the backup routes' `apply` and `rotate`, which also
 set the recovery key. Before contacting the bucket, Test and Save run the check Litestream's
 configuration runs, refusing with `backup.stream_config_unsafe` naming the field (for the bucket

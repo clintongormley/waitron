@@ -1207,6 +1207,7 @@ describe("backup admin routes", () => {
         nodeId: "00000000-0000-0000-0000-000000000000",
         venueId: "c0000000-0000-4000-8000-000000000002",
         isPrimary: () => true,
+        isManagedByEnvironment: () => false,
         readRecoveryKey: readKey,
         writeRecoveryKey: (recoveryKey) =>
           writeRecoveryKey(sc.stateDir, { recoveryKey, keyRotatedAt: undefined }),

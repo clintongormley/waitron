@@ -1,25 +1,22 @@
-import { randomBytes } from "node:crypto";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { readMembershipTrustSet, withTransaction, type Database } from "@waitron/db";
 import { deleteCredential, putCredential, type KeyRing } from "@waitron/credentials";
 import { authorizeManager } from "@waitron/identity";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import {
-  CONTROL_CHARACTER,
-  checkLitestreamSettings,
   encodeRecoveryKit,
+  readBucketConfig,
   type BucketConfig,
   type ProbeResult,
   type StreamView,
 } from "@waitron/stream";
-import { keyFingerprint } from "./backup-supervisor.js";
+import { keyFingerprint, mintRecoveryKey, readHeldKey } from "./backup-supervisor.js";
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
 import type { Turns } from "./backup-turns.js";
 import {
-  ABSENT,
   STREAM_PURPOSE,
   readStreamSettings,
   streamSettingsPayload,
@@ -35,6 +32,8 @@ export interface StreamApiDeps {
   /** The venue the stream writes under; Save stores it with the settings. */
   venueId: string;
   isPrimary: () => boolean;
+  /** True when `WAITRON_BACKUP_*` variables in the environment would override `backup.env`. */
+  isManagedByEnvironment: () => boolean;
   readRecoveryKey: () => Promise<string | undefined>;
   writeRecoveryKey: (key: string) => Promise<void>;
   /** Re-locks this node's secrets row under the current recovery key. Never throws. */
@@ -69,6 +68,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "backup.request_invalid": 400,
   "backup.stream_config_unsafe": 400,
+  "backup.managed_by_environment": 409,
   "backup.recovery_key_too_short": 400,
   "backup.not_primary": 409,
   "backup.reload_in_progress": 409,
@@ -79,46 +79,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // The bucket gave no answer at all: not a refusal of the owner's settings, so not 422.
   "backup.stream_request_failed": 502,
 };
-
-/** A refusal names the field, never its value: one of them is the secret key. */
-async function readBucketBody(c: Context): Promise<BucketConfig> {
-  const body = await readJsonBody<Record<string, unknown>>(c);
-  const field = (name: string, required: boolean): string => {
-    const value = body[name];
-    if (value === undefined || value === "") {
-      if (required) throw new AppError("backup.request_invalid", { field: name });
-      return "";
-    }
-    if (typeof value !== "string" || CONTROL_CHARACTER.test(value) || value.trim() !== value) {
-      throw new AppError("backup.request_invalid", { field: name });
-    }
-    return value;
-  };
-  const endpoint = field("endpoint", false);
-  if (endpoint !== "") {
-    let protocol: string;
-    try {
-      protocol = new URL(endpoint).protocol;
-    } catch {
-      throw new AppError("backup.request_invalid", { field: "endpoint" });
-    }
-    if (protocol !== "https:" && protocol !== "http:") {
-      throw new AppError("backup.request_invalid", { field: "endpoint" });
-    }
-  }
-  const prefix = field("prefix", false);
-  if (prefix === ABSENT) throw new AppError("backup.request_invalid", { field: "prefix" });
-  const bucket: BucketConfig = {
-    ...(endpoint === "" ? {} : { endpoint }),
-    region: field("region", true),
-    bucket: field("bucket", true),
-    prefix,
-    accessKeyId: field("accessKeyId", true),
-    secretAccessKey: field("secretAccessKey", true),
-  };
-  checkLitestreamSettings(bucket);
-  return bucket;
-}
 
 export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "backup.stream_failed");
@@ -132,25 +92,30 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
   const guardPrimary = (): void => {
     if (!deps.isPrimary()) throw new AppError("backup.not_primary", {});
   };
+  // The payload is built and discarded for its refusals, so Test refuses what Save would.
+  const readBucketBody = async (c: Context): Promise<BucketConfig> => {
+    const bucket = readBucketConfig(await readJsonBody<unknown>(c), (field) => {
+      throw new AppError("backup.request_invalid", { field });
+    });
+    streamSettingsPayload({ venueId: deps.venueId, bucket });
+    return bucket;
+  };
   const probeOrRefuse = async (bucket: BucketConfig): Promise<void> => {
     const result = await deps.probe(bucket);
     if (!result.ok) throw new AppError("backup.stream_test_failed", { reason: result.reason });
   };
 
-  // Two writers side by side would each find no recovery key and write a different one, and the
-  // host refuses a reload while another runs.
-  const oneWriteAtATime = deps.turns;
+  const heldKeyOrRefuse = async (): Promise<string | undefined> => {
+    const held = await deps.readRecoveryKey();
+    if (held === undefined && deps.isManagedByEnvironment()) {
+      throw new AppError("backup.managed_by_environment", {});
+    }
+    return held;
+  };
 
   const view = async (): Promise<StreamSettingsView> => {
     const bucket = (await readStreamSettings(deps.db, deps.ring))?.bucket ?? null;
-    let key: string | undefined;
-    let recoveryKeySet = true;
-    try {
-      key = await deps.readRecoveryKey();
-      recoveryKeySet = key !== undefined;
-    } catch (error) {
-      if (!(isAppError(error) && error.code === "backup.recovery_key_too_short")) throw error;
-    }
+    const { held: recoveryKeySet, key } = await readHeldKey(deps.readRecoveryKey);
     return {
       isPrimary: deps.isPrimary(),
       configured: bucket !== null,
@@ -194,12 +159,13 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     run(c, log, async () => {
       await authorize(c);
       guardPrimary();
+      await heldKeyOrRefuse();
       const bucket = await readBucketBody(c);
       await probeOrRefuse(bucket);
-      return oneWriteAtATime(async () => {
+      return deps.turns(async () => {
         guardPrimary();
-        if ((await deps.readRecoveryKey()) === undefined) {
-          await deps.writeRecoveryKey(randomBytes(32).toString("base64url"));
+        if ((await heldKeyOrRefuse()) === undefined) {
+          await deps.writeRecoveryKey(mintRecoveryKey());
         }
         await deps.sealedState.refresh();
         await withTransaction(deps.db, (tx) =>
@@ -219,7 +185,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     run(c, log, async () => {
       await authorize(c);
       guardPrimary();
-      return oneWriteAtATime(async () => {
+      return deps.turns(async () => {
         guardPrimary();
         await withTransaction(deps.db, (tx) => deleteCredential(tx, { purpose: STREAM_PURPOSE }));
         await deps.stream.reload();
@@ -239,6 +205,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       if (pointerSignerPublicKey === undefined) {
         throw new AppError("backup.stream_signer_missing", {});
       }
+      c.header("Cache-Control", "no-store");
       return c.json({
         kit: encodeRecoveryKit({
           version: 1,

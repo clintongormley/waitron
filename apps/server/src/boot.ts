@@ -2070,9 +2070,11 @@ export async function startServer(
   const backupOutcomes: BackupOutcomeHolder = { failed: new Map() };
   const readRecoveryKey = async (): Promise<string | undefined> =>
     loadRecoveryKey(await loadBoxEnv(base, config.stateDir));
+  const isBackupManagedByEnvironment = (): boolean =>
+    BACKUP_ENV_KEYS.some((k) => !isUnset(base[k]));
   const backupSupervisor = new BackupSupervisor({
     buildConfig: async () => loadBackupConfig(await loadBoxEnv(base, config.stateDir)),
-    isManagedByEnvironment: () => BACKUP_ENV_KEYS.some((k) => !isUnset(base[k])),
+    isManagedByEnvironment: isBackupManagedByEnvironment,
     readSingletonRole: () => holders.singletonRole.current,
     venueDir: config.venueDir,
     modules: ALL_MODULES,
@@ -2260,6 +2262,7 @@ export async function startServer(
       nodeId: till.nodeId,
       venueId: till.locationId,
       isPrimary: () => holders.singletonRole.current === "primary",
+      isManagedByEnvironment: isBackupManagedByEnvironment,
       readRecoveryKey,
       writeRecoveryKey: (recoveryKey) =>
         writeRecoveryKey(config.stateDir, { recoveryKey, keyRotatedAt: undefined }),

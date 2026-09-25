@@ -23,7 +23,7 @@ import "./errors.js";
 export const STREAM_PURPOSE = "backup.stream";
 
 /** How the vault stores an absent optional field: it refuses empty strings. */
-export const ABSENT = "-";
+const ABSENT = "-";
 
 export interface StreamSettings {
   venueId: string;
@@ -33,6 +33,7 @@ export interface StreamSettings {
 /** What `putCredential` stores for `settings`: the inverse of {@link readStreamSettings}. */
 export function streamSettingsPayload(settings: StreamSettings): Record<string, string> {
   const { bucket } = settings;
+  if (bucket.prefix === ABSENT) throw new AppError("backup.request_invalid", { field: "prefix" });
   return {
     venueId: settings.venueId,
     endpoint: bucket.endpoint ?? ABSENT,

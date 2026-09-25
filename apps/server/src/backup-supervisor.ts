@@ -36,11 +36,11 @@
 // tick false (the Task 3 carry: `Promise.allSettled` swallows per-backend faults). The flag resets on
 // each reload and on restart, self-healing on the immediate first dump after boot — sound, unlike mtime.
 
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { openVenueDatabase, type SingletonRole, type VenueDatabase } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import type { BackupConfig, BackupSchedule } from "./backup-config.js";
 import type { ScheduleClock } from "./backup-schedule.js";
@@ -102,6 +102,29 @@ export interface BackupSupervisorDeps {
  * about the key. `sha256(key)` truncated to 8 hex chars. */
 export function keyFingerprint(key: string): string {
   return createHash("sha256").update(key).digest("hex").slice(0, 8);
+}
+
+/** A new recovery key: 32 random bytes, base64url. */
+export function mintRecoveryKey(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+/**
+ * Presence, not validity: a key under the length floor still counts as held, and `key` is then
+ * undefined.
+ */
+export async function readHeldKey(
+  read: () => Promise<string | undefined>,
+): Promise<{ held: boolean; key: string | undefined }> {
+  try {
+    const key = await read();
+    return { held: key !== undefined, key };
+  } catch (error) {
+    if (isAppError(error) && error.code === "backup.recovery_key_too_short") {
+      return { held: true, key: undefined };
+    }
+    throw error;
+  }
 }
 
 export class BackupSupervisor {

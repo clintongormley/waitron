@@ -1,5 +1,5 @@
 import { AppError } from "@waitron/shared";
-import { checkLitestreamSettings } from "./litestream.js";
+import { CONTROL_CHARACTER, readBucketConfig } from "./bucket-config.js";
 import type { BucketConfig } from "./s3-store.js";
 import "./errors.js";
 
@@ -23,14 +23,8 @@ export function encodeRecoveryKit(kit: RecoveryKit): string {
   return KIT_PREFIX + Buffer.from(JSON.stringify(kit), "utf8").toString("base64url");
 }
 
-/** A C0 control character or DEL. */
-// eslint-disable-next-line no-control-regex
-export const CONTROL_CHARACTER = /[\x00-\x1f\x7f]/;
-
-function text(value: unknown, allowEmpty = false): value is string {
-  return (
-    typeof value === "string" && (allowEmpty || value !== "") && !CONTROL_CHARACTER.test(value)
-  );
+function text(value: unknown): value is string {
+  return typeof value === "string" && value !== "" && !CONTROL_CHARACTER.test(value);
 }
 
 function refuse(reason: "not_found" | "encoding" | "shape"): never {
@@ -49,34 +43,17 @@ export function parseRecoveryKit(input: string): RecoveryKit {
   }
   if (typeof raw !== "object" || raw === null) refuse("shape");
   const k = raw as Record<string, unknown>;
-  const b = (typeof k.bucket === "object" && k.bucket !== null ? k.bucket : {}) as Record<
-    string,
-    unknown
-  >;
   if (
     k.version !== 1 ||
     !text(k.venueId) ||
     !text(k.recoveryKey) ||
-    !text(k.pointerSignerPublicKey) ||
-    !text(b.region) ||
-    !text(b.bucket) ||
-    !text(b.prefix, true) ||
-    !text(b.accessKeyId) ||
-    !text(b.secretAccessKey) ||
-    (b.endpoint !== undefined && !text(b.endpoint))
+    !text(k.pointerSignerPublicKey)
   ) {
     refuse("shape");
   }
-  const bucket: BucketConfig = {
-    ...(b.endpoint === undefined ? {} : { endpoint: b.endpoint as string }),
-    region: b.region as string,
-    bucket: b.bucket as string,
-    prefix: b.prefix as string,
-    accessKeyId: b.accessKeyId as string,
-    secretAccessKey: b.secretAccessKey as string,
-  };
+  let bucket: BucketConfig;
   try {
-    checkLitestreamSettings(bucket);
+    bucket = readBucketConfig(k.bucket, () => refuse("shape"));
   } catch {
     refuse("shape");
   }

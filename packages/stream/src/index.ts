@@ -29,6 +29,7 @@ export {
   checkLitestreamSettings,
   resolveLitestreamBin,
 } from "./litestream.js";
+export { readBucketConfig } from "./bucket-config.js";
 export type { ChildHandle, SpawnFn } from "./litestream-process.js";
 export { DEFAULT_WAL_LIMIT_BYTES, L0_RETENTION_MS, StreamSupervisor } from "./supervisor.js";
 export type {
@@ -41,7 +42,7 @@ export type {
 } from "./supervisor.js";
 export { COMMIT_GRANULARITY_MS, CommitLog, computeLag } from "./freshness.js";
 export type { LagInput } from "./freshness.js";
-export { CONTROL_CHARACTER, KIT_PREFIX, encodeRecoveryKit, parseRecoveryKit } from "./kit.js";
+export { KIT_PREFIX, encodeRecoveryKit, parseRecoveryKit } from "./kit.js";
 export type { RecoveryKit } from "./kit.js";
 
 // Side-effect only: keeps errors.ts's registry augmentation reachable from this barrel
