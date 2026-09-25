@@ -172,6 +172,29 @@ it("offers every label by name, sorted, and lists the chosen ones as lozenges", 
   expect(change).toHaveBeenCalledWith(["l-happy", "l-alc"]);
 });
 
+const promo10: Label = { id: "l-10", name: "Promo 10" };
+const promo9: Label = { id: "l-9", name: "Promo 9" };
+
+it("offers and shows numbered labels by value, as the tables do", async () => {
+  const combobox = await mount(
+    labelsField({
+      labels: [promo10, promo9],
+      value: ["l-10", "l-9"],
+      disabled: false,
+      change: () => {},
+    }),
+  );
+  expect(combobox.options.map((option) => option.label)).toEqual(["Promo 9", "Promo 10"]);
+  expect([...host.querySelectorAll("wt-lozenge")].map((chip) => chip.textContent)).toEqual([
+    "Promo 9",
+    "Promo 10",
+  ]);
+});
+
+it("names numbered labels by value, as the tables do", () => {
+  expect(labelsText(["l-10", "l-9"], [promo10, promo9], "Missing")).toBe("Promo 9, Promo 10");
+});
+
 it("names a product's labels sorted by name, marking one that no longer exists", () => {
   expect(labelsText(["l-happy", "gone", "l-alc"], [alcoholic, happy], "Missing")).toBe(
     "Alcoholic, Happy hour drinks, Missing",

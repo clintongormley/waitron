@@ -1,7 +1,7 @@
 import { html, nothing } from "lit";
 import type { ContentLanguages } from "@waitron/shared";
 import type { CategorySummary, Label } from "../api/client.js";
-import { byCategoryLabel, categoryPath } from "./category-form.js";
+import { byLabel, categoryPath } from "./category-form.js";
 import { currentLocale, t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-lozenge.js";
@@ -35,7 +35,7 @@ export function categoryField(options: CategoryFieldOptions) {
       value: category.id,
       label: categoryPath(category, options.categories, currentLocale(), options.languages),
     }))
-    .sort(byCategoryLabel);
+    .sort((a, b) => byLabel(a.label, b.label));
   return html`<wt-combobox
     name=${options.name}
     label=${options.label}
@@ -62,7 +62,7 @@ export interface LabelsFieldOptions {
   change: (ids: string[]) => void;
 }
 
-const byName = (a: Label, b: Label) => a.name.localeCompare(b.name);
+const byName = (a: Label, b: Label) => byLabel(a.name, b.name);
 
 export function labelsField(options: LabelsFieldOptions) {
   const chosen = options.labels.filter((label) => options.value.includes(label.id)).sort(byName);
@@ -104,6 +104,6 @@ export function labelsText(
 ): string {
   return ids
     .map((id) => labels.find((label) => label.id === id)?.name ?? missing)
-    .sort((a, b) => a.localeCompare(b))
+    .sort(byLabel)
     .join(", ");
 }

@@ -37,9 +37,9 @@ export function categoryPath(
   return names.join(" / ");
 }
 
-/** The collation `wt-data-table` sorts category names with, so a picker and the tables agree. */
-export function byCategoryLabel(a: { label: string }, b: { label: string }): number {
-  return a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" });
+/** The collation `wt-data-table` sorts text with, so a picker or list and the tables agree. */
+export function byLabel(a: string, b: string): number {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 }
 
 export function categoryWithDescendants(
@@ -272,7 +272,7 @@ export class CategoryForm extends LitElement {
                 value: category.id,
                 label: categoryPath(category, this.categories, currentLocale(), this.languages),
               }))
-              .sort(byCategoryLabel),
+              .sort((a, b) => byLabel(a.label, b.label)),
           ]}
           .value=${this.parentId ?? ""}
           .error=${errors.parent ?? ""}
