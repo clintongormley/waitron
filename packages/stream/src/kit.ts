@@ -51,6 +51,10 @@ export function parseRecoveryKit(input: string): RecoveryKit {
   ) {
     refuse("shape");
   }
+  // Stricter than the settings routes: no kit the kit route issues has any of these, and Save
+  // refuses a prefix of "-" (`streamSettingsPayload`).
+  const b = k.bucket as Record<string, unknown> | null | undefined;
+  if (b?.prefix === undefined || b.prefix === "-" || b.endpoint === "") refuse("shape");
   let bucket: BucketConfig;
   try {
     bucket = readBucketConfig(k.bucket, () => refuse("shape"));

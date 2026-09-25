@@ -12,7 +12,8 @@ import {
   type ProbeResult,
   type StreamView,
 } from "@waitron/stream";
-import { keyFingerprint, mintRecoveryKey, readHeldKey } from "./backup-supervisor.js";
+import { mintRecoveryKey, readHeldKey } from "./backup-config.js";
+import { keyFingerprint } from "./backup-supervisor.js";
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
 import type { Turns } from "./backup-turns.js";

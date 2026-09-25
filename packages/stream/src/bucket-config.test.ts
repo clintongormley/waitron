@@ -44,6 +44,18 @@ describe("readBucketConfig", () => {
     });
   });
 
+  it("reads a missing prefix as none", () => {
+    expect(readBucketConfig({ ...INPUT, prefix: undefined }, refuse)).toEqual({
+      ...INPUT,
+      prefix: "",
+    });
+  });
+
+  // The vault's marker for no prefix; the settings routes refuse it (`streamSettingsPayload`).
+  it('passes a prefix of "-" through', () => {
+    expect(readBucketConfig({ ...INPUT, prefix: "-" }, refuse)).toEqual({ ...INPUT, prefix: "-" });
+  });
+
   it.each([
     ["region", { region: "" }],
     ["region", { region: undefined }],

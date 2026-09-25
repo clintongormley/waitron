@@ -1,5 +1,6 @@
+import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { isUnset } from "./env-value.js";
 import { positiveInt } from "./config.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
@@ -137,6 +138,29 @@ export function loadRecoveryKey(env: Env): string | undefined {
     throw new AppError("backup.recovery_key_too_short", { min: MIN_PASSPHRASE_LENGTH });
   }
   return recoveryKey;
+}
+
+/** A new recovery key: 32 random bytes, base64url. */
+export function mintRecoveryKey(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+/**
+ * Presence, not validity: a key under the length floor still counts as held, and `key` is then
+ * undefined.
+ */
+export async function readHeldKey(
+  read: () => Promise<string | undefined>,
+): Promise<{ held: boolean; key: string | undefined }> {
+  try {
+    const key = await read();
+    return { held: key !== undefined, key };
+  } catch (error) {
+    if (isAppError(error) && error.code === "backup.recovery_key_too_short") {
+      return { held: true, key: undefined };
+    }
+    throw error;
+  }
 }
 
 /**

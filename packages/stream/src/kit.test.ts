@@ -43,6 +43,13 @@ describe("the recovery kit", () => {
     expect(parseRecoveryKit(encodeRecoveryKit(kit))).toEqual(kit);
   });
 
+  it("round-trips a bucket with no endpoint and no prefix", () => {
+    const bare = { ...KIT.bucket, prefix: "" };
+    delete bare.endpoint;
+    const kit: RecoveryKit = { ...KIT, bucket: bare };
+    expect(parseRecoveryKit(encodeRecoveryKit(kit))).toEqual(kit);
+  });
+
   it("finds the kit inside the downloaded file's explanatory text", () => {
     const file = `Waitron recovery kit\nKeep this safe.\n\n${encodeRecoveryKit(KIT)}\n`;
     expect(parseRecoveryKit(file)).toEqual(KIT);
@@ -104,12 +111,26 @@ describe("the recovery kit", () => {
     });
   });
 
-  // The same rules the settings routes apply, so a kit never carries settings Save would refuse.
   it.each([
     ["a field with surrounding spaces", { region: " eu-west-1" }],
     ["an endpoint with no scheme", { endpoint: "s3.example.net" }],
     ["an endpoint that is not http(s)", { endpoint: "ftp://s3.example.net" }],
   ])("refuses %s, as Save would", (_what, change) => {
+    const kit = { ...KIT, bucket: { ...KIT.bucket, ...change } };
+    const text = `${KIT_PREFIX}${Buffer.from(JSON.stringify(kit)).toString("base64url")}`;
+    expect(refusal(text)).toEqual({
+      code: "backup.stream_kit_invalid",
+      params: { reason: "shape" },
+    });
+  });
+
+  // The kit route's bucket comes from `readStreamSettings`, which always sets `prefix`, leaves
+  // `endpoint` out rather than empty, and reads the vault's "-" back as "".
+  it.each([
+    ["a bucket with no prefix field", { prefix: undefined }],
+    ["an empty endpoint", { endpoint: "" }],
+    ['a prefix of "-"', { prefix: "-" }],
+  ])("refuses %s, which no issued kit carries", (_what, change) => {
     const kit = { ...KIT, bucket: { ...KIT.bucket, ...change } };
     const text = `${KIT_PREFIX}${Buffer.from(JSON.stringify(kit)).toString("base64url")}`;
     expect(refusal(text)).toEqual({
