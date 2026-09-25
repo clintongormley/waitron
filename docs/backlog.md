@@ -5138,8 +5138,8 @@ was only logged (`backup.sealed_state_failed`); Task 7 now raises it as a dashbo
 backup job runs only on the primary — kept by design (owner, 2026-09-24). Nothing outside the backup routes
 rewrites a sealed file while the server keeps running (#560's per-task review traced each writer:
 promotion rewrites `trading.env` and then restarts; `modules.json`, `secrets.env` and the TLS files
-are written in setup or by the command line, before a restart); Tasks 8a and 9a must call the one
-`sealedState.refresh()` boot builds.
+are written in setup or by the command line, before a restart); Task 8a calls the one
+`sealedState.refresh()` boot builds, and Task 9a must too.
 Task 3a, one process per venue folder (opening a venue folder holds `venue.lock`, a SQLite
 `begin immediate` the operating system releases when the process dies; a second process is refused
 `provisioning.database_in_use`, while opens inside one process share it; restore and
@@ -5215,14 +5215,16 @@ continues after a pause, after measurement 1 was repeated at the 256 MiB side-fi
 note §1b: the restore after the restart held every sale, and Litestream uploaded a full copy of the
 database at level 0). Left for later tasks: `/health` must treat the supervisor's
 `supervisor_failed` stop as a problem, not as streaming switched off (done by Task 7); the settings route
-must reload the stream only after its save commits, and word the refusal of a bucket name holding
-capitals or `_` (Task 8a). Left open by #590's review, the owner's call (the PR description has the
+must reload the stream only after its save commits, and refuse a bucket name holding capitals or
+`_` (both done by Task 8a; the screen's wording is Task 8b's). Left open by #590's review, the owner's call (the PR description has the
 detail): (1) no S3 call has a request timeout, so a pointer write that never gets an answer holds up the
 supervisor's retry until the server stops or reloads — Litestream stays stopped meanwhile, so the side
 file is not at risk; (2) `StreamHost.reload()` can leave the old supervisor's pointer write in flight,
 landing after the new supervisor read the pointer, so the box takes its own write for another box's
-and refuses itself — nothing in production calls `StreamHost.reload()` until Task 8a, which must close
-this first (one option: a pointer carrying this box's own node id and term counts as its own write);
+and refuses itself — closed on Task 8a's branch: a supervisor retries its pointer write when the
+refusal was caused by one of this process's own earlier pointers, matched byte for byte, the last 16
+kept. Still open: a pointer write from a process that has since died, landing after the restart,
+can still make the box refuse itself, because a restarted process starts with an empty record;
 (3) `StreamHost` streams on any node whose role is primary, while the Cloud snapshot worker also
 requires that the node has not been cut off from acting as primary (`cloudPrimary`) — should a
 cut-off primary stream?; (4) the server's 8-second shutdown stops the stream last, after the Cloud
@@ -5262,6 +5264,21 @@ bucket copy that is on and current. Left open:
 - Of the four places boot hands the copy's state to, three are held by the compiler, which refuses
   a boot call that leaves the key out, and `/health` by a boot test. A boot test also pins the
   sealed-state alert's registration.
+Task 8a, the server side of the bucket-copy settings, landed as #TBD. Routes under
+`/api/backup/stream`, behind the manager login, read the settings, test a bucket, save and switch
+the copy on, switch it off, and hand out the recovery kit: one string holding the bucket's details,
+the venue id, the recovery key and the public key that signs the pointer
+(`packages/stream/src/kit.ts`). Save sets a recovery key when the box holds none, refreshes the
+sealed-state row, stores the settings, and reloads the copy only after that commits; Saves and
+switch-offs take turns. Test and Save refuse, before contacting the bucket, a bucket name with
+capitals or `_`, a prefix Litestream would read as another folder, or a key holding a quote or a
+character outside printable ASCII (`backup.stream_config_unsafe`, naming the field), and a prefix of a single `-`, which the vault
+would store as no prefix. The screen is Task 8b's. Left open:
+- The stream routes' Save and the backup routes' `apply` and `rotate` take turns only among
+  themselves, not with each other, so on a box holding no key a Save and an `apply` sent at the same
+  moment could each set a different recovery key (read from the code, not tested).
+- The same pointer write left open under Task 6, item (2): one from a process that has since died,
+  landing after the restart.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence
