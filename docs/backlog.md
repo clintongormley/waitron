@@ -5303,7 +5303,7 @@ the panel's kit, the diagnostics screen's log lines and the setup app's break-gl
 `apps/dashboard/src/screens/printers-screen.ts` already asked for it with a `monospace` fallback,
 and now gets it. Left open: the Backups screen's own card width is still a
 `34rem` literal, which the no-hardcoded-chrome rule forbids in a view and no guard reads.
-Task 9a, the first start after a restore (this PR). Every restore that takes on the archive's
+Task 9a, the first start after a restore (#630). Every restore that takes on the archive's
 identity (`skipSecrets` unset) leaves `rebuild-first-start.json` in the state folder, written under the
 venue lock before anything is placed and removed if the restore throws. At the next trading start
 the box signs a new certificate for this machine's addresses with the authority it brought back,
@@ -5342,6 +5342,10 @@ listener reads it, because the marker is still there — unless that start defer
   start runs whenever that box next starts trading unfenced and not as a mirror. Whether a rejoin
   should clear it is the owner's call.
 - A sell-only local secondary that is not fenced runs the first start and signs the next term.
+- A mirror that deferred its first start and is then promoted without a restart
+  (`promoteMirrorToPrimary`, `apps/server/src/promote.ts`) keeps the bucket copy held, reading off
+  with the reason `first_start_pending` and raising no alert, until the box next starts; that start
+  runs the first start, because the marker is still there. From reading, not a run.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence
