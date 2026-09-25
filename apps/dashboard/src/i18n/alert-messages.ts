@@ -62,6 +62,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "The box could not update the locked copy of its own keys and settings that it keeps with your data. A box rebuilt from your bucket might come back with out-of-date keys and settings, or without them if none were ever saved. Sales continue. Contact support.",
     es: "El equipo no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un equipo reconstruido desde tu bucket podría volver con claves y ajustes desactualizados, o sin ellos si nunca se llegaron a guardar. Las ventas continúan. Contacta con soporte.",
   },
+  "restore.first_start_failed": {
+    en: "This box was restored but could not finish setting itself up, so it is not copying to your storage bucket. Sales continue. Restart the box; if this message stays, contact support.",
+    es: "Este equipo se ha restaurado pero no ha podido terminar de configurarse, así que no está copiando a tu bucket de almacenamiento. Las ventas continúan. Reinicia el equipo; si el mensaje sigue, contacta con soporte.",
+  },
   "chain.verification_failed": {
     en: "The invoice record chain failed its integrity check on a sale. Contact support.",
     es: "La cadena de registros de facturación no ha superado su comprobación de integridad en una venta. Contacta con soporte.",

@@ -129,6 +129,8 @@ export function backupAlertSource(deps: {
   outcomes: BackupOutcomeHolder;
   now: () => Date;
   readStream: () => StreamView;
+  /** True while a restored box's first start (`rebuild-first-start.ts`) has not finished. */
+  firstStartFailed: () => boolean;
 }): AlertSource {
   return {
     area: "backup",
@@ -137,6 +139,16 @@ export function backupAlertSource(deps: {
       const status = await deps.listStatus();
       const stream = deps.readStream();
       const alerts = streamAlerts(stream, deps.now());
+      if (deps.firstStartFailed()) {
+        alerts.push({
+          key: "restore.first_start_failed",
+          code: "restore.first_start_failed",
+          params: {},
+          severity: "warning",
+          since: null,
+          screen: BACKUP_SCREEN,
+        });
+      }
       const streamCurrent =
         "lagMs" in stream && stream.state === "streaming" && stream.lagMs < STREAM_BEHIND_AFTER_MS;
       if (!status.configured) {

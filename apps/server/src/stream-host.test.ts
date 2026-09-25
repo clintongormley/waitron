@@ -286,6 +286,31 @@ describe("the live copy's wiring", () => {
         }
       });
 
+      // A restored box whose first start has not finished holds a term that may not have moved
+      // (rebuild-first-start.ts), and a settings save reloads the host, so start AND reload hold it.
+      it("starts nothing, on a start or a reload, while a restore's first start is unfinished", async () => {
+        logs = [];
+        let mayStream = false;
+        const litestream = new FakeLitestream();
+        const rt = runtime({
+          spawn: litestream.spawn,
+          store: new SwitchableStore(() => new Date()),
+          mayStream: () => mayStream,
+        });
+        try {
+          await rt.start();
+          await rt.reload();
+          expect(rt.status()).toEqual({ state: "off" });
+          expect(litestream.children).toHaveLength(0);
+          expect(logs.filter((event) => event === "stream.first_start_pending")).toHaveLength(2);
+          mayStream = true;
+          await rt.reload();
+          await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10_000 });
+        } finally {
+          await rt.stop();
+        }
+      });
+
       it("refuses a second reload while one is running, rather than interleaving them", async () => {
         const rt = runtime({
           spawn: new FakeLitestream().spawn,

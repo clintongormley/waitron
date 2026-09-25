@@ -362,6 +362,7 @@ function ongoingRegistry(opts: { backupDisabled?: boolean; awaitingCert?: boolea
         outcomes: { failed: new Map() },
         now: () => NOW,
         readStream: () => ({ state: "off" }),
+        firstStartFailed: () => false,
       }),
       sealedStateAlertSource({ failedSince: null }),
       awaitingCertAlertSource({ current: opts.awaitingCert ?? false }),

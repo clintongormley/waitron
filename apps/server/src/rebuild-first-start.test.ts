@@ -3,26 +3,43 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { loadKeyRing, type KeyRing } from "@waitron/credentials";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { deleteCredential, loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
 import {
   locations,
   nodes,
   readMembershipTrustSet,
   readNodeMembership,
   tenants,
+  withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { verifyMembershipDocument, type MembershipNode } from "@waitron/membership";
+import {
+  generateNodeKeyPair,
+  verifyMembershipDocument,
+  type MembershipNode,
+} from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import {
+  generationName,
+  pointerKey,
+  signPointer,
+  writePointer,
+  type ObjectStore,
+} from "@waitron/stream";
+import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity } from "./node-identity.js";
+import { STREAM_PURPOSE, streamSettingsPayload, type StreamSettings } from "./stream-host.js";
 import {
   REBUILD_MARKER,
   completeRebuild,
+  deferFirstStart,
+  readBucketPointerTerm,
+  runFirstStart,
   type RebuildDeps,
   type RebuildSource,
 } from "./rebuild-first-start.js";
@@ -241,5 +258,173 @@ describe("completeRebuild", () => {
     expect(held!.body.nodes).toEqual([
       { nodeId: NODE, contactUrl: "https://waitron.local", standing: "serving-primary" },
     ]);
+  });
+});
+
+describe("the term after a restore (plan Reconciliation N23)", () => {
+  it("signs one term above the bucket's pointer when the restored copy is older than it", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    await completeRebuild(deps(stateDir, { pointerTerm: async () => 2 }));
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(3);
+  });
+
+  it("moves one term up from the restored document when the pointer cannot be read", async () => {
+    const stateDir = await rebuiltStateDir("stream");
+    await completeRebuild(deps(stateDir, { pointerTerm: async () => null }));
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(1);
+  });
+
+  it("does not ask the bucket on an ordinary start", async () => {
+    const stateDir = await rebuiltStateDir(false);
+    const pointerTerm = vi.fn(async () => 5);
+    await completeRebuild(deps(stateDir, { pointerTerm }));
+    expect(pointerTerm).not.toHaveBeenCalled();
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
+  });
+});
+
+describe("readBucketPointerTerm", () => {
+  const SETTINGS: StreamSettings = {
+    venueId: LOCATION,
+    bucket: {
+      region: "eu-west-1",
+      bucket: "venue-copy",
+      prefix: "",
+      accessKeyId: "AKIA",
+      secretAccessKey: "secret-0123456789",
+    },
+  };
+  const storeSettings = (settings: StreamSettings) =>
+    withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, { purpose: STREAM_PURPOSE, value: streamSettingsPayload(settings) }),
+    );
+  afterEach(async () => {
+    await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: STREAM_PURPOSE }));
+  });
+
+  it("answers null when the box has no bucket settings, without opening a bucket", async () => {
+    const openStore = vi.fn();
+    expect(await readBucketPointerTerm(suite.db, RING, { openStore })).toBeNull();
+    expect(openStore).not.toHaveBeenCalled();
+  });
+
+  it("answers the pointer's term, and null when the bucket holds no pointer", async () => {
+    await storeSettings(SETTINGS);
+    const store = createMemoryObjectStore();
+    expect(await readBucketPointerTerm(suite.db, RING, { openStore: () => store })).toBeNull();
+    const signer = generateNodeKeyPair();
+    await writePointer(
+      store,
+      LOCATION,
+      signPointer(
+        {
+          venueId: LOCATION,
+          term: 2,
+          nodeId: NODE,
+          generation: generationName(2, NODE, NOW),
+          writtenAt: NOW.toISOString(),
+        },
+        signer.privateKey,
+      ),
+      null,
+    );
+    expect(await readBucketPointerTerm(suite.db, RING, { openStore: () => store })).toBe(2);
+  });
+
+  it("answers null when the bucket does not answer in time", async () => {
+    await storeSettings(SETTINGS);
+    const store = createMemoryObjectStore();
+    const silent: ObjectStore = {
+      get: () => new Promise<never>(() => {}),
+      put: (key, body, condition) => store.put(key, body, condition),
+      list: (prefix) => store.list(prefix),
+      delete: (key) => store.delete(key),
+      deleteMany: (keys) => store.deleteMany(keys),
+    };
+    expect(
+      await readBucketPointerTerm(suite.db, RING, { openStore: () => silent, timeoutMs: 50 }),
+    ).toBeNull();
+  });
+
+  it("answers null when the pointer in the bucket cannot be read", async () => {
+    await storeSettings(SETTINGS);
+    const store = createMemoryObjectStore();
+    await store.put(pointerKey(LOCATION), new TextEncoder().encode("not json"), undefined);
+    expect(await readBucketPointerTerm(suite.db, RING, { openStore: () => store })).toBeNull();
+  });
+
+  it("opens the stored bucket itself when no store is given", async () => {
+    // Nothing listens on port 1, so the real client's request fails and the read answers null.
+    await storeSettings({
+      ...SETTINGS,
+      bucket: { ...SETTINGS.bucket, endpoint: "http://127.0.0.1:1" },
+    });
+    expect(await readBucketPointerTerm(suite.db, RING, { timeoutMs: 5_000 })).toBeNull();
+  });
+});
+
+describe("runFirstStart (plan Reconciliation N24)", () => {
+  it("opens for sales without streaming, logs restore.first_start_failed, and keeps the marker for the next start", async () => {
+    const stateDir = await rebuiltStateDir("stream");
+    const log = vi.fn();
+    await expect(runFirstStart(deps(stateDir, { ring: OTHER_RING, log }))).resolves.toEqual({
+      mayStream: false,
+      failed: true,
+    });
+    expect(log).toHaveBeenCalledWith("error", "restore.first_start_failed", {
+      errorCode: "credentials.decrypt_failed",
+    });
+    await stat(join(stateDir, REBUILD_MARKER));
+    await expect(runFirstStart(deps(stateDir))).resolves.toEqual({
+      mayStream: true,
+      failed: false,
+    });
+    await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("streams on an ordinary start", async () => {
+    const stateDir = await rebuiltStateDir(false);
+    await expect(runFirstStart(deps(stateDir))).resolves.toEqual({
+      mayStream: true,
+      failed: false,
+    });
+  });
+});
+
+describe("deferFirstStart", () => {
+  it("leaves the marker, the certificate and the term alone, and holds the stream", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    const leafBefore = await readFile(join(stateDir, "tls", "server.crt"));
+    const log = vi.fn();
+    await expect(deferFirstStart(stateDir, log)).resolves.toEqual({
+      mayStream: false,
+      failed: false,
+    });
+    expect(log).toHaveBeenCalledWith("warn", "restore.first_start_deferred", {});
+    await stat(join(stateDir, REBUILD_MARKER));
+    expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(leafBefore);
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
+  });
+
+  it("changes nothing on an ordinary start", async () => {
+    const stateDir = await rebuiltStateDir(false);
+    const log = vi.fn();
+    await expect(deferFirstStart(stateDir, log)).resolves.toEqual({
+      mayStream: true,
+      failed: false,
+    });
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("holds the stream when it cannot tell whether the marker is there", async () => {
+    // The state folder is a file, so looking inside it fails with ENOTDIR rather than ENOENT.
+    const dir = await mkdtemp(join(tmpdir(), "waitron-rebuild-"));
+    dirs.push(dir);
+    const notADirectory = join(dir, "state");
+    await writeFile(notADirectory, "");
+    await expect(deferFirstStart(notADirectory, () => {})).resolves.toEqual({
+      mayStream: false,
+      failed: false,
+    });
   });
 });

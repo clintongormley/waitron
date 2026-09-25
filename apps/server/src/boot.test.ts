@@ -10,6 +10,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { randomUUID, X509Certificate } from "node:crypto";
 import { createConnection, createServer } from "node:net";
+import { connect as tlsConnect } from "node:tls";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -71,6 +72,9 @@ import { DUTY_BUDGET_MS } from "./health.js";
 import { DRAIN_DUTY } from "./pass.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
+import { seedTermZeroMembership } from "./membership-seed.js";
+import { establishNodeIdentity } from "./node-identity.js";
+import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { unsealNodeState } from "./sealed-state.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -458,6 +462,19 @@ function httpsVia(ca: string | Buffer): {
     via: { dispatcher } as RequestInit & { dispatcher: Agent },
     close: () => dispatcher.close(),
   };
+}
+
+/** The certificate the listener on `port` presents to a client that trusts `ca`. */
+async function servedCertificate(port: number, ca: Buffer): Promise<X509Certificate> {
+  return new Promise((resolve, reject) => {
+    const socket = tlsConnect({ port, host: "127.0.0.1", ca, servername: "localhost" }, () => {
+      const certificate = socket.getPeerX509Certificate();
+      socket.destroy();
+      if (certificate === undefined) reject(new Error("no certificate presented"));
+      else resolve(certificate);
+    });
+    socket.once("error", reject);
+  });
 }
 
 /**
@@ -1151,6 +1168,148 @@ describe("startServer, against a migrated venue directory", () => {
       expect(response.status).toBe(200);
       const body = (await response.json()) as { alerts: { code: string }[] };
       expect(body.alerts.map((alert) => alert.code)).toContain("backup.sealed_state_failed");
+    } finally {
+      await server.close();
+      await close();
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  // Boot's wiring of the first start after a restore (rebuild-first-start.ts): the listener must
+  // read the certificate AFTER the first start re-issues it, and the contact address must be this
+  // machine's advertised origin.
+  it("finishes a restore at its first trading start: it serves a certificate for this machine's addresses and signs the next term", async () => {
+    const venue = await freshVenue();
+    const db = venue.store.venue;
+    await seedTradingVenue(db);
+    const ring = loadKeyRing(KEY_ENV);
+    await establishNodeIdentity({ ownerDb: db, ring }, TILL_ENV.WAITRON_TILL_NODE_ID);
+    await seedTermZeroMembership(
+      { db, ring },
+      TILL_ENV.WAITRON_TILL_NODE_ID,
+      "https://old-box.example",
+    );
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-first-start-"));
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    await ensureBoxSecrets({
+      stateDir,
+      hostnames: ["waitron.local", "localhost"],
+      now: () => new Date(),
+      listIpv4: () => ["192.168.1.10"],
+    });
+    await writeFile(
+      join(stateDir, REBUILD_MARKER),
+      JSON.stringify({ version: 1, source: "archive" }),
+    );
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_VENUE_DIR: venue.directory,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "preproduction",
+      WAITRON_BOX_ADDRESSES: "10.1.2.3",
+      WAITRON_ADVERTISED_ORIGIN: "https://box.example.test",
+    });
+    try {
+      await awaitListening(port);
+      const served = await servedCertificate(port, await readFile(join(stateDir, "tls", "ca.crt")));
+      expect(served.subjectAltName).toContain("IP Address:10.1.2.3");
+      expect(served.subjectAltName).not.toContain("192.168.1.10");
+      expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(false);
+      const held = await readNodeMembership(db);
+      expect(held!.body.term).toBe(1);
+      expect(held!.body.nodes).toEqual([
+        {
+          nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+          contactUrl: "https://box.example.test",
+          standing: "serving-primary",
+        },
+      ]);
+    } finally {
+      await server.close();
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("keeps selling when a restore's first start fails, and raises restore.first_start_failed", async () => {
+    const venue = await freshVenue();
+    const db = venue.store.venue;
+    // No membership key is sealed for this node, so signing the next term fails.
+    await seedTradingVenue(db);
+    const [admin] = await db
+      .insert(persons)
+      .values({
+        displayName: "First Start Admin",
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword("dashPass123"),
+        email: "first-start-admin@example.test",
+        role: "admin",
+      })
+      .returning({ id: persons.id });
+    const session = await withTransaction(db, (tx) =>
+      startManagementSession(tx, { personId: admin!.id }),
+    );
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-first-start-failed-"));
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    await ensureBoxSecrets({
+      stateDir,
+      hostnames: ["waitron.local", "localhost"],
+      now: () => new Date(),
+    });
+    await writeFile(
+      join(stateDir, REBUILD_MARKER),
+      JSON.stringify({ version: 1, source: "stream" }),
+    );
+    // A bucket copy set up, and no membership document: a copy that tried to start would read off
+    // with the reason `no_membership`, so a plain off shows it was held.
+    await withTransaction(db, (tx) =>
+      putCredential(tx, loadKeyRing(KEY_ENV), {
+        purpose: STREAM_PURPOSE,
+        value: {
+          venueId: "venue-1",
+          endpoint: "https://127.0.0.1:1",
+          region: "eu-south-2",
+          bucket: "venue-copies",
+          prefix: "-",
+          accessKeyId: "AKIAEXAMPLE",
+          secretAccessKey: "secret-example",
+        },
+      }),
+    );
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_VENUE_DIR: venue.directory,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "preproduction",
+    });
+    const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
+    try {
+      const health = await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
+      expect(health.status).toBe(200);
+      expect(((await health.json()) as { stream: unknown }).stream).toEqual({ state: "off" });
+      const response = await fetch(`https://127.0.0.1:${port}/management-api/alerts`, {
+        ...via,
+        headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { alerts: { code: string }[] };
+      expect(body.alerts.map((alert) => alert.code)).toContain("restore.first_start_failed");
+      expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(true);
     } finally {
       await server.close();
       await close();

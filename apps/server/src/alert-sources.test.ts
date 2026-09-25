@@ -44,12 +44,14 @@ function src(
   status: BackupStatus,
   outcomes: BackupOutcomeHolder,
   readStream: () => StreamView = OFF,
+  firstStartFailed: () => boolean = () => false,
 ) {
   return backupAlertSource({
     listStatus: async () => status,
     outcomes,
     now: () => NOW,
     readStream,
+    firstStartFailed,
   });
 }
 
@@ -62,6 +64,31 @@ const stream = (overrides: Partial<StreamStatus>): StreamStatus => ({
   lagMs: 0,
   lastConfirmedUploadAt: "2026-09-15T11:59:00.000Z",
   ...overrides,
+});
+
+describe("backupAlertSource after a restore whose first start failed", () => {
+  const none = { failed: new Map() };
+
+  it("raises restore.first_start_failed while the first start is unfinished, and not otherwise", async () => {
+    const failed = await src({ configured: false }, none, OFF, () => true).read(ctx);
+    expect(failed).toContainEqual({
+      key: "restore.first_start_failed",
+      code: "restore.first_start_failed",
+      params: {},
+      severity: "warning",
+      since: null,
+      screen: "backup",
+    });
+    const fine = await src({ configured: false }, none, OFF, () => false).read(ctx);
+    expect(fine.map((a) => a.code)).not.toContain("restore.first_start_failed");
+  });
+
+  it("raises it beside a configured archive's alerts too", async () => {
+    const alerts = await src({ configured: true, destinations: [] }, none, OFF, () => true).read(
+      ctx,
+    );
+    expect(alerts.map((a) => a.code)).toEqual(["restore.first_start_failed"]);
+  });
 });
 
 describe("backupAlertSource", () => {

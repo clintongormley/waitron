@@ -1,11 +1,14 @@
 import { createServer as createHttpServer, type Server } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import type { AddressInfo } from "node:net";
-import { cp, mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { Agent } from "undici";
+import { loadKeyRing } from "@waitron/credentials";
 import {
   invoiceSeries,
   locations,
@@ -26,6 +29,9 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { startServer } from "./boot.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { ensureBoxSecrets } from "./box-secrets.js";
+import { establishNodeIdentity } from "./node-identity.js";
+import { REBUILD_MARKER } from "./rebuild-first-start.js";
 
 // A box that returns after being fenced still names itself serving-primary; if it sold, two nodes
 // would file under one NIF. Pinned at boot: a reachable peer holding a higher-term chart that fences
@@ -259,6 +265,71 @@ describe("returned-box membership reconciliation at boot", () => {
     } finally {
       await server.close();
       await peer.stop();
+    }
+  }, 60_000);
+
+  // A box restored from an old archive while the cloud serves in its place: its first start after
+  // the restore must not move the term before the peer's chart is read, or the fencing chart reads
+  // as not newer and two nodes sell.
+  it("a restored box that the peer fences adopts the fence and leaves its first start for later", async () => {
+    const [venueDir, db] = await migratedVenue();
+    await seed(db);
+    await stampDeployment(db, "preproduction");
+    // This node can sign, so a first start that ran would move the term.
+    await establishNodeIdentity(
+      { ownerDb: db, ring: loadKeyRing(KEY_ENV) },
+      TILL_ENV.WAITRON_TILL_NODE_ID,
+    );
+    await seedHeldChart(db, 1);
+    const peer = await startPeer(peerFencingChart(2));
+    await writeMirrorConfig(db, TILL_ENV.WAITRON_TILL_NODE_ID, {
+      relayUrl: peer.url,
+      boxHostname: "box.local",
+      boxCaPem: BOX_CA_PEM,
+      originNodeId: PEER_NODE,
+    });
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-reconcile-restored-"));
+    writeFileSync(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    await ensureBoxSecrets({
+      stateDir,
+      hostnames: ["waitron.local", "localhost"],
+      now: () => new Date(),
+      listIpv4: () => [],
+    });
+    await writeFile(
+      join(stateDir, REBUILD_MARKER),
+      JSON.stringify({ version: 1, source: "archive" }),
+    );
+    const leafBefore = await readFile(join(stateDir, "tls", "server.crt"));
+    const dispatcher = new Agent({
+      connect: { ca: await readFile(join(stateDir, "tls", "ca.crt")) },
+    });
+
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_VENUE_DIR: venueDir,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    });
+    try {
+      const node = await fetch(`https://127.0.0.1:${port}/api/node`, {
+        dispatcher,
+      } as RequestInit);
+      expect(node.status).toBe(200);
+      expect(await node.json()).toMatchObject({ acceptingSales: false });
+      expect((await readNodeMembership(db))?.body.term).toBe(2);
+      expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(true);
+      expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(leafBefore);
+    } finally {
+      await server.close();
+      await peer.stop();
+      await dispatcher.close();
+      await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
 

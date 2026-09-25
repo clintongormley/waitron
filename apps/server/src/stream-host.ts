@@ -77,6 +77,9 @@ export interface StreamHostDeps {
   now: () => Date;
   /** Read at each start, so a promotion is followed. */
   isPrimary: () => boolean;
+  /** False while a restored box's first start is unfinished (`rebuild-first-start.ts`). Read at
+   * each start, so a reload after a settings save is held too. Default: always true. */
+  mayStream?: () => boolean;
   /** Test seams; production leaves them unset. */
   spawn?: SpawnFn;
   store?: ObjectStore;
@@ -112,6 +115,10 @@ export class StreamHost {
     const { db, ring, log } = this.#deps;
     if (!this.#deps.isPrimary()) {
       log("info", "stream.not_primary", {});
+      return;
+    }
+    if (this.#deps.mayStream?.() === false) {
+      log("warn", "stream.first_start_pending", {});
       return;
     }
     try {

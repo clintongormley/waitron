@@ -5139,8 +5139,9 @@ backup job runs only on the primary — kept by design (owner, 2026-09-24). Noth
 or the bucket-copy settings' Save (which writes a recovery key into `backup.env` when the box holds none)
 rewrites a sealed file while the server keeps running (#560's per-task review traced each writer:
 promotion rewrites `trading.env` and then restarts; `modules.json`, `secrets.env` and the TLS files
-are written in setup or by the command line, before a restart); Task 8a calls the one
-`sealedState.refresh()` boot builds, and Task 9a must too.
+are written in setup or by the command line, before a restart, and Task 9a's first start rewrites
+the TLS leaf during a start, before that start's refresh); Task 8a calls the one
+`sealedState.refresh()` boot builds, and Task 9a calls none: boot's own refresh seals its new leaf.
 Task 3a, one process per venue folder (opening a venue folder holds `venue.lock`, a SQLite
 `begin immediate` the operating system releases when the process dies; a second process is refused
 `provisioning.database_in_use`, while opens inside one process share it; restore and
@@ -5302,6 +5303,26 @@ the panel's kit, the diagnostics screen's log lines and the setup app's break-gl
 `apps/dashboard/src/screens/printers-screen.ts` already asked for it with a `monospace` fallback,
 and now gets it. Left open: the Backups screen's own card width is still a
 `34rem` literal, which the no-hardcoded-chrome rule forbids in a view and no guard reads.
+Task 9a, the first start after a restore (this PR). Every restore that takes on the archive's
+identity (`skipSecrets` unset) leaves `rebuild-first-start.json` in the state folder, written under the
+venue lock before anything is placed and removed if the restore throws. At the next trading start
+the box signs a new certificate for this machine's addresses with the authority it brought back,
+then the membership document one term above both the restored document and the term the bucket's
+pointer names (read for at most 15 seconds, only when the marker is there), naming this machine's
+advertised origin; the marker goes last (`apps/server/src/rebuild-first-start.ts`). A first start
+that fails lets the box sell but holds the bucket copy, a reload after a settings save included,
+and raises `restore.first_start_failed`. It runs after the returned-box reconciliation with the
+cloud peer, not straight after the key ring as the plan placed it: with the call moved there, the
+fenced-restore case in `apps/server/src/boot.reconcile.test.ts` failed with the box accepting sales,
+because the moved term made the peer's fencing document read as not newer. A mirror or a fenced
+node re-issues and signs nothing; the marker stays and the copy is held. Left open:
+- The pointer's term is taken without checking its signature, as the supervisor already does, so
+  whoever can write the bucket can push a restored box's term up (never down).
+- A marker left on a fenced box survives `waitron-rejoin`, which wipes the database and removes
+  only `trading.env` from the state folder (`apps/server/src/rejoin-command.ts`), so the first
+  start runs whenever that box next starts trading unfenced and not as a mirror. Whether a rejoin
+  should clear it is the owner's call.
+- A sell-only local secondary that is not fenced runs the first start and signs the next term.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence
