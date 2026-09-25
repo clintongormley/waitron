@@ -5142,8 +5142,9 @@ bucket copy that is on and current. Left open:
   and one line of the adapter's prepare comment is over 100 characters.
 - The alerts send the owner to the Backups page for the bucket's settings, which Task 8b adds; the
   status gained a third shape, a copy set up but not started, which Task 8b's panel must show.
-- The four places boot hands the copy's state to are pinned: three by the compiler and `/health`
-  by a boot test. The sealed-state alert's registration at boot is not, and was checked by reading.
+- Of the four places boot hands the copy's state to, three are held by the compiler, which refuses
+  a boot call that leaves the key out (though not one that passes `undefined`), and `/health` by a
+  boot test. A boot test also pins the sealed-state alert's registration.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence

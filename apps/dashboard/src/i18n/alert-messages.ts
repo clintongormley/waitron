@@ -55,12 +55,12 @@ export const ALERT_MESSAGES: Readonly<
     es: "Tu bucket está rechazando este equipo: puede que su clave de acceso ya no funcione, o que el bucket ya no admita la comprobación que usa Waitron para evitar que dos equipos sobrescriban la copia del otro. Revisa los ajustes del bucket en la página de Copias.",
   },
   "backup.stream_stopped": {
-    en: "The bucket copy has stopped, so new changes are not reaching your bucket. Sales continue. Contact support.",
-    es: "La copia en el bucket se ha detenido, así que los cambios nuevos no llegan a tu bucket. Las ventas continúan. Contacta con soporte.",
+    en: "The bucket copy is not running, so new changes are not reaching your bucket. Sales continue. Contact support.",
+    es: "La copia en el bucket no está en marcha, así que los cambios nuevos no llegan a tu bucket. Las ventas continúan. Contacta con soporte.",
   },
   "backup.sealed_state_failed": {
-    en: "The box could not update the locked copy of its own keys and settings that it keeps with your data. A box rebuilt from your bucket would come back without its current keys, including the one that opens the passwords and access keys it stores. Sales continue. Contact support.",
-    es: "El equipo no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un equipo reconstruido desde tu bucket volvería sin sus claves actuales, entre ellas la que abre las contraseñas y claves de acceso que guarda. Las ventas continúan. Contacta con soporte.",
+    en: "The box could not update the locked copy of its own keys and settings that it keeps with your data. A box rebuilt from your bucket might come back with out-of-date keys and settings, or without them if none were ever saved. Sales continue. Contact support.",
+    es: "El equipo no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un equipo reconstruido desde tu bucket podría volver con claves y ajustes desactualizados, o sin ellos si nunca se llegaron a guardar. Las ventas continúan. Contacta con soporte.",
   },
   "chain.verification_failed": {
     en: "The invoice record chain failed its integrity check on a sale. Contact support.",

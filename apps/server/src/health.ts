@@ -259,7 +259,9 @@ export function healthSnapshot(
 /** Named field by field: the generation's name carries the node id and term, which stay off this
  * unauthenticated route. */
 function streamHealth(view: StreamView): Record<string, unknown> {
-  if (!("lagMs" in view)) return { ...view };
+  if (!("reason" in view)) return { state: view.state };
+  if (!("lagMs" in view))
+    return { state: view.state, reason: view.reason, stateSince: view.stateSince };
   return {
     state: view.state,
     reason: view.reason,

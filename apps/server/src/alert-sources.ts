@@ -43,8 +43,31 @@ function streamAlerts(stream: StreamView, now: Date): OngoingAlert[] {
     screen: BACKUP_SCREEN,
   } as const;
   if (!("lagMs" in stream)) return [stopped];
+  const refused = stream.state === "refused";
+  let explained: OngoingAlert | undefined;
+  if (refused && (stream.reason === "pointer_changed" || stream.reason === "pointer_newer_term")) {
+    explained = {
+      key: "backup.stream_refused",
+      code: "backup.stream_refused",
+      params: {},
+      severity: "error",
+      since: stream.stateSince,
+      screen: BACKUP_SCREEN,
+    };
+  } else if (refused && stream.reason === "config_unsafe") {
+    explained = {
+      key: "backup.stream_settings_unusable",
+      code: "backup.stream_settings_unusable",
+      params: {},
+      severity: "error",
+      since: stream.stateSince,
+      screen: BACKUP_SCREEN,
+    };
+  } else if (refused || (stream.state === "off" && STOPPED_BY_ITSELF.has(stream.reason))) {
+    explained = stopped;
+  }
   const alerts: OngoingAlert[] = [];
-  if (stream.lagMs >= STREAM_BEHIND_AFTER_MS) {
+  if (explained === undefined && stream.lagMs >= STREAM_BEHIND_AFTER_MS) {
     alerts.push({
       key: "backup.stream_behind",
       code: "backup.stream_behind",
@@ -64,28 +87,7 @@ function streamAlerts(stream: StreamView, now: Date): OngoingAlert[] {
       screen: BACKUP_SCREEN,
     });
   }
-  const refused = stream.state === "refused";
-  if (refused && (stream.reason === "pointer_changed" || stream.reason === "pointer_newer_term")) {
-    alerts.push({
-      key: "backup.stream_refused",
-      code: "backup.stream_refused",
-      params: {},
-      severity: "error",
-      since: stream.stateSince,
-      screen: BACKUP_SCREEN,
-    });
-  } else if (refused && stream.reason === "config_unsafe") {
-    alerts.push({
-      key: "backup.stream_settings_unusable",
-      code: "backup.stream_settings_unusable",
-      params: {},
-      severity: "error",
-      since: stream.stateSince,
-      screen: BACKUP_SCREEN,
-    });
-  } else if (refused || (stream.state === "off" && STOPPED_BY_ITSELF.has(stream.reason))) {
-    alerts.push(stopped);
-  }
+  if (explained !== undefined) alerts.push(explained);
   if (stream.bucketProblem !== null) {
     alerts.push({
       key: "backup.stream_bucket_unusable",
@@ -130,7 +132,8 @@ export function recordBackupOutcome(
  * whose most recent attempt failed (`backup.destination_failed`, `since` = when it failed). Overdue
  * reads the per-request freshness listing; failed reads the in-process outcome holder — a fresh
  * destination can still carry a failed last attempt, so both are reported. The bucket copy's come
- * from its status: behind by {@link STREAM_BEHIND_AFTER_MS} or more (`backup.stream_behind`), paused
+ * from its status: behind by {@link STREAM_BEHIND_AFTER_MS} or more (`backup.stream_behind`, left
+ * out while one of the refused or stopped alerts already says why nothing reaches the bucket), paused
  * at the side-file limit (`backup.stream_paused`), refused because another box moved the pointer
  * (`backup.stream_refused`) or because its settings cannot be used safely
  * (`backup.stream_settings_unusable`), refused by its bucket (`backup.stream_bucket_unusable`), or

@@ -30,6 +30,7 @@ import {
   printingAlertSource,
   recordBackupOutcome,
   sealedStateAlertSource,
+  STREAM_BEHIND_AFTER_MS,
 } from "./alert-sources.js";
 import type { BackupStatus } from "./backup-status.js";
 import { createTtlCache } from "./ttl-cache.js";
@@ -144,6 +145,15 @@ describe("backupAlertSource and the bucket copy", () => {
     });
   });
 
+  it("raises backup.stream_behind at exactly fifteen minutes", async () => {
+    const alerts = await src(configured, none, () =>
+      stream({ lagMs: STREAM_BEHIND_AFTER_MS }),
+    ).read(ctx);
+    expect(alerts.map((a) => [a.code, a.params])).toEqual([
+      ["backup.stream_behind", { minutes: 15 }],
+    ]);
+  });
+
   it("does not raise backup.stream_behind just under fifteen minutes", async () => {
     const alerts = await src(configured, none, () => stream({ lagMs: 15 * 60_000 - 1 })).read(ctx);
     expect(alerts).toEqual([]);
@@ -223,16 +233,49 @@ describe("backupAlertSource and the bucket copy", () => {
     });
   }
 
-  it("still counts how far behind a copy that stopped itself is", async () => {
-    const failed = stream({
-      state: "off",
-      reason: "supervisor_failed",
-      stateSince: "2026-09-15T11:45:00.000Z",
-      lagMs: 16 * 60_000,
-    });
-    expect((await src(configured, none, () => failed).read(ctx)).map((a) => a.code)).toEqual([
-      "backup.stream_behind",
+  // Its own alert already says why nothing reaches the bucket; "behind" would point the owner at
+  // the internet connection instead.
+  const explained: [string, Partial<StreamStatus>, string][] = [
+    ["stopped itself", { state: "off", reason: "supervisor_failed" }, "backup.stream_stopped"],
+    [
+      "refused for another box",
+      { state: "refused", reason: "pointer_changed" },
+      "backup.stream_refused",
+    ],
+    [
+      "refused its settings",
+      { state: "refused", reason: "config_unsafe" },
+      "backup.stream_settings_unusable",
+    ],
+    [
+      "refused for no named reason",
+      { state: "refused", reason: "something_new" },
       "backup.stream_stopped",
+    ],
+  ];
+  for (const [name, overrides, code] of explained) {
+    it(`raises only its own alert, not backup.stream_behind, for a copy that ${name}`, async () => {
+      const view = stream({ ...overrides, lagMs: 16 * 60_000 });
+      expect((await src(configured, none, () => view).read(ctx)).map((a) => a.code)).toEqual([
+        code,
+      ]);
+    });
+  }
+
+  it("raises backup.stream_behind beside a pause or a refusing bucket, which do not say it", async () => {
+    const lagMs = 16 * 60_000;
+    const paused = stream({ state: "paused", reason: "side_file_limit", lagMs });
+    expect((await src(configured, none, () => paused).read(ctx)).map((a) => a.code)).toEqual([
+      "backup.stream_behind",
+      "backup.stream_paused",
+    ]);
+    const refusing = stream({
+      lagMs,
+      bucketProblem: { reason: "access_denied", since: "2026-09-15T11:50:00.000Z" },
+    });
+    expect((await src(configured, none, () => refusing).read(ctx)).map((a) => a.code)).toEqual([
+      "backup.stream_behind",
+      "backup.stream_bucket_unusable",
     ]);
   });
 

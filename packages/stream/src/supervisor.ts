@@ -59,7 +59,10 @@ export interface StreamStatus {
   lastConfirmedUploadAt: string | null;
 }
 
-/** A copy with bucket settings stored here that has no supervisor running; `reason` says why. */
+/**
+ * A copy whose bucket settings are stored here, or could not be read, and that has no supervisor
+ * running; `reason` says why.
+ */
 export interface StreamNotStarted {
   state: "off";
   reason: string;

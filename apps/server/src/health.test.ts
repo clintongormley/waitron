@@ -661,6 +661,21 @@ describe("the bucket copy on /health", () => {
     expect(healthSnapshot(state, AT).body.stream).toEqual(notStarted);
   });
 
+  it("names the fields of a copy that is off, so a field added later stays off this route", () => {
+    const state = createHealthState(BOOT);
+    const since = AT.toISOString();
+    const extra = { nodeId: "node-a" };
+    state.readStream = () =>
+      ({ state: "off", reason: "no_membership", stateSince: since, ...extra }) as StreamView;
+    expect(healthSnapshot(state, AT).body.stream).toEqual({
+      state: "off",
+      reason: "no_membership",
+      stateSince: since,
+    });
+    state.readStream = () => ({ state: "off", ...extra }) as StreamView;
+    expect(healthSnapshot(state, AT).body.stream).toEqual({ state: "off" });
+  });
+
   // A bucket is external. /health failing on it would stall an install or an update
   // (`deploy/waitron.sh` waits for a healthy container) on someone else's outage.
   const badCopies: [string, StreamView][] = [

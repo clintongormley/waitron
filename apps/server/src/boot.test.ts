@@ -1101,6 +1101,65 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
+  it("raises the sealed-state alert when the start's refresh of that row fails", async () => {
+    const venue = await freshVenue();
+    const db = venue.store.venue;
+    await seedTradingVenue(db);
+    const [admin] = await db
+      .insert(persons)
+      .values({
+        displayName: "Sealed Admin",
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword("dashPass123"),
+        email: "sealed-admin@example.test",
+        role: "admin",
+      })
+      .returning({ id: persons.id });
+    const session = await withTransaction(db, (tx) =>
+      startManagementSession(tx, { personId: admin!.id }),
+    );
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-sealed-failed-"));
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    await ensureBoxSecrets({
+      stateDir,
+      hostnames: ["waitron.local", "localhost"],
+      now: () => new Date(),
+    });
+    // No `trading.env`: one of the files the row must carry is missing, so the refresh fails.
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_VENUE_DIR: venue.directory,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "preproduction",
+      },
+      { WAITRON_BACKUP_RECOVERY_KEY: "boot-recovery-key-0123" },
+    );
+    const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
+    try {
+      await fetchHealthOk(`https://127.0.0.1:${port}/health`, via);
+      const response = await fetch(`https://127.0.0.1:${port}/management-api/alerts`, {
+        ...via,
+        headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}` },
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { alerts: { code: string }[] };
+      expect(body.alerts.map((alert) => alert.code)).toContain("backup.sealed_state_failed");
+    } finally {
+      await server.close();
+      await close();
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   // The only suite that observes boot's own wiring of the advertised addresses: `box-secrets.test.ts`
   // injects its own `listIpv4` and never calls `startServer`, so it stays green if this wiring is
   // deleted. Here the override has to travel env -> loadConfig -> the ensureBoxSecrets call for the
