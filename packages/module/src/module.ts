@@ -298,6 +298,8 @@ export interface VenueServiceContribution {
   ): Promise<void>;
   /** Whether staff may change an item already sent to the kitchen. */
   readEditSentLines(tx: Transaction): Promise<boolean>;
+  /** Whether Finish table leaves the party's tables needing clearing. */
+  readClearingWorkflow(tx: Transaction): Promise<boolean>;
 }
 
 /** A reference to non-DB state a module owns, resolved to a path by the composition root. */
