@@ -6013,7 +6013,7 @@ endorsement stored when that round reads, not the first round's"
     run). The owner's decision on this, 2026-09-26, is under the failover residuals ("a standby
     checks a promotion against the primary's key"; it covers promotion, `retireSelf` and the
     standby chart append, and a restored mirror's own start is not covered by it).
-  - **Closed for a restore by A53 (`fix/restore-membership-damaged-document-message`), 2026-09-26,
+  - **Closed for a restore by A53 (#688), 2026-09-26,
     on the owner's A45 answer ("move the check earlier").** When a restore's marker is present,
     boot now runs `assertRestoredMembershipReadable` (`apps/server/src/rebuild-first-start.ts`)
     before its first read of the held row, ahead of the peer reconciliation: stored text that is not
