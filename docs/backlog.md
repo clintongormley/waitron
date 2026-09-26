@@ -291,7 +291,7 @@ rows written before it misbehave (a dish sent before the upgrade counts as unsen
 before it blocks a one-line edit) — the PR has the measured table; settle open orders or reset
 before upgrading. Still open: the `changed`
 notice kind is declared but nothing writes it (the kitchen screen renders it since Task 7c).
-**Menus Task 7c: changing a sent line from the till, and kitchen-screen notices.** The table
+**Menus Task 7c landed (#710, 2026-09-26): changing a sent line from the till, and kitchen-screen notices.** The table
 screen offers Change on a sent line the kitchen has not started, a recalled line and a line with no
 kitchen route; it opens the existing option, extras and note editor prefilled from the line and saves
 through the one-line edit route with the order's revision. A started line keeps Cancel only; Cancel
@@ -1791,7 +1791,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     on each form tried only with a hand-built event or not at all, and move the ones that close to
     `dismissible`.
   - **Every other task waits for lane C's menus tasks that change the same order and till code**
-    (M7c, M7v, M9; M7b landed as #696, M7b2 as #702). Building beside them would collide on
+    (M7v, M9; M7b landed as #696, M7b2 as #702, M7c as #710). Building beside them would collide on
     `apps/server/src/working-order.ts`, the till and the core migrations.
   - **Task 17** (unpaid departure) also waits for asesor Q28.
   - **Asesor questions to send:**
