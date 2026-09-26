@@ -4048,9 +4048,7 @@ branch found, checked, and consciously did not take.
   abandoned because Stryker 9.6.1 kills almost nothing under it: `packages/fiscal` scored 0.00% and
   `packages/shared` 8.14% (stryker-js#6210; fix PR #6214 was open and unreleased). Stryker 10.0.0's
   release notes mention neither issue, and nothing here was run under Vitest 5, so the question is
-  untouched rather than resolved. The dated note at the top of
-  `docs/superpowers/plans/2026-09-18-vitest-5-upgrade.md` says the same thing beside the plan it
-  qualifies; this is the backlog's pointer to it.
+  untouched rather than resolved.
 
 **Left behind by the dependency refresh (#432, 2026-09-19).** Nineteen dependencies moved to their
 latest minor or patch release; one loose end came with it.
