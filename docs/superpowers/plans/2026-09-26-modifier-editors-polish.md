@@ -88,9 +88,10 @@ Its findings are folded in here; where a step below says otherwise, THIS section
   field is required).
 - `allow-blank` is dropped: the sketch gave it no behaviour, so both blank-value tests pass without
   it. A blank value is simply a value; Task 3 marks "no limit" with the placeholder alone.
-- The stepper's grid uses `align-items: baseline`, so the host's baseline is the input text's
-  baseline (a probe without it measured the − button's baseline, 1.5px off). Pin that with a test
-  in Task 1 that fails without it.
+- The stepper's number box alone is aligned by baseline (`align-self: baseline`), with the buttons
+  stretching to its height, so the host's baseline is the input text's baseline (a probe without
+  it measured the − button's baseline, 1.5px off). Pin that with a test in Task 1 that fails
+  without it.
 - Assert error rendering, `placeholder`, `hide-label`, `disabled` (both buttons and the input) and
   the label-to-input association directly — axe alone does not meet the 90 mutation floor.
 - The `hostUpdated` re-mark is not needed: every host renders its rows with keyed `repeat`, so a

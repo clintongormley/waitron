@@ -110,10 +110,32 @@ const panel = (theme: "light" | "dark") => `
       </wt-price-input>
     </div>
     <div class="row" style="margin-top:16px">
-      <wt-number-stepper label="Mínimo" name="minimo" value="0" hint="0 hace la lista opcional">
+      <wt-number-stepper
+        label="Mínimo"
+        name="minimo"
+        value="0"
+        hint="0 hace la lista opcional"
+        decreaselabel="Reducir {label}"
+        increaselabel="Aumentar {label}"
+      >
       </wt-number-stepper>
-      <wt-number-stepper label="Máximo" name="maximo" placeholder="Sin límite"></wt-number-stepper>
-      <wt-number-stepper label="Cantidad" name="cantidad" value="1" min="1" max="1">
+      <wt-number-stepper
+        label="Máximo"
+        name="maximo"
+        placeholder="∞"
+        decreaselabel="Reducir {label}"
+        increaselabel="Aumentar {label}"
+      >
+      </wt-number-stepper>
+      <wt-number-stepper
+        label="Cantidad"
+        name="cantidad"
+        value="1"
+        min="1"
+        max="1"
+        decreaselabel="Reducir {label}"
+        increaselabel="Aumentar {label}"
+      >
       </wt-number-stepper>
     </div>
     <wt-tabs label="Venue settings">

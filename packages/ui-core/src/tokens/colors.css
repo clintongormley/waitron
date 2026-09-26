@@ -1,7 +1,4 @@
 :where([data-wt-theme-root]) {
-  /* --wt-color-surface-lifted is something picked up and moving, such as a row being dragged. It
-     differs from every other surface in both themes, because a dragged row can sit on any of them —
-     a wt-modal is painted --wt-color-surface-raised. */
   /* Native controls the app does not paint itself — radios, checkboxes, scrollbars — are drawn by
      the user agent, which reads this property and never `data-theme`. Without it the dark theme got
      the light drawing, and an unchecked radio came out a solid white dot. */

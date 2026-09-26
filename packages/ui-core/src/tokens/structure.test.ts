@@ -44,6 +44,7 @@ test("defines the structural contract", () => {
     "--wt-modal-inline-margin",
     "--wt-modal-inline-padding",
     "--wt-cell-name-max-width",
+    "--wt-stepper-field-width",
   ]) {
     expect(token(el, name), `${name} should be defined`).not.toBe("");
   }
@@ -55,8 +56,6 @@ test("dialog max width is 48rem, capped at 90% of the viewport", () => {
 });
 
 test("the standard modal is 64rem wide, and a dialog keeps its own 48rem", () => {
-  // Forms go in a wt-modal; wt-dialog and wt-help-tooltip hold confirmations and hints, so their
-  // width does not follow the modal's.
   const el = mount();
   expect(token(el, "--wt-modal-max-width")).toBe("64rem");
   el.style.setProperty("--wt-modal-max-width", "10rem");
@@ -73,10 +72,9 @@ test("a name cell may grow wider than the controls that sit beside it", () => {
   );
 });
 
-test("a stepper's number box is declared and never narrower than the tap target", () => {
+test("a stepper's number box is never narrower than the tap target", () => {
   // The box is what a wt-number-stepper hands focus to, so it is held to the tap minimum.
   const el = mount();
-  expect(token(el, "--wt-stepper-field-width")).not.toBe("");
   expect(parseInt(token(el, "--wt-stepper-field-width"), 10)).toBeGreaterThanOrEqual(
     parseInt(token(el, "--wt-tap-min"), 10),
   );

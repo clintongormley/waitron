@@ -29,8 +29,6 @@
   --wt-opacity-hover: 0.85;
 
   --wt-modal-max-width: 64rem;
-  /* Its own width, not the modal's: a wt-dialog or wt-help-tooltip holds a confirmation or a hint,
-     not a form. */
   --wt-dialog-max-width: min(90vw, 48rem);
 
   /* A modal's side margin and inline padding shrink on a phone so the width goes to its content.
