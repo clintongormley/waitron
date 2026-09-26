@@ -346,7 +346,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
     }),
     abandonWorkingOrder: vi.fn().mockResolvedValue(undefined),
-    updateWorkingOrder: vi.fn().mockResolvedValue(undefined),
+    updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 4 }),
     placeOrder: vi.fn().mockResolvedValue(placedResult),
     collectOrder: vi.fn().mockResolvedValue(saleResult),
     reprint: vi.fn().mockResolvedValue(undefined),
@@ -1873,7 +1873,7 @@ describe("till-app", () => {
     // edit made after retrieve must be re-locked (`updateWorkingOrder`) BEFORE the pay or it is SILENTLY
     // DROPPED from both the charge and the filed record. Retrieve wo-1 (café×2), add a second café, then
     // pay: `updateWorkingOrder` must carry the EDITED composition and run BEFORE `recordSale`.
-    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
     const recordSale = vi.fn().mockResolvedValue(saleResult);
     const { el } = await mountApp({ updateWorkingOrder, recordSale });
     const c = await toCounter(el);
@@ -1915,7 +1915,10 @@ describe("till-app", () => {
   });
 
   it("a save that lands moves the copy on a revision, so a pay retried after a decline saves again from it", async () => {
-    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const updateWorkingOrder = vi
+      .fn()
+      .mockResolvedValueOnce({ revision: 4 })
+      .mockResolvedValue({ revision: 5 });
     const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
     const { el } = await mountApp({ updateWorkingOrder, pay });
     const c = await toCounter(el);
@@ -1932,8 +1935,30 @@ describe("till-app", () => {
     expect(updateWorkingOrder.mock.calls.map(([, req]) => req.revision)).toEqual([3, 4]);
   });
 
+  it("a save the server says changed nothing keeps the copy at the server's revision, so the retried pay is not refused as out of date", async () => {
+    // The server counts a save on the revision only when it changed something, and answers the
+    // revision the order is at.
+    const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 3 });
+    const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
+    const { el } = await mountApp({ updateWorkingOrder, pay });
+    const c = await toCounter(el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    c.store.addProduct(cafe, "1");
+    c.store.removeLine(1);
+    await el.updateComplete;
+
+    emit(c, "collect-card", {});
+    await flush(el);
+    emit(c, "collect-card", {});
+    await flush(el);
+
+    expect(updateWorkingOrder.mock.calls.map(([, req]) => req.revision)).toEqual([3, 3]);
+    expect(c.store.revision).toBe(3);
+  });
+
   it("a held order parked from this till is saved from revision 0", async () => {
-    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
     const placeOrder = vi
       .fn()
       .mockRejectedValueOnce({ code: "station.no_default" })
@@ -2028,7 +2053,7 @@ describe("till-app", () => {
   });
 
   it("sends a retrieved line's stable server id on a quantity edit", async () => {
-    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
     const { el } = await mountApp({
       updateWorkingOrder,
       retrieveWorkingOrder: vi.fn().mockResolvedValue({
@@ -2729,7 +2754,7 @@ describe("till-app", () => {
     // and inserts nothing — the re-sent basket is DISCARDED), so re-parking a RETRIEVED, EDITED order
     // would SILENTLY DISCARD the edit yet show success. So Hold must mirror the pay/place paths: route a
     // PERSISTED order through `#syncIfDirty` (`updateWorkingOrder`), never `parkOrder`.
-    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
     const parkOrder = vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 });
     const { el } = await mountApp({ updateWorkingOrder, parkOrder });
     const c = await toCounter(el);
@@ -2767,7 +2792,7 @@ describe("till-app", () => {
     // because an idempotent re-park is a needless round trip that only replays the already-stored order.
     // `#syncIfDirty` no-ops on a clean basket (`persisted && !dirty`), so neither `updateWorkingOrder`
     // nor `parkOrder` fires; the basket clears so the operator can move on.
-    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
     const parkOrder = vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 });
     const { el } = await mountApp({ updateWorkingOrder, parkOrder });
     const c = await toCounter(el);
@@ -2792,7 +2817,7 @@ describe("till-app", () => {
     // `label ?? null`, so forwarding that undefined would WIPE the retrieved order's name ("Mesa 4" → NULL)
     // — anonymising it in the cross-till held list. The persisted branch falls back to the STORED label,
     // so a blank re-hold preserves the name. (A typed label still renames — the case above.)
-    const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+    const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
     const parkOrder = vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 });
     const { el } = await mountApp({ updateWorkingOrder, parkOrder });
     const c = await toCounter(el);
@@ -4285,7 +4310,7 @@ describe("till-app", () => {
 
       it("pay-tab settles the WHOLE tab via recordSale with the tab id and NO re-price, then shows the ticket", async () => {
         const recordSale = vi.fn().mockResolvedValue(saleResult);
-        const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+        const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -4861,7 +4886,7 @@ describe("till-app", () => {
       // path files from the STORED lock and IGNORES req.lines for the integrated route too, so an edit
       // made after retrieve must be re-locked (updateWorkingOrder) BEFORE the pay or it is silently
       // dropped from both the charge and the filed record.
-      const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+      const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
       const { el } = await mountApp({ updateWorkingOrder, pay });
       const c = await toCounter(el);
@@ -4898,7 +4923,7 @@ describe("till-app", () => {
     it("retrieve → collect-card (unedited): no re-sync, files the stored lock straight through", async () => {
       // The integrated route's mirror of the unedited retrieve→pay test: an UNEDITED retrieve must NOT
       // re-sync — that would re-price against the live catalogue and defeat the add-time lock (design §3).
-      const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+      const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
       const { el } = await mountApp({ updateWorkingOrder, pay });
       const c = await toCounter(el);
@@ -5089,7 +5114,7 @@ describe("till-app", () => {
       // (`updateWorkingOrder`) BEFORE placing, or the server places the STORED lock and silently drops
       // the edit. Retrieve wo-1 (café×2), add a second café, then place: `updateWorkingOrder` carries the
       // EDITED composition and runs BEFORE `placeOrder`.
-      const updateWorkingOrder = vi.fn().mockResolvedValue(undefined);
+      const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
       const placeOrder = vi.fn().mockResolvedValue(placedResult);
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),

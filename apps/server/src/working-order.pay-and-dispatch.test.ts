@@ -1213,7 +1213,7 @@ describe("cross-till end-to-end", () => {
         revision: await revisionOf(orderId),
         lines: [{ menuItemId: cafe.menuItemId, quantity: "2" }],
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(1);
 
     // The edit landed on the shared row: node A sees node B's rewritten basket (quantity 1 → 2).
     const afterEdit = await getHeldOrder({ db: suite.db }, nodeA, orderId);

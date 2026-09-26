@@ -1051,8 +1051,12 @@ export class TillApp extends LitElement {
   async #syncIfDirty(id: string, lines: SaleLine[], label: string | undefined): Promise<boolean> {
     if (!(this.#store.persisted && this.#store.dirty)) return true;
     try {
-      await this.api.updateWorkingOrder(id, { lines, label, revision: this.#store.revision });
-      this.#store.markSaved();
+      const saved = await this.api.updateWorkingOrder(id, {
+        lines,
+        label,
+        revision: this.#store.revision,
+      });
+      this.#store.markSaved(saved.revision);
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code === "working_order.out_of_date") {

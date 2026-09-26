@@ -172,9 +172,9 @@ export class WorkingOrderStore {
     this.#dirty = false;
   }
 
-  /** After a save of this copy landed: the save counted one write on the order. */
-  markSaved(): void {
-    this.#revision += 1;
+  /** After a save of this copy landed, at the revision the server answered. */
+  markSaved(revision: number): void {
+    this.#revision = revision;
   }
 
   get #pricedOrder(): Priced {

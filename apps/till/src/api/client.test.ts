@@ -554,9 +554,10 @@ describe("TillApi", () => {
     expect(r).toEqual(order);
   });
 
-  it("updateWorkingOrder PUTs the whole new basket to the addressed order (empty 200 body)", async () => {
-    // An EMPTY 200 body resolves void rather than being JSON-parsed.
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+  it("updateWorkingOrder PUTs the whole new basket to the addressed order and resolves the revision the server answers", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ revision: 4 }), { status: 200 }));
     const api = new TillApi("", fetchStub);
 
     await expect(
@@ -565,7 +566,7 @@ describe("TillApi", () => {
         label: "Mesa 5",
         revision: 4,
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ revision: 4 });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/wo1",
@@ -1599,8 +1600,10 @@ describe("TillApi", () => {
     );
   });
 
-  it("updateOrderLine PUTs the changed fields of one line with the revision it was read at", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+  it("updateOrderLine PUTs the changed fields of one line with the revision it was read at, and resolves the one the server answers", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ revision: 8 }), { status: 200 }));
 
     await expect(
       new TillApi("", fetchStub).updateOrderLine(
@@ -1609,7 +1612,7 @@ describe("TillApi", () => {
         { quantity: "2", note: null, extras: [] },
         7,
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ revision: 8 });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/ord-1/lines/3",

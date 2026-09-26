@@ -648,6 +648,45 @@ describe("table + tab routes", () => {
     }
   });
 
+  it("both edit routes answer the order's revision after the write, the same one when the edit changes nothing", async () => {
+    const { tabId, revision } = await firedTab();
+    const lineEdit = (body: object) =>
+      request(`/api/working-orders/${tabId}/lines/1`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+
+    const changed = await lineEdit({ note: "sin gas", revision });
+    expect(changed.status).toBe(200);
+    expect(await changed.json()).toEqual({ revision: revision + 1 });
+    const unchanged = await lineEdit({ note: "sin gas", revision: revision + 1 });
+    expect(await unchanged.json()).toEqual({ revision: revision + 1 });
+
+    const held = (await (await request(`/api/working-orders/${tabId}`)).json()) as {
+      lines: { workingOrderLineId: string }[];
+    };
+    const save = (quantity: string, copy: number) =>
+      request(`/api/working-orders/${tabId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          revision: copy,
+          lines: [
+            {
+              workingOrderLineId: held.lines[0]!.workingOrderLineId,
+              menuItemId,
+              quantity,
+              note: "sin gas",
+            },
+          ],
+        }),
+      });
+    const sameOrder = await save("1", revision + 1);
+    expect(sameOrder.status).toBe(200);
+    expect(await sameOrder.json()).toEqual({ revision: revision + 1 });
+    const moreOfIt = await save("2", revision + 1);
+    expect(await moreOfIt.json()).toEqual({ revision: revision + 2 });
+  });
+
   it("answers 409 order.payment_in_flight to a round, a line edit and a void while a card payment is in flight", async () => {
     const { tabId, revision } = await firedTab();
     suite.db.run(

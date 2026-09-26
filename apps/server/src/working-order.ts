@@ -3496,12 +3496,23 @@ async function applyLineEdits(
 }
 
 /**
- * Count a write on the order's revision only when it changed something. One that changes nothing is
- * still refused while a card payment of the order is in flight, as every other line write is.
+ * Count a write on the order's revision only when it changed something, and answer the revision the
+ * order is at after it: `copy` is the one {@link requireEditableOrder} matched in this transaction.
+ * One that changes nothing is still refused while a card payment of the order is in flight, as every
+ * other line write is.
  */
-async function countEdit(tx: Transaction, orderId: string, changed: boolean): Promise<void> {
-  if (changed) await bumpRevision(tx, [orderId]);
-  else await refusePaymentInFlight(tx, [orderId]);
+async function countEdit(
+  tx: Transaction,
+  orderId: string,
+  copy: number,
+  changed: boolean,
+): Promise<number> {
+  if (!changed) {
+    await refusePaymentInFlight(tx, [orderId]);
+    return copy;
+  }
+  await bumpRevision(tx, [orderId]);
+  return copy + 1;
 }
 
 /**
@@ -3509,14 +3520,15 @@ async function countEdit(tx: Transaction, orderId: string, changed: boolean): Pr
  * {@link applyLineEdits} states. A line of the basket naming a stored line by id, through the same
  * offer and variant, edits it; a line naming a different offer or variant replaces it with a new
  * item priced now; a line naming none is new; a stored line the basket leaves out is removed. An
- * absent label clears it: the whole request is the new state.
+ * absent label clears it: the whole request is the new state. Answers the order's revision after
+ * the save.
  */
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   id: string,
   req: UpdateHeldOrderRequest,
-): Promise<void> {
+): Promise<number> {
   return withTransaction(deps.db, async (tx) => {
     const { label } = await requireEditableOrder(tx, id, req.revision);
     // Rewriting an order to zero lines is a discard, which is `abandonHeldOrder`'s job.
@@ -3569,7 +3581,7 @@ export async function updateHeldOrder(
         .set({ label: req.label ?? null })
         .where(eq(workingOrders.id, id));
     }
-    await countEdit(tx, id, changed || relabelled);
+    return countEdit(tx, id, req.revision, changed || relabelled);
   });
 }
 
@@ -3577,7 +3589,7 @@ export async function updateHeldOrder(
  * Edit ONE dish line of an OPEN order made from the copy at `revision`, by the rules
  * {@link applyLineEdits} states; an absent field of `patch` keeps the line's own. A line number the
  * order does not hold is `tab.line_not_found`, and an extras line, which follows its dish,
- * `management.request_invalid`.
+ * `management.request_invalid`. Answers the order's revision after the edit.
  */
 export async function updateOrderLine(
   tx: Transaction,
@@ -3586,7 +3598,7 @@ export async function updateOrderLine(
   lineNo: number,
   patch: OrderLinePatch,
   revision: number,
-): Promise<void> {
+): Promise<number> {
   await requireEditableOrder(tx, orderId, revision);
   const order = await readEditableOrder(tx, cfg, orderId);
   const line = order.lines.find((candidate) => candidate.lineNo === lineNo);
@@ -3612,7 +3624,7 @@ export async function updateOrderLine(
     removed: [],
     fresh: [],
   });
-  await countEdit(tx, orderId, changed);
+  return countEdit(tx, orderId, revision, changed);
 }
 
 /** Abandon an open held order anywhere in the venue. An unknown id reads as `working_order.not_open`. */

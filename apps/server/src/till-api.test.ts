@@ -2044,7 +2044,8 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       ],
     });
 
-    // PUT replaces the whole basket + label — a 200 with no body — and a re-retrieve reflects it.
+    // PUT replaces the whole basket + label — a 200 with the revision it moved to — and a re-retrieve
+    // reflects it.
     const put = await app.request(`/api/working-orders/${id}`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
@@ -2055,7 +2056,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       }),
     });
     expect(put.status).toBe(200);
-    expect(await put.text()).toBe("");
+    expect(await put.json()).toEqual({ revision: 1 });
     const afterPut = await (
       await app.request(`/api/working-orders/${id}`, { headers: { cookie } })
     ).json();

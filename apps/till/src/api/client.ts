@@ -1231,22 +1231,23 @@ export class TillApi {
    * Edit a parked order → `PUT /api/working-orders/:id`. A full REPLACEMENT: the sent `lines` and
    * `label` become the order's new state (`label` absent clears it). Only an `open` order may change
    * (else `working_order.not_open`), and only from the copy at its current `revision` (else
-   * `working_order.out_of_date`).
+   * `working_order.out_of_date`). Resolves the revision the order is at after the save, which a save
+   * that changed nothing leaves where it was.
    */
-  async updateWorkingOrder(
+  updateWorkingOrder(
     id: string,
     req: { lines: SaleLine[]; label?: string; revision: number },
-  ): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${id}`, "PUT", req);
+  ): Promise<{ revision: number }> {
+    return this.#request<{ revision: number }>(`/api/working-orders/${id}`, "PUT", req);
   }
 
   /**
    * Edit ONE dish line of an open order → `PUT /api/working-orders/:orderId/lines/:lineNo`, from the
    * copy read at `revision`. An absent field keeps the line's own. Rejects `working_order.out_of_date`,
    * `order.payment_in_flight`, `ticket.already_started`, `ticket.already_fired` or
-   * `tab.line_not_found`.
+   * `tab.line_not_found`. Resolves the revision the order is at after the edit.
    */
-  async updateOrderLine(
+  updateOrderLine(
     orderId: string,
     lineNo: number,
     patch: {
@@ -1256,11 +1257,12 @@ export class TillApi {
       extras?: ExtraSelection[];
     },
     revision: number,
-  ): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/${lineNo}`, "PUT", {
-      ...patch,
-      revision,
-    });
+  ): Promise<{ revision: number }> {
+    return this.#request<{ revision: number }>(
+      `/api/working-orders/${orderId}/lines/${lineNo}`,
+      "PUT",
+      { ...patch, revision },
+    );
   }
 
   /**

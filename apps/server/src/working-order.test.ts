@@ -303,7 +303,7 @@ async function updateProducts(
     revision?: number;
     lines: (ProductLine & { workingOrderLineId?: string })[];
   },
-): Promise<void> {
+): Promise<number> {
   const offers = await counterOffers(cfg);
   return updateHeldOrder({ db }, cfg, id, {
     ...req,
@@ -2141,7 +2141,7 @@ describe("updateHeldOrder", () => {
     // The foreign-node order is edited like the node's own: the whole-basket replacement lands.
     await expect(
       updateProducts(cfg, foreign, { lines: [{ productId: cafeId, quantity: "1" }] }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(1);
     const after = await getHeldOrder({ db }, cfg, foreign);
     expect(after.lines).toHaveLength(1);
     expect(after.lines[0]!.productId).toBe(cafeId);

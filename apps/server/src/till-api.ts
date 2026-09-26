@@ -839,13 +839,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         label?: string;
         revision?: unknown;
       }>(c);
-      const revision = requireRevision(body.revision);
-      await updateHeldOrder({ db: deps.db }, deps.cfg, id, {
+      const revision = await updateHeldOrder({ db: deps.db }, deps.cfg, id, {
         lines: body.lines,
         label: body.label,
-        revision,
+        revision: requireRevision(body.revision),
       });
-      return c.body(null, 200);
+      return c.json({ revision });
     }),
   );
 
@@ -1285,10 +1284,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
       const { revision, ...patch } = await readJsonBody<OrderLinePatch & { revision?: unknown }>(c);
       const copy = requireRevision(revision);
-      await withTransaction(deps.db, async (tx) => {
-        await updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy);
-      });
-      return c.body(null, 200);
+      const saved = await withTransaction(deps.db, (tx) =>
+        updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy),
+      );
+      return c.json({ revision: saved });
     }),
   );
 
