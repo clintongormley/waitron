@@ -1,10 +1,6 @@
-// `GET /management-api/servers` and `POST /management-api/servers/:nodeId/remove`: an admin on the
-// serving primary lists the machines in its membership chart and removes a standby that never
-// finished joining (`judgeRemoval`, `membership-removal.ts`).
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { AppError, isUuid } from "@waitron/shared";
 import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
@@ -61,7 +57,6 @@ export function mountMembershipRemovalApi(
       // about which ids the chart lists.
       const personId = await authorize(requireManagementSession(c));
       const targetNodeId = c.req.param("nodeId");
-      if (!isUuid(targetNodeId)) throw new AppError("membership.node_not_found", {});
       const result = await removeUnjoinedStandby(
         { db: deps.db, ring: deps.ring, nodeId: deps.nodeId, log },
         { targetNodeId, personId },

@@ -282,14 +282,15 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
   });
 
   describe("the term-guarded chart write", () => {
-    it("re-reads and re-signs when a newer chart lands between its read and its write", async () => {
+    it("re-reads and re-signs when a newer chart lands between its read and its write, keeping the machine that chart added", async () => {
       const p = await primary();
       const gone = standby();
       await holdChart(p, [self(p), gone]);
       const seedTerm = (await heldTerm(p.db))!;
+      const added = standby(randomUUID(), "https://added.deli.test");
       // Stands in for another writer, once: the first write is skipped and the held chart moves one
-      // term on instead, so the round that read `seedTerm` loses its guard. The marker row stops the
-      // trigger firing on its own update, since the store turns recursive triggers on.
+      // term on, with a machine added, so the round that read `seedTerm` loses its guard. The marker
+      // row stops the trigger firing on its own update, since the store turns recursive triggers on.
       await p.db.execute(sql.raw("create table test_newer_landed (done integer)"));
       await p.db.execute(
         sql.raw(
@@ -298,7 +299,11 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
            begin
              insert into test_newer_landed values (1);
              update node_membership set term = term + 1,
-               document = json_set(document, '$.body.term', term + 1) where id = 1;
+               document = json_insert(
+                 json_set(document, '$.body.term', term + 1),
+                 '$.body.nodes[#]',
+                 json('${JSON.stringify(added)}')
+               ) where id = 1;
              select raise(ignore);
            end`,
         ),
@@ -315,12 +320,67 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
       expect(await res.json()).toEqual({ removed: true, term: seedTerm + 2 });
       const after = (await readNodeMembership(p.db))!;
       expect(after.body.term).toBe(seedTerm + 2);
-      expect(after.body.nodes).toContainEqual({ ...gone, standing: "evicted" });
+      expect(after.body.nodes).toEqual([self(p), { ...gone, standing: "evicted" }, added]);
       const verdict = verifyMembershipDocument(after, { [p.nodeId]: p.publicKey });
       expect(verdict.valid ? "valid" : verdict.reason).toBe("valid");
       expect(await removals(p.db)).toEqual([
         expect.objectContaining({ node_id: gone.nodeId, term: seedTerm + 2 }),
       ]);
+    });
+
+    it("refuses as membership.standby_joined (409) when the standby's node row lands after the first check, changing nothing", async () => {
+      const p = await primary();
+      const late = standby();
+      await holdChart(p, [self(p), late]);
+      const before = await readNodeMembership(p.db);
+      // The row lands during the chart write, inside the removal's transaction and after the check
+      // the removal made before minting.
+      await p.db.execute(
+        sql.raw(
+          `create trigger test_standby_joins before update on node_membership
+           begin
+             insert into nodes (id, location_id, name, created_at)
+               select '${late.nodeId}', location_id, 'Joined late', created_at
+               from nodes where id = '${p.nodeId}';
+           end`,
+        ),
+      );
+      let res: Response;
+      try {
+        res = await remove(p, late.nodeId, p.adminCookie);
+      } finally {
+        await p.db.execute(sql.raw("drop trigger test_standby_joins"));
+      }
+
+      expect(res.status).toBe(409);
+      expect((await errorOf(res)).code).toBe("membership.standby_joined");
+      expect(await readNodeMembership(p.db)).toEqual(before);
+      expect(await removals(p.db)).toEqual([]);
+    });
+
+    it("commits the chart and its removal record together: a refused record leaves the chart unmoved", async () => {
+      const p = await primary();
+      const gone = standby();
+      await holdChart(p, [self(p), gone]);
+      const before = await readNodeMembership(p.db);
+      await p.db.execute(
+        sql.raw(
+          `create trigger test_removal_refused before insert on membership_removals
+           begin select raise(abort, 'test: removal record refused'); end`,
+        ),
+      );
+      let res: Response;
+      try {
+        res = await remove(p, gone.nodeId, p.adminCookie);
+      } finally {
+        await p.db.execute(sql.raw("drop trigger test_removal_refused"));
+      }
+
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ error: { code: "server.internal" } });
+      expect(await readNodeMembership(p.db)).toEqual(before);
+      expect(await removals(p.db)).toEqual([]);
+      expect(p.lines.map((l) => l.event)).not.toContain("membership.node_removed");
     });
 
     it("gives up with 503 membership.write_contended when every round loses, recording nothing", async () => {

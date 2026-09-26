@@ -8,6 +8,7 @@ import {
   readNodeMembership,
   withTransaction,
   type Database,
+  type Transaction,
 } from "@waitron/db";
 import {
   evictNode,
@@ -41,8 +42,8 @@ export type RemovalVerdict =
  * (`insertReservedNodeTx`, via `establishReservedStandbyIdentity`, which only that machine's own
  * boot runs: `runFinishAdoption`), not in this one, and today no adopt can finish at all
  * (`PendingAdoption` in `finish-adoption.ts`). So every remote `serving-secondary` reads as
- * never-finished here. Removing a machine that did join, or served, would take a working failover
- * target out of the list tills reroute by, and fence it.
+ * never-finished here. Removing one marks it `evicted` in this node's chart, so tills stop routing
+ * to it; the removed machine acts on that only if it reads this chart.
  */
 export function judgeRemoval(
   held: SignedMembershipDocument | null,
@@ -71,7 +72,10 @@ function refused(code: RemovalRefusal): RemovalVerdict {
   return { kind: "refused", code };
 }
 
-async function nodeIdsWithRows(db: Database, ids: readonly string[]): Promise<Set<string>> {
+async function nodeIdsWithRows(
+  db: Database | Transaction,
+  ids: readonly string[],
+): Promise<Set<string>> {
   const rows = await db
     .select({ id: nodes.id })
     .from(nodes)
@@ -129,7 +133,7 @@ const MAX_CHART_WRITE_ROUNDS = 8;
 
 /**
  * Marks a never-joined standby `evicted` in a new chart this node signs, and records the removal in
- * the same transaction. Every refusal throws before anything is written.
+ * the same transaction. Every refusal throws before anything commits.
  */
 export async function removeUnjoinedStandby(
   deps: RemovalDeps,
@@ -159,6 +163,10 @@ export async function removeUnjoinedStandby(
     const term = document.body.term;
     const committed = await withTransaction(deps.db, async (tx) => {
       if (!(await persistNodeMembershipIfNewerTx(tx, document))) return false;
+      // Checked again under the write lock: the check above ran outside this transaction.
+      if ((await nodeIdsWithRows(tx, [args.targetNodeId])).has(args.targetNodeId)) {
+        throw new AppError("membership.standby_joined", {});
+      }
       await tx.insert(membershipRemovals).values({
         nodeId: args.targetNodeId,
         contactUrl: verdict.node.contactUrl,
