@@ -28,8 +28,20 @@ const CLIENT_METHODS = [
   "processPaymentIntent",
   "readerOutcome",
   "cancelReaderAction",
+  "retrievePaymentIntent",
+  "cancelPaymentIntent",
   "refund",
 ] as const;
+
+// `deferredStripeClient` casts its wrapper to `StripeClient`, so a method missing from the list
+// above would typecheck and fail only when called; this line fails the typecheck instead.
+const everyClientMethodListed: Exclude<
+  keyof StripeClient,
+  (typeof CLIENT_METHODS)[number]
+> extends never
+  ? true
+  : never = true;
+void everyClientMethodListed;
 
 export type MakeStripe = (secretKey: string) => Stripe;
 

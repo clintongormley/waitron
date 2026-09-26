@@ -79,6 +79,15 @@ function fakeMakeStripe(
           },
         },
       },
+      paymentIntents: {
+        retrieve: async (id: string) => ({
+          id,
+          status: "processing",
+          amount: 100,
+          amount_received: 0,
+        }),
+        cancel: async (id: string) => ({ id, status: "canceled" }),
+      },
     } as unknown as Stripe;
   };
 }
@@ -383,6 +392,23 @@ describe("deferredStripeClient", () => {
     // A second call reuses the cached client rather than reading the credential again.
     await client.cancelReaderAction("tmr_def");
     expect(calls.secretKeys).toEqual(["sk_test_key"]);
+  });
+
+  it("dispatches the PaymentIntent retrieve and cancel the abandoned-attempt resolver makes", async () => {
+    await seedStripe(FOUR_FIELDS);
+    const client = deferredStripeClient({
+      db: suite.db,
+      ring,
+      environment: "preproduction",
+      makeStripe: fakeMakeStripe({}, freshCalls()),
+    });
+    expect(await client.retrievePaymentIntent("pi_1")).toEqual({
+      id: "pi_1",
+      status: "processing",
+      amount: 100,
+      amountReceived: 0,
+    });
+    expect(await client.cancelPaymentIntent("pi_1")).toEqual({ status: "canceled" });
   });
 
   it("does not cache a failed read, so a later call retries once the credential exists", async () => {

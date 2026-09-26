@@ -7,3 +7,4 @@ export { paymentRefundState, paymentRefunds } from "./payment-refunds.js";
 export { paymentPolicy } from "./payment-policy.js";
 export { cardReaders } from "./card-readers.js";
 export { deviceCardReaders } from "./device-card-readers.js";
+export { paymentResolutionOutcome, paymentResolutions } from "./payment-resolutions.js";

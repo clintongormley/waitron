@@ -832,6 +832,11 @@ function liveAttemptsOf(db: Database): Map<string, string> {
   return live;
 }
 
+/** Whether an integrated card attempt on this order is running in this process. */
+export function paymentAttemptIsLive(db: Database, workingOrderId: string): boolean {
+  return liveAttemptsOf(db).has(workingOrderId);
+}
+
 /**
  * Which of these orders has a payment that is, or could still become, a capture no sale records:
  * an attempt its provider has not resolved, or a capture not yet filed. This decides whether a
@@ -870,25 +875,35 @@ async function releasePaymentAttempt(
 ): Promise<void> {
   if (attemptAt === null) return;
   try {
-    await withTransaction(deps.db, async (tx) => {
-      if ((await ordersWithUnfiledPayment(tx, [workingOrderId])).has(workingOrderId)) return;
-      await tx
-        .update(workingOrders)
-        .set({ paymentAttemptAt: null })
-        .where(
-          and(
-            eq(workingOrders.id, workingOrderId),
-            eq(workingOrders.status, "open"),
-            eq(workingOrders.paymentAttemptAt, attemptAt),
-          ),
-        );
-    });
+    await withTransaction(deps.db, (tx) => clearPaymentAttemptMark(tx, workingOrderId, attemptAt));
   } catch (error) {
     deps.log?.("warn", "payment_attempt.release_failed", {
       workingOrderId,
       error: String(error),
     });
   }
+}
+
+/**
+ * Clear the in-flight mark `attemptAt` on an OPEN order, unless a payment of the order could still
+ * be captured or waits to be filed, or the mark has since been replaced.
+ */
+export async function clearPaymentAttemptMark(
+  tx: Transaction,
+  workingOrderId: string,
+  attemptAt: string,
+): Promise<void> {
+  if ((await ordersWithUnfiledPayment(tx, [workingOrderId])).has(workingOrderId)) return;
+  await tx
+    .update(workingOrders)
+    .set({ paymentAttemptAt: null })
+    .where(
+      and(
+        eq(workingOrders.id, workingOrderId),
+        eq(workingOrders.status, "open"),
+        eq(workingOrders.paymentAttemptAt, attemptAt),
+      ),
+    );
 }
 
 /**

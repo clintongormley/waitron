@@ -272,3 +272,16 @@ it("has English and Spanish copy for a publish refused because the menu changed"
     "Este menú ha cambiado después de mostrar la vista previa, así que no se ha publicado. Revisa la nueva vista previa y vuelve a publicarlo.",
   );
 });
+
+it("has a sentence of its own for each refusal of a stuck card payment's check", () => {
+  const GENERIC_EN = codeMessage("test.unmapped_code", "en");
+  const GENERIC_ES = codeMessage("test.unmapped_code", "es");
+  for (const code of [
+    "payment.not_stuck",
+    "payment.resolve_unsupported",
+    "payment.outcome_unknown",
+  ]) {
+    expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+  }
+});

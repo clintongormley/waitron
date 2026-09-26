@@ -1,4 +1,6 @@
 export type {
+  AbandonedAttemptAudit,
+  AbandonedAttemptOutcome,
   AsyncPaymentProvider,
   CardDetails,
   CollectParams,
@@ -53,6 +55,12 @@ export type {
   ReconcilableRow,
   SettledInitiated,
 } from "./store.js";
+export {
+  countProviderCancelledResolutions,
+  recordAttemptResolution,
+  recordResolution,
+} from "./resolutions.js";
+export type { NewPaymentResolution } from "./resolutions.js";
 export { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
 export { SimulatorPaymentProvider } from "./simulator.js";
 export type { ManualCardPaymentParams, ManualCardPaymentResult } from "./manual.js";
@@ -95,3 +103,4 @@ export { cardReaders } from "./schema/card-readers.js";
 export { deviceCardReaders } from "./schema/device-card-readers.js";
 
 export { payments } from "./schema/payments.js";
+export { paymentResolutions } from "./schema/payment-resolutions.js";

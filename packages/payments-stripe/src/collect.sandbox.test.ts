@@ -7,7 +7,12 @@ import {
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
-import { PAYMENTS_MIGRATIONS, getPaymentByRef } from "@waitron/payments";
+import {
+  PAYMENTS_MIGRATIONS,
+  getPaymentByRef,
+  insertAttempting,
+  stampAttemptingRef,
+} from "@waitron/payments";
 import { stripeClient } from "./stripe-client.js";
 import { StripeTerminalProvider } from "./provider.js";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
@@ -16,6 +21,7 @@ import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 // through a simulated Terminal reader.
 const KEY = process.env.STRIPE_SECRET_KEY;
 const d = KEY ? describe : describe.skip;
+const MANAGER = "22222222-2222-4222-8222-222222222222";
 
 d("Stripe test-mode sandbox: collect against a simulated reader", () => {
   const pg = useVenueDb({
@@ -119,5 +125,37 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
       idempotencyKey: `wo_${s.workingOrderId}`,
     });
     expect(replay.id).toBe(row?.externalRef);
+  });
+
+  it("resolving an abandoned attempt cancels its unpaid PaymentIntent at real Stripe", async () => {
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    const client = stripeClient(stripe);
+    const provider = new StripeTerminalProvider({
+      client,
+      db: pg.db,
+      nodeId: "11111111-1111-4111-8111-111111111111",
+    });
+    const intent = await client.createPaymentIntent({
+      amount: decimal("12.10"),
+      currency: "eur",
+      idempotencyKey: `sandbox_abandoned_${s.workingOrderId}`,
+    });
+    const key = { provider: "stripe", paymentRef: `sandbox-${s.workingOrderId}` };
+    await pg.db.transaction(async (tx) => {
+      await insertAttempting(tx, {
+        ...key,
+        workingOrderId: s.workingOrderId,
+        amount: decimal("12.10"),
+      });
+      await stampAttemptingRef(tx, key, intent.id);
+    });
+
+    expect(
+      await provider.resolveAbandonedAttempt(key.paymentRef, new Date(), { personId: MANAGER }),
+    ).toEqual({
+      outcome: "failed",
+      cancelledAtProvider: true,
+    });
+    expect((await client.retrievePaymentIntent(intent.id)).status).toBe("canceled");
   });
 });

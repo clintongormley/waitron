@@ -181,6 +181,17 @@ declare module "@waitron/shared" {
      * `activeReaders` is a COUNT; never a reader id or a secret.
      */
     "payment.provider_in_use": { activeReaders: number };
+    /** Refuses a manager's resolve: the payment is not `attempting`, its order is not open and
+     * marked in flight, or an attempt in this process is still driving the order. */
+    "payment.not_stuck": { paymentId: string };
+    "payment.resolve_unsupported": { providerId: string };
+    /** The processor could not say what became of the payment; the row and the order's mark are
+     * left as they were. */
+    "payment.outcome_unknown": {
+      paymentId: string;
+      reason: "unreachable" | "ambiguous";
+      providerStatus?: string;
+    };
     /** No card reader with this id. `id` is the reader uuid the caller already holds, not a secret. */
     "reader.not_found": { id: string };
     /** Adoption names a reference absent from the provider account. Public provider id only. */

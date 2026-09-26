@@ -12,6 +12,11 @@ export interface StripeClient {
     readerId: string,
   ): Promise<{ status: "in_progress" | "succeeded" | "failed"; failureCode?: string }>;
   cancelReaderAction(readerId: string): Promise<void>;
+  /** Amounts are in minor units, as Stripe reports them. */
+  retrievePaymentIntent(
+    paymentIntentId: string,
+  ): Promise<{ id: string; status: string; amount: number; amountReceived: number }>;
+  cancelPaymentIntent(paymentIntentId: string): Promise<{ status: string }>;
   refund(params: {
     paymentIntentId: string;
     amount?: Decimal;
@@ -37,7 +42,10 @@ export function fromMinorUnits(minor: number): Decimal {
 
 /** Derived from the working order, never from the per-attempt `paymentRef`, so a retried collect
  * re-drives the SAME PaymentIntent and the card is charged once: one PaymentIntent per working
- * order, possibly many `payments` rows. */
-export function workingOrderIdempotencyKey(workingOrderId: string): string {
-  return `wo_${workingOrderId}`;
+ * order, possibly many `payments` rows. `cancelled` is how many of the order's PaymentIntents a
+ * resolution left cancelled at Stripe (`countProviderCancelledResolutions`): the key moves on past
+ * each, because until Stripe forgets a key it replays that key's first response, which names the
+ * PaymentIntent now cancelled. */
+export function workingOrderIdempotencyKey(workingOrderId: string, cancelled = 0): string {
+  return cancelled === 0 ? `wo_${workingOrderId}` : `wo_${workingOrderId}_r${cancelled}`;
 }

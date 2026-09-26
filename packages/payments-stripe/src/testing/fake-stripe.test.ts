@@ -85,4 +85,106 @@ describe("FakeStripe", () => {
       idempotencyKey: "r2",
     });
   });
+
+  it("retrievePaymentIntent reports a created intent awaiting a card, in minor units", async () => {
+    const fake = new FakeStripe();
+    const pi = await fake.createPaymentIntent({
+      amount: decimal("12.10"),
+      currency: "eur",
+      idempotencyKey: "k4",
+    });
+    expect(await fake.retrievePaymentIntent(pi.id)).toEqual({
+      id: pi.id,
+      status: "requires_payment_method",
+      amount: 1210,
+      amountReceived: 0,
+    });
+  });
+
+  it("a processed intent reads succeeded with the amount received, a declined one still awaits a card", async () => {
+    const fake = new FakeStripe();
+    const paid = await fake.createPaymentIntent({
+      amount: decimal("3.00"),
+      currency: "eur",
+      idempotencyKey: "k5",
+    });
+    await fake.processPaymentIntent("reader_1", paid.id);
+    expect(await fake.retrievePaymentIntent(paid.id)).toMatchObject({
+      status: "succeeded",
+      amountReceived: 300,
+    });
+    fake.declineNext();
+    const declined = await fake.createPaymentIntent({
+      amount: decimal("3.00"),
+      currency: "eur",
+      idempotencyKey: "k6",
+    });
+    await fake.processPaymentIntent("reader_1", declined.id);
+    expect(await fake.retrievePaymentIntent(declined.id)).toMatchObject({
+      status: "requires_payment_method",
+      amountReceived: 0,
+    });
+  });
+
+  it("retrievePaymentIntent rejects an unknown id, and unreachableNext rejects the next call only", async () => {
+    const fake = new FakeStripe();
+    await expect(fake.retrievePaymentIntent("pi_missing")).rejects.toThrow(/No such/);
+    fake.setIntent("pi_known", { status: "processing", amount: 500 });
+    fake.unreachableNext();
+    await expect(fake.retrievePaymentIntent("pi_known")).rejects.toThrow(/unreachable/);
+    expect((await fake.retrievePaymentIntent("pi_known")).status).toBe("processing");
+  });
+
+  it("setIntent scripts an intent's status and amount received", async () => {
+    const fake = new FakeStripe();
+    fake.setIntent("pi_s", { status: "succeeded", amount: 1210, amountReceived: 1000 });
+    expect(await fake.retrievePaymentIntent("pi_s")).toEqual({
+      id: "pi_s",
+      status: "succeeded",
+      amount: 1210,
+      amountReceived: 1000,
+    });
+  });
+
+  it("cancelPaymentIntent cancels a cancellable intent and records it", async () => {
+    const fake = new FakeStripe();
+    fake.setIntent("pi_c", { status: "requires_capture", amount: 100 });
+    expect(await fake.cancelPaymentIntent("pi_c")).toEqual({ status: "canceled" });
+    expect((await fake.retrievePaymentIntent("pi_c")).status).toBe("canceled");
+    expect(fake.cancelledIntents).toEqual(["pi_c"]);
+  });
+
+  it("cancelPaymentIntent refuses a succeeded, a canceled and an unknown intent", async () => {
+    const fake = new FakeStripe();
+    fake.setIntent("pi_done", { status: "succeeded", amount: 100, amountReceived: 100 });
+    fake.setIntent("pi_gone", { status: "canceled", amount: 100 });
+    await expect(fake.cancelPaymentIntent("pi_done")).rejects.toThrow(/status of succeeded/);
+    await expect(fake.cancelPaymentIntent("pi_gone")).rejects.toThrow(/status of canceled/);
+    await expect(fake.cancelPaymentIntent("pi_missing")).rejects.toThrow(/No such/);
+    expect(fake.cancelledIntents).toEqual([]);
+  });
+
+  it("processPaymentIntent refuses a canceled intent: the reader is not engaged and it stays canceled", async () => {
+    const fake = new FakeStripe();
+    fake.setIntent("pi_cx", { status: "canceled", amount: 400 });
+    await expect(fake.processPaymentIntent("reader_1", "pi_cx")).rejects.toThrow(
+      /status of canceled/,
+    );
+    expect(fake.processedReaders).toEqual([]);
+    expect(await fake.retrievePaymentIntent("pi_cx")).toMatchObject({
+      status: "canceled",
+      amountReceived: 0,
+    });
+  });
+
+  it("cancelRacesNext: the next cancel is refused because the card was charged first", async () => {
+    const fake = new FakeStripe();
+    fake.setIntent("pi_r", { status: "requires_payment_method", amount: 700 });
+    fake.cancelRacesNext();
+    await expect(fake.cancelPaymentIntent("pi_r")).rejects.toThrow(/status of succeeded/);
+    expect(await fake.retrievePaymentIntent("pi_r")).toMatchObject({
+      status: "succeeded",
+      amountReceived: 700,
+    });
+  });
 });

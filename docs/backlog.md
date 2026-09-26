@@ -2423,6 +2423,28 @@ and a standby that has fallen behind.
   caught the #312 refund-unit bug. Needs a sandbox account and a CI secret.
 - **Stripe does not fill `CardDetails`**, so a Stripe card sale prints `Tarjeta` with no scheme/PAN/
   auth. Gated on the deli having a Stripe account, which it does not.
+- **What M7b2 left open (a manager clearing a stuck card payment, 2026-09-26).**
+  - Stripe Terminal's automatic `resolvePending` sweep is still a no-op, on purpose. During a LIVE
+    collect the row is `attempting` and its PaymentIntent waits for a card, so a sweep that cancels
+    would cancel a payment a customer is about to tap. Only the manager action, which first checks
+    that no attempt is running in this process, asks Stripe, and cancels the PaymentIntent if Stripe
+    still allows it.
+  - SumUp has no permanent lock: its sweep resolves every `attempting` row against SumUp, and fails
+    one SumUp has never heard of after 15 minutes, with an incident. It leaves a row only while SumUp
+    keeps answering PENDING. The manager action refuses a SumUp payment
+    (`payment.resolve_unsupported`).
+  - A Stripe Terminal row written before M7b2 carries no PaymentIntent id, and the resolver treats
+    "no id" as "never reached the reader". That holds only for rows the new `collect` wrote; there is
+    no backwards-compatibility code (pre-production).
+  - On `main` since 2026-07-23 (`39800efd5`): when the reader poll times out or errors, `collect`
+    cancels the reader action best-effort and fails the row. If that cancel fails and the customer
+    then taps, the money is captured while the local row says `failed`; only reconciliation sees it.
+    Now that a resolver exists, leaving such a row `attempting` would hand it to the manager action
+    instead. That would also lock the order until a manager acts, so it is the owner's call.
+  - Flaky: `packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts`, "calls onClose when
+    the dialog is dismissed with Escape", failed once in a run beside two coverage runs and passed
+    three times alone (M7b2, 2026-09-26). Not investigated yet; the owner's rule is to fix it at the
+    root.
 - **Slice 2 — the handheld NFC/QR link.** Owner decisions 2026-09-18
   ([2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)
   §2–§3): the waiter carries the reader to the table and settles there; pairing is an NFC sticker, a

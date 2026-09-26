@@ -311,6 +311,38 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("lists the stuck card payments and asks the provider to resolve one", async () => {
+    const stuck = [
+      {
+        paymentId: "pay-1",
+        workingOrderId: "wo-1",
+        orderNumber: 12,
+        label: null,
+        tillId: "till-1",
+        tillName: "Bar",
+        provider: "stripe-terminal",
+        amount: "12.50",
+        startedAt: "2026-09-26T10:00:00.000Z",
+      },
+    ];
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(stuck))
+      .mockResolvedValueOnce(jsonResponse({ outcome: "not_charged", orderUnlocked: true }));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.listStuckPayments()).resolves.toEqual(stuck);
+    await expect(api.resolveStuckPayment("pay-1")).resolves.toEqual({
+      outcome: "not_charged",
+      orderUnlocked: true,
+    });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/payments/stuck", "GET", undefined],
+      ["/management-api/payments/stuck/pay-1/resolve", "POST", undefined],
+    ]);
+  });
+
   it.each([
     ["finishTotp", "totp.invalid", 400, (api: DashboardApi) => api.finishTotp("enr-1", "000000")],
     [

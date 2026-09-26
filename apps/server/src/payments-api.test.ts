@@ -23,7 +23,9 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
+import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { mountPaymentsApi } from "./payments-api.js";
+import { systemClock } from "./till-backend.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import type { TillConfig } from "./till-config.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -173,6 +175,11 @@ const pool: CardProviderPool = {
   },
 };
 
+// These routes file no sale; the stuck-payment routes that do are in payments-api.stuck.test.ts.
+function saleDeps() {
+  return { backend: new FakeFiscalBackend(suite.db), clock: systemClock() };
+}
+
 function cfgOf(venue: Venue): TillConfig {
   return {
     tillId: brandTillId(randomUUID()),
@@ -192,6 +199,7 @@ function mountApp(venue: Venue, providers: readonly CardProviderContribution[] =
     app,
     {
       db: suite.db,
+      ...saleDeps(),
       cfg: cfgOf(venue),
       ring: RING,
       environment: "preproduction",
@@ -457,6 +465,7 @@ describe("an injected fetch is threaded to the seat", () => {
       app,
       {
         db: suite.db,
+        ...saleDeps(),
         cfg: cfgOf(venue),
         ring: RING,
         environment: "preproduction",
@@ -565,6 +574,7 @@ describe("add reader — races with a concurrent disconnect", () => {
       app,
       {
         db: suite.db,
+        ...saleDeps(),
         cfg: cfgOf(venue),
         ring: RING,
         environment: "preproduction",
@@ -625,6 +635,7 @@ describe("unpair reader — retryable after a failed vendor unpair", () => {
       app,
       {
         db: suite.db,
+        ...saleDeps(),
         cfg: cfgOf(venue),
         ring: RING,
         environment: "preproduction",

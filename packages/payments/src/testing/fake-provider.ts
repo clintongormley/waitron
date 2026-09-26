@@ -6,6 +6,8 @@ import { saleId as brandSaleId, tillId as brandTillId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { workingOrders } from "@waitron/db";
 import type {
+  AbandonedAttemptAudit,
+  AbandonedAttemptOutcome,
   CollectParams,
   ForwardResult,
   PaymentProvider,
@@ -13,10 +15,14 @@ import type {
   ProviderCapabilities,
 } from "../provider.js";
 import type { PaymentRow } from "../store.js";
+import { recordAttemptResolution } from "../resolutions.js";
 import {
+  captureAttempting,
   claimAcceptedOffline,
   declineForwarded,
+  failAttempting,
   findPaymentByRef,
+  getPaymentByRef,
   insertAcceptedOffline,
   insertCapturedPayment,
   insertFailedPayment,
@@ -40,6 +46,9 @@ export class FakePaymentProvider implements PaymentProvider {
   private failNext = false;
   private offlineNext = false;
   private readonly declineForwardRefs = new Set<string>();
+  private abandonedAnswer: AbandonedAttemptOutcome = { outcome: "unknown", reason: "unreachable" };
+  /** Every `resolveAbandonedAttempt` call, in order. */
+  readonly abandonedAttemptCalls: { paymentRef: string; now: Date }[] = [];
 
   constructor(private readonly db: Database) {}
 
@@ -57,6 +66,12 @@ export class FakePaymentProvider implements PaymentProvider {
   /** Test affordance: the next `forward` DECLINES this payment ref instead of settling it. */
   declineForwardFor(ref: string): void {
     this.declineForwardRefs.add(ref);
+  }
+
+  /** Test affordance: what every later `resolveAbandonedAttempt` answers and does to the row, until
+   * scripted again. Unscripted, it answers `unknown`/`unreachable` and touches nothing. */
+  scriptAbandonedAttempt(answer: AbandonedAttemptOutcome): void {
+    this.abandonedAnswer = answer;
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
@@ -133,6 +148,38 @@ export class FakePaymentProvider implements PaymentProvider {
   resolvePending(now: Date): Promise<ForwardResult> {
     void now;
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
+  }
+
+  async resolveAbandonedAttempt(
+    paymentRef: string,
+    now: Date,
+    audit: AbandonedAttemptAudit,
+  ): Promise<AbandonedAttemptOutcome> {
+    this.abandonedAttemptCalls.push({ paymentRef, now });
+    const answer = this.abandonedAnswer;
+    const key = { provider: this.provider, paymentRef };
+    await this.db.transaction(async (tx) => {
+      const row = await getPaymentByRef(tx, key);
+      if (row?.state !== "attempting") throw new AppError("payment.not_found", key);
+      if (answer.outcome === "unknown") return;
+      if (answer.outcome === "captured") {
+        await captureAttempting(tx, {
+          ...key,
+          settledAt: now,
+          externalRef: `fake-ext-${paymentRef}`,
+        });
+      } else {
+        await failAttempting(tx, key);
+      }
+      await recordAttemptResolution(tx, key, {
+        personId: audit.personId,
+        outcome: answer.outcome,
+        cancelledAtProvider: answer.outcome === "failed" && answer.cancelledAtProvider,
+        providerStatus: null,
+        resolvedAt: now,
+      });
+    });
+    return answer;
   }
 
   async void(ref: string): Promise<PaymentResult> {

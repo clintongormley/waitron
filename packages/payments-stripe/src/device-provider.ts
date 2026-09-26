@@ -14,6 +14,7 @@ import type {
   ProviderCapabilities,
 } from "@waitron/payments";
 import {
+  countProviderCancelledResolutions,
   declineForwarded,
   getPaymentPolicy,
   insertAcceptedOffline,
@@ -65,13 +66,18 @@ export class StripeOnDeviceProvider implements PaymentProvider {
 
   async collect(params: CollectParams): Promise<PaymentResult> {
     const paymentRef = randomUUID();
-    const stripeIdempotencyKey = workingOrderIdempotencyKey(params.workingOrderId);
     // Decided before the collect, because it configures the device's offline behaviour.
-    const offlineAllowed = await this.inTransaction(async (tx) => {
+    const { offlineAllowed, stripeIdempotencyKey } = await this.inTransaction(async (tx) => {
       const policy = await getPaymentPolicy(tx);
-      return (
-        resolveOfflineDecision(policy, params.allowOffline ?? false, params.amount) === "accept"
-      );
+      const cancelled = await countProviderCancelledResolutions(tx, {
+        provider: PROVIDER,
+        workingOrderId: params.workingOrderId,
+      });
+      return {
+        offlineAllowed:
+          resolveOfflineDecision(policy, params.allowOffline ?? false, params.amount) === "accept",
+        stripeIdempotencyKey: workingOrderIdempotencyKey(params.workingOrderId, cancelled),
+      };
     });
 
     const outcome = await this.opts.client.collectOnDevice({

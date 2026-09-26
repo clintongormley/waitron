@@ -75,6 +75,12 @@ of scope here: this design changes the payment of a table's bill only (§9).
    Inferred from Stripe's documented idempotency behaviour, not tested: a second payment against the
    same order would reuse the key, and Stripe would refuse a different amount or return the first
    PaymentIntent for the same one.
+   _(2026-09-26, M7b2: the key now carries a generation. It is `wo_<workingOrderId>` until a
+   manager's resolve records one of the order's PaymentIntents as cancelled at Stripe, then
+   `wo_<workingOrderId>_r<n>`, where `n` counts those resolutions for the order and provider
+   (`workingOrderIdempotencyKey` in `packages/payments-stripe/src/client.ts`, used by `provider.ts`
+   and `device-provider.ts`), so the next collect gets a new PaymentIntent rather than the cancelled
+   one. The per-bill-payment key §5.3 plans must also move past a cancelled PaymentIntent.)_
 5. **One in-flight mark per order.** Lane C's lock (menus plan D22) is one timestamp,
    `working_orders.payment_attempt_at`, set in P1 and cleared in P3, on a failed attempt, or by the
    loop's `releaseStalePaymentAttempts` when nothing can still capture or file the payment. Every
@@ -89,11 +95,19 @@ of scope here: this design changes the payment of a table's bill only (§9).
    `attempting` row and the real providers write theirs after P1 has committed; the release of the
    mark and the second-card check do read `payments` (`ordersWithUnfiledPayment` in
    `apps/server/src/till-sale.ts`, on lane C's branch).
+   _(2026-09-26, M7b2: a manager's resolve that marks the payment `failed` (Stripe reports its
+   PaymentIntent cancelled, or no PaymentIntent id was ever recorded) also clears the mark, unless a
+   payment of the order could still be captured or waits to be filed, or a newer attempt has
+   replaced the mark (`clearPaymentAttemptMark`, `apps/server/src/till-sale.ts`).)_
 6. **Stripe's crash recovery does nothing.** `resolvePending` is a no-op
    (`packages/payments-stripe/src/provider.ts:97-102`). SumUp's is real: it resolves an `attempting`
    row against SumUp's own record, and marks one SumUp has never heard of `failed` after 15 minutes
    (`packages/payments-sumup/src/provider.ts:271-361`). M7b2 exists because a crash during a Stripe
    payment leaves the order locked with no way out.
+   _(2026-09-26, M7b2: Stripe Terminal now records its PaymentIntent id before the reader is asked
+   to charge, and a manager clears a stuck payment from the Payments screen against Stripe's own
+   record. The automatic `resolvePending` sweep stays a no-op for Stripe Terminal; the M7b2 pull
+   request says why.)_
 7. **No refund path.** No route or screen refunds a payment. The provider interface has `void`,
    `refund` and `partialRefund` (`packages/payments/src/provider.ts:120-129`), and the only product
    caller is the automatic reversal of a card payment taken for an abandoned order
@@ -450,6 +464,9 @@ invoice is issued by the second capture's P3, never by the first).
   `createCheckout` sends no idempotency key, and sends the payment's own reference only when an
   affiliate key is configured (`packages/payments-sumup/src/sumup-client.ts:88-99`), so nothing
   there is keyed to the order and nothing needs changing.
+  _(2026-09-26, M7b2: the working order's key now moves to `wo_<workingOrderId>_r<n>` after a
+  manager's resolve leaves one of its PaymentIntents cancelled at Stripe (§1.2 item 4), so the
+  per-bill-payment key must also move past a cancelled PaymentIntent.)_
 - **P3 (transaction):** on `captured` or `accepted_offline`, mark the bill payment `received`, then
   issue the invoice if the bill is now fully paid (§7). When the live attempt's own answer is a
   decline or a failure, mark it `failed`, which releases its reservation. Anything else leaves it
@@ -488,6 +505,13 @@ A pending bill payment is resolved from the provider's row, never from its age:
   cancelled at the provider, `failed`, reservation released; provider unreachable or ambiguous →
   refused, the payment stays pending. Task 14 re-maps M7b2 as landed and extends it; it adds no
   second clearing path.
+  _(2026-09-26, M7b2 as landed: the Payments screen lists only `payments` rows still `attempting`
+  on an OPEN order that carries the in-flight mark, and resolves one row at a time, only for a
+  provider that implements `resolveAbandonedAttempt` — Stripe Terminal alone; any other is refused
+  with `payment.resolve_unsupported` (`apps/server/src/payments-api.ts`). A row already `captured`
+  is not listed, and a Stripe capture whose amount differs from the row's is refused as ambiguous,
+  not filed. So the extension must add a `failed` row, a mismatched captured amount, and a pending
+  bill payment with no `payments` row; none of the three reaches the landed action.)_
 - **An offline-accepted payment the provider later declines** (`forward`,
   `packages/payments/src/provider.ts:108-110`: a decline is an incident with no fiscal change). No
   path the server uses today produces one: only the on-device Tap to Pay provider writes

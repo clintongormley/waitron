@@ -6,6 +6,7 @@ import type { WorkingOrderId } from "@waitron/shared";
 import {
   associatePaymentWithSale,
   classify,
+  countProviderCancelledResolutions,
   DEFAULT_SETTLEMENT_LAG_MS,
   existingReferences,
   getPaymentByRef,
@@ -20,11 +21,13 @@ import {
   recordManualCardPayment,
   recordManualRefund,
   recordRefund,
+  recordResolution,
   recordVoid,
   stampAttemptingRef,
   tillsForWorkingOrders,
 } from "./index.js";
 import type {
+  AbandonedAttemptOutcome,
   AsyncPaymentProvider,
   AttemptingPayment,
   InboundSettlement,
@@ -32,6 +35,7 @@ import type {
   InitiateResult,
   ManualCardPaymentParams,
   ManualCardPaymentResult,
+  NewPaymentResolution,
   OrphanRemediation,
   PaymentMismatch,
   PaymentProvider,
@@ -127,6 +131,25 @@ describe("package public surface (./index.js)", () => {
     expect(result.externalRef).toBe("hosted-1");
     expect(params.paymentRef).toBe("pay-1");
     expect(asyncProvider).toBe("fake");
+  });
+});
+
+describe("the stuck-payment resolution surface", () => {
+  it("re-exports the resolution audit helpers from the package root", () => {
+    expect(typeof recordResolution).toBe("function");
+    expect(typeof countProviderCancelledResolutions).toBe("function");
+    const resolution: NewPaymentResolution = {
+      paymentId: "p",
+      workingOrderId: "w",
+      personId: "m",
+      outcome: "failed",
+      cancelledAtProvider: true,
+      providerStatus: null,
+      resolvedAt: new Date("2026-09-26T12:00:00Z"),
+    };
+    expect(resolution.outcome).toBe("failed");
+    const outcome: AbandonedAttemptOutcome = { outcome: "unknown", reason: "ambiguous" };
+    expect(outcome.outcome).toBe("unknown");
   });
 });
 

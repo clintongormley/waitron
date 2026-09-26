@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -8,7 +8,12 @@ import {
   tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
-import { PAYMENTS_MIGRATIONS, getPaymentByRef } from "@waitron/payments";
+import {
+  PAYMENTS_MIGRATIONS,
+  getPaymentByRef,
+  insertAttempting,
+  recordResolution,
+} from "@waitron/payments";
 import { openIncidents } from "@waitron/core";
 import { FakeStripeDevice } from "./testing/fake-stripe-device.js";
 import { StripeOnDeviceProvider } from "./device-provider.js";
@@ -35,6 +40,33 @@ function collectParams(s: { tillId: string; workingOrderId: string }, allowOffli
     ...(allowOffline === undefined ? {} : { allowOffline }),
   };
 }
+
+describe("StripeOnDeviceProvider.collect after a Terminal PaymentIntent of the order was cancelled", () => {
+  it("uses the order's next key, because Stripe's replayed response to the old key names the cancelled PaymentIntent", async () => {
+    const s = await seedWorkingOrder(pg.db, freshNif());
+    await withTransaction(pg.db, async (tx) => {
+      const key = { provider: "stripe", paymentRef: "terminal-stuck" };
+      await insertAttempting(tx, {
+        ...key,
+        workingOrderId: s.workingOrderId,
+        amount: decimal("10.00"),
+      });
+      const row = await getPaymentByRef(tx, key);
+      await recordResolution(tx, {
+        paymentId: row!.id,
+        workingOrderId: s.workingOrderId,
+        personId: "22222222-2222-4222-8222-222222222222",
+        outcome: "failed",
+        cancelledAtProvider: true,
+        providerStatus: "requires_payment_method",
+        resolvedAt: AT,
+      });
+    });
+    const client = new FakeStripeDevice();
+    await providerFor(client).collect(collectParams(s));
+    expect(client.lastCollect?.idempotencyKey).toBe(`wo_${s.workingOrderId}_r1`);
+  });
+});
 
 describe("StripeOnDeviceProvider.collect", () => {
   it("online capture writes a captured row with the PI id in external_ref", async () => {

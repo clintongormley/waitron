@@ -1241,4 +1241,25 @@ describe("listAttempting / stampAttemptingRef", () => {
     const row = await pg.db.transaction((tx) => getPaymentByRef(tx, key));
     expect(row!.externalRef).toBe("txn_e");
   });
+  it("stampAttemptingRef reports whether it stamped: true on an attempting row, false once resolved", async () => {
+    const t = await seedWorkingOrder(pg.db, freshNif());
+    const key = { provider: "stripe", paymentRef: "ref-f" };
+    const [stamped, late, missing] = await pg.db.transaction(async (tx) => {
+      await insertAttempting(tx, {
+        ...key,
+        workingOrderId: t.workingOrderId,
+        amount: decimal("5.00"),
+      });
+      const first = await stampAttemptingRef(tx, key, "pi_f");
+      await failAttempting(tx, key);
+      const second = await stampAttemptingRef(tx, key, "pi_f_late");
+      const none = await stampAttemptingRef(
+        tx,
+        { provider: "stripe", paymentRef: "no-such-ref" },
+        "pi_x",
+      );
+      return [first, second, none];
+    });
+    expect([stamped, late, missing]).toEqual([true, false, false]);
+  });
 });

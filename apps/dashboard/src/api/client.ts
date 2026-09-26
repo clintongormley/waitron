@@ -1107,6 +1107,22 @@ export interface ReaderStatusView {
   pairingStatus?: "processing" | "paired";
 }
 
+/** An open order's card payment that nothing is driving any more, typically after a restart. */
+export interface StuckPaymentRow {
+  paymentId: string;
+  workingOrderId: string;
+  orderNumber: number;
+  label: string | null;
+  tillId: string;
+  tillName: string;
+  provider: string;
+  amount: string;
+  startedAt: string;
+}
+
+export type StuckPaymentResolution =
+  { outcome: "filed"; invoiceNumber: string } | { outcome: "not_charged"; orderUnlocked: boolean };
+
 export interface AddReaderInput {
   providerId: string;
   name: string;
@@ -2661,5 +2677,16 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/payments/devices/${id}/reader`, "PUT", {
       readerId,
     });
+  }
+
+  listStuckPayments(): Promise<StuckPaymentRow[]> {
+    return this.#request<StuckPaymentRow[]>("/management-api/payments/stuck", "GET");
+  }
+
+  resolveStuckPayment(paymentId: string): Promise<StuckPaymentResolution> {
+    return this.#request<StuckPaymentResolution>(
+      `/management-api/payments/stuck/${paymentId}/resolve`,
+      "POST",
+    );
   }
 }
