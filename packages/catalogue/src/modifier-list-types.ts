@@ -90,5 +90,5 @@ export interface OptionListDependants {
 /** What deleting an extras list would touch — see `extraListDependants` (extras.ts). */
 export interface ExtraListDependants {
   products: { id: string; name: string }[];
-  menus: { id: string; name: string }[];
+  menus: { id: string; name: string; menuName: string }[];
 }

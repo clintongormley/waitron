@@ -767,10 +767,11 @@ describe("what deleting an extras list would touch", () => {
 
     const dependants = await run((tx) => extraListDependants(tx, list.id));
 
-    // The two dishes carry different names, so a join that reaches the wrong product shows up here.
+    // The two dishes carry different names, so a join that reaches the wrong product shows up here;
+    // the menu's name, "Deli", is no product's or list's, so a menuName read from either fails too.
     expect([...dependants.menus].sort((a, b) => a.name.localeCompare(b.name))).toEqual([
-      { id: offers.burger, name: "burger" },
-      { id: offers.pizza, name: "pizza" },
+      { id: offers.burger, name: "burger", menuName: "Deli" },
+      { id: offers.pizza, name: "pizza", menuName: "Deli" },
     ]);
     // Both dishes carry the list as well as publishing it, which is the only way to publish it.
     // Alphabetical by staff name, so this pins the order as well as the membership.

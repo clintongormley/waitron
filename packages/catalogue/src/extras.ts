@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
-import { products, type Transaction } from "@waitron/db";
+import { catalogues, products, type Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, stringToCents } from "@waitron/shared";
 import { menuItems } from "./schema/menu.js";
 import { reachableMenuItem } from "./menu-structure.js";
@@ -470,7 +470,7 @@ export type { ExtraListDependants } from "./modifier-list-types.js";
  * carry it and the menu offers that publish it, each detached by the delete rather than blocking it.
  * No order is consulted: an order's child line records the list's id with no foreign key into it,
  * so the delete does not touch it. A menu publication has no name of its own, so it is identified by
- * the menu item's id and its product's staff name.
+ * the menu item's id, its product's staff name and its menu's name.
  */
 export async function extraListDependants(
   tx: Transaction,
@@ -485,10 +485,11 @@ export async function extraListDependants(
     .where(eq(productModifiers.extraListId, extraListId))
     .orderBy(products.name, products.id);
   const menus = await tx
-    .select({ id: menuItems.id, name: products.name })
+    .select({ id: menuItems.id, name: products.name, menuName: catalogues.name })
     .from(menuItemExtraLists)
     .innerJoin(menuItems, eq(menuItems.id, menuItemExtraLists.menuItemId))
     .innerJoin(products, eq(products.id, menuItems.productId))
+    .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
     .where(eq(menuItemExtraLists.listId, extraListId))
     .orderBy(menuItems.id);
   return { products: carrying, menus };
