@@ -210,8 +210,8 @@ hold parts of it, each re-numbered from the body of whatever save writes it.
 | `menu_item_extra_lists.display_order` | the extras lists of a line naming a MENU OFFER | `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`), from the body that sets a menu offer's extras lists | no — nothing outside `packages/catalogue` and the test suites calls it |
 
 So a line parked before any of those saves keeps the old order while the rebuilt side comes back in
-the new one, and a comparison pairing the two up position by position reads that as a changed answer
-— which, before plan D10, re-priced a quantity-only edit. The extras comparison answers the PAIRING
+the new one, and a comparison pairing the two up position by position reads that as a changed answer.
+The extras comparison answers the PAIRING
 of picks to stored child lines rather than a yes or no, because the update moves each child's
 quantity and the two sides are no longer in step.
 

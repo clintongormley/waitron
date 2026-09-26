@@ -370,10 +370,21 @@ finds, none of them puts a photo on a menu's own list: in `packages/catalogue/sr
 inserts create library sections and the update refuses any other, and none of the writes outside
 that file sets an image. So when Task 3 lets a menu's list carry a photo, link it to the menu editor or
 narrow the link to library sections.
+
 **A joined tab's kitchen slips can name a table its ticket did not print.** Correction and MOVED
 slips name a joined tab's lowest-id table (`readOrderHeader`, `apps/server/src/kitchen-print.ts`),
 so after a join a MOVED slip's "from" can name the other table; recording each ticket's printed
 table would fix it.
+
+**A line moved onto a split CHECK cannot be voided from the check.** `voidTabLine`
+(`apps/server/src/working-order.ts`) calls `assertAnchoredTabOpen`, which refuses `tab.not_open`
+for an open order no table points at, and a check is exactly that; `voidTabLine` did the same on
+`main` before menus Task 7b. What Task 7b adds (owner decision 2026-09-26): a part of a line the
+kitchen has started can now be split onto a check, so the kitchen's made-but-cancelled part cannot
+be voided there. A check can be merged back into its tab (`mergeTabs`, "tells the kitchen nothing
+when a check merges back into the tab it was split from" in `apps/server/src/split-bill.test.ts`).
+**Next action:** an owner decision — does a check get Void, with its kitchen notice, or do staff
+merge the check back into its tab first?
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
 shared look, and the rules for it live in [design-system.md](developers/design-system.md). That
@@ -889,7 +900,12 @@ rows: **this task needs no venue reset of its own.** What it left open:
   class, category and allergens, so a retrieved line can now show values that differ from what was
   billed. **Next action (a follow-up, not one of the plan's tasks):** save or read the chosen
   variant's values for a retrieved line.
-- **The server lets a tab split take a fraction of a whole-unit line.** `carveOffLines`
+- **DONE 2026-09-26 (menus plan Task 7b, branch `feat/menus-order-edits`):** `carveOffLines` now
+  refuses a quantity finer than the line's `unit_precision` with `tab.transfer_quantity_invalid`
+  (`assertQuantityPrecision`). Pinned through a transfer, which shares `carveOffLines` with the
+  split: "throws tab.transfer_quantity_invalid for a fraction of a line counted in whole units"
+  (`apps/server/src/transfer-lines.test.ts`). The entry as it stood:
+  **The server lets a tab split take a fraction of a whole-unit line.** `carveOffLines`
   (`apps/server/src/working-order.ts`) checks only that the quantity is above zero and no more than
   the line's. I believe this predates the branch: #537 leaves that check untouched. The till now
   offers only whole numbers for such a line, using the line's frozen unit precision. **Next
@@ -1413,6 +1429,9 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   the server re-prices. A staff-name rename or a withdrawn label matches nothing, and the till
   surfaces `held.options_changed` rather than substituting the list's default. Landed inside Task 12
   after the first cut of the picker refused every such edit with `options.label_required`.
+  **Superseded 2026-09-26 by menus plan Task 7b (branch `feat/menus-order-edits`):** the server no
+  longer re-prices an edited line; a re-sent answer is frozen onto the same row at its stored price
+  (plan D10).
 - **A child extras row still renders FLAT in the tab drawer**, as its own row beside the dishes, with
   its own name, quantity and price — where the basket and the settled ticket both nest a child under
   its dish. It is now correctly skipped by the per-line action, the course picker and the split and

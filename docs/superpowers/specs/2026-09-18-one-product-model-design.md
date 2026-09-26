@@ -329,6 +329,9 @@ declarations").
 
 - Deleting an **extras list** cascades its product attachments (§5) and its menu rows (§3.2) and
   touches no order — an open order's child line points at the product, not the list.
+  _Updated 2026-09-26 (menus plan D10 / Task 7b): a child line now also records the list's id
+  (`working_order_lines.extra_list_id`), with no foreign key into it, so the delete still touches
+  no order._
 - Deleting a **product** that an extras list names is refused with `product.in_use`, the same way a
   product on a menu is refused today; an open-order reference to that product also keeps refusing.
 

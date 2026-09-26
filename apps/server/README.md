@@ -3,8 +3,9 @@
 The host process. It boots from environment config, loads the credential vault's key ring, applies
 every migration set behind the venue directory's own migration lock, resolves the AEAT transport and the Stripe
 account, then runs a loop: `drain` (the fiscal submission duty), the Stripe payments reconcile, the
-per-tick card `resolvePending` sweep (this node's own `attempting` card rows), fold the result into
-a sleep duration, repeat. It also serves several HTTP routes on one Hono app:
+per-tick card `resolvePending` sweep (this node's own `attempting` card rows), the release of stale
+card-payment marks (`withStalePaymentRelease`: open orders no card attempt is still behind), fold
+the result into a sleep duration, repeat. It also serves several HTTP routes on one Hono app:
 `GET /health` (unauthenticated), the till API under `/api/*`, the management-dashboard API under
 `/management-api/*`, and the inbound Stripe payments webhook at `POST /webhooks/stripe`.
 

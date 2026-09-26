@@ -1653,6 +1653,21 @@ call, and its tests drive them directly.
   // HeldExtra gains listId: string
   ```
 
+  _Corrected 2026-09-26, against the code on `feat/menus-order-edits` (Task 7c is built from what
+  follows, not the block above):_
+  - _The notice functions live in `packages/venue-service/src/kitchen-notices.ts`, reached through
+    `VENUE_SERVICE`. `KitchenNoticeKind` is `"recalled" | "void" | "changed" | "moved"`;
+    `KitchenNotice` also carries `movedTo: string | null`, and its `quantity` is a `Decimal` (a
+    decimal string). `recordKitchenNotices` takes a last `movedTo: string | null = null` argument,
+    for a `moved` notice only, and each item's `quantity` is a `Decimal`._
+  - _`updateOrderLine`'s `patch.quantity` and `voidTabLine`'s `quantity` are decimal strings, not
+    numbers. `updateOrderLine` resolves the order's new revision (`Promise<number>`)._
+  - _`PUT /api/working-orders/:id` and `PUT /api/working-orders/:id/lines/:lineNo` answer
+    `{ revision }`, and `GET /api/working-orders/:id/lines` answers `{ lines, revision }`; the
+    till stores that revision. `DELETE /api/working-orders/:id/lines/:lineNo` answers an empty
+    body._
+  - _`HeldExtra.listId` is `string | null`._
+
 - [ ] **Step 1: Write the failing tests:**
   - **Pricing:**
     - a held order with L1 (Lemonade €3.00), L2 (Water €2.00) and L3 (Burger €12.00 with Extra cheese
