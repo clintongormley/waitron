@@ -3055,7 +3055,7 @@ image constraints under *Detail → Box image*.
     (`apps/server/src/setup-api.ts`), when recording the setup operation fails before `execute`
     starts (for example with `setup.operation_conflict`), the in-memory setup lock stays set, so
     every later setup request answers `409 setup.already_provisioning` until the server restarts;
-    the adopt route has the same shape (read, not run). **Done (2026-09-26, lane A's A42):**
+    the adopt route has the same shape (read, not run). **Done (2026-09-26, lane A's A42, #674):**
     provision and adopt now release the lock whenever the request does not end in a success
     answer, reading the body for its hash and recording the operation included; reproduced on the
     old code for provision (a recorded operation for another request, an unreadable
