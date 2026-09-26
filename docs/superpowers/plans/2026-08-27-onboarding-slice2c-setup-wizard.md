@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Lit 3.x, `@waitron/ui` (design system), Vite 6, Vitest **browser mode** (real Chromium via Playwright) + `axe-core` a11y. Server side: Hono, the existing `mountSpa`/`assertBuiltApp`.
 
-**Spec:** [docs/superpowers/specs/2026-08-26-appliance-onboarding-design.md](../specs/2026-08-26-appliance-onboarding-design.md) §4 (the flow), §10 (admin/tenant/location + AEAT cert), §11 (pairing — deferred), §16 (slice 2c = this app). Builds on 2a (#141) + 2b (#142). **Map:** `.superpowers/notes/2c-frontend-map.md`.
+**Spec:** docs/superpowers/specs/2026-08-26-appliance-onboarding-design.md §4 (the flow), §10 (admin/tenant/location + AEAT cert), §11 (pairing — deferred), §16 (slice 2c = this app). Builds on 2a (#141) + 2b (#142). **Map:** `.superpowers/notes/2c-frontend-map.md`.
 
 ---
 

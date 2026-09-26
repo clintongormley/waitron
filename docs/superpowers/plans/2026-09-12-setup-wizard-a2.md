@@ -1,6 +1,6 @@
 # Setup wizard A2 implementation
 
-Design: [Setup wizard A2](../specs/2026-09-12-setup-wizard-a2-design.md).
+Design: Setup wizard A2.
 
 1. Reproduce unknown-path behavior and implement setup-only redirects with asset/API controls.
 2. Add country-owned Demo generation and fiscal-owned defaults; test both boundaries before wiring the wizard.

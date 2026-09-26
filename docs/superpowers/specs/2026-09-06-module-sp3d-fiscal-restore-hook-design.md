@@ -13,9 +13,9 @@ fresh-context by Fable and read-only by Astra (both 2026-09-06; the findings tha
 are folded in and named where they matter). The decisions in §3 are the ones to challenge at PR
 review; each states what it costs to reverse.
 
-**Implements:** [module-system-architecture §8 SP-3](2026-09-04-module-system-architecture-design.md)
+**Implements:** module-system-architecture §8 SP-3
 — the last of the four SP-3 slices (SP-3a #238, SP-3b #240, SP-3c #245 landed) — and the backup
-regime's BR-4 ([backup-restore-regime §7](2026-09-04-backup-restore-regime-design.md)), folded into
+regime's BR-4 (backup-restore-regime §7), folded into
 SP-3 by owner decision 2026-09-05. It fills the `backup.restore` seat BR-2 declared and BR-3 left
 empty, and closes the cold-restore follow-up the onboarding 4b-iii runbook recorded (`docs/backlog.md`,
 "Cold-restore follow-up": `registerSif` does not freshen the invoice series).

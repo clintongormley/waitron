@@ -18,7 +18,7 @@ Four recurring duties have been built, each deliberately shaped for a caller tha
 `packages/fiscal`'s `backend.ts` already fixed the governing constraint: *"the repeating cadence is
 the caller re-invoking on `nextDueAt`, **driven by the database, never an in-memory timer**."*
 
-The immediate trigger is narrower. The orphan drift gate ([`2026-07-25-orphan-drift-gate-design.md`](./2026-07-25-orphan-drift-gate-design.md))
+The immediate trigger is narrower. The orphan drift gate (`2026-07-25-orphan-drift-gate-design.md`)
 holds a customer's funds pending a human, and `listReconcilable` selects by `settled_at` within the
 swept period, so under a closed-past-window cadence **nothing re-sweeps that period**. The row is
 detected once. §7 below is what closes that.

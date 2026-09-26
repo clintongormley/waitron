@@ -8,7 +8,7 @@ question [asesor-questions.md Q19](../../compliance/asesor-questions.md).
 ## 1. The problem, in one paragraph
 
 The card details currently print on the fiscal ticket
-([2026-09-11-card-receipt-tender-details-design.md](2026-09-11-card-receipt-tender-details-design.md),
+(2026-09-11-card-receipt-tender-details-design.md,
 rendered at [apps/server/src/receipt-ticket.ts](../../../apps/server/src/receipt-ticket.ts) ~line 305)
 because the SumUp Solo has no printer of its own. That was a product choice, not a legal requirement —
 the mandated contents of a factura simplificada carry no payment element and the Veri\*Factu registro

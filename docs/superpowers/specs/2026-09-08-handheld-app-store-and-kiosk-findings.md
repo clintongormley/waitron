@@ -6,7 +6,7 @@ three recurring questions so they are not re-researched, and records the owner's
 end. Companion to
 [2026-08-30-native-app-capabilities.md](2026-08-30-native-app-capabilities.md) (this note closes its
 row N5) and to
-[2026-08-26-appliance-onboarding-design.md](2026-08-26-appliance-onboarding-design.md) §7–§8, which
+2026-08-26-appliance-onboarding-design.md §7–§8, which
 already designs the box's own certificate authority and the paid real-cert tier — this note does not
 re-decide those, it adds one argument for keeping the private CA as the offline fallback.
 

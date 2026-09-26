@@ -1,6 +1,6 @@
 # Card reader adoption and status
 
-Implement the [approved design](../specs/2026-09-12-card-reader-adoption-and-status-design.md).
+Implement the approved design.
 
 1. Add failing provider tests for account reader listing, structured status, unavailable status and
    Stripe's millisecond timestamp. Extend the common contract and both seats; update all test seats

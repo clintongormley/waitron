@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-29
 **Status:** designed, not implemented
-**Depends on:** [the deployment environment](./2026-07-29-deployment-environment-design.md), which
+**Depends on:** the deployment environment, which
 should land first so `instance` can write the stamp, and `tenant` can validate a Stripe credential
 against it, rather than bolting either on later.
 

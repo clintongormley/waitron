@@ -125,7 +125,7 @@ For a customer with a cloud instance, the proposed route reuses that instance:
 Restaurant box <-- WireGuard --> Customer's cloud instance <-- Technician
 ```
 
-The existing [connectivity decision](2026-09-05-relay-decision.md) uses each venue's own cloud
+The existing [connectivity decision](https://github.com/waitron-io/waitron-cloud/blob/main/docs/reference/2026-09-05-relay-decision.md) uses each venue's own cloud
 instance and WireGuard, with an SSH fallback recorded in the backlog. This note does not reopen
 that decision or propose a third-party overlay network.
 

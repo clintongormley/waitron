@@ -13,12 +13,12 @@ hosting runs that application; it does not create a second implementation of it.
 
 ## Moved on 2026-09-22
 
-The original paths below now forward to the full documents in Waitron Cloud:
+These documents now live in Waitron Cloud:
 
-- [Cloud services inventory](superpowers/specs/2026-08-29-cloud-services-inventory.md).
-- [Cloud gateway handoff](superpowers/specs/2026-09-21-cloud-ingress-wireguard-gateway-design.md).
-- [Historical cloud storage model](superpowers/specs/2026-07-31-cloud-storage-model-design.md).
-- [Relay decision](superpowers/specs/2026-09-05-relay-decision.md).
+- [Cloud services inventory](https://github.com/waitron-io/waitron-cloud/blob/main/docs/reference/2026-08-29-cloud-services-inventory.md).
+- [Cloud gateway handoff](https://github.com/waitron-io/waitron-cloud/blob/main/docs/reference/2026-09-21-cloud-ingress-wireguard-gateway-design.md).
+- [Historical cloud storage model](https://github.com/waitron-io/waitron-cloud/blob/main/docs/reference/2026-07-31-cloud-storage-model-design.md).
+- [Relay decision](https://github.com/waitron-io/waitron-cloud/blob/main/docs/reference/2026-09-05-relay-decision.md).
 
 The move preserves historical text and provenance. It does not reconcile the older
 per-venue endpoint decision with the newer shared gateway proposal. Current country,

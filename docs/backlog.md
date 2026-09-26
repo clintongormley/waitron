@@ -400,9 +400,7 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    [integration contract](developers/modifiers.md)), Units (#342) and Products (#345,
    [operator guidance](products.md)). One question is left hanging over it: the existing zero-rate class
    is shown as **No tax (0%)**, and asesor Q20 asks whether any intended case legally needs N1 or N2
-   instead — to be answered before the first live filing, not before more building. See the
-   [spec and plan](superpowers/specs/2026-09-12-product-editor-design.md) and
-   [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md).
+   instead — to be answered before the first live filing, not before more building.
 3. **Printing** — `printers-screen.ts` with its agent tabs, and `printing-rules-screen.ts`. #319,
    #327 and #380 reworked these recently, so read them against the rules before changing anything.
 4. **Payments** — `payments-screen.ts` and the provider panels in `packages/payments-stripe` and
@@ -426,9 +424,7 @@ component rules harden around the dashboard alone.
 languages product and menu text is written in and which one is the fallback; photos live in a shared
 library (the mandatory `packages/media` module) with translated names, alt text, search and reuse,
 and a picture cannot be deleted while a product uses it.
-[Image-library design](superpowers/specs/2026-09-12-image-library-design.md),
-[content-language design](superpowers/specs/2026-09-12-content-languages-design.md),
-[operator guide](content-and-images.md).
+[Operator guide](content-and-images.md).
 
 What it left open:
 
@@ -1248,17 +1244,15 @@ What the per-menu publication (#452, the plan's Task 5) left behind:
 **Product selling units — LANDED #342.** A product is sold by the each, or by weight or volume, with
 0 to 3 decimal places on its quantity and a price per that unit; units have their own dashboard page,
 and a unit's name and precision are frozen onto sold lines.
-[Design](superpowers/specs/2026-09-12-product-units-design.md).
 
 **Update — unit abbreviations and screen rebuild.** Every unit has a short translatable
 abbreviation (`kg`, `ml`), which is what prints on sold lines, receipts, kitchen tickets and the till;
 the frozen `unit_name` column is presentation only and does not enter the fiscal hash.
-[Design](superpowers/specs/2026-09-14-units-screen-and-abbreviation-design.md).
 
 **Update — a product's unit is optional, and a unit lists its products — LANDED #375.** A product no
 longer needs a unit (Each stores nothing), and the units screen can bulk-reassign a unit's products to
 Each so the unit can be emptied and deleted.
-[Design](superpowers/specs/2026-09-15-optional-product-unit-design.md). Left open (small,
+Left open (small,
 unowned): `createProduct` and `updateProduct` still duplicate the legacy-`pricingUnit` fallback, so a
 shared helper would keep the two from drifting; and the synthetic `EACH_UNIT` id lives as a literal in
 both `packages/catalogue/src/units.ts` and the till's `product-name.ts` with nothing pinning them equal.
@@ -1291,8 +1285,7 @@ What it left open:
 **The integrated product editor — LANDED #345, and the four-part Products overhaul (Units,
 Categories, Modifiers, Products) is complete.** One Products list and one editor save a product's
 names, image, tax choice, unit, categories, modifiers, allergen and dietary declarations and variants
-in one transaction; recipe authoring was withdrawn from the dashboard. [Operator guide](products.md),
-[design](superpowers/specs/2026-09-12-product-editor-design.md). (Later reworked — see #377 and #379
+in one transaction; recipe authoring was withdrawn from the dashboard. [Operator guide](products.md). (Later reworked — see #377 and #379
 below.)
 
 What it left open:
@@ -1437,8 +1430,7 @@ What it left open:
 translated customer-facing name and a plain kitchen name (resolved in
 `packages/catalogue/src/product-presentation.ts`); the editor is a short form with collapsible
 sections, a product has no variants or at least two, and it added the shared `wt-disclosure` and
-`wt-price-input`. [Developer guide](developers/products.md),
-[design](superpowers/specs/2026-09-15-product-editor-rework-design.md).
+`wt-price-input`. [Developer guide](developers/products.md).
 
 What it left open:
 
@@ -2102,7 +2094,7 @@ ongoing overhaul listed at the top of Track A.
   (`multiple`), and optionally offer to add what was typed when nothing matches. The category form's
   parent picker (#362) and the product's main-category and labels pickers
   (`apps/dashboard/src/widgets/classification-fields.ts`) use it. Left out on purpose, per its
-  [design](superpowers/specs/2026-09-13-wt-combobox-design.md): searching on the server, disabling
+  design: searching on the server, disabling
   single options, taking part in a native `<form>`, and showing chosen options as chips (it shows a
   count instead). **Undecided:** how it relates to the `wt-select` row above. The combobox does not
   sort its options, and neither its design nor that row mentions the other, so decide whether
@@ -2169,7 +2161,7 @@ ongoing overhaul listed at the top of Track A.
   about. The hard-code is in `packages/catalogue/src/provisioning.ts` and names this entry. Receipt
   languages are a separate setting and already follow the province.
 - **Category-driven routing to multiple printers/destinations** (owner, 2026-09-12): deferred from
-  the [Products overhaul](superpowers/specs/2026-09-12-products-overhaul-design.md). Decide how a
+  the Products overhaul. Decide how a
   product's labels (menus spec §10.5; category memberships are gone since 2026-09-25) select one or
   more preparation/printing destinations, how matching rules combine and how duplicate output is
   prevented. Keep reporting attribution separate so one
@@ -4554,7 +4546,7 @@ uncommitted diff is wanted.
 
 **Shared account controls:** `@waitron/ui-core` owns the seven account controls, tokens and common
 helpers inside this repository, and existing `@waitron/ui` imports re-export them (see the
-[extraction design](superpowers/specs/2026-09-23-shared-ui-extraction-design.md)). Cloud has
+extraction design). Cloud has
 published private `@waitron-io/ui-core@0.1.0` (see the [release receipt and setup](https://github.com/waitron-io/waitron-cloud/blob/main/docs/shared-ui-release.md))
 and owns the release workflow and account screens.
 Read the first weekly mutation results for both UI packages after the split; this
@@ -4576,7 +4568,7 @@ its cloud support-service proposal is tracked in Cloud and is not approved by th
 **SQLite + Litestream replaces PostgreSQL** — owner decision
 2026-09-16, taken on the infrastructure simplification alone, which retired the density measurement
 that used to gate it. The feasibility reads are in
-[SQLite instead of PostgreSQL](superpowers/specs/2026-09-16-sqlite-instead-of-postgres-discussion.md)
+_SQLite instead of PostgreSQL_
 (the regulation names no database privilege; Litestream covers standby and rejoin but not a returned
 box's ledger tail) and the architecture in
 [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md),
@@ -5458,8 +5450,7 @@ already waiting.
 
 ### Logging, diagnostics & one-touch bug report (A9; Slice 1 landed #192)
 
-[Design](superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md),
-[plan](superpowers/plans/2026-08-31-logging-diagnostics-foundation.md). Eventual vendor destination
+[Design](superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md). Eventual vendor destination
 is GitHub issues; for now a bundle only needs to be copy-pastable.
 
 - **Slice 2 — one-touch bug report.** A `bug_reports` table (`local`, grants in its
@@ -5504,7 +5495,7 @@ enums, but a user-definable kitchen-status list does not exist.
 
 ### Backup & restore — carry-forwards (B2)
 
-[Design](superpowers/specs/2026-09-04-backup-restore-regime-design.md); the restore hook is
+The restore hook is
 [SP-3d](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md); the wizard is
 [#295](superpowers/specs/2026-09-09-backup-recovery-key-wizard-design.md). Landed: the storage
 abstraction, fan-out and AES-256-GCM artifact encryption; the single encrypted archive and the module

@@ -5,7 +5,7 @@
 [2026-09-08-handheld-app-store-and-kiosk-findings.md](2026-09-08-handheld-app-store-and-kiosk-findings.md)
 §2–§3 to be nailed down. This note turns them into one measured spike and one small build, each
 with its failing case stated up front (CLAUDE.md §1). The onboarding design
-([2026-08-26-appliance-onboarding-design.md](2026-08-26-appliance-onboarding-design.md) §7–§8, §18)
+(2026-08-26-appliance-onboarding-design.md §7–§8, §18)
 already decides the two-tier certificate model; nothing here re-decides it.
 
 **Why it matters now.** Most waiters will use their own phones as the handheld (owner, 2026-09-08).

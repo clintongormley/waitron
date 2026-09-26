@@ -21,7 +21,7 @@ prototype still gives an early, loud signal if that judgement is wrong.
 and §5.2 (the tail shipper); the natural-key clash shapes come from the
 outbox → native replication swap §4.2/§4.4.
 Litestream's documented behaviour is quoted in the
-[SQLite instead of PostgreSQL discussion note](2026-09-16-sqlite-instead-of-postgres-discussion.md) §3.
+SQLite instead of PostgreSQL discussion note §3.
 
 ---
 

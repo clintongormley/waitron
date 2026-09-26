@@ -15,7 +15,7 @@ plug-in-your-phone flow asks for it, so a box is one disk failure from having no
 engine it drives is the landed backup regime — BR-1 storage/fan-out/AES-256-GCM under
 `WAITRON_BACKUP_RECOVERY_KEY` (#226), BR-2 the encrypted archive (#228), BR-3 the restore consumer
 (#232), BR-4/SP-3d the filing node's fresh-chain restore hook (#248)
-([backup-restore-regime](2026-09-04-backup-restore-regime-design.md)).
+(backup-restore-regime).
 
 **Unblocks:** it does not gate other tracks; it closes the recovery hole the container-packaging step
 left open (node-containers design §3.1: the box deliberately ships with backups off, fail-closed, so

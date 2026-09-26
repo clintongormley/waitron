@@ -3,14 +3,14 @@
 **Date:** 2026-09-08. **Status:** design, approved section-by-section with the owner; plan follows.
 
 **Track H** (hardware). Builds on the printing subsystem
-([2026-08-17-printing-subsystem-design.md](2026-08-17-printing-subsystem-design.md)) and realises the
+(2026-08-17-printing-subsystem-design.md) and realises the
 "native on-device agent, printing first" of
-[till-reroute-route-decision §3](2026-09-05-till-reroute-route-decision.md), in its first form: a
+till-reroute-route-decision §3, in its first form: a
 standalone container. Follow-ons: the virtual PDF printer (Track H item 2), the un-pin of IP printers
 from one agent (failover-printing §4a, Track H item 3).
 
 > **Amended 2026-09-08, before implementation** — §2.3's enrolment is superseded by
-> [2026-09-08-device-join-and-accept-design.md](2026-09-08-device-join-and-accept-design.md) §7,
+> 2026-09-08-device-join-and-accept-design.md §7,
 > which extends join-and-accept to devices and makes one mechanism serve both surfaces. In short:
 > the verification code becomes a two-digit number the admin picks out of three (the pending list no
 > longer returns it), `join` is gated on a venue-wide fifteen-minute pairing window, and pending

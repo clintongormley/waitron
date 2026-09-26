@@ -7,7 +7,7 @@
 4. Add the localized dashboard form and fresh-result feedback; test lifecycle and accessibility.
 5. Run affected coverage, build the print agent/dashboard, run the repository gate and update backlog.
 
-Design: [Check a printer address](../specs/2026-09-12-printer-address-probe-design.md).
+Design: Check a printer address.
 
 ## Verification receipts (2026-09-12)
 

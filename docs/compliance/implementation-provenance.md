@@ -96,7 +96,7 @@ that taxes hosting with a source-publication duty does not prevent hosting.
 
 **Known trade-off, accepted:** this is source-available, not OSI-approved open source, and the
 MIT grant already given cannot be revoked. See
-[the licence design](../superpowers/specs/2026-07-28-licence-change-and-history-rewrite-design.md)
+the licence design
 for the full reasoning, the alternatives considered (PolyForm Shield, BUSL 1.1, FSL, a bespoke
 licence), and what the change does not protect.
 

@@ -13,7 +13,7 @@ is built (§5.2, risk 2).
 > shipper's fresh-context read — here and in the two later places this spec asks for "a Fable read"
 > — runs on the default model, Opus 5.5, like every other review.
 
-**Companion:** [SQLite instead of PostgreSQL — a discussion](2026-09-16-sqlite-instead-of-postgres-discussion.md)
+**Companion:** SQLite instead of PostgreSQL — a discussion
 (2026-09-16) is the feasibility note this builds on. It carries the receipts this spec cites: the
 regulation's own words, Litestream's documented behaviour, and the counts. Read it first.
 
@@ -23,7 +23,7 @@ outbox → native logical replication swap
 publications/subscriptions do not); the "no relay — replication rides WireGuard" standing decision for
 the replication path (the stream goes to object storage; WireGuard's fate for remote dashboard access
 is a separate, untouched question); and decision 5 of the
-[backup & restore regime](2026-09-04-backup-restore-regime-design.md) **for the stream only** (see §7).
+backup & restore regime **for the stream only** (see §7).
 
 ---
 
@@ -214,7 +214,7 @@ same seat cannot both win (proved by deletion, §9). An unclaimed seat is a chea
 fiscally inert — a never-promoted tertiary just burns one number, which AEAT permits (many "SIF
 virtuales" per NIF, each with its own installation number "propio y distinto"; the receipt is the AEAT
 FAQ quoted in
-[local-server-sif-and-failover](2026-08-01-local-server-sif-and-failover-design.md) §12, not the
+local-server-sif-and-failover §12, not the
 discussion note). A venue with a box mirror and cloud backup carries two seats.
 
 **Two rejected alternatives** (recorded so a future session does not silently reintroduce them):

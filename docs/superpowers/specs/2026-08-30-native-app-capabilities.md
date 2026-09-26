@@ -6,7 +6,7 @@ cannot do this on the target device" findings appear.
 
 This is a companion to [2026-07-30-deli-hardware-design.md](2026-07-30-deli-hardware-design.md),
 which decided the deli's hardware, and to
-[2026-08-15-distribution-and-client-topology-design.md](2026-08-15-distribution-and-client-topology-design.md),
+2026-08-15-distribution-and-client-topology-design.md,
 which worked out the client/server topologies (including the cloud-primary case that N4 turns on).
 It exists to answer a question that keeps recurring one feature at a time: *does this force us to
 ship a native app?*

@@ -12,7 +12,7 @@ slot, and defers the runtime fiscal pass to the `fiscal-none` slice; (2) the com
 into a new `@waitron/composition` package; (3) `FiscalBackend` gains an `id`, and the caller-supplied
 `fiscalBackend` input to `packages/core` is removed.
 
-**Implements:** [module-system-architecture §8 SP-3](2026-09-04-module-system-architecture-design.md) —
+**Implements:** module-system-architecture §8 SP-3 —
 the third of the four slices SP-3 was split into (owner decision 2026-09-05; see
 SP-3a for the split):
 

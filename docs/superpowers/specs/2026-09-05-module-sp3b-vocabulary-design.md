@@ -5,7 +5,7 @@
 session). Two override points were offered and not taken: the generic package list stays explicit, and
 a module's package is derived from `migrations.from` rather than declared on the seat.
 
-**Implements:** [module-system-architecture](2026-09-04-module-system-architecture-design.md) §3
+**Implements:** module-system-architecture §3
 ("vocabulary + error codes — the regime terms it legitimately uses, generalising the english-only
 `EXEMPT_PACKAGES` list to 'a module declares its own vocabulary'"), §4 (the vocabulary registry the
 guard reads) and §9 ("English-only guard preserved, not exempted-around"). The second of SP-3's four

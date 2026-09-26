@@ -10,7 +10,7 @@
 > cross-subdomain cookie delivery in production. PR numbers are recorded in `docs/backlog.md` → Track B.
 
 **Date:** 2026-09-05. **Status:** design, awaiting owner review; plan follows. **Track B item 1.**
-Rests on decision (i) ([`2026-09-05-till-reroute-route-decision.md`](2026-09-05-till-reroute-route-decision.md)),
+Rests on decision (i) (`2026-09-05-till-reroute-route-decision.md`),
 decision (ii) (no relay), decision (iii) (registers/devices) and Track A's swap spec
 (`2026-09-05-outbox-to-native-replication-swap-design.md`).
 Owner decisions taken in this brainstorm (2026-09-05): **the till follows the primary — no manual

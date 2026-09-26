@@ -4,7 +4,7 @@
 **Status:** APPROVED — landed 2026-08-29; implementation plan to follow. The next design pass flagged by
 `2026-08-29-promotion-failover-and-node-lifecycle-design.md`
 §9 item 2 (hereafter **the lifecycle spec**), which called it "the biggest remaining gap." Inherits its
-topology from [`2026-08-01-local-server-sif-and-failover-design.md`](2026-08-01-local-server-sif-and-failover-design.md)
+topology from `2026-08-01-local-server-sif-and-failover-design.md`
 (**#33**), its replication protocol from `2026-08-02-app-level-sync-design.md`
 (**sync**), and its mirror-mode mechanism from
 `2026-08-28-sync-cloud-mirror-c2a-mirror-server-design.md`
@@ -171,7 +171,7 @@ promote is refused by the latch.
 ## 4. Authority and trigger: remote-first, local fallback, one break-glass secret
 
 > **2026-09-07 update:** break-glass no longer unlocks the key ring — see
-> [promote-endpoint-slice-2-design.md](2026-09-07-promote-endpoint-slice-2-design.md) §4.2/§4.3.
+> promote-endpoint-slice-2-design.md §4.2/§4.3.
 > It is purely authorization now; a promoted cloud sells but does not file until cert-distribution
 > lands. The "both jobs" framing below (and §5's "unlock the key ring" steps) is superseded.
 

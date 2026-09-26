@@ -4,7 +4,7 @@
 **Track:** printing + hardware surface (top-tier #4) × distribution/failover (#5/#8). **Runs SUPERVISED.**
 
 This records **how printing survives a failover** — the local box dying and a cloud (or second local)
-node taking over — a corner the [printing subsystem design](2026-08-17-printing-subsystem-design.md)
+node taking over — a corner the printing subsystem design
 explicitly deferred (§4: *"single-node works now; full multi-node routing lands when replication
 does"*). It is **mostly decision-capture**: its failover mechanisms are follow-ons to work that is
 either **in flight** (the base printing subsystem, `feat/printing-subsystem` — schema + agent runtime +
@@ -66,7 +66,7 @@ change *where an agent may run* and *which printers it may serve*.
 (`GET /print-api/agent/jobs`), push to the printer, report (`POST …/result`) — are initiated by the
 agent dialing out. That direction is exactly why a **cloud** server works despite the shop's NAT: the
 cloud never has to reach into the LAN (which NAT would block,
-[topology §5](2026-08-15-distribution-and-client-topology-design.md)) — it only answers connections the
+topology §5) — it only answers connections the
 agent opened, the same outbound-only pattern as the sync pull and the relay tunnel. On failover the
 agent simply re-aims its outbound poll at the next node in the list (§4b); nothing has to reconfigure to
 *reach* the agent, because nothing ever reached it.
@@ -96,7 +96,7 @@ a claim about behaviour under a condition the code has never run; it gets a test
 
 **Authorization becomes location-scoped for shared printers**, replacing the agent-identity scope. That
 is a real change to the security boundary and is a **security-review item** (the printing subsystem
-already mandates a `security-review` pass before merge, [design §7](2026-08-17-printing-subsystem-design.md)).
+already mandates a `security-review` pass before merge, design §7).
 
 **Why this is a follow-on, not in-flight work:** pre-production means the schema **drop-recreates with no
 migration or backfill** (CLAUDE.md §3), so there is **no cost saving** from forcing an un-pinnable schema
@@ -107,14 +107,14 @@ join table vs. an implicit "any active agent at the location serves `network_tcp
 ### 4b. Agents pull from the till's `[local → cloud]` failover list
 
 An agent walks the **same ordered node list the till uses** (`[primary → secondary → cloud]`,
-[failover §8](2026-08-01-local-server-sif-and-failover-design.md); the till-side list is itself spec-only
+failover §8; the till-side list is itself spec-only
 today, [backlog](../../backlog.md) #8) and pulls from the first reachable node.
 
 **This does *not* require the outbox to be replicated across nodes.** On failover the till fires to the
 cloud and the cloud **enqueues into its own outbox**; an agent that has also failed over to pull from
 that same node consumes the job it created — creation and delivery happen on **one** acting node. The
 printing spec deferred *general* multi-node routing (a job enqueued on A, delivered from B) to
-replication ([§4:170-173](2026-08-17-printing-subsystem-design.md)); **failover is the narrower
+replication (§4:170-173); **failover is the narrower
 "everyone converges on one acting node" case**, which is why it lands earlier and cheaper. Jobs queued on
 the dead box before it died are stranded — recovered by re-firing from the replicated *order*, not the
 outbox (§5).
@@ -132,7 +132,7 @@ deferred it; corrected once the single-box majority was back in view.)
 
 This makes a **till** one of the runtime's hosts. A browser PWA cannot open a raw socket or USB, so it
 requires the till's **native on-device agent**
-([topology §2](2026-08-15-distribution-and-client-topology-design.md); **no spec yet**) — the *same*
+(topology §2; **no spec yet**) — the *same*
 agent the topology already wants for failover routing and the offline queue, given one more job, not a
 new native component. A USB printer plugged into that till, or an IP printer it can reach, then survives
 box death for as long as the till is up.
@@ -140,14 +140,14 @@ box death for as long as the till is up.
 **What actually gates it — the native app.** The on-device agent is not a standalone spec you can just
 move up the queue: it **requires a native app** on the till (a browser PWA cannot open a raw socket or
 USB), and going native is a **per-OS strategic decision** the topology design frames on its own
-([topology §2, PWA-vs-native](2026-08-15-distribution-and-client-topology-design.md)). So the till
+(topology §2, PWA-vs-native). So the till
 print-agent is **parked behind the go-native decision** — high in *importance* (the majority venue's
 box-death path) but unable to precede the native app. Until that lands, a single-box venue's only
 box-death options are a second box (most won't have) or `cloud_poll` (demoted), so **interim single-box
 venues have no till path to box-death printing** — an honest consequence of the native-app gate.
 
 > **Resolved 2026-09-05 (owner decision, Track B decision (i);
-> [`2026-09-05-till-reroute-route-decision.md`](2026-09-05-till-reroute-route-decision.md)).** The
+> `2026-09-05-till-reroute-route-decision.md`).** The
 > native on-device agent is built from the start — headless, outbound-only, hardware only, printing
 > first — because the cloud-only minimum setup (a cloud server, phones as handhelds, any POS device,
 > a printer the venue already owns) needs it on the POS device. Routing stays in the till web app, so
@@ -185,7 +185,7 @@ scope, `runtime.ts:147`.)
 
 **Gap 2 — a terminally `failed` job is only *passively* surfaced.** After the cap a job is `failed` and
 appears on the management dashboard's failing-printer surface
-([printing §6](2026-08-17-printing-subsystem-design.md)) — which nobody watches during a rush. **Fix —
+(printing §6) — which nobody watches during a rush. **Fix —
 active escalation to the operator who fired it, at the till/KDS:** *"ticket didn't print — reprint /
 acknowledge / hand-write it,"* with the dashboard as the secondary view. This is the human half of the
 guarantee and is **Slice-B (KDS) + counter-receipt** work, not the base subsystem.
@@ -202,7 +202,7 @@ paper, jammed, or powered off *after* accepting the socket can swallow a job tha
 raw ESC/POS returns no printer-side ack. The one transport that **does** confirm physical completion is
 **`cloud_poll`**: the CloudPRNT / Server-Direct-Print protocol has the printer signal completion back
 after printing (Star's `POST`-poll → `GET`-job → **`DELETE`-complete** leg,
-[distribution §16](2026-08-15-distribution-and-client-topology-design.md)) — a genuine point in its
+distribution §16) — a genuine point in its
 favour despite the demotion (§6). For raw printers, surface printer **health** (paper-out / cover-open,
 where the printer reports it via status-back) rather than claim per-job physical confirmation.
 
@@ -211,7 +211,7 @@ where the printer reports it via status-back) rather than claim per-job physical
 **Owner decision (2026-08-26): keep `cloud_poll` on the roadmap but well down the priority list;** local
 agents on boxes (and later tills) give more coverage without a hardware dependency. The subsystem already
 carries the `cloud_poll` enum value and `poll_*` columns
-([printers.ts](2026-08-17-printing-subsystem-design.md)), so enabling it later is an adapter + a poll
+(printers.ts), so enabling it later is an adapter + a poll
 endpoint — **no schema change**.
 
 Where it *would* fit, when built: it is the **no-local-compute** route to surviving **box death** — the
@@ -252,7 +252,7 @@ necessary, but **not sufficient** under a real partition where different clients
 **Owner request (2026-08-26): split-brain needs its own detailed examination across the whole
 active-active model — not scoped to printing.** Recorded as a [backlog](../../backlog.md) item under the
 distribution/failover track; this section is only the pointer. It touches selling, the fiscal chain
-(new-chain-on-partition is already the fiscal safety valve, [failover §8](2026-08-01-local-server-sif-and-failover-design.md)),
+(new-chain-on-partition is already the fiscal safety valve, failover §8),
 payments (`resolvePending` partitioning), and printing alike.
 
 ## 9. Sequencing / dependencies
@@ -289,7 +289,7 @@ that does. No implementation plan is written for the follow-ons now.
   eligible). Long enough not to reclaim a slow-but-live push; short enough that a real drop is caught
   within a service.
 - **Agent node-down detection (4b):** reuse the till's "N consecutive failures then fail over"
-  ([topology §3](2026-08-15-distribution-and-client-topology-design.md)) verbatim, or a printing-specific
+  (topology §3) verbatim, or a printing-specific
   threshold? Default: reuse, especially when co-hosted in the till's agent.
 - **Epson "forwarding"** (§6) — printer-to-printer vs. server-URL — to confirm from the manual before any
   reliance.
@@ -302,7 +302,7 @@ over the same pull endpoint**: a notification that only says *"pull now"* (**SSE
 WebSockets** — server→agent only, plain HTTP, auto-reconnect; WebSockets add a bidirectional channel this
 use has no need for), with **the pull staying the source of truth** so the atomic claim, never-block and
 single-writer guarantees are untouched, and it **degrades to polling** if the doorbell drops. The
-**dedicated single-tenant server** ([failover §9](2026-08-01-local-server-sif-and-failover-design.md))
+**dedicated single-tenant server** (failover §9)
 keeps this cheap — enqueue and the held connection share one process, so no cross-instance pub/sub
 (Redis / `LISTEN`-`NOTIFY`) is needed. **Non-breaking to add later**; the only thing to hold to now is
 that the pull endpoint is authoritative and any notify channel is a hint over it.
@@ -317,15 +317,15 @@ Designed 2026-08-26 against the live tree and the in-flight `feat/printing-subsy
 `queued`/`failed`-only pull, the absent lease column, and the `RECLAIM NUANCE` (failed-retry, not
 stuck-`printing`) — `packages/db/src/schema/print-jobs.ts` (no `claimed_at`),
 `packages/printing/src/runtime.ts:97-104,147`; the outbox + never-block + deferred multi-node routing —
-[printing subsystem design](2026-08-17-printing-subsystem-design.md) §3c, §4:170-173, §3e, §6 (dashboard
+printing subsystem design §3c, §4:170-173, §3e, §6 (dashboard
 failing-printer surface); the failover list + new-chain-on-partition —
-[local-server SIF + failover design](2026-08-01-local-server-sif-and-failover-design.md) §8; the
+local-server SIF + failover design §8; the
 on-device agent + PWA-vs-native native-app cost, the browser-cannot-raw-socket + poll-the-cloud rows,
 and CloudPRNT `DELETE`-complete —
-[distribution/client-topology design](2026-08-15-distribution-and-client-topology-design.md) §2
+distribution/client-topology design §2
 (agent + native), §5 (bridge / NAT, :262-289), §16; the tunnel is the path *to* the box, not a failover
 path —
-[management dashboard design](2026-08-07-management-dashboard-design.md) §5 (T1 blind tunnel, T3
+management dashboard design §5 (T1 blind tunnel, T3
 read-mirror); pre-production drop-recreate / no backfill — CLAUDE.md §3.
 
 **External (vendor, quoted per CLAUDE.md §1):**

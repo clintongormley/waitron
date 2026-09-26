@@ -1,7 +1,7 @@
 # Printing — the `cloud_poll` transport (Star CloudPRNT)
 
 **Date:** 2026-08-17. **Status:** design (approved with the owner); plan alongside. **Track:** the
-fast-follow transport for the [printing subsystem](2026-08-17-printing-subsystem-design.md) (Slice A).
+fast-follow transport for the printing subsystem (Slice A).
 **Runs SUPERVISED**. Adds the third transport the abstraction was built to carry.
 
 Slice A built `usb` + `network_tcp` — both **pushed** by a local print agent. A `cloud_poll` printer

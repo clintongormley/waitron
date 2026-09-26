@@ -22,7 +22,7 @@ and Q18 (*modelo 303* IVA soportado) were added on 2026-08-26; Q16 was sharpened
 substantive pass **2026-08-01**.
 
 > **2026-09-09:** Added the separate preparation-environment question below for
-> [node onboarding](../superpowers/specs/2026-09-09-node-onboarding-design.md). This does not
+> node onboarding. This does not
 > reopen the settled treatment of training invoices issued by an operational live SIF.
 
 > **⚠ Read before sending, 2026-08-01.** Two architecture designs and one research pass have moved
@@ -39,7 +39,7 @@ substantive pass **2026-08-01**.
 > DGT consultas were read via reproduction because PETETE failed TLS validation; confirm the exact
 > wording on PETETE if an asesor engages.)
 >
-> **① Server-as-SIF** ([`../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md`](../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md), #33).
+> **① Server-as-SIF** (`../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md`, #33).
 > The unit AEAT holds responsible for issuing invoices — the SIF — is the **local server**, not the
 > till. Consequences for this list:
 >
@@ -57,7 +57,7 @@ substantive pass **2026-08-01**.
 >   the **normal** operating state, not a disaster edge, so it must be answered before those topologies
 >   are offered. This absorbs the cloud-custody angle of Q11/Q12 (design §13, §9).
 >
-> **② Cloud storage** ([`../superpowers/specs/2026-07-31-cloud-storage-model-design.md`](../superpowers/specs/2026-07-31-cloud-storage-model-design.md), #19).
+> **② Cloud storage** ([`../superpowers/specs/2026-07-31-cloud-storage-model-design.md`](https://github.com/waitron-io/waitron-cloud/blob/main/docs/reference/2026-07-31-cloud-storage-model-design.md), #19).
 > The cloud is a **sync root, not a system of record**: it never holds the key ring, the fiscal
 > certificate stays on the client's own local server (the SIF, per #33) sealed under a key ring only
 > they hold, and the local server always submits. So any question premised on Waitron **hosting the
@@ -90,7 +90,7 @@ substantive pass **2026-08-01**.
 >   asesor must confirm **before the first LIVE filing** (a foreign-recipient `IDType` shape and an
 >   XSD confirmation for F3; the prorrata base treatment for 303).
 > - **Q16 sharpened, not rewritten.** The distribution & client-topology design
->   ([`../superpowers/specs/2026-08-15-distribution-and-client-topology-design.md`](../superpowers/specs/2026-08-15-distribution-and-client-topology-design.md), #86)
+>   (`../superpowers/specs/2026-08-15-distribution-and-client-topology-design.md`, #86)
 >   makes cloud-hosted a first-class **planned** mode, so Q16 is no longer the hypothetical
 >   "only if a topology is offered" it was written as — it **gates a mode already on the roadmap**.
 >   Draw the line at production: the cloud **trial** on-ramp (preproduction, shared demo tenant, no
@@ -182,7 +182,7 @@ that Q1, Q2 and Q9(b) have all come off the list.
 > SIF, so whether a *till* qualifies as one no longer arises; the already-closed **Q2** (relayed
 > submission) becomes non-load-bearing; and **Q5(a)** (one series per till) is reshaped — a series now
 > belongs to the server-SIF, and two concurrent SIFs must issue under disjoint series. See
-> [`../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md`](../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md)
+> `../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md`
 > §§1, 3, 11. A full re-read of this list against the new architecture is a backlog task.
 
 > 🟢 **CLOSED 2026-07-27 on primary source, same trip as Q2.** The developer FAQ answers the
@@ -410,7 +410,7 @@ with one reliable till and one in a dead spot is a realistic configuration.
 > [verifactu-findings.md §10.1](verifactu-findings.md). Do not re-ask (b).
 
 > **(a) reshaped by server-as-SIF, 2026-08-01 (#33).** The subject of (a) has changed: under
-> [`../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md`](../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md)
+> `../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md`
 > a series belongs to the **server**-SIF, not the till, so "one series per till" is no longer the
 > shape to ask about. What replaces it is a **hard architectural constraint, not an open question**: a
 > venue runs **two** concurrent SIFs (active-active), and AEAT identifies a record by the triple
@@ -1023,7 +1023,7 @@ that muddies the one that matters. Given the exposure, a lawyer rather than a ge
 > **Premise largely retired, 2026-08-01 (#19 / #33). Do not ask as written.** This question assumes
 > Waitron **hosts and operates the client's fiscal system** — the Spanish text below says so in as
 > many words (*"ese servidor lo operamos nosotros, no el cliente"*). The
-> [cloud-storage design](../superpowers/specs/2026-07-31-cloud-storage-model-design.md) (#19) abolishes
+> [cloud-storage design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/reference/2026-07-31-cloud-storage-model-design.md) (#19) abolishes
 > that as the default: the cloud never holds the key ring, the fiscal certificate stays on the
 > **client's own local server**, which is the SIF (#33) and always submits. So in the default
 > architecture there is no third-party key custody to ask about. Custody by Waitron **re-emerges only
@@ -1079,7 +1079,7 @@ load-bearing or merely tidy.
 
 > **Premise largely retired, 2026-08-01 (#19 / #33). Do not ask as written.** Like Q11, this assumes
 > Waitron **hosts** the client's fiscal system (*"la clave privada se genera y permanece en la
-> infraestructura que nosotros operamos"*). Under the [cloud-storage default](../superpowers/specs/2026-07-31-cloud-storage-model-design.md)
+> infraestructura que nosotros operamos"*). Under the [cloud-storage default](https://github.com/waitron-io/waitron-cloud/blob/main/docs/reference/2026-07-31-cloud-storage-model-design.md)
 > (#19) the client's own local server is the SIF and submits under the client's own certificate — the
 > convenio-017 "provider submits under its own certificate" model is not in play. It **re-emerges only
 > in the opt-in cloud-primary/standalone topology**, which is exactly the new **Q16**. The convenio
@@ -1145,11 +1145,11 @@ mechanics). The convenio side can be asked directly at `comunicacion.sepri@corre
 > **production-cloud-primary**, which issues real invoices from a cloud we operate, does. Left as
 > written below per `CLAUDE.md` §6.
 
-**Why it matters.** [cloud-storage §8a](../superpowers/specs/2026-07-31-cloud-storage-model-design.md)
+**Why it matters.** [cloud-storage §8a](https://github.com/waitron-io/waitron-cloud/blob/main/docs/reference/2026-07-31-cloud-storage-model-design.md)
 constrains where the cloud may **conserve** records: records kept outside Spain trigger a
 prior-notification duty on the client (ROF art. 22.2), and outside the EU is more restricted
 (art. 19.4). That analysis leaned on *"the archive is not a SIF."* The
-[server-as-SIF design](../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md) §13
+server-as-SIF design §13
 raises the stronger case: a cloud server that **issues** invoices *is* the SIF, operating the
 invoicing system abroad, not merely holding a copy of its output. Under the tertiary/disaster default
 that is an edge; under a **cloud-primary or standalone** topology it is the **normal operating
@@ -1239,7 +1239,7 @@ first real F3 is filed:
 
 **Why it matters.** We generate the *modelo 303* from issued invoices (IVA repercutido) and captured
 received invoices (IVA soportado deducible), and emit the DR303 file for the AEAT "por fichero"
-uploader (#91/#98, [design](../superpowers/specs/2026-08-16-purchase-invoices-and-modelo-303-deducible-design.md)).
+uploader (#91/#98, design).
 The output-VAT side is settled on primary source; the input-VAT side rests on two interpretive points
 plus the treatment of boxes not yet implemented. **(a) is the pre-filing blocker** — the whole
 deducible figure turns on it:
@@ -1403,7 +1403,7 @@ streams each venue's database, fiscal records included, to an S3-compatible buck
 supplies**, with any provider, so the copy may sit outside Spain; a dead box is rebuilt from it under a
 fresh chain. Waitron Cloud's own bucket plugs into the same setting later; the owner decision that
 closed Q16 places cloud instances in Spain, and the Spanish text below assumes the bucket follows. This revives two of the three ROF questions in
-[cloud-storage §8a](../superpowers/specs/2026-07-31-cloud-storage-model-design.md) for a shape that
+[cloud-storage §8a](https://github.com/waitron-io/waitron-cloud/blob/main/docs/reference/2026-07-31-cloud-storage-model-design.md) for a shape that
 spec did not have: the owner's own bucket abroad, and our bucket as holder.
 
 > Estamos desarrollando una copia continua de la base de datos de cada local, registros de

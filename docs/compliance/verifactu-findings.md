@@ -17,7 +17,7 @@ This is the single most important correction to the original design assumption.
 
 > **Design pointer, 2026-08-01 (#33).** The primary-source finding in this section — one chain per
 > SIF, and per-till chains lawful *because each till is its own SIF* — is unchanged. What the
-> [server-as-SIF design](../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md)
+> server-as-SIF design
 > (#33) decides is *which node Waitron treats as the SIF*: the **local server**, not the till. The
 > intended topology is therefore one chain per **server**, with a venue running two concurrent
 > server-SIFs that must issue under disjoint series (see [asesor-questions.md](asesor-questions.md)'s
@@ -938,7 +938,7 @@ above is citable.**
 
 **Why this was checked.** Card payments run through the SumUp Solo, which has no printer, so the card
 details were put on the fiscal ticket ([§14](#14-factura-simplificada-content), design
-[2026-09-11-card-receipt-tender-details-design.md](../superpowers/specs/2026-09-11-card-receipt-tender-details-design.md)).
+2026-09-11-card-receipt-tender-details-design.md).
 The owner then asked what happens when three guests split one bill — three copies of the invoice, one
 each, or something else — and whether a card slip is legally required at all. Answered on primary
 source: BOE consolidated texts fetched 2026-09-12, and the DGT consulta read on PETETE itself.

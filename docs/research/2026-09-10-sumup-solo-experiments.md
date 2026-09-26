@@ -18,7 +18,7 @@ result that looks the same either way is recognised as measuring nothing. When y
 _Result_, copy the actual output; do not paraphrase it into the answer you hoped for.
 
 What goes back into the code afterwards: the provider spec's §7 list
-([2026-07-30-sumup-card-present-provider-design.md](../superpowers/specs/2026-07-30-sumup-card-present-provider-design.md))
+(2026-07-30-sumup-card-present-provider-design.md)
 gets one dated line per item, quoting the _Result_ here. The spec is not rewritten; it records what
 was true when written, and this file is the receipt.
 
@@ -283,7 +283,7 @@ mis-keyed PIN), but the transaction it left answers the question:
 
 - `entry_mode` for a contact read is `"chip"` (contactless was `"contactless"` in 0.6). Those are the
   two the card-receipt adapter maps to themselves; `magstripe`/`swipe → swipe`, everything else →
-  `unknown` ([card-receipt design §4.2](../superpowers/specs/2026-09-11-card-receipt-tender-details-design.md)).
+  `unknown` (card-receipt design §4.2).
 - A `FAILED` transaction still carries `card` and `entry_mode` but `auth_code: null`. The design
   renders a card block only on a `captured` result, so a failed payment yields no receipt — this is a
   confirmation, not a requirement.

@@ -111,7 +111,7 @@ If it holds, the agreed shape is a snapshot at each pre-bill print, a diff per a
 and nothing logged before the first print — AEAT is explicit that pre-issuance changes are
 *«perfectamente lícita»*, and the order itself may stay mutable provided amendments are annotated.
 It was deliberately **not** built with
-[the settlement model](2026-07-31-sale-settlement-model-design.md), because a log with no producer
+the settlement model, because a log with no producer
 cannot be shown to work.
 
 ### Sequencing notes
@@ -465,7 +465,7 @@ número de instalación.
 
 > **Promoted to the primary model, 2026-08-01 (#33).** This fallback is now *the* design, not a hedge
 > — see
-> [`2026-08-01-local-server-sif-and-failover-design.md`](2026-08-01-local-server-sif-and-failover-design.md),
+> `2026-08-01-local-server-sif-and-failover-design.md`,
 > which works out active-active operation, failover, and the division of labour between servers. The
 > section below is left as written, per `CLAUDE.md` §6.
 

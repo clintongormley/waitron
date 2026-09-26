@@ -368,7 +368,7 @@ Architecture §9 records that production numbering can never be reused even for 
 this is the one default in the file whose mistake is irreversible.
 
 > **2026-07-29 note:** `WAITRON_AEAT_ENV` was replaced by `WAITRON_ENV` — see the
-> [deployment-environment design](./2026-07-29-deployment-environment-design.md). It now governs the
+> deployment-environment design. It now governs the
 > Stripe key mode a tenant's credential must match as well as the AEAT endpoint family; the table
 > row and this paragraph are left as they were written.
 

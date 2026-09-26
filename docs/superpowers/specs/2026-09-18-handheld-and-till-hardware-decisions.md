@@ -8,7 +8,7 @@ re-researched or re-argued.
 **Supersedes two earlier decisions:** the "most waiters will use their own phones" decision in
 [2026-09-08-handheld-app-store-and-kiosk-findings.md](2026-09-08-handheld-app-store-and-kiosk-findings.md)
 §4, and this document's §5 revises the "keep the SIF box separate from any till" lean in
-[2026-08-15-distribution-and-client-topology-design.md](2026-08-15-distribution-and-client-topology-design.md)
+2026-08-15-distribution-and-client-topology-design.md
 §8. Companion to the buying doc,
 [2026-07-30-deli-hardware-design.md](2026-07-30-deli-hardware-design.md), whose buy-list rows this
 changes (§7).
