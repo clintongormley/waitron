@@ -435,7 +435,11 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
     ["send-lines", { lineNos: [] }, "sendLines"],
     ["recall-lines", { lineNos: [1] }, "recallLines"],
     ["void-line", { lineNo: 1 }, "voidLine"],
-    ["change-line", { lineNo: 1, patch: { note: "sin sal" }, revision: 0 }, "updateOrderLine"],
+    [
+      "change-line",
+      { lineNo: 1, lineName: "Café", patch: { note: "sin sal" }, revision: 0 },
+      "updateOrderLine",
+    ],
     ["set-status", { statusId: "s1" }, "setTableStatus"],
     ["move-tab", { toTableId: "t9" }, "moveTab"],
     ["join-table", { tableId: "t9" }, "joinTable"],
@@ -463,7 +467,11 @@ describe("till-app table ordering: refused and failed table actions", () => {
     ["send-round", { lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1" }] }, "addTabRound"],
     ["recall-lines", { lineNos: [1] }, "recallLines"],
     ["void-line", { lineNo: 1 }, "voidLine"],
-    ["change-line", { lineNo: 1, patch: { note: "sin sal" }, revision: 0 }, "updateOrderLine"],
+    [
+      "change-line",
+      { lineNo: 1, lineName: "Café", patch: { note: "sin sal" }, revision: 0 },
+      "updateOrderLine",
+    ],
     ["serve-line", { lineNo: 1 }, "markLineServed"],
     ["send-lines", { lineNos: [] }, "sendLines"],
     ["transfer-lines", { toTabId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferLines"],
@@ -606,7 +614,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     menuItemId: "menu-item-burger",
     parentProductId: null,
   };
-  const change = { lineNo: 5, patch: { note: "no onions" }, revision: 7 };
+  const change = { lineNo: 5, lineName: "Burger", patch: { note: "no onions" }, revision: 7 };
 
   async function openBurgerTab(overrides: Record<string, unknown> = {}) {
     const { el } = await mountApp({
@@ -784,38 +792,83 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(dialogOf(tableOrder(el)!).open).toBe(false);
   });
 
-  it("drops a refusal that arrives after the waiter has moved to another table", async () => {
+  describe("an answer that arrives after the waiter has moved to another table", () => {
     const otherTable: TableState = { ...openTable, id: "t3", label: "3", tabId: "wo-8" };
     const otherLine: TabLine = { ...burgerLine, name: "Tarta", state: "preparing" };
-    let refuse!: (reason: unknown) => void;
-    const { el, screen } = await openBurgerTab({
-      getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
-      getTabLines: vi.fn((orderId: string) =>
-        Promise.resolve({
-          lines: [orderId === "wo-8" ? otherLine : burgerLine],
-          revision: orderId === "wo-8" ? 2 : 7,
-          editSentLines: true,
-        }),
-      ),
-      updateOrderLine: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+
+    /** Sends a change on table 2, then opens table 3 before the server answers it. */
+    async function changeThenOpenTable3() {
+      let settle!: { resolve: (value: unknown) => void; reject: (reason: unknown) => void };
+      const { el, screen } = await openBurgerTab({
+        getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
+        getTabLines: vi.fn((orderId: string) =>
+          Promise.resolve({
+            lines: [orderId === "wo-8" ? otherLine : burgerLine],
+            revision: orderId === "wo-8" ? 2 : 7,
+            editSentLines: true,
+          }),
+        ),
+        updateOrderLine: vi.fn(
+          () => new Promise((resolve, reject) => (settle = { resolve, reject })),
+        ),
+      });
+      emit(screen, "change-line", change);
+      await flush(el);
+      emit(screen, "back-to-floor");
+      await flush(el);
+      await openFromFloor(el, otherTable);
+      await flush(el);
+      expect(tableOrder(el)!.orderId).toBe("wo-8");
+      return { el, settle, reads: vi.mocked(api.getTabLines).mock.calls.length };
+    }
+
+    it("says the change to the old table's line was refused, and touches nothing on the new table", async () => {
+      const { el, settle, reads } = await changeThenOpenTable3();
+
+      settle.reject({ code: "ticket.already_started" });
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(
+        "Tu cambio en Burger de la mesa 2 no se ha guardado. La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
+      );
+      expect(banner(el)!.textContent).not.toContain("Tarta");
+      expect(dialogOf(tableOrder(el)!).open).toBe(false);
+      expect(tableOrder(el)!.revision).toBe(2);
+      expect(api.getTabLines).toHaveBeenCalledTimes(reads);
     });
 
-    emit(screen, "change-line", change);
-    await flush(el);
-    emit(screen, "back-to-floor");
-    await flush(el);
-    await openFromFloor(el, otherTable);
-    await flush(el);
-    expect(tableOrder(el)!.orderId).toBe("wo-8");
-    const reads = vi.mocked(api.getTabLines).mock.calls.length;
+    it("says it cannot tell whether the change was saved when the server did not answer", async () => {
+      const { el, settle } = await changeThenOpenTable3();
 
-    refuse({ code: "ticket.already_started" });
-    await flush(el);
+      settle.reject(new TypeError("Failed to fetch"));
+      await flush(el);
 
-    expect(dialogOf(tableOrder(el)!).open).toBe(false);
-    expect(tableOrder(el)!.revision).toBe(2);
-    expect(api.getTabLines).toHaveBeenCalledTimes(reads);
-    expect(banner(el)).toBeNull();
+      expect(banner(el)!.textContent).toContain(
+        "El servidor no respondió a tu cambio en Burger de la mesa 2. Abre esa mesa y comprueba si se guardó.",
+      );
+    });
+
+    it("says the change was not saved, in general words, when the failure names no reason", async () => {
+      const { el, settle } = await changeThenOpenTable3();
+
+      settle.reject(new Error("unexpected"));
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(
+        "Tu cambio en Burger de la mesa 2 no se ha guardado. Algo salió mal, inténtalo de nuevo",
+      );
+    });
+
+    it("says nothing when the change was saved", async () => {
+      const { el, settle, reads } = await changeThenOpenTable3();
+
+      settle.resolve({ revision: 8 });
+      await flush(el);
+
+      expect(banner(el)).toBeNull();
+      expect(tableOrder(el)!.revision).toBe(2);
+      expect(api.getTabLines).toHaveBeenCalledTimes(reads);
+    });
   });
 
   it("offers no Cancel when the waiter moves to another table while the refused line reloads", async () => {

@@ -60,6 +60,8 @@ export type { TableServiceStatus };
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
 export interface ChangeLineDetail {
   lineNo: number;
+  /** The line's staff name, for a message about the change shown once another order is open. */
+  lineName: string;
   patch: OrderLinePatch;
   revision: number;
 }
@@ -935,7 +937,12 @@ export class TillTableOrderScreen extends LitElement {
     if (offered.some((entry) => entry.kind === "options")) patch.options = detail.options ?? [];
     if (offered.some((entry) => entry.kind === "extras"))
       patch.extras = toWireModifiers({ extras: detail.extras }).extras ?? [];
-    const change: ChangeLineDetail = { lineNo: line.lineNo, patch, revision: this.#changeRevision };
+    const change: ChangeLineDetail = {
+      lineNo: line.lineNo,
+      lineName: this.#nameForLine(line),
+      patch,
+      revision: this.#changeRevision,
+    };
     this.dispatchEvent(
       new CustomEvent("change-line", { detail: change, bubbles: true, composed: true }),
     );

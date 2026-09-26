@@ -1129,7 +1129,12 @@ describe("till-table-order-screen", () => {
       picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
       await el.updateComplete;
 
-      expect(seen.event!.detail).toEqual({ lineNo: 5, patch: { note: "no onions" }, revision: 7 });
+      expect(seen.event!.detail).toEqual({
+        lineNo: 5,
+        lineName: "Burger",
+        patch: { note: "no onions" },
+        revision: 7,
+      });
       expect(seen.event!.bubbles).toBe(true);
       expect(seen.event!.composed).toBe(true);
       expect(editor(el)).toBeNull();
@@ -1186,6 +1191,7 @@ describe("till-table-order-screen", () => {
       picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
       expect(seen.event!.detail).toEqual({
         lineNo: 5,
+        lineName: "Burger",
         revision: 3,
         patch: {
           note: "sin sal",
@@ -1319,6 +1325,7 @@ describe("till-table-order-screen", () => {
       await typeNote(picker, "sin pepinillo");
       picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
       expect(seen.event!.detail.patch).toEqual({ note: "sin pepinillo" });
+      expect(seen.event!.detail.lineName).toBe("Grande");
     });
 
     it("closing the editor changes nothing", async () => {

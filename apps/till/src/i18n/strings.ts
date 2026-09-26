@@ -272,6 +272,10 @@ export const en = {
   "table.cancel_one_of": "Cancel 1 of {n}?",
   "table.cancel_one": "Cancel 1",
   "table.cancel_all": "Cancel all",
+  // `{line}`, `{table}` and `{reason}` are substituted at the call site; `t()` does not interpolate.
+  "table.change_not_saved": "Your change to {line} on table {table} was not saved. {reason}",
+  "table.change_unconfirmed":
+    "The server did not answer your change to {line} on table {table}. Open that table and check whether it was saved.",
   // Table actions
   "table.actions_title": "Table actions",
   "table.action_move": "Move to table",
@@ -592,6 +596,9 @@ export const es: Record<StringKey, string> = {
   "table.cancel_one_of": "¿Cancelar 1 de {n}?",
   "table.cancel_one": "Cancelar 1",
   "table.cancel_all": "Cancelar todos",
+  "table.change_not_saved": "Tu cambio en {line} de la mesa {table} no se ha guardado. {reason}",
+  "table.change_unconfirmed":
+    "El servidor no respondió a tu cambio en {line} de la mesa {table}. Abre esa mesa y comprueba si se guardó.",
   "table.actions_title": "Acciones de mesa",
   "table.action_move": "Mover a mesa",
   "table.action_join": "Unir una mesa",

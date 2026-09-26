@@ -147,8 +147,26 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
   return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? { code } : fallback;
 }
 
-/** A banner's string key, or a refusal shown through its code's own message. */
-type CounterError = StringKey | { code: string };
+/** A change to a line of an order that is no longer open on screen, and how it failed. */
+interface LateChange {
+  lineName: string;
+  tableLabel: string;
+  /** The server gave no answer, so the change may have been saved. */
+  unanswered: boolean;
+  code?: string;
+}
+
+function lateChangeMessage(late: LateChange): string {
+  // Replacer functions, so a `$` in a name is never read as a replacement pattern.
+  const text = t(late.unanswered ? "table.change_unconfirmed" : "table.change_not_saved")
+    .replace("{line}", () => late.lineName)
+    .replace("{table}", () => late.tableLabel);
+  return text.replace("{reason}", () => codeMessage(late.code ?? "server.internal"));
+}
+
+/** A banner's string key, a refusal shown through its code's own message, or a change that failed
+ * after its order left the screen. */
+type CounterError = StringKey | { code: string } | { lateChange: LateChange };
 
 function isPermanentSaleRefusal(error: unknown): boolean {
   const code = (error as { code?: string }).code;
@@ -1715,13 +1733,15 @@ export class TillApp extends LitElement {
   /**
    * The reload runs on every path, so the line shows what the server stored and a refused change
    * leaves no stale actions. A change refused because the kitchen has started the line offers to
-   * cancel it after the reload. An answer that arrives once another order is open is dropped whole:
-   * its revision, message, reload and line number all belong to the order it was sent for.
+   * cancel it after the reload. An answer that arrives once another order is open changes nothing on
+   * screen but the message: a failure is still said, naming the line and table it was for, because the
+   * waiter may believe a note (an allergy, say) was saved.
    */
   async #onChangeLine(event: Event): Promise<void> {
-    const { lineNo, patch, revision } = (event as CustomEvent<ChangeLineDetail>).detail;
+    const { lineNo, lineName, patch, revision } = (event as CustomEvent<ChangeLineDetail>).detail;
     const orderId = this.activeTabId;
     if (orderId === undefined) return;
+    const tableLabel = this.tables.find((table) => table.id === this.activeTableId)?.label ?? "";
     this.errorKey = undefined;
     this.cancelOffer = null;
     let outcome: { saved: { revision: number } } | { error: unknown };
@@ -1730,7 +1750,16 @@ export class TillApp extends LitElement {
     } catch (error) {
       outcome = { error };
     }
-    if (this.activeTabId !== orderId) return;
+    if (this.activeTabId !== orderId) {
+      if ("error" in outcome) {
+        const unanswered = isNetworkFailure(outcome.error);
+        const code = (outcome.error as { code?: string } | undefined)?.code;
+        this.errorKey = {
+          lateChange: { lineName, tableLabel, unanswered, ...(code === undefined ? {} : { code }) },
+        };
+      }
+      return;
+    }
     let refusal: string | undefined;
     if ("saved" in outcome) {
       this.tabRevision = outcome.saved.revision;
@@ -2245,7 +2274,9 @@ export class TillApp extends LitElement {
                 ${
                   typeof this.errorKey === "string"
                     ? t(this.errorKey)
-                    : codeMessage(this.errorKey.code)
+                    : "code" in this.errorKey
+                      ? codeMessage(this.errorKey.code)
+                      : lateChangeMessage(this.errorKey.lateChange)
                 }
               </p>`
             : nothing
