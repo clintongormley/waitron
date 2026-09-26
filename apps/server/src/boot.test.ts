@@ -3571,36 +3571,44 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     });
     try {
       await withCapturedStdout(async (lines) => {
-        await withSetupBoot(venue.directory, { WAITRON_LOG_DIR: logDir }, async ({ post }) => {
-          const restore = async (code: string) => {
-            refusal = code;
-            const response = await post("/setup-api/restore-bucket", {
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ kit, environment: "preproduction" }),
-            });
-            expect(response.status).toBe(502);
-            return response.text();
-          };
-          for (const code of [
-            "ProviderSpecificRefusal",
-            "sk_live_0123456789abcdefSECRET",
-            "&lt;script&gt;alert(1)&lt;/script&gt;",
-          ]) {
-            const body = await restore(code);
-            expect(JSON.parse(body)).toMatchObject({
-              error: {
-                code: "backup.stream_request_failed",
-                params: { status: 403, name: "other" },
-              },
-            });
-            for (const raw of ["ProviderSpecificRefusal", "sk_live_", "script"]) {
-              expect(body).not.toContain(raw);
+        await withSetupBoot(
+          venue.directory,
+          { WAITRON_LOG_DIR: logDir },
+          async ({ post, kills, stateDir }) => {
+            const restore = async (code: string) => {
+              refusal = code;
+              const response = await post("/setup-api/restore-bucket", {
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ kit, environment: "preproduction" }),
+              });
+              expect(response.status).toBe(502);
+              return response.text();
+            };
+            for (const code of [
+              "ProviderSpecificRefusal",
+              "sk_live_0123456789abcdefSECRET",
+              "&lt;script&gt;alert(1)&lt;/script&gt;",
+            ]) {
+              const body = await restore(code);
+              expect(JSON.parse(body)).toMatchObject({
+                error: {
+                  code: "backup.stream_request_failed",
+                  params: { status: 403, name: "other" },
+                },
+              });
+              for (const raw of ["ProviderSpecificRefusal", "sk_live_", "script"]) {
+                expect(body).not.toContain(raw);
+              }
             }
-          }
-          expect(JSON.parse(await restore("AccessDenied"))).toMatchObject({
-            error: { params: { status: 403, name: "AccessDenied" } },
-          });
-        });
+            expect(JSON.parse(await restore("AccessDenied"))).toMatchObject({
+              error: { params: { status: 403, name: "AccessDenied" } },
+            });
+            await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
+              code: "ENOENT",
+            });
+            expect(kills).toEqual([]);
+          },
+        );
         const logged = [lines.join("\n"), await readFile(join(logDir, "waitron.log"), "utf8")];
         for (const text of logged) {
           const refusals = text

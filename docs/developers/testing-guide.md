@@ -636,8 +636,10 @@ The cases under "a refusal the bucket answered names its error, from a fixed lis
 the list check taken out (the unlisted names), with a listed name taken off the list (that name's
 case), and with the field taken off the line; a name `s3-store.ts` gives an answer it refused
 through `answerRefused` is typed against the list, so a new one missing from it fails the typecheck
-(TS2345); `requestFailed` still takes any string, so a refusal written with it type-checks, and a
-name it passes that is not on the list is logged as `other` when the line carries a status.
+(TS2345); `requestFailed` still takes any string, so a refusal written with it type-checks, and since
+A62 it stores a name that is not on the list as `other` in the error's params (the cases under
+"the bucket's own error name" in `packages/stream/src/s3-store.test.ts`, at statuses 403 and 200);
+the log line's check runs again over that.
 
 **Why versitygw 1.8.0.** Five candidates were weighed on 2026-09-23. Four were run with the same
 probe: a write "only if absent" over an existing key, a write "only if unchanged" with a stale ETag,

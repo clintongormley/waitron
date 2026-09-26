@@ -26,7 +26,7 @@ describe("loggableErrorName", () => {
     },
   );
 
-  it.each(["Error", "TimeoutError"])("logs the client's own name %s as itself", (name) => {
+  it.each(["Error", "TimeoutError"])("logs the fixed client name %s as itself", (name) => {
     expect(loggableErrorName(name)).toBe(name);
   });
 

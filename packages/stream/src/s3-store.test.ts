@@ -570,9 +570,13 @@ describe("the bucket's own error name", () => {
         body: `<?xml version="1.0" encoding="UTF-8"?><DeleteResult><Error><Key>waitron/a</Key><Code>AccessDenied</Code><Message>no</Message></Error></DeleteResult>`,
       },
     ]);
-    expect((await rejection(store.get("k"))).params).toMatchObject({ name: "AccessDenied" });
-    expect((await rejection(store.deleteMany(["a"]))).params).toMatchObject({
-      name: "AccessDenied",
+    expect(await rejection(store.get("k"))).toEqual({
+      code: "backup.stream_request_failed",
+      params: { operation: "get", key: "k", status: 403, name: "AccessDenied" },
+    });
+    expect(await rejection(store.deleteMany(["a"]))).toEqual({
+      code: "backup.stream_request_failed",
+      params: { operation: "delete", key: "a", status: 200, name: "AccessDenied" },
     });
   });
 
