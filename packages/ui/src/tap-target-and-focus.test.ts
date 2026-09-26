@@ -38,12 +38,13 @@ test("discovers at least one interactive primitive", () => {
   expect(interactiveComponents.length).toBeGreaterThan(0);
 });
 
-test("the interactive set is exactly wt-button, wt-combobox, wt-input, wt-price-input, and wt-switch", () => {
+test("the interactive set is exactly wt-button, wt-combobox, wt-input, wt-number-stepper, wt-price-input, and wt-switch", () => {
   // A primitive leaving or joining the set otherwise changes only how many tests run below.
   expect(interactiveComponents.map(({ tag }) => tag).sort()).toEqual([
     "wt-button",
     "wt-combobox",
     "wt-input",
+    "wt-number-stepper",
     "wt-price-input",
     "wt-switch",
   ]);

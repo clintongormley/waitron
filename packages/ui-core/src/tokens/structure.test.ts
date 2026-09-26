@@ -64,6 +64,15 @@ test("a name cell may grow wider than the controls that sit beside it", () => {
   );
 });
 
+test("a stepper's number box is declared and never narrower than the tap target", () => {
+  // The box is what a wt-number-stepper hands focus to, so it is held to the tap minimum.
+  const el = mount();
+  expect(token(el, "--wt-stepper-field-width")).not.toBe("");
+  expect(parseInt(token(el, "--wt-stepper-field-width"), 10)).toBeGreaterThanOrEqual(
+    parseInt(token(el, "--wt-tap-min"), 10),
+  );
+});
+
 test("minimum tap target is at least 44px", () => {
   const el = mount();
   const tap = parseInt(token(el, "--wt-tap-min"), 10);

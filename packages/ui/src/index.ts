@@ -12,6 +12,7 @@ export { WtCard } from "./components/wt-card.js";
 export { WtDisclosure } from "./components/wt-disclosure.js";
 export { WtInput } from "./components/wt-input.js";
 export { WtPriceInput } from "./components/wt-price-input.js";
+export { WtNumberStepper } from "./components/wt-number-stepper.js";
 export { WtFormActions } from "./components/wt-form-actions.js";
 export { WtFormErrorSummary } from "./components/wt-form-error-summary.js";
 export { WtHelpTooltip } from "./components/wt-help-tooltip.js";

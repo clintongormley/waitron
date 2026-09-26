@@ -58,6 +58,10 @@
      quoting a list of consumers here: it has gone stale once already. */
   --wt-cell-name-max-width: 140px;
 
+  /* Wide enough for four digits, and never below --wt-tap-min: the number box is what a
+     wt-number-stepper hands focus to. */
+  --wt-stepper-field-width: 64px;
+
   --wt-shadow-1: 0 1px 2px rgb(0 0 0 / 0.08);
   --wt-shadow-2: 0 8px 24px rgb(0 0 0 / 0.16);
 
