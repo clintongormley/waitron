@@ -363,9 +363,20 @@ venue-service adds `kitchen_notices` and `service_settings`; the upgrade succeed
 rows written before it misbehave (a dish sent before the upgrade counts as unsent, an extra saved
 before it blocks a one-line edit) — the PR has the measured table; settle open orders or reset
 before upgrading. Golden fingerprint and `inmutabilidad` unedited. Still open: showing notices on
-the kitchen screen (menus Task 7c); a manager clearing a card payment a crash left running (M7b2,
-next in the lane); the `changed` notice kind is declared but nothing writes it.
-Next in the lane (was menus Task 7b): M7b2, then M6c, 7c, 7. The owner lifted the wait: the dependency upgrades are
+the kitchen screen (menus Task 7c); the `changed` notice kind is declared but nothing writes it.
+**M7b2 landed (#702, 2026-09-26): a manager can clear a card payment a crash left running.** The
+Payments screen lists open orders locked by a card payment nothing is finishing any more, and a
+"Check with the card provider" button asks the provider for the payment's own record. If the card
+was charged, the sale is filed once through the existing recovery path. If it was not, the payment
+is cancelled at Stripe and marked failed, and the order is unlocked. If the provider is unreachable
+or unclear, the action refuses and the order stays locked. Stripe Terminal now records its
+PaymentIntent id before the reader is asked to charge, and the Stripe key gains a suffix after a
+cancellation so the order can be paid by card again. Each resolution is recorded, with the
+manager, in the new append-only `payment_resolutions` table. The upgrade adds only that table; it
+was measured, and existing payment rows came through unchanged. Golden fingerprint and
+`inmutabilidad` unedited. What it leaves open is under "What M7b2 left open" in the payments
+section.
+Next in the lane (was M7b2): M6c, then 7c, 7. The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
@@ -2248,8 +2259,8 @@ address that answers is then asked for its paper sizes on port 631.
   - **Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md) is
     approved** (owner, 2026-09-26, PR #698), with the owner's answers to its open points (its §11):
     the cash-up counts money on the day it moves, in Task 14 (§9a), and a card refund is a durable
-    attempt that survives an interrupted call (§6b). Task 14 waits only for its dependencies (Task 2
-    and lane C's M7b2), and its Step 0 checks the providers' documentation and the SumUp endpoint
+    attempt that survives an interrupted call (§6b). Task 14 waits only for its dependencies (Task 2;
+    lane C's M7b2 landed as #702), and its Step 0 checks the providers' documentation and the SumUp endpoint
     before any implementation.
   - **The card refund path records only after the provider call, with a fresh key each time**
     (found by the owner reviewing Task 0, 2026-09-26). `reverseViaStripe`
@@ -2264,7 +2275,7 @@ address that answers is then asked for its paper sizes on port 631.
   - **Task 1** (adjustment reasons and policies, a new module) is the one build task that can start
     now.
   - **Every other task waits for lane C's menus tasks that change the same order and till code**
-    (M7c, M7v, M9, M7b2; M7b landed as #696). Building beside them would collide on
+    (M7c, M7v, M9; M7b landed as #696, M7b2 as #702). Building beside them would collide on
     `apps/server/src/working-order.ts`, the till and the core migrations.
   - **Task 17** (unpaid departure) also waits for asesor Q28.
   - **Asesor questions to send:**
