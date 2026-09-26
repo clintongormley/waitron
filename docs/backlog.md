@@ -2201,18 +2201,27 @@ address that answers is then asked for its paper sizes on port 631.
 
 ### A4. Till, displays and devices
 
-- **Service, ordering and billing: specified; implementation deferred (owner, 2026-09-20).**
-  [Design](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) covers floor/table/tab
-  dashboards and station collection signals, separate staff drafts with takeover, selectable firing
-  groups, editable held work, paper/KDS status limits, guest access, shared bills and contributions,
-  tips, adjustments and approval/reporting. Named courses only organise the initial draft; later
-  additions default to Fire now or explicitly join a held group. Also records public/staff-only/not
-  sold separately ordering, future inventory rules, and the direction away from a general canvas
-  editor toward source-coded screens. Fiscal Q19 remains open. This specifies intended behaviour,
-  not verified features. Wait for SQLite, dependency upgrades and variants/extras-as-products to
-  land (the variants/extras-as-products part has, with branch 2's Task 9, #556;
-  the other two are not recorded here as done), alongside the [menu design](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md),
-  then resolve the listed integration questions before planning.
+- **Service, ordering and billing: planned and queued on lane B (2026-09-26).**
+  [Design](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) (§14 records the
+  owner's decisions of 2026-09-26, what a review against the code found missing, and what the menus
+  work superseded); [plan](superpowers/plans/2026-09-26-service-ordering-and-billing.md), eighteen
+  tasks. Two start now: the payment and billing design (Task 0), and adjustment reasons and policies
+  as a new module (Task 1). Every other task waits for lane C's menus tasks that change the same order
+  and till code (M7c, M7v, M9, M7b2), because building beside them would collide on
+  `apps/server/src/working-order.ts`, the till and the core migrations, and would build on order rules
+  still being decided there. Owner decisions (2026-09-26):
+  - groups replace named courses, and who may release a held group stays a venue setting;
+  - a visit record ties a party's orders and bills and keeps the table occupied until Finish table;
+  - a bill's invoice is issued when it is fully paid, several payments may come before it, and lines
+    can still be split off after a contribution;
+  - discounts reduce the line, and comps show at €0.00 with the original price.
+
+  New asesor questions:
+  [Q27](compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
+  (money before the invoice, then a split; printing the invoice first) and
+  [Q28](compliance/asesor-questions.md#q28-a-table-leaves-without-paying--is-the-invoice-still-owed-added-2026-09-26)
+  (unpaid departure). Q19 stays open. Out of scope for this plan: guest access, inventory, seat and
+  staff assignment, changing the floor layout during service, screen plugins and Bizum.
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
   this is designed. For now, orders remain at table/tab level and staff select items manually
   when splitting bills; seat assignment is not a prerequisite for the service workflow.

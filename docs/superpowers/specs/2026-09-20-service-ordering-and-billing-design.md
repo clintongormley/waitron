@@ -447,3 +447,104 @@ Audit existing behaviour rather than assuming every requirement needs new code. 
 
 Write implementation slices only after those dependencies and questions are addressed. This change
 adds no schema, API, runtime behaviour or production tests.
+
+## 14. Owner decisions and review findings, 2026-09-26
+
+Added after a review of this spec against `main` at `17dd4b147` and lane C's unlanded order-edits
+branch (`feat/menus-order-edits` at `1996d4ce7`). Both audits only read code; nothing was run. The
+implementation plan is
+[2026-09-26-service-ordering-and-billing.md](../plans/2026-09-26-service-ordering-and-billing.md).
+Where this section and §1–§13 disagree, this section wins.
+
+### 14.1 Decisions (owner, 2026-09-26)
+
+1. **Groups replace courses.** A group becomes the kitchen's unit of hold and release. Today's
+   named courses (`kitchen_courses`) survive only as product defaults that pre-sort a draft. The
+   venue setting that says which surface may fire (`locations.fire_control`: waiter, kitchen or
+   expo) stays configurable, per group instead of per course, and so does "away" at the pass.
+2. **A visit record ties one party's orders and bills together.** Seating opens a visit and
+   records the guest count. The tab, every bill split from it, and anything ordered after a payment
+   belong to the visit. The table stays occupied until Finish table (or an unpaid departure)
+   closes the visit. This is the one new entity this spec now chooses, overriding the "not new
+   database entities" sentence above for the visit only.
+3. **A bill's invoice is issued when the bill is fully paid, and paying is flexible.** Several
+   payments can be taken against one bill before its invoice exists. After a general contribution
+   ("here's €50"), another guest can still ask for their own bill: staff move those lines to a
+   separate bill, take its payment and print its invoice, then return to the original bill, which
+   keeps the contribution. The venue may alternatively print the invoice at the start, before any
+   payment; if the table then splits, the original is corrected through the fiscal correction
+   workflow. Both points go to the advisor as
+   [Q27](../../compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26);
+   the plan builds invoice-at-full-payment and holds the print-first option until Q27 is answered.
+4. **Discounts and comps reduce the line.** A line discount lowers that line's price. A whole-bill
+   discount is spread across the bill's lines in proportion to their amounts, with rounding cents
+   allocated deterministically, so each VAT rate's taxable amount drops correctly. A comp is the
+   line at 100% off, shown on the invoice with its original price and €0.00. This rests on the
+   closed advisor finding that a reduction agreed before issuance is a *descuento*
+   ([Q15](../../compliance/asesor-questions.md#q15-short-payment--a-discount-or-a-bad-debt-added-2026-07-31)).
+
+### 14.2 What the review found missing
+
+- **Existing behaviour the spec did not account for.** Much of §3–§5 exists: named courses with
+  hold and fire, per-line send and recall, queued/preparing/ready kitchen states, void and recall
+  slips, reprint, waiting-time bands, a pay-first counter mode and a handover stamp, whole-item
+  bill splitting (each bill gets its own invoice), table moves, joins and line transfers, and a
+  manager PIN override that keeps the waiter signed in (`authorize` in
+  `packages/identity/src/authorize.ts`).
+- **Today, paying frees the table.** A trigger (`working_orders_clear_table_status`,
+  `packages/db/drizzle/0001_behavioural_triggers.sql`) clears the table's status when its tab
+  settles, and a settled order is terminal. A split-off bill carries no link to its table. §8's
+  Finish table and §6's related bills both depend on decision 2.
+- **Taking money before the invoice exists.** `settleSale` takes every tender at once and a
+  trigger refuses a tender once the sale is settled. Decision 3 needs payments held against an
+  un-invoiced bill. That is new fiscal ground (Q27), and it also touches the open
+  [Q21](../../compliance/asesor-questions.md#q21-when-a-table-asks-for-the-bill--pre-bill-first-or-the-invoice-straight-away-added-2026-09-23)
+  and [Q14](../../compliance/asesor-questions.md#q14-is-a-restaurant-precuenta-a-prefactura-for-art-292j-lgt-added-2026-07-31),
+  which §6 did not name.
+- **Unpaid departure in a venue that invoices on payment.** The food was served and no invoice
+  exists. Whether one must still be issued is
+  [Q28](../../compliance/asesor-questions.md#q28-a-table-leaves-without-paying--is-the-invoice-still-owed-added-2026-09-26).
+- **Tips.** Settled: a voluntary tip is outside the VAT base and off the invoice (Q13, closed).
+  Cash and manual-card payments record no tip today; only integrated card payments do.
+- **Bizum** has no connected provider (SumUp cannot take it, per
+  `docs/research/2026-09-18-online-payment-providers-bizum.md`). §6's Bizum example is future.
+- **Who owns a draft on a shared till.** Drafts belong to the signed-in operator (the till's PIN
+  lock screen already identifies one). Today the counter basket belongs to the device and survives
+  a change of operator, and the table round draft lives only in the screen's memory.
+- **Several payments at once.** Lane C's card-payment lock (`working_orders.payment_attempt_at`,
+  menus plan D22) is one timestamp per order, so it cannot represent two guests paying at the same
+  time. The payment design (plan Task 0) starts from it.
+- **Two meanings of "held".** In the code a held order is also a parked counter basket
+  (`parkOrder`). In this spec and its plan, "held" means submitted but not released to the
+  kitchen; the counter's action keeps the code name "park".
+- **Held-customisation prices** (§3's open point) are settled by the menus plan's D10: a line's
+  price locks when it is added to a saved order.
+- **Smaller gaps:** "bill requested" is today one manual status per table, so it cannot coexist
+  with another status; a reprinted kitchen ticket is not marked REPRINT; served is whole-line only;
+  cancelling a line deletes it with no reason or actor recorded, so there is nothing for §7's
+  reports to count; sending a round to the kitchen (`addTabRound`) takes no idempotency key
+  (read, not run); cumulative adjustment caps do not say what they add up over (the plan decides:
+  per bill, per reason).
+
+### 14.3 Superseded by the menus work
+
+This spec was written before the menus work in lane C began. The
+[menus spec](2026-09-20-menus-categories-and-home-layouts-design.md) §10–§11 and its plan's
+decisions (as the owner amended them while lane C built them) now govern the following, and this
+spec defers to them:
+
+| Here | Now governed by | What it says |
+| --- | --- | --- |
+| §3 "the exact price treatment when editing held customisations was not settled" | menus §10.3, §11.2 | A saved order's line keeps the price it was given when added; an edit prices only what it adds. An unsaved basket follows the live published menu, and staff confirm any change. |
+| §3 cancelling fired work; §4 corrections | menus §10.3, §11.5; plan D10 | Sent, not started: the edit is allowed and the kitchen receives a recall plus a new ticket. Started (only a kitchen screen can say so): refused; void and re-add. Every correction is a kitchen notice as well as a slip. The venue setting "Allow changes to items already sent to the kitchen" (for a paper-only kitchen) leaves only void. |
+| §3 staff edit sent work | menus §11.6 | The till's Change action on a sent, not-started line. |
+| §10 availability of existing work | menus §11.3 | An unsent line whose product became unavailable cannot be sent or paid for; a sent line stays payable. "Sent" is recorded on the line. |
+| §6 billing separation keeps kitchen progress | lane C's order-edits branch (menus Task 7b) and the owner's answers of 2026-09-26 | A split line takes its own kitchen ticket; moving sent work to another table prints a "MOVED" slip. |
+| §6 simultaneous payments | menus §11.4; plan D22 | While a card payment on an order is between pricing and filing, the order refuses line writes, and (as built) other payments too. The payment design must start from this. |
+| VAT on lines | lane C's queue item M7v (owner, 2026-09-26) | A line records its VAT rate and reporting classification from the published menu when its price locks. |
+| §7 "cancelling preparation and removing the charge are separate" | menus §11.5 | A void removes the line from the bill at once; a line the kitchen made anyway is re-added with a note so it is billed. The adjustment record keeps the preparation outcome and the charge outcome as separate facts. |
+| §9 how the ordering setting enters the snapshot | still open; the menus plan's D20 leaves it out of scope | Decided in this spec's plan. |
+
+The plan also decides, subject to the owner's review, that a draft (§2) is priced like an unsaved
+basket: it follows the live published menu until it is submitted, and its prices lock at
+submission.

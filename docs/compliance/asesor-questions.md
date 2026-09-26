@@ -9,7 +9,7 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-Last revised **2026-09-26** — Q26 updated: the rule it asks about is now built, and the question
+Last revised **2026-09-26** — Q27 (money taken against a bill before its invoice exists, then a split) and Q28 (a table leaves without paying: is the invoice still owed?) added beside Q21 and Q15, from the service design's §14. Earlier the same day, Q26 updated: the rule it asks about is now built, and the question
 stays open. Before that, **2026-09-25** — Q26 (a VAT change while an order is open: we apply the rate in force
 when the invoice is issued — is that right?) added beside Q25, and later the same day reworded from
 "at payment" to "when the invoice is issued", naming the invoice-first case. Before that, **2026-09-24** — Q25 (a void made on a later day: which VAT period the annulment lands
@@ -604,6 +604,68 @@ cents, the cash never matches the invoice exactly.
 > **(c)** Si se redondean los importes en efectivo al múltiplo de cinco céntimos más próximo, ¿debe
 > el redondeo figurar como una línea o un descuento en la propia factura, de modo que el importe
 > facturado y el cobrado coincidan?
+
+---
+
+### Q27. Money taken against a bill before its invoice exists, then a split (added 2026-09-26)
+
+**Why it matters.** The owner decided on 2026-09-26 that a table's bill is invoiced when it is
+fully paid, and that paying must be flexible
+([service design §14.1](../superpowers/specs/2026-09-20-service-ordering-and-billing-design.md#141-decisions-owner-2026-09-26),
+decision 3). The case that needs an answer:
+
+- A table's bill is €120. One guest hands over €50 "towards the bill". No invoice exists yet.
+- A second guest then asks for their own invoice for two items (€30). Staff move those two lines
+  to a separate bill, take €30, and issue and print that bill's simplified invoice.
+- The table returns to the original bill (now €90, with €50 already received) and pays the other
+  €40. Only then is the original bill's simplified invoice issued, for €90.
+
+So money is held for a while against consumption that has no invoice yet, and the lines that
+invoice covers change after money was received. Today the software never does this: every bill is
+paid in one go at the moment its invoice is issued. It also touches Q21 (pre-bill or invoice when
+the bill is asked for) and Q14 (whether a *precuenta* is a *prefactura*).
+
+The owner also wants the option of printing the invoice at the START, before anyone pays. If the
+table then splits, the original has to be corrected. We would build that only after this answer.
+
+> **(a)** En un restaurante que expide facturas simplificadas, ¿puede el establecimiento recibir
+> uno o varios pagos parciales de los comensales a cuenta de la cuenta de la mesa, y expedir la
+> factura simplificada sólo cuando la cuenta queda totalmente pagada? ¿Existe algún plazo máximo
+> entre el primer cobro y la expedición?
+>
+> **(b)** Si, después de un pago parcial a cuenta, un comensal pide su propia factura por algunas de
+> las consumiciones, ¿es correcto separar esas consumiciones, expedir para ellas una factura
+> simplificada independiente, y expedir después la factura de la cuenta original sólo por las
+> consumiciones restantes (con el pago parcial anterior aplicado a esa cuenta)?
+>
+> **(c)** Si, en cambio, la factura simplificada de toda la mesa se expide y se entrega ANTES de
+> cobrar, y después los comensales piden facturas separadas, ¿procede una factura rectificativa de
+> la original y la expedición de nuevas facturas por cada parte? ¿Hay un procedimiento más sencillo
+> admitido en hostelería?
+
+---
+
+### Q28. A table leaves without paying — is the invoice still owed? (added 2026-09-26)
+
+**Why it matters.** The service design lets staff record an *unpaid departure*: the guests left,
+the table is released, and the unpaid amount and the staff member who recorded it are kept
+([service design §8](../superpowers/specs/2026-09-20-service-ordering-and-billing-design.md#8-finish-the-visit-without-hiding-outstanding-bills)).
+In a venue that invoices at payment, no invoice exists at that moment although the food was
+served. Q15 (closed) covers a shortfall the venue ACCEPTS as payment in full, which is a discount;
+this is the case where nothing is accepted and the debt stands.
+
+The software can either issue the simplified invoice anyway, for the full amount, and record it as
+unpaid; or issue nothing and keep the debt only in its own records until it is collected. We
+assume the first is the safe reading, and we will not build unpaid departure until this is
+answered.
+
+> **(a)** Cuando un cliente abandona el restaurante sin pagar lo consumido, ¿debe el establecimiento
+> expedir igualmente la factura simplificada por el importe total de lo servido, aunque no se haya
+> cobrado, y registrarla en el sistema de facturación?
+>
+> **(b)** Si se cobra más tarde (en todo o en parte), ¿basta con registrar el cobro contra esa
+> factura? Si no se cobra nunca, ¿el único cauce para recuperar el IVA es la modificación de la base
+> imponible por créditos incobrables (artículo 80.Cuatro de la Ley del IVA)?
 
 ---
 
