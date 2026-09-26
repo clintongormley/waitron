@@ -808,6 +808,7 @@ const table = {
   posY: null,
   shape: null,
   rotation: null,
+  visit: null,
 };
 
 const tabLemonade = {
@@ -844,7 +845,7 @@ function tableStubs(
     getTabLines: vi
       .fn()
       .mockResolvedValue({ lines: [tabLemonade], revision: 0, editSentLines: true }),
-    addTabRound: vi.fn().mockResolvedValue(undefined),
+    addTabRound: vi.fn().mockResolvedValue({ tabId: "wo-7" }),
     _dining: diningOffers,
     ...overrides,
   };
@@ -865,7 +866,7 @@ async function toTable(el: TillApp): Promise<void> {
   emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
   await flush(el);
   const floorScreen = shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!;
-  emit(floorScreen, "open-table", { tableId: "t2", hasOpenTab: true });
+  emit(floorScreen, "open-table", { tableId: "t2", seated: true });
   await flush(el);
   // After the open, every read of the dining zone answers the republished offers.
   const dining = api._dining as unknown as ZoneOfferCatalogue;
@@ -895,7 +896,10 @@ describe("a table round refused because the menu changed", () => {
   it("re-sends the round once, asserting v2, when nothing in it changed", async () => {
     const { el } = await mountApp(
       tableStubs(catalogue("v2", V1.offers), {
-        addTabRound: vi.fn().mockRejectedValueOnce(versionRefusal).mockResolvedValueOnce(undefined),
+        addTabRound: vi
+          .fn()
+          .mockRejectedValueOnce(versionRefusal)
+          .mockResolvedValueOnce({ tabId: "wo-7" }),
       }),
     );
     await toTable(el);
@@ -950,6 +954,7 @@ describe("a table round refused because the menu changed", () => {
     await sendLemonadeRound(el);
     expect(api.addTabRound).toHaveBeenCalledOnce();
     expect(roundGrid(el).store.lineCount).toBe(0);
+    expect(banner(el)?.textContent ?? null).toBeNull();
   });
 });
 
@@ -966,7 +971,7 @@ describe("the counter's basket hold stays on the counter", () => {
     await flush(el);
     emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
       tableId: "t2",
-      hasOpenTab: true,
+      seated: true,
     });
     await flush(el);
     tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
@@ -1073,10 +1078,10 @@ const roundStore = (el: TillApp) => roundGrid(el).store as unknown as RoundStore
 
 describe("a table round while it is being sent", () => {
   it("takes no quantity change until the answer, so the kitchen gets what the screen shows", async () => {
-    let answer!: () => void;
+    let answer!: (value: { tabId: string }) => void;
     const { el } = await mountApp(
       tableStubs(DINING, {
-        addTabRound: vi.fn(() => new Promise<void>((resolve) => (answer = resolve))),
+        addTabRound: vi.fn(() => new Promise<{ tabId: string }>((resolve) => (answer = resolve))),
       }),
     );
     await toTable(el);
@@ -1087,7 +1092,7 @@ describe("a table round while it is being sent", () => {
     expect(roundStore(el).lines[0]!.quantity).toBe("1");
     expect(tableScreen(el).shadowRoot!.querySelector("[data-round-sending]")).not.toBeNull();
 
-    answer();
+    answer({ tabId: "wo-7" });
     await flush(el);
     expect(api.addTabRound.mock.calls[0]![1]).toEqual([
       { menuItemId: "offer-lemonade", menuVersionId: "v1", quantity: "1" },
@@ -1100,7 +1105,10 @@ describe("a table round while it is being sent", () => {
     let answerReload!: (value: ZoneOfferCatalogue) => void;
     const { el } = await mountApp(
       tableStubs(DINING, {
-        addTabRound: vi.fn().mockRejectedValueOnce(versionRefusal).mockResolvedValueOnce(undefined),
+        addTabRound: vi
+          .fn()
+          .mockRejectedValueOnce(versionRefusal)
+          .mockResolvedValueOnce({ tabId: "wo-7" }),
       }),
     );
     await toTable(el);
@@ -1187,7 +1195,7 @@ describe("a round at phone width", () => {
       await flush(el);
       emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
         tableId: "t2",
-        hasOpenTab: true,
+        seated: true,
       });
       await flush(el);
       roundGrid(el).shadowRoot!.querySelector<HTMLElement>("wt-button")!.click();
@@ -1236,13 +1244,13 @@ describe("a kept round and another table", () => {
     emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "service" });
     await flush(el);
     const floorScreen = () => shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!;
-    emit(floorScreen(), "open-table", { tableId: "t2", hasOpenTab: true });
+    emit(floorScreen(), "open-table", { tableId: "t2", seated: true });
     await flush(el);
     const screenForA = tableScreen(el);
     await sendLemonadeRound(el);
     expect(roundStore(el).lineCount).toBe(1);
 
-    emit(floorScreen(), "open-table", { tableId: "t3", hasOpenTab: true });
+    emit(floorScreen(), "open-table", { tableId: "t3", seated: true });
     await flush(el);
     expect(tableScreen(el)).toBe(screenForA);
     expect(roundStore(el).lineCount).toBe(0);
@@ -1250,7 +1258,7 @@ describe("a kept round and another table", () => {
       tableScreen(el).shadowRoot!.querySelector("[data-send-round]")!.hasAttribute("disabled"),
     ).toBe(true);
 
-    emit(floorScreen(), "open-table", { tableId: "t2", hasOpenTab: true });
+    emit(floorScreen(), "open-table", { tableId: "t2", seated: true });
     await flush(el);
     expect(roundStore(el).lineCount).toBe(1);
   });
@@ -1467,7 +1475,7 @@ describe("a remembered round when another table's menu cannot be loaded", () => 
     await flush(el);
     emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
       tableId: tableC.id,
-      hasOpenTab: true,
+      seated: true,
     });
     await flush(el);
     return round;
@@ -1484,5 +1492,51 @@ describe("a remembered round when another table's menu cannot be loaded", () => 
       false,
     );
     expect(round.lines[0]!.blocked).toBe("unavailable");
+  });
+});
+
+// ── A round that lands on the party's next tab ───────────────────────────────────────────────────
+
+const shownTab = (el: TillApp) => (tableScreen(el) as unknown as { orderId?: string }).orderId;
+
+describe("a round the server adds to another tab", () => {
+  it("moves the screen to that tab and takes the sent lines out of the round", async () => {
+    const { el } = await mountApp(
+      tableStubs(DINING, { addTabRound: vi.fn().mockResolvedValue({ tabId: "wo-next" }) }),
+    );
+    await toTable(el);
+    const round = roundStore(el);
+    await sendLemonadeRound(el);
+
+    expect(api.addTabRound).toHaveBeenCalledWith("wo-7", expect.any(Array), expect.anything());
+    expect(shownTab(el)).toBe("wo-next");
+    expect(api.getTabLines).toHaveBeenLastCalledWith("wo-next");
+    expect(round.lineCount).toBe(0);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("leaves the operator on the table they opened while the answer was out", async () => {
+    let answer!: (value: { tabId: string }) => void;
+    const { el } = await mountApp(
+      tableStubs(DINING, {
+        getTablesState: vi.fn().mockResolvedValue([table, tableB]),
+        addTabRound: vi.fn(() => new Promise<{ tabId: string }>((resolve) => (answer = resolve))),
+      }),
+    );
+    await toTable(el);
+    await sendLemonadeRound(el);
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    await flush(el);
+    emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: "t3",
+      seated: true,
+    });
+    await flush(el);
+    expect(shownTab(el)).toBe("wo-8");
+
+    answer({ tabId: "wo-next" });
+    await flush(el);
+    expect(shownTab(el)).toBe("wo-8");
+    expect(api.getTabLines).not.toHaveBeenCalledWith("wo-next");
   });
 });
