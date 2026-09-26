@@ -1585,8 +1585,8 @@ export class TillApi {
    * inverse of {@link sendLines}. NON-FISCAL; a previously-fired line gets a RECALLED correction slip.
    * Rejects `tab.not_open`, `tab.line_not_found`, `ticket.already_started` (the kitchen has started
    * it), or `ticket.already_fired` (the venue does not allow changes to sent items and a line with a
-   * ticket item has been sent — a recalled line still counts as sent); a held line never sent is a
-   * no-op.
+   * ticket item has been sent — a recalled line still counts as sent); a held line never sent changes
+   * nothing but the order's revision.
    */
   async recallLines(orderId: string, lineNos: number[]): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/recall`, "POST", { lineNos });

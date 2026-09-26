@@ -1347,7 +1347,7 @@ describe("till-station-screen 15-second refresh", () => {
     expect(shownRead(el)).toEqual(["kn-read-3"]);
   });
 
-  it("a read that never answers is cancelled 25 seconds after it set out, silently, and later reads go ahead", async () => {
+  it("a refresh read that never answers is cancelled 25 seconds after it set out, silently, and later reads go ahead", async () => {
     const signals: AbortSignal[] = [];
     const api = stubApi({
       getStationQueue: vi

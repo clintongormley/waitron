@@ -3924,8 +3924,8 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
 
 // Coursing editing — `setLineCourse` moves a not-yet-fired tab line into another active course (or
 // clears it to null), updating BOTH the open-tab line's `course_id` and its held ticket item's snapshot.
-// It refuses a line whose ticket item has already FIRED (`ticket.already_fired`) — a fired line is
-// corrected via recall, not a silent move — validates a non-null target with the same `requireLiveCourse`
+// It refuses a line whose ticket item has already FIRED (`ticket.already_fired`) rather than moving it
+// silently, validates a non-null target with the same `requireLiveCourse`
 // the config/fire verbs use (`course.not_found` for an absent / foreign / retired course), and throws
 // `tab.line_not_found` for a `line_no` not on the tab. Non-fiscal: it touches only `working_order_lines`
 // (open tab) and `ticket_items` (kitchen), never a filed record. This suite proves the update + the

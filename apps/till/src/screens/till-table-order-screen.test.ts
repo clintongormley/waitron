@@ -670,7 +670,7 @@ describe("till-table-order-screen", () => {
   });
 
   it("shows a FIRED tab line's course READ-ONLY, offering no editable picker", async () => {
-    // A fired line (firedAt set) is corrected via recall, not moved here.
+    // A fired line (firedAt set) is not moved here.
     const firedWithCourse: TabLine = { ...pendingLine, lineNo: 1, courseId: "postres" };
     const { el } = await mount({ lines: [firedWithCourse], courses });
     await openDrawer(el);
