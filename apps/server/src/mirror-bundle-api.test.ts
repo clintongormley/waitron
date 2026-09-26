@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   nodes,
   readMembershipTrustSet,
@@ -23,6 +23,7 @@ import {
   generateNodeKeyPair,
   verifyBytes,
   verifyMembershipDocument,
+  type MembershipNode,
 } from "@waitron/membership";
 import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
@@ -31,9 +32,43 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { removeUnjoinedStandby } from "./membership-removal.js";
 
-// No case races concurrent adopts: writers are serialised on this engine, so the chart-write retry
-// is driven by triggers that refuse updates of the held chart instead.
+// Pause points for the cases that land a removal part-way through a request. Each runs once and
+// clears itself; unset, the wrapped function behaves as the real one.
+const pause = vi.hoisted(() => ({
+  beforeModuleConfigRead: undefined as (() => Promise<void>) | undefined,
+  beforeChartMint: undefined as (() => Promise<void>) | undefined,
+}));
+
+vi.mock("./module-config.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./module-config.js")>();
+  return {
+    ...actual,
+    readModuleConfig: async (stateDir: string) => {
+      const hook = pause.beforeModuleConfigRead;
+      pause.beforeModuleConfigRead = undefined;
+      await hook?.();
+      return actual.readModuleConfig(stateDir);
+    },
+  };
+});
+
+vi.mock("./membership-mint.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./membership-mint.js")>();
+  return {
+    ...actual,
+    mintNextMembershipDocument: async (
+      ...args: Parameters<typeof actual.mintNextMembershipDocument>
+    ) => {
+      const hook = pause.beforeChartMint;
+      pause.beforeChartMint = undefined;
+      await hook?.();
+      return actual.mintNextMembershipDocument(...args);
+    },
+  };
+});
+
 const LOCALE = "es-ES";
 const ADMIN_PASSWORD = "dashPass123";
 const STAFF_PASSWORD = "staffPass123";
@@ -159,6 +194,37 @@ function validStandby(): {
   };
 }
 
+async function installationCounter(): Promise<number[]> {
+  const { rows } = await db.execute<{ n: number }>(
+    sql`select proximo_numero as n from contadores_instalacion`,
+  );
+  return rows.map((r) => r.n);
+}
+
+async function removalRows(): Promise<Record<string, unknown>[]> {
+  const { rows } = await db.execute<Record<string, unknown>>(
+    sql`select removed_node_id, term from membership_removals`,
+  );
+  return rows;
+}
+
+/** Holds a chart listing this primary and `standbyNodeId` as a serving standby; returns its term. */
+async function holdChartWithStandby(
+  designated: AdoptResult,
+  standbyNodeId: string,
+): Promise<number> {
+  const term = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+  const members: MembershipNode[] = [
+    { nodeId: designated.nodeId, contactUrl: "https://box.deli.test", standing: "serving-primary" },
+    { nodeId: standbyNodeId, contactUrl: "https://cloud.deli.test", standing: "serving-secondary" },
+  ];
+  await writeNodeMembership(
+    db,
+    signedMembershipDoc(term, { signerNodeId: designated.nodeId, nodes: members }),
+  );
+  return term;
+}
+
 async function post(app: Hono, body: unknown): Promise<Response> {
   return app.request("/management-api/mirror-bundle", {
     method: "POST",
@@ -182,6 +248,11 @@ beforeAll(async () => {
 // The per-test reset wipes the deployment stamp.
 beforeEach(async () => {
   await stampDeployment(db, "preproduction");
+});
+
+afterEach(() => {
+  pause.beforeModuleConfigRead = undefined;
+  pause.beforeChartMint = undefined;
 });
 
 afterAll(async () => {
@@ -634,12 +705,6 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       }),
     );
     const chartBefore = await readNodeMembership(db);
-    const installationCounter = async (): Promise<number[]> => {
-      const { rows } = await db.execute<{ n: number }>(
-        sql`select proximo_numero as n from contadores_instalacion`,
-      );
-      return rows.map((r) => r.n);
-    };
     const counterBefore = await installationCounter();
 
     const res = await post(app, {
@@ -662,6 +727,68 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     });
     expect(fresh.status).toBe(200);
     expect(await installationCounter()).not.toEqual(counterBefore);
+  });
+
+  describe("a removal of the same standby landing part-way through the request", () => {
+    const removeDuringRequest =
+      (designated: AdoptResult, adminPersonId: string, standbyNodeId: string) =>
+      async (): Promise<void> => {
+        await removeUnjoinedStandby(
+          { db, ring: RING, nodeId: designated.nodeId, log: () => {} },
+          { targetNodeId: standbyNodeId, personId: adminPersonId },
+        );
+      };
+
+    it("refuses 409 mirror.standby_removed when the removal commits before the reservation, which spends nothing", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      const standbyNodeId = crypto.randomUUID();
+      const seedTerm = await holdChartWithStandby(designated, standbyNodeId);
+      const counterBefore = await installationCounter();
+      pause.beforeModuleConfigRead = removeDuringRequest(designated, adminPersonId, standbyNodeId);
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+        standbyNodeId,
+      });
+
+      expect(pause.beforeModuleConfigRead).toBeUndefined();
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: { code: "mirror.standby_removed", params: {} } });
+      expect(await installationCounter()).toEqual(counterBefore);
+      const after = (await readNodeMembership(db))!;
+      expect(after.body.term).toBe(seedTerm + 1);
+      expect(after.body.nodes.find((n) => n.nodeId === standbyNodeId)?.standing).toBe("evicted");
+      expect(await removalRows()).toEqual([{ removed_node_id: standbyNodeId, term: seedTerm + 1 }]);
+    });
+
+    it("refuses 409 mirror.standby_removed when the removal commits between a chart round's read and its write", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      const standbyNodeId = crypto.randomUUID();
+      const seedTerm = await holdChartWithStandby(designated, standbyNodeId);
+      const counterBefore = await installationCounter();
+      pause.beforeChartMint = removeDuringRequest(designated, adminPersonId, standbyNodeId);
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+        standbyNodeId,
+      });
+
+      expect(pause.beforeChartMint).toBeUndefined();
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ error: { code: "mirror.standby_removed", params: {} } });
+      // The reservation ran before the chart round, so its number is spent.
+      expect(await installationCounter()).toEqual(counterBefore.map((n) => n + 1));
+      // The removal's chart is the one held: the request wrote no later term over it.
+      const after = (await readNodeMembership(db))!;
+      expect(after.body.term).toBe(seedTerm + 1);
+      expect(after.body.nodes.find((n) => n.nodeId === standbyNodeId)?.standing).toBe("evicted");
+    });
   });
 
   it("refuses a non-string standbyContactUrl as mirror.standby_invalid", async () => {

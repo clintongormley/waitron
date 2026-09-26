@@ -666,7 +666,7 @@ declare module "@waitron/shared" {
     "membership.write_contended": { attempts: number };
     /**
      * An admin asked to remove a machine this node's held membership chart does not list, or no
-     * chart is held, or the id is not a UUID.
+     * chart is held.
      */
     "membership.node_not_found": Record<string, never>;
     /** Only the chart's serving primary removes a machine from it, and this node is not that. */

@@ -7,6 +7,8 @@ import { readNodeEndorsement, type Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import { readNodeIdentityKey } from "./node-identity.js";
 
+export const MAX_CHART_WRITE_ROUNDS = 8;
+
 /**
  * Read THIS node's signing key and build and sign the next membership document. The signer's stored
  * endorsement, if any, is always carried, so a peer that trusts only the endorser's key can accept

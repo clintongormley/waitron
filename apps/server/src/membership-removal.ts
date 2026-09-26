@@ -18,7 +18,7 @@ import {
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import type { KeyRing } from "@waitron/credentials";
-import { mintNextMembershipDocument } from "./membership-mint.js";
+import { MAX_CHART_WRITE_ROUNDS, mintNextMembershipDocument } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 
 type RemovalRefusal =
@@ -128,9 +128,6 @@ export interface RemovalResult {
   readonly term: number;
 }
 
-// A round is lost only to a writer that committed a newer term.
-const MAX_CHART_WRITE_ROUNDS = 8;
-
 /**
  * Marks a never-joined standby `evicted` in a new chart this node signs, and records the removal in
  * the same transaction. Every refusal throws before anything commits.
@@ -168,7 +165,7 @@ export async function removeUnjoinedStandby(
         throw new AppError("membership.standby_joined", {});
       }
       await tx.insert(membershipRemovals).values({
-        nodeId: args.targetNodeId,
+        removedNodeId: args.targetNodeId,
         contactUrl: verdict.node.contactUrl,
         personId: args.personId,
         term,
