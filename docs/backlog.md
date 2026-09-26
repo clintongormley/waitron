@@ -6442,7 +6442,7 @@ line with what slice 2 built. Left open:
   lane A's A51 (#686, 2026-09-26):** a refused question is logged once per pause, `stream.pause_check_failed`
   with the refusal's code, and a refusal arriving after the deadline or a stop is not
   ([testing-guide.md](developers/testing-guide.md), "A bucket question the pause is waiting on").
-  **DONE by lane A's A57 (2026-09-26):** that line, and the supervisor's other lines for a bucket
+  **DONE by lane A's A57 (#697, 2026-09-26):** that line, and the supervisor's other lines for a bucket
   request that failed (`stream.open_failed`, `stream.list_failed`, `stream.pointer_write_failed`,
   `stream.freshness_unreadable`, `stream.prune_failed`), also carry the bucket's HTTP `status` when
   the bucket answered, and nothing more when it did not; a deadline's `errorCode: "timeout"` line is
