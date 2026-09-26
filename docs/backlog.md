@@ -6509,7 +6509,7 @@ line with what slice 2 built. Left open:
   answer the store turned down as unusable (its `answerRefused` calls), or an answer the SDK could
   not read (an error-branch `requestFailed` call passing the thrown error's 200, logged with
   `errorName` `other`; shown with a scripted cut-off listing through the SDK, not pinned by a test).
-  **DONE by lane A's A60 (2026-09-26):** the line also carries `errorName`,
+  **DONE by lane A's A60 (#703, 2026-09-26):** the line also carries `errorName`,
   the bucket's error name when it is on the fixed list in `packages/stream/src/bucket-error-names.ts`
   (the S3 API Reference's list of error codes, one name from the PutObject page, and the names
   `s3-store.ts` gives an answer it refused) and `other` when it is not, so a 200 line now names a
