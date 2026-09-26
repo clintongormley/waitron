@@ -298,6 +298,22 @@ describe("menuDocumentHash", () => {
       "the dish's reporting category",
       (tx, f) => updateProduct(tx, f.lemonade, { categoryId: f.coldDrinks }),
     ],
+    [
+      // `updateProduct` refuses a variant's main category; the column is written directly.
+      "the variant's reporting category",
+      (tx, f) =>
+        tx.update(products).set({ categoryId: f.coldDrinks }).where(eq(products.id, f.large)),
+    ],
+    [
+      "whether the offer withdraws the extra",
+      async (tx, f) =>
+        tx.insert(menuItemExtraItems).values({
+          menuItemId: await offerOf(tx, f.dinner, f.lemonade),
+          listId: f.extrasList,
+          productId: f.extraLemon,
+          available: false,
+        }),
+    ],
   ];
 
   it.each(unchanged)("does not move when %s changes", async (_, change) => {
@@ -832,7 +848,29 @@ describe("diffMenuDocuments", () => {
         kind: "product_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        fields: ["names", "variants", "options"],
+        fields: ["variants", "options"],
+        source: "shared_product",
+      },
+    ]);
+  });
+
+  it("names a change to one variant's own facts as the variants', not the dish's", async () => {
+    const f = await menusFixture(fx.db);
+    const live = await build(f.dinner);
+    await app((tx) =>
+      updateProduct(tx, f.large, {
+        name: "Huge",
+        image: "huge.jpg",
+        allergens: { sulphites: { presence: "contains" } },
+        dietOverride: { vegan: "no" },
+      }),
+    );
+    expect(diffMenuDocuments(live, await build(f.dinner))).toEqual([
+      {
+        kind: "product_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        fields: ["variants"],
         source: "shared_product",
       },
     ]);

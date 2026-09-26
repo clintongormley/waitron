@@ -185,9 +185,10 @@ type WalkedList =
  * item is left out when its product row is missing, Inactive or Unavailable (spec §15.6), or has an
  * Active variant (spec §15.1). The order path refuses a pick of the last three on its own read.
  *
- * With `everyItem`, what a published document holds: every label, and every extras item whether or
- * not its product is Active and Available and whether or not the offer withdraws it. A default label
- * is then kept while it names any label of its list.
+ * With `everyItem`, what a published document holds: every label, and an extras item whether or
+ * not its product is Active and Available and whether or not the offer withdraws it; an item whose
+ * product has an Active variant is still left out. A default label is then kept while it names any
+ * label of its list.
  */
 export async function readOfferedModifiers(
   tx: Transaction,

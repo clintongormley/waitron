@@ -81,8 +81,19 @@ export interface MenuDocument {
 /** An extras item as a served offer carries it: the frozen item with its current availability. */
 export type LiveExtraItem = OfferedExtraItem & { available: boolean };
 
+/**
+ * An options list as a served offer carries it. Unlike `OfferedOptionsList`, whose labels are the
+ * available ones alone, it holds every label the document holds.
+ */
+export type LiveOptionsList = Omit<OfferedOptionsList, "labels" | "defaultLabelId"> & {
+  /** Every label, each with its current availability. */
+  labels: OptionLabel[];
+  /** Null unless it names a label that is available now. */
+  defaultLabelId: string | null;
+};
+
 export type LiveOfferedModifier =
-  (Omit<OfferedExtrasList, "items"> & { items: LiveExtraItem[] }) | OfferedOptionsList;
+  (Omit<OfferedExtrasList, "items"> & { items: LiveExtraItem[] }) | LiveOptionsList;
 
 /**
  * A published offer with the live fields put back from the current rows. Every variant, extras item

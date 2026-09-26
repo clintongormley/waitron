@@ -290,7 +290,6 @@ interface LiveProductRow {
 /**
  * The documents' offers, per menu and in menu order, with the live fields put back from the current
  * rows: availability, and the VAT class, course and reporting category that are not menu content.
- * One read of each live table for all the documents together.
  *
  * An item whose product row no longer exists is left out, as is an offer whose product is gone.
  */
@@ -563,7 +562,15 @@ function productFields(
   for (const variant of b.variants) {
     const was = before.get(variant.id);
     if (was === undefined) continue;
-    changedFacts(PRODUCT_FACTS, was, variant, shared);
+    // A variant that inherits the fact changed with the dish, which the dish's own fields name.
+    const read = (value: object, key: string) => (value as Record<string, unknown>)[key];
+    const inherited = (keys: readonly string[]) =>
+      keys.every(
+        (key) => same(read(variant, key), read(b, key)) && same(read(was, key), read(a, key)),
+      );
+    for (const [, keys] of PRODUCT_FACTS)
+      if (keys.some((key) => !same(read(was, key), read(variant, key))) && !inherited(keys))
+        shared.add("variants");
     if (was.offered !== variant.offered || was.menuPrice !== variant.menuPrice)
       menu.add("variants");
     else if (was.unitPrice !== variant.unitPrice)

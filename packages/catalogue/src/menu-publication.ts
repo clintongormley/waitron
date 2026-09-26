@@ -138,8 +138,9 @@ function fieldsOf(change: MenuChange): readonly string[] | undefined {
     : undefined;
 }
 
+/** One shared edit shows up in two menus as the same change from the same source. */
 function sameEdit(a: DiffEntry, b: DiffEntry): boolean {
-  if (changeSubject(a) !== changeSubject(b)) return false;
+  if (a.change.source !== b.change.source || changeSubject(a) !== changeSubject(b)) return false;
   const fields = fieldsOf(a.change);
   return fields === undefined || fields.some((field) => fieldsOf(b.change)!.includes(field));
 }
@@ -168,55 +169,55 @@ export async function previewMenu(
   if (mine === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
   const live = await readLiveDocuments(tx, [...menus.keys()]);
   const entries = diffEntries(live.get(menuId)?.document ?? null, mine.document);
+  const others = [...live]
+    .filter(([other]) => other !== menuId && menus.has(other))
+    .map(([other, { document }]) => ({
+      menuId: other,
+      name: menus.get(other)!.document.menuName,
+      entries: diffEntries(document, menus.get(other)!.document),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
-  const removedButReached = new Set(
-    reachableProducts(graph, mine.rootSectionId).filter((productId) =>
-      entries.some(
-        ({ change }) => change.kind === "product_removed" && change.productId === productId,
-      ),
-    ),
+  const removed = [entries, ...others.map((other) => other.entries)].flatMap((list) =>
+    list.flatMap(({ change }) => (change.kind === "product_removed" ? [change.productId] : [])),
   );
   const deleted = new Set<string>();
-  for (const batch of batches([...removedButReached]))
+  for (const batch of batches([...new Set(removed)]))
     for (const row of await tx
       .select({ id: products.id })
       .from(products)
       .where(and(inArray(products.id, batch), eq(products.active, false))))
       deleted.add(row.id);
-  for (const entry of entries) {
-    const { change } = entry;
-    if (change.kind === "product_removed" && removedButReached.has(change.productId)) {
-      change.source = deleted.has(change.productId) ? "shared_product" : "this_menu";
-      delete entry.section;
-    } else if (entry.section !== undefined) {
-      const section = entry.section;
-      const shared =
-        menusContaining(graph, section).some((other) => other !== menuId) ||
-        [...live].some(
-          ([other, { document }]) => other !== menuId && documentHoldsSection(document, section),
-        );
-      if (!shared) {
-        change.source = "this_menu";
+  const refine = (list: DiffEntry[], owner: string): void => {
+    const reached = new Set(reachableProducts(graph, menus.get(owner)!.rootSectionId));
+    for (const entry of list) {
+      const { change } = entry;
+      if (change.kind === "product_removed" && reached.has(change.productId)) {
+        change.source = deleted.has(change.productId) ? "shared_product" : "this_menu";
         delete entry.section;
+      } else if (entry.section !== undefined) {
+        const section = entry.section;
+        const shared =
+          menusContaining(graph, section).some((other) => other !== owner) ||
+          [...live].some(
+            ([other, { document }]) => other !== owner && documentHoldsSection(document, section),
+          );
+        if (!shared) {
+          change.source = "this_menu";
+          delete entry.section;
+        }
       }
     }
-  }
+  };
+  refine(entries, menuId);
+  for (const other of others) refine(other.entries, other.menuId);
 
-  const shared = entries.filter(({ change }) => change.source !== "this_menu");
-  if (shared.length > 0) {
-    const others = [...live]
-      .filter(([other]) => other !== menuId && menus.has(other))
-      .map(([other, { document }]) => ({
-        name: menus.get(other)!.document.menuName,
-        entries: diffEntries(document, menus.get(other)!.document),
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-    for (const entry of shared) {
-      const alsoOn = others
-        .filter((other) => other.entries.some((candidate) => sameEdit(entry, candidate)))
-        .map((other) => other.name);
-      if (alsoOn.length > 0) entry.change.alsoOn = alsoOn;
-    }
+  for (const entry of entries) {
+    if (entry.change.source === "this_menu") continue;
+    const alsoOn = others
+      .filter((other) => other.entries.some((candidate) => sameEdit(entry, candidate)))
+      .map((other) => other.name);
+    if (alsoOn.length > 0) entry.change.alsoOn = alsoOn;
   }
 
   return {

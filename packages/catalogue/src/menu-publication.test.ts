@@ -468,6 +468,28 @@ describe("previewMenu", () => {
     ]);
   });
 
+  it("leaves a menu out of also-on when its own matching change is its own setting", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    await publish(f.dinner);
+    await app(async (tx) => {
+      await updateProduct(tx, f.lemonade, { unitPrice: "3.20" });
+      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), {
+        grossPrice: "2.60",
+      });
+    });
+    expect((await app((tx) => previewMenu(tx, f.dinner))).changes).toEqual([
+      {
+        kind: "price_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        from: "3.00",
+        to: "3.20",
+        source: "shared_product",
+      },
+    ]);
+  });
+
   it("names a reorder of Lunch's top level as this menu's change", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
