@@ -6,23 +6,31 @@ import { join } from "node:path";
 import { createSecureContext } from "node:tls";
 import forge from "node-forge";
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { writeFile, mkdir } from "node:fs/promises";
+import { chmod, lstat, symlink, writeFile, mkdir } from "node:fs/promises";
 import { ensureBoxSecrets, mintedBoxLeaf, reissueBoxLeaf } from "./box-secrets.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
-// `access`, `copyFile` and `rename` are wrapped so a test can inject a failure for a single path;
+// `access`, `chmod`, `copyFile` and `rename` are wrapped so a test can inject a failure for a single path;
 // every other call forwards to the real implementation.
-const { accessMock, copyFileMock, renameMock } = vi.hoisted(() => ({
+const { accessMock, chmodMock, copyFileMock, renameMock } = vi.hoisted(() => ({
   accessMock: vi.fn(),
+  chmodMock: vi.fn(),
   copyFileMock: vi.fn(),
   renameMock: vi.fn(),
 }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   accessMock.mockImplementation(actual.access);
+  chmodMock.mockImplementation(actual.chmod);
   copyFileMock.mockImplementation(actual.copyFile);
   renameMock.mockImplementation(actual.rename);
-  return { ...actual, access: accessMock, copyFile: copyFileMock, rename: renameMock };
+  return {
+    ...actual,
+    access: accessMock,
+    chmod: chmodMock,
+    copyFile: copyFileMock,
+    rename: renameMock,
+  };
 });
 
 let kp: forge.pki.rsa.KeyPair;
@@ -86,6 +94,43 @@ describe("ensureBoxSecrets", () => {
     // mode is masked by the umask, so assert it is no WIDER than 0o700 rather than exactly equal.
     const tlsMode = (await stat(join(d, "tls"))).mode & 0o777;
     expect(tlsMode & ~0o700).toBe(0);
+  });
+
+  it("makes an existing world-readable tls dir 0700 on the first start, as a restore does", async () => {
+    const d = await newDir();
+    await mkdir(join(d, "tls"), { mode: 0o755 });
+    await chmod(join(d, "tls"), 0o755);
+    await ensureBoxSecrets(deps(d));
+    expect((await stat(join(d, "tls"))).mode & 0o777).toBe(0o700);
+  });
+
+  it("makes an existing world-readable tls dir 0700 on a later start that reuses its files", async () => {
+    const d = await newDir();
+    await ensureBoxSecrets(deps(d));
+    await chmod(join(d, "tls"), 0o755);
+    await ensureBoxSecrets(deps(d));
+    expect((await stat(join(d, "tls"))).mode & 0o777).toBe(0o700);
+  });
+
+  it("makes an existing tls dir it cannot read (0300) 0700 without throwing", async () => {
+    const d = await newDir();
+    await mkdir(join(d, "tls"));
+    await chmod(join(d, "tls"), 0o300);
+    await expect(ensureBoxSecrets(deps(d))).resolves.toBeDefined();
+    expect((await stat(join(d, "tls"))).mode & 0o777).toBe(0o700);
+  });
+
+  it("leaves the mode of the folder a symlinked tls points to as it was", async () => {
+    const d = await newDir();
+    const stateDir = join(d, "state");
+    const outside = join(d, "outside");
+    await mkdir(stateDir);
+    await mkdir(outside);
+    await chmod(outside, 0o755);
+    await symlink(outside, join(stateDir, "tls"));
+    await ensureBoxSecrets(deps(stateDir));
+    expect((await lstat(join(stateDir, "tls"))).isSymbolicLink()).toBe(true);
+    expect((await stat(outside)).mode & 0o777).toBe(0o755);
   });
 
   it("is idempotent: a second call reuses the exact same bytes and regenerates nothing", async () => {
@@ -192,6 +237,27 @@ describe("ensureBoxSecrets", () => {
       accessMock.mockImplementation(passthrough);
     }
     await expect(readFile(secretsFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rethrows a failure tightening a real tls dir", async () => {
+    const d = await newDir();
+    const tlsDir = join(d, "tls");
+    const eperm = Object.assign(new Error("operation not permitted"), {
+      code: "EPERM",
+    }) as NodeJS.ErrnoException;
+    const passthrough = chmodMock.getMockImplementation()!;
+    chmodMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
+      if (p === tlsDir) throw eperm;
+      return (passthrough as (...a: unknown[]) => unknown)(p, ...rest);
+    });
+    try {
+      await expect(ensureBoxSecrets(deps(d))).rejects.toBe(eperm);
+    } finally {
+      chmodMock.mockImplementation(passthrough);
+    }
+    await expect(readFile(join(d, "secrets.env"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 });
 
