@@ -1,4 +1,4 @@
-import { mkdir, access, copyFile, readFile, rename, rm } from "node:fs/promises";
+import { mkdir, access, chmod, copyFile, lstat, readFile, rename, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
@@ -85,8 +85,10 @@ const exists = (p: string): Promise<boolean> =>
  * key ring would strand every sealed credential. `server.key` guards all four TLS PEMs (when it is
  * absent all four are re-minted over whatever exists); `secrets.env` guards only itself.
  *
- * Each file is written 0600 through a newly created working copy; `tls/` is created 0700, and a
- * directory that already exists keeps its mode.
+ * Each file is written 0600 through a newly created working copy. A real `tls/` folder ends 0700
+ * whether or not it already existed, as `unpackBundleToDir` leaves it on a restore. A `tls/` that
+ * is a symlink keeps the mode of the folder it points to; a restore refuses one pointing outside
+ * the destination.
  */
 export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxTlsFiles> {
   const mint = deps.mint ?? mintSelfSignedServerCert;
@@ -95,6 +97,7 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
 
   const files = boxTlsPaths(deps.stateDir);
   await mkdir(files.tlsDir, { recursive: true, mode: 0o700 });
+  if (!(await lstat(files.tlsDir)).isSymbolicLink()) await chmod(files.tlsDir, 0o700);
 
   // server.key is the presence sentinel for all four TLS files.
   if (!(await exists(files.keyFile))) {
