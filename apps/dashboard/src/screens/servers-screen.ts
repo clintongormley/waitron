@@ -253,7 +253,7 @@ export class ServersScreen extends LitElement {
         label: t("servers.actions"),
         cell: (row) => {
           const actions = (["remove", "clear"] as const).filter((action) =>
-            action === "remove" ? row.removable : row.canClear === true,
+            action === "remove" ? row.removable : row.canClear,
           );
           return actions.length === 0
             ? nothing

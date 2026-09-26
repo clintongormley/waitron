@@ -11,7 +11,7 @@ export interface MembershipDocumentBody {
   readonly term: number;
   readonly nodes: readonly MembershipNode[];
   /**
-   * Node ids cleared out of `nodes` for good; `standingOf` answers each as `evicted`. Omitted when
+   * Node ids cleared out of `nodes`; `standingOf` answers each as `evicted`. Omitted when
    * empty, so a chart that has cleared nobody keeps the two-key body. It shuts out an ID, not a
    * key: the joining machine sends its own node id (`standbyNodeId`,
    * `apps/server/src/mirror-bundle-api.ts`), so an admin can still admit the same key again under

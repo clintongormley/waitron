@@ -394,7 +394,7 @@ describe("servers screen removal", () => {
     }
   });
 
-  it("moves focus to the screen's heading after a removal, because the Remove item it came from is gone", async () => {
+  it("moves focus to the screen's heading after a removal, even when the refresh lands after the dialog closes", async () => {
     const api = stubApi();
     const el = await mount(api);
     // Real clicks, because a click is what moves focus onto the Remove item the popover then hides.
@@ -612,15 +612,15 @@ describe("servers screen clearing", () => {
     expect(inTable(el, `role-${REMOVED}`)).toBeNull();
   });
 
-  it("says in both languages that clearing frees the place and the machine stays shut out", () => {
+  it("says in both languages that clearing frees the place and this primary refuses the machine's return", () => {
     expect(en["servers.clear_explanation"]).toContain("frees the place");
     expect(en["servers.clear_explanation"]).toContain(
-      "It stays shut out: if it tries to come back under its old identity",
+      "If it tries to come back under its old identity, this primary refuses it",
     );
     expect(en["servers.clear_explanation"]).toContain("join from scratch");
     expect(es["servers.clear_explanation"]).toContain("libera el sitio");
     expect(es["servers.clear_explanation"]).toContain(
-      "La máquina sigue excluida: si intenta volver con su identidad anterior",
+      "Si intenta volver con su identidad anterior, este servidor principal la rechaza",
     );
     expect(es["servers.clear_explanation"]).toContain("unirse de nuevo desde el principio");
   });

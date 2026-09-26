@@ -34,9 +34,9 @@ export function endorseKey(
  * into trust, so unless it is a trust ANCHOR its key neither signs nor vouches. An anchor is
  * trusted without any endorsement and stays so — a promoted primary's key is vouched for by the
  * primary it joined under, which may since have been removed — so a removed anchor's endorsement is
- * honoured only for an id the held chart lists in good standing, never for the held chart's signer
- * under a key other than the one that signed it, and a key admitted on its word may not vouch
- * further. Left open: a removed anchor can vouch a key of its own making for a good-standing id that
+ * honoured only for an id the held chart lists in good standing — and, when the held chart carries
+ * an endorsement of its own signer whose key verifies its signature, for that signer only under
+ * that key — and a key admitted on its word may not vouch further. Left open: a removed anchor can vouch a key of its own making for a good-standing id that
  * is not an anchor and whose key the held chart does not bind — any id but its signer, or the
  * signer when no endorsement it carries verifies its signature — and then sign as that id; and a
  * held chart older than the removal does not know of it.

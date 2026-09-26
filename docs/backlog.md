@@ -2602,9 +2602,9 @@ image constraints under *Detail → Box image*.
     production that path accepts no chart today and the receiver checks above never run there (read,
     not run); (iii) a cleared machine is refused its own promotion only if its own held chart
     contains the clearing, and a standby that never finished joining never receives it; (iv) so, of
-    these guards, only the primary's own work in production today: its join refusals
-    (`mirror.standby_removed` for a removed or cleared id, `mirror.membership_full` for a full chart)
-    and the mint's `membership.chart_too_large`; (v) a receiver whose held chart predates a removal accepts the removed machine's charts
+    these guards, only those that run where a chart is made or a join is served work in production
+    today: the primary's join refusals (`mirror.standby_removed` for a removed or cleared id,
+    `mirror.membership_full` for a full chart) and the mint's `membership.chart_too_large`; (v) a receiver whose held chart predates a removal accepts the removed machine's charts
     until it learns of the removal; (vi) a joining standby sees `mirror.bundle_fetch_failed` rather
     than the primary's reason, because `apps/server/src/mirror-bundle-fetch.ts` turns every non-2xx
     answer into that code — this predates A63, and `mirror.standby_removed` has the same gap; (vii)
