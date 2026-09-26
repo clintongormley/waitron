@@ -120,6 +120,14 @@ product's membership of the menu's top level (what
 `DELETE /management-api/sections/:id/members/:memberId` removes), or null when only a
 section holds it. The till's offers carry no such field.
 
+`GET /management-api/catalogues/:id/prices` lists the same products, one row each, for the
+dashboard's price list: `{ menuItemId, productId, name, categoryId, placements, productPrice,
+override, effectivePrice, active, variants }`. `productPrice` is the product's own price,
+`override` the menu's (`grossPrice` above, null when it sets none), `effectivePrice` the price
+charged, `categoryId` the product's reporting category, and each of `variants` is
+`{ variantId, price, offered }` as `GET …/items/:itemId/variants` gives it. An unknown menu is
+`catalogue.not_found` (404).
+
 ## Moving and deleting
 
 Moving a category to a new parent, or a product to a new main category, is always allowed. Sale

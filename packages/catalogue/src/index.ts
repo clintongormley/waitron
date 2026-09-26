@@ -21,11 +21,13 @@ export * from "./section-graph.js";
 export * from "./sections.js";
 export {
   createMenuShell,
+  menuPrices,
   readMenuStructure,
   requireMenuRoot,
   syncMenuOffers,
   type MenuStructureNode,
 } from "./menu-structure.js";
+export type { MenuPriceRow } from "./menu-types.js";
 export * from "./sale-classification.js";
 
 export * from "./option-contract.js";

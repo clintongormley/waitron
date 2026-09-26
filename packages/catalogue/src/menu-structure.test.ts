@@ -7,7 +7,9 @@ import {
   addProductToMenu,
   createCatalogue,
   createProduct,
+  deactivateCatalogue,
   deactivateMenuItem,
+  deactivateProduct,
   listMenuOffers,
   listMenuOffersWithTopLevel,
   renameCatalogue,
@@ -21,7 +23,8 @@ import { menuDetails, menuItems } from "./schema/menu.js";
 import { menuItemExtraItems, menuItemExtraLists } from "./schema/extras.js";
 import { sections } from "./schema/sections.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
-import { readMenuStructure, syncMenuOffers } from "./menu-structure.js";
+import { menuPrices, readMenuStructure, syncMenuOffers } from "./menu-structure.js";
+import { createCategory } from "./categories.js";
 import {
   addMember,
   createSection,
@@ -31,7 +34,7 @@ import {
   moveMember,
   removeMember,
 } from "./sections.js";
-import { setMenuVariants, setProductVariants } from "./variants.js";
+import { listMenuVariants, setMenuVariants, setProductVariants } from "./variants.js";
 import type { MemberRef } from "./section-types.js";
 
 // A menu's structure and the settings rows it keeps in step with it.
@@ -733,5 +736,194 @@ describe("which rows a sync resets", () => {
           .where(eq(menuItemVariantOverrides.menuItemId, stray)),
       ),
     ).toEqual([{ price: 300 }]);
+  });
+});
+
+describe("a menu's prices", () => {
+  const itemOf = async (menuId: string, productId: string) =>
+    (await app((tx) => menuItemRow(tx, menuId, productId)))!.id;
+
+  it("lists each product the menu reaches once, with every path to it and none through a section it does not reach", async () => {
+    const f = await fixture();
+    const unrelated = await app((tx) => createSection(tx, { internalName: "Dinner drinks" }));
+    await app(async (tx) => {
+      await addMember(tx, f.favourites, product(f.lemonade));
+      await addMember(tx, f.drinks, product(f.lemonade));
+      await addMember(tx, unrelated.id, product(f.lemonade));
+      await addMember(tx, unrelated.id, product(f.juice));
+      await addMember(tx, f.lunchRoot, section(f.favourites));
+      await addMember(tx, f.lunchRoot, section(f.drinks));
+      await addMember(tx, f.lunchRoot, product(f.water));
+      await addMember(tx, f.dinnerRoot, section(unrelated.id));
+    });
+    expect(await app((tx) => menuPrices(tx, f.lunch))).toEqual([
+      {
+        menuItemId: await itemOf(f.lunch, f.lemonade),
+        productId: f.lemonade,
+        name: "Lemonade (staff)",
+        categoryId: null,
+        placements: [[f.favourites], [f.drinks]],
+        productPrice: "3.00",
+        override: null,
+        effectivePrice: "3.00",
+        active: true,
+        variants: [{ variantId: f.large, price: null, offered: true }],
+      },
+      {
+        menuItemId: await itemOf(f.lunch, f.water),
+        productId: f.water,
+        name: "Water (staff)",
+        categoryId: null,
+        placements: [[]],
+        productPrice: "2.00",
+        override: null,
+        effectivePrice: "2.00",
+        active: true,
+        variants: [],
+      },
+    ]);
+  });
+
+  it("keeps an override equal to the product's price when that price changes, and a cleared one follows it", async () => {
+    const f = await fixture();
+    await app(async (tx) => {
+      await addMember(tx, f.lunchRoot, product(f.lemonade));
+      await addMember(tx, f.lunchRoot, product(f.water));
+    });
+    const lemonadeItem = await itemOf(f.lunch, f.lemonade);
+    const waterItem = await itemOf(f.lunch, f.water);
+    await app(async (tx) => {
+      await updateMenuItem(tx, f.lunch, lemonadeItem, { grossPrice: "3.00" });
+      await updateMenuItem(tx, f.lunch, waterItem, { grossPrice: "1.80" });
+      await updateMenuItem(tx, f.lunch, waterItem, { grossPrice: null });
+      await updateProduct(tx, f.lemonade, { unitPrice: "3.40" });
+      await updateProduct(tx, f.water, { unitPrice: "2.20" });
+    });
+    const rows = await app((tx) => menuPrices(tx, f.lunch));
+    expect(
+      rows.map(({ productId, productPrice, override, effectivePrice }) => ({
+        productId,
+        productPrice,
+        override,
+        effectivePrice,
+      })),
+    ).toEqual([
+      { productId: f.lemonade, productPrice: "3.40", override: "3.00", effectivePrice: "3.00" },
+      { productId: f.water, productPrice: "2.20", override: null, effectivePrice: "2.20" },
+    ]);
+  });
+
+  it("lists a product switched off on the menu and a sold-out one, and leaves out an inactive one", async () => {
+    const f = await fixture();
+    await app(async (tx) => {
+      for (const productId of [f.lemonade, f.water, f.burger, f.juice])
+        await addMember(tx, f.lunchRoot, product(productId));
+    });
+    const lemonadeItem = await itemOf(f.lunch, f.lemonade);
+    await app(async (tx) => {
+      await deactivateMenuItem(tx, f.lunch, lemonadeItem);
+      await updateProduct(tx, f.water, { available: false });
+      await deactivateProduct(tx, f.burger);
+    });
+    const rows = await app((tx) => menuPrices(tx, f.lunch));
+    expect(rows.map(({ name, active }) => ({ name, active }))).toEqual([
+      { name: "Lemonade (staff)", active: false },
+      { name: "Water (staff)", active: true },
+      { name: "Juice (staff)", active: true },
+    ]);
+  });
+
+  it("carries each Active variant with this menu's settings for it, as the variants read gives them", async () => {
+    const f = await fixture();
+    const small = await app(async (tx) => {
+      const variants = await setProductVariants(
+        tx,
+        f.lemonade,
+        [
+          {
+            id: f.large,
+            name: "Large",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "3.50",
+            available: true,
+          },
+          {
+            name: "Small",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "2.50",
+            available: true,
+          },
+          {
+            name: "Jug",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "9.00",
+            available: true,
+            active: false,
+          },
+        ],
+        "en",
+      );
+      await addMember(tx, f.lunchRoot, product(f.lemonade));
+      await addMember(tx, f.dinnerRoot, product(f.lemonade));
+      return variants.find((variant) => variant.name === "Small")!.id;
+    });
+    const lunchItem = await itemOf(f.lunch, f.lemonade);
+    await app((tx) =>
+      setMenuVariants(tx, lunchItem, [{ variantId: f.large, price: "3.25", offered: false }]),
+    );
+    const [lunchRow] = await app((tx) => menuPrices(tx, f.lunch));
+    const [dinnerRow] = await app((tx) => menuPrices(tx, f.dinner));
+    expect(lunchRow!.variants).toEqual([
+      { variantId: f.large, price: "3.25", offered: false },
+      { variantId: small, price: null, offered: true },
+    ]);
+    expect(lunchRow!.variants).toEqual(await app((tx) => listMenuVariants(tx, lunchItem)));
+    expect(dinnerRow!.variants).toEqual([
+      { variantId: f.large, price: null, offered: true },
+      { variantId: small, price: null, offered: true },
+    ]);
+  });
+
+  it("names the product's reporting category by id", async () => {
+    const f = await fixture();
+    const cheese = await app(async (tx) => {
+      const category = await createCategory(tx, { name: { en: "Cheese" } });
+      const created = await createProduct(tx, {
+        catalogueId: f.lunch,
+        categoryId: category.id,
+        name: "Manchego (staff)",
+        customerName: { en: "Manchego (customer)" },
+        kitchenName: "Manchego (kitchen)",
+        pricingUnit: "each",
+        unitPrice: "6.00",
+        vatClass: "reduced",
+      });
+      await addMember(tx, f.lunchRoot, product(created.id));
+      return { categoryId: category.id, productId: created.id };
+    });
+    expect(await app((tx) => menuPrices(tx, f.lunch))).toMatchObject([
+      { productId: cheese.productId, name: "Manchego (staff)", categoryId: cheese.categoryId },
+    ]);
+  });
+
+  it("lists nothing while the menu is inactive", async () => {
+    const f = await fixture();
+    await app((tx) => addMember(tx, f.lunchRoot, product(f.water)));
+    expect(await app((tx) => menuPrices(tx, f.lunch))).toHaveLength(1);
+    await app((tx) => deactivateCatalogue(tx, f.lunch));
+    expect(await app((tx) => menuPrices(tx, f.lunch))).toEqual([]);
+  });
+
+  it("refuses a menu that does not exist", async () => {
+    await seedTenant(fx.db);
+    await expect(app((tx) => menuPrices(tx, crypto.randomUUID()))).rejects.toMatchObject({
+      code: "catalogue.not_found",
+    });
   });
 });

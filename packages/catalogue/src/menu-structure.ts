@@ -1,7 +1,10 @@
 import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
+import type { MenuPriceRow } from "./menu-types.js";
+import { priceOrNull } from "./offer-price.js";
+import { listMenuOffers } from "./operations.js";
 import { menuDetails, menuItems } from "./schema/menu.js";
 import { menuItemExtraItems, menuItemExtraLists } from "./schema/extras.js";
 import { sections } from "./schema/sections.js";
@@ -87,6 +90,45 @@ export async function readMenuStructure(
   const rootSectionId = await requireMenuRoot(tx, menuId);
   const graph = await loadSectionGraph(tx);
   return { rootSectionId, nodes: nodesOf(graph, rootSectionId) };
+}
+
+/**
+ * Every Active product the menu reaches, once each in the structure's order, with its own price,
+ * this menu's override and the price charged. A product switched off on this menu, or sold out, is
+ * listed too: this is the dashboard's read, where both can be switched back.
+ */
+export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuPriceRow[]> {
+  await requireMenuRoot(tx, menuId);
+  const offers = await listMenuOffers(tx, [menuId], {
+    includeUnavailable: true,
+    includeSwitchedOff: true,
+  });
+  const own = new Map<string, { unitPrice: number | null; categoryId: string | null }>();
+  for (const batch of batches(offers.map((offer) => offer.productId)))
+    for (const row of await tx
+      .select({ id: products.id, unitPrice: products.unitPrice, categoryId: products.categoryId })
+      .from(products)
+      .where(inArray(products.id, batch)))
+      own.set(row.id, row);
+  return offers.map((offer) => {
+    const product = own.get(offer.productId)!;
+    return {
+      menuItemId: offer.id,
+      productId: offer.productId,
+      name: offer.name,
+      categoryId: product.categoryId,
+      placements: offer.placements,
+      productPrice: priceOrNull(product.unitPrice),
+      override: offer.grossPrice,
+      effectivePrice: offer.unitPrice,
+      active: offer.active,
+      variants: offer.variants.map((variant) => ({
+        variantId: variant.id,
+        price: variant.menuPrice,
+        offered: variant.offered,
+      })),
+    };
+  });
 }
 
 /**

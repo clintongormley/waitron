@@ -91,6 +91,35 @@ export interface MenuOfferVariant {
   courseId: string | null;
 }
 
+/** One Active variant's settings on one menu: `price` null and `offered` true store nothing. */
+export interface MenuVariant {
+  variantId: string;
+  price: string | null;
+  offered: boolean;
+}
+
+/** One product a menu reaches, with what it costs there (`menuPrices`). */
+export interface MenuPriceRow {
+  menuItemId: string;
+  productId: string;
+  /** The staff name. */
+  name: string;
+  /** The product's reporting category, `products.category_id`. */
+  categoryId: string | null;
+  /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top
+   * level. */
+  placements: string[][];
+  /** The product's own price. */
+  productPrice: string | null;
+  /** The price this menu sets, or null when the product's own price applies. */
+  override: string | null;
+  /** The price charged, resolved as `MenuOffer.unitPrice` is. */
+  effectivePrice: string;
+  /** This menu's own switch for the product. */
+  active: boolean;
+  variants: MenuVariant[];
+}
+
 /**
  * A product in a location's menu list. An `AvailableProduct` is NOT a `PriceableProduct`:
  * it carries `name` + `customerName`, not the snapshot `descriptions` a sale line freezes. Before

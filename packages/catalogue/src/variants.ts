@@ -9,7 +9,8 @@ import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { priceOrNull } from "./offer-price.js";
 import type { ProductPresentation } from "./product-presentation.js";
-import type { MenuOffer } from "./menu-types.js";
+import type { MenuOffer, MenuVariant } from "./menu-types.js";
+export type { MenuVariant } from "./menu-types.js";
 import { INHERITED_KEYS, productWithId } from "./variant-fallback.js";
 import "./errors.js";
 import type { ProductVariant, ProductVariantInput } from "./product-types.js";
@@ -19,13 +20,6 @@ export type { ProductVariant, ProductVariantInput } from "./product-types.js";
  * the editor body always carries, with `active` optional for a caller in code — absent creates a new
  * variant Active and leaves one sent by `id` Active or Inactive as it already is. */
 export type VariantWrite = Omit<ProductVariantInput, "active"> & { active?: boolean };
-
-/** One Active variant's settings on one menu: `price` null and `offered` true store nothing. */
-export interface MenuVariant {
-  variantId: string;
-  price: string | null;
-  offered: boolean;
-}
 
 const variantColumns = {
   id: products.id,

@@ -3561,6 +3561,57 @@ describe("a menu's structure", () => {
   });
 });
 
+describe("a menu's prices", () => {
+  it("lists each product the menu reaches with its own price, the menu's override and the price charged", async () => {
+    const app = mountApp();
+    const menuId = await createCatalogueVia(app, "Priced menu");
+    const name = `Oferta ${crypto.randomUUID()}`;
+    const productId = await createNamedProductVia(app, name);
+    const items = `/management-api/catalogues/${menuId}/items`;
+    const created = await send(app, "POST", items, { body: { productId, grossPrice: "1.40" } });
+    const itemId = ((await created.json()) as { id: string }).id;
+    const path = `/management-api/catalogues/${menuId}/prices`;
+    expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
+    expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
+    const res = await send(app, "GET", path);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([
+      {
+        menuItemId: itemId,
+        productId,
+        name,
+        categoryId: null,
+        placements: [[]],
+        productPrice: "1.00",
+        override: "1.40",
+        effectivePrice: "1.40",
+        active: true,
+        variants: [],
+      },
+    ]);
+    // "Use product price" clears the override, and the row then charges the product's own price.
+    expect(
+      (await send(app, "PATCH", `${items}/${itemId}`, { body: { grossPrice: null } })).status,
+    ).toBe(204);
+    expect(await (await send(app, "GET", path)).json()).toMatchObject([
+      { menuItemId: itemId, productPrice: "1.00", override: null, effectivePrice: "1.00" },
+    ]);
+
+    const unknown = await send(
+      app,
+      "GET",
+      `/management-api/catalogues/${crypto.randomUUID()}/prices`,
+    );
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({ error: { code: "catalogue.not_found" } });
+    const bad = await send(app, "GET", "/management-api/catalogues/bad-id/prices");
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({
+      error: { code: "shared.invalid_id", params: { kind: "MenuId", value: "bad-id" } },
+    });
+  });
+});
+
 it("authors translated hierarchy and sets a product's main category through the API", async () => {
   const app = mountApp("en-GB");
   await suite.db.execute(sql`delete from content_languages`);
