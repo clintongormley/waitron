@@ -9,7 +9,7 @@ declare module "@waitron/shared" {
     /**
      * Thrown by ./aeat-transport.ts when a decrypted `fiscal.aeat` payload's `certKind`,
      * `pfxBase64` or `passphrase` is absent or unusable. `apps/server/src/errors.ts` declares it
-     * too. Codes are never renamed once shipped, so the `server.*` string stands. The two
+     * too. The two
      * declarations carry identical params so TypeScript's declaration merging accepts both when
      * `apps/server` compiles them together.
      */

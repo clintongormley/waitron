@@ -19,7 +19,13 @@ reading from that engine and not as something a box can still print.
 ## Error codes name the DOMAIN CONCEPT, never the throwing package
 
 `series.not_found`, not `db.series_not_found` (design note atop `packages/shared/src/errors.ts`).
-Codes are **never renamed once shipped**; deprecate and add a sibling. `server.*` is reserved for
+**A rename is a migration, made in one change** (owner decision 2026-09-26, replacing "never renamed
+once shipped; deprecate and add a sibling"): the registry, the wording keyed by the code, the tests,
+stored copies such as `incidents.code` (`packages/db/src/schema/incidents.ts`) and `recovery.json`'s
+`lastErrorCode` — grep the code across the tree to find them — and anything outside this repository
+that reads it, which must accept both names until both sides are deployed. Old log lines keep the
+old name. Before a venue is live, stored copies are not rewritten (CLAUDE.md §3's no-data-migration
+rule). `server.*` is reserved for
 facts about the process itself (`apps/server/src/errors.ts`). Every file that throws a code imports
 its registry (`import "./errors.js"`); reachability is guarded once, in the root project (§4).
 

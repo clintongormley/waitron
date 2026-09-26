@@ -13,8 +13,7 @@
  *   }
  *
  * The prefix names the DOMAIN CONCEPT (`sale.*`, `series.*`), never the package that throws,
- * because every code doubles as a translation key. Codes are never renamed once shipped; a wrong
- * one is deprecated and a new one added beside it.
+ * because every code doubles as a translation key.
  *
  * `shared.*` is not an exception: it names the value types this package defines (ids, exact
  * decimals and the stored counts they convert to), common to every package that parses one.

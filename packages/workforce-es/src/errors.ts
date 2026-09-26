@@ -3,8 +3,7 @@
 import "@waitron/shared";
 
 /**
- * packages/workforce-es's contribution to the shared error registry, by declaration merging. Codes
- * are never renamed once shipped.
+ * packages/workforce-es's contribution to the shared error registry, by declaration merging.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {

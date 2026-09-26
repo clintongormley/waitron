@@ -1129,7 +1129,8 @@ What B4 leaves open:
 - **`sale.unknown_product` is no longer raised.** A line naming an item the zone does not offer is
   refused `service_zone.offer_not_allowed` instead. The code stays registered, with its note in
   `apps/server/src/errors.ts` saying nothing raises it, and keeps its 400 in the till surface's
-  status map (`apps/server/src/till-api.ts`), because a shipped code is never renamed or removed.
+  status map (`apps/server/src/till-api.ts`), under the rule of the time that a shipped code was
+  never renamed or removed (replaced 2026-09-26: a rename is now a migration, CLAUDE.md §3).
   **Next action:** none unless a retired code should also leave the status map; recorded so a
   reader who meets it knows it is retired.
 
@@ -1913,7 +1914,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   result, but nothing bounds the round trip from pressing the button to an answer; the agent only
   picks the request up on its next job pull.
 - **Two review suggestions were deliberately not taken** and would be relitigated otherwise:
-  renaming the new error code (codes name the domain concept and are never renamed once shipped),
+  renaming the new error code (declined under the never-renamed rule, replaced 2026-09-26: a rename
+  is now a migration, CLAUDE.md §3, so it can be reconsidered),
   and deduplicating targets in the agent host (the issuing server already normalises and
   deduplicates its bounded list of eight).
 - **Nothing physical has been verified since #327:** discovery, paper output, whether a device knock
@@ -2289,8 +2291,9 @@ ongoing overhaul listed at the top of Track A.
   stores a person's ROLE (`packages/identity/src/schema/persons.ts`), and the names appear only in
   code the box itself serves — and the pre-production rule (CLAUDE.md §3, no
   backwards-compatibility code until a venue is live) covers the rest. The review should confirm that
-  by running it, then drop or narrow that header sentence. Ties in with the next item: editable roles
-  are built from this list.
+  by running it, then drop or narrow that header sentence. **Do it before the editable-roles item
+  below** (owner, 2026-09-26): once an admin can make roles and give them permissions, every
+  permission name is stored with the roles, and a rename then has to rewrite those rows as well.
 - **Roles are something an admin can add and edit; the four built-ins are only defaults** (owner
   decision 2026-09-12, design not written). Detail under *Detail → Roles*: the ladder question decides
   the schema.
@@ -4595,7 +4598,8 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
 - **Three shipped error codes were deleted rather than deprecated, and the owner has not ruled on
   it.** `stripe.tenant_mismatch`, `sumup.tenant_mismatch` and `payment.webhook_tenant_mismatch` went
   when the condition they described — two taxpayers disagreeing — stopped being reachable. `CLAUDE.md`
-  §3 says a shipped code is never renamed and that you deprecate and add a sibling; this backlog says
+  §3 said a shipped code is never renamed and that you deprecate and add a sibling (replaced
+  2026-09-26: a rename is now a migration, which settles renaming but not deleting); this backlog says
   removing one is the owner's call; and the nearest precedent, in a file #378 edited, keeps a retired
   code registered with a note saying codes are never deleted once shipped. The case for deleting them
   is that Waitron is pre-production with no deployed consumer reading them. **Next action:** the owner

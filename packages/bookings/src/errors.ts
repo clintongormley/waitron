@@ -1,7 +1,6 @@
 // Makes TypeScript augment the real "@waitron/shared" rather than declare a new ambient module.
 import "@waitron/shared";
 
-/** Codes are never renamed once shipped. */
 declare module "@waitron/shared" {
   interface ErrorParams {
     /** `bookingId` is the caller's own id, not a secret. */

@@ -6,8 +6,6 @@ import "@waitron/shared";
  * packages/purchasing's contribution to the shared error registry, by declaration merging. The
  * concept here is the received purchase invoice, so the prefix is `purchase.*`: never `purchasing.*`
  * (the package name) or `invoice.*` (which would collide with the invoices WE issue).
- *
- * Codes are never renamed once shipped: a wrong one is deprecated and a new one added beside it.
  */
 declare module "@waitron/shared" {
   interface ErrorParams {

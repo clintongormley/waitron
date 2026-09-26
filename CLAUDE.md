@@ -59,8 +59,8 @@ wide margin. This section stays in full deliberately: it applies to every change
 - **The correction is a new claim, and deserves MORE scrutiny than the text it replaces.** This is the
   single most productive source of false claims in the repository's history.
 - **Before asserting a convention, grep the siblings** — identifiers AND prose. Cost: an error code
-  prefixed `payments.` landed beside twelve `payment.` siblings (codes are never renamed once
-  shipped), and a spec used `orphan` to mean what `packages/payments/src/reconcile.ts` calls
+  prefixed `payments.` landed beside twelve `payment.` siblings (renaming a shipped code is a
+  migration), and a spec used `orphan` to mean what `packages/payments/src/reconcile.ts` calls
   `unmatched`.
 - **A behaviour change retires every receipt about the old behaviour — editing a file is not auditing
   it.** Read the runbooks and the README paraphrases across the whole base-to-tip range, not the three
@@ -362,7 +362,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   — each proven by widening `=== undefined` to `== null`. One field is deliberately outside the rule
   and pinned separately: an extras list's `maxPicks` null MEANS uncapped.
 - **Error codes name the DOMAIN CONCEPT, never the throwing package** — `series.not_found`, not
-  `db.series_not_found`. **Never renamed once shipped**; deprecate and add a sibling. `server.*` is
+  `db.series_not_found`. **A rename is a migration, made in one change** (owner decision 2026-09-26,
+  replacing "never renamed once shipped; deprecate and add a sibling"): the registry, the wording
+  keyed by the code, the tests, stored copies such as `incidents.code` and `recovery.json`'s
+  `lastErrorCode` — grep the code across the tree to find them — and anything outside this
+  repository that reads it, which must accept both names until both sides are deployed. Before a
+  venue is live, stored copies are not rewritten (the no-data-migration rule below). `server.*` is
   reserved for facts about the process itself. Every file that throws a code imports its registry.
 - **A recorded incident code needs an area claim and English and Spanish alert wording.** Guard:
   `scripts/alert-codes.test.ts`, which reads only double-quoted, one-dot, lowercase-and-underscore literals
