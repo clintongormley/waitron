@@ -43,6 +43,14 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
     expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
   });
 
+  test("hinted input", async () => {
+    await mountThemed(
+      '<wt-input label="Precio" hint="Déjalo vacío para usar el precio del producto."></wt-input>',
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   test("disabled input", async () => {
     await mountThemed('<wt-input label="Peso (kg)" disabled></wt-input>', theme);
     await expectNoA11yViolations(host);

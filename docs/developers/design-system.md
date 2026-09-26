@@ -589,6 +589,12 @@ Give its question-mark button a localized `aria-label`. It opens on click, stays
 interact with it, and closes when you press Escape or click anywhere outside it. Place it in a
 `wt-input`'s `help` slot to align it beside that field's label.
 
+A line of help that should always show goes in `wt-input`'s `hint`: it renders muted under the
+field, and the native input is described by it. A paragraph placed beside the `wt-input` cannot do
+that: in Chromium an `aria-describedby` naming an id outside the input's shadow root gave the input
+no description (measured 2026-09-26 with Playwright 1.63.0's Chromium, reading its accessibility
+tree; the same reference inside the shadow root did describe it).
+
 #### A field that falls back to another value
 
 Some fields store a value only to override one they would otherwise take from somewhere else — a
@@ -1198,12 +1204,12 @@ Give each tab a stable key, a localized label and a matching named slot:
 ```ts
 html`<wt-tabs
   label="Venue operations"
-  .items=${[{ key: "status", label: "Status" }, { key: "menus", label: "Menus" }]}
+  .items=${[{ key: "status", label: "Status" }, { key: "zones", label: "Service zones" }]}
   .value=${this.view}
   @wt-change=${this.selectView}
 >
   <section slot="status">${this.renderStatus()}</section>
-  <section slot="menus">${this.renderMenus()}</section>
+  <section slot="zones">${this.renderZones()}</section>
 </wt-tabs>`;
 ```
 

@@ -397,10 +397,8 @@ export class MenuPricesTable extends LitElement {
         (value) => this.#edit((current) => ({ ...current, grossPrice: value }), "grossPrice"),
         false,
         productPrice,
+        t("menu_prices.override_help").replace("{price}", productPrice),
       )}
-      <p class="help" data-test="override-help">
-        ${t("menu_prices.override_help").replace("{price}", productPrice)}
-      </p>
       ${
         draft.grossPrice !== ""
           ? html`<div>

@@ -485,6 +485,27 @@ it("lists the menus and opens one, recording the menu and its tab in the address
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe(t("menus.title")));
 });
 
+it("lists the menus by name, and reverses that order when the name heading is pressed", async () => {
+  // Listed against name order, with ids that sort WITH that listing, so a list kept in the order
+  // it came in, or sorted by id, fails.
+  const el = await mount(
+    api({
+      listCatalogues: vi.fn().mockResolvedValue([
+        { id: "menu-a", name: "Terrace Menu", active: true, version: 1 },
+        { id: "menu-b", name: "Brunch Menu", active: true, version: 1 },
+      ]),
+    }),
+  );
+  const order = () =>
+    [...table(el).shadowRoot.querySelectorAll("tbody tr")].map((row) =>
+      row.getAttribute("data-row-key"),
+    );
+  expect(order()).toEqual(["menu-b", "menu-a"]);
+  table(el).shadowRoot.querySelector<HTMLElement>('button[data-sort="name"]')!.click();
+  await table(el).updateComplete;
+  expect(order()).toEqual(["menu-a", "menu-b"]);
+});
+
 it("opens the menu and tab the address names, and leaves the list by the Back control", async () => {
   const client = api();
   const el = await mountLunch(client);

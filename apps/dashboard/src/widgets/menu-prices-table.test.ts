@@ -336,6 +336,29 @@ it("sorts the prices as amounts, not as text", async () => {
   expect(column(el, "product-price")).toEqual(["9.50", "10.00"]);
 });
 
+it("sorts by this menu's price and by the price charged here, not by the product's own price", async () => {
+  // The product prices order the two rows one way and the menu's prices the other, so a column
+  // sorting by the product price fails.
+  const el = await mount({
+    rows: [
+      { ...lager, productPrice: "10.00", override: "4.00", effectivePrice: "4.00" },
+      { ...burger, productPrice: "5.00", override: "9.00", effectivePrice: "9.00" },
+    ],
+  });
+  const sortBy = async (key: string) => {
+    table(el).shadowRoot.querySelector<HTMLElement>(`button[data-sort="${key}"]`)!.click();
+    await table(el).updateComplete;
+  };
+  await sortBy("product-price");
+  expect(shown(el)).toEqual(["mi-burger", "mi-lager"]);
+  await sortBy("effective-price");
+  expect(shown(el)).toEqual(["mi-lager", "mi-burger"]);
+  await sortBy("product-price");
+  expect(shown(el)).toEqual(["mi-burger", "mi-lager"]);
+  await sortBy("menu-price");
+  expect(shown(el)).toEqual(["mi-lager", "mi-burger"]);
+});
+
 it("sorts by name and by where a product first appears", async () => {
   const el = await mount();
   const sortBy = async (key: string) => {
@@ -397,6 +420,11 @@ it("edits the menu price, with the product price as the empty field's hint, the 
   );
   expect(field(el, "grossPrice").value).toBe("2.50");
   expect(field(el, "grossPrice").placeholder).toBe("3.00");
+  // Each price falls back to another when left empty, so none is required or marked as required.
+  for (const name of ["grossPrice", "variants.0.price", "variants.1.price"]) {
+    expect(field(el, name).required, name).toBe(false);
+    expect(field(el, name).shadowRoot!.querySelector("[data-required]"), name).toBeNull();
+  }
   expect(field<HTMLElementTagNameMap["wt-switch"]>(el, "active").checked).toBe(true);
   const legends = [...modal(el).querySelectorAll("fieldset legend")].map(text);
   expect(legends).toEqual(["Small", "Large"]);
@@ -432,9 +460,12 @@ it("hints the product price on an empty menu price, and sends no variants for a 
   const el = await mount({ editing: "mi-burger" });
   expect(field(el, "grossPrice").value).toBe("");
   expect(field(el, "grossPrice").placeholder).toBe("12.00");
-  expect(text(modal(el).querySelector('[data-test="override-help"]'))).toBe(
-    t("menu_prices.override_help").replace("{price}", "12.00"),
-  );
+  // The help line is the price field's own hint, which is what its input is described by.
+  const help = field(el, "grossPrice").shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
+  expect(text(help)).toBe(t("menu_prices.override_help").replace("{price}", "12.00"));
+  expect(
+    field(el, "grossPrice").shadowRoot!.querySelector("input")!.getAttribute("aria-describedby"),
+  ).toBe(help.id);
   expect(modal(el).querySelector("fieldset")).toBeNull();
   expect(modal(el).querySelector('[data-test="use-product-price"]')).toBeNull();
   const heard = saves(el);
