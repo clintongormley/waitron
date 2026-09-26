@@ -52,8 +52,9 @@ already *sold* — see below.
 
 ## What a sold line freezes
 
-A line freezes what it was sold as and never reads the catalogue again, so editing a product does not
-rewrite yesterday's receipt. `working_order_lines` and `sale_lines` each carry:
+A line freezes its names and its gross price when it is added and never reads them from the
+catalogue again, so editing a product does not rewrite yesterday's receipt. The one exception is the
+VAT rate of a line not yet invoiced, below. `working_order_lines` and `sale_lines` each carry:
 
 - `name` — the product's staff name at add time; on a line sold as a variant, the PARENT's. On a
   line with no variant this is what the basket and a retrieved tab show after the product has been
@@ -90,8 +91,8 @@ product's — so the customer pays the same gross and only the VAT split follows
 `2026-09-20-menus-categories-and-home-layouts-design.md` §11.4). The filed `sale_lines` row carries
 the resolved rate. That pass also writes the rate and the net `unit_price` back onto
 `working_order_lines` while the order is still open; an order issued while placed (a ticket-then-pay
-collect) keeps its add-time rate there, because `working_order_lines_require_open_parent_update`
-refuses any line write on a placed order. A reprint or a replay rebuilds its lines from the stored
+collect) keeps its stored rate there, because `working_order_lines_require_open_parent_update`
+refuses an update of a line whose order is not open. A reprint or a replay rebuilds its lines from the stored
 lines at their stored rates and never resolves again (`priceStoredOrder`, same file).
 
 Because both customer maps (`descriptions` and `variant_descriptions`) had their fallback applied

@@ -455,6 +455,9 @@ No single "frozen" rule covers everything:
 | Availability | Always current, refreshed by the till on its own (§11.1). It governs whether an unsent line can be sent or paid for (§10.3, §11.3). |
 | Preparation destination | Decided by routing and recorded when the line is sent, as today (the ticket item's station). |
 
+_2026-09-26: menus plan Task 7a built this rule (`priceStoredOrderForIssuance`,
+`apps/server/src/working-order.ts`), so the VAT row's "Today" sentence describes the code before it._
+
 Asesor question Q26 (`docs/compliance/asesor-questions.md`) asks the venue's tax adviser to confirm
 that the rate in force when the invoice is issued is the right one, including across a legal rate
 change while a table is open (§11.4 states the issuance moment per path).
@@ -635,6 +638,12 @@ today (`apps/server/src/till-sale.ts`, `working-order.ts`):
   enforces "no overlap"; it is not a step in the workflow.
 - Asesor question Q26 asks the adviser to confirm the rule, and its wording now says "when the
   invoice is issued" and names the invoice-first case.
+
+_2026-09-26: as built, the write-back happens only while the order is open, because
+`working_order_lines_require_open_parent_update` refuses an update of a line whose order is not
+open. An order issued while placed keeps its stored rate on the line, and the filed record
+carries the issued rate; a rebuilt ticket takes its VAT breakdown from the filed record
+(`readSettledTicket`, `apps/server/src/till-sale.ts`)._
 
 ### 11.5 Kitchen screens receive corrections, not only printers
 

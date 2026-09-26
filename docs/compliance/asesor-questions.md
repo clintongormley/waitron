@@ -9,7 +9,8 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-Last revised **2026-09-25** — Q26 (a VAT change while an order is open: we apply the rate in force
+Last revised **2026-09-26** — Q26 updated: the rule it asks about is now built, and the question
+stays open. Before that, **2026-09-25** — Q26 (a VAT change while an order is open: we apply the rate in force
 when the invoice is issued — is that right?) added beside Q25, and later the same day reworded from
 "at payment" to "when the invoice is issued", naming the invoice-first case. Before that, **2026-09-24** — Q25 (a void made on a later day: which VAT period the annulment lands
 in) added beside the filing questions. Before that, **2026-09-23** — Q21 (when a table's invoice
@@ -1212,20 +1213,15 @@ record is issued**, from the product's current VAT class, whenever the line was 
 §10.4 and §11.4). On most paths that is the moment of payment; for an order the venue invoices
 first and collects later, it is the moment the order is placed, before any payment; for a card
 payment it is the pricing done just before the card terminal is contacted. The customer pays the
-same gross price either way, so only the VAT split changes. Today a held order's lines are filed at
-the rate stored when each line was added (`priceStoredOrder`, `apps/server/src/working-order.ts`;
-read, not run), so this is a change we are about to make, and we want it confirmed before
-production. Two different events are affected:
+same gross price either way, so only the VAT split changes. Since 2026-09-26 each line is filed at
+the rate resolved when the invoice is issued (`priceStoredOrderForIssuance`,
+`apps/server/src/working-order.ts`). Two different events are affected:
 
 - **A set-up error corrected mid-service**, for example a drink configured at 10% that should always
   have been 21%. Under the new rule, lines already in open orders are filed at the corrected rate.
 - **A legal rate change effective from a given moment**, for example a change on 1 January while a
   New Year's Eve table is still open after midnight. Under the new rule, everything paid after
   midnight is filed at the new rate, including drinks served before it.
-
-_2026-09-26: menus plan Task 7a built this rule (`priceStoredOrderForIssuance`,
-`apps/server/src/working-order.ts`), so the "Today" sentence above describes the code before it.
-The question to the adviser stands._
 
 A wrong rate on a filed invoice can only be corrected by a further record, so we want the rule
 confirmed before production, not after.
