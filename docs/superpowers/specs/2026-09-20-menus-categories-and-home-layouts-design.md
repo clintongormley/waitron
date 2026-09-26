@@ -133,6 +133,10 @@ price” clears the override. Published effective prices change only when that m
 The Prices tab is a flat, searchable list with one row per distinct product, columns as above, and
 filters for category and overridden prices. Placements describe this menu only, including nested
 paths and a Top level label. Categories unrelated to the menu do not appear in that column.
+*(2026-09-26, owner decisions: each product's Active variants are rows under it, a product sold
+only as its variants shows price ranges, and "Variant overrides" when only its variants have menu
+prices, and the manager chooses which columns are shown, including #541's struck-out single price
+column, hidden by default.)*
 
 ## 4. Publish the menu as one complete snapshot
 

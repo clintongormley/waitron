@@ -6,7 +6,10 @@ import "./menu-prices-table.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 
 afterEach(cleanupWidgets);
-beforeEach(() => sessionStorage.clear());
+beforeEach(() => {
+  sessionStorage.clear();
+  localStorage.clear();
+});
 
 const sections: LibrarySection[] = [
   { id: "s-drinks", internalName: "Drinks", names: {}, image: null, color: null, members: [] },
@@ -70,6 +73,25 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     ["failed", { rows: [], failed: true }],
   ])("accessible table, %s", async (_state, props) => {
     const { host } = await mount(theme, props);
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible table with a product's variants open and the combined price shown", async () => {
+    const { el, host } = await mount(theme, {});
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = table.shadowRoot!;
+    root
+      .querySelector<HTMLButtonElement>('tr[data-row-key="mi-lemonade"] button.tree-toggle')!
+      .click();
+    root.querySelector<HTMLInputElement>('input[data-column="price-on-menu"]')!.click();
+    await table.updateComplete;
+    expect(root.querySelector('tr[data-row-key="mi-lemonade:v-large"]')).not.toBeNull();
+    // A struck price, a muted one with its hidden words, and a muted "Not offered", all drawn.
+    expect(root.querySelector("s")).not.toBeNull();
+    expect(root.querySelector('[part~="visually-hidden"]')).not.toBeNull();
+    expect(
+      root.querySelector('tr[data-row-key="mi-lemonade:v-large"] [part~="muted"]'),
+    ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

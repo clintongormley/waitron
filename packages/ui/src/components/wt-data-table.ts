@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import type { PropertyValues } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property, query, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
 import { baseStyles, selectStyles } from "../base-styles.js";
 
@@ -22,6 +22,9 @@ export interface DataTableColumn<Row> {
     initial?: string;
   };
   align?: "start" | "end";
+  /** Offers the column in the column chooser, shown or hidden until the person chooses. Absent, the
+   * column is always shown. A hidden column still filters and is still searched, but does not sort. */
+  choosable?: "shown" | "hidden";
 }
 
 type SortDirection = "ascending" | "descending";
@@ -203,6 +206,55 @@ export class WtDataTable<Row = unknown> extends LitElement {
         min-height: var(--wt-tap-min);
       }
 
+      .columns-trigger {
+        margin-inline-start: auto;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .columns-panel {
+        position: fixed;
+        margin: 0;
+        /* #toggleChooser keeps this same gutter above and below the panel. */
+        max-height: calc(100dvh - 2 * var(--wt-space-2));
+        overflow-y: auto;
+        padding: var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        box-shadow: var(--wt-shadow-2);
+      }
+
+      .column-choice {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        min-height: var(--wt-tap-min);
+        padding-inline: var(--wt-space-2);
+        cursor: pointer;
+      }
+
+      .column-choice input {
+        width: var(--wt-space-4);
+        height: var(--wt-space-4);
+        margin: 0;
+        accent-color: var(--wt-color-primary);
+      }
+
+      .columns-trigger:focus-visible,
+      .column-choice input:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+
       .tree-toggle {
         width: var(--wt-tap-min);
         height: var(--wt-tap-min);
@@ -248,6 +300,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() errorMessage = "";
   @property() collapseLabel = "Collapse";
   @property() expandLabel = "Expand";
+  /** Names each row's tree toggle, in place of `collapseLabel` and `expandLabel`, so a toggle can
+   * say which branch it opens. */
+  @property({ attribute: false }) rowToggleLabel?: (row: Row, expanded: boolean) => string;
   /** In tree mode, seed each branch as collapsed the first time that branch appears. A person can
    * still expand it normally, and later row refreshes do not collapse it again. */
   @property({ type: Boolean }) initiallyCollapsed = false;
@@ -270,8 +325,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Placeholder text for the search box; empty means it repeats `searchLabel`. */
   @property() searchPlaceholder = "";
   @property() noMatchesMessage = "No matches";
+  /** The column chooser's button text and the accessible name of its list. */
+  @property() columnsLabel = "Columns";
   /** When set, the tab's session storage remembers this table's sort and filter choices under this
-   * key and restores them on the next visit. Search text is never persisted. */
+   * key, and the browser's local storage remembers the chosen columns under `${viewKey}:columns`;
+   * both are restored on the next visit. Search text is never persisted. */
   @property() viewKey?: string;
   @state() private searchText = "";
   /** Every filter choice, chosen or restored, keyed by column key; an absent key means the column's
@@ -280,6 +338,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * removes one its column's options no longer include. */
   @state() private filterSelections: Record<string, string> = {};
   @state() private collapsed = new Set<string>();
+  /** Each column's shown state, chosen or restored; it applies only while its column is choosable. */
+  @state() private columnChoices: Record<string, boolean> = {};
+  @state() private chooserOpen = false;
+  @query(".columns-trigger") private chooserTrigger!: HTMLButtonElement;
+  @query(".columns-panel") private chooserPanel!: HTMLElement;
   private readonly seededBranches = new Set<string>();
   #restored = false;
 
@@ -314,6 +377,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (!this.viewKey || this.columns.length === 0) return;
     if (!this.#restored) {
       this.#restored = true;
+      this.#restoreColumns(this.viewKey);
       let raw: string | null;
       try {
         raw = sessionStorage.getItem(this.viewKey);
@@ -345,6 +409,80 @@ export class WtDataTable<Row = unknown> extends LitElement {
         // A malformed store is ignored, exactly like a first visit.
       }
     }
+  }
+
+  /** Replaces the column choices with the ones stored under this key; anything unreadable is a
+   * first visit. */
+  #restoreColumns(viewKey: string): void {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(localStorage.getItem(`${viewKey}:columns`) ?? "null");
+    } catch {
+      // Blocked or malformed storage reads as nothing stored.
+    }
+    // Object() makes an object of nothing read, null, a number, a string or a boolean, and none of
+    // those has an own entry that is a boolean.
+    const entries = Array.isArray(parsed) ? [] : Object.entries(Object(parsed) as object);
+    this.columnChoices = Object.fromEntries(
+      entries.filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"),
+    );
+  }
+
+  /** The columns drawn, in column order; the first column stands in when every one is hidden. */
+  #shownColumns(): DataTableColumn<Row>[] {
+    const shown = this.columns.filter(
+      (column) =>
+        column.choosable === undefined ||
+        (this.columnChoices[column.key] ?? column.choosable === "shown"),
+    );
+    return shown.length > 0 ? shown : this.columns.slice(0, 1);
+  }
+
+  #chooseColumn(key: string, shown: boolean): void {
+    this.columnChoices = { ...this.columnChoices, [key]: shown };
+    if (this.viewKey) {
+      try {
+        localStorage.setItem(`${this.viewKey}:columns`, JSON.stringify(this.columnChoices));
+      } catch {
+        // The remembered columns are a convenience; the table works without them.
+      }
+    }
+    this.dispatchEvent(
+      new CustomEvent("wt-columns-change", {
+        detail: { shown: this.#shownColumns().map((column) => column.key) },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #toggleChooser(event: MouseEvent): void {
+    event.preventDefault();
+    if (this.chooserPanel.matches(":popover-open")) {
+      this.chooserPanel.hidePopover();
+      return;
+    }
+    this.chooserPanel.showPopover();
+    // Placed synchronously after opening, so its first paint is already in place.
+    const anchor = this.chooserTrigger.getBoundingClientRect();
+    const box = this.chooserPanel.getBoundingClientRect();
+    const left = Math.max(8, Math.min(anchor.right - box.width, innerWidth - box.width - 8));
+    this.chooserPanel.style.left = `${left}px`;
+    const top = Math.max(8, Math.min(anchor.bottom, innerHeight - box.height - 8));
+    this.chooserPanel.style.top = `${top}px`;
+  }
+
+  #chooserKeydown(event: KeyboardEvent): void {
+    if (
+      event.key !== "Escape" ||
+      event.defaultPrevented ||
+      !this.chooserPanel.matches(":popover-open")
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.chooserPanel.hidePopover();
+    this.chooserTrigger.focus();
   }
 
   /** The options a column's filter currently offers, or undefined while it offers none: the column
@@ -506,10 +644,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
     );
   }
 
-  #sortedRows(rows: readonly Row[]): Row[] {
-    const column = this.columns.find(
-      (candidate) => candidate.key === this.sortKey && candidate.sortValue !== undefined,
-    );
+  /** A hidden column sorts nothing, though `sortKey` still names it for when it is shown again. */
+  #sortColumn(shown: readonly DataTableColumn<Row>[]): DataTableColumn<Row> | undefined {
+    return shown.find((column) => column.key === this.sortKey && column.sortValue !== undefined);
+  }
+
+  #sortedRows(rows: readonly Row[], column: DataTableColumn<Row> | undefined): Row[] {
     const indexOf = new Map<Row, number>();
     rows.forEach((row, index) => indexOf.set(row, index));
     return this.#sortByColumn(rows, column, indexOf);
@@ -549,7 +689,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   #treeRows(
     rows: readonly Row[],
-    forcedOpen: ReadonlySet<string> = new Set(),
+    forcedOpen: ReadonlySet<string>,
+    column: DataTableColumn<Row> | undefined,
   ): { row: Row; key: string; depth: number; hasChildren: boolean }[] {
     const keyOf = (row: Row, i: number) => this.rowKey(row, i);
     const parentOf = this.rowParent!;
@@ -563,7 +704,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const bucket = p !== null && present.has(p) ? p : "";
       (childrenByParent.get(bucket) ?? childrenByParent.set(bucket, []).get(bucket)!).push(row);
     }
-    const column = this.columns.find((c) => c.key === this.sortKey && c.sortValue !== undefined);
     const out: { row: Row; key: string; depth: number; hasChildren: boolean }[] = [];
     const walk = (parentKey: string, depth: number) => {
       const siblings = this.#sortByColumn(childrenByParent.get(parentKey) ?? [], column, indexOf);
@@ -598,7 +738,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * `role="treegrid"` complete — axe wants every level named once the table's own role is
    * overridden.
    */
-  #renderHead(visibleKeys: string[]) {
+  #renderHead(visibleKeys: string[], shown: readonly DataTableColumn<Row>[]) {
     const { allSelected, someSelected } = this.#selectionState(visibleKeys);
     return html`
       <thead role="rowgroup">
@@ -620,7 +760,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 </th>`
               : nothing
           }
-          ${this.columns.map(
+          ${shown.map(
             (column) => html`
               <th
                 role="columnheader"
@@ -684,7 +824,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   #renderToolbar() {
     const hasFilters = this.columns.some((column) => column.filter);
-    if (!this.searchable && !hasFilters) return nothing;
+    const choosable = this.columns.filter((column) => column.choosable !== undefined);
+    if (!this.searchable && !hasFilters && choosable.length === 0) return nothing;
     return html`<div class="table-toolbar">
       ${
         this.searchable
@@ -736,7 +877,50 @@ export class WtDataTable<Row = unknown> extends LitElement {
             </div>`
           : nothing
       }
+      ${choosable.length > 0 ? this.#renderChooser(choosable) : nothing}
     </div>`;
+  }
+
+  #renderChooser(choosable: readonly DataTableColumn<Row>[]) {
+    const shown = this.#shownColumns();
+    return html`<button
+        type="button"
+        class="columns-trigger"
+        aria-expanded=${this.chooserOpen}
+        popovertarget="columns-panel"
+        @click=${this.#toggleChooser}
+        @keydown=${this.#chooserKeydown}
+      >
+        ${this.columnsLabel}
+      </button>
+      <div
+        id="columns-panel"
+        class="columns-panel"
+        popover
+        role="group"
+        aria-label=${this.columnsLabel}
+        @toggle=${(event: ToggleEvent) => {
+          this.chooserOpen = event.newState === "open";
+        }}
+        @keydown=${this.#chooserKeydown}
+      >
+        ${choosable.map((column) => {
+          const isShown = shown.includes(column);
+          return html`<label class="column-choice">
+            <input
+              type="checkbox"
+              name=${`${column.key}-column`}
+              data-column=${column.key}
+              .checked=${isShown}
+              ?disabled=${isShown && shown.length === 1}
+              @change=${(event: Event) => {
+                event.stopPropagation();
+                this.#chooseColumn(column.key, (event.target as HTMLInputElement).checked);
+              }}
+            />${column.label}
+          </label>`;
+        })}
+      </div>`;
   }
 
   override render() {
@@ -758,14 +942,16 @@ export class WtDataTable<Row = unknown> extends LitElement {
       return html`${this.#renderToolbar()}
         <p class="message" role="status">${this.noMatchesMessage}</p>`;
 
+    const shown = this.#shownColumns();
+    const sortColumn = this.#sortColumn(shown);
     if (!isTree) {
-      const sorted = this.#sortedRows(visible);
+      const sorted = this.#sortedRows(visible, sortColumn);
       const visibleKeys = sorted.map((row, index) => this.rowKey(row, index));
       return html`
         ${this.#renderToolbar()}
         <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
           <table>
-            ${this.#renderHead(visibleKeys)}
+            ${this.#renderHead(visibleKeys, shown)}
             <tbody>
               ${sorted.map((row, index) => {
                 const key = this.rowKey(row, index);
@@ -775,7 +961,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                     class=${classMap({ clickable: this.rowClick !== undefined })}
                   >
                     ${this.#renderSelectCell(key, row, false)}
-                    ${this.columns.map(
+                    ${shown.map(
                       (column, ci) => html`
                         <td data-align=${column.align ?? "start"}>
                           ${
@@ -801,13 +987,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
     }
 
     const { rows: treeRows, ancestorOnly } = treeVisible!;
-    const entries = this.#treeRows(treeRows, ancestorOnly);
+    const entries = this.#treeRows(treeRows, ancestorOnly, sortColumn);
     const visibleKeys = entries.map((e) => e.key);
     return html`
       ${this.#renderToolbar()}
       <div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
         <table role="treegrid">
-          ${this.#renderHead(visibleKeys)}
+          ${this.#renderHead(visibleKeys, shown)}
           <tbody role="rowgroup">
             ${entries.map(({ row, key, depth, hasChildren }) => {
               const expanded = !this.collapsed.has(key) || ancestorOnly.has(key);
@@ -819,7 +1005,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 aria-expanded=${hasChildren ? String(expanded) : nothing}
               >
                 ${this.#renderSelectCell(key, row, true)}
-                ${this.columns.map(
+                ${shown.map(
                   (column, ci) =>
                     html`<td role="gridcell" data-align=${column.align ?? "start"}>
                       ${
@@ -832,7 +1018,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
                                 hasChildren && !cellContext.ancestorOnly
                                   ? html`<button
                                       class="tree-toggle"
-                                      aria-label=${expanded ? this.collapseLabel : this.expandLabel}
+                                      aria-label=${
+                                        this.rowToggleLabel
+                                          ? this.rowToggleLabel(row, expanded)
+                                          : expanded
+                                            ? this.collapseLabel
+                                            : this.expandLabel
+                                      }
                                       @click=${() => this.#toggle(key)}
                                     >
                                       ${expanded ? "▾" : "▸"}
