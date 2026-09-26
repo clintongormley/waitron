@@ -587,6 +587,33 @@ export async function startServer(
   base: NodeJS.ProcessEnv = {},
   seams: StartServerSeams = {},
 ): Promise<StartedServer> {
+  const undoOnFailure: Array<() => Promise<void>> = [];
+  try {
+    return await bootServer(env, base, seams, undoOnFailure);
+  } catch (error) {
+    // Newest first, so anything that runs on the venue store stops before the store closes. An undo
+    // that fails is dropped: the boot's own error is the one the supervisor has to see.
+    for (const undo of undoOnFailure.reverse()) {
+      try {
+        await undo();
+      } catch {
+        // Dropped; see above.
+      }
+    }
+    throw error;
+  }
+}
+
+/**
+ * `startServer`'s body. Whatever it starts that must be stopped if a later step throws is pushed onto
+ * `undoOnFailure`; nothing there runs once it has returned a server, whose own `close()` takes over.
+ */
+async function bootServer(
+  env: Record<string, string | undefined>,
+  base: NodeJS.ProcessEnv,
+  seams: StartServerSeams,
+  undoOnFailure: Array<() => Promise<void>>,
+): Promise<StartedServer> {
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
   const cloudOrigin = loadCloudOrigin(env);
@@ -639,8 +666,7 @@ export async function startServer(
   }
 
   // Before ANY write, including migrations: a host pointed at another environment's database must
-  // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself, so
-  // this function never holds two opens of one directory at once.
+  // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
   try {
     await assertDeploymentMatches(stampProbe.venue, config.environment);
@@ -649,9 +675,8 @@ export async function startServer(
   }
 
   // `applyMigrations` opens and closes its own store, so running it BEFORE the long-lived open below
-  // keeps this boot to one open of the directory at a time and leaves nothing open behind a failed
-  // migration. Setup mode migrates the FULL schema, which the wizard needs; trading mode migrates
-  // only the enabled set.
+  // keeps the two from overlapping and leaves nothing open behind a failed migration. Setup mode
+  // migrates the FULL schema, which the wizard needs; trading mode migrates only the enabled set.
   const moduleConfig = await readModuleConfig(config.stateDir);
   const setsToMigrate =
     config.till === undefined ? ALL_MODULES : enabledModules(ALL_MODULES, moduleConfig);
@@ -661,9 +686,10 @@ export async function startServer(
       migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),
     ),
   );
-  // The long-lived open, and the only one for the rest of this boot. Every teardown below closes
-  // `store`.
+  // The long-lived open. On a primary with a backup configured, the backup supervisor opens its own
+  // beside it.
   const store = await openVenueDatabase(config.venueDir);
+  undoOnFailure.push(() => store.close());
   const db = store.venue;
 
   // Drift visibility: log the enabled set against what the database has actually migrated. A
@@ -726,275 +752,247 @@ export async function startServer(
     //
     // `ensureBoxSecrets` runs regardless of `config.tls`: the box's own vault key must exist whichever
     // front-door cert is served. An operator's `WAITRON_TLS_*` pair still wins as the served cert.
-    //
-    // Guarded so any throw in this branch closes the store before it propagates: on a throw path
-    // nothing else would ever call `store.close()`.
-    try {
-      const ensured = await ensureBoxSecrets({
-        stateDir: config.stateDir,
-        hostnames: BOX_LEAF_HOSTNAMES,
-        now,
-        listIpv4: boxAddresses,
+    const ensured = await ensureBoxSecrets({
+      stateDir: config.stateDir,
+      hostnames: BOX_LEAF_HOSTNAMES,
+      now,
+      listIpv4: boxAddresses,
+    });
+    // `ensureBoxSecrets` wrote the vault key into `secrets.env` but did not load it into this
+    // process's env, so the setup ring is read back off disk.
+    const ring = loadKeyRing(
+      parseEnvFile(readFileSync(join(config.stateDir, "secrets.env"), "utf8")),
+    );
+    const accountKey = resolveAccountKey({}, ring);
+    const persistTrading = async (cfg: TradingConfig): Promise<void> => {
+      await writeTradingEnv(config.stateDir, {
+        ...cfg,
+        accountKey: cfg.accountKey ?? accountKey.toString("base64"),
       });
-      // `ensureBoxSecrets` wrote the vault key into `secrets.env` but did not load it into this
-      // process's env, so the setup ring is read back off disk.
-      const ring = loadKeyRing(
-        parseEnvFile(readFileSync(join(config.stateDir, "secrets.env"), "utf8")),
-      );
-      const accountKey = resolveAccountKey({}, ring);
-      const persistTrading = async (cfg: TradingConfig): Promise<void> => {
-        await writeTradingEnv(config.stateDir, {
-          ...cfg,
-          accountKey: cfg.accountKey ?? accountKey.toString("base64"),
-        });
-      };
-      // What `provisioning.foreign_tenant` names: operator-typed configuration rather than a secret,
-      // which is why it may be echoed.
-      const ownerDatabaseName = config.venueDir;
-      const openBoundedBucket = (bucket: BucketConfig) =>
-        boundObjectStore(createS3ObjectStore(bucket));
-      mountSetup(
-        app,
-        {
-          environment: config.environment,
-          devMode: config.devMode,
-          operations: createSetupOperationStore(config.stateDir),
-          cloudRecovery:
-            cloudOrigin && config.environment === "preproduction"
-              ? createCloudRecoveryClient({
-                  stateDir: config.stateDir,
-                  origin: cloudOrigin,
-                  environment: config.environment,
-                })
-              : undefined,
-          stageRestore: (request, { oldBoxGone }) =>
-            stageRestoreRequest(config.stateDir, request, async (candidate) => {
-              const validated = await validateArtifact({
-                artifact: candidate.artifact,
-                recoveryKey: candidate.recoveryKey,
+    };
+    // What `provisioning.foreign_tenant` names: operator-typed configuration rather than a secret,
+    // which is why it may be echoed.
+    const ownerDatabaseName = config.venueDir;
+    const openBoundedBucket = (bucket: BucketConfig) =>
+      boundObjectStore(createS3ObjectStore(bucket));
+    mountSetup(
+      app,
+      {
+        environment: config.environment,
+        devMode: config.devMode,
+        operations: createSetupOperationStore(config.stateDir),
+        cloudRecovery:
+          cloudOrigin && config.environment === "preproduction"
+            ? createCloudRecoveryClient({
                 stateDir: config.stateDir,
-                stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
-                migrationsRoot: config.migrationsRoot,
-                modules: ALL_MODULES,
-                environment: candidate.environment,
-              });
-              await refuseIfArchiveSourceLive({
-                validated,
-                stateDir: config.stateDir,
-                oldBoxGone,
-                now,
-                openStore: openBoundedBucket,
-              });
-            }),
-          stageBucketRestore: async ({ kit, environment, oldBoxGone, venueConfirmed }) =>
-            stageStreamRestore({
-              kit: parseRecoveryKit(kit),
+                origin: cloudOrigin,
+                environment: config.environment,
+              })
+            : undefined,
+        stageRestore: (request, { oldBoxGone }) =>
+          stageRestoreRequest(config.stateDir, request, async (candidate) => {
+            const validated = await validateArtifact({
+              artifact: candidate.artifact,
+              recoveryKey: candidate.recoveryKey,
               stateDir: config.stateDir,
               stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
               migrationsRoot: config.migrationsRoot,
               modules: ALL_MODULES,
-              environment,
-              litestreamBin: config.litestreamBin,
+              environment: candidate.environment,
+            });
+            await refuseIfArchiveSourceLive({
+              validated,
+              stateDir: config.stateDir,
               oldBoxGone,
-              venueConfirmed,
               now,
-              log,
               openStore: openBoundedBucket,
-            }),
-          stageConfiguration: (artifact, passphrase) =>
-            stageConfigurationImport(
-              config.stateDir,
-              ring,
-              artifact,
-              passphrase,
-              async (bundle) => {
-                const resolvedConfig = venueModuleConfig(
-                  moduleConfig,
-                  bundle.venue.location.fiscalTerritory,
-                );
-                const modules = enabledModules(ALL_MODULES, resolvedConfig);
-                validateConfigurationBundle(
-                  bundle,
-                  modules,
-                  await schemaVersionsByModule(db, modules),
-                );
-              },
-            ),
-          clearConfiguration: () => clearStagedConfigurationImport(config.stateDir),
-          runFiscalTest: async ({ request, contribution, secret }) => {
+            });
+          }),
+        stageBucketRestore: async ({ kit, environment, oldBoxGone, venueConfirmed }) =>
+          stageStreamRestore({
+            kit: parseRecoveryKit(kit),
+            stateDir: config.stateDir,
+            stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
+            migrationsRoot: config.migrationsRoot,
+            modules: ALL_MODULES,
+            environment,
+            litestreamBin: config.litestreamBin,
+            oldBoxGone,
+            venueConfirmed,
+            now,
+            log,
+            openStore: openBoundedBucket,
+          }),
+        stageConfiguration: (artifact, passphrase) =>
+          stageConfigurationImport(config.stateDir, ring, artifact, passphrase, async (bundle) => {
             const resolvedConfig = venueModuleConfig(
               moduleConfig,
-              request.venue.location.fiscalTerritory,
+              bundle.venue.location.fiscalTerritory,
             );
             const modules = enabledModules(ALL_MODULES, resolvedConfig);
-            const moduleVersions = await schemaVersionsByModule(db, modules);
-            const input = fiscalReadinessInput({
+            validateConfigurationBundle(bundle, modules, await schemaVersionsByModule(db, modules));
+          }),
+        clearConfiguration: () => clearStagedConfigurationImport(config.stateDir),
+        runFiscalTest: async ({ request, contribution, secret }) => {
+          const resolvedConfig = venueModuleConfig(
+            moduleConfig,
+            request.venue.location.fiscalTerritory,
+          );
+          const modules = enabledModules(ALL_MODULES, resolvedConfig);
+          const moduleVersions = await schemaVersionsByModule(db, modules);
+          const input = fiscalReadinessInput({
+            venue: request.venue,
+            contribution,
+            secret,
+            moduleVersions,
+            applicationVersion: applicationVersion(process.env),
+          });
+          return createFiscalReadinessStore(
+            config.stateDir,
+            () =>
+              submitFiscalReadiness({
+                stateDir: config.stateDir,
+                migrationsRoot: config.migrationsRoot,
+                modules,
+                venue: request.venue,
+                contribution,
+                secret,
+                ring,
+                readinessInput: input,
+              }),
+            ring.current.key,
+          ).run(input);
+        },
+        assertFiscalReady: async ({ request, contribution, secret }) => {
+          const resolvedConfig = venueModuleConfig(
+            moduleConfig,
+            request.venue.location.fiscalTerritory,
+          );
+          const modules = enabledModules(ALL_MODULES, resolvedConfig);
+          const moduleVersions = await schemaVersionsByModule(db, modules);
+          await createFiscalReadinessStore(
+            config.stateDir,
+            async () => "uncertain",
+            ring.current.key,
+          ).assertReady(
+            fiscalReadinessInput({
               venue: request.venue,
               contribution,
               secret,
               moduleVersions,
               applicationVersion: applicationVersion(process.env),
-            });
-            return createFiscalReadinessStore(
-              config.stateDir,
-              () =>
-                submitFiscalReadiness({
-                  stateDir: config.stateDir,
-                  migrationsRoot: config.migrationsRoot,
-                  modules,
-                  venue: request.venue,
-                  contribution,
-                  secret,
-                  ring,
-                  readinessInput: input,
-                }),
-              ring.current.key,
-            ).run(input);
-          },
-          assertFiscalReady: async ({ request, contribution, secret }) => {
-            const resolvedConfig = venueModuleConfig(
-              moduleConfig,
-              request.venue.location.fiscalTerritory,
-            );
-            const modules = enabledModules(ALL_MODULES, resolvedConfig);
-            const moduleVersions = await schemaVersionsByModule(db, modules);
-            await createFiscalReadinessStore(
-              config.stateDir,
-              async () => "uncertain",
-              ring.current.key,
-            ).assertReady(
-              fiscalReadinessInput({
-                venue: request.venue,
-                contribution,
-                secret,
-                moduleVersions,
-                applicationVersion: applicationVersion(process.env),
-              }),
-            );
-          },
-          // The fiscal slot comes from the REQUEST's territory: the box's `moduleConfig` base is
-          // default-on, which with two fiscal-slot members would be ambiguous.
-          provision: async (req) => {
-            const resolvedConfig = venueModuleConfig(
-              moduleConfig,
-              req.venue.location.fiscalTerritory,
-            );
-            const modules = enabledModules(ALL_MODULES, resolvedConfig);
-            const staged = req.configurationImport
-              ? await readStagedConfigurationImport(config.stateDir, ring)
-              : null;
-            if (req.configurationImport && staged === null) {
-              throw new AppError("setup.request_invalid", { field: "configurationImport" });
-            }
-            if (
-              staged !== null &&
-              (staged.bundle.venue.country !== req.venue.country ||
-                staged.bundle.venue.taxId !== req.venue.taxId)
-            ) {
-              throw new AppError("setup.request_invalid", { field: "configurationImport" });
-            }
-            const versions =
-              staged === null ? undefined : await schemaVersionsByModule(db, modules);
-            const result = await provisionVenue(
-              {
-                ownerDb: db,
-                moduleConfig: resolvedConfig,
-                database: ownerDatabaseName,
-                stateDir: config.stateDir,
-                ...(staged === null
-                  ? {}
-                  : {
-                      beforeCommit: async (tx, result) => {
-                        await importConfigurationTables(
-                          tx,
-                          staged.bundle,
-                          { locationId: result.locationId },
-                          modules,
-                          versions!,
-                        );
-                      },
-                    }),
-              },
-              req,
-            );
-            return result;
-          },
-          recoverProvision: async (req) => {
-            const result = await recoverProvisionedVenue(db, req);
-            return result;
-          },
-          seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
-          adopt: (req) =>
-            adoptFromPrimary(
-              {
-                ownerDb: db,
-                fetchBundle: fetchMirrorBundle,
-                advertisedOrigin: config.advertisedOrigin,
-                environment: config.environment,
-                persistTrading,
-                persistModuleConfig: async (c) => {
-                  await writeModuleConfig(config.stateDir, c);
-                },
-                stateDir: config.stateDir,
-                database: ownerDatabaseName,
-              },
-              req,
-            ),
-          establishIdentity: (nodeId) => establishNodeIdentity({ ownerDb: db, ring }, nodeId),
-          seedMembership: (nodeId) =>
-            seedTermZeroMembership({ db, ring }, nodeId, config.advertisedOrigin),
-          // Handed to the fiscal contribution's `provisioningSecret.seal` seat, so boot imports no
-          // regime package.
-          db,
-          ring,
-          persistTrading,
-          requestRestart: () => process.kill(process.pid, "SIGTERM"),
-          setupAppDir: config.setupAppDir,
+            }),
+          );
         },
-        log,
-      );
-      const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
-      const server = startListening({ ...config, tls }, app, now, log);
-      // Started after the throwing setup steps, so a failed boot cannot leak its socket.
-      const mdns = startMdnsResponder({
-        hostname: BOX_HOSTNAME,
-        devMode: config.devMode,
-        httpHost: config.httpHost,
-        getAddresses: boxAddresses,
-        log,
-      });
-      return makeStartedServer(
-        server,
-        health,
-        log,
-        {
-          stopWork: () => Promise.resolve(),
-          closePools: () => store.close(),
+        // The fiscal slot comes from the REQUEST's territory: the box's `moduleConfig` base is
+        // default-on, which with two fiscal-slot members would be ambiguous.
+        provision: async (req) => {
+          const resolvedConfig = venueModuleConfig(
+            moduleConfig,
+            req.venue.location.fiscalTerritory,
+          );
+          const modules = enabledModules(ALL_MODULES, resolvedConfig);
+          const staged = req.configurationImport
+            ? await readStagedConfigurationImport(config.stateDir, ring)
+            : null;
+          if (req.configurationImport && staged === null) {
+            throw new AppError("setup.request_invalid", { field: "configurationImport" });
+          }
+          if (
+            staged !== null &&
+            (staged.bundle.venue.country !== req.venue.country ||
+              staged.bundle.venue.taxId !== req.venue.taxId)
+          ) {
+            throw new AppError("setup.request_invalid", { field: "configurationImport" });
+          }
+          const versions = staged === null ? undefined : await schemaVersionsByModule(db, modules);
+          const result = await provisionVenue(
+            {
+              ownerDb: db,
+              moduleConfig: resolvedConfig,
+              database: ownerDatabaseName,
+              stateDir: config.stateDir,
+              ...(staged === null
+                ? {}
+                : {
+                    beforeCommit: async (tx, result) => {
+                      await importConfigurationTables(
+                        tx,
+                        staged.bundle,
+                        { locationId: result.locationId },
+                        modules,
+                        versions!,
+                      );
+                    },
+                  }),
+            },
+            req,
+          );
+          return result;
         },
-        mdns,
-        startLandingListener(config, log),
-      );
-    } catch (error) {
-      await store.close();
-      throw error;
-    }
+        recoverProvision: async (req) => {
+          const result = await recoverProvisionedVenue(db, req);
+          return result;
+        },
+        seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
+        adopt: (req) =>
+          adoptFromPrimary(
+            {
+              ownerDb: db,
+              fetchBundle: fetchMirrorBundle,
+              advertisedOrigin: config.advertisedOrigin,
+              environment: config.environment,
+              persistTrading,
+              persistModuleConfig: async (c) => {
+                await writeModuleConfig(config.stateDir, c);
+              },
+              stateDir: config.stateDir,
+              database: ownerDatabaseName,
+            },
+            req,
+          ),
+        establishIdentity: (nodeId) => establishNodeIdentity({ ownerDb: db, ring }, nodeId),
+        seedMembership: (nodeId) =>
+          seedTermZeroMembership({ db, ring }, nodeId, config.advertisedOrigin),
+        // Handed to the fiscal contribution's `provisioningSecret.seal` seat, so boot imports no
+        // regime package.
+        db,
+        ring,
+        persistTrading,
+        requestRestart: () => process.kill(process.pid, "SIGTERM"),
+        setupAppDir: config.setupAppDir,
+      },
+      log,
+    );
+    const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
+    const server = startListening({ ...config, tls }, app, now, log);
+    undoOnFailure.push(() => closeListener(server));
+    const mdns = startMdnsResponder({
+      hostname: BOX_HOSTNAME,
+      devMode: config.devMode,
+      httpHost: config.httpHost,
+      getAddresses: boxAddresses,
+      log,
+    });
+    undoOnFailure.push(() => mdns.stop());
+    return makeStartedServer(
+      server,
+      health,
+      log,
+      {
+        stopWork: () => Promise.resolve(),
+        closePools: () => store.close(),
+      },
+      mdns,
+      startLandingListener(config, log),
+    );
   }
 
   // TRADING MODE — a venue is bound.
   //
   // The env straight through: `loadKeyRing` owns the WAITRON_CREDENTIALS_KEY* names and their
   // validation. Loaded here rather than in the shared prefix, so an unprovisioned box needs no key.
-  //
-  // Each guarded throw site below closes the store before it propagates: on a throw path nothing
-  // else would ever call `store.close()`. Unguarded sites further down (`readOrderFlow` among them)
-  // still leave it open.
-  let ring: ReturnType<typeof loadKeyRing>;
-  try {
-    ring = loadKeyRing(env);
-  } catch (error) {
-    await store.close();
-    throw error;
-  }
+  const ring = loadKeyRing(env);
   const accountKey = resolveAccountKey(env, ring);
   const totpKeyRing = {
     current: { version: 1, key: accountPurposeKey(accountKey, "totp") },
@@ -1019,7 +1017,9 @@ export async function startServer(
     finishWorker.catch((err) =>
       log("error", "adoption.worker_rejected", { errorCode: codeOf(err) }),
     );
+    undoOnFailure.push(() => finishWorker.catch(() => {}));
     const server = startTradingListener(config, app, now, log);
+    undoOnFailure.push(() => closeListener(server));
     const mdns = startMdnsResponder({
       hostname: BOX_HOSTNAME,
       devMode: config.devMode,
@@ -1027,6 +1027,7 @@ export async function startServer(
       getAddresses: boxAddresses,
       log,
     });
+    undoOnFailure.push(() => mdns.stop());
     return makeStartedServer(
       server,
       health,
@@ -1042,12 +1043,7 @@ export async function startServer(
     );
   }
 
-  try {
-    assertSingleOperationalVenue(await readOperationalVenueIds(db), config.till.locationId);
-  } catch (error) {
-    await store.close();
-    throw error;
-  }
+  assertSingleOperationalVenue(await readOperationalVenueIds(db), config.till.locationId);
 
   // Nothing reaches here as a `mirror` today: `adoptFromPrimary` writes `mode='mirror'` together with
   // the adoption-pending latch, and the branch above returns while it is set.
@@ -1061,37 +1057,26 @@ export async function startServer(
   // so a persisted superseding document flows into the `fenced` demote. An unreachable peer lets
   // boot proceed as primary: the MVP's accepted window. Demote-only: it can never self-promote.
   if (initialAxes.mode !== "mirror") {
-    let peer: Awaited<ReturnType<typeof readMirrorConfig>>;
-    try {
-      peer = await readMirrorConfig(db, config.till.nodeId);
-    } catch (error) {
-      await store.close();
-      throw error;
-    }
+    const peer = await readMirrorConfig(db, config.till.nodeId);
     if (peer !== null) {
-      try {
-        const [trustSet, held] = await Promise.all([
-          readMembershipTrustSet(db),
-          readNodeMembership(db),
-        ]);
-        await reconcileMembershipOnBoot({
-          held,
-          nodeId: config.till.nodeId,
-          // `mirror_config` is owner-written trusted config, so no SSRF screen.
-          peerUrl: `${peer.relayUrl.replace(/\/+$/, "")}/management-api/membership`,
-          fetchPeerMembership: fetchPeerMembershipDocument,
-          // Persist-if-accepted, so a newer verified chart is held even when it does not fence this node.
-          acceptDocument: async (incoming, currentTerm) => {
-            const result = acceptMembershipDocument(incoming, currentTerm, trustSet);
-            if (result.accepted) await persistNodeMembershipIfNewer(db, incoming);
-            return result;
-          },
-          log,
-        });
-      } catch (error) {
-        await store.close();
-        throw error;
-      }
+      const [trustSet, held] = await Promise.all([
+        readMembershipTrustSet(db),
+        readNodeMembership(db),
+      ]);
+      await reconcileMembershipOnBoot({
+        held,
+        nodeId: config.till.nodeId,
+        // `mirror_config` is owner-written trusted config, so no SSRF screen.
+        peerUrl: `${peer.relayUrl.replace(/\/+$/, "")}/management-api/membership`,
+        fetchPeerMembership: fetchPeerMembershipDocument,
+        // Persist-if-accepted, so a newer verified chart is held even when it does not fence this node.
+        acceptDocument: async (incoming, currentTerm) => {
+          const result = acceptMembershipDocument(incoming, currentTerm, trustSet);
+          if (result.accepted) await persistNodeMembershipIfNewer(db, incoming);
+          return result;
+        },
+        log,
+      });
     }
   }
   // Re-read AFTER the reconciliation above, so a persisted superseding chart is reflected here.
@@ -1103,14 +1088,9 @@ export async function startServer(
     // Demote the singleton axis, which stops every singleton duty. `mode` stays 'primary'; the
     // read-only gate below, not the mode, enforces the fence.
     const ownNodeId = config.till.nodeId;
-    try {
-      await withTransaction(db, async (tx) => {
-        await setSingletonRoleTx(tx, ownNodeId, "secondary");
-      });
-    } catch (error) {
-      await store.close();
-      throw error;
-    }
+    await withTransaction(db, async (tx) => {
+      await setSingletonRoleTx(tx, ownNodeId, "secondary");
+    });
     // Re-read rather than synthesize: both axes from one read of the current row, so `mode` cannot
     // be stale if it flipped since the initial read.
     axes = await readDeploymentAxes(db, config.till.nodeId);
@@ -1155,12 +1135,7 @@ export async function startServer(
   // FAIL CLOSED before the mirror's ambient full-admin viewer is seeded below: the loopback default
   // of `config.httpHost` is the only thing keeping it off the network, so a non-loopback bind is
   // refused unless the operator opts in (`WAITRON_MIRROR_ALLOW_EXPOSED`).
-  try {
-    assertMirrorBindSafe(config, isMirror, env);
-  } catch (error) {
-    await store.close();
-    throw error;
-  }
+  assertMirrorBindSafe(config, isMirror, env);
   // Resolved once so the mirror's ambient session and every mounted login surface agree with the
   // listener about whether cookies require HTTPS.
   const secureCookies = resolveTradingTls(config) !== undefined;
@@ -1181,24 +1156,13 @@ export async function startServer(
     );
   }
   if (isMirror) {
-    let viewerToken: string;
-    try {
-      viewerToken = await ensureMirrorViewer(db);
-    } catch (error) {
-      await store.close();
-      throw error;
-    }
+    const viewerToken = await ensureMirrorViewer(db);
     app.use(
       "*",
       mirrorSession(db, secureCookies, () => holders.mode.current, viewerToken),
     );
   } else {
-    try {
-      await endMirrorViewer(db);
-    } catch (error) {
-      await store.close();
-      throw error;
-    }
+    await endMirrorViewer(db);
   }
 
   // The node whose DATA the node-scoped read paths display. On a mirror it is the ORIGIN primary,
@@ -1206,29 +1170,19 @@ export async function startServer(
   // every WRITE path.
   let dataNodeId: string = config.till.nodeId;
   if (isMirror) {
-    try {
-      const loaded = await readMirrorConfig(db, config.till.nodeId);
-      if (loaded === null) {
-        throw new AppError("server.config_invalid", {
-          variable: "mirror_config",
-          reason: "mirror_requires_mirror_config",
-        });
-      }
-      dataNodeId = loaded.originNodeId;
-    } catch (error) {
-      await store.close();
-      throw error;
+    const loaded = await readMirrorConfig(db, config.till.nodeId);
+    if (loaded === null) {
+      throw new AppError("server.config_invalid", {
+        variable: "mirror_config",
+        reason: "mirror_requires_mirror_config",
+      });
     }
+    dataNodeId = loaded.originNodeId;
   }
 
   const liveEvents = new LiveEvents();
   const changeSources = setsToMigrate.flatMap((module) => module.changes ?? []);
-  try {
-    await installChangeFeed(db, changeSources);
-  } catch (error) {
-    await store.close();
-    throw error;
-  }
+  await installChangeFeed(db, changeSources);
   mountLiveApi(
     app,
     {
@@ -1524,6 +1478,7 @@ export async function startServer(
     outcomes: backupOutcomes,
     log,
   });
+  undoOnFailure.push(() => backupSupervisor.stop());
   await backupSupervisor.reload();
   const sealedStateStatus: SealedStateStatus = { failedSince: null };
   // After migrations, so the row's manifest names the schema the database holds.
@@ -1557,6 +1512,7 @@ export async function startServer(
     mayStream: () => firstStart.mayStream,
     ...seams.stream,
   });
+  undoOnFailure.push(() => streamHost.stop());
   await streamHost.start();
   health.readStream = () => streamHost.status();
 
@@ -1720,6 +1676,10 @@ export async function startServer(
       log,
     });
     tunnelWorker.catch((err) => log("error", "tunnel.worker_rejected", { errorCode: codeOf(err) }));
+    undoOnFailure.push(async () => {
+      tunnelController.abort();
+      await tunnelWorker?.catch(() => {});
+    });
   } else if (isSingletonPrimary) {
     log("info", "tunnel.disabled", {});
   }
@@ -1817,11 +1777,16 @@ export async function startServer(
 
   // After every mount above, so the app is complete before it binds.
   const server = startTradingListener(config, app, now, log);
+  undoOnFailure.push(() => closeListener(server));
 
   // The change feed is in-process: the transaction that wrote the change hands it over once it has
   // committed (`@waitron/db`'s `withTransaction`). Nothing connects, so nothing can drop and there
   // is no batch of changes to miss, which is why no snapshot refresh is broadcast on startup.
   const unsubscribeFromChanges = subscribeToChanges(changeSubscriber(liveEvents, log));
+  undoOnFailure.push(async () => {
+    unsubscribeFromChanges();
+    liveEvents.close();
+  });
 
   // `config.environment` is the value `assertDeploymentMatches` pinned against the database at boot.
   //
@@ -1892,8 +1857,11 @@ export async function startServer(
     log,
     onPass: (report, at) => logDegradedDuties(log, recordPass(health, report, at)),
   });
+  undoOnFailure.push(async () => {
+    controller.abort();
+    await loop;
+  });
 
-  // Started after the throwing setup steps, so a failed boot cannot leak its socket.
   const mdns = startMdnsResponder({
     hostname: BOX_HOSTNAME,
     devMode: config.devMode,
@@ -1901,6 +1869,7 @@ export async function startServer(
     getAddresses: boxAddresses,
     log,
   });
+  undoOnFailure.push(() => mdns.stop());
   const cloudController = new AbortController();
   const cloudWorker = cloudConnection
     ? runCloudWorker({
@@ -1938,6 +1907,11 @@ export async function startServer(
         }),
       })
     : undefined;
+  undoOnFailure.push(async () => {
+    cloudController.abort();
+    await cloudWorker;
+    await cloudSnapshots;
+  });
   return makeStartedServer(
     server,
     health,
