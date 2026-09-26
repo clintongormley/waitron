@@ -1540,7 +1540,7 @@ describe("ordering extras and options — parent + child lines", () => {
 
   // What the server BILLS for a pick the till can no longer re-send; the till's showing and dropping
   // of it are pinned in apps/till/src/till-app.test.ts.
-  it("bills a parked extra that gained an Active variant until an edit omits it, which re-prices without it", async () => {
+  it("bills a parked extra that gained an Active variant until an edit omits it, which takes it off the line", async () => {
     const v = await setupModifierVenue();
     const park = (id: string, quantity: string, baconQuantity: number) =>
       withTransaction(suite.db, (tx) =>
@@ -1591,7 +1591,7 @@ describe("ordering extras and options — parent + child lines", () => {
     expect((await pay(edited)).total).toBe("18.00");
   });
 
-  it("re-prices without a parked extra that gained an Active variant when an edit changes only ANOTHER line", async () => {
+  it("drops a parked extra that gained an Active variant when an edit changes only ANOTHER line", async () => {
     const v = await setupModifierVenue();
     const id = randomUUID();
     await withTransaction(suite.db, (tx) =>

@@ -428,8 +428,10 @@ and it hides nothing in the dashboard. The till sells a product, or offers it as
 it is both (`listMenuOffers` and `readExtraProducts` in
 `packages/catalogue/src`, and `resolveBasketModifiers` in `apps/server/src/working-order.ts`) —
 except that an edit of a held order may keep a line at or below its quantity although its dish or
-an extra has since become Inactive or Unavailable (a raise is checked in `updateHeldOrder`), and
-paying bills such a line only once it has been sent; unsent, it is refused `product.unavailable`
+an extra has since become Inactive or Unavailable (a raise is checked in `updateHeldOrder`, and a
+change to the note, options or extras of a line the kitchen already has is refused
+`product.unavailable` too, because the changed line is sent to the kitchen again — `applyLineEdits`),
+and paying bills such a line only once it has been sent; unsent, it is refused `product.unavailable`
 (`priceStoredOrderForIssuance`).
 `listMenuOffers` keeps an Unavailable product's offer only when its caller passes
 `includeUnavailable`, as the menu management route and the venue readiness check do. A variant is

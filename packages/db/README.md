@@ -78,7 +78,8 @@ declare: `0001_behavioural_triggers.sql`, the nine behavioural rules this packag
 with hand-written PostgreSQL triggers, restored as SQLite triggers; `0004_variant_one_level.sql`,
 which keeps a variant one level deep, its parent fixed, and a product's id unchanged; and
 `0015_settled_order_freeze_new_columns.sql`, which re-creates `0001`'s
-`working_orders_enforce_transition` with the columns `0014` added in its list. No migration
+`working_orders_enforce_transition` with the two `working_orders` columns `0014` added (`revision`
+and `payment_attempt_at`) in its list. No migration
 contains a `GRANT`, a role or an `ENABLE ALWAYS`: there is no database role to grant anything to,
 and file permissions on the venue directory are the access control.
 

@@ -329,8 +329,9 @@ declare module "@waitron/shared" {
     /** A transfer named the SAME tab as source and destination. */
     "tab.transfer_self": { tabId: string };
     /**
-     * A transfer named a `quantity` outside `0 < quantity ≤ line.quantity`, or one that is not a valid
-     * decimal. `quantity` is the caller's own text.
+     * A transfer named a `quantity` outside `0 < quantity ≤ line.quantity`, not a valid decimal, with
+     * more integer digits than a quantity holds, or finer than the line's unit counts. `quantity` is
+     * the caller's own text.
      */
     "tab.transfer_quantity_invalid": { tabId: string; lineNo: number; quantity: string };
     /**

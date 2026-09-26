@@ -3214,7 +3214,9 @@ async function applyLineEdits(
   const resent: string[] = [];
 
   for (const { parent, intent } of plan.edits) {
-    assertQuantityPrecision(intent.quantity, parent.unitPrecision ?? 3, { positive: true });
+    assertQuantityPrecision(intent.quantity, parent.unitPrecision ?? MAX_UNIT_PRECISION, {
+      positive: true,
+    });
     const requested = decimal(intent.quantity);
     const dishId = parent.parentProductId ?? parent.productId!;
     let optionSnapshots = parent.optionSnapshots;

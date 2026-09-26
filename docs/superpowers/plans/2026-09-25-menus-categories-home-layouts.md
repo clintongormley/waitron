@@ -475,7 +475,8 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
     increments it, and `PUT /api/working-orders/:id` and the per-line route carry the revision their
     copy came from. A mismatch is refused (409, a code named for the concept — grep the
     working-order codes first), and the till reloads the order (spec §10.7 example 2). No revision
-    exists today.
+    exists today. _(2026-09-26: a save or line edit that changes nothing leaves the revision unchanged; see the
+    Task 7c correction below.)_
   - **A per-line edit route for sent lines:** `PUT /api/working-orders/:id/lines/:lineNo`
     `{quantity, note, options, extras, revision}` applies the rules above to ONE line, so the till's
     Change action (Task 7c) never sends the whole order. `PUT /api/working-orders/:id` (the counter
@@ -1663,9 +1664,13 @@ call, and its tests drive them directly.
   - _`updateOrderLine`'s `patch.quantity` and `voidTabLine`'s `quantity` are decimal strings, not
     numbers. `updateOrderLine` resolves the order's new revision (`Promise<number>`)._
   - _`PUT /api/working-orders/:id` and `PUT /api/working-orders/:id/lines/:lineNo` answer
-    `{ revision }`, and `GET /api/working-orders/:id/lines` answers `{ lines, revision }`; the
-    till stores that revision. `DELETE /api/working-orders/:id/lines/:lineNo` answers an empty
-    body._
+    `{ revision }`, and `GET /api/working-orders/:id/lines` answers `{ lines, revision }`. The till
+    stores the revision `GET /api/working-orders/:id` answers when it loads an order and the one
+    `PUT /api/working-orders/:id` answers; nothing in the till reads the revision the per-line
+    `PUT` or `GET /api/working-orders/:id/lines` answers yet.
+    `DELETE /api/working-orders/:id/lines/:lineNo` answers an empty body._
+  - _A save or a line edit that changes nothing answers the revision unchanged (`countEdit` in
+    `apps/server/src/working-order.ts`)._
   - _`HeldExtra.listId` is `string | null`._
 
 - [ ] **Step 1: Write the failing tests:**
