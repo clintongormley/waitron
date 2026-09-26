@@ -319,7 +319,7 @@ cannot be deleted or renamed (media migration `0003`). The money formatter moved
 test and `inmutabilidad` pass unedited. The migrations only add tables and triggers, and a venue main
 had migrated and demo-seeded upgraded cleanly (measured); a dev venue that applied an earlier copy of
 this branch's media `0003` lacks its insert check and needs `wa-wt reset demo <name>`. **Tills still
-sell from the working state until menus Task 7.** **M6c** (2026-09-26) closed two of the gaps this
+sell from the working state until menus Task 7.** **M6c** (#705, 2026-09-26) closed two of the gaps this
 left and added the owner's second Preview view: an extras item's photo (a variant's borrowed from its
 parent) is in the frozen copy, so changing it flags every menu offering it and a live version's
 extras photos cannot be deleted; a deleted (switched-off) product leaves the frozen copy's extras
@@ -382,7 +382,7 @@ manager, in the new append-only `payment_resolutions` table. The upgrade adds on
 was measured, and existing payment rows came through unchanged. Golden fingerprint and
 `inmutabilidad` unedited. What it leaves open is under "What M7b2 left open" in the payments
 section.
-Next in the lane (was M7b2): 7c, then 7 (M6c is done). The owner lifted the wait: the dependency upgrades are
+Next in the lane (was M7b2): 7c, then 7 (M6c landed as #705). The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
