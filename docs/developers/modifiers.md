@@ -225,9 +225,10 @@ other list, or two picks that EXCHANGED counts between the two lists, pair with 
 picks, priced from today's offers. A child stored before the column existed records no list and
 pairs with nothing either. Pinned in `apps/server/src/working-order.test.ts` by "keeps an extra's
 list and stored price on a quantity-only edit when two lists offer it", "keeps an extra from the
-list it was taken from, whatever that list later charges or offers", and by "replaces the line when
-a pick moves to another list offering the same product" and "replaces the line when two lists
-offering the same product have their picks swapped", which assert the BILL.
+list it was taken from, whatever that list later charges or offers", and by "prices a pick now when
+it moves to another list offering the same product: it is a new pick" and "prices both picks now
+when two lists offering the same product exchange their counts: each is a new pick", which assert
+the BILL.
 
 An OPTIONS list RENAMED between the two sends does make the two sides differ, so the renamed answer
 is frozen onto the line as a changed one; the line keeps its row and its stored price, and no other
@@ -299,10 +300,15 @@ Six things it is worth knowing about that payload:
   rows — `readExtraProducts` (`offered-modifiers.ts`) for what the till is offered, and
   `resolveBasketModifiers` (`apps/server/src/working-order.ts`) for a basket priced afresh, which
   includes a new line or a new pick in an edit of a saved order. A pick the stored line already
-  holds is kept even when its product has since sold out, and a line whose quantity rises is priced
-  afresh as a check, so there it is refused like a new pick. Tests: "an extra the till cannot sell" in
-  `packages/catalogue/src/offered-modifiers.test.ts`, and "refuses an extras pick of an Unavailable
-  or an Inactive product as a pick the list does not offer" in `apps/server/src/till-sale.test.ts`.
+  holds is kept even when its product has since sold out — through an edit of a line the kitchen
+  does not have (held or recalled), and a quantity drop of one it has — with two exceptions: a
+  CHANGE to a line the kitchen has sends the line again with the picks it keeps, so a sold-out one
+  is refused `product.unavailable`; and a line whose quantity rises, the kitchen's or not, is priced
+  afresh as a check, so there it is refused like a new pick. All of these are pinned by "keeps an extra whose product sold out on a line the kitchen does not have, and
+  refuses to send it again on one it has" in `apps/server/src/tabs.test.ts`. The filter's own tests:
+  "an extra the till cannot sell" in `packages/catalogue/src/offered-modifiers.test.ts`, and
+  "refuses an extras pick of an Unavailable or an Inactive product as a pick the list does not
+  offer" in `apps/server/src/till-sale.test.ts`.
   An extras list also leaves out a product that has an Active variant (spec §15.1: it is never sold
   as itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a
   different code, `product.variant_required`, in `priceOrderLines`

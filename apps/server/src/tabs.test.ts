@@ -2000,6 +2000,58 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     expect(await linesOf(tabId)).toEqual(before);
   });
 
+  it("keeps an extra whose product sold out on a line the kitchen does not have, and refuses to send it again on one it has", async () => {
+    const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
+    const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
+    const withWater = [{ listId, picks: [{ productId: aguaId, quantity: 1 }] }];
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    // Dishes at lines 1 (held), 3 (two, fired) and 5 (fired, then recalled), each followed by its
+    // extra.
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: cafeOffer, quantity: "1", extras: withWater, hold: true },
+        { menuItemId: cafeOffer, quantity: "2", extras: withWater },
+        { menuItemId: cafeOffer, quantity: "1", extras: withWater },
+      ]),
+    );
+    await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [5]));
+    await db.execute(sql`update products set available = 0 where id = ${aguaId}`);
+    const edit = (lineNo: number, patch: { note?: string; quantity?: string }) =>
+      asApp(cfg, async (tx) =>
+        updateOrderLine(tx, cfg, tabId, lineNo, patch, await revisionOf(tabId)),
+      );
+
+    await edit(1, { note: "later" });
+    await edit(5, { note: "later" });
+    // A drop sends nothing again: it is a void of the difference.
+    await edit(3, { quantity: "1" });
+    expect(
+      (await linesOf(tabId)).map((line) => [
+        line.lineNo,
+        line.parentLineId !== null,
+        line.quantity,
+      ]),
+    ).toEqual([
+      [1, false, 1000],
+      [2, true, 1000],
+      [3, false, 1000],
+      [4, true, 1000],
+      [5, false, 1000],
+      [6, true, 1000],
+    ]);
+
+    await expect(edit(3, { note: "now" })).rejects.toMatchObject({
+      code: "product.unavailable",
+      params: { productId: aguaId },
+    });
+    for (const lineNo of [1, 3]) {
+      await expect(edit(lineNo, { quantity: "2" })).rejects.toMatchObject({
+        code: "extras.invalid",
+        params: { field: "productId" },
+      });
+    }
+  });
+
   it("refuses an unknown line, and an extras line, which follows its dish", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
@@ -2024,6 +2076,138 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
         updateOrderLine(tx, cfg, tabId, 2, { note: "x" }, await revisionOf(tabId)),
       ),
     ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineNo" } });
+  });
+});
+
+/** Each line's number and whether its ticket item has fired; `null` for a line with no item. */
+async function firedByLine(orderId: string): Promise<[number, boolean | null][]> {
+  return (await sentState(orderId)).map((line) => [
+    line.lineNo,
+    line.ticket === null ? null : line.ticket.firedAt !== null,
+  ]);
+}
+
+/** A tab whose water (starters, the earliest course) fired at its round and whose café (mains, a
+ * later course) was then fired with `fireCourse`: the café is the only fired dish of its course. */
+async function tabWithFiredMains() {
+  const venue = await setupVenue();
+  const { cfg, cafeId, aguaId, tableId, cafeOffer, aguaOffer } = venue;
+  const starters = await asApp(cfg, (tx) =>
+    createCourse(tx, cfg, { name: "Entrantes", displayOrder: 1 }),
+  );
+  const mains = await asApp(cfg, (tx) =>
+    createCourse(tx, cfg, { name: "Principales", displayOrder: 2 }),
+  );
+  await asApp(cfg, (tx) => setProductCourse(tx, cfg, aguaId, starters.id));
+  await asApp(cfg, (tx) => setProductCourse(tx, cfg, cafeId, mains.id));
+  const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+  await asApp(cfg, (tx) =>
+    addTabRound(tx, cfg, tabId, [
+      { menuItemId: aguaOffer, quantity: "1" },
+      { menuItemId: cafeOffer, quantity: "1" },
+    ]),
+  );
+  expect(await firedByLine(tabId)).toEqual([
+    [1, true],
+    [2, false],
+  ]);
+  await asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, mains.id));
+  const [water, cafe] = await db
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId))
+    .orderBy(workingOrderLines.lineNo);
+  return { ...venue, tabId, waterLineId: water!.id, cafeLineId: cafe!.id };
+}
+
+/** A tab whose only round was held: one café, with a held ticket item and nothing sent. */
+async function tabWithHeldCafe() {
+  const venue = await setupVenue();
+  const { cfg, tableId, cafeOffer } = venue;
+  const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+  await asApp(cfg, (tx) =>
+    addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", hold: true }]),
+  );
+  const [line] = await db
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId));
+  return { ...venue, tabId, lineId: line!.id };
+}
+
+describe("new work an edit adds reaches the kitchen as a round's would (plan D10)", () => {
+  it("a change with a rise to the only fired dish of a later course sends the added unit at once", async () => {
+    const { cfg, tabId } = await tabWithFiredMains();
+
+    await asApp(cfg, async (tx) =>
+      updateOrderLine(tx, cfg, tabId, 2, { note: "tibio", quantity: "2" }, await revisionOf(tabId)),
+    );
+
+    expect(await firedByLine(tabId)).toEqual([
+      [1, true],
+      [2, true],
+      [3, true],
+    ]);
+  });
+
+  it("a whole-order save that changes the only fired dish of a later course sends a new dish of that course at once", async () => {
+    const { cfg, tabId, waterLineId, cafeLineId, cafeOffer, aguaOffer } = await tabWithFiredMains();
+
+    await updateHeldOrder({ db }, cfg, tabId, {
+      lines: [
+        { workingOrderLineId: waterLineId, menuItemId: aguaOffer, quantity: "1" },
+        { workingOrderLineId: cafeLineId, menuItemId: cafeOffer, quantity: "1", note: "tibio" },
+        { menuItemId: cafeOffer, quantity: "1" },
+      ],
+      revision: await revisionOf(tabId),
+    });
+
+    expect(await firedByLine(tabId)).toEqual([
+      [1, true],
+      [2, true],
+      [3, true],
+    ]);
+  });
+
+  it("a line a whole-order save adds to a tab whose every line is held is held too, and Send releases it", async () => {
+    const { cfg, tabId, lineId, cafeOffer, aguaOffer } = await tabWithHeldCafe();
+
+    await updateHeldOrder({ db }, cfg, tabId, {
+      lines: [
+        { workingOrderLineId: lineId, menuItemId: cafeOffer, quantity: "1" },
+        { menuItemId: aguaOffer, quantity: "1" },
+      ],
+      revision: await revisionOf(tabId),
+    });
+    expect(await firedByLine(tabId)).toEqual([
+      [1, false],
+      [2, false],
+    ]);
+
+    await asApp(cfg, (tx) => sendLines(tx, cfg, tabId, []));
+    expect(await firedByLine(tabId)).toEqual([
+      [1, true],
+      [2, true],
+    ]);
+  });
+
+  it("replacing the dish of a held line on a tab whose every line is held keeps the new dish held for Send", async () => {
+    const { cfg, tabId, lineId, aguaId, aguaOffer } = await tabWithHeldCafe();
+
+    await updateHeldOrder({ db }, cfg, tabId, {
+      lines: [{ workingOrderLineId: lineId, menuItemId: aguaOffer, quantity: "1" }],
+      revision: await revisionOf(tabId),
+    });
+    expect(await firedByLine(tabId)).toEqual([[2, false]]);
+
+    await asApp(cfg, (tx) => sendLines(tx, cfg, tabId, []));
+    expect(await sentState(tabId)).toEqual([
+      expect.objectContaining({
+        lineNo: 2,
+        productId: aguaId,
+        ticket: expect.objectContaining({ firedAt: expect.any(String) }),
+      }),
+    ]);
   });
 });
 
@@ -2103,7 +2287,7 @@ describe("every write to an open order's lines counts on its revision (plan D10)
   });
 
   it("does not count a write refused as out of date, nor one that changes nothing", async () => {
-    const { cfg, tabId } = await twoTabs();
+    const { cfg, tabId, cafeOffer } = await twoTabs();
     const copy = await revisionOf(tabId);
     await asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, { note: "a" }, copy));
 
@@ -2111,6 +2295,49 @@ describe("every write to an open order's lines counts on its revision (plan D10)
       asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, { note: "b" }, copy)),
     ).rejects.toMatchObject({ code: "working_order.out_of_date", params: { revision: copy + 1 } });
     expect(await revisionOf(tabId)).toBe(copy + 1);
+
+    // An empty patch, a note the line already carries, and the whole order saved as it stands.
+    await asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, {}, copy + 1));
+    await asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, { note: "a" }, copy + 1));
+    const lines = await db
+      .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo);
+    await updateHeldOrder({ db }, cfg, tabId, {
+      lines: [
+        { workingOrderLineId: lines[0]!.id, menuItemId: cafeOffer, quantity: "3", note: "a" },
+        { workingOrderLineId: lines[1]!.id, menuItemId: cafeOffer, quantity: "1" },
+      ],
+      revision: copy + 1,
+    });
+    expect(await revisionOf(tabId)).toBe(copy + 1);
+  });
+
+  it("counts a whole-order save whose only change is the label", async () => {
+    const { cfg, tabId, cafeOffer } = await twoTabs();
+    const lines = await db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo);
+    const copy = await revisionOf(tabId);
+
+    await updateHeldOrder({ db }, cfg, tabId, {
+      lines: [
+        { workingOrderLineId: lines[0]!.id, menuItemId: cafeOffer, quantity: "3" },
+        { workingOrderLineId: lines[1]!.id, menuItemId: cafeOffer, quantity: "1" },
+      ],
+      label: "Ventana",
+      revision: copy,
+    });
+
+    expect(await revisionOf(tabId)).toBe(copy + 1);
+    const [order] = await db
+      .select({ label: workingOrders.label })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, tabId));
+    expect(order!.label).toBe("Ventana");
   });
 });
 
@@ -2203,6 +2430,30 @@ describe("a line write on an order whose card payment is in flight is refused (p
       expect(await snapshot(tabs)).toEqual(before);
       await markPaying(paying, null);
     }
+  });
+
+  it("refuses even an edit that changes nothing, one line or the whole order", async () => {
+    const tabs = await twoTabs();
+    const lines = await db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabs.tabId))
+      .orderBy(workingOrderLines.lineNo);
+    await markPaying(tabs.tabId);
+    const revision = await revisionOf(tabs.tabId);
+
+    await expect(
+      asApp(tabs.cfg, (tx) => updateOrderLine(tx, tabs.cfg, tabs.tabId, 1, {}, revision)),
+    ).rejects.toMatchObject({ code: "order.payment_in_flight" });
+    await expect(
+      updateHeldOrder({ db }, tabs.cfg, tabs.tabId, {
+        lines: [
+          { workingOrderLineId: lines[0]!.id, menuItemId: tabs.cafeOffer, quantity: "3" },
+          { workingOrderLineId: lines[1]!.id, menuItemId: tabs.cafeOffer, quantity: "1" },
+        ],
+        revision,
+      }),
+    ).rejects.toMatchObject({ code: "order.payment_in_flight" });
   });
 
   it("never blocks a different order", async () => {

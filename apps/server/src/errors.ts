@@ -367,6 +367,12 @@ declare module "@waitron/shared" {
      */
     "station.not_found": { stationId: string };
     /**
+     * No kitchen notice with this id in this venue (for a station's own display, at its station).
+     * Declared by `@waitron/venue-service` too, with the same params: it throws it for an unknown
+     * notice, and the acknowledge routes here for an id that is not a UUID.
+     */
+    "kitchen_notice.not_found": { noticeId: string };
+    /**
      * A line was fired but resolves no product- or category-level station and the venue has no
      * default station. Firing fails loud rather than silently dropping food from the kitchen.
      * `locationId` names the misconfigured venue.

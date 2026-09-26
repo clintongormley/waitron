@@ -6058,10 +6058,9 @@ describe("what a held-order edit preserves and what it replaces", () => {
     ]);
   });
 
-  it("replaces the line when two lists offering the same product have their picks swapped", async () => {
+  it("prices both picks now when two lists offering the same product exchange their counts: each is a new pick", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
-    // One wine, offered by two of the dish's lists at two prices. A child line records the product
-    // it is, its quantity and the price it was sold at — never the list that offered it.
+    // One wine, offered by two of the dish's lists at two prices.
     const seeded = await withTransaction(db, async (tx) => {
       const cheap = await addExtraList(tx, catalogueId, cafeId, "Vino", {
         price: "1.00",
@@ -6129,7 +6128,7 @@ describe("what a held-order edit preserves and what it replaces", () => {
     ).toEqual([200, 300]);
   });
 
-  it("replaces the line when a pick moves to another list offering the same product", async () => {
+  it("prices a pick now when it moves to another list offering the same product: it is a new pick", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     const seeded = await withTransaction(db, async (tx) => {
       const cheap = await addExtraList(tx, catalogueId, cafeId, "Vino", { price: "1.00" });

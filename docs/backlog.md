@@ -3452,8 +3452,10 @@ image constraints under *Detail → Box image*.
   - Found by #623 (`apps/server` part b: working-order, tabs, tables), not fixable in a
     comments-only change. (The first finding is fixed by menus plan Task 7b on
     `feat/menus-order-edits`: an edit that changes or removes a sent line recalls or voids it with a
-    kitchen notice and slip, and changed or new work is sent; the "editing a line the kitchen has and
-    has not started" cases in `apps/server/src/tabs.test.ts`.) **Editing a held order that has already sent lines to the kitchen deletes
+    kitchen notice and slip, the changed line is sent again, and a line the edit adds reaches the
+    kitchen as a round's would, held where its course or the whole tab is held; the "editing a line
+    the kitchen has and has not started" and "new work an edit adds" cases in
+    `apps/server/src/tabs.test.ts`.) **Editing a held order that has already sent lines to the kitchen deletes
     their ticket items and never re-sends the new lines.** `PUT /api/working-orders/:id` checks only
     that the order is open; any edit that is not a pure quantity change takes `updateHeldOrder`'s
     replacement path (`apps/server/src/working-order.ts`), which deletes every line and inserts new

@@ -2831,6 +2831,7 @@ interface EditableLine {
     firedAt: string | null;
     state: TicketState;
     stationId: string;
+    courseId: string | null;
     /** Thousandths. */
     firedQuantity: number;
   } | null;
@@ -2846,8 +2847,15 @@ interface EditableOrder {
   lines: EditableLine[];
   parents: EditableParent[];
   maxLineNo: number;
-  /** Some line of the order was sent: new work added to it goes to the kitchen at once. */
-  hasSentWork: boolean;
+  /**
+   * What a line the edit adds gets from the kitchen: `fire` where some line of the order was sent,
+   * as a round's line would; `hold` where nothing was sent but the kitchen holds items, so Send
+   * releases it with them; `none` where the order has no ticket item and nothing sent, as a parked
+   * counter order, whose lines are fired when it is placed.
+   */
+  newWork: "fire" | "hold" | "none";
+  /** The courses in which the kitchen already has fired work, read before the edit changes any. */
+  firedCourseIds: Set<string>;
 }
 
 /** What an edit asks of one stored dish line. `null` options or extras keep the stored ones. */
@@ -2868,9 +2876,13 @@ async function requireEditableOrder(
   tx: Transaction,
   orderId: string,
   revision: number | undefined,
-): Promise<void> {
+): Promise<{ label: string | null }> {
   const [order] = await tx
-    .select({ status: workingOrders.status, revision: workingOrders.revision })
+    .select({
+      status: workingOrders.status,
+      revision: workingOrders.revision,
+      label: workingOrders.label,
+    })
     .from(workingOrders)
     .where(eq(workingOrders.id, orderId));
   if (order === undefined || order.status !== "open") {
@@ -2882,6 +2894,7 @@ async function requireEditableOrder(
       revision: order.revision,
     });
   }
+  return { label: order.label };
 }
 
 /**
@@ -2947,6 +2960,7 @@ async function readEditableOrder(
       firedAt: ticketItems.firedAt,
       state: ticketItems.state,
       stationId: ticketItems.stationId,
+      ticketCourseId: ticketItems.courseId,
       firedQuantity,
     })
     .from(workingOrderLines)
@@ -2976,6 +2990,7 @@ async function readEditableOrder(
             firedAt: row.firedAt,
             state: row.state!,
             stationId: row.stationId!,
+            courseId: row.ticketCourseId,
             firedQuantity: row.firedQuantity,
           },
   }));
@@ -2996,7 +3011,16 @@ async function readEditableOrder(
     lines,
     parents,
     maxLineNo: Math.max(0, ...lines.map((line) => line.lineNo)),
-    hasSentWork: lines.some((line) => line.sentAt !== null),
+    newWork: lines.some((line) => line.sentAt !== null)
+      ? "fire"
+      : lines.some((line) => line.ticket !== null)
+        ? "hold"
+        : "none",
+    firedCourseIds: new Set(
+      lines
+        .filter((line) => line.ticket?.firedAt != null && line.ticket.courseId !== null)
+        .map((line) => line.ticket!.courseId!),
+    ),
   };
 }
 
@@ -3032,9 +3056,11 @@ async function assertProductsSellable(
  * - A started line is refused `ticket.already_started`; with changes to sent items switched off, a
  *   line that was sent to a station is refused `ticket.already_fired`.
  *
- * New lines are numbered after the order's highest line number, and fire where the order already
- * has work sent. A line that gains an extra moves after that number with its extras, so each dish
- * is followed by its own extras in line order, as a ticket groups them.
+ * New lines are numbered after the order's highest line number, and reach the kitchen as
+ * {@link EditableOrder.newWork} says: where work was sent, as a round's line would, a course the
+ * kitchen had fired before the edit counting as fired. A line that gains an extra moves after that
+ * number with its extras, so each dish is followed by its own extras in line order, as a ticket
+ * groups them.
  */
 async function applyLineEdits(
   tx: Transaction,
@@ -3046,7 +3072,7 @@ async function applyLineEdits(
     removed: EditableParent[];
     fresh: RequestedLine[];
   },
-): Promise<void> {
+): Promise<{ changed: boolean }> {
   const context = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
   let editSentLines: boolean | undefined;
   /** Refuses what the kitchen state forbids; answers whether the kitchen holds fired work. */
@@ -3099,12 +3125,11 @@ async function applyLineEdits(
     /** Index into `pricing` of the line carrying this line's added extras, if any. */
     addedAt: number | null;
   }[] = [];
-  // Every line priced now, in one offer read: a new dish line, which fires or not as `fires` says,
-  // or the carrier of extras added to a stored line, whose dish row is not kept.
+  // Every line priced now, in one offer read: a new dish line, which the kitchen gets as `kitchen`
+  // says, or the carrier of extras added to a stored line, whose dish row is not kept.
   const pricing: RequestedLine[] = [...plan.fresh];
-  const pricedAs: ({ kind: "line"; fires: boolean } | { kind: "extras" })[] = plan.fresh.map(
-    () => ({ kind: "line", fires: order.hasSentWork }),
-  );
+  const pricedAs: ({ kind: "line"; kitchen: EditableOrder["newWork"] } | { kind: "extras" })[] =
+    plan.fresh.map(() => ({ kind: "line", kitchen: order.newWork }));
   const raised: RequestedLine[] = [];
   const resent: string[] = [];
 
@@ -3173,7 +3198,7 @@ async function applyLineEdits(
         ...asOffered(subtractDecimal(requested, parent.quantity)),
         courseId: parent.courseId,
       });
-      pricedAs.push({ kind: "line", fires: true });
+      pricedAs.push({ kind: "line", kitchen: "fire" });
     }
     if (action === "free" && rise > 0) raised.push(asOffered(requested));
     if (action === "change") {
@@ -3352,13 +3377,18 @@ async function applyLineEdits(
     for (const [rowIndex, row] of group.rows.entries()) {
       inserted.push({ ...row, lineNo: ++nextLineNo });
       insertedContexts.push(group.contexts[rowIndex]!);
-      if (row.parentLineId === null && as.fires) {
+      if (row.parentLineId === null && as.kitchen !== "none") {
+        const courseId = row.courseId ?? null;
         fireNow.push({
           id: row.id!,
           productId: row.productId!,
-          courseId: row.courseId ?? null,
+          courseId,
           parentLineId: null,
           note: row.note ?? null,
+          hold: as.kitchen === "hold",
+          // A changed line's old item is deleted above, so `fireLines` alone could no longer see
+          // that its course had fired.
+          release: as.kitchen === "fire" && courseId !== null && order.firedCourseIds.has(courseId),
         });
       }
     }
@@ -3383,6 +3413,16 @@ async function applyLineEdits(
         ),
       );
   }
+  return { changed: changes.length > 0 || plan.removed.length > 0 || plan.fresh.length > 0 };
+}
+
+/**
+ * Count a write on the order's revision only when it changed something. One that changes nothing is
+ * still refused while a card payment of the order is in flight, as every other line write is.
+ */
+async function countEdit(tx: Transaction, orderId: string, changed: boolean): Promise<void> {
+  if (changed) await bumpRevision(tx, [orderId]);
+  else await refusePaymentInFlight(tx, [orderId]);
 }
 
 /**
@@ -3399,7 +3439,7 @@ export async function updateHeldOrder(
   req: UpdateHeldOrderRequest,
 ): Promise<void> {
   return withTransaction(deps.db, async (tx) => {
-    await requireEditableOrder(tx, id, req.revision);
+    const { label } = await requireEditableOrder(tx, id, req.revision);
     // Rewriting an order to zero lines is a discard, which is `abandonHeldOrder`'s job.
     if (req.lines.length === 0) {
       throw new AppError("sale.empty_basket", {});
@@ -3438,16 +3478,19 @@ export async function updateHeldOrder(
         },
       });
     }
-    await applyLineEdits(tx, cfg, id, order, {
+    const { changed } = await applyLineEdits(tx, cfg, id, order, {
       edits,
       removed: order.parents.filter((parent) => !claimed.has(parent.id)),
       fresh,
     });
-    await tx
-      .update(workingOrders)
-      .set({ label: req.label ?? null })
-      .where(eq(workingOrders.id, id));
-    await bumpRevision(tx, [id]);
+    const relabelled = (req.label ?? null) !== label;
+    if (relabelled) {
+      await tx
+        .update(workingOrders)
+        .set({ label: req.label ?? null })
+        .where(eq(workingOrders.id, id));
+    }
+    await countEdit(tx, id, changed || relabelled);
   });
 }
 
@@ -3475,7 +3518,7 @@ export async function updateOrderLine(
   if (parent === undefined) {
     throw new AppError("management.request_invalid", { field: "lineNo" });
   }
-  await applyLineEdits(tx, cfg, orderId, order, {
+  const { changed } = await applyLineEdits(tx, cfg, orderId, order, {
     edits: [
       {
         parent,
@@ -3490,7 +3533,7 @@ export async function updateOrderLine(
     removed: [],
     fresh: [],
   });
-  await bumpRevision(tx, [orderId]);
+  await countEdit(tx, orderId, changed);
 }
 
 /** Abandon an open held order anywhere in the venue. An unknown id reads as `working_order.not_open`. */

@@ -91,9 +91,10 @@ a quantity-only edit" raises the offer's price and the extra's price underneath 
 the parent and its child keep their ids and locked prices; "keeps the line's id and locked price when
 two options lists change places" and "keeps each extras child on its own row when two extras lists
 change places" do the same across a reorder; "keeps an extra's list and stored price on a quantity-only
-edit when two lists offer it" pins the list pairing; "replaces the line when a pick moves to another
-list offering the same product" and "replaces the line when two lists offering the same product have
-their picks swapped" pin its refusals, by the BILL rather than by an id — two picks exchanged
+edit when two lists offer it" pins the list pairing; "prices a pick now when it moves to another list
+offering the same product: it is a new pick" and "prices both picks now when two lists offering the
+same product exchange their counts: each is a new pick" pin its refusals, by the BILL rather than by
+an id — two picks exchanged
 between a 1.00 list and a 3.00 one cost 5.00, not the 7.00 a crossed pairing charges.
 
 ## A replay reports the original transaction facts; side effects are gated separately
