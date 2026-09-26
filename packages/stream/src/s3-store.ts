@@ -15,6 +15,7 @@ import type {
 } from "@aws-sdk/client-s3";
 import { setTimeout as sleep } from "node:timers/promises";
 import { AppError } from "@waitron/shared";
+import type { AnswerRefusal } from "./bucket-error-names.js";
 import "./errors.js";
 import type { BucketOperation } from "./errors.js";
 import { normalisePrefix } from "./names.js";
@@ -79,6 +80,15 @@ function requestFailed(
   name: string,
 ): AppError {
   return new AppError("backup.stream_request_failed", { operation, key, status, name });
+}
+
+function answerRefused(
+  operation: BucketOperation,
+  key: string,
+  status: number | null,
+  name: AnswerRefusal,
+): AppError {
+  return requestFailed(operation, key, status, name);
 }
 
 function conditionHeaders(condition: PutCondition | undefined): {
@@ -154,7 +164,7 @@ export function createS3ObjectStore(
         throw requestFailed("get", key, statusOf(error), nameOf(error));
       }
       if (out.Body === undefined || out.ETag === undefined) {
-        throw requestFailed("get", key, out.$metadata.httpStatusCode ?? null, "IncompleteResponse");
+        throw answerRefused("get", key, out.$metadata.httpStatusCode ?? null, "IncompleteResponse");
       }
       try {
         return { body: await out.Body.transformToByteArray(), etag: out.ETag };
@@ -189,7 +199,7 @@ export function createS3ObjectStore(
           throw requestFailed("put", key, status, nameOf(error));
         }
         if (out.ETag === undefined)
-          throw requestFailed("put", key, out.$metadata.httpStatusCode ?? null, "MissingETag");
+          throw answerRefused("put", key, out.$metadata.httpStatusCode ?? null, "MissingETag");
         return { etag: out.ETag };
       }
     },
@@ -214,8 +224,8 @@ export function createS3ObjectStore(
         } catch (error) {
           throw requestFailed("list", prefix, statusOf(error), nameOf(error));
         }
-        const refuse = (name: string) =>
-          requestFailed("list", prefix, page.$metadata.httpStatusCode ?? null, name);
+        const refuse = (name: AnswerRefusal) =>
+          answerRefused("list", prefix, page.$metadata.httpStatusCode ?? null, name);
         for (const object of page.Contents ?? []) {
           if (object.Key === undefined || object.LastModified === undefined)
             throw refuse("IncompleteListing");
@@ -267,7 +277,7 @@ export function createS3ObjectStore(
           const status = out.$metadata.httpStatusCode ?? null;
           const key = batch.find((candidate) => at(candidate) === refused.Key);
           if (key === undefined || !refused.Code) {
-            throw requestFailed("delete", key ?? batch[0]!, status, "IncompleteDeleteResult");
+            throw answerRefused("delete", key ?? batch[0]!, status, "IncompleteDeleteResult");
           }
           throw requestFailed("delete", key, status, refused.Code);
         }

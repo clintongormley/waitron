@@ -2,6 +2,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { hasCode, isAppError } from "@waitron/shared";
+import { loggableErrorName } from "./bucket-error-names.js";
 import { bucketClockOffset, levelFolder, newestOf, newestUpload } from "./bucket-times.js";
 import { isPreconditionFailure } from "./conditional.js";
 import "./errors.js";
@@ -203,18 +204,19 @@ const replicateArgs = (configPath: string): string[] => ["replicate", "-config",
 
 const codeOf = (error: unknown): string => (isAppError(error) ? error.code : "unknown");
 
-type FailureFields = { errorCode: string; status?: number };
+type FailureFields = { errorCode: string; status?: number; errorName?: string };
 
 /**
- * The line carries the bucket's HTTP status but not the error's `name`, which can be text the
- * bucket supplied. A 2xx status means the request was answered and the failure was found inside
- * the answer (the `requestFailed` calls in `s3-store.ts`).
+ * When the bucket answered, the line carries its HTTP status and the error's name as
+ * `loggableErrorName` passes it. A 2xx status means the request was answered and the failure was
+ * found inside the answer.
  */
 function failureFields(error: unknown): FailureFields {
   const errorCode = codeOf(error);
   if (isAppError(error) && hasCode(error, "backup.stream_request_failed")) {
-    const { status } = error.params;
-    if (typeof status === "number") return { errorCode, status };
+    const { status, name } = error.params;
+    if (typeof status === "number")
+      return { errorCode, status, errorName: loggableErrorName(name) };
   }
   return { errorCode };
 }

@@ -6470,13 +6470,24 @@ line with what slice 2 built. Left open:
   `stream.freshness_unreadable`, `stream.prune_failed`), also carry the bucket's HTTP `status` when
   the bucket answered, and nothing more when it did not; a deadline's `errorCode: "timeout"` line is
   unchanged, since no answer arrived to have a status. A 2xx `status` means the bucket answered the
-  request and the failure was found inside the answer — a file a batch delete refused, or an answer
-  the store turned down as unusable (the `requestFailed` calls in `packages/stream/src/s3-store.ts`
-  that pass the answer's own status); the line carries the number and not the bucket's error name,
-  so it does not say which. Left by #686 and A57: that a real bucket's 403 to this LISTING reads
+  request and the failure was found inside the answer — a file a batch delete refused (the
+  `requestFailed` call in `packages/stream/src/s3-store.ts` that passes the answer's own status), an
+  answer the store turned down as unusable (its `answerRefused` calls), or an answer the SDK could
+  not read (an error-branch `requestFailed` call passing the thrown error's 200, logged with
+  `errorName` `other`; shown with a scripted cut-off listing through the SDK, not pinned by a test).
+  **DONE by lane A's A60 (2026-09-26):** the line also carries `errorName`,
+  the bucket's error name when it is on the fixed list in `packages/stream/src/bucket-error-names.ts`
+  (the S3 API Reference's list of error codes, one name from the PutObject page, and the names
+  `s3-store.ts` gives an answer it refused) and `other` when it is not, so a 200 line now names a
+  listed error found inside the answer. Not covered by A60: the same `name` param still travels unvetted in the setup API's 502
+  answer (`apps/server/src/setup-api.ts`, pinned by a `boot.test.ts` case) and in any
+  `server.boot_failed` detail whose error is `backup.stream_request_failed`; whether a start can
+  fail with that code was not checked. Left by #686 and A57: that a real bucket's 403 to this LISTING reads
   that code, and the status on each line, were shown by reading `packages/stream/src/s3-store.ts`,
   by the store's scripted HTTP answers and by the supervisor's injected errors, not against a real
-  bucket; and the case "refused while the run is stopping" catches a removed stop check only through
+  bucket, and A60's `errorName` was shown the same way — its list was checked against Amazon's
+  reference only, not against the names versitygw, the S3-compatible test server, gives its errors;
+  and the case "refused while the run is stopping" catches a removed stop check only through
   the order two pending steps finish in, so re-run that removal if `#bucketAnswers` is restructured.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
