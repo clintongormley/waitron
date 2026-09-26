@@ -20,7 +20,13 @@ import * as menuDocument from "./menu-document.js";
 import * as operations from "./operations.js";
 import * as sectionGraph from "./section-graph.js";
 import { menuDocumentHash } from "./menu-document.js";
-import { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
+import {
+  assertLiveVersions,
+  menuStatus,
+  previewMenu,
+  publishMenu,
+  readLiveDocuments,
+} from "./menu-publication.js";
 import {
   createCatalogue,
   createProduct,
@@ -217,6 +223,80 @@ describe("publishMenu", () => {
     await app((tx) => publishMenu(tx, f.lunch, preview.hash, "person-1"));
     const live = await app((tx) => readLiveDocuments(tx, [f.lunch]));
     expect(live.get(f.lunch)!.document.homeLayouts[0]!.tiles).toEqual([product(f.soup)]);
+  });
+});
+
+describe("assertLiveVersions", () => {
+  it("answers each allowed published menu's live version and document, and no unpublished one", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await publish(f.lunch);
+    const live = await app((tx) => assertLiveVersions(tx, [f.lunch, f.dinner], []));
+    const [row] = await versionRows();
+    expect([...live.keys()]).toEqual([f.lunch]);
+    expect(live.get(f.lunch)).toEqual({ versionId: lunch.versionId, document: row!.document });
+  });
+
+  it("accepts versions that are live, however many lines assert each", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await publish(f.lunch);
+    const dinner = await publish(f.dinner);
+    const live = await app((tx) =>
+      assertLiveVersions(
+        tx,
+        [f.lunch, f.dinner],
+        [
+          { menuId: f.lunch, versionId: lunch.versionId },
+          { menuId: f.dinner, versionId: dinner.versionId },
+          { menuId: f.lunch, versionId: lunch.versionId },
+        ],
+      ),
+    );
+    expect(live.get(f.lunch)!.versionId).toBe(lunch.versionId);
+    expect(live.get(f.dinner)!.versionId).toBe(dinner.versionId);
+  });
+
+  it("refuses a version that is no longer live, naming each such menu once with its live version", async () => {
+    const f = await menusFixture(fx.db);
+    const first = await publish(f.lunch);
+    const dinner = await publish(f.dinner);
+    await app((tx) => updateProduct(tx, f.soup, { name: "Broth" }));
+    const second = await publish(f.lunch);
+    await expect(
+      app((tx) =>
+        assertLiveVersions(
+          tx,
+          [f.lunch, f.dinner],
+          [
+            { menuId: f.lunch, versionId: first.versionId },
+            { menuId: f.dinner, versionId: dinner.versionId },
+            { menuId: f.lunch, versionId: first.versionId },
+          ],
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "menu.version_changed",
+      params: { menus: [{ menuId: f.lunch, liveVersionId: second.versionId }] },
+    });
+  });
+
+  it("refuses a version of a menu with no live version among the allowed ones", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await publish(f.lunch);
+    const asserted = [{ menuId: f.lunch, versionId: lunch.versionId }];
+    // Published, but not one of the menus the caller allows.
+    await expect(app((tx) => assertLiveVersions(tx, [f.dinner], asserted))).rejects.toMatchObject({
+      code: "menu.version_changed",
+      params: { menus: [{ menuId: f.lunch, liveVersionId: null }] },
+    });
+    // Allowed, but never published.
+    await expect(
+      app((tx) =>
+        assertLiveVersions(tx, [f.dinner], [{ menuId: f.dinner, versionId: lunch.versionId }]),
+      ),
+    ).rejects.toMatchObject({
+      code: "menu.version_changed",
+      params: { menus: [{ menuId: f.dinner, liveVersionId: null }] },
+    });
   });
 });
 

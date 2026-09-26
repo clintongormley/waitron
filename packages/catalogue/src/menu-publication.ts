@@ -102,6 +102,29 @@ export async function readLiveDocuments(
   return live;
 }
 
+/**
+ * The allowed menus' live versions and documents, as {@link readLiveDocuments} answers them, once
+ * every asserted version is the live version of an allowed menu. Otherwise refused with
+ * `menu.version_changed`, naming each such menu once.
+ */
+export async function assertLiveVersions(
+  tx: Transaction,
+  allowedMenuIds: readonly string[],
+  asserted: readonly { menuId: string; versionId: string }[],
+): Promise<Map<string, { versionId: string; document: MenuDocument }>> {
+  const live = await readLiveDocuments(tx, allowedMenuIds);
+  const changed = new Map<string, string | null>();
+  for (const { menuId, versionId } of asserted) {
+    const liveVersionId = live.get(menuId)?.versionId ?? null;
+    if (liveVersionId !== versionId) changed.set(menuId, liveVersionId);
+  }
+  if (changed.size > 0)
+    throw new AppError("menu.version_changed", {
+      menus: [...changed].map(([menuId, liveVersionId]) => ({ menuId, liveVersionId })),
+    });
+  return live;
+}
+
 /** Every section id the document's structure holds. */
 function sectionsOf(document: MenuDocument): Set<string> {
   const held = new Set<string>();

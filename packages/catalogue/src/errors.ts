@@ -84,6 +84,9 @@ declare module "@waitron/shared" {
     /** The menu's working state no longer hashes to what its preview showed, so nothing was
      * published. */
     "menu.changed_since_preview": { menuId: string };
+    /** An order line was priced against a menu version that is not live; `liveVersionId` is null
+     * when the menu has no live version among the ones the order may sell from. */
+    "menu.version_changed": { menus: { menuId: string; liveVersionId: string | null }[] };
     /** A menu offer operation names no item the menu's structure reaches; menuId is present when
      * the route supplies it. */
     "menu_item.not_found": { menuId?: string; menuItemId: string };
