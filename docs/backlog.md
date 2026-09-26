@@ -6403,19 +6403,21 @@ line with what slice 2 built. Left open:
   during the wait fails once the line no longer checks for a stop. Since A44 a bucket that never
   replies ends each question as a refusal after about 90 seconds, before the deadline. **DONE by
   lane A's A51 (#686, 2026-09-26):** a refused question is logged once per pause, `stream.pause_check_failed`
-  with the refusal's code, and a refusal arriving after the deadline or a stop is not; the line
-  carries the code only, so a refusal the bucket answered (403) and one that got no answer both read
-  `backup.stream_request_failed` in it ([testing-guide.md](developers/testing-guide.md), "A bucket
-  question the pause is waiting on"). **DONE by lane A's A57 (2026-09-26):** that line, and the
-  supervisor's other lines for a bucket request that failed (`stream.open_failed`,
-  `stream.list_failed`, `stream.pointer_write_failed`, `stream.freshness_unreadable`,
-  `stream.prune_failed`), also carry the bucket's HTTP `status` when the bucket answered, and
-  nothing more when it did not; a deadline's `errorCode: "timeout"` line is unchanged, since no
-  answer arrived to have a status. Left by #686: that a real bucket's 403 to this LISTING reads
-  that code was shown by reading `packages/stream/src/s3-store.ts` and by the test stand-in, not
-  against a real bucket; and the case "refused while the run is stopping" catches a removed stop
-  check only through the order two pending steps finish in, so re-run that removal if
-  `#bucketAnswers` is restructured.
+  with the refusal's code, and a refusal arriving after the deadline or a stop is not
+  ([testing-guide.md](developers/testing-guide.md), "A bucket question the pause is waiting on").
+  **DONE by lane A's A57 (2026-09-26):** that line, and the supervisor's other lines for a bucket
+  request that failed (`stream.open_failed`, `stream.list_failed`, `stream.pointer_write_failed`,
+  `stream.freshness_unreadable`, `stream.prune_failed`), also carry the bucket's HTTP `status` when
+  the bucket answered, and nothing more when it did not; a deadline's `errorCode: "timeout"` line is
+  unchanged, since no answer arrived to have a status. A 2xx `status` means the bucket answered the
+  request and the failure was found inside the answer — a file a batch delete refused, or an answer
+  the store turned down as unusable (the `requestFailed` calls in `packages/stream/src/s3-store.ts`
+  that pass the answer's own status); the line carries the number and not the bucket's error name,
+  so it does not say which. Left by #686 and A57: that a real bucket's 403 to this LISTING reads
+  that code, and the status on each line, were shown by reading `packages/stream/src/s3-store.ts`,
+  by the store's scripted HTTP answers and by the supervisor's injected errors, not against a real
+  bucket; and the case "refused while the run is stopping" catches a removed stop check only through
+  the order two pending steps finish in, so re-run that removal if `#bucketAnswers` is restructured.
 
 **Open: the images ship no notice file for the npm packages bundled into their JavaScript.** The
 owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence

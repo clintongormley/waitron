@@ -2567,6 +2567,49 @@ describe("a refusal the bucket answered is logged with its HTTP status", () => {
     ]);
   });
 
+  it("a status that is not a number is left off the line", async () => {
+    const h = await streaming();
+    const list = h.store.list.bind(h.store);
+    let questions = 0;
+    h.store.list = async (prefix) => {
+      if (prefix.endsWith("/0000/") && h.supervisor.status().state === "paused") {
+        questions += 1;
+        if (questions === 1) throw refused("list", prefix, "403" as never);
+      }
+      return list(prefix);
+    };
+    h.setWal(LIMIT);
+    await h.clock.until(() => h.supervisor.status().state === "streaming" && questions > 1);
+    expect(h.logs.filter((line) => line.event === "stream.pause_check_failed")).toEqual([
+      {
+        level: "warn",
+        event: "stream.pause_check_failed",
+        fields: { errorCode: "backup.stream_request_failed" },
+      },
+    ]);
+  });
+
+  it("a refusal carrying status 200, as a file refused inside a batch delete does, is logged with it", async () => {
+    const h = await streaming();
+    const old = generationName(1, "node-old", new Date(Date.parse(START) - 9 * DAY));
+    h.store.upload(fullCopyOf(old), new Date(Date.parse(START) - 8 * DAY));
+    h.store.failNext({
+      operation: "delete",
+      key: fullCopyOf(old),
+      error: refused("delete", fullCopyOf(old), 200),
+    });
+    h.clock.advance(8 * DAY);
+    await h.clock.next(); // the streaming tick
+    await vi.waitFor(() =>
+      expect(h.logs).toContainEqual({
+        level: "warn",
+        event: "stream.prune_failed",
+        fields: { errorCode: "backup.stream_request_failed", status: 200 },
+      }),
+    );
+    expect(h.store.has(fullCopyOf(old))).toBe(true);
+  });
+
   it("an opening the bucket refuses", async () => {
     const h = await harness();
     h.store.failNext({

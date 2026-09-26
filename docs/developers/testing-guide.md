@@ -627,8 +627,9 @@ carries the bucket's HTTP `status` when the bucket answered the refusal (the sto
 refused listing is a request failure" in `packages/stream/src/s3-store.test.ts` has a listing
 answered 403 carry `status: 403`), and only the code when no answer arrived; the cases under "a
 refusal the bucket answered is logged with its HTTP status" in
-`packages/stream/src/supervisor.test.ts`, with the prune and pause-check cases above, each fail with
-their own line's status taken out, and the no-answer case fails with the null check taken out.
+`packages/stream/src/supervisor.test.ts` that expect a status, with the "generation housekeeping"
+case "logs a prune the bucket refuses, and streams on", each fail with their own line's status taken
+out, and that block's no-answer and not-a-number cases fail with the number check taken out.
 
 **Why versitygw 1.8.0.** Five candidates were weighed on 2026-09-23. Four were run with the same
 probe: a write "only if absent" over an existing key, a write "only if unchanged" with a stale ETag,

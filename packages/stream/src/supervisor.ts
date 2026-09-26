@@ -205,13 +205,16 @@ const codeOf = (error: unknown): string => (isAppError(error) ? error.code : "un
 
 type FailureFields = { errorCode: string; status?: number };
 
-/** A failure's code, and the bucket's HTTP status when the bucket answered it — a number, never its
- * reply. */
+/**
+ * The line carries the bucket's HTTP status but not the error's `name`, which can be text the
+ * bucket supplied. A 2xx status means the request was answered and the failure was found inside
+ * the answer (the `requestFailed` calls in `s3-store.ts`).
+ */
 function failureFields(error: unknown): FailureFields {
   const errorCode = codeOf(error);
   if (isAppError(error) && hasCode(error, "backup.stream_request_failed")) {
     const { status } = error.params;
-    if (status !== null) return { errorCode, status };
+    if (typeof status === "number") return { errorCode, status };
   }
   return { errorCode };
 }
