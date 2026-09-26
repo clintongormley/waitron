@@ -700,16 +700,19 @@ per-repository budget" above). An error answer from a release download fails the
 naming the URL.
 
 **A change to either installer alone selects `apps/server`**, because both are in
-`ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) against it; until branch
-`fix/installer-scripts-select-server` neither was, and such a change ran no shard. Checked
+`ROOT_SCOPE_CONSUMERS` (`scripts/changed-scope.mjs`) against it. Checked
 2026-09-26: `printf 'scripts/setup-litestream.mjs\n' | node scripts/changed-packages.mjs`, and the
 same for `scripts/setup-s3-test-server.mjs`, each printed `code=true`, `scope=packages`,
 `packages=@waitron/server`; and `pnpm --filter "...@waitron/server" ls --depth -1 --json | node
 scripts/changed-scope.mjs`, the `changes` job's gate step for that scope, printed `server=true` with
 every other gate false. `test-server`'s `if:` asks for `code` and `server` both true. On `main` the
 `changes` job forces `scope=global`, whose gate step prints every gate true. That a real pull
-request then runs the shards has not been checked on CI. The cost is that every installer change
-runs the three server shards.
+request then runs the shards has not been checked on CI. The cost, read from the jobs' `if:` lines
+in `.github/workflows/ci.yml`: on a pull request an installer change runs the three server shards,
+`test-server-merge`, and `typecheck` and `bundle-smoke`, which ask for `code` alone; on its merge to
+`main` those two run again, the forced global scope runs every test job and `mutation-shared`, and
+the push runs `image` and, once `ci` passes, `publish`, which moves `:main` unless
+`scripts/main-tag-guard.sh` holds it for a newer commit.
 
 ## Two TypeScript compilers are installed, and that is deliberate
 

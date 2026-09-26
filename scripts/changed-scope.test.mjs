@@ -70,7 +70,7 @@ describe("isInertPath", () => {
 
 describe("isRootScopePath", () => {
   // The repository's own machinery. It is CODE — isInertPath says so — but it gives the ROOT Vitest
-  // project work and gives no package any CI work; the files members do read are in
+  // project work and gives no package any CI work; the files a member depends on are in
   // ROOT_SCOPE_CONSUMERS.
   it.each([
     "scripts/changed-scope.mjs",

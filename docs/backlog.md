@@ -2751,10 +2751,12 @@ image constraints under *Detail → Box image*.
   change to either is `code=true` and `bundle-smoke` runs. The list is hand-written, and
   `scripts/root-scope-consumers.test.mjs` fails in both directions — a member file naming a root
   `scripts/` file by relative path that is not listed, or a listed pair no file makes. That guard
-  reads text: a path assembled from parts is invisible to it. **Still open:** `bundle-smoke` builds
-  only the credentials and server bundles, so a change to the shared script selects print-agent and
-  provisioning for typecheck and tests but builds neither of their bundles in CI. `bundle-smoke`
-  built the same two before #580 (`git show 7b1ad8889^:.github/workflows/ci.yml`).
+  reads text: a path assembled from parts is invisible to it. (2026-09-26: since A34 the guard also
+  accepts a pair a ci.yml job makes — see [ci-and-gates.md](developers/ci-and-gates.md).)
+  **Still open:** `bundle-smoke` builds only the credentials and server bundles, so a change to the
+  shared script selects print-agent and provisioning for typecheck and tests but builds neither of
+  their bundles in CI. `bundle-smoke` built the same two before #580
+  (`git show 7b1ad8889^:.github/workflows/ci.yml`).
 - **Every package to the high coverage bar, `98/98/98/95` — DONE (owner decision 2026-09-23; the
   floor retired 2026-09-24 by **PR #549**).** Every package and the root project now hold
   the bar, and `scripts/coverage-thresholds.test.ts` pins one bar for all of them, a new package
@@ -5794,9 +5796,10 @@ line with what slice 2 built. Left open:
   that tests a member ([ci-and-gates.md](developers/ci-and-gates.md)). Left open, found by A34:
   `scripts/changed-packages.mjs runnable` runs before the tests in the jobs of nine packages
   (dashboard, setup, till, bookings, fiscal-verifactu, media, payments-stripe, payments-sumup,
-  venue-service) and in the two-filter ui/ui-core job, fed from a pipe, so the guard does not count
-  it and it is not listed; a change to it alone runs none of those jobs. Listing it would send every
-  change to it through all of them — the owner's call.
+  venue-service), in the two-filter ui/ui-core job, and in `test-light-a` and `test-light-b`, fed
+  from a pipe, so the guard does not count it and it is not listed; a change to it alone runs none
+  of those jobs. Listing it against every member those jobs test would send every change to it
+  through all of them — the owner's call.
 - Linux is covered by one CI run only: #652's first (2026-09-25, run 36173603563), where each
   `test-server` shard's install step took about two seconds by GitHub's whole-second step
   timestamps, and the loop test passed in 15,989 ms with no test skipped in the merged report.

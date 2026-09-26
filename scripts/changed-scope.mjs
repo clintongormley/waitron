@@ -39,9 +39,9 @@ const ROOT_SCOPE_PREFIXES = ["scripts/", ".husky/", ".github/"];
  * Hand-written. `scripts/root-scope-consumers.test.mjs` fails when a root `scripts/` file is named
  * by a member file through a relative path, or run by a line starting `node scripts/` in a ci.yml
  * job that tests a member through one quoted `pnpm --filter`, and is not listed here for that
- * member — or when an entry here is neither. Weaker than its name: it reads text, so a path built
- * from parts is invisible to it, a member-file comment spelling the path counts as a reference, a
- * script fed from a pipe in ci.yml does not count, and only root `scripts/` is scanned.
+ * member — or when an entry here is neither. Weaker than its name in the ways its header states —
+ * it reads member files and ci.yml as text, so among other gaps a path built from parts, or a
+ * script fed from a pipe in ci.yml, is invisible to it.
  */
 export const ROOT_SCOPE_CONSUMERS = new Map([
   [
@@ -55,7 +55,7 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
 
 /**
  * True for a path under ROOT_SCOPE_PREFIXES. For the files ROOT_SCOPE_CONSUMERS lists,
- * scopeForPaths also selects the members that read them.
+ * scopeForPaths also selects the members listed against them.
  *
  * The other root config — the lockfile, the root manifests, `tsconfig*.json`, the lint and format
  * config, `vitest.config.ts` — is deliberately not here: each can change what every package builds,

@@ -189,7 +189,7 @@ export function scopeForPaths(changedPaths, loadPackages) {
           packages: [],
           root,
           deploy,
-          reason: `${path} is read by ${dir}, which is not a workspace member — running everything`,
+          reason: `${path} is listed against ${dir}, which is not a workspace member — running everything`,
         };
       }
       attributed.add(consumer.name);

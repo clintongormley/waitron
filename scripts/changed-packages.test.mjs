@@ -194,7 +194,7 @@ describe("scopeForPaths", () => {
     });
   });
 
-  describe("a root file that workspace members read", () => {
+  describe("a root file a workspace member depends on", () => {
     const consumers = workspacePackages(
       ls(
         member("@waitron/server", "apps/server"),
@@ -229,6 +229,17 @@ describe("scopeForPaths", () => {
         root: true,
       });
     });
+
+    it.each(["scripts/setup-litestream.mjs", "scripts/setup-s3-test-server.mjs"])(
+      "selects the server, whose CI test job runs %s",
+      (path) => {
+        expect(scopeForPaths([path], workspace(consumers))).toMatchObject({
+          kind: "packages",
+          packages: ["@waitron/server"],
+          root: true,
+        });
+      },
+    );
 
     it("still gives any other scripts/ file root scope alone", () => {
       const load = loader(consumers);

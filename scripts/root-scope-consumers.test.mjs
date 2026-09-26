@@ -20,11 +20,12 @@ import { PNPM_LS_SPAWN_TIMEOUT_MS, workspaceMembers } from "./workspace-members.
 // reads ci.yml alone. A script counts only on a line that STARTS with `node scripts/<file>` (after
 // an optional `- run:`), so one run at the end of a pipe, or any other way, is not counted — the
 // pipe is what leaves out `scripts/changed-packages.mjs runnable`, which several test jobs run
-// before their tests. A member counts only through `pnpm --filter "<name>" test:shard` or
-// `test:coverage` with that one quoted filter, so a job that tests through two filters or a
-// variable is attributed to nobody. It skips full-line comments, but a step an `if:` switches off,
-// or a line inside a heredoc, still counts, and it does not check that the script runs before the
-// tests.
+// before their tests. A member counts only on a line where one quoted filter,
+// `pnpm --filter "<name>"`, is followed directly by `test:shard` or `test:coverage`, so a member a
+// job tests only through two filters, an unquoted filter or a variable, or with an option or `run`
+// between the filter and the script name, is attributed no script from that job. It skips
+// full-line comments, but a step an `if:` switches off, or a line inside a heredoc, still counts,
+// and it does not check that the script runs before the tests.
 
 const REPO_ROOT = join(import.meta.dirname, "..");
 const CI_WORKFLOW = join(REPO_ROOT, ".github", "workflows", "ci.yml");
@@ -101,7 +102,8 @@ const TESTS_MEMBER = /pnpm --filter "([^"]+)" test:(?:shard|coverage)\b/;
 /**
  * `{ file: memberDirs[] }` of every root `scripts/` file a ci.yml job runs as a command of its own
  * (`node scripts/<file>` at the start of a line), attributed to each member that same job tests
- * with `pnpm --filter "<name>" test:shard` or `test:coverage`. Full-line comments are skipped.
+ * with `pnpm --filter "<name>" test:shard` or `test:coverage`, the script name directly after that
+ * one quoted filter. Full-line comments are skipped.
  */
 function ciRunReaders(text, members) {
   const readers = new Map();
@@ -275,7 +277,27 @@ describe("ciRunReaders", () => {
       "  changes:",
       "    steps:",
       "      - run: node scripts/setup-x.mjs",
-      "      - run: pnpm --filter @waitron/server build",
+      '      - run: pnpm --filter "@waitron/server" build',
+    );
+    expect(ciRunReaders(text, members)).toEqual(new Map());
+  });
+
+  it("attributes a script to nobody when its job tests through two filters", () => {
+    const text = workflow(
+      "  test-both:",
+      "    steps:",
+      "      - run: node scripts/setup-x.mjs",
+      '      - run: pnpm --filter "@waitron/server" --filter "@waitron/till" test:coverage',
+    );
+    expect(ciRunReaders(text, members)).toEqual(new Map());
+  });
+
+  it("attributes a script to nobody when its job tests through an unquoted filter", () => {
+    const text = workflow(
+      "  test-server:",
+      "    steps:",
+      "      - run: node scripts/setup-x.mjs",
+      "      - run: pnpm --filter @waitron/server test:coverage",
     );
     expect(ciRunReaders(text, members)).toEqual(new Map());
   });
