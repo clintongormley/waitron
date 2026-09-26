@@ -614,6 +614,56 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     });
   });
 
+  it("refuses a standby id the held chart lists as evicted with 409 mirror.standby_removed, before reserving anything", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const removedId = crypto.randomUUID();
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+    await writeNodeMembership(
+      db,
+      signedMembershipDoc(seedTerm, {
+        signerNodeId: designated.nodeId,
+        nodes: [
+          {
+            nodeId: designated.nodeId,
+            contactUrl: "https://box.deli.test",
+            standing: "serving-primary",
+          },
+          { nodeId: removedId, contactUrl: "https://cloud.deli.test", standing: "evicted" },
+        ],
+      }),
+    );
+    const chartBefore = await readNodeMembership(db);
+    const installationCounter = async (): Promise<number[]> => {
+      const { rows } = await db.execute<{ n: number }>(
+        sql`select proximo_numero as n from contadores_instalacion`,
+      );
+      return rows.map((r) => r.n);
+    };
+    const counterBefore = await installationCounter();
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+      standbyNodeId: removedId,
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: { code: "mirror.standby_removed", params: {} } });
+    expect(await installationCounter()).toEqual(counterBefore);
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+
+    // Control: a fresh id through the same app does reserve, so the counter read above can move.
+    const fresh = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+    expect(fresh.status).toBe(200);
+    expect(await installationCounter()).not.toEqual(counterBefore);
+  });
+
   it("refuses a non-string standbyContactUrl as mirror.standby_invalid", async () => {
     const { designated, adminPersonId } = await setupVenue();
     const app = mountApp(designated, "https://relay.example:9000/");

@@ -226,6 +226,14 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       expect(bundle.status).toBe(403);
       expect(await bundle.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 
+      // Removing a machine from the chart is a write; the primary control below answers 401.
+      const removal = await fetch(`${base}/management-api/servers/${crypto.randomUUID()}/remove`, {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(removal.status).toBe(403);
+      expect(await removal.json()).toEqual({ error: { code: "node.read_only", params: {} } });
+
       // The agent and device groups are not mounted on a mirror. A GET bypasses the read-only
       // gate, so a 404 means the route is absent, not gated; the primary control answers 200.
       const printStatus = await fetch(`${base}/print-api/agent/join/status`);
@@ -349,6 +357,15 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       const bundle = await fetch(`${base}/management-api/mirror-bundle`, { method: "POST" });
       expect(bundle.status).toBe(401);
       expect((await bundle.json()).error.code).toBe("password.invalid");
+
+      const servers = await fetch(`${base}/management-api/servers`);
+      expect(servers.status).toBe(401);
+      expect((await servers.json()).error.code).toBe("management_session.required");
+      const removal = await fetch(`${base}/management-api/servers/${crypto.randomUUID()}/remove`, {
+        method: "POST",
+      });
+      expect(removal.status).toBe(401);
+      expect((await removal.json()).error.code).toBe("management_session.required");
 
       const printStatus = await fetch(`${base}/print-api/agent/join/status`);
       expect(printStatus.status).toBe(200);

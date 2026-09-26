@@ -10,7 +10,7 @@ import {
   withTransaction,
   type Database,
 } from "@waitron/db";
-import { withMember } from "@waitron/membership";
+import { standingOf, withMember } from "@waitron/membership";
 import { authorizeManager, endManagementSession, loginManagerById } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
@@ -44,6 +44,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "mirror.no_relay": 400,
   "mirror.standby_invalid": 400,
+  "mirror.standby_removed": 409,
   "membership.write_contended": 503,
 };
 
@@ -105,6 +106,12 @@ export function mountMirrorBundleApi(
       });
 
       if (deps.relayUrl === undefined) throw new AppError("mirror.no_relay", {});
+
+      // Before assembly, so a removed machine's id spends no reservation.
+      const held = await readNodeMembership(deps.appDb);
+      if (held !== null && standingOf(held, standby.nodeId) === "evicted") {
+        throw new AppError("mirror.standby_removed", {});
+      }
 
       const bundle = await assembleMirrorBundle({
         appDb: deps.appDb,

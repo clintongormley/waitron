@@ -1,7 +1,7 @@
 import type { MembershipNode } from "./types.js";
 
 /**
- * The outgoing primary is demoted, never evicted: eviction is a node's own act (`retireSelf`).
+ * The outgoing primary is demoted, never evicted.
  * A promoting node missing from the chart is appended with an empty contactUrl, which
  * `routableServers` drops, so no till is told to dial it. The append is only a fallback, for a
  * promoting node whose own held chart omits it or is empty.

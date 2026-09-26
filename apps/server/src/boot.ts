@@ -152,6 +152,7 @@ import { mountWorkforceApi } from "./workforce-api.js";
 import { mountScheduleApi } from "./schedule-api.js";
 import { mountMeApi } from "./me-api.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { assertBuiltApp, mountSpa } from "./spa-api.js";
 import { mountSetup } from "./setup-api.js";
@@ -1637,6 +1638,9 @@ async function bootServer(
 
   // Mounted on every node: `retireSelf`'s own guards refuse a serving node.
   mountBoxRetireApi(app, { appDb: db, ring, nodeId: till.nodeId }, log);
+  // Mounted on every node: a mirror or fenced node's read-only gate refuses the removal, and a
+  // node that is not the chart's serving primary refuses it itself.
+  mountMembershipRemovalApi(app, { db, ring, nodeId: till.nodeId }, log);
 
   mountRecoveryBundleApi(app, { db, stateDir: config.stateDir, now }, log);
   const cloudConnection = cloudOrigin

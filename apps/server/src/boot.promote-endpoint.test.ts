@@ -383,6 +383,12 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
       expect(write.status).toBe(403);
       expect(await write.json()).toEqual({ error: { code: "node.read_only", params: {} } });
 
+      const removal = await fetch(`${base}/management-api/servers/${crypto.randomUUID()}/remove`, {
+        method: "POST",
+      });
+      expect(removal.status).toBe(403);
+      expect(await removal.json()).toEqual({ error: { code: "node.read_only", params: {} } });
+
       const res = await postPromote(base, {
         oldNodeNeutralised: true,
         personId: ADMIN_ID,
