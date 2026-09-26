@@ -303,7 +303,7 @@ suggest wiping anything. Below them the page shows why the last start failed and
 a tail from the previous, successful run, and the reason was only in `docker logs`, which the
 operator cannot read. So every start counted as an attempt writes `server.boot_started` to
 `waitron.log`, and a failed one writes `server.boot_failed` carrying its code and `detail` — the
-error's name and message, every `caused by`, the stack and an `AppError`'s params, through
+error's name and message, the stack, each `caused by` in its cause chain up to five levels in all and an `AppError`'s params, through
 `redactSecrets` (`runEntry`, `apps/server/src/node-entry.ts`). The page shows the latest start's `detail` in full,
 read from the whole file so the tail's line cap cannot cut it off, and only when no later start
 began; in the tail each failure's `detail` is laid out on its own lines.

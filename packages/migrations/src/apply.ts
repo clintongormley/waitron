@@ -83,7 +83,11 @@ async function migrateEverySet(
   }
 }
 
-/** Drizzle runs a set's pending migrations in one transaction and rolls it back when one fails. */
+/**
+ * Drizzle runs a set's pending migrations in one transaction and rolls it back when one fails.
+ * Pinned by "undoes every migration the set applied in the same run, not only the refused one"
+ * (`apply-failed.test.ts`).
+ */
 async function runSet(db: Database, set: VenueMigrationOptions): Promise<void> {
   try {
     await runMigrations(db, set);

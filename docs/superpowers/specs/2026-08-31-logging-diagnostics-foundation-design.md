@@ -166,6 +166,9 @@ injected-sink design.
   bounded number of rotated files (e.g. 10 MB × 5), auto-pruning the oldest. The
   box process is the single sequential writer, so rotation is simple and needs no
   cross-process locking.
+  **Pointer, 2026-09-26:** other writers now append to the file too (the
+  entrypoint's boot lines, the frozen-holder watchdog); only the server's own sink
+  rotates — see `apps/server/src/log-file.ts`.
 - The production sink is `tee(stdoutSink, rotatingFileSink)` — **stdout behaviour
   is unchanged** (container logs still work); the file is additive.
 - **Failure is swallowed:** an IO error (disk full, permissions) degrades to

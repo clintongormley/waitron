@@ -116,9 +116,10 @@ Both carry the caught error's own words — a missing column, a database file th
 the counts behind `migrations.incomplete`, the migration hashes behind
 `provisioning.database_ahead` — with any credentials embedded in a URL masked before it is written.
 The container's output also holds what happens before a start is counted, such as a start refused
-for being given arguments. `docker compose logs` keeps it across the
-container's own restart loop, so read it before pulling a new image: `docker compose up -d` on a
-fresh image starts a new container and the previous boot's output goes with the old one.
+for being given arguments. `docker compose logs` keeps it across the container's own restart loop,
+but `docker compose up -d` on a fresh image starts a new container and the previous boot's output
+goes with the old one, so read it before pulling a new image. The failed start's report is also in
+`waitron.log` on the `logs` volume, which a new container keeps.
 
 ### Trying a branch before it merges
 

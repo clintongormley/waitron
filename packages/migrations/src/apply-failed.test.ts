@@ -15,7 +15,7 @@ const scratch: string[] = [];
 
 const BREAK = "\n--> statement-breakpoint\n";
 
-/** The shape of the 2026-09-26 incident: a first statement that succeeds, then one the engine refuses. */
+/** A first statement that succeeds, then one the engine refuses. */
 const REFUSED_SECOND_STATEMENT = [
   "ALTER TABLE `probe_items` ADD `setup_port` integer;",
   "ALTER TABLE `absent_table` DROP COLUMN `has_cash_drawer`;",

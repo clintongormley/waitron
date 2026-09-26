@@ -592,13 +592,13 @@ describe("a start refused by a holder that stopped", () => {
 });
 
 describe("a restore whose database could not be put in place, if it is the last failure", () => {
-  it("sends the operator to whoever installed the box, and not to the log on this page", async () => {
+  it("sends the operator to whoever installed the box, and to the failed start's details on this page", async () => {
     const text = OPERATOR_TEXT["restore.placement_failed"];
     expect(text).toBeDefined();
     expect(text!["en-GB"].action).toMatch(/ask whoever installed this box/i);
-    expect(text!["en-GB"].action).not.toMatch(/log below/i);
+    expect(text!["en-GB"].action).toContain("Why the last start failed");
     expect(text!["es-ES"].action).toMatch(/quien instaló este equipo/i);
-    expect(text!["es-ES"].action).not.toMatch(/registro de abajo/i);
+    expect(text!["es-ES"].action).toContain("Por qué falló el último arranque");
     const body = await pageFor("restore.placement_failed");
     expect(body).toContain(escapeHtml(text!["en-GB"].action));
     const spanish = await pageFor("restore.placement_failed", undefined, SPANISH);
@@ -612,8 +612,10 @@ describe("a start refused because the only copy of the database may be in a set-
     expect(text).toBeDefined();
     expect(text!["en-GB"].title).toMatch(/moved aside/i);
     expect(text!["en-GB"].action).toMatch(/ask whoever installed this box/i);
+    expect(text!["en-GB"].action).toContain("Why the last start failed");
     expect(text!["es-ES"].title).toMatch(/apartada/i);
     expect(text!["es-ES"].action).toMatch(/quien instaló este equipo/i);
+    expect(text!["es-ES"].action).toContain("Por qué falló el último arranque");
     const body = await pageFor("restore.database_set_aside");
     expect(body).toContain(escapeHtml(text!["en-GB"].title));
     const spanish = await pageFor("restore.database_set_aside", undefined, SPANISH);

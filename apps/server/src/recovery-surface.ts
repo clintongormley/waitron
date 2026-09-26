@@ -321,24 +321,24 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "A restore could not put the restored database in place.",
       action:
-        "Ask whoever installed this box to look at it before anything else. The server's own output says whether the box's previous database is unchanged or was left in a folder inside its venue folder, which must be moved back before the box is used.",
+        "Ask whoever installed this box to look at it before anything else. The details under “Why the last start failed” below, and the server's own output, say whether the box's previous database is unchanged or was left in a folder inside its venue folder, which must be moved back before the box is used.",
     },
     "es-ES": {
       title: "Una restauración no pudo poner en su sitio la base de datos restaurada.",
       action:
-        "Antes de nada, pide a quien instaló este equipo que lo revise. La salida del propio servidor indica si la base de datos anterior del equipo sigue sin cambios o quedó en una carpeta dentro de la carpeta de su local; en ese caso hay que devolverla a su sitio antes de usar el equipo.",
+        "Antes de nada, pide a quien instaló este equipo que lo revise. Los detalles de «Por qué falló el último arranque», más abajo, y la salida del propio servidor indican si la base de datos anterior del equipo sigue sin cambios o quedó en una carpeta dentro de la carpeta de su local; en ese caso hay que devolverla a su sitio antes de usar el equipo.",
     },
   },
   "restore.database_set_aside": {
     "en-GB": {
       title: "This box's database was moved aside by a restore that did not finish.",
       action:
-        "Ask whoever installed this box to look at it before anything else. The database is in a folder inside the venue folder, named in the server's own output. It must be moved back, or the restore run again, before the box can start.",
+        "Ask whoever installed this box to look at it before anything else. The database is in a folder inside the venue folder, named under “Why the last start failed” below and in the server's own output. It must be moved back, or the restore run again, before the box can start.",
     },
     "es-ES": {
       title: "La base de datos de este equipo quedó apartada por una restauración que no terminó.",
       action:
-        "Antes de nada, pide a quien instaló este equipo que lo revise. La base de datos está en una carpeta dentro de la carpeta del local, cuyo nombre aparece en la salida del propio servidor. Hay que devolverla a su sitio, o volver a hacer la restauración, antes de que el equipo pueda arrancar.",
+        "Antes de nada, pide a quien instaló este equipo que lo revise. La base de datos está en una carpeta dentro de la carpeta del local, cuyo nombre aparece más abajo, en «Por qué falló el último arranque», y en la salida del propio servidor. Hay que devolverla a su sitio, o volver a hacer la restauración, antes de que el equipo pueda arrancar.",
     },
   },
   "restore.membership_invalid": {

@@ -338,9 +338,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `device_cgroup_rules: ["c 180:* rwm"]` and `group_add: ["7"]` — not a `/dev/usb` subdirectory bind
   and not a hard `devices:` line.
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error
-  code; its log tail shows the failed start's own lines — the error, every cause, the stack and an
-  `AppError`'s params — through `redactSecrets` and HTML-escaped** (owner decision 2026-09-26: a
-  failure the page could not show took `docker logs` to diagnose, which the operator cannot read).
+  code; its log tail shows the failed start's own lines — the error, its cause chain (up to five
+  levels in all), the stack and an `AppError`'s params — through `redactSecrets` and
+  HTML-escaped** (owner decision 2026-09-26: a failure the page could not show took `docker logs`
+  to diagnose, which the operator cannot read).
   The code, `lastFailureAt` and the log file's lines are the text from outside the image; the log
   file's `redactSecrets` masks only a password in a URL, which is why no code's params and no
   logged message may carry a secret. See [conventions-ui.md](docs/developers/conventions-ui.md).

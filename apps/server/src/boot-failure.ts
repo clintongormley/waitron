@@ -21,9 +21,10 @@ const SCHEMA_MISSING = /^no such (table|column): /;
 const UNREACHABLE = new Set(UNREACHABLE_RESULT_CODES);
 
 /**
- * The code recorded for a boot failure. The unauthenticated recovery page shows fixed text chosen by
- * this code; its log tail can still carry a caught error's words (`recovery-surface.ts`). A socket
- * failure is not classified: the database is a file, so it cannot come from the database.
+ * The code recorded for a boot failure. The unauthenticated recovery page's title and action are
+ * fixed text chosen by this code; what else the page shows is at `OPERATOR_TEXT`
+ * (`recovery-surface.ts`). A socket failure is not classified: the database is a file, so it cannot
+ * come from the database.
  */
 export function classifyBootFailure(error: unknown): string {
   if (isAppError(error)) return error.code;
