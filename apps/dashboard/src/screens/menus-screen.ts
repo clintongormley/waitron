@@ -44,6 +44,15 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 
 const TABS = ["structure"] as const;
 
+/** A list being edited, by section id, with the name it was shown under and the menu and path
+ * it was reached by. */
+interface ListTarget {
+  menuId: string;
+  path: string[];
+  listId: string;
+  name: string;
+}
+
 const NO_USAGES: SectionUsages = { menus: [], sections: [] };
 const NO_NAMES: ReadonlyMap<string, string> = new Map();
 
@@ -62,19 +71,64 @@ function reachableProducts(nodes: MenuStructureNode[]): string[] {
   return [...found];
 }
 
+/** The section nodes `path` follows from the menu's top level, as far as the structure still has it. */
+function trailOf(structure: MenuStructure | null, path: readonly string[]): MenuStructureNode[] {
+  const trail: MenuStructureNode[] = [];
+  let nodes = structure?.nodes ?? [];
+  for (const memberId of path) {
+    const node = nodes.find((candidate) => candidate.memberId === memberId);
+    if (node?.ref.kind !== "section") break;
+    trail.push(node);
+    nodes = node.children ?? [];
+  }
+  return trail;
+}
+
+function listIdOf(structure: MenuStructure | null, trail: MenuStructureNode[]): string | null {
+  const last = trail.at(-1);
+  return last?.ref.kind === "section" ? last.ref.sectionId : (structure?.rootSectionId ?? null);
+}
+
+function sameOrder(order: readonly string[], nodes: readonly MenuStructureNode[]): boolean {
+  return (
+    order.length === nodes.length && nodes.every(({ memberId }, index) => memberId === order[index])
+  );
+}
+
+/** Every place `listId` appears in the structure, as that place's nodes. */
+function placesOf(structure: MenuStructure | null, listId: string): MenuStructureNode[][] {
+  if (structure === null) return [];
+  const found: MenuStructureNode[][] = listId === structure.rootSectionId ? [structure.nodes] : [];
+  const walk = (nodes: MenuStructureNode[]): void => {
+    for (const node of nodes) {
+      if (node.ref.kind !== "section" || node.children === undefined) continue;
+      if (node.ref.sectionId === listId) found.push(node.children);
+      walk(node.children);
+    }
+  };
+  walk(structure.nodes);
+  return found;
+}
+
 /**
  * The structure's nodes with every place `listId` appears in `ordered`'s order, or null when a
- * place's members are not exactly the ones `ordered` names, which only a fresh read can resolve.
+ * place's members are not exactly the ones `ordered` names, or a place's order is none of
+ * `accepted`, which only a fresh read can resolve.
  */
 function withOrder(
   structure: MenuStructure,
   listId: string,
   ordered: readonly SectionMember[],
+  accepted: readonly (readonly string[])[],
 ): MenuStructureNode[] | null {
   let mismatch = false;
   const arrange = (nodes: MenuStructureNode[]): MenuStructureNode[] => {
     const byId = new Map(nodes.map((node) => [node.memberId, node]));
-    if (byId.size !== ordered.length || ordered.some(({ id }) => !byId.has(id))) {
+    if (
+      byId.size !== ordered.length ||
+      ordered.some(({ id }) => !byId.has(id)) ||
+      !accepted.some((order) => sameOrder(order, nodes))
+    ) {
       mismatch = true;
       return nodes;
     }
@@ -218,11 +272,13 @@ export class MenusScreen extends LitElement {
   @state() private duplicateName = "";
   @state() private duplicateErrors: Record<string, string> = {};
 
-  @state() private creatingSection = false;
+  /** The list the new-section form adds to, while it is open. */
+  @state() private creatingSection: ListTarget | null = null;
   @state() private newSectionName = "";
   @state() private newSectionErrors: Record<string, string> = {};
 
-  @state() private addingProducts = false;
+  /** The list the product picker adds to, while it is open. */
+  @state() private addingProducts: ListTarget | null = null;
   @state() private addProductsError: string | null = null;
 
   readonly #queries = new DashboardQueries(
@@ -265,6 +321,10 @@ export class MenusScreen extends LitElement {
   #memberProducts: Product[] = [];
   #addable: Product[] = [];
   readonly #writes = new ListWriteQueue();
+  /** Per list, the current batch of moves: those made since the list last had none unanswered,
+   * until one is refused. `out` counts the unanswered; `answered` holds the orders answered by
+   * moves that were not shown because another write to the list waited behind them. */
+  readonly #moveBatches = new Map<string, { answered: string[][]; out: number }>();
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -276,7 +336,10 @@ export class MenusScreen extends LitElement {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
       this.#parents = sectionParents(this.sections);
     }
-    if (changed.has("structure") || changed.has("path")) this.#resolvePath();
+    if (changed.has("structure") || changed.has("path")) {
+      this.#resolvePath();
+      this.#closeLostList();
+    }
     if (changed.has("structure")) this.#onMenu = reachableProducts(this.structure?.nodes ?? []);
     if (changed.has("structure") || changed.has("path") || changed.has("sections"))
       this.#excluded = this.path.length === 0 ? [] : sectionsHolding(this.#parents, this.#listId!);
@@ -291,25 +354,77 @@ export class MenusScreen extends LitElement {
 
   /** Keeps the longest part of the path the structure still has, and derives the list it names. */
   #resolvePath(): void {
-    const trail: MenuStructureNode[] = [];
-    let nodes = this.structure?.nodes ?? [];
-    for (const memberId of this.path) {
-      const node = nodes.find((candidate) => candidate.memberId === memberId);
-      if (node?.ref.kind !== "section") break;
-      trail.push(node);
-      nodes = node.children ?? [];
-    }
+    const trail = trailOf(this.structure, this.path);
     if (trail.length < this.path.length) this.path = this.path.slice(0, trail.length);
     this.#trail = trail;
-    const last = trail.at(-1);
-    this.#listId =
-      last?.ref.kind === "section" ? last.ref.sectionId : (this.structure?.rootSectionId ?? null);
+    this.#listId = listIdOf(this.structure, trail);
+    const nodes =
+      trail.length === 0 ? (this.structure?.nodes ?? []) : (trail.at(-1)!.children ?? []);
     this.#listMembers = nodes.map(({ memberId, ref }, position) => ({
       id: memberId,
       position,
       ref,
     }));
     this.#inSection = nodes.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : []));
+  }
+
+  /** Whether the target's path, followed as far as the menu on screen still has it, ends at the
+   * target's list. */
+  #holds(target: ListTarget): boolean {
+    return listIdOf(this.structure, trailOf(this.structure, target.path)) === target.listId;
+  }
+
+  /** Closes a window whose path no longer leads to its list, except while its request is out, so
+   * the outcome is shown in the window that names its list, and except before its menu's structure
+   * is read, when this runs again as it arrives. Only a list lost within the same menu is
+   * explained; the menu itself changes only by navigation, and then the window closes without a
+   * message. Says whether it closed one. */
+  #closeLostList(): boolean {
+    const target = this.addingProducts ?? this.creatingSection;
+    if (target === null || this.busy) return false;
+    if (target.menuId === this.menuId && (this.structure === null || this.#holds(target)))
+      return false;
+    this.addingProducts = null;
+    this.creatingSection = null;
+    if (target.menuId === this.menuId)
+      this.memberError = t("menus.list_gone").replace("{name}", target.name);
+    return true;
+  }
+
+  /** After a write to `target` was saved, says so when, in the same menu, its path no longer leads
+   * to its list; with the menu's structure unread it cannot tell, and says nothing. */
+  #reportSavedToLost(target: ListTarget): void {
+    if (target.menuId === this.menuId && this.structure !== null && !this.#holds(target))
+      this.memberError = t("menus.list_gone_saved").replace("{name}", target.name);
+  }
+
+  /** When a change to `target` is refused while another menu, or none, is on screen, names the
+   * list with the refusal, so the refusal is not read as being about what is on screen. Says whether
+   * it did. */
+  #reportRefusedElsewhere(target: ListTarget, error: unknown): boolean {
+    if (target.menuId === this.menuId) return false;
+    this.memberError = t("menus.change_not_saved")
+      .replace("{name}", target.name)
+      .replace("{reason}", codeMessage(codeOf(error)));
+    return true;
+  }
+
+  /** Closes a window whose request was refused while another menu, or none, is on screen, so it is
+   * never left open over a menu it does not belong to. Says whether it closed one. */
+  #closeRefusedElsewhere(target: ListTarget, error: unknown): boolean {
+    if (!this.#reportRefusedElsewhere(target, error)) return false;
+    this.addingProducts = null;
+    this.creatingSection = null;
+    return true;
+  }
+
+  #here(): ListTarget {
+    return {
+      menuId: this.menuId!,
+      path: this.path,
+      listId: this.#listId!,
+      name: this.#listName(),
+    };
   }
 
   // ── Loading and the address ─────────────────────────────────────────────────────────────────
@@ -477,14 +592,16 @@ export class MenusScreen extends LitElement {
 
   /** Adds and removes hold `busy`, which disables the list until the menu is read again. */
   #listWrite(write: (listId: string) => Promise<unknown>): void {
-    const listId = this.#listId!;
+    const target = this.#here();
+    const { listId } = target;
     this.memberError = null;
     this.busy = true;
     this.#writes.run(listId, async () => {
       try {
         await write(listId);
       } catch (error) {
-        this.memberError = codeMessage(codeOf(error));
+        if (!this.#reportRefusedElsewhere(target, error))
+          this.memberError = codeMessage(codeOf(error));
         this.busy = false;
         return;
       }
@@ -495,19 +612,48 @@ export class MenusScreen extends LitElement {
 
   /** Not `busy`: that would disable the handle the keyboard user is on and drop their focus. */
   #move(memberId: string, to: number): void {
-    const listId = this.#listId!;
+    const target = this.#here();
+    const { listId } = target;
+    const moves = this.#moveBatches.get(listId) ?? { answered: [], out: 0 };
+    this.#moveBatches.set(listId, moves);
+    moves.out += 1;
+    let sentOver: MenuStructure | null = null;
     this.memberError = null;
     this.#writes.move(
       listId,
-      () => this.api.moveSectionMember(listId, memberId, to),
+      () => {
+        sentOver = this.structure;
+        return this.api.moveSectionMember(listId, memberId, to);
+      },
       async (ordered, last) => {
-        if (!last || this.structure === null) return;
-        const nodes = withOrder(this.structure, listId, ordered);
+        moves.out -= 1;
+        if (moves.out === 0) this.#moveBatches.delete(listId);
+        const answer = ordered.map(({ id }) => id);
+        if (!last) {
+          moves.answered.push(answer);
+          return;
+        }
+        if (this.structure === null) return;
+        // With no version to compare, the answer is shown only when the list's order on screen, at
+        // every place it appears, is exactly the one this move was sent over, one an earlier move
+        // of this batch answered, or this answer itself; any other order may be a newer change, so
+        // the menu is read again, while an accepted order can itself be a newer change that
+        // recreated it, such as one undoing this move, which the answer then covers until the menu
+        // is next read.
+        const accepted = [
+          ...placesOf(sentOver, listId).map((nodes) => nodes.map((node) => node.memberId)),
+          ...moves.answered,
+          answer,
+        ];
+        const nodes = withOrder(this.structure, listId, ordered, accepted);
         if (nodes === null) await this.#watchStructure();
         else this.structure = { ...this.structure, nodes };
       },
       async (error) => {
-        this.memberError = codeMessage(codeOf(error));
+        // The moves queued behind a refused one are dropped unanswered, so its batch ends here.
+        this.#moveBatches.delete(listId);
+        if (!this.#reportRefusedElsewhere(target, error))
+          this.memberError = codeMessage(codeOf(error));
         await this.#refresh();
       },
     );
@@ -571,7 +717,7 @@ export class MenusScreen extends LitElement {
   }
 
   #openNewSection(): void {
-    this.creatingSection = true;
+    this.creatingSection = this.#here();
     this.newSectionName = "";
     this.newSectionErrors = {};
   }
@@ -579,13 +725,14 @@ export class MenusScreen extends LitElement {
   /** Two requests: the section, then its place in the list. A section left out of the list by a
    * refused second request is still in the library, and offered by the list's own picker. */
   #createSection(): void {
-    if (!this.creatingSection || this.busy) return;
+    if (this.creatingSection === null || this.busy || this.#closeLostList()) return;
     const internalName = this.newSectionName.trim();
     if (internalName === "") {
       this.newSectionErrors = { internalName: t("sections.internal_name_required") };
       return;
     }
-    const listId = this.#listId!;
+    const target = this.creatingSection;
+    const listId = target.listId;
     this.busy = true;
     this.newSectionErrors = {};
     this.memberError = null;
@@ -594,35 +741,47 @@ export class MenusScreen extends LitElement {
       try {
         created = await this.api.createSection({ internalName });
       } catch (error) {
-        this.newSectionErrors = refusal(error);
+        if (!this.#closeRefusedElsewhere(target, error)) this.newSectionErrors = refusal(error);
         this.busy = false;
         return;
       }
-      this.creatingSection = false;
+      this.creatingSection = null;
+      let added = true;
       try {
         await this.api.addSectionMember(listId, { kind: "section", sectionId: created.id });
       } catch {
-        this.memberError = t("menus.section_not_added").replace("{name}", created.internalName);
+        added = false;
+        this.memberError =
+          listId === this.#listId
+            ? t("menus.section_not_added").replace("{name}", created.internalName)
+            : t("menus.section_not_added_to")
+                .replace("{name}", created.internalName)
+                .replace("{list}", target.name);
       }
       await this.#refresh();
+      if (added) this.#reportSavedToLost(target);
       this.busy = false;
     });
   }
 
   #addProducts(productIds: string[]): void {
-    const listId = this.#listId!;
+    if (this.addingProducts === null || this.busy || this.#closeLostList()) return;
+    const target = this.addingProducts;
+    const { listId } = target;
     this.busy = true;
     this.addProductsError = null;
     this.#writes.run(listId, async () => {
       try {
         await this.api.addSectionProducts(listId, productIds);
       } catch (error) {
-        this.addProductsError = codeMessage(codeOf(error));
+        if (!this.#closeRefusedElsewhere(target, error))
+          this.addProductsError = codeMessage(codeOf(error));
         this.busy = false;
         return;
       }
-      this.addingProducts = false;
+      this.addingProducts = null;
       await this.#refresh();
+      this.#reportSavedToLost(target);
       this.busy = false;
     });
   }
@@ -780,7 +939,7 @@ export class MenusScreen extends LitElement {
 
   #renderList() {
     return html`<h1>${t("menus.title")}</h1>
-      ${this.#renderLoadState()}
+      ${this.#renderLoadState()} ${this.#renderMemberError()}
       ${
         !this.loading && !this.loadError
           ? html`<div class="page-actions">
@@ -819,6 +978,14 @@ export class MenusScreen extends LitElement {
             >`
         : nothing
     }`;
+  }
+
+  /** Drawn whatever the structure's state, so a window closed by a refusal while another menu's
+   * structure is unread still says why. */
+  #renderMemberError() {
+    return this.memberError
+      ? html`<p class="error" role="alert" data-test="member-error">${this.memberError}</p>`
+      : nothing;
   }
 
   #renderBreadcrumb() {
@@ -890,11 +1057,6 @@ export class MenusScreen extends LitElement {
       <h2 id="list-heading">${listName}</h2>
       ${this.#renderShared()}
       <p class="help">${t("sections.members_saved_note")}</p>
-      ${
-        this.memberError
-          ? html`<p class="error" role="alert" data-test="member-error">${this.memberError}</p>`
-          : nothing
-      }
       <dashboard-member-list-editor
         .members=${this.#listMembers}
         .products=${this.#memberProducts}
@@ -936,7 +1098,7 @@ export class MenusScreen extends LitElement {
           .disabled=${this.busy}
           @click=${() => {
             this.addProductsError = null;
-            this.addingProducts = true;
+            this.addingProducts = this.#here();
           }}
           >${t("sections.add_products")}</wt-button
         >
@@ -1024,8 +1186,8 @@ export class MenusScreen extends LitElement {
     const errors = this.newSectionErrors;
     return this.#formModal({
       test: "new-section",
-      open: this.creatingSection,
-      heading: t("menus.new_section_heading").replace("{list}", this.#listName()),
+      open: this.creatingSection !== null,
+      heading: t("menus.new_section_heading").replace("{list}", this.creatingSection?.name ?? ""),
       body: html`<div class="fields">
         ${this.#summary(errors)}
         ${this.#nameInput({
@@ -1044,25 +1206,26 @@ export class MenusScreen extends LitElement {
       save: "new-section-save",
       saveLabel: t("action.save"),
       close: () => {
-        this.creatingSection = false;
+        this.creatingSection = null;
       },
       submit: () => this.#createSection(),
     });
   }
 
   #renderAddProducts() {
+    const target = this.addingProducts;
     return html`<wt-modal
       data-test="add-products"
-      .open=${this.addingProducts}
-      heading=${t("sections.add_products_heading").replace("{name}", this.#listName())}
+      .open=${target !== null}
+      heading=${t("sections.add_products_heading").replace("{name}", target?.name ?? "")}
       @keydown=${this.#guardEscape}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
-        if (!this.busy) this.addingProducts = false;
+        if (!this.busy) this.addingProducts = null;
       }}
     >
       ${
-        this.addingProducts
+        target !== null
           ? html`${
                 this.addProductsError
                   ? html`<p class="error" role="alert" data-test="add-products-error">
@@ -1073,8 +1236,8 @@ export class MenusScreen extends LitElement {
               <dashboard-section-add-products
                 .products=${this.#addable}
                 .categories=${this.categories}
-                .inSection=${this.#inSection}
-                .onMenu=${this.#onMenu}
+                .inSection=${target.listId === this.#listId ? this.#inSection : []}
+                .onMenu=${target.menuId === this.menuId ? this.#onMenu : null}
                 .busy=${this.busy}
                 @wt-add-products=${(event: CustomEvent<{ productIds: string[] }>) => {
                   event.stopPropagation();
@@ -1086,7 +1249,7 @@ export class MenusScreen extends LitElement {
                   data-test="add-products-cancel"
                   .disabled=${this.busy}
                   @click=${() => {
-                    this.addingProducts = false;
+                    this.addingProducts = null;
                   }}
                   >${t("action.cancel")}</wt-button
                 ></dashboard-section-add-products
@@ -1104,7 +1267,7 @@ export class MenusScreen extends LitElement {
         >
       </div>
       <h1>${name || t("menus.title")}</h1>
-      ${this.#renderLoadState()}
+      ${this.#renderLoadState()} ${this.#renderMemberError()}
       <wt-tabs
         data-test="menu-tabs"
         label=${name || t("menus.title")}

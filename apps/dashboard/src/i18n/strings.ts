@@ -1512,6 +1512,12 @@ export const en = {
   "menus.new_section_heading": "New section in {list}",
   "menus.section_not_added":
     "{name} was created, but it could not be added to this list. Choose it below to add it.",
+  "menus.section_not_added_to": "{name} was created, but it could not be added to {list}.",
+  "menus.list_gone":
+    "Another change took {name} away from where you were editing it, so its window was closed.",
+  "menus.list_gone_saved":
+    "Your change to {name} was saved, but meanwhile another change took it away from where you were editing it.",
+  "menus.change_not_saved": "Your change to {name} was not saved. {reason}",
   "add_to_menus.heading": "Add {name} to menus",
   "add_to_menus.intro":
     "{name} is saved. Choose where it goes on your menus, or skip this and add it later from Menus.",
@@ -3056,6 +3062,12 @@ export const es: Record<StringKey, string> = {
   "menus.new_section_heading": "Nueva sección en {list}",
   "menus.section_not_added":
     "Se creó {name}, pero no se pudo añadir a esta lista. Elígela abajo para añadirla.",
+  "menus.section_not_added_to": "Se creó {name}, pero no se pudo añadir a {list}.",
+  "menus.list_gone":
+    "Otro cambio ha quitado {name} de donde la estabas editando, así que se ha cerrado su ventana.",
+  "menus.list_gone_saved":
+    "Se ha guardado tu cambio en {name}, pero entretanto otro cambio la ha quitado de donde la estabas editando.",
+  "menus.change_not_saved": "No se ha guardado tu cambio en {name}. {reason}",
   "add_to_menus.heading": "Añadir {name} a los menús",
   "add_to_menus.intro":
     "{name} está guardado. Elige dónde va en tus menús, u omite este paso y añádelo más tarde desde Menús.",
