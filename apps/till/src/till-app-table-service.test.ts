@@ -2213,7 +2213,9 @@ describe("till-app table ordering: a menu published while a table is open", () =
 
     expect(api.addTabRound).toHaveBeenCalledTimes(2);
     expect(api.listZoneOffers).toHaveBeenCalledTimes(3);
-    expect(api.listZoneOffers).toHaveBeenLastCalledWith(floorZone.id);
+    expect(api.listZoneOffers).toHaveBeenLastCalledWith(floorZone.id, {
+      signal: expect.any(AbortSignal),
+    });
     expect(banner(el)!.textContent).toContain(codeMessage("menu.version_changed"));
   });
 
@@ -2285,7 +2287,9 @@ describe("till-app table ordering: a menu published while a table is open", () =
       await flush(el);
       await flush(el);
 
-      expect(listZoneOffers).toHaveBeenLastCalledWith(floorZone.id);
+      expect(listZoneOffers).toHaveBeenLastCalledWith(floorZone.id, {
+        signal: expect.any(AbortSignal),
+      });
       expect(tableOrder(el)!.products.map((product) => product.id)).toEqual(["cordero"]);
       // Lunch is no longer in the zone, so the table falls back to its default menu.
       expect(tableOrder(el)!.selectedMenuId).toBe("menu-dinner");

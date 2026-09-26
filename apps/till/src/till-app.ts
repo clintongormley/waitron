@@ -117,12 +117,15 @@ interface RefreshRetry {
 const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 
 /**
- * How long a round's send may stay out before it is cancelled and treated as unanswered. Above the
- * server watchdog's two minutes (`WATCHDOG_KILL_MS`, `packages/store/src/venue-liveness.ts`), after
- * which a server whose main thread stopped is killed, so the till does not give up on a server the
- * watchdog is still letting run.
+ * How long a round's send, or a reload of the table's offers, may stay out before it is cancelled.
+ * It is above the server watchdog's kill bound (`WATCHDOG_KILL_MS` plus `STACK_CAPTURE_MS`,
+ * `packages/store/src/venue-liveness.ts`), so a server whose main thread had stopped when the request
+ * went out is killed before the till gives up.
  */
-const ROUND_SEND_LIMIT_MS = 150_000;
+const TABLE_REQUEST_LIMIT_MS = 150_000;
+
+/** What a round's send leaves to do once the round is open for edits again. */
+type RoundFollowUp = "read-tab" | "mark-sold-out" | undefined;
 
 /** A whole-count unit's three-place server quantity reads "2", not "2.000". */
 function displayQuantity(product: TillProduct, quantity: string): string {
@@ -1262,25 +1265,25 @@ export class TillApp extends LitElement {
     this.#tableOffers.load(catalogue);
     this.tableMenus = catalogue.menus;
     this.tableProducts = this.#tableOffers.products();
-    this.#markRounds();
+    this.#markRounds(true);
   }
 
-  /** A round refused because a dish in it sold out: the table's offers are read again, so the line
-   * shows its mark, and the mark follows the offers from then on. */
+  /** A round refused because a dish in it sold out is marked against the table's offers from now on,
+   * and the offers are read again. */
   async #markSoldOut(round: WorkingOrderStore): Promise<void> {
     const zoneId = this.#tableZoneId;
     if (zoneId === undefined) return;
-    await this.#reloadTableOffers(zoneId);
     this.#markedRounds.add(round);
-    this.#markRounds();
+    await this.#reloadTableOffers(zoneId);
   }
 
-  /** Marks each marked round's lines again against the table's offers; a round left with no mark is
-   * forgotten. */
-  #markRounds(): void {
+  /** Marks each marked round's lines again against the table's offers; with `forget`, a round left
+   * with no mark is dropped. */
+  #markRounds(forget = false): void {
     for (const round of this.#markedRounds) {
       round.setBlocked(this.#tableOffers.blocks(round.lines));
-      if (round.lines.every((line) => line.blocked === undefined)) this.#markedRounds.delete(round);
+      if (forget && round.lines.every((line) => line.blocked === undefined))
+        this.#markedRounds.delete(round);
     }
   }
 
@@ -1323,8 +1326,10 @@ export class TillApp extends LitElement {
   async #reloadTableOffers(zoneId: string): Promise<boolean> {
     const action = this.#tableOfferRequest;
     const request = ++this.#tableRefreshRequest;
+    const read = new AbortController();
+    const limit = setTimeout(() => read.abort(), TABLE_REQUEST_LIMIT_MS);
     try {
-      const catalogue = await this.api.listZoneOffers(zoneId);
+      const catalogue = await this.api.listZoneOffers(zoneId, { signal: read.signal });
       if (
         request !== this.#tableRefreshRequest ||
         action !== this.#tableOfferRequest ||
@@ -1338,6 +1343,8 @@ export class TillApp extends LitElement {
       return true;
     } catch {
       return false;
+    } finally {
+      clearTimeout(limit);
     }
   }
 
@@ -1400,7 +1407,7 @@ export class TillApp extends LitElement {
     if (zoneId === undefined || !(await this.#reloadTableOffers(zoneId))) return "failed";
     const outcome = this.#reconcileBasket(round, this.#tableOffers);
     this.#markedRounds.add(round);
-    this.#markRounds();
+    this.#markRounds(true);
     return outcome;
   }
 
@@ -2237,11 +2244,16 @@ export class TillApp extends LitElement {
     // The round is shut to edits until the answer, so a retry sends what the screen shows and success
     // takes out exactly what was sent.
     if (round !== undefined) round.sending = true;
+    let followUp: RoundFollowUp;
     try {
-      await this.#sendRound(tabId, lines, round, sent ?? [], false);
+      followUp = await this.#sendRound(tabId, lines, round, sent ?? [], false);
     } finally {
       if (round !== undefined) round.sending = false;
     }
+    if (followUp === "read-tab") {
+      await this.#loadTabLines();
+      if (this.orderParty !== null) await this.#loadVisitBills();
+    } else if (followUp === "mark-sold-out" && round !== undefined) await this.#markSoldOut(round);
   }
 
   /**
@@ -2254,11 +2266,11 @@ export class TillApp extends LitElement {
     round: WorkingOrderStore | undefined,
     sent: readonly OrderLine[],
     retried: boolean,
-  ): Promise<void> {
+  ): Promise<RoundFollowUp> {
     this.errorKey = undefined;
     let landedOn: string;
     const send = new AbortController();
-    const limit = setTimeout(() => send.abort(), ROUND_SEND_LIMIT_MS);
+    const limit = setTimeout(() => send.abort(), TABLE_REQUEST_LIMIT_MS);
     try {
       landedOn = (await this.api.addTabRound(tabId, lines, { signal: send.signal })).tabId;
     } catch (error) {
@@ -2277,13 +2289,12 @@ export class TillApp extends LitElement {
       if (isNetworkFailure(error)) {
         this.errorKey = "table.round_unconfirmed";
         round?.removeLines(sent);
-        await this.#loadTabLines();
-        return;
+        return "read-tab";
       }
       this.errorKey = lineWriteError(error);
-      if ((error as { code?: string }).code === "product.unavailable" && round !== undefined)
-        await this.#markSoldOut(round);
-      return;
+      return (error as { code?: string }).code === "product.unavailable"
+        ? "mark-sold-out"
+        : undefined;
     } finally {
       clearTimeout(limit);
     }
@@ -2293,8 +2304,7 @@ export class TillApp extends LitElement {
       await this.#reloadTables();
       this.#rememberOrderParty();
     }
-    await this.#loadTabLines();
-    if (this.orderParty !== null) await this.#loadVisitBills();
+    return "read-tab";
   }
 
   async #onFireCourse(event: Event): Promise<void> {

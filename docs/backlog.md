@@ -349,6 +349,14 @@ required options list to a dish in the basket, or lowers a list's picks limit, s
 new version silently and the server then refuses the request `options.label_required` (or
 `extras.limit_exceeded`, per `validateExtraSelections`); nothing wrong is filed, but staff see a refusal where the dialog should have asked.
 A table's round is also not marked by the poll's sold-out list, only when a send is refused.
+Follow-up: a round the waiter has built but not yet sent belongs to the order it was built on, so
+when a split moves the table screen to the split-off check, the round is not shown on the check
+(before this branch the screen's one round went with it); when a split answers, move the unsent
+round to the check.
+Follow-up: a round kept after a refused send survives leaving the table only on a canvas that shows
+the floor and the order side by side, because the table screen holds it; on the till's drill view
+and a handheld's separate order tab, leaving destroys the screen and the round. Keeping rounds on
+the app, one per order, would keep them on every layout.
 **M7b2 landed (#702, 2026-09-26): a manager can clear a card payment a crash left running.** The
 Payments screen lists open orders locked by a card payment nothing is finishing any more, and "Check
 with the card provider" files the sale once if the card was charged, marks the payment failed and

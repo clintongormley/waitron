@@ -528,10 +528,8 @@ export class TillTableOrderScreen extends LitElement {
   @state() private splitQuantities = new Map<number, string>();
   @state() private splitAttempted = false;
 
-  /**
-   * One round per order, so a round kept after a refused send stays with its table: another table
-   * opened on this screen starts its own, and the first comes back when the waiter returns to it.
-   */
+  /** One round per order, kept only as long as this screen is: another order shown here starts its
+   * own round. */
   readonly #rounds = new Map<string, WorkingOrderStore>();
 
   get #roundStore(): WorkingOrderStore {
@@ -1231,19 +1229,15 @@ export class TillTableOrderScreen extends LitElement {
                   ></till-diet-filter>`
                 : nothing
             }
-            ${
-              // Keyed on the order: a widget subscribes to its store once, when it connects, so a
-              // round of another order needs a fresh one.
-              keyed(
-                this.orderId,
-                html`<till-product-grid
-                  class="round-control"
-                  ?inert=${this.#roundStore.sending}
-                  .products=${this.#gridProducts()}
-                  .store=${this.#roundStore}
-                ></till-product-grid>`,
-              )
-            }
+            ${keyed(
+              this.orderId,
+              html`<till-product-grid
+                class="round-control"
+                ?inert=${this.#roundStore.sending}
+                .products=${this.#gridProducts()}
+                .store=${this.#roundStore}
+              ></till-product-grid>`,
+            )}
           </div>
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>

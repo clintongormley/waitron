@@ -1323,3 +1323,117 @@ describe("a round refused because a dish in it sold out", () => {
     expect(roundStore(el).lines[0]!.blocked).toBe("unavailable");
   });
 });
+
+// ── Fix round 4 ──────────────────────────────────────────────────────────────────────────────────
+
+const lemonadeTile = (el: TillApp) =>
+  [...roundGrid(el).shadowRoot!.querySelectorAll<HTMLElement>("wt-button")].find(
+    (button) => button.querySelector(".name")!.textContent === "Lemonade",
+  )!;
+const roundSending = (el: TillApp) =>
+  tableScreen(el).shadowRoot!.querySelector("[data-round-sending]");
+const soldOutRefusal = { code: "product.unavailable", status: 409, productId: "Lemonade" };
+
+describe("a round's lock once its send is decided", () => {
+  it("opens the round for the next one while the tab's lines are still being read", async () => {
+    const { el } = await mountApp(tableStubs(DINING));
+    await toTable(el);
+    api.getTabLines.mockImplementation(() => new Promise(() => {}));
+    await sendLemonadeRound(el);
+
+    expect(api.addTabRound).toHaveBeenCalledOnce();
+    expect(roundStore(el).lineCount).toBe(0);
+    expect(roundSending(el)).toBeNull();
+    lemonadeTile(el).click();
+    await flush(el);
+    expect(roundStore(el).lineCount).toBe(1);
+  });
+
+  it("opens a round refused sold out for edits while the table's offers are read again", async () => {
+    const { el } = await mountApp(
+      tableStubs(DINING, { addTabRound: vi.fn().mockRejectedValue(soldOutRefusal) }),
+    );
+    await toTable(el);
+    api.listZoneOffers.mockImplementation((zoneId: string) =>
+      zoneId === "zone-dining" ? new Promise(() => {}) : Promise.resolve(V1),
+    );
+    await sendLemonadeRound(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("product.unavailable"));
+    expect(roundSending(el)).toBeNull();
+    roundStore(el).setLineQuantity(0, "2");
+    await flush(el);
+    expect(roundStore(el).lines[0]!.quantity).toBe("2");
+  });
+
+  it("gives up on a menu-change refusal's offers read after 150 seconds, keeping the round", async () => {
+    let signal: AbortSignal | undefined;
+    const { el } = await mountApp(
+      tableStubs(DINING, { addTabRound: vi.fn().mockRejectedValue(versionRefusal) }),
+    );
+    await toTable(el);
+    api.listZoneOffers.mockImplementation((zoneId: string, options?: { signal?: AbortSignal }) =>
+      zoneId === "zone-dining"
+        ? new Promise((_resolve, reject) => {
+            signal = options?.signal;
+            signal?.addEventListener("abort", () =>
+              reject(new DOMException("The operation was aborted.", "AbortError")),
+            );
+          })
+        : Promise.resolve(V1),
+    );
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    const settle = async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+    };
+    lemonadeTile(el).click();
+    await settle();
+    tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+    await settle();
+
+    await vi.advanceTimersByTimeAsync(149_999);
+    await el.updateComplete;
+    expect(signal?.aborted).toBe(false);
+    expect(roundSending(el)).not.toBeNull();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await settle();
+    await settle();
+    expect(signal?.aborted).toBe(true);
+    expect(roundSending(el)).toBeNull();
+    expect(roundStore(el).lineCount).toBe(1);
+    expect(banner(el)!.textContent).toContain(codeMessage("menu.version_changed"));
+    expect(api.addTabRound).toHaveBeenCalledOnce();
+  });
+});
+
+describe("a round refused sold out whose offers could not be read again", () => {
+  it("is marked by the next read of the table's offers that succeeds", async () => {
+    const { el } = await mountApp(
+      tableStubs(DINING, { addTabRound: vi.fn().mockRejectedValue(soldOutRefusal) }),
+    );
+    await toTable(el);
+    api.listZoneOffers.mockImplementation((zoneId: string) =>
+      zoneId === "zone-dining" ? Promise.reject({ code: "server.internal" }) : Promise.resolve(V1),
+    );
+    await sendLemonadeRound(el);
+    expect(roundStore(el).lines[0]!.blocked).toBeUndefined();
+
+    const soldOutV2 = {
+      ...catalogue("v2", [
+        offer("offer-lemonade", "Lemonade", "3.00", { available: false }),
+        burgerOffer(),
+      ]),
+      context: DINING.context,
+    };
+    api.listZoneOffers.mockImplementation((zoneId: string) =>
+      Promise.resolve(zoneId === "zone-dining" ? soldOutV2 : V1),
+    );
+    api.menuState.mockImplementation(async (zoneId: string) =>
+      menuState(zoneId === "zone-dining" ? "v2" : "v1"),
+    );
+    await poll(el);
+    expect(roundStore(el).lines[0]!.blocked).toBe("unavailable");
+  });
+});

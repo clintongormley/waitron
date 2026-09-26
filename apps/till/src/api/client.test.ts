@@ -382,7 +382,7 @@ describe("TillApi", () => {
     expect(r.products[1]!.allergens).toBeNull();
   });
 
-  it("listZoneOffers GETs menu-item identities for the selected service zone", async () => {
+  it("listZoneOffers GETs menu-item identities for the selected service zone, cancellably", async () => {
     const payload = {
       context: { zoneId: "zone-upstairs", departmentId: "restaurant", serviceMode: "table_tab" },
       defaultMenuId: "drinks",
@@ -404,13 +404,14 @@ describe("TillApi", () => {
       ],
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(payload));
+    const read = new AbortController();
 
-    await expect(new TillApi("", fetchStub).listZoneOffers("zone-upstairs")).resolves.toEqual(
-      payload,
-    );
+    await expect(
+      new TillApi("", fetchStub).listZoneOffers("zone-upstairs", { signal: read.signal }),
+    ).resolves.toEqual(payload);
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/service-zones/zone-upstairs/offers",
-      expect.objectContaining({ method: "GET", credentials: "include" }),
+      expect.objectContaining({ method: "GET", credentials: "include", signal: read.signal }),
     );
   });
 

@@ -1212,10 +1212,12 @@ export class TillApi {
     return this.#request<ProductCatalogue>("/api/products", "GET");
   }
 
-  async listZoneOffers(zoneId: string): Promise<ZoneOfferCatalogue> {
+  async listZoneOffers(zoneId: string, options: ReadOptions = {}): Promise<ZoneOfferCatalogue> {
     return this.#request<ZoneOfferCatalogue>(
       `/api/service-zones/${encodeURIComponent(zoneId)}/offers`,
       "GET",
+      undefined,
+      options.signal,
     );
   }
 
