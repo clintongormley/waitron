@@ -161,12 +161,14 @@ A line's **paid quantity** is the sum of its `bill_payment_lines.quantity` over 
 `bill_payment_id`, `submission_id` (unique together with `bill_payment_id`, so a retried refund
 gives money back once, §5.1), `fingerprint` (§5.1), `applied_amount`, `tip_amount`, `reason`,
 `authorized_by`, `requested_by`, `till_id` (the device that gave the money back, for the cash-up,
-§9a), `state` (`pending | completed | failed`, §6b), `sent_at` (§6b R1b), `provider_refund_ref`,
+§9a), `state` (`pending | completed | failed`, §6b), `sent_at` and `send_count` (§6b R1b),
+`provider_refund_ref`,
 `attested_by` and `attestation_note` (§6b), `created_at`, `completed_at`, `failed_at`.
 **Classified `ledger`, not append-only**, for the same reason as `bill_payments`: the amounts are
 decided once and only the outcome arrives later. A behavioural trigger (a custom migration) allows
 only `pending → completed` and `pending → failed`, plus, while the row is `pending`, setting
-`sent_at` once (null to a value) and the attestation columns with the outcome; it refuses any change
+`sent_at` once (null to a value), raising `send_count` by one, and the attestation columns with the
+outcome; it refuses any change
 to the amounts, the payment, the device, or a `sent_at` already set. A cash refund is inserted `completed` in its own transaction; only a card refund is
 ever `pending`. For a card, the provider refund it made is also recorded where refunds already are
 (`payment_refunds`, `packages/payments/src/schema/payment-refunds.ts`), through the `payments` row.
@@ -547,6 +549,14 @@ again.
   (https://developer.sumup.com/api/transactions). This is SumUp's documentation, not a test
   against a merchant account; Task 14's Step 0 calls the endpoint with the venue's credentials
   and records what it returns and which permission it needs.
+- Stripe's idempotency keys: *"You can remove keys from the system automatically after they're at
+  least 24 hours old. We generate a new request if a key is reused after the original is pruned."*
+  (https://docs.stripe.com/api/idempotent_requests). A same-key resend is protected only within 24
+  hours of the first send.
+- Stripe's errors: *"rate limiters run before the API's idempotency layer. The same goes for a 401
+  that omitted an API key, or most 400s that sent invalid parameters"*, and *"Treat requests that
+  return 500 errors as indeterminate"* (https://docs.stripe.com/error-low-level). So a 4xx on a
+  LATER send says nothing about an earlier one, and a 500 settles nothing.
 
 **The rule: the attempt is written before the call, the call is keyed to the attempt, and an
 outcome is recorded only on evidence.**
@@ -555,9 +565,11 @@ outcome is recorded only on evidence.**
    (`order.payment_in_flight`) or a pending refund (`bill.refund_in_progress`); insert the
    `bill_payment_refunds` row as `pending` with its `submission_id`; commit. From here the bill is
    locked (§5.2).
-2. **R1b (transaction):** stamp the row's `sent_at` immediately before the provider call; commit.
-   **A pending row with no `sent_at` provably never reached the provider**, because the stamp
-   commits before any network call.
+2. **R1b (transaction):** immediately before EACH provider call, stamp `sent_at` (on the first
+   send only) and add one to `send_count`; commit. **A pending row with no `sent_at` provably never
+   reached the provider**, because the stamp commits before any network call. A resend happens only
+   after an uncertain send, so **`send_count` above one means an earlier send is still
+   uncertain.**
 3. **R2 (no transaction):** call the provider's refund for the exact amount WITHOUT recording
    anything: a new provider method that only talks to the provider, never the existing
    `refund`/`partialRefund`/`reverseViaStripe`, which record in their own transactions. The call
@@ -576,13 +588,17 @@ action, so no path can conclude more than another.
 | No `sent_at` on the row | `failed`: it never left us |
 | The provider's answer to the call, or a lookup match, says Stripe `succeeded`, or SumUp `REFUNDED` or `SUCCESSFUL` | `completed` |
 | The provider's answer, or a lookup match, says Stripe `failed` or `canceled`, or SumUp `FAILED` | `failed` |
-| An HTTP 4xx from the call itself other than 408, 409 and 429 (the request was refused, so it created nothing) | `failed` |
+| A documented refusal answering the attempt's ONLY send (`send_count` = 1): a response the provider documents as meaning the refund was not created, from the list Task 14's Step 0 compiles per provider | `failed` |
+| Any refusal or 4xx answering a LATER send (`send_count` > 1) | stays `pending`: it answers that send only, and the earlier uncertain send is unresolved |
 | A match that is Stripe `pending` or `requires_action`, or SumUp `PENDING` | stays `pending` |
-| No match, an unchanged SumUp refunded total, a timeout, a 5xx, 408, 409 or 429, or no answer | stays `pending` |
+| No match, an unchanged SumUp refunded total, a timeout, a 5xx, a 4xx not on the documented-refusal list, or no answer | stays `pending` |
 | Two or more candidate matches (SumUp, below) | stays `pending`; manager only |
 
-**Absence is never failure once `sent_at` is set.** A request that reached the provider can still be
-in flight there; "nothing visible yet" does not show it cannot later succeed.
+**The invariant: an uncertain send stays unresolved until evidence settles its outcome.** Absence
+is never failure once `sent_at` is set: a request that reached the provider can still be in flight
+there, and "nothing visible yet" does not show it cannot later succeed. A later send's answer never
+settles an earlier send. Only a lookup match with a success or failure status, or a confirmed manual
+resolution, settles an attempt that has had an uncertain send.
 
 **Looking a refund up** (a new provider method, `lookupRefund`, the contract change below):
 
@@ -599,16 +615,18 @@ retry or the manager action is answered "in progress".
 - **A retry with the SAME `submission_id`** (the till's automatic retry, or staff): §5.1's replay
   rule is amended for this case: a `pending` card refund is RESUMED. With no `sent_at`, it runs
   R1b–R3 now. With `sent_at`, it LOOKS UP first, and a match with an outcome completes or fails the
-  row locally with NO second refund request. **Stripe only:** when the lookup finds no match, it
-  re-sends R2 with the SAME derived key; within Stripe's idempotency window a repeated key returns
-  the first request's result instead of refunding again (inferred from Stripe's documentation, not
-  tested here; Task 14's Step 0 records the window in Stripe's own words), and outside it the lookup
-  has already shown that no refund carries the row's id. **SumUp:** never re-sent; its refund takes
-  no key, so re-sending could refund twice.
+  row locally with NO second refund request. **Stripe only, and only within the key window:** when
+  the lookup finds no match and less than 24 hours have passed since `sent_at`, it re-sends R2 with
+  the SAME derived key (R1b first), because within that window a repeated key returns the first
+  request's result rather than refunding again. At or after 24 hours it sends NOTHING: the key may
+  have been pruned, a resend would be a new, unprotected refund, and an empty lookup is not proof
+  the first one failed. The refund stays pending for the lookup or a confirmed manual resolution.
+  **SumUp:** never re-sent; its refund takes no key, so re-sending could refund twice.
 - **A retry with a NEW `submission_id`** while a refund is pending → `bill.refund_in_progress`.
 - **The loop** (§5.4) only looks up and applies the table; it never sends a refund.
 - **M7b2's manager action** lists a bill's pending refunds beside its pending payments and resolves
-  one at a time by the same table, and for Stripe may re-send with the same key as a retry does.
+  one at a time by the same table, and for Stripe may re-send with the same key under the same
+  24-hour limit as a retry.
   **A manual resolution records a CONFIRMED outcome only** (owner, 2026-09-26): a manager, with
   their PIN and a mandatory note, records `completed` or `failed` only when they have the
   provider's confirmation of THAT request's outcome — a refund shown as refunded or failed in the
@@ -754,13 +772,24 @@ its code.
     retry, by the loop and by the manager action. Success statuses complete it; failure statuses
     fail it; `pending`, `requires_action`, `PENDING`, no match and two candidates leave it `pending`
     and the bill locked, with no refund sent (except the Stripe retry and manager re-send in 21).
-20. **The call's own answer:** a refund object `failed`, and a 400, fail the row; a 429, a 409, a 503
-    and a timeout leave it `pending` (the control that a non-definite answer is not taken as a
-    refusal).
-21. **Never sent, and sent but not found:** a crash between R1 and R1b leaves no `sent_at`; the loop
-    marks it `failed` and the lock is released, and no provider call was ever made. With `sent_at`
-    and no match: the loop leaves it `pending`; a Stripe retry re-sends with the SAME key (the stub
-    sees one distinct key); a SumUp retry sends nothing.
+20. **The call's own answer, and which answers settle what:**
+    - control: a documented refusal answering the FIRST and only send (`send_count` = 1) fails the
+      row and releases the lock;
+    - a refund object `failed` answering any send fails it (an outcome, not a refusal);
+    - the first send times out; the lookup finds nothing; a retry within 24 hours re-sends and gets
+      a 401 (credentials changed): the row stays `pending` with `send_count` 2, because the 401
+      answers only the retry, and the bill stays locked;
+    - the same with a 400 or a 429 on the retry: `pending`;
+    - a 500, a 503, a 409 and a timeout on any send leave it `pending`.
+21. **Never sent, sent but not found, and the key window:**
+    - a crash between R1 and R1b leaves no `sent_at`; the loop marks it `failed`, the lock is
+      released, and no provider call was ever made;
+    - with `sent_at` and no match, the loop leaves it `pending` and sends nothing;
+    - a Stripe retry 23 hours after `sent_at`, with no match, re-sends with the SAME key (the stub
+      sees one distinct key and `send_count` becomes 2);
+    - **a Stripe retry 25 hours after `sent_at`, with no match, sends NO refund request** (the stub
+      counts no new call), and the row stays `pending`; the manager action refuses to re-send too;
+    - a SumUp retry sends nothing at any age.
 22. **The manager needs a confirmed outcome:** on a pending SumUp refund with no match, the manager
     action refuses to record `failed` from an empty lookup; recording `failed` or `completed` with a
     confirmation note and PIN succeeds and keeps the attestation on the row. An hour-old pending

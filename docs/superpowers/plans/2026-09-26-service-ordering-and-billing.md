@@ -1830,7 +1830,10 @@ themselves:
   and re-map the payment path after M7b2. Read Stripe's current documentation for how long it keeps
   an idempotency key, and call SumUp's transaction endpoint with the venue's credentials to confirm
   the `REFUND` events and statuses its documentation describes, and which permission it needs;
-  record both, with the source's own words, in the ledger (design §6b depends on them). Write this task's Files
+  and, for each card provider, which error responses its own documentation says mean a refund was
+  NOT created (the documented-refusal list of design §6b; Stripe's own error page says rate
+  limiting, a missing key and most 400s run before its idempotency layer); record all three, with
+  the source's own words, in the ledger (design §6b depends on them). Write this task's Files
   and Interfaces into the ledger before any test.
 - [ ] **Step 1: Write the failing tests:**
   - **Change versus tip (§12 item 7):**
@@ -1872,7 +1875,8 @@ themselves:
     and nothing is written.
   - **Every acceptance test in design §8**, including 17–23 (an interrupted card refund completed
     by lookup without a second request, each provider outcome through each resolver, the call's own
-    answer, never-sent versus sent-but-not-found, the manager's confirmed outcome, and the invoice
+    answer settling only its own send, never-sent versus sent-but-not-found, no Stripe resend after
+    24 hours, the manager's confirmed outcome, and the invoice
     waiting for a pending refund) and 24–27 (the cash-up counting money on the day and till it
     moved, a refund on another day and till, today's paths unchanged, and a zero-net cash till
     still counted).
