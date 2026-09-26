@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PERMISSIONS,
   type Permission,
+  type PersonRoleValue,
   permissionsForRole,
   registerModulePermissions,
   roleAtLeast,
@@ -192,5 +193,14 @@ describe("roleAtLeast", () => {
         expect(roleAtLeast(role, floor), `${role} >= ${floor}`).toBe(i >= j);
       }
     }
+  });
+  it("fails for a role the ladder does not know, even against the lowest floor", () => {
+    expect(roleAtLeast("owner" as PersonRoleValue, "staff")).toBe(false);
+  });
+  it("fails against a floor the ladder does not know, even for the highest role", () => {
+    expect(roleAtLeast("admin", "owner" as PersonRoleValue)).toBe(false);
+  });
+  it("fails when neither the role nor the floor is on the ladder", () => {
+    expect(roleAtLeast("owner" as PersonRoleValue, "guest" as PersonRoleValue)).toBe(false);
   });
 });
