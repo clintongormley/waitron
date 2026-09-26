@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  deviceProfiles,
   kitchenStations,
   locations,
   printJobs,
@@ -29,6 +30,11 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import { VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { deploymentEnvironment } from "./config.js";
+import { DEVICE_COOKIE } from "./device-session.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
+import { setupVenue } from "./testing/venue-fixtures.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -42,9 +48,12 @@ import { addTabRound, joinTable, openTab } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// The HTTP surface of the split and un-join routes: the session guard, the malformed-`:id`/`tableId`
-// screens, the happy-path result shapes and the STATUS mapping for `table.not_joined`. The verbs'
-// write behaviour is pinned in `split-bill.test.ts` and `split-bill.fiscal.test.ts`.
+// The HTTP surface of the split, un-join and merge routes: the session guard, the malformed-`:id`/`tableId`
+// screens, the result shapes and the STATUS mapping for `table.not_joined`. The successful merge case also
+// checks the kitchen tickets, kitchen notices and print jobs it leaves; the refused one checks the
+// tickets stay on the check. One case finds a split-off check in Held orders and pays it through the
+// sale route. The split and un-join verbs themselves are tested in
+// `split-bill.test.ts` and `split-bill.fiscal.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
 // One product so a tab can open with a real line to split/carry across an un-join — `openTab` prices it
@@ -644,5 +653,98 @@ describe("POST /api/tabs/:id/merge of a check back into the tab it was split fro
     expect((await ticketsOn(checkId)).map((item) => item.id)).toEqual([ticket.id]);
     expect(await ticketsOn(tabA)).toEqual([]);
     expect(await heldOrderIds(app, cookie)).toContain(checkId);
+  });
+});
+
+/** What a till that forgot the split, by a reload or a crash, finds on the server. */
+describe("a split-off check after the till that made it has forgotten it", () => {
+  // Paying files a fiscal record, which needs a provisioned venue: the file's shared database is seeded
+  // without a registered installation or series.
+  const venueSuite = useVenueDb({
+    migrations: migrationOptionsFor(manifestSets(), null),
+    timeoutMs: 60_000,
+  });
+
+  async function provisionedTab(): Promise<{ app: Hono; tabId: string; cookie: string }> {
+    const db = venueSuite.db;
+    const { cfg: venueCfg, cafeId } = await setupVenue(db);
+    const { tabId, personId, profileId } = await withTransaction(db, async (tx) => {
+      const offers = await offerProducts(tx, venueCfg, { zone: "tables" });
+      const table = await createTable(tx, venueCfg, { label: "Mesa 5", zoneId: offers.zoneId });
+      const tab = await openTab(tx, venueCfg, {
+        tableId: table.id,
+        lines: offers.toOfferLines([{ productId: cafeId, quantity: "2" }]),
+      });
+      const [person] = await tx
+        .insert(persons)
+        .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+        .returning({ id: persons.id });
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({ name: "Counter till", formFactor: "till", capabilities: [] })
+        .returning({ id: deviceProfiles.id });
+      return { tabId: tab.tabId, personId: person!.id, profileId: profile!.id };
+    });
+    const session = await withTransaction(db, (tx) =>
+      loginWithPin(tx, { tillId: venueCfg.tillId, personId, pin: "5555" }),
+    );
+    // The sale route takes its till from the device that sends it.
+    const device = await enrolDeviceForTest(db, venueCfg, { name: "Barra", profileId });
+    const clock = systemClock();
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        db,
+        backend: new VerifactuBackend({
+          clock,
+          db,
+          environment: deploymentEnvironment(process.env),
+          deploymentEnvironment: deploymentEnvironment(process.env),
+          resolveClient: () => Promise.reject(new Error("a sale never submits inline")),
+        }),
+        clock,
+        cfg: venueCfg,
+        secureCookies: false,
+        venueLocale: "es-ES",
+      },
+      collect([]),
+    );
+    const cookie = `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+    return { app, tabId, cookie };
+  }
+
+  async function heldOrders(app: Hono, cookie: string): Promise<{ id: string; label: string }[]> {
+    const res = await app.request("/api/working-orders", { headers: { cookie } });
+    expect(res.status).toBe(200);
+    return (await res.json()) as { id: string; label: string }[];
+  }
+
+  it("is in Held orders under its table's name, and pays there through the sale route", async () => {
+    const { app, tabId, cookie } = await provisionedTab();
+    const split = await app.request(`/api/tabs/${tabId}/split`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ transfers: [{ lineNo: 1, quantity: "1" }] }),
+    });
+    expect(split.status).toBe(200);
+    const { checkId } = (await split.json()) as { checkId: string };
+
+    expect((await heldOrders(app, cookie)).find((order) => order.id === checkId)).toMatchObject({
+      label: "Mesa 5",
+    });
+
+    const pay = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        lines: [],
+        tender: { method: "cash", amount: "5.00" },
+        workingOrderId: checkId,
+      }),
+    });
+    expect(pay.status).toBe(200);
+    expect(await pay.json()).toMatchObject({ total: "1.50", orderLabel: "Mesa 5" });
+    expect((await heldOrders(app, cookie)).map((order) => order.id)).not.toContain(checkId);
   });
 });

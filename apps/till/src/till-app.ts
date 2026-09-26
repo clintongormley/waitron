@@ -310,6 +310,7 @@ export class TillApp extends LitElement {
     this.operatorPersonId = "";
     this.operatorName = "";
     this.canEdit = false;
+    this.#endOperatorSession();
     this.errorKey = "server.switched";
     this.#setScreen("lock");
     void this.#boot();
@@ -446,9 +447,16 @@ export class TillApp extends LitElement {
   #tableOpensPending = 0;
   /** Identifies the latest tab-lines read, so an earlier read answering later cannot win. */
   #tabLinesRead = 0;
-  /** The check {@link #onSplitLines} made and the tab it came from, while the check is on screen and
-   * unpaid. Held in memory only: after a reload the check stays in Held orders. */
+  /** The check {@link #onSplitLines} made and the tab it came from, cleared when a tab is paid, the
+   * check is left while it is the open order, or the operator's session ends. Held in memory only:
+   * after a reload the check stays in Held orders. */
   #splitCheck?: { checkId: string; tabId: string };
+  /** The last merge {@link #returnSplitCheck} started in this operator's session, so a later exit
+   * waits for it. */
+  #checkReturn: Promise<void> = Promise.resolve();
+  /** Bumped when the operator's session ends by logout or a server switch, so a split answering
+   * afterwards records no origin and a merge answering afterwards changes nothing on screen. */
+  #operatorSession = 0;
   @state() private counterServiceZones: ServiceZoneSummary[] = [];
   @state() private counterServiceZoneId = "";
   #counterOfferRequest = 0;
@@ -1953,11 +1961,12 @@ export class TillApp extends LitElement {
     const { transfers } = (event as CustomEvent<{ transfers: TabTransfer[] }>).detail;
     const tabId = this.activeTabId;
     if (tabId === undefined) return;
+    const session = this.#operatorSession;
     this.errorKey = undefined;
     try {
       const { checkId } = await this.api.splitTab(tabId, transfers);
       this.activeTabId = checkId;
-      this.#splitCheck = { checkId, tabId };
+      if (session === this.#operatorSession) this.#splitCheck = { checkId, tabId };
     } catch (error) {
       const code = (error as { code?: string }).code;
       this.errorKey =
@@ -1972,24 +1981,61 @@ export class TillApp extends LitElement {
   }
 
   /** Leaving a split-off check unpaid puts its lines back on the tab it came from, with their kitchen
-   * tickets. A check being paid here, or one the server will not merge, stays in Held orders. */
-  async #returnSplitCheck(): Promise<void> {
+   * tickets. A check whose payment is running here is left to that payment, and a failed merge is not
+   * retried. Resolves once the latest merge started in this session has settled, so an exit's next
+   * read comes after it. */
+  #returnSplitCheck(): Promise<void> {
     const split = this.#splitCheck;
-    if (split === undefined || this.activeTabId !== split.checkId) return;
+    if (split === undefined || this.activeTabId !== split.checkId) return this.#checkReturn;
     this.#splitCheck = undefined;
     if (this.submitting) {
-      this.errorKey = "table.check_kept_held";
-      return;
+      this.#showCheckOutcome("table.check_kept_held");
+      return this.#checkReturn;
     }
+    this.#checkReturn = this.#mergeCheckBack(split);
+    return this.#checkReturn;
+  }
+
+  async #mergeCheckBack(split: { checkId: string; tabId: string }): Promise<void> {
+    const session = this.#operatorSession;
     try {
       await this.api.mergeTabs(split.tabId, split.checkId, false);
-    } catch {
-      this.errorKey = "table.check_kept_held";
+    } catch (error) {
+      if (session !== this.#operatorSession) return;
+      // No answer means the merge may have happened.
+      this.#showCheckOutcome(
+        isNetworkFailure(error) ? "table.check_return_unconfirmed" : "table.check_kept_held",
+      );
       return;
     }
-    if (this.activeTabId !== split.checkId) return;
+    if (session !== this.#operatorSession || this.activeTabId !== split.checkId) return;
     this.activeTabId = split.tabId;
     await this.#loadTabLines();
+  }
+
+  /** A merge still in flight is not waited for: its request has no time limit, so one that never
+   * answers would hold up every table the next operator opens. */
+  #endOperatorSession(): void {
+    this.#operatorSession++;
+    this.#splitCheck = undefined;
+    this.#checkReturn = Promise.resolve();
+  }
+
+  #showCheckOutcome(key: "table.check_kept_held" | "table.check_return_unconfirmed"): void {
+    const late = this.#lateChangeShown();
+    this.errorKey = late === undefined ? key : { lateChange: late, also: key };
+  }
+
+  /** A paid check is no longer in Held orders; a late change shown beside that message stays. */
+  #withdrawCheckKept(): void {
+    const shown = this.errorKey;
+    if (shown === "table.check_kept_held") this.errorKey = undefined;
+    else if (
+      typeof shown === "object" &&
+      "lateChange" in shown &&
+      shown.also === "table.check_kept_held"
+    )
+      this.errorKey = { lateChange: shown.lateChange };
   }
 
   /**
@@ -2006,7 +2052,7 @@ export class TillApp extends LitElement {
     try {
       this.result = await this.api.recordSale([], tender, id);
       this.#splitCheck = undefined;
-      if (this.errorKey === "table.check_kept_held") this.errorKey = undefined;
+      this.#withdrawCheckKept();
       this.#showTicket(id);
     } catch (error) {
       // No preliminary save, so any network failure may have filed.
@@ -2109,7 +2155,7 @@ export class TillApp extends LitElement {
     this.operatorName = "";
     this.canEdit = false;
     this.#orderVisit++;
-    this.#splitCheck = undefined;
+    this.#endOperatorSession();
     // `screen = "lock"` resets neither the drill nor the tab.
     this.drill = undefined;
     this.#setActiveTab(this.canvas?.tabs[0]?.key, true);

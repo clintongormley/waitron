@@ -313,6 +313,8 @@ export const en = {
   "table.split_held_error": "Send held items to the kitchen before moving them to another bill",
   "table.check_kept_held":
     "The separate bill could not go back to the table. It is in Held orders on the counter.",
+  "table.check_return_unconfirmed":
+    "The server did not answer, so it is not known whether the separate bill went back to the table. If it is not on the table, it is in Held orders on the counter.",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "This account is disabled — ask a manager",
@@ -650,6 +652,8 @@ export const es: Record<StringKey, string> = {
     "Envía a cocina los artículos retenidos antes de pasarlos a otra cuenta",
   "table.check_kept_held":
     "La cuenta separada no pudo volver a la mesa. Está en Pedidos aparcados, en el mostrador.",
+  "table.check_return_unconfirmed":
+    "El servidor no ha respondido, así que no se sabe si la cuenta separada ha vuelto a la mesa. Si no está en la mesa, está en Pedidos aparcados, en el mostrador.",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Esta cuenta está desactivada. Avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
