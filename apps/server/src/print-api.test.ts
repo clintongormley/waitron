@@ -1419,7 +1419,16 @@ describe("printer cash-drawer calibration", () => {
     const first = await joinAndAccept(app, "First delivery agent");
     const last = await joinAndAccept(app, "Last delivery agent");
     const id = await createNetworkPrinter(app, "10.0.0.85", 9100, "Delivery history");
+    const otherId = await createNetworkPrinter(app, "10.0.0.86", 9100, "Other delivery history");
     await suite.db.insert(printJobs).values([
+      {
+        locationId,
+        printerId: otherId,
+        payload: new Uint8Array([1]),
+        status: "done",
+        claimedBy: first.agentId,
+        deliveredAt: "2026-09-26T09:00:00.000Z",
+      },
       {
         locationId,
         printerId: id,
@@ -1451,6 +1460,10 @@ describe("printer cash-drawer calibration", () => {
     expect(rows.find((row) => row.id === id)).toMatchObject({
       lastPrintAgentId: last.agentId,
       lastPrintAt: "2026-09-26T11:00:00.000Z",
+    });
+    expect(rows.find((row) => row.id === otherId)).toMatchObject({
+      lastPrintAgentId: first.agentId,
+      lastPrintAt: "2026-09-26T09:00:00.000Z",
     });
   });
   it("stores attachment on the printer and refuses non-boolean choices", async () => {

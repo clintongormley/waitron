@@ -389,6 +389,21 @@ describe("guided printer calibration", () => {
     return el;
   }
 
+  it("clears the width answer when paper width is changed directly", async () => {
+    const el = await openStepFour(stubApi());
+    for (let step = 4; step > 2; step--) {
+      q(el, "[data-test=calibration-back]")!.click();
+      await flush(el);
+    }
+    await chooseOption(el, "printer-width-line", "A");
+    const answer = q(el, '[name="printer-width-line"]') as HTMLSelectElement;
+    expect(answer.value).toBe("A");
+    expect((q(el, '[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("58mm");
+    await chooseOption(el, "printer-paper-width", "80mm");
+    expect(answer.value).toBe("");
+    expect(answer.selectedOptions[0]!.textContent!.trim()).toBe(t("printers.test_answer_choose"));
+  });
+
   it("opens the drawer only on an explicit test and records the operator's observation", async () => {
     let complete!: () => void;
     const api = stubApi({
@@ -446,6 +461,9 @@ describe("guided printer calibration", () => {
       testPrinterDrawer: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
     });
     const el = await openStepFour(api);
+    expect(q(el, '[name="printer-cash-drawer"]')!.shadowRoot!.querySelector("input")!.checked).toBe(
+      true,
+    );
     q(el, "[data-test=test-printer-drawer]")!.click();
     await flush(el);
     expect(text(el, "[data-test=edit-printer-modal] [role=alert]")).toBe(
@@ -779,6 +797,28 @@ describe("printers-screen", () => {
     q(el, "[data-test=printer-row-p3]")!.click();
     await flush(el);
     expect(text(el, "[data-test=printer-connection-p3]")).toBe("Puede cambiar de agente");
+  });
+
+  it("ignores saved sort and filter settings for removed printer columns", async () => {
+    sessionStorage.setItem(
+      "printers:table",
+      JSON.stringify({
+        sortKey: "connection",
+        sortDirection: "descending",
+        filters: { address: "10.0.0.9", status: "" },
+      }),
+    );
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    await selectTab(el, "printers");
+    for (const id of ["p1", "p2", "p3"])
+      expect(q(el, `[data-test=printer-row-${id}]`)).not.toBeNull();
+    expect((q(el, '[name="status-filter"]') as HTMLSelectElement).value).toBe("");
+    expect(
+      (q(el, "[data-test=printers-table]") as import("@waitron/ui").WtDataTable).sortKey,
+    ).not.toBe("connection");
   });
 
   it("renders each job's status, attempts, resolved printer and last error", async () => {

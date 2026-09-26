@@ -17,7 +17,7 @@ function deps(overrides: Partial<SetupDeps> = {}): SetupDeps {
 }
 
 describe("createSetupApp — GET /", () => {
-  it("shows progress and prevents duplicate submissions while scanning", async () => {
+  it("disables Scan and reveals its progress indicator on submission", async () => {
     const html = await (await createSetupApp(deps()).request("/")).text();
     const script = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];
     expect(script).toBeDefined();
