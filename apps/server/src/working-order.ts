@@ -50,7 +50,6 @@ import {
   products,
   sales,
   ticketItems,
-  ticketState,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -101,9 +100,10 @@ import {
   enqueueKitchenTickets,
   enqueueMovedSlips,
   firedQuantity,
+  isStarted,
   readSentWork,
 } from "./kitchen-print.js";
-import type { CorrectionItem } from "./kitchen-print.js";
+import type { CorrectionItem, FiredItem, TicketState } from "./kitchen-print.js";
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -1280,19 +1280,37 @@ export async function fireCourse(
   const noRoute = await heldNoRouteLines(tx, cfg, orderId, { courseIds: [courseId], lineIds: [] });
   // Only an open order's lines can be removed, so only there is a sold-out line refused; a placed
   // order's held course is committed work.
-  if (await isOpenOrder(tx, orderId)) {
-    await assertSendable(tx, [...firedItems.map((item) => item.workingOrderLineId), ...noRoute]);
-  }
-  await stampSent(
+  await finishRelease(
     tx,
+    cfg,
     orderId,
-    [...firedItems.map((item) => item.workingOrderLineId), ...noRoute],
+    firedItems,
+    noRoute,
     firedNow,
+    await isOpenOrder(tx, orderId),
   );
-  // The `fired_at IS NULL` predicate makes `RETURNING` exactly the items that fired now, so a re-fire
-  // prints nothing.
-  await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
-  if (firedItems.length > 0 || noRoute.length > 0) await bumpRevision(tx, [orderId]);
+}
+
+/**
+ * The end of {@link fireCourse} and {@link sendLines}: refuse a sold-out line when
+ * `refuseSoldOut`, stamp the released lines sent, print the items that fired now, and count the
+ * write if anything was released. `fired` must be exactly the items this release fired (an
+ * update's `RETURNING` over `fired_at IS NULL`), so a re-send prints nothing.
+ */
+async function finishRelease(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  fired: FiredItem[],
+  noRoute: readonly string[],
+  at: string,
+  refuseSoldOut: boolean,
+): Promise<void> {
+  const released = [...fired.map((item) => item.workingOrderLineId), ...noRoute];
+  if (refuseSoldOut) await assertSendable(tx, released);
+  await stampSent(tx, orderId, released, at);
+  await enqueueKitchenTickets(tx, cfg, orderId, fired);
+  if (released.length > 0) await bumpRevision(tx, [orderId]);
 }
 
 /**
@@ -1356,25 +1374,7 @@ export async function sendLines(
           lineIds: namedLineIds,
         },
   );
-  await assertSendable(tx, [...firedItems.map((item) => item.workingOrderLineId), ...noRoute]);
-  await stampSent(
-    tx,
-    tabId,
-    [...firedItems.map((item) => item.workingOrderLineId), ...noRoute],
-    firedNow,
-  );
-  // As in `fireCourse`, a re-send of an already-fired line prints nothing.
-  await enqueueKitchenTickets(
-    tx,
-    cfg,
-    tabId,
-    firedItems.map(({ workingOrderLineId, stationId, quantity }) => ({
-      workingOrderLineId,
-      stationId,
-      quantity,
-    })),
-  );
-  if (firedItems.length > 0 || noRoute.length > 0) await bumpRevision(tx, [tabId]);
+  await finishRelease(tx, cfg, tabId, firedItems, noRoute, firedNow, true);
 }
 
 /** Of `courseIds` (`null` standing for no course), the ones with no held item left on the order. */
@@ -1444,7 +1444,7 @@ export async function recallLines(
   if (items.some((r) => r.sentAt !== null) && !(await VENUE_SERVICE.readEditSentLines(tx))) {
     throw new AppError("ticket.already_fired", { workingOrderId: tabId });
   }
-  const started = items.find((r) => r.state === "preparing" || r.state === "ready");
+  const started = items.find((r) => isStarted(r.state));
   if (started !== undefined) {
     throw new AppError("ticket.already_started", { ticketItemId: started.ticketItemId });
   }
@@ -1610,7 +1610,7 @@ export async function voidTabLine(
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
   const removed = quantity === undefined ? null : voidQuantity(tabId, lineNo, quantity, target);
-  const wasStarted = target.state === "preparing" || target.state === "ready";
+  const wasStarted = isStarted(target.state);
   const voided =
     target.firedAt !== null
       ? [
@@ -1639,7 +1639,49 @@ export async function voidTabLine(
       );
     return;
   }
-  await reduceLine(tx, target, removed);
+  const children = await tx
+    .select({
+      id: workingOrderLines.id,
+      quantity: workingOrderLines.quantity,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.parentLineId, target.id));
+  const dishQuantity = thousandthsToDecimal(target.quantity);
+  await reduceLine(
+    tx,
+    target,
+    removed,
+    children.map((child) => ({
+      child: { id: child.id, unitPriceGross: centsToDecimal(child.unitPriceGross) },
+      perDish: perDishOptionQuantity(thousandthsToDecimal(child.quantity), dishQuantity),
+    })),
+  );
+}
+
+/** A dish's extras child, and how many of it go with one of the dish. */
+interface KeptExtra {
+  child: { id: string; unitPriceGross: Decimal };
+  perDish: number;
+}
+
+/** Each child's quantity and total follow its dish to `dishQuantity`, at the child's stored gross
+ * price. */
+async function rescaleExtras(
+  tx: Transaction,
+  kept: readonly KeptExtra[],
+  dishQuantity: Decimal,
+): Promise<void> {
+  for (const { child, perDish } of kept) {
+    const quantity = multiplyDecimal(dishQuantity, decimal(String(perDish)));
+    await tx
+      .update(workingOrderLines)
+      .set({
+        quantity: decimalToThousandths(quantity),
+        lineTotal: decimalToCents(grossLineTotal(child.unitPriceGross, quantity)),
+      })
+      .where(eq(workingOrderLines.id, child.id));
+  }
 }
 
 /**
@@ -1656,9 +1698,12 @@ async function reduceLine(
     firedQuantity: number;
   },
   removed: number,
+  children: readonly KeptExtra[],
 ): Promise<void> {
-  const lineQuantity = thousandthsToDecimal(target.quantity);
-  const remaining = subtractDecimal(lineQuantity, thousandthsToDecimal(removed));
+  const remaining = subtractDecimal(
+    thousandthsToDecimal(target.quantity),
+    thousandthsToDecimal(removed),
+  );
   await tx
     .update(workingOrderLines)
     .set({
@@ -1666,27 +1711,7 @@ async function reduceLine(
       lineTotal: decimalToCents(grossLineTotal(centsToDecimal(target.unitPriceGross), remaining)),
     })
     .where(eq(workingOrderLines.id, target.id));
-  const children = await tx
-    .select({
-      id: workingOrderLines.id,
-      quantity: workingOrderLines.quantity,
-      unitPriceGross: workingOrderLines.unitPriceGross,
-    })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.parentLineId, target.id));
-  for (const child of children) {
-    const perDish = perDishOptionQuantity(thousandthsToDecimal(child.quantity), lineQuantity);
-    const childQuantity = multiplyDecimal(remaining, decimal(String(perDish)));
-    await tx
-      .update(workingOrderLines)
-      .set({
-        quantity: decimalToThousandths(childQuantity),
-        lineTotal: decimalToCents(
-          grossLineTotal(centsToDecimal(child.unitPriceGross), childQuantity),
-        ),
-      })
-      .where(eq(workingOrderLines.id, child.id));
-  }
+  await rescaleExtras(tx, children, remaining);
   if (target.ticketItemId !== null) {
     await tx
       .update(ticketItems)
@@ -3134,7 +3159,7 @@ async function applyLineEdits(
       editSentLines ??= await VENUE_SERVICE.readEditSentLines(tx);
       if (!editSentLines) throw new AppError("ticket.already_fired", { workingOrderId: orderId });
     }
-    if (line.ticket?.state === "preparing" || line.ticket?.state === "ready") {
+    if (line.ticket !== null && isStarted(line.ticket.state)) {
       throw new AppError("ticket.already_started", { ticketItemId: line.ticket.id });
     }
     return line.ticket !== null && line.ticket.firedAt !== null;
@@ -3327,8 +3352,9 @@ async function applyLineEdits(
     }));
   const dropped = changes
     .filter(({ action }) => action === "drop")
-    .map(({ parent, quantity }) => ({
+    .map(({ parent, quantity, kept }) => ({
       parent,
+      kept,
       removed: decimalToThousandths(subtractDecimal(parent.quantity, quantity)),
     }));
   await enqueueCorrectionSlips(tx, cfg, orderId, recalled, "RECALLED");
@@ -3347,7 +3373,7 @@ async function applyLineEdits(
     ],
     "VOID",
   );
-  for (const { parent, removed } of dropped) {
+  for (const { parent, kept, removed } of dropped) {
     await reduceLine(
       tx,
       {
@@ -3358,6 +3384,7 @@ async function applyLineEdits(
         firedQuantity: parent.ticket!.firedQuantity,
       },
       removed,
+      kept,
     );
   }
 
@@ -3384,16 +3411,7 @@ async function applyLineEdits(
         ),
       );
     }
-    for (const { child, perDish } of kept) {
-      const childQuantity = multiplyDecimal(quantity, decimal(String(perDish)));
-      await tx
-        .update(workingOrderLines)
-        .set({
-          quantity: decimalToThousandths(childQuantity),
-          lineTotal: decimalToCents(grossLineTotal(child.unitPriceGross, childQuantity)),
-        })
-        .where(eq(workingOrderLines.id, child.id));
-    }
+    await rescaleExtras(tx, kept, quantity);
     if (change.addedAt !== null) {
       // The dish and the extras it keeps move after the highest number, and the added ones follow.
       for (const line of [parent, ...kept.map(({ child }) => child)]) {
@@ -3888,8 +3906,7 @@ function minutesSince(stamp: string, nowMs: number): number {
   return Math.floor((nowMs - Date.parse(stamp)) / 60_000);
 }
 
-/** `queued → preparing → ready`. */
-export type TicketState = (typeof ticketState.enumValues)[number];
+export type { TicketState } from "./kitchen-print.js";
 
 export type WorkingOrderStatus = (typeof workingOrderStatus.enumValues)[number];
 

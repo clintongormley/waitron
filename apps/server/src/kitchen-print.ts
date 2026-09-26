@@ -11,6 +11,7 @@ import {
   printers,
   stationPrinters,
   ticketItems,
+  ticketState,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -347,6 +348,14 @@ export async function enqueueKitchenTickets(
   }
 }
 
+/** `queued → preparing → ready`. */
+export type TicketState = (typeof ticketState.enumValues)[number];
+
+/** Whether the cook has started an item. */
+export function isStarted(state: TicketState | null): boolean {
+  return state === "preparing" || state === "ready";
+}
+
 /**
  * What the kitchen was asked to make: the ticket item's fired quantity. A ticket item fired before
  * `ticket_items.quantity` existed carries none, and reads its line's current quantity instead. For a
@@ -522,7 +531,7 @@ export async function enqueueMovedSlips(
       workingOrderLineId: item.workingOrderLineId,
       stationId: item.stationId!,
       quantity: item.quantity,
-      wasStarted: item.state === "preparing" || item.state === "ready",
+      wasStarted: isStarted(item.state),
     }));
   if (moved.length === 0) return;
 
