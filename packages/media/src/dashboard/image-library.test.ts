@@ -672,6 +672,27 @@ it("links a section using the image by its internal name to its editor, and bloc
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
 });
 
+it("links a live menu version using the image to its menu, and blocks the delete", async () => {
+  const client = api();
+  client.getImage.mockResolvedValue({
+    image,
+    uses: [
+      { kind: "menu_version", id: "version-1", menuId: "lunch", menuName: "Lunch Menu", number: 3 },
+    ],
+  });
+  await mount(client);
+  click("[data-test=delete-one]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe(
+      "Lunch Menu (Published menu)",
+    ),
+  );
+  expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
+    "/manage/menus/menu/lunch",
+  );
+  expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
+});
+
 function openDialog(): HTMLDialogElement {
   return el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!;
 }

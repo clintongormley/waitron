@@ -718,6 +718,60 @@ it("protects an image used by sections, a menu's own list among them, and counts
   });
 });
 
+it("protects an image only a live menu version names, and releases it once another version is live", async () => {
+  const {
+    addMember,
+    createCatalogue,
+    createProduct,
+    previewMenu,
+    publishMenu,
+    readMenuStructure,
+    updateProduct,
+  } = await import("@waitron/catalogue");
+  await seedTenant(suite.db);
+  const publish = async (tx: Transaction, menuId: string) =>
+    publishMenu(tx, menuId, (await previewMenu(tx, menuId)).hash, "person-1");
+  await withTransaction(suite.db, async (tx) => {
+    const { image } = await uploadImage(
+      tx,
+      { image: photo, names: { en: "Lemonade" }, altText: { en: "A glass" }, labels: [] },
+      {},
+    );
+    const menu = await createCatalogue(tx, { name: "Lunch Menu" });
+    const lemonade = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: "Lemonade",
+      pricingUnit: "each",
+      unitPrice: "3.00",
+      vatClass: "reduced",
+      image: image.filename,
+    });
+    const { rootSectionId } = await readMenuStructure(tx, menu.id);
+    await addMember(tx, rootSectionId, { kind: "product", productId: lemonade.id });
+    const first = await publish(tx, menu.id);
+    // The working state lets go; the live version still shows the photo.
+    await updateProduct(tx, lemonade.id, { image: null });
+    const uses = [
+      {
+        kind: "menu_version" as const,
+        id: first.versionId,
+        menuId: menu.id,
+        menuName: "Lunch Menu",
+        number: 1,
+      },
+    ];
+    expect(await listImageUsages(tx, image.id)).toEqual(uses);
+    expect((await readImage(tx, image.id)).usageCount).toBe(1);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    await publish(tx, menu.id);
+    expect(await listImageUsages(tx, image.id)).toEqual([]);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+  });
+});
+
 describe("relevance scores and tie-breaks", () => {
   const add = async (
     tx: Transaction,

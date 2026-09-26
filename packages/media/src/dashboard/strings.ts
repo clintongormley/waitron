@@ -43,6 +43,7 @@ const en = {
   "image.page": "Images",
   "image.default": "Default",
   "image.inactive": "Inactive product",
+  "image.published_menu": "Published menu",
   "image.retry": "Try again",
 } as const;
 const es: Record<keyof typeof en, string> = {
@@ -89,6 +90,7 @@ const es: Record<keyof typeof en, string> = {
   "image.page": "Imágenes",
   "image.default": "Predeterminado",
   "image.inactive": "Producto inactivo",
+  "image.published_menu": "Menú publicado",
   "image.retry": "Reintentar",
 };
 export const MEDIA_STRINGS = { en, es };
