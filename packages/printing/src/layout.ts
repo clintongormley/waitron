@@ -85,29 +85,23 @@ export function labelAmountLines(
   return lines;
 }
 
-const QR_TARGET_MM = 35;
+const QR_MAX_MM = 40;
 /** The QR standard's blank border, in squares per side, counted when fitting the paper. */
 export const QR_QUIET_ZONE = 4;
 
 /**
  * Dots per QR square for a code `squares` wide (without its border) on a `dpi` printer whose images
- * must fit `safeWidthDots`. Tries every dot size that fits and keeps whichever prints closest to
- * 35 mm (the target of the legal 30–40 mm band, Orden HAC/1177/2024 art. 21.1), the smaller size on a
- * tie. There is no separate step that prefers an in-range size over an out-of-range one — minimising
- * distance to 35 mm already picks an in-range size whenever one fits, because every in-range size is
- * closer to 35 mm than any out-of-range one. When nothing fits, returns 1: it never throws, because
- * the receipt is built inside the sale's transaction.
+ * must fit `safeWidthDots`. Uses the largest whole-dot scale up to 40 mm, including the blank border
+ * when checking the paper width. Falls back to 1 when nothing fits rather than blocking a sale.
  */
 export function chooseQrDots(squares: number, dpi: number, safeWidthDots: number): number {
-  let best: { dots: number; distance: number } | undefined;
+  let best = 1;
   for (let dots = 1; (squares + 2 * QR_QUIET_ZONE) * dots <= safeWidthDots; dots++) {
     const mm = (squares * dots * 25.4) / dpi;
-    const distance = Math.abs(mm - QR_TARGET_MM);
-    if (best === undefined || distance < best.distance) {
-      best = { dots, distance };
-    }
+    if (mm > QR_MAX_MM) break;
+    best = dots;
   }
-  return best?.dots ?? 1;
+  return best;
 }
 
 /** A new square matrix with `quiet` light modules added on every side. */

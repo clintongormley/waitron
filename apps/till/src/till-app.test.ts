@@ -1586,25 +1586,29 @@ describe("till-app", () => {
     expect(openDrawer).not.toHaveBeenCalled();
   });
 
-  it("open-drawer: a drawer.no_printer rejection surfaces the drawer.error banner, never an unhandled rejection", async () => {
-    // The till has no receipt printer set → the server rejects `{ code: "drawer.no_printer" }`. The app
-    // surfaces its usual non-fatal banner (generic copy, never the raw code) and stays on the ticket.
-    const { el } = await mountApp({
-      openDrawer: vi.fn().mockRejectedValue({ code: "drawer.no_printer" }),
-    });
-    const c = await toCounter(el);
-    c.store.addProduct(cafe, "2");
-    await el.updateComplete;
-    emit(c, "confirm-payment", { method: "cash", amount: "5" });
-    await flush(el);
+  it.each([
+    ["drawer.no_printer", "No se pudo abrir el cajón, inténtalo de nuevo"],
+    ["drawer.not_attached", "Esta impresora no tiene un cajón conectado"],
+  ])(
+    "open-drawer: %s surfaces a helpful banner and leaves the ticket open",
+    async (code, message) => {
+      const { el } = await mountApp({
+        openDrawer: vi.fn().mockRejectedValue({ code }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
 
-    emit(ticket(el)!, "open-drawer");
-    await flush(el);
-    const banner = el.shadowRoot!.querySelector('[role="alert"]');
-    expect(banner).not.toBeNull();
-    expect(banner!.textContent).toContain(t("drawer.error"));
-    expect(ticket(el)).not.toBeNull();
-  });
+      emit(ticket(el)!, "open-drawer");
+      await flush(el);
+      const banner = el.shadowRoot!.querySelector('[role="alert"]');
+      expect(banner).not.toBeNull();
+      expect(banner!.textContent).toContain(message);
+      expect(ticket(el)).not.toBeNull();
+    },
+  );
 
   // ── Cash-drawer-authorization: the OPTIMISTIC 403 → supervisor-override dialog → retry flow ──
   // The till carries NO policy or role knowledge: it always TRIES the direct open, and only on the
@@ -1681,24 +1685,30 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
-  it("a drawer.no_printer on the override closes the dialog and surfaces the generic drawer.error banner", async () => {
-    const openDrawer = vi
-      .fn()
-      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
-      .mockRejectedValueOnce({ code: "drawer.no_printer" });
-    const { el } = await mountApp({ openDrawer });
-    await toTicket(el);
-    emit(ticket(el)!, "open-drawer");
-    await flush(el);
+  it.each([
+    ["drawer.no_printer", "No se pudo abrir el cajón, inténtalo de nuevo"],
+    ["drawer.not_attached", "Esta impresora no tiene un cajón conectado"],
+  ])(
+    "%s on the override closes the dialog and surfaces a helpful banner",
+    async (code, message) => {
+      const openDrawer = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+        .mockRejectedValueOnce({ code });
+      const { el } = await mountApp({ openDrawer });
+      await toTicket(el);
+      emit(ticket(el)!, "open-drawer");
+      await flush(el);
 
-    emit(overrideDialog(el)!, "override-confirm", { personId: "sup-1", pin: "4321" });
-    await flush(el);
+      emit(overrideDialog(el)!, "override-confirm", { personId: "sup-1", pin: "4321" });
+      await flush(el);
 
-    expect(overrideDialog(el)).toBeNull();
-    const banner = el.shadowRoot!.querySelector('[role="alert"]');
-    expect(banner).not.toBeNull();
-    expect(banner!.textContent).toContain(t("drawer.error"));
-  });
+      expect(overrideDialog(el)).toBeNull();
+      const banner = el.shadowRoot!.querySelector('[role="alert"]');
+      expect(banner).not.toBeNull();
+      expect(banner!.textContent).toContain(message);
+    },
+  );
 
   it("override-cancel closes the dialog with no banner and no further openDrawer call", async () => {
     const openDrawer = vi.fn().mockRejectedValue({ code: "authorization.not_permitted" });

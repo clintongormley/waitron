@@ -2089,13 +2089,18 @@ encoding and the `ESC t` table number independent printer settings, the editor p
 simulated sample receipt with unsaved settings, sample characters follow the site's language, and the
 Add-printer layout was tidied.
 
-The later calibration chooser starts with tables 0–15, prints a broader two-line glyph sample, and
-lets you choose one compact code that sets both the printer table and Waitron encoding. Later ranges
-remain selectable. Each candidate line first selects table 0, so a printer that accepts table 0 but
-ignores an invalid number does not inherit the previous candidate's table. **Still open:** check
-this two-line finder on another printer, including how it responds to an unassigned table number.
-The byte sequence and dashboard flow have been tested, but no printer was available on the
-development network. [Chooser design and limitation](superpowers/specs/2026-09-16-printer-setup-refinements.md#calibration-chooser-follow-up-2026-09-21).
+The later calibration chooser starts with tables 0–15 and offers further ranges. **26 September
+follow-up, implemented on the printer branch:** a three-step wizard replaces the combined calibration editor, using
+`W-nn`/`8-nn` labels and remembering printed ranges. Drawer attachment belongs to the printer and
+has a separate audited test. The owner's network printer reproduced the finder failure: removing
+table-zero resets and slowing the bytes did not fix it. Initializing before each candidate line
+produced full finder matches at W-11 and 8-14 on the owner's NT-806. The actual sample receipt at
+PC858/table 14 printed Spanish text and euro amounts correctly. Why these table numbers differ
+from the supplied manual remains unknown; do not use them as defaults for other printers.
+Receipt QRs now use the largest whole-dot size up to 40mm that fits the paper with its blank border,
+rather than the size closest to 35mm. The receipt body, QR and its VERI*FACTU legend are centred;
+the owner confirmed the centred body and QR on paper, then requested the centred legend.
+[Current design and physical evidence](superpowers/specs/2026-09-26-printer-calibration-wizard.md).
 
 - **Every printer saved before this change must be recalibrated** through the printer editor's test
   flow. Rows still carrying the old `pc858` setting were deliberately not converted: this repository

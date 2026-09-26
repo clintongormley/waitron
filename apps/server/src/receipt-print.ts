@@ -23,6 +23,7 @@ function printConfig(cfg: TillConfig): PrintConfig {
 /** The till's active receipt printer and the settings its receipts are laid out for. */
 export interface ReceiptPrinter extends ReceiptPrinterSettings {
   id: string;
+  hasCashDrawer: boolean;
 }
 
 /**
@@ -37,6 +38,7 @@ export async function resolveReceiptPrinter(
   const [printer] = await tx
     .select({
       id: printers.id,
+      hasCashDrawer: printers.hasCashDrawer,
       paperWidth: printers.paperWidth,
       resolution: printers.resolution,
       characterSet: printers.characterSet,
@@ -142,6 +144,7 @@ export async function enqueueManualDrawerOpen(
 ): Promise<void> {
   await tx.insert(drawerOpens).values({
     tillId: cfg.tillId,
+    printerId,
     personId: operatorId,
     reason: "manual",
     authorizedBy,
@@ -161,7 +164,7 @@ export async function enqueueOriginalReceipt(
   await enqueuePrintJob(tx, printConfig(cfg), resolved.printer.id, resolved.receiptBytes);
 }
 
-/** Cash collected at a till opens its drawer independently of document printing. */
+/** Cash collected at a till opens its attached drawer independently of document printing. */
 export async function enqueueCashSaleDrawer(
   tx: Transaction,
   cfg: TillConfig,
@@ -170,9 +173,10 @@ export async function enqueueCashSaleDrawer(
 ): Promise<void> {
   if (operatorId === undefined || cfg.allowCashDrawer === false) return;
   const printer = await resolveReceiptPrinter(tx, cfg);
-  if (printer === undefined) return;
+  if (printer === undefined || !printer.hasCashDrawer) return;
   await tx.insert(drawerOpens).values({
     tillId: cfg.tillId,
+    printerId: printer.id,
     personId: operatorId,
     reason: "cash_sale",
     saleId,

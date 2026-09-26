@@ -79,6 +79,9 @@ export interface NetworkProbe {
 export interface Host {
   /** Machine hostname when the host platform exposes it. */
   hostname?(): string;
+  /** Browser-facing setup address, or null when the host cannot advertise one. */
+  setupUrl?(): string | null;
+  setupPort?(): number;
   config(): Promise<AgentConfig | null>;
   saveConfig(config: AgentConfig): Promise<void>;
   token(): Promise<string | null>;

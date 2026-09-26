@@ -377,14 +377,21 @@ const generatedSql = () =>
     .map((f) => readFileSync(join(drizzleDir, f), "utf8"))
     .join("\n");
 
-/** The body of a table's own CREATE TABLE, non-greedy so a later table cannot be caught. */
+/** The last CREATE body, including a generated rebuild, with its final table name. */
 const createTableBody = (tableName: string) =>
-  new RegExp(`create table \`${tableName}\` \\(([\\s\\S]*?)\\n\\);`, "i").exec(generatedSql())?.[1];
+  [
+    ...generatedSql().matchAll(
+      new RegExp(`create table \`(?:__new_)?${tableName}\` \\(([\\s\\S]*?)\\n\\);`, "gi"),
+    ),
+  ]
+    .at(-1)?.[1]
+    ?.replaceAll(`"__new_${tableName}"`, `"${tableName}"`);
 
 /** The SQL type the migration gives each `drawer_opens` column, and the helper that must emit it. */
 const DRAWER_OPENS_TYPES = {
   id: "text",
   till_id: "text",
+  printer_id: "text",
   person_id: "text",
   opened_at: "text",
   reason: "text",
@@ -419,9 +426,11 @@ describe("the generated migration and the converted table agree", () => {
       (c) => c.name === "drawer_opens_reason_ck",
     );
     expect(constraint).toBeDefined(); // positive control, as above
-    expect(render(constraint.value)).toBe("\"drawer_opens\".\"reason\" in ('cash_sale', 'manual')");
+    expect(render(constraint.value)).toBe(
+      "\"drawer_opens\".\"reason\" in ('cash_sale', 'manual', 'calibration')",
+    );
     expect(body).toContain(
-      `CONSTRAINT "drawer_opens_reason_ck" CHECK("drawer_opens"."reason" in ('cash_sale', 'manual'))`,
+      `CONSTRAINT "drawer_opens_reason_ck" CHECK("drawer_opens"."reason" in ('cash_sale', 'manual', 'calibration'))`,
     );
   });
 });

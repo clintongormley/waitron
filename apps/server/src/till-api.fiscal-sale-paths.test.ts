@@ -1614,6 +1614,7 @@ describe("handheld sales and device capability gates", () => {
         name: "Counter",
         transport: "network_tcp",
         host: "192.0.2.1",
+        hasCashDrawer: true,
       });
       await tx.execute(
         sql`update tills set receipt_printer_id = ${printer.id} where id = ${cfg.tillId}`,

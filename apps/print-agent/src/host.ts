@@ -59,6 +59,8 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
   const now = opts.now ?? (() => Date.now());
   return {
     hostname,
+    setupUrl: () => opts.env.setupUrl ?? null,
+    setupPort: () => opts.env.setupPort,
     config: async (): Promise<AgentConfig | null> => {
       // Env pins only the url; the saved name and environment still ride along.
       if (opts.env.serverUrl !== undefined) {

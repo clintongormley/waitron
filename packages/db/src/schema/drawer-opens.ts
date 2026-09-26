@@ -1,7 +1,9 @@
 import { check } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 import { enumCheck, enumText, flag, id, newId, now, table, ts } from "./columns.js";
 import { sales } from "./sales.js";
 import { tills } from "./tenants.js";
+import { printers } from "./printers.js";
 
 /**
  * The cash-drawer audit log: one row per drawer open. The kick itself is a separate `drawer` print
@@ -18,13 +20,15 @@ export const drawerOpens = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     tillId: id("till_id")
-      .notNull()
       /* v8 ignore start */
       .references(() => tills.id),
     /* v8 ignore stop */
+    /* v8 ignore start */
+    printerId: id("printer_id").references(() => printers.id),
+    /* v8 ignore stop */
     personId: id("person_id").notNull(),
     openedAt: ts("opened_at").notNull().$defaultFn(now),
-    reason: enumText("reason", ["cash_sale", "manual"] as const).notNull(),
+    reason: enumText("reason", ["cash_sale", "manual", "calibration"] as const).notNull(),
     /* v8 ignore start */
     saleId: id("sale_id").references(() => sales.id),
     /* v8 ignore stop */
@@ -33,7 +37,13 @@ export const drawerOpens = table(
     // A person holding cash.drawer authorized the open on behalf of an operator who does not.
     viaOverride: flag("via_override").notNull().default(false),
   },
-  (t) => [check("drawer_opens_reason_ck", enumCheck(t.reason))],
+  (t) => [
+    check("drawer_opens_reason_ck", enumCheck(t.reason)),
+    check(
+      "drawer_opens_target_ck",
+      sql`(${t.reason} = 'calibration' and ${t.printerId} is not null and ${t.tillId} is null and ${t.saleId} is null) or (${t.reason} != 'calibration' and ${t.tillId} is not null)`,
+    ),
+  ],
 );
 
 export type DrawerOpenReason = (typeof drawerOpens.reason.enumValues)[number];

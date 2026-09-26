@@ -212,12 +212,13 @@ function apiDeps(cfg: TillConfig): TillApiDeps {
 }
 
 /** Create a `cloud_poll` receipt printer (the enqueue is a pure INSERT, so no transport is touched). */
-async function makePrinter(cfg: TillConfig): Promise<string> {
+async function makePrinter(cfg: TillConfig, hasCashDrawer = true): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const { id } = await createPrinter(tx, printCfg(cfg), {
       name: "Recibos",
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
+      hasCashDrawer,
     });
     return id;
   });
@@ -264,7 +265,8 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
     reason: string;
     saleId: string | null;
     personId: string;
-    tillId: string;
+    tillId: string | null;
+    printerId: string | null;
     authorizedBy: string | null;
     viaOverride: boolean;
   }[]
@@ -277,6 +279,7 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
         saleId: drawerOpens.saleId,
         personId: drawerOpens.personId,
         tillId: drawerOpens.tillId,
+        printerId: drawerOpens.printerId,
         authorizedBy: drawerOpens.authorizedBy,
         viaOverride: drawerOpens.viaOverride,
       })
@@ -532,6 +535,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
       reason: "manual",
       personId: operatorId,
       tillId: cfg.tillId,
+      printerId,
       authorizedBy: operatorId,
       viaOverride: false,
     });
@@ -553,6 +557,23 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
       error: { code: "drawer.no_printer" },
     });
     // Refused before any write: no job, no audit row.
+    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it("refuses an unattached cash drawer without writing a command or audit", async () => {
+    const { cfg, operatorId } = await setupVenue();
+    const printerId = await makePrinter(cfg, false);
+    await configureReceipt(cfg, { printerId });
+    await setDrawerPolicy(cfg, "open");
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "drawer.not_attached", params: { printerId } },
+    });
     expect(await printJobsFor(cfg)).toEqual([]);
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
@@ -863,7 +884,7 @@ describe("original receipt and payment slip actions", () => {
     const duplicate = jobs
       .map((j) => Buffer.from(j.payload).toString("latin1"))
       .find((p) => p.includes("DUPLICADO"))!;
-    expect(duplicate.replace("DUPLICADO\n", "")).toBe(original);
+    expect(duplicate.replace("DUPLICADO".padEnd(42) + "\n", "")).toBe(original);
     expect(await registroCount(cfg)).toBe(1);
     expect(await saleCount(cfg)).toBe(1);
   });

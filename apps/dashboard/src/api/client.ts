@@ -672,6 +672,7 @@ export interface PrintAgentRow {
   id: string;
   name: string;
   host: string | null;
+  setupUrl: string | null;
   active: boolean;
   nodeId: string | null;
   lastSeenAt: string | null;
@@ -693,6 +694,7 @@ export interface Printer {
   resolution: PrintResolution;
   characterSet: PrintCharacterSet;
   characterTable: number;
+  hasCashDrawer: boolean;
   active: boolean;
 }
 
@@ -707,6 +709,7 @@ export interface PrinterInput {
   resolution?: PrintResolution;
   characterSet?: PrintCharacterSet;
   characterTable?: number;
+  hasCashDrawer?: boolean;
 }
 
 export interface PrinterAddressProbe {
@@ -744,14 +747,22 @@ export interface PrinterPatch {
   resolution?: PrintResolution;
   characterSet?: PrintCharacterSet;
   characterTable?: number;
+  hasCashDrawer?: boolean;
   active?: boolean;
 }
 
 export type PrintPreviewBlock =
-  | { kind: "text"; text: string }
+  | { kind: "text"; text: string; align?: "center" | "right" }
   | { kind: "feed"; lines: number }
   | { kind: "cut" }
-  | { kind: "image"; width: number; height: number; data: string; qrData?: string };
+  | {
+      kind: "image";
+      width: number;
+      height: number;
+      data: string;
+      qrData?: string;
+      align?: "center" | "right";
+    };
 
 export interface PrintJobPreview {
   columns: number;
@@ -2071,12 +2082,10 @@ export class DashboardApi {
     id: string,
     patch: {
       receiptPrinterId?: string | null;
-      hasCashDrawer?: boolean;
     },
   ): Promise<{
     id: string;
     receiptPrinterId: string | null;
-    hasCashDrawer: boolean;
   }> {
     return this.#request(`/management-api/devices/${id}/hardware`, "PATCH", patch);
   }
@@ -2149,6 +2158,13 @@ export class DashboardApi {
   testPrint(printerId: string): Promise<{ jobId: string; calibrationLocale: SupportedLocale }> {
     return this.#request<{ jobId: string; calibrationLocale: SupportedLocale }>(
       `/management-api/printers/${printerId}/test-print`,
+      "POST",
+    );
+  }
+
+  testPrinterDrawer(printerId: string): Promise<{ jobId: string }> {
+    return this.#request<{ jobId: string }>(
+      `/management-api/printers/${printerId}/test-drawer`,
       "POST",
     );
   }

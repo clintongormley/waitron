@@ -535,6 +535,7 @@ declare module "@waitron/shared" {
      * nothing to send the kick through. `tillId` names the misconfigured till.
      */
     "drawer.no_printer": { tillId: string };
+    "drawer.not_attached": { printerId: string };
     /**
      * A promote was requested without the operator attesting that the OLD node is physically
      * neutralised. Software cannot verify a partitioned peer, and two submitters under one NIF is

@@ -294,11 +294,11 @@ export const en = {
   // charged, because a settle path can reach it after a card was already charged on a terminal.
   "sale.refused":
     "This sale cannot be filed with the tax agency. The till has recorded nothing, and trying again will not help — the venue's invoice settings need fixing, so call whoever set this box up. If you already charged a card on the terminal, refund it there.",
-  // `drawer.error` stays generic: the fix is the same to the operator whatever the cause.
   "reprint.error": "Could not reprint the receipt, try again",
   "receipt.error": "Could not print the receipt, try again",
   "payment_slip.error": "Could not print the payment slip, try again",
   "drawer.error": "Could not open the cash drawer, try again",
+  "drawer.not_attached": "No cash drawer is attached to this printer",
   "held.park_error": "Could not hold the order, try again",
   "held.product_gone": "A product is no longer available and was dropped from the order",
   "held.extra_not_offered":
@@ -605,6 +605,7 @@ export const es: Record<StringKey, string> = {
   "receipt.error": "No se pudo imprimir el recibo, inténtalo de nuevo",
   "payment_slip.error": "No se pudo imprimir el justificante de pago, inténtalo de nuevo",
   "drawer.error": "No se pudo abrir el cajón, inténtalo de nuevo",
+  "drawer.not_attached": "Esta impresora no tiene un cajón conectado",
   "held.park_error": "No se pudo aparcar el pedido, inténtalo de nuevo",
   "held.product_gone": "Un producto ya no está disponible y se quitó del pedido",
   "held.extra_not_offered":

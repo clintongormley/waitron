@@ -144,6 +144,7 @@ const printers: Printer[] = [
     resolution: "180dpi",
     characterSet: "wpc1252",
     characterTable: 16,
+    hasCashDrawer: false,
     active: true,
   },
 ];
@@ -198,13 +199,11 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
         id: string,
         patch: {
           receiptPrinterId?: string | null;
-          hasCashDrawer?: boolean;
         },
       ) =>
         Promise.resolve({
           id,
           receiptPrinterId: patch.receiptPrinterId ?? null,
-          hasCashDrawer: patch.hasCashDrawer ?? false,
         }),
     ),
     ...overrides,
@@ -223,13 +222,6 @@ function pickSelect(el: DevicesScreen, testId: string, value: string): void {
   const select = q(el, `[data-test=${testId}]`) as HTMLSelectElement;
   select.value = value;
   select.dispatchEvent(new Event("change"));
-}
-
-/** Toggle a has-cash-drawer wt-switch by dispatching its composed `wt-change` (the wt-switch contract). */
-function toggleCashDrawer(el: DevicesScreen, testId: string, checked: boolean): void {
-  q(el, `[data-test=${testId}]`)!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
-  );
 }
 
 describe("devices-screen", () => {
@@ -730,28 +722,23 @@ describe("devices-screen", () => {
 
   // ── Per-device hardware editor ─────────────────────────────────────────────────────────────────
 
-  // A row's hardware editor PATCHes the receipt printer + cash drawer and reflects the stored values.
   it("saves a row's edited hardware and reflects the update", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
 
     pickSelect(el, "hw-printer-d1", "pr1");
-    toggleCashDrawer(el, "hw-cash-drawer-d1", true);
     await el.updateComplete;
     q(el, "[data-test=hw-save-d1]")!.click();
     await flush(el);
 
     expect(api.patchDeviceHardware).toHaveBeenCalledWith("d1", {
       receiptPrinterId: "pr1",
-      hasCashDrawer: true,
     });
     // The controls reflect what took: the reconciled select shows the saved value.
     expect((q(el, "[data-test=hw-printer-d1]") as HTMLSelectElement).value).toBe("pr1");
   });
 
-  // A save with the editor left at its defaults sends the cleared hardware: no printer (null) and no
-  // cash drawer. Covers the ""→null printer mapping.
   it("saves cleared hardware (nulls) when the editor is left at its defaults", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
@@ -762,7 +749,6 @@ describe("devices-screen", () => {
 
     expect(api.patchDeviceHardware).toHaveBeenCalledWith("d1", {
       receiptPrinterId: null,
-      hasCashDrawer: false,
     });
   });
 

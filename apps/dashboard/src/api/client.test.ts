@@ -2065,13 +2065,11 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     const updated = {
       id: "d1",
       receiptPrinterId: "pr1",
-      hasCashDrawer: true,
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(updated));
     const api = new DashboardApi("", fetchImpl);
     const body = {
       receiptPrinterId: "pr1",
-      hasCashDrawer: true,
     };
     expect(await api.patchDeviceHardware("d1", body)).toEqual(updated);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/hardware", {
@@ -2506,6 +2504,25 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(settings),
+    });
+  });
+
+  it("testPrinterDrawer POSTs a separate drawer test and returns its job", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ jobId: "drawer-1" }, true, 202));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.testPrinterDrawer("p1")).toEqual({ jobId: "drawer-1" });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers/p1/test-drawer", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("testPrinterDrawer propagates permission refusals", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "auth.forbidden" } }, false, 403));
+    await expect(new DashboardApi("", fetchImpl).testPrinterDrawer("p1")).rejects.toMatchObject({
+      code: "auth.forbidden",
     });
   });
 

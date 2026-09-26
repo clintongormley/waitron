@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { WtModal } from "@waitron/ui/src/components/wt-modal.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { t } from "../i18n/t.js";
@@ -22,9 +22,73 @@ const preview: PrintJobPreview = {
   truncated: false,
 };
 
-afterEach(cleanupWidgets);
+const initialViewport = { width: window.innerWidth, height: window.innerHeight };
+afterEach(async () => {
+  cleanupWidgets();
+  await page.viewport(initialViewport.width, initialViewport.height);
+});
 
 describe("print job preview", () => {
+  it.each([
+    ["light", 1280],
+    ["dark", 1280],
+    ["light", 390],
+    ["dark", 390],
+  ] as const)(
+    "centres images and legend without shifting body text in %s at %i pixels",
+    async (theme, width) => {
+      await page.viewport(width, 800);
+      const { el, host } = await mountWidget<PrintJobPreviewDialog>(
+        "dashboard-print-job-preview",
+        {
+          open: true,
+          preview: {
+            ...preview,
+            blocks: [
+              { kind: "text", text: "Body".padEnd(42) + "\n", align: "center" },
+              {
+                kind: "image",
+                width: 120,
+                height: 120,
+                data: btoa("\xff".repeat(1800)),
+                align: "center",
+              },
+              { kind: "text", text: "VERI*FACTU\n", align: "center" },
+              { kind: "image", width: 120, height: 1, data: btoa("\0".repeat(15)), align: "right" },
+              { kind: "text", text: "Right", align: "right" },
+            ],
+          },
+        },
+        theme,
+      );
+      const paper = el.shadowRoot!.querySelector<HTMLElement>(".paper")!;
+      const [body, legend, right] = paper.querySelectorAll("pre");
+      const [image, rightImage] = paper.querySelectorAll("img");
+      await image!.decode();
+      const bounds = paper.getBoundingClientRect();
+      const img = image!.getBoundingClientRect();
+      expect(Math.abs((img.left + img.right) / 2 - (bounds.left + bounds.right) / 2)).toBeLessThan(
+        1,
+      );
+      const textBounds = (element: Element) => {
+        const range = document.createRange();
+        const node = [...element.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!;
+        range.setStart(node, 0);
+        range.setEnd(node, node.textContent!.trimEnd().length);
+        return range.getBoundingClientRect();
+      };
+      const caption = textBounds(legend!);
+      expect(
+        Math.abs((caption.left + caption.right) / 2 - (img.left + img.right) / 2),
+      ).toBeLessThan(1);
+      expect(Math.abs(textBounds(body!).left - body!.getBoundingClientRect().left)).toBeLessThan(1);
+      expect(getComputedStyle(right!).textAlign).toBe("right");
+      expect(
+        Math.abs(rightImage!.getBoundingClientRect().right - right!.getBoundingClientRect().right),
+      ).toBeLessThan(1);
+      await expectNoA11yViolations(host);
+    },
+  );
   it("shows receipt text and QR content safely alongside a visual paper preview", async () => {
     const { el, host } = await mountWidget<PrintJobPreviewDialog>("dashboard-print-job-preview", {
       open: true,

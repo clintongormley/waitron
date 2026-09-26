@@ -371,7 +371,12 @@ describe("createClient — pullJobs", () => {
       }),
     );
     const client = createClient({ fetch: fetchImpl });
-    const inventory = { visible: [{ transport: "usb" as const, localKey: "SN-1" }], scanned: [] };
+    const inventory = {
+      visible: [{ transport: "usb" as const, localKey: "SN-1" }],
+      scanned: [],
+      setupUrl: "http://192.168.10.40:9310",
+      setupPort: 9210,
+    };
     const r = await client.pullJobs("http://s", "tok", inventory);
     expect(r.ok && r.value.jobs[0]!.localKey).toBe("SN-1");
     expect(r.ok && r.value.discoveryUntil).toBe(123);

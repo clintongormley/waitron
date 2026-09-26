@@ -123,6 +123,7 @@ function mountApp(
     pairingOpen?: boolean;
     enrolRateLimiter?: EnrolRateLimiter;
     venueLocale?: SupportedLocale;
+    listIpv4?: () => string[];
   } = {},
 ): Hono {
   const app = new Hono();
@@ -137,6 +138,7 @@ function mountApp(
       readMembership: async () => MEMBERSHIP,
       enrolRateLimiter: opts.enrolRateLimiter,
       venueLocale: opts.venueLocale ?? "es-ES",
+      listIpv4: opts.listIpv4,
     },
     noopLog,
   );
@@ -873,6 +875,168 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
 });
 
 describe("mountPrintApi — management: agents", () => {
+  it("stores reported setup metadata, preserves omitted values and clears an explicit null URL", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    for (const body of [{ setupUrl: "http://192.168.10.40:9310/", setupPort: 9210 }, {}]) {
+      expect(
+        (await send(app, "POST", "/print-api/agent/jobs", { bearer: token, body })).status,
+      ).toBe(200);
+      const rows = await (
+        await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie })
+      ).json();
+      expect(rows).toContainEqual(
+        expect.objectContaining({ id: agentId, setupUrl: "http://192.168.10.40:9310" }),
+      );
+      expect(
+        await suite.db
+          .select({ port: printAgents.setupPort })
+          .from(printAgents)
+          .where(eq(printAgents.id, agentId)),
+      ).toEqual([{ port: 9210 }]);
+    }
+    expect(
+      (
+        await send(app, "POST", "/print-api/agent/jobs", {
+          bearer: token,
+          body: { setupUrl: null },
+        })
+      ).status,
+    ).toBe(200);
+    const rows = await (
+      await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie })
+    ).json();
+    expect(rows).toContainEqual(expect.objectContaining({ id: agentId, setupUrl: null }));
+  });
+
+  it("uses this node's advertised LAN address only for its own agent and actual listener port", async () => {
+    const app = mountApp({ listIpv4: () => ["192.168.10.40", "10.0.0.40"] });
+    const { agentId, token } = await joinAndAccept(app);
+    expect(
+      (
+        await send(app, "POST", "/print-api/agent/jobs", {
+          bearer: token,
+          body: { setupUrl: null, setupPort: 9210 },
+        })
+      ).status,
+    ).toBe(200);
+    try {
+      for (const [nodeId, expected] of [
+        [null, null],
+        [randomUUID(), null],
+        [cfg.nodeId, "http://192.168.10.40:9210"],
+      ] as const) {
+        await suite.db.update(printAgents).set({ nodeId }).where(eq(printAgents.id, agentId));
+        const rows = await (
+          await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie })
+        ).json();
+        expect(rows).toContainEqual(expect.objectContaining({ id: agentId, setupUrl: expected }));
+      }
+      expect(
+        (
+          await send(app, "POST", "/print-api/agent/jobs", {
+            bearer: token,
+            body: { setupUrl: "https://agent.example.test" },
+          })
+        ).status,
+      ).toBe(200);
+      const explicit = await (
+        await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie })
+      ).json();
+      expect(explicit).toContainEqual(
+        expect.objectContaining({ id: agentId, setupUrl: "https://agent.example.test" }),
+      );
+      expect(
+        (
+          await send(app, "POST", "/print-api/agent/jobs", {
+            bearer: token,
+            body: { setupUrl: null },
+          })
+        ).status,
+      ).toBe(200);
+      for (const other of [mountApp(), mountApp({ listIpv4: () => [] })]) {
+        const rows = await (
+          await send(other, "GET", "/management-api/print-agents", { cookie: managerCookie })
+        ).json();
+        expect(rows).toContainEqual(expect.objectContaining({ id: agentId, setupUrl: null }));
+      }
+      await suite.db
+        .update(printAgents)
+        .set({ setupPort: null })
+        .where(eq(printAgents.id, agentId));
+      const rows = await (
+        await send(app, "GET", "/management-api/print-agents", { cookie: managerCookie })
+      ).json();
+      expect(rows).toContainEqual(expect.objectContaining({ id: agentId, setupUrl: null }));
+    } finally {
+      await suite.db.update(printAgents).set({ nodeId: null }).where(eq(printAgents.id, agentId));
+    }
+  });
+
+  it("refuses malformed setup metadata before changing the authenticated agent", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    for (const [field, values] of [
+      [
+        "setupUrl",
+        [
+          42,
+          "",
+          "not a URL",
+          "javascript:alert(1)",
+          "http://user:secret@agent.test",
+          "http://:secret@agent.test",
+          "http://agent.test/path",
+          "http://agent.test/?q=x",
+          "http://agent.test/#fragment",
+          "http://localhost:9110",
+          "http://127.2.3.4:9110",
+          "http://[::1]:9110",
+          "http://[::]:9110",
+          "http://0.0.0.0:9110",
+        ],
+      ],
+      ["setupPort", [null, "9110", 0, -1, 65536, 9110.5]],
+    ] as const) {
+      for (const value of values) {
+        const response = await send(app, "POST", "/print-api/agent/jobs", {
+          bearer: token,
+          body: { [field]: value },
+        });
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({
+          error: { code: "management.request_invalid", params: { field } },
+        });
+      }
+    }
+    expect(
+      await suite.db
+        .select({ setupUrl: printAgents.setupUrl, setupPort: printAgents.setupPort })
+        .from(printAgents)
+        .where(eq(printAgents.id, agentId)),
+    ).toEqual([{ setupUrl: null, setupPort: null }]);
+  });
+
+  it("does not rewrite unchanged setup metadata on each poll", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const body = { setupUrl: "https://agent.test", setupPort: 9110 };
+    expect((await send(app, "POST", "/print-api/agent/jobs", { bearer: token, body })).status).toBe(
+      200,
+    );
+    await suite.db
+      .execute(sql`create trigger reject_unchanged_agent_setup before update of setup_url, setup_port on print_agents
+      when old.setup_url is new.setup_url and old.setup_port is new.setup_port
+      begin select raise(abort, 'unchanged setup metadata'); end`);
+    try {
+      expect(
+        (await send(app, "POST", "/print-api/agent/jobs", { bearer: token, body })).status,
+      ).toBe(200);
+    } finally {
+      await suite.db.execute(sql`drop trigger reject_unchanged_agent_setup`);
+    }
+  });
+
   it("persists the authenticated agent hostname and edits only its display name", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app, "Original");
@@ -1249,6 +1413,102 @@ describe("mountPrintApi — management: printers CRUD", () => {
   });
 });
 
+describe("printer cash-drawer calibration", () => {
+  it("stores attachment on the printer and refuses non-boolean choices", async () => {
+    const app = mountApp();
+    const id = await createNetworkPrinter(app, "10.0.0.81", 9100, "Drawer calibration");
+    const read = async () => {
+      const response = await send(app, "GET", "/management-api/printers", {
+        cookie: managerCookie,
+      });
+      return ((await response.json()) as { id: string; hasCashDrawer: boolean }[]).find(
+        (row) => row.id === id,
+      );
+    };
+    expect(await read()).toMatchObject({ hasCashDrawer: false });
+    expect(
+      (
+        await send(app, "PATCH", `/management-api/printers/${id}`, {
+          cookie: managerCookie,
+          body: { hasCashDrawer: true },
+        })
+      ).status,
+    ).toBe(204);
+    expect(await read()).toMatchObject({ hasCashDrawer: true });
+    for (const value of [null, "yes", 1, []]) {
+      const response = await send(app, "PATCH", `/management-api/printers/${id}`, {
+        cookie: managerCookie,
+        body: { hasCashDrawer: value },
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "hasCashDrawer" } },
+      });
+    }
+    expect(await read()).toMatchObject({ hasCashDrawer: true });
+  });
+
+  it("audits a manager's test against an unassigned printer and queues only a non-resendable drawer pulse", async () => {
+    const app = mountApp();
+    const id = await createNetworkPrinter(app, "10.0.0.82", 9100, "Unassigned drawer");
+    const response = await send(app, "POST", `/management-api/printers/${id}/test-drawer`, {
+      cookie: managerCookie,
+    });
+    expect(response.status).toBe(202);
+    const { jobId } = (await response.json()) as { jobId: string };
+    const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
+    expect(job).toMatchObject({ printerId: id, kind: "drawer", status: "queued" });
+    expect([...job!.payload]).toEqual([0x1b, 0x70, 0, 25, 250]);
+    const audit = await suite.db.execute<{
+      person_id: string;
+      till_id: string | null;
+      reason: string;
+    }>(sql`
+      select person_id, till_id, reason from drawer_opens where printer_id = ${id}`);
+    const [manager] = await suite.db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.displayName, "The Manager"));
+    expect(audit.rows).toEqual([{ person_id: manager!.id, till_id: null, reason: "calibration" }]);
+    await suite.db.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, jobId));
+    const resend = await send(app, "POST", `/management-api/print-jobs/${jobId}/resend`, {
+      cookie: managerCookie,
+    });
+    expect(resend.status).toBe(409);
+    expect(await resend.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
+  });
+
+  it("refuses unauthenticated, unpermitted, missing and inactive printer tests without queuing a pulse", async () => {
+    const app = mountApp();
+    const id = await createNetworkPrinter(app, "10.0.0.83", 9100, "Disabled drawer");
+    for (const [cookie, status, code] of [
+      [undefined, 401, "management_session.required"],
+      [staffCookie, 403, "authorization.not_permitted"],
+    ] as const) {
+      const response = await send(app, "POST", `/management-api/printers/${id}/test-drawer`, {
+        cookie,
+      });
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
+    await send(app, "PATCH", `/management-api/printers/${id}`, {
+      cookie: managerCookie,
+      body: { active: false },
+    });
+    for (const printerId of [id, randomUUID()]) {
+      const response = await send(
+        app,
+        "POST",
+        `/management-api/printers/${printerId}/test-drawer`,
+        { cookie: managerCookie },
+      );
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({ error: { code: "printer.not_found" } });
+    }
+    expect(await suite.db.select().from(printJobs).where(eq(printJobs.printerId, id))).toEqual([]);
+  });
+});
+
 describe("mountPrintApi — management: test-print", () => {
   it.each([
     { personLocale: "en-GB", browserLocale: "es", venueLocale: "es-ES", expected: "en-GB" },
@@ -1294,7 +1554,7 @@ describe("mountPrintApi — management: test-print", () => {
           .from(printJobs)
           .where(eq(printJobs.id, jobId));
         expect([...new Uint8Array(job!.payload)]).toEqual([
-          ...formatTestPage({ locale: expected, calibrationLocale: venueLocale }),
+          ...formatTestPage({ locale: expected }),
         ]);
       } finally {
         await setLocale(null);

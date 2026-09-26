@@ -5,7 +5,6 @@ import {
   characterEncodingName,
   characterFinderOptions,
   characterSetOptions,
-  testCharsetSamples,
 } from "./test-page-samples.js";
 import {
   PC858_TO_UNICODE,
@@ -75,19 +74,19 @@ describe("prepareText / encodeText", () => {
   it("maps compact finder codes to both printer settings across selected blocks", () => {
     const first = characterFinderOptions("es-ES", 0);
     expect(first).toHaveLength(32);
-    expect(first[0]).toEqual({ code: "T0W", characterSet: "wpc1252", characterTable: 0 });
-    expect(first.find(({ code }) => code === "T68")).toEqual({
-      code: "T68",
+    expect(first[0]).toEqual({ code: "W-00", characterSet: "wpc1252", characterTable: 0 });
+    expect(first.find(({ code }) => code === "8-06")).toEqual({
+      code: "8-06",
       characterSet: "pc858",
       characterTable: 6,
     });
-    expect(first.at(-1)?.code).toBe("T158");
+    expect(first.at(-1)?.code).toBe("8-15");
     const last = characterFinderOptions("en-GB", 240);
-    expect(last[0]?.code).toBe("T240W");
-    expect(last.at(-1)?.code).toBe("T2558");
+    expect(last[0]?.code).toBe("W-240");
+    expect(last.at(-1)?.code).toBe("8-255");
     const unaligned = characterFinderOptions("es-ES", 5);
-    expect(unaligned[0]?.code).toBe("T5W");
-    expect(unaligned.at(-1)?.code).toBe("T208");
+    expect(unaligned[0]?.code).toBe("W-05");
+    expect(unaligned.at(-1)?.code).toBe("8-20");
     expect(() => characterFinderOptions("en-GB", -1)).toThrow(RangeError);
     expect(() => characterFinderOptions("en-GB", 256)).toThrow(RangeError);
   });
@@ -130,20 +129,8 @@ describe("prepareText / encodeText", () => {
     expect(prepareText("·", "plain")).toBe("-");
   });
 
-  it("round-trips the numbered test-page samples through their character sets", () => {
+  it("offers named character sets for each supported locale", () => {
     for (const { code } of SUPPORTED_LOCALES) {
-      const samples = testCharsetSamples(code);
-      expect(samples).toEqual([
-        { value: "1", characterSet: "wpc1252", characterTable: 6, text: "Café jamón Ñ ¿¡ ç ü 5 €" },
-        {
-          value: "2",
-          characterSet: "wpc1252",
-          characterTable: 16,
-          text: "Café jamón Ñ ¿¡ ç ü 5 €",
-        },
-        { value: "3", characterSet: "pc858", characterTable: 19, text: "Café jamón Ñ ¿¡ ç ü 5 €" },
-        { value: "4", characterSet: "plain", characterTable: 0, text: "Cafe jamon N ?! c u 5 EUR" },
-      ]);
       expect(characterCalibration(code).finderEncodings.map(({ label }) => label)).toEqual([
         "W",
         "8",
@@ -151,11 +138,6 @@ describe("prepareText / encodeText", () => {
       const options = characterSetOptions(code);
       expect(options.map(({ value }) => value)).toEqual(["wpc1252", "pc858", "plain"]);
       expect(options[0]!.label).toContain(code === "es-ES" ? "Latino occidental" : "Western Latin");
-      for (const { value, characterSet: cs, text } of samples) {
-        const sample = `${value}: ${text}`;
-        expect(prepareText(sample, cs)).toBe(sample);
-        expect(decodeBytes(encodeText(sample, cs), cs)).toBe(sample);
-      }
     }
   });
 

@@ -187,15 +187,24 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
  */
 async function makePrinter(
   cfg: TillConfig,
-  { active = true, transport = "cloud_poll" as "cloud_poll" | "network_tcp" } = {},
+  {
+    active = true,
+    transport = "cloud_poll" as "cloud_poll" | "network_tcp",
+    hasCashDrawer = true,
+  } = {},
 ): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const { id } = await createPrinter(
       tx,
       printCfg(cfg),
       transport === "network_tcp"
-        ? { name: "Recibos", transport: "network_tcp", host: "192.0.2.1" }
-        : { name: "Recibos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+        ? { name: "Recibos", transport: "network_tcp", host: "192.0.2.1", hasCashDrawer }
+        : {
+            name: "Recibos",
+            transport: "cloud_poll",
+            pollId: `poll-${randomUUID()}`,
+            hasCashDrawer,
+          },
     );
     if (!active) await deactivatePrinter(tx, printCfg(cfg), id);
     return id;
@@ -239,9 +248,15 @@ async function printJobsFor(
   });
 }
 
-async function drawerOpensFor(
-  cfg: TillConfig,
-): Promise<{ reason: string; saleId: string | null; personId: string; tillId: string }[]> {
+async function drawerOpensFor(cfg: TillConfig): Promise<
+  {
+    reason: string;
+    saleId: string | null;
+    personId: string;
+    tillId: string | null;
+    printerId: string | null;
+  }[]
+> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     return tx
@@ -250,6 +265,7 @@ async function drawerOpensFor(
         saleId: drawerOpens.saleId,
         personId: drawerOpens.personId,
         tillId: drawerOpens.tillId,
+        printerId: drawerOpens.printerId,
       })
       .from(drawerOpens);
   });
@@ -388,6 +404,29 @@ describe("receipt grouping after table changes", () => {
 });
 
 describe("cash payment drawer separation", () => {
+  it("prints a cash receipt without a drawer command or audit when its printer has no drawer", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    const printerId = await makePrinter(cfg, { hasCashDrawer: false });
+    await configureReceipt(cfg, { mode: "auto", printerId });
+    const result = await recordTillSale(
+      deps(),
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "2.00" },
+      },
+      OPERATOR,
+    );
+    expect(result.total).toBe("1.50");
+    expect(await registroCount(cfg)).toBe(1);
+    const jobs = await printJobsFor(cfg);
+    expect(jobs).toHaveLength(1);
+    expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain("TOTAL");
+    expect(bytesInclude(new Uint8Array(jobs[0]!.payload), DRAWER_KICK)).toBe(false);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
   it.each(["auto", "on_request", "never"] as const)(
     "%s mode keeps cash payment separate from document printing",
     async (mode) => {
@@ -492,7 +531,12 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     // The drawer open is audited, its `sale_id` pinned to the filed sale.
     const opens = await drawerOpensFor(cfg);
     expect(opens).toHaveLength(1);
-    expect(opens[0]).toMatchObject({ reason: "cash_sale", personId: OPERATOR, tillId: cfg.tillId });
+    expect(opens[0]).toMatchObject({
+      reason: "cash_sale",
+      personId: OPERATOR,
+      tillId: cfg.tillId,
+      printerId,
+    });
     expect(opens[0]!.saleId).toBe(await onlySaleId(cfg));
   });
 

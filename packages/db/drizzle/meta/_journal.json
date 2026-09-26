@@ -85,6 +85,20 @@
       "when": 1790376501870,
       "tag": "0011_sale_voids_voided_at_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790420999853,
+      "tag": "0012_printer_calibration",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1790421100549,
+      "tag": "0013_printer_hardware_settings",
+      "breakpoints": true
     }
   ]
 }

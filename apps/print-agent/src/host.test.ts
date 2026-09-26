@@ -25,6 +25,25 @@ afterEach(async () => {
 });
 
 describe("createContainerHost — config()", () => {
+  it("reports the configured setup URL and actual port independently of the container hostname", () => {
+    const host = createContainerHost({
+      env: { ...baseEnv, setupUrl: "http://192.168.10.40:9310", setupPort: 9210 },
+      state: new FileState(dir),
+      onStatus: () => {},
+    });
+    expect(host.setupUrl?.()).toBe("http://192.168.10.40:9310");
+    expect(host.setupPort?.()).toBe(9210);
+  });
+
+  it("reports no setup URL when no browser-facing address is configured", () => {
+    const host = createContainerHost({
+      env: baseEnv,
+      state: new FileState(dir),
+      onStatus: () => {},
+    });
+    expect(host.setupUrl?.()).toBeNull();
+    expect(host.setupPort?.()).toBe(9110);
+  });
   it("reports the machine hostname", () => {
     const host = createContainerHost({
       env: baseEnv,

@@ -16,6 +16,7 @@ import type {
 import { PrintersScreen, SCAN_LISTEN_MS, SCAN_POLL_MS } from "./printers-screen.js";
 import { LiveData } from "@waitron/dashboard-kit";
 
+beforeEach(() => sessionStorage.removeItem("printers:table"));
 afterEach(cleanupWidgets);
 afterEach(() => vi.restoreAllMocks());
 
@@ -27,6 +28,7 @@ const agents: PrintAgentRow[] = [
     host: null,
     nodeId: null, // manually enrolled — no provenance marker
     lastSeenAt: "2026-08-25T14:30:00.000Z",
+    setupUrl: null,
     enrolledAt: "2026-08-20T09:00:00.000Z",
   },
   {
@@ -36,6 +38,7 @@ const agents: PrintAgentRow[] = [
     host: null,
     nodeId: "n1", // self-enrolled on a node, then revoked — marker + allow-again
     lastSeenAt: null,
+    setupUrl: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
   },
 ];
@@ -54,6 +57,7 @@ const printers: Printer[] = [
     resolution: "180dpi",
     characterSet: "wpc1252",
     characterTable: 16,
+    hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
     active: true,
@@ -71,6 +75,7 @@ const printers: Printer[] = [
     resolution: "180dpi",
     characterSet: "wpc1252",
     characterTable: 16,
+    hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
     active: false,
@@ -88,6 +93,7 @@ const printers: Printer[] = [
     resolution: "180dpi",
     characterSet: "wpc1252",
     characterTable: 16,
+    hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
     active: false,
@@ -224,6 +230,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     createPrinter: vi.fn().mockResolvedValue({ id: "p9" }),
     updatePrinter: vi.fn().mockResolvedValue(undefined),
     deactivatePrinter: vi.fn().mockResolvedValue(undefined),
+    testPrinterDrawer: vi.fn().mockResolvedValue({ jobId: "drawer-test" }),
     testPrint: vi.fn().mockResolvedValue({ jobId: "j9", calibrationLocale: "es-ES" }),
     sampleReceipt: vi.fn().mockResolvedValue({ jobId: "j10" }),
     testCharacterTables: vi.fn().mockResolvedValue({ jobId: "j11", calibrationLocale: "es-ES" }),
@@ -262,8 +269,8 @@ function deepQuery(root: ShadowRoot | HTMLElement, sel: string): HTMLElement | n
 const q = (el: PrintersScreen, sel: string) => deepQuery(el.shadowRoot!, sel);
 const text = (el: PrintersScreen, sel: string) => q(el, sel)?.textContent?.trim();
 async function filterPrinters(el: PrintersScreen, value: string): Promise<void> {
-  const select = q(el, '[name="printer-status-filter"]') as HTMLSelectElement;
-  select.value = value;
+  const select = q(el, '[name="status-filter"]') as HTMLSelectElement;
+  select.value = value === "all" ? "" : value;
   select.dispatchEvent(new Event("change"));
   await flush(el);
 }
@@ -309,6 +316,242 @@ async function chooseOption(el: PrintersScreen, name: string, value: string): Pr
   select.dispatchEvent(new Event("change"));
   await flush(el);
 }
+
+describe("guided printer calibration", () => {
+  async function openStepThree(api: DashboardApi): Promise<PrintersScreen> {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el);
+    q(el, "[data-test=calibrate-printer]")!.click();
+    await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    return el;
+  }
+
+  it("opens the drawer only on an explicit test and records the operator's observation", async () => {
+    let complete!: () => void;
+    const api = stubApi({
+      testPrinterDrawer: vi.fn().mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            complete = () => resolve({ jobId: "drawer-test" });
+          }),
+      ),
+    });
+    const el = await openStepThree(api);
+    expect(q(el, "[data-test=test-printer-drawer]")).toBeNull();
+    toggleSwitch(el, '[name="printer-cash-drawer"]', true);
+    await flush(el);
+    expect(api.testPrinterDrawer).not.toHaveBeenCalled();
+    q(el, "[data-test=print-sample-receipt-p1]")!.click();
+    await flush(el);
+    expect(api.testPrinterDrawer).not.toHaveBeenCalled();
+    const button = q(el, "[data-test=test-printer-drawer]")!;
+    button.click();
+    button.click();
+    expect(api.testPrinterDrawer).toHaveBeenCalledExactlyOnceWith("p1");
+    expect(q(el, '[name="printer-drawer-result"]')).toBeNull();
+    complete();
+    await flush(el);
+    q(el, '[name="printer-drawer-result"][value="closed"]')!.click();
+    await flush(el);
+    expect(q(el, '[data-test="calibration-step-3"]')!.textContent).toContain(
+      t("printers.drawer_check"),
+    );
+    q(el, '[name="printer-drawer-result"][value="opened"]')!.click();
+    await flush(el);
+    expect(q(el, '[data-test="calibration-step-3"]')!.textContent).not.toContain(
+      t("printers.drawer_check"),
+    );
+    q(el, "[data-test=calibration-back]")!.click();
+    await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    expect(q(el, '[name="printer-cash-drawer"]')!.shadowRoot!.querySelector("input")!.checked).toBe(
+      true,
+    );
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", { hasCashDrawer: true });
+  });
+
+  it("shows a drawer test refusal and allows attachment to be turned off", async () => {
+    const api = stubApi({
+      listPrinters: vi.fn().mockResolvedValue([{ ...printers[0]!, hasCashDrawer: true }]),
+      testPrinterDrawer: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
+    });
+    const el = await openStepThree(api);
+    q(el, "[data-test=test-printer-drawer]")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=edit-printer-modal] [role=alert]")).toBe(
+      codeMessage("printer.not_found"),
+    );
+    expect(q(el, '[name="printer-drawer-result"]')).toBeNull();
+    toggleSwitch(el, '[name="printer-cash-drawer"]', false);
+    await flush(el);
+    expect(q(el, "[data-test=test-printer-drawer]")).toBeNull();
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", { hasCashDrawer: false });
+  });
+
+  it.each(["resolve", "reject"] as const)(
+    "ignores a drawer test that finishes after calibration closes (%s)",
+    async (outcome) => {
+      let resolve!: (value: { jobId: string }) => void;
+      let reject!: (error: unknown) => void;
+      const api = stubApi({
+        listPrinters: vi.fn().mockResolvedValue([{ ...printers[0]!, hasCashDrawer: true }]),
+        testPrinterDrawer: vi.fn().mockReturnValue(
+          new Promise((done, fail) => {
+            resolve = done;
+            reject = fail;
+          }),
+        ),
+      });
+      const el = await openStepThree(api);
+      q(el, "[data-test=test-printer-drawer]")!.click();
+      await flush(el);
+      q(el, "[data-test=cancel-edit-printer]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
+      await openPrinter(el);
+      if (outcome === "resolve") resolve({ jobId: "late" });
+      else reject({ code: "printer.not_found" });
+      await flush(el);
+      expect(q(el, '[name="printer-drawer-result"]')).toBeNull();
+      expect(q(el, "[data-test=edit-printer-modal] [role=alert]")).toBeNull();
+    },
+  );
+
+  it("does not write unchanged calibration settings", async () => {
+    const api = stubApi();
+    const el = await openStepThree(api);
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    expect(api.updatePrinter).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
+  });
+
+  it("preserves connection edits when finishing calibration from the editor", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el);
+    typeField(el, "[data-test=printer-name-p1]", "Updated kitchen");
+    typeField(el, "[data-test=printer-host-p1]", "10.0.0.88");
+    typeField(el, "[data-test=printer-port-p1]", "9101");
+    toggleSwitch(el, "[data-test=printer-active-p1]", false);
+    await flush(el);
+    q(el, "[data-test=calibrate-printer]")!.click();
+    await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", {
+      name: "Updated kitchen",
+      host: "10.0.0.88",
+      port: 9101,
+      active: false,
+    });
+  });
+
+  it.each(["https://agent.local:9110/", "http://192.168.10.81:9110/"])(
+    "links the agent host to its reported setup page %s",
+    async (setupUrl) => {
+      const api = stubApi({
+        listAgents: vi.fn().mockResolvedValue([{ ...agents[0]!, host: "Kitchen box", setupUrl }]),
+      });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await flush(el);
+      const link = q(el, 'a[target="_blank"]') as HTMLAnchorElement;
+      expect(link.href).toBe(setupUrl);
+      expect(link.textContent).toBe("Kitchen box");
+      expect(link.rel).toBe("noopener noreferrer");
+    },
+  );
+
+  it("renders unsupported agent URLs as plain host text", async () => {
+    const api = stubApi({
+      listAgents: vi
+        .fn()
+        .mockResolvedValue([
+          { ...agents[0]!, host: "Kitchen box", setupUrl: "javascript:alert(1)" },
+        ]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    expect(q(el, 'a[target="_blank"]')).toBeNull();
+    expect(q(el, '[data-test="agents-table"]')!.shadowRoot!.textContent).toContain("Kitchen box");
+  });
+
+  it("opens calibration after adding, retains printed blocks, and saves the tested draft", async () => {
+    const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openDiscovery(el);
+    await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
+    await flush(el);
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true),
+    );
+    expect(q(el, "[data-test=new-printer-modal]")).toBeNull();
+    q(el, "[data-test=print-character-tables-p9]")!.click();
+    await flush(el);
+    await chooseOption(el, "printer-table-block", "16");
+    q(el, "[data-test=print-character-tables-p9]")!.click();
+    await flush(el);
+    await chooseOption(el, "printer-table-block", "0");
+    expect(q(el, 'option[value="8-06"]')).not.toBeNull();
+    expect(api.testCharacterTables).toHaveBeenCalledTimes(2);
+    await chooseOption(el, "printer-matching-code", "8-06");
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=calibration-step-2]")?.checkVisibility()).toBe(true);
+    await chooseOption(el, "printer-paper-width", "58mm");
+    await chooseOption(el, "printer-resolution", "203dpi");
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=calibration-step-3]")?.checkVisibility()).toBe(true);
+    q(el, "[data-test=print-sample-receipt-p9]")!.click();
+    await flush(el);
+    expect(api.sampleReceipt).toHaveBeenCalledWith("p9", {
+      paperWidth: "58mm",
+      resolution: "203dpi",
+      characterSet: "pc858",
+      characterTable: 6,
+    });
+    toggleSwitch(el, '[name="printer-cash-drawer"]', true);
+    await flush(el);
+    expect(api.updatePrinter).not.toHaveBeenCalled();
+    q(el, "[data-test=save-printer-p9]")!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledWith("p9", {
+      paperWidth: "58mm",
+      resolution: "203dpi",
+      characterSet: "pc858",
+      characterTable: 6,
+      hasCashDrawer: true,
+    });
+  });
+
+  it("always offers a remembered status filter, even when every printer is active", async () => {
+    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([printers[0]]) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    const select = q(el, '[name="status-filter"]') as HTMLSelectElement;
+    expect(select).not.toBeNull();
+    expect(select.value).toBe("active");
+    await chooseOption(el, "status-filter", "disabled");
+    expect(q(el, '[data-test="printer-row-p1"]')).toBeNull();
+    expect(sessionStorage.getItem("printers:table")).toContain("disabled");
+  });
+});
 
 describe("printer configuration tabs", () => {
   it.each([
@@ -1268,7 +1511,7 @@ describe("printers-screen", () => {
     expect(arg).not.toHaveProperty("agentId");
     expect(arg).not.toHaveProperty("localKey");
     expect(arg).not.toHaveProperty("pollId");
-    expect(api.listPrinters).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
   });
 
   it("Scan shows a busy button and keeps re-reading the discovered list for the listen period", async () => {
@@ -1429,7 +1672,7 @@ describe("printers-screen", () => {
     const arg = vi.mocked(api.createPrinter).mock.calls[0]![0];
     expect(arg).not.toHaveProperty("agentId");
     expect(arg).not.toHaveProperty("host");
-    expect(api.listPrinters).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
   });
 
   it("uses make and model when a discovered device has no name", async () => {
@@ -1629,7 +1872,7 @@ describe("printers-screen", () => {
     const [, patch] = vi.mocked(api.updatePrinter).mock.calls[0]!;
     expect(patch).not.toHaveProperty("localKey");
     expect(patch).not.toHaveProperty("pollId");
-    expect(api.listPrinters).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
   });
 
   it("rejects an emptied required network host", async () => {
@@ -1664,6 +1907,7 @@ describe("printers-screen", () => {
       resolution: "180dpi",
       characterSet: "wpc1252",
       characterTable: 16,
+      hasCashDrawer: false,
       pendingJobs: 0,
       lastPrintAt: null,
       active: true,
@@ -1704,6 +1948,7 @@ describe("printers-screen", () => {
       resolution: "180dpi",
       characterSet: "wpc1252",
       characterTable: 16,
+      hasCashDrawer: false,
       pendingJobs: 0,
       lastPrintAt: null,
       active: true,
@@ -1774,7 +2019,7 @@ describe("printers-screen", () => {
     expect(banner).toContain(codeMessage("printer.not_found", "es-ES"));
   });
 
-  it("deactivates a printer only after confirmation, reloads, and disables inactive deletion", async () => {
+  it("deactivates a printer immediately, reloads, and disables inactive deletion", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -1784,12 +2029,8 @@ describe("printers-screen", () => {
 
     q(el, "[data-test=deactivate-printer-p1]")!.click();
     await flush(el);
-    expect(api.deactivatePrinter).not.toHaveBeenCalled();
-    expect(text(el, "[data-test=deactivate-printer-p1]")).toBe(t("printers.delete_confirm"));
-    q(el, "[data-test=deactivate-printer-p1]")!.click();
-    await flush(el);
     expect(api.deactivatePrinter).toHaveBeenCalledWith("p1");
-    expect(api.listPrinters).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
   });
 
   it("shows an error banner when a deactivate is rejected", async () => {
@@ -1799,9 +2040,6 @@ describe("printers-screen", () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
-    q(el, "[data-test=deactivate-printer-p1]")!.click();
-    await flush(el);
-    expect(api.deactivatePrinter).not.toHaveBeenCalled();
     q(el, "[data-test=deactivate-printer-p1]")!.click();
     await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("printer.not_found");
@@ -1979,15 +2217,19 @@ it("keeps a successfully added printer registered when refreshing discovery fail
     await flush(el);
     expect(api.createPrinter).toHaveBeenCalledOnce();
     expect(q(el, '[data-test="name-printer-modal"]')).toBeNull();
-    expect(text(el, '[data-test="printer-added"]')).toContain(discoveredNetwork[0]!.name);
-    expect(text(el, '[data-test="printer-refresh-error"]')).toContain(t("printers.refresh_failed"));
+    await vi.waitFor(() =>
+      expect(text(el, '[data-test="printer-refresh-error"]')).toContain(
+        t("printers.refresh_failed"),
+      ),
+    );
+    expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true);
     expect(q(el, '[data-test="register-10.0.0.77:9100"]')).toBeNull();
     expect(q(el, '[data-test="discovered-row-10.0.0.77:9100"]')).toBeNull();
     vi.mocked(api.listDiscoveredPrinters).mockResolvedValue(discoveredNetwork);
     vi.mocked(api.listDiscoveredPrinters).mockClear();
     await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
     await flush(el);
-    expect(api.listDiscoveredPrinters).toHaveBeenCalledOnce();
+    expect(api.listDiscoveredPrinters).not.toHaveBeenCalled();
     expect(q(el, '[data-test="register-10.0.0.77:9100"]')).toBeNull();
     expect(q(el, '[data-test="discovered-row-10.0.0.77:9100"]')).toBeNull();
     expect(api.createPrinter).toHaveBeenCalledOnce();
@@ -2250,31 +2492,19 @@ it("edits printer activation through a named shared switch", async () => {
   expect(control.shadowRoot!.querySelector("input")!.name).toBe("printer-active");
 });
 
-it("keeps the delete confirmation menu open and disarms another printer", async () => {
-  const api = stubApi({
-    listPrinters: vi
-      .fn()
-      .mockResolvedValue(printers.map((printer) => ({ ...printer, active: true }))),
-  });
+it("closes the kebab after disabling a printer with one click", async () => {
+  const api = stubApi();
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
+  await selectTab(el, "printers");
   const first = q(el, "[data-test=deactivate-printer-p1]")!;
   const menu = first.closest("dashboard-row-actions")!;
   menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
   first.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
   await flush(el);
-  expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-  expect(api.deactivatePrinter).not.toHaveBeenCalled();
-  q(el, "[data-test=deactivate-printer-p2]")!.click();
-  await flush(el);
-  expect(text(el, "[data-test=deactivate-printer-p1]")).toBe(t("printers.disable"));
-  q(el, "[data-test=deactivate-printer-p1]")!.click();
-  await flush(el);
-  expect(api.deactivatePrinter).not.toHaveBeenCalled();
-  await openPrinter(el);
-  q(el, "[data-test=print-test-page-p1]")!.click();
-  await flush(el);
-  expect(text(el, "[data-test=deactivate-printer-p1]")).toBe(t("printers.disable"));
+  expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+  expect(api.deactivatePrinter).toHaveBeenCalledExactlyOnceWith("p1");
 });
 
 it("defaults to active printers and filters disabled and all registrations", async () => {
@@ -2282,28 +2512,30 @@ it("defaults to active printers and filters disabled and all registrations", asy
   await flush(el);
   expect(q(el, "[data-test=printer-row-p1]")).not.toBeNull();
   expect(q(el, "[data-test=printer-row-p2]")).toBeNull();
-  const select = q(el, '[name="printer-status-filter"]') as HTMLSelectElement;
+  const select = q(el, '[name="status-filter"]') as HTMLSelectElement;
   expect(select.value).toBe("active");
   select.value = "disabled";
   select.dispatchEvent(new Event("change"));
   await flush(el);
   expect(q(el, "[data-test=printer-row-p1]")).toBeNull();
   expect(q(el, "[data-test=printer-row-p2]")).not.toBeNull();
-  select.value = "all";
+  select.value = "";
   select.dispatchEvent(new Event("change"));
   await flush(el);
   for (const id of ["p1", "p2", "p3"])
     expect(q(el, `[data-test="printer-row-${id}"]`)).not.toBeNull();
 });
 
-it("shows a sole disabled printer without a redundant status filter", async () => {
+it("keeps disabled printers under the disabled status filter", async () => {
   const onlyDisabled = [{ ...printers[1]!, active: false }];
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi({ listPrinters: vi.fn().mockResolvedValue(onlyDisabled) }),
   });
   await flush(el);
   await selectTab(el, "printers");
-  expect(q(el, '[name="printer-status-filter"]')).toBeNull();
+  expect(q(el, '[name="status-filter"]')).not.toBeNull();
+  expect(q(el, "[data-test=printer-row-p2]")).toBeNull();
+  await filterPrinters(el, "disabled");
   expect(q(el, "[data-test=printer-row-p2]")).not.toBeNull();
 });
 
@@ -2345,7 +2577,10 @@ it.each(["usb", "bluetooth", "network_tcp"] as const)(
     expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", { active: true });
     expect(api.createPrinter).not.toHaveBeenCalled();
     expect(q(el, `[data-test="register-${key}"]`)).toBeNull();
-    expect(text(el, "[data-test=printer-row-p3]")).toContain("Saved kitchen name");
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=printer-row-p3]")).toContain("Saved kitchen name"),
+    );
+    expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true);
   },
 );
 
@@ -2536,10 +2771,8 @@ it("re-adds a printer after adding and disabling it in the same screen", async (
   await flush(el);
   await openDiscovery(el);
   await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
-  await flush(el);
-  q(el, "[data-test=cancel-new-printer]")!.click();
-  await flush(el);
-  q(el, "[data-test=deactivate-printer-p9]")!.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=calibration-step-1]")).not.toBeNull());
+  q(el, "[data-test=cancel-edit-printer]")!.click();
   await flush(el);
   q(el, "[data-test=deactivate-printer-p9]")!.click();
   await flush(el);
@@ -2731,11 +2964,14 @@ describe("printer layout settings", () => {
     await openPrinter(el, "p1");
     q(el, '[data-test="print-character-tables-p1"]')!.click();
     await flush(el);
-    await chooseOption(el, "printer-matching-code", "T68");
+    await chooseOption(el, "printer-matching-code", "8-06");
     q(el, '[data-test="print-character-tables-p1"]')!.click();
     await flush(el);
-    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("T68");
+    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("8-06");
     expect(api.testCharacterTables).toHaveBeenCalledTimes(2);
+    await chooseOption(el, "printer-table-block", "16");
+    await chooseOption(el, "printer-table-block", "0");
+    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("8-06");
   });
 
   it("sets both saved text fields when switching from a matching code to plain letters", async () => {
@@ -2745,7 +2981,7 @@ describe("printer layout settings", () => {
     await openPrinter(el, "p1");
     q(el, '[data-test="print-character-tables-p1"]')!.click();
     await flush(el);
-    await chooseOption(el, "printer-matching-code", "T68");
+    await chooseOption(el, "printer-matching-code", "8-06");
     await chooseOption(el, "printer-matching-code", "plain");
     expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe(
       "plain",
@@ -2776,18 +3012,18 @@ describe("printer layout settings", () => {
     expect(q(el, '[data-test="finder-expected-W"]')!.textContent).toContain("áéíóú ÁÉÍÓÚ ñÑ üÜ");
     expect(q(el, '[data-test="finder-expected-W"]')!.textContent).toContain("¿¡ € £ çÇ “ ” ‘ ’");
     await chooseOption(el, "printer-table-block", "16");
-    expect(q(el, 'select[name="printer-matching-code"] option[value="T68"]')).toBeNull();
+    expect(q(el, 'select[name="printer-matching-code"] option[value="8-06"]')).toBeNull();
     expect(q(el, '[data-test="finder-expected-W"]')).toBeNull();
     q(el, '[data-test="print-character-tables-p1"]')!.click();
     await flush(el);
     expect(api.testCharacterTables).toHaveBeenLastCalledWith("p1", 16);
-    expect(q(el, 'select[name="printer-matching-code"] option[value="T168"]')).not.toBeNull();
+    expect(q(el, 'select[name="printer-matching-code"] option[value="8-16"]')).not.toBeNull();
     expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("");
     await chooseOption(el, "printer-table-block", "0");
     q(el, '[data-test="print-character-tables-p1"]')!.click();
     await flush(el);
-    await chooseOption(el, "printer-matching-code", "T68");
-    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("T68");
+    await chooseOption(el, "printer-matching-code", "8-06");
+    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("8-06");
     expect((q(el, 'select[name="printer-character-set"]') as HTMLSelectElement).value).toBe(
       "pc858",
     );
@@ -2849,74 +3085,37 @@ describe("printer layout settings", () => {
     ).toBe(true);
   });
 
-  it("prints the test page, turns the three answers into settings, and prints a sample receipt", async () => {
+  it("uses explicit width and resolution, and prints a sample from the calibration draft", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await openPrinter(el, "p1");
-    expect(q(el, "[data-test=test-page-hint-p1]")?.textContent?.trim()).toBe(
-      t("printers.test_page_hint"),
-    );
+    await openPrinter(el);
+    q(el, "[data-test=calibrate-printer]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=calibration-step-1]")!.checkVisibility()).toBe(true);
+    await chooseOption(el, "printer-matching-code", "plain");
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    await chooseOption(el, "printer-paper-width", "58mm");
+    await chooseOption(el, "printer-resolution", "203dpi");
     q(el, "[data-test=print-test-page-p1]")!.click();
     await flush(el);
-    expect(api.testPrint).toHaveBeenCalledWith("p1");
-    const value = (name: string) =>
-      (
-        q(
-          el,
-          `select[name="${name}"], input[name="${name}"], wt-input[name="${name}"]`,
-        ) as HTMLInputElement
-      ).value;
-    const answer = async (name: string, value: string) => {
-      q(el, `input[name="${name}"][value="${value}"]`)!.click();
-      await flush(el);
-    };
-    expect(
-      [...el.shadowRoot!.querySelectorAll('input[name="printer-test-line-reads"]')].map((input) =>
-        input.closest("label")!.textContent!.trim(),
-      ),
-    ).toEqual([
-      "1: Café jamón Ñ ¿¡ ç ü 5 €",
-      "2: Café jamón Ñ ¿¡ ç ü 5 €",
-      "3: Café jamón Ñ ¿¡ ç ü 5 €",
-      "4: Cafe jamon N ?! c u 5 EUR",
-    ]);
-    expect(q(el, 'input[name="printer-test-line-fits"]:checked')).toBeNull();
-    await answer("printer-test-line-fits", "B");
-    expect(q(el, "[data-test=test-qr-help] legend")?.textContent?.trim()).toBe(
-      t("printers.test_qr_help"),
-    );
-    await answer("printer-test-qr-fits", "45");
-    await answer("printer-test-line-reads", "4");
-    q(el, '[data-test="apply-printer-test"]')!.click();
+    expect(api.testPrint).toHaveBeenCalledExactlyOnceWith("p1");
+    expect(q(el, '[name="printer-test-line-fits"]')).toBeNull();
+    q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
-    expect([value("printer-paper-width"), value("printer-resolution")]).toEqual(["58mm", "180dpi"]);
-    expect(value("printer-character-set")).toBe("plain");
-    expect(value("printer-character-table")).toBe("0");
     q(el, "[data-test=print-sample-receipt-p1]")!.click();
     await flush(el);
     expect(api.sampleReceipt).toHaveBeenCalledWith("p1", {
       paperWidth: "58mm",
-      resolution: "180dpi",
+      resolution: "203dpi",
       characterSet: "plain",
       characterTable: 0,
     });
-    q(el, "[data-test=print-character-tables-p1]")!.click();
-    await flush(el);
-    expect(api.testCharacterTables).toHaveBeenCalledWith("p1", 0);
-    q(el, '[data-test="print-test-page-p1"]')!.click();
-    await flush(el);
-    await answer("printer-test-line-fits", "D");
-    await answer("printer-test-qr-fits", "40");
-    q(el, '[data-test="apply-printer-test"]')!.click();
-    await flush(el);
     q(el, "[data-test=save-printer-p1]")!.click();
     await flush(el);
     expect(api.updatePrinter).toHaveBeenCalledWith("p1", {
-      name: "Cocina",
-      host: "10.0.0.9",
-      port: 9100,
-      active: true,
+      paperWidth: "58mm",
       resolution: "203dpi",
       characterSet: "plain",
       characterTable: 0,
@@ -2925,12 +3124,12 @@ describe("printer layout settings", () => {
 });
 
 describe("printer setup refinements", () => {
-  it("hides an empty printer filter and redundant tab headings", async () => {
+  it("keeps an empty printer filter and hides redundant tab headings", async () => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi({ listPrinters: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
-    expect(q(el, '[name="printer-status-filter"]')).toBeNull();
+    expect(q(el, '[name="status-filter"]')).not.toBeNull();
     expect(el.shadowRoot!.querySelectorAll("wt-tabs h2").length).toBe(0);
   });
 
@@ -2983,24 +3182,23 @@ describe("printer setup refinements", () => {
     expect(api.updatePrinter).toHaveBeenCalledWith("p3", { name: "Barra USB", active: false });
   });
 
-  it("opens test questions in a dialog and cancels without changing settings", async () => {
+  it("cancels calibration without saving its draft", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     await openPrinter(el);
-    expect(q(el, '[name="printer-test-line-fits"]')).toBeNull();
-    q(el, '[data-test="print-test-page-p1"]')!.click();
+    q(el, "[data-test=calibrate-printer]")!.click();
     await flush(el);
-    expect(api.testPrint).toHaveBeenCalledWith("p1");
-    expect(q(el, '[data-test="printer-test-dialog"]')).not.toBeNull();
-    q(el, 'input[name="printer-test-line-fits"][value="B"]')!.click();
-    q(el, '[data-test="cancel-printer-test"]')!.click();
+    await chooseOption(el, "printer-matching-code", "plain");
+    q(el, "[data-test=cancel-edit-printer]")!.click();
     await flush(el);
-    expect((q(el, '[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("80mm");
+    expect(api.updatePrinter).not.toHaveBeenCalled();
+    await openPrinter(el);
+    expect((q(el, '[name="printer-character-set"]') as HTMLSelectElement).value).toBe("wpc1252");
   });
 });
 
-it("keeps a reopened test dialog independent of a pending earlier print", async () => {
+it("keeps a reopened calibration independent of a pending earlier print", async () => {
   let rejectOld!: (reason: unknown) => void;
   const api = stubApi({
     testPrint: vi
@@ -3018,16 +3216,17 @@ it("keeps a reopened test dialog independent of a pending earlier print", async 
   await openPrinter(el);
   q(el, '[data-test="print-test-page-p1"]')!.click();
   await flush(el);
-  q(el, '[data-test="reprint-test-page"]')!.click();
+  q(el, '[data-test="print-test-page-p1"]')!.click();
   expect(api.testPrint).toHaveBeenCalledOnce();
-  q(el, '[data-test="cancel-printer-test"]')!.click();
+  q(el, '[data-test="cancel-edit-printer"]')!.click();
   await flush(el);
+  await openPrinter(el);
   q(el, '[data-test="print-test-page-p1"]')!.click();
   await flush(el);
   expect(api.testPrint).toHaveBeenCalledTimes(2);
   rejectOld({ code: "printer.not_found" });
   await flush(el);
-  expect(q(el, '[data-test="printer-test-dialog"]')!.textContent).not.toContain(
+  expect(q(el, '[data-test="edit-printer-modal"]')!.textContent).not.toContain(
     codeMessage("printer.not_found"),
   );
 });
@@ -3396,7 +3595,7 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     q(el, "[data-test=refresh-printer-lists]")!.click();
 
     await vi.waitFor(() => expect(q(el, "[data-test=printer-refresh-error]")).toBeNull());
-    expect(api.listPrinters).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
     expect(q(el, "[data-test=printer-row-p1]")).not.toBeNull();
   });
 
@@ -3686,9 +3885,7 @@ describe("printers-screen discovery and add edges", () => {
 
     await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
     await flush(el);
-    expect(text(el, "[data-test=printer-added]")).toBe(
-      t("printers.added").replace("{name}", "EPSON TM-T20"),
-    );
+    expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true);
     expect(q(el, "[data-test=new-printer-modal] [role=alert]")).toBeNull();
   });
 });
@@ -3879,12 +4076,13 @@ describe("printers-screen printer editor edges", () => {
     await vi.waitFor(() => expect(api.listRecentJobs).toHaveBeenCalledTimes(2));
     await flush(el);
     expect(q(el, '[data-test="finder-expected-W"]')).toBeNull();
-    expect(q(el, 'select[name="printer-matching-code"] option[value="T168"]')).toBeNull();
+    expect(q(el, 'select[name="printer-matching-code"] option[value="8-16"]')).toBeNull();
   });
 
   it("does not adopt a test page's result after its dialog was cancelled", async () => {
     let release!: () => void;
     const { el, api } = await mountEditing("p1", {
+      testPrinterDrawer: vi.fn().mockResolvedValue({ jobId: "drawer-test" }),
       testPrint: vi.fn().mockReturnValueOnce(
         new Promise((resolve) => {
           release = () => resolve({ jobId: "j9", calibrationLocale: "es-ES" });
@@ -3893,8 +4091,8 @@ describe("printers-screen printer editor edges", () => {
     });
     q(el, "[data-test=print-test-page-p1]")!.click();
     await flush(el);
-    q(el, "[data-test=cancel-printer-test]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=printer-test-dialog]")).toBeNull());
+    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
 
     release();
     await flush(el);
@@ -3902,29 +4100,23 @@ describe("printers-screen printer editor edges", () => {
     expect(api.listRecentJobs).toHaveBeenCalledOnce();
   });
 
-  it("applies only the answered test question, leaving paper width and resolution as they were", async () => {
+  it("saves only the changed character settings, leaving width and resolution alone", async () => {
     const { el, api } = await mountEditing("p1");
-    q(el, "[data-test=print-test-page-p1]")!.click();
+    q(el, "[data-test=calibrate-printer]")!.click();
     await flush(el);
-    q(el, 'input[name="printer-test-line-reads"][value="4"]')!.click();
+    await chooseOption(el, "printer-matching-code", "plain");
+    q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
-
-    q(el, '[data-test="apply-printer-test"]')!.click();
+    q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
     q(el, "[data-test=save-printer-p1]")!.click();
-
     await vi.waitFor(() =>
       expect(api.updatePrinter).toHaveBeenCalledWith("p1", {
-        name: "Cocina",
-        host: "10.0.0.9",
-        port: 9100,
-        active: true,
         characterSet: "plain",
         characterTable: 0,
       }),
     );
   });
-
   it("clears the matching-code choice once the character set no longer matches plain letters", async () => {
     const { el } = await mountEditing("p1");
     await chooseOption(el, "printer-matching-code", "plain");
@@ -3941,7 +4133,7 @@ describe("printers-screen printer editor edges", () => {
     const { el, api } = await mountEditing("p1");
     q(el, "[data-test=print-character-tables-p1]")!.click();
     await vi.waitFor(() => expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull());
-    await chooseOption(el, "printer-matching-code", "T68");
+    await chooseOption(el, "printer-matching-code", "8-06");
 
     await chooseOption(el, "printer-matching-code", "");
 

@@ -74,12 +74,52 @@ const TRIM: ReceiptTrim = {
   footerMessage: "¡Gracias por su visita!",
 };
 
+it("puts the QR legend immediately after the raster and a blank line before the footer", () => {
+  const bytes = formatReceipt({
+    result: FILED_SALE,
+    issuer: ISSUER,
+    receipt: TRIM,
+    invoiceLocale: "es-ES",
+    printer: PRINTER_80,
+  });
+  const at = bytes.findIndex((_, i) =>
+    RASTER_LEAD_BYTES.every((value, j) => bytes[i + j] === value),
+  );
+  expect(at).toBeGreaterThan(0);
+  const stride = bytes[at + 4]! + 256 * bytes[at + 5]!;
+  const height = bytes[at + 6]! + 256 * bytes[at + 7]!;
+  const afterImage = at + 8 + stride * height;
+  expect(Buffer.from(bytes.slice(afterImage, afterImage + 12)).toString("ascii")).toBe(
+    "VERI*FACTU\n\n",
+  );
+});
+
 /** Resolve a line's goods name the way the receipt does — invoice locale, then any description. */
 function lineName(line: TillSaleResult["lines"][number]): string {
   return line.descriptions["es-ES"] ?? Object.values(line.descriptions)[0] ?? "";
 }
 
 describe("formatReceipt — the faithful, legally-complete customer receipt", () => {
+  it.each([PRINTER_80, PRINTER_58])(
+    "centres the fixed-width body and the unpadded QR legend on $paperWidth",
+    (printer) => {
+      const bytes = formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer,
+      });
+      expect([...bytes.slice(7, 10)]).toEqual([0x1b, 0x61, 1]);
+      const lines = printedLines(bytes).filter(Boolean);
+      const width = printer.paperWidth === "80mm" ? 42 : 30;
+      expect(lines).toContain("VERI*FACTU");
+      for (const line of lines.filter((line) => line !== "VERI*FACTU"))
+        expect(line.length).toBe(width);
+      expect(lines).toContain(ISSUER.venueName.padEnd(width));
+      expect(lines.at(-1)).toBe(TRIM.footerMessage!.padEnd(width));
+    },
+  );
   it.each([PRINTER_80, PRINTER_58])(
     "reproduces every mandated art. 7.1 / arts. 20-21 element of a filed receipt on $paperWidth paper",
     (printer) => {
@@ -643,9 +683,11 @@ it("adds only the duplicate marker and preserves the order grouping and QR bytes
   const duplicate = formatReceipt({ ...input, duplicate: true });
   expect(decodeTicket(original)).toContain("Mesa 6 · Pedido 41");
   expect(decodeTicket(original)).not.toContain("DUPLICADO");
-  expect(Buffer.from(duplicate).toString("latin1").replace("DUPLICADO\n", "")).toBe(
-    Buffer.from(original).toString("latin1"),
-  );
+  expect(
+    Buffer.from(duplicate)
+      .toString("latin1")
+      .replace("DUPLICADO".padEnd(42) + "\n", ""),
+  ).toBe(Buffer.from(original).toString("latin1"));
   expect(decodeTicket(duplicate)).toContain("DUPLICADO");
 });
 
@@ -712,8 +754,8 @@ it("prints each options answer under its dish in the invoice locale, indented by
   const dish = lines.findIndex((line) => line.includes("Menú del día"));
   expect(dish).toBeGreaterThanOrEqual(0);
   expect(lines.slice(dish + 1, dish + 3)).toEqual([
-    "  Tamano cliente: Grande cliente",
-    "  Coccion personal: Poco hecha personal",
+    "  Tamano cliente: Grande cliente".padEnd(42),
+    "  Coccion personal: Poco hecha personal".padEnd(42),
   ]);
 });
 
@@ -807,12 +849,12 @@ describe("formatReceipt — printer layout", () => {
         printer: PRINTER_58,
       }),
     );
-    const first = lines.indexOf("1  Tostada con tomate y jamón");
+    const first = lines.indexOf("1  Tostada con tomate y jamón".padEnd(30));
     expect(first).toBeGreaterThanOrEqual(0);
     expect(lines.slice(first, first + 4)).toEqual([
-      "1  Tostada con tomate y jamón",
-      "   ibérico de bellota  12,50 €",
-      "  Aceite de oliva virgen extra",
+      "1  Tostada con tomate y jamón".padEnd(30),
+      "   ibérico de bellota  12,50 €".padEnd(30),
+      "  Aceite de oliva virgen extra".padEnd(30),
       `  de la casa${" ".repeat(12)}0,50 €`,
     ]);
   });
@@ -853,12 +895,12 @@ describe("formatReceipt — printer layout", () => {
         printer: PRINTER_58,
       }),
     );
-    const first = lines.indexOf("  Nota: sin cebolla y con");
+    const first = lines.indexOf("  Nota: sin cebolla y con".padEnd(30));
     expect(first).toBeGreaterThanOrEqual(0);
     expect(lines.slice(first, first + 3)).toEqual([
-      "  Nota: sin cebolla y con",
-      "  mucho tomate natural bien",
-      "  picado",
+      "  Nota: sin cebolla y con".padEnd(30),
+      "  mucho tomate natural bien".padEnd(30),
+      "  picado".padEnd(30),
     ]);
   });
 
@@ -889,11 +931,11 @@ describe("formatReceipt — printer layout", () => {
       }),
     );
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
-    const first = lines.indexOf("Ref. AUTORIZACION 123456");
+    const first = lines.indexOf("Ref. AUTORIZACION 123456".padEnd(30));
     expect(first).toBeGreaterThanOrEqual(0);
     expect(lines.slice(first, first + 2)).toEqual([
-      "Ref. AUTORIZACION 123456",
-      "TERMINAL 0042 LOTE 17",
+      "Ref. AUTORIZACION 123456".padEnd(30),
+      "TERMINAL 0042 LOTE 17".padEnd(30),
     ]);
   });
 

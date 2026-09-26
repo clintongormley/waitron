@@ -66,9 +66,7 @@ describe("devices FKs (till / receipt_printer / device_profile)", () => {
     await suite.db.execute(sql`delete from device_profiles where id <> ${PROFILE_A}`);
   });
 
-  it("accepts real bindings; a NULL printer is unconstrained (MATCH SIMPLE) and the defaults apply", async () => {
-    // Drizzle also for the `has_cash_drawer` read below: a raw read hands back the stored 0, not
-    // `false`.
+  it("accepts real bindings and defaults to no receipt printer", async () => {
     const bound = await admin
       .insert(devices)
       .values({
@@ -79,7 +77,6 @@ describe("devices FKs (till / receipt_printer / device_profile)", () => {
         tokenHash: TOKEN_HASH,
         tillId: TILL_A,
         receiptPrinterId: PRINTER_A,
-        hasCashDrawer: true,
       })
       .returning({ id: devices.id });
     expect(bound).toHaveLength(1);
@@ -94,8 +91,8 @@ describe("devices FKs (till / receipt_printer / device_profile)", () => {
         tokenHash: TOKEN_HASH,
         tillId: TILL_A,
       })
-      .returning({ hasCashDrawer: devices.hasCashDrawer });
-    expect(row!.hasCashDrawer).toBe(false);
+      .returning({ receiptPrinterId: devices.receiptPrinterId });
+    expect(row!.receiptPrinterId).toBeNull();
   });
 
   it("has no card_provider / card_reader_id column (dropped in Task 13)", async () => {

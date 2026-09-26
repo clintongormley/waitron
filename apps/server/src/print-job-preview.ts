@@ -2,10 +2,17 @@ import QRCode from "qrcode";
 import { decodeBytes, type CharacterSet } from "@waitron/printing";
 
 export type PrintPreviewBlock =
-  | { kind: "text"; text: string }
+  | { kind: "text"; text: string; align?: "center" | "right" }
   | { kind: "feed"; lines: number }
   | { kind: "cut" }
-  | { kind: "image"; width: number; height: number; data: string; qrData?: string };
+  | {
+      kind: "image";
+      width: number;
+      height: number;
+      data: string;
+      qrData?: string;
+      align?: "center" | "right";
+    };
 
 export interface PrintJobPreview {
   /** The printer's column count and resolution, for the dashboard to size the paper and images. */
@@ -58,6 +65,7 @@ export function previewPrintJob(
   let qrLevel: "L" | "M" | "Q" | "H" = "L";
   let imageBytes = 0;
   let feedLines = 0;
+  let align: "center" | "right" | undefined;
   // The printer profile supplies the starting encoding and its model-specific table mapping. Known
   // diagnostic tables may switch away from it; `ESC @` restores the profile's starting encoding.
   let charset: CharacterSet = printer.characterSet ?? "plain";
@@ -91,6 +99,7 @@ export function previewPrintJob(
       width,
       height,
       data: Buffer.from(bytes).toString("base64"),
+      ...(align === undefined ? {} : { align }),
       ...(qrData === undefined ? {} : { qrData }),
     });
   };
@@ -149,8 +158,11 @@ export function previewPrintJob(
       }
       const character = decodeBytes([byte], charset);
       const last = result.blocks.at(-1);
-      if (last?.kind === "text") last.text += character;
-      else if (!appendBlock({ kind: "text", text: character })) break;
+      if (last?.kind === "text" && last.align === align) last.text += character;
+      else if (
+        !appendBlock({ kind: "text", text: character, ...(align === undefined ? {} : { align }) })
+      )
+        break;
       result.text += character;
       outputLength++;
       offset++;
@@ -159,11 +171,23 @@ export function previewPrintJob(
     if (!available(2)) break;
     const command = payload[offset + 1];
     if (byte === 0x1b && command === 0x40) {
+      align = undefined;
       charset = printer.characterSet ?? "plain";
       storedQr = "";
       qrSize = 3;
       qrLevel = "L";
       offset += 2;
+      continue;
+    }
+    if (byte === 0x1b && command === 0x61) {
+      if (!available(3)) break;
+      const value = payload[offset + 2];
+      if (value !== 0 && value !== 1 && value !== 2) {
+        result.unsupported = true;
+        break;
+      }
+      align = value === 1 ? "center" : value === 2 ? "right" : undefined;
+      offset += 3;
       continue;
     }
     if (byte === 0x1c && command === 0x2e) {

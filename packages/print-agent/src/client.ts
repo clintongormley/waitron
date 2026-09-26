@@ -6,6 +6,8 @@ import type { PrintTransport } from "./transport.js";
 /** Every pull reports local presence (`visible`) and active scan or address-check results (`scanned`). */
 export interface AgentInventory {
   host?: string;
+  setupUrl?: string | null;
+  setupPort?: number;
   visible: VisibleDevice[];
   scanned: DiscoveredDevice[];
 }

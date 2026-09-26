@@ -327,11 +327,13 @@ A printed document never hard-codes a paper width, a QR size or a text encoding:
 the printer it is printing to (`paperWidth`, `resolution`, `characterSet` on `printers`). Text is
 passed through `prepareText` before it is measured, and through `wrapText`/`labelAmountLines` before
 it is printed, so a string is never counted in one character set and printed in another. The fiscal
-QR is a raster image, its dot size chosen per receipt by `chooseQrDots` for the legal 30-40mm size —
+QR is a raster image, its dot size chosen per receipt by `chooseQrDots` for the largest fitting size
+within 30-40mm, including its blank border when checking the paper width —
 never the printer's own built-in QR command, which cannot be sized this way. A test reads a payload's
 printed text with `printedLines` (`apps/server/src/testing/decode-ticket.ts`), which fails the test
 on an unsupported byte instead of silently stopping partway and hiding the rest of the ticket. Design:
-`docs/superpowers/specs/2026-09-14-printer-paper-resolution-and-character-set-design.md`.
+`docs/superpowers/specs/2026-09-14-printer-paper-resolution-and-character-set-design.md`, updated by
+`docs/superpowers/specs/2026-09-26-printer-calibration-wizard.md`.
 
 ## Resolve live content and receipt snapshots separately
 

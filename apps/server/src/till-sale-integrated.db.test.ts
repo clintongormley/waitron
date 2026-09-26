@@ -257,7 +257,12 @@ async function makeReceiptPrinter(cfg: TillConfig): Promise<string> {
     const { id } = await createPrinter(
       tx,
       { locationId: cfg.locationId },
-      { name: "Recibos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+      {
+        name: "Recibos",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+        hasCashDrawer: true,
+      },
     );
     tx.run(sql`update tills set receipt_printer_id = ${id} where id = ${cfg.tillId}`);
     return id;

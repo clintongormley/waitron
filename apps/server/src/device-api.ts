@@ -190,7 +190,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         stationId: device.stationId,
         tillId: device.tillId,
         receiptPrinterId: device.receiptPrinterId,
-        hasCashDrawer: device.hasCashDrawer,
       });
     }),
   );
@@ -324,20 +323,12 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
       const body = await readJsonBody<{
         receiptPrinterId?: unknown;
-        hasCashDrawer?: unknown;
       }>(c);
       const set: {
         receiptPrinterId?: string | null;
-        hasCashDrawer?: boolean;
       } = {};
       if ("receiptPrinterId" in body) {
         set.receiptPrinterId = requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId");
-      }
-      if ("hasCashDrawer" in body) {
-        if (typeof body.hasCashDrawer !== "boolean") {
-          throw new AppError("management.request_invalid", { field: "hasCashDrawer" });
-        }
-        set.hasCashDrawer = body.hasCashDrawer;
       }
       // A PATCH that names no hardware field is a request-shape fault rather than an empty
       // `UPDATE … SET`.
@@ -351,7 +342,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         return tx.update(devices).set(set).where(ownDeviceById(id)).returning({
           id: devices.id,
           receiptPrinterId: devices.receiptPrinterId,
-          hasCashDrawer: devices.hasCashDrawer,
         });
       });
       if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });

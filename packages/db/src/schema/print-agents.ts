@@ -1,5 +1,5 @@
 import { unique } from "drizzle-orm/sqlite-core";
-import { flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
+import { flag, id, label, newId, nowIso, smallCount, table, tsString } from "./columns.js";
 import { locations } from "./tenants.js";
 
 /**
@@ -19,6 +19,8 @@ export const printAgents = table(
     name: label("name").notNull(),
     // Reported by the agent after authentication; independent of its editable display name.
     host: label("host"),
+    setupUrl: label("setup_url"),
+    setupPort: smallCount("setup_port"),
     // The node that enrolled this agent over loopback, or NULL when a human enrolled it. NO FK to
     // `nodes`: the primary holds no `nodes` row for a mirror (mirror-bundle.ts), so a FK would
     // reject a mirror's self-enrolment.

@@ -1,3 +1,5 @@
+import { isIPv4 } from "node:net";
+
 /** Env wins over the state directory's `config.json`, so the setup page never overrides a
  * compose-supplied address. */
 export interface EnvConfig {
@@ -7,6 +9,7 @@ export interface EnvConfig {
   name?: string;
   stateDir: string;
   setupPort: number;
+  setupUrl?: string;
 }
 
 export const DEFAULT_STATE_DIR = "/var/lib/waitron-print-agent";
@@ -45,10 +48,46 @@ export function readEnv(env: NodeJS.ProcessEnv, hostname: string): EnvConfig {
     setupPort = parsed;
   }
 
+  const rawSetupUrl = value(env.WAITRON_SETUP_URL);
+  const rawAddresses = value(env.WAITRON_BOX_ADDRESSES);
+  let setupUrl: string | undefined;
+  if (rawSetupUrl !== undefined) {
+    let parsed: URL;
+    try {
+      parsed = new URL(rawSetupUrl);
+    } catch {
+      throw new Error("WAITRON_SETUP_URL must be a browser-facing http(s) origin");
+    }
+    if (
+      !["http:", "https:"].includes(parsed.protocol) ||
+      parsed.username !== "" ||
+      parsed.password !== "" ||
+      parsed.pathname !== "/" ||
+      parsed.search !== "" ||
+      parsed.hash !== "" ||
+      ["localhost", "0.0.0.0", "[::]", "[::1]"].includes(parsed.hostname) ||
+      parsed.hostname.startsWith("127.")
+    ) {
+      throw new Error("WAITRON_SETUP_URL must be a browser-facing http(s) origin");
+    }
+    setupUrl = parsed.origin;
+  } else if (rawAddresses !== undefined) {
+    const addresses = rawAddresses.split(",").map((address) => address.trim());
+    if (
+      addresses.some(
+        (address) => !isIPv4(address) || address.startsWith("127.") || address === "0.0.0.0",
+      )
+    ) {
+      throw new Error("WAITRON_BOX_ADDRESSES must contain non-loopback IPv4 addresses");
+    }
+    setupUrl = new URL(`http://${addresses[0]}:${setupPort}`).origin;
+  }
+
   return {
     serverUrl,
     name: value(env.WAITRON_AGENT_NAME) ?? hostname,
     stateDir: value(env.WAITRON_STATE_DIR) ?? DEFAULT_STATE_DIR,
     setupPort,
+    ...(setupUrl === undefined ? {} : { setupUrl }),
   };
 }
