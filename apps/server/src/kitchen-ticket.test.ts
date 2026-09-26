@@ -286,6 +286,61 @@ describe("formatCorrectionSlip", () => {
   });
 });
 
+describe("formatCorrectionSlip for work moved to another table", () => {
+  it("prints the table and order number the kitchen had, then the ones the work moved to", () => {
+    const lines = printedLines(
+      formatCorrectionSlip(
+        {
+          kind: "MOVED",
+          stationName: "Cocina",
+          tableLabel: "Mesa 7",
+          orderNumber: "15",
+          movedFrom: { tableLabel: "Mesa 3", orderNumber: "12" },
+          at: new Date(2026, 7, 17, 14, 30).toISOString(),
+          item: { qty: 2, name: "Tiramisu", note: "sin nata" },
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "*** MOVED ***",
+      "Cocina",
+      "Mesa 3 -> Mesa 7",
+      "12 -> 15",
+      "14:30",
+      "2 x Tiramisu",
+      "  * sin nata",
+      "",
+    ]);
+  });
+
+  it("prints the order number once when the order moved with its work, and a dash for no table", () => {
+    const lines = printedLines(
+      formatCorrectionSlip(
+        {
+          kind: "MOVED",
+          stationName: "Cocina",
+          tableLabel: null,
+          orderNumber: "12",
+          movedFrom: { tableLabel: "Mesa 3", orderNumber: "12" },
+          at: new Date(2026, 7, 17, 9, 5).toISOString(),
+          item: { qty: 1, name: "Chips" },
+        },
+        KITCHEN_80,
+      ),
+    );
+    expect(lines).toEqual([
+      "*** MOVED ***",
+      "Cocina",
+      "Mesa 3 -> -",
+      "12",
+      "09:05",
+      "1 x Chips",
+      "",
+    ]);
+  });
+});
+
 describe("kitchen paper layout", () => {
   const ticket: KitchenTicket = {
     scope: "station",

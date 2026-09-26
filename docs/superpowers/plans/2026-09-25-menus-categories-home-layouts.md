@@ -399,6 +399,10 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
       ticket row stays with the source line; **`ticket_items` gains `quantity`, the quantity fired**,
       so the kitchen screen keeps showing what it was asked to make after a split reduces the
       source line's quantity (`listStationQueue` reads the line's current quantity today).
+      **Overturned 2026-09-26 (the owner's answer):** a partial split gives the split row its own
+      ticket row, copied from the source's, at the quantity moved, and the source's `quantity`
+      drops by that much. A split onto a new check refuses a line whose ticket is still held
+      (`tab.split_held_line`), because a check cannot be sent.
     - **A no-route line under a HELD course** is not stamped when `fireLines` skips it, because its
       course has not fired. `fireCourse` and `sendLines` today act on `ticket_items` alone
       (`working-order.ts:942-1020`), so they gain a lookup of the course's no-route LINES and stamp
@@ -417,6 +421,13 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
       has no ticket row of its own, so it would read as freely editable while the cook has the
       work. `carveOffLines` reads the source's ticket state before splitting; a whole-line move
       keeps the row and its ticket and is unaffected.
+    - **Overturned 2026-09-26 (the owner's answer to the split question):** the moved part gets its
+      own ticket row, copied from the original, and the original's quantity drops by the part
+      moved; a started line may be split, while edits of it stay refused; the split tells the
+      kitchen nothing.
+      _2026-09-26, the owner's answer to item 4: a split onto a check still tells the kitchen
+      nothing, but sent work moved to another table records a MOVED notice and prints a MOVED
+      slip — spec §11.5's dated note._
     - **With the venue setting off** (owner, 2026-09-25: the setting is for a paper-only kitchen,
       which never reports "started", so a recall slip cannot be trusted either), a line that was
       ever sent to a station (`sent_at` set AND a ticket row exists) is refused `ticket.already_fired`
@@ -464,7 +475,8 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
     increments it, and `PUT /api/working-orders/:id` and the per-line route carry the revision their
     copy came from. A mismatch is refused (409, a code named for the concept — grep the
     working-order codes first), and the till reloads the order (spec §10.7 example 2). No revision
-    exists today.
+    exists today. _(2026-09-26: a save or line edit that changes nothing leaves the revision unchanged; see the
+    Task 7c correction below.)_
   - **A per-line edit route for sent lines:** `PUT /api/working-orders/:id/lines/:lineNo`
     `{quantity, note, options, extras, revision}` applies the rules above to ONE line, so the till's
     Change action (Task 7c) never sends the whole order. `PUT /api/working-orders/:id` (the counter
@@ -584,6 +596,12 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
   mark set: the recovery branch of `POST /api/pay` clears it when it files or fails, and boot's
   reconcile clears any mark older than the provider timeout. It never outlives the payment
   attempt, whose own timeout bounds it. Built in Task 7b.
+  - **2026-09-26, after review:** no mark is released by its age. An attempt still running in this
+    process keeps its mark however long the reader waits, and so does an order with a payment still
+    `attempting` or a capture no sale records; after each pass the server's loop clears any other
+    mark on an open order (`releaseStalePaymentAttempts`, `apps/server/src/till-sale.ts`). A card
+    Pay over a mark is refused `order.payment_in_flight` on the same two conditions, after the
+    recovery branch has had its turn.
 - **D23. "Duplicate and use the copy here" is one transaction** (spec §11.7 example 8). Two requests
   — remove Drinks, then add the copy — leave a moment in which Lunch reaches Lemonade through
   nothing, and D5's sync then resets its price and deletes its overrides. Task 1 adds
@@ -767,6 +785,10 @@ test. Each has its test in the named task.
    - A bottled beer with a `no_preparation` route sent in a round, then marked unavailable, pays.
    - A partial split of a Burger the cook has started is refused; a whole-line move of it keeps
      its ticket. A recalled Burger whose product went unavailable cannot be sent again.
+   - **Restated 2026-09-26 (the owner's answer):** the kitchen shows the two Burgers, one on each
+     check; the split moves a ticket row of its own with the Burger, takes it off the original's
+     quantity, and tells the kitchen nothing. A started Burger may now be split; editing it stays
+     refused.
    - (Task 7b.)
 7. **Every correction reaches the kitchen screen, printer or not.**
    - A station with no printer: a recall, a void of a started item and a change to a queued line
@@ -1632,6 +1654,25 @@ call, and its tests drive them directly.
   // HeldExtra gains listId: string
   ```
 
+  _Corrected 2026-09-26, against the code on `feat/menus-order-edits` (Task 7c is built from what
+  follows, not the block above):_
+  - _The notice functions live in `packages/venue-service/src/kitchen-notices.ts`, reached through
+    `VENUE_SERVICE`. `KitchenNoticeKind` is `"recalled" | "void" | "changed" | "moved"`;
+    `KitchenNotice` also carries `movedTo: string | null`, and its `quantity` is a `Decimal` (a
+    decimal string). `recordKitchenNotices` takes a last `movedTo: string | null = null` argument,
+    for a `moved` notice only, and each item's `quantity` is a `Decimal`._
+  - _`updateOrderLine`'s `patch.quantity` and `voidTabLine`'s `quantity` are decimal strings, not
+    numbers. `updateOrderLine` resolves the order's new revision (`Promise<number>`)._
+  - _`PUT /api/working-orders/:id` and `PUT /api/working-orders/:id/lines/:lineNo` answer
+    `{ revision }`, and `GET /api/working-orders/:id/lines` answers `{ lines, revision }`. The till
+    stores the revision `GET /api/working-orders/:id` answers when it loads an order and the one
+    `PUT /api/working-orders/:id` answers; nothing in the till reads the revision the per-line
+    `PUT` or `GET /api/working-orders/:id/lines` answers yet.
+    `DELETE /api/working-orders/:id/lines/:lineNo` answers an empty body._
+  - _A save or a line edit that changes nothing answers the revision unchanged (`countEdit` in
+    `apps/server/src/working-order.ts`)._
+  - _`HeldExtra.listId` is `string | null`._
+
 - [ ] **Step 1: Write the failing tests:**
   - **Pricing:**
     - a held order with L1 (Lemonade €3.00), L2 (Water €2.00) and L3 (Burger €12.00 with Extra cheese
@@ -1665,6 +1706,13 @@ call, and its tests drive them directly.
     product goes unavailable. The refusal of a partial split of a dish with extras stays, and a
     partial split of a `preparing` line is refused `ticket.already_started` while a whole-line move
     of it succeeds and keeps its ticket.
+    **Overturned 2026-09-26 (the owner's answer):** the split row gets its own ticket row, copied
+    from the original, at the quantity moved, and the source's ticket drops by that quantity; a
+    partial split of a `preparing` or `ready` line succeeds, edits of either row stay refused
+    `ticket.already_started`, and the split writes no notice and no print job.
+    **Changed 2026-09-26 (the owner's answer to item 4):** a split onto a check still writes
+    neither; a transfer or unjoin that takes sent work to another table writes a MOVED notice and
+    slip (below).
   - **Kitchen, sent and not started:**
     - a fired tab line (`state = 'queued'`) changed to "no onions" through
       `PUT /api/working-orders/:id/lines/:lineNo` gets a RECALLED notice AND slip for the old ticket
@@ -1691,6 +1739,12 @@ call, and its tests drive them directly.
     recall, a void and a change each leave a notice `listStationNotices` returns, and
     `enqueuePrintJob` is never called. With a printer: notice AND slip. Acknowledging removes it;
     an unknown id is `kitchen_notice.not_found`.
+  - **Moved** (added 2026-09-26, the owner's answer to item 4, spec §11.5's dated note): sent work
+    that `transferLines` (whole or part), `unjoinTable`, `moveTab`, `mergeTabs` or `moveTabLines`
+    takes to another table records a `moved` notice, with `movedTo` the table it now belongs to,
+    at the quantity its ticket asks for, and prints a MOVED slip naming both tables, and both order
+    numbers where they differ; held work and a move that keeps the table (a split onto a check, a
+    check merged back into its tab) record nothing.
   - **Revision:** two edits made from the same revision — the first lands and the second is refused
     as out of date, with nothing changed. The till reloads the order and shows a message (spec §10.7
     example 2).
@@ -1748,7 +1802,8 @@ Browser tests in real Chromium. It depends on Task 7b's routes and needs no publ
     void route with `quantity=1`.
   - **Kitchen screen notices:** a stubbed queue answer with two notices renders them above the
     items in order, the void of a started item reads "started", text and an icon distinguish the
-    three kinds (never colour alone), Acknowledge calls the route and removes the row, and the
+    three kinds (never colour alone; 2026-09-26: four, with `moved`, which names its `movedTo`
+    table — Task 7b's Moved step), Acknowledge calls the route and removes the row, and the
     screen re-fetches on the 15-second timer (fake timers, advanced past an awaited frame per
     CLAUDE.md §4).
   - **The a11y tests** cover the Change editor, the partial-cancel dialog, and the notices strip

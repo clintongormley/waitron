@@ -68,6 +68,10 @@ export interface VenueServiceModel {
   hours: HoursInterval[];
   zoneMenus: ZoneMenu[];
   readiness: VenueReadinessIssue[];
+  settings: VenueServiceSettings;
+}
+export interface VenueServiceSettings {
+  editSentLines: boolean;
 }
 export interface VenueServiceChoices {
   menus: (NamedRow & { active: boolean })[];
@@ -196,6 +200,10 @@ export class VenueServiceApi {
     },
   ): Promise<void> {
     return this.request(`/management-api/venue-service/routes/${routeId}`, "PUT", input);
+  }
+
+  saveSettings(settings: VenueServiceSettings): Promise<void> {
+    return this.request("/management-api/venue-service/settings", "PUT", settings);
   }
 
   deleteRoute(routeId: string): Promise<void> {

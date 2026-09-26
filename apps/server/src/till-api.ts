@@ -90,10 +90,12 @@ import {
   transferLines,
   unjoinTable,
   unmarkLineServed,
+  readOrderRevision,
   updateHeldOrder,
+  updateOrderLine,
   voidTabLine,
 } from "./working-order.js";
-import type { LineExtras, TicketState } from "./working-order.js";
+import type { LineExtras, OrderLinePatch, TicketState } from "./working-order.js";
 import { listCourses, listStations } from "./kitchen.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
@@ -229,6 +231,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "sale.empty_basket": 400,
   "sale.unknown_product": 400,
   "product.variant_required": 400,
+  // A line never sent whose product sold out, refused at send and at pay (spec §11.3).
+  "product.unavailable": 409,
   "modifier.invalid": 400,
   "sale.unsupported_tender": 400,
   "sale.tender_shortfall": 400,
@@ -247,6 +251,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "sale_classification.invalid": 409,
   "working_order.not_found": 404,
   "working_order.not_open": 409,
+  "working_order.out_of_date": 409,
+  "order.payment_in_flight": 409,
   "working_order.not_placed": 409,
   "working_order.not_settled": 409,
   "working_order.already_collected": 409,
@@ -259,6 +265,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "course.not_found": 404,
   "station.no_default": 409,
   "station.not_found": 404,
+  "kitchen_notice.not_found": 404,
   "service_zone.not_found": 404,
   "service_zone.default_missing": 409,
   "service_zone.offer_not_allowed": 400,
@@ -283,10 +290,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.merge_self": 400,
   "tab.transfer_self": 400,
   "tab.transfer_quantity_invalid": 400,
+  "tab.void_quantity_invalid": 400,
   "tab.transfer_duplicate_line": 400,
   "table.not_joined": 409,
   "table.not_shared": 409,
   "tab.transfer_modifier_line": 400,
+  "tab.split_held_line": 400,
   "status.not_found": 404,
   "status.inactive": 409,
   "drawer.no_printer": 400,
@@ -345,6 +354,14 @@ function requireTabParam(id: string): string {
     throw new AppError("tab.not_open", { tabId: id });
   }
   return id;
+}
+
+/** An order's revision as a body carries it: a whole number from 0, else `management.request_invalid`. */
+function requireRevision(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new AppError("management.request_invalid", { field: "revision" });
+  }
+  return value;
 }
 
 /** A value that cannot be a line number gets the absent line's `tab.line_not_found`. */
@@ -714,7 +731,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // Practice mode: the local simulator, stamping no reader.
       if (deps.cardProvider?.provider === "simulator") {
         const outcome = await payWorkingOrderIntegrated(
-          { db: deps.db, backend: deps.backend, clock: deps.clock, provider: deps.cardProvider },
+          {
+            db: deps.db,
+            backend: deps.backend,
+            clock: deps.clock,
+            provider: deps.cardProvider,
+            log,
+          },
           saleCfg,
           { ...body, zoneId },
           personId,
@@ -740,6 +763,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           provider,
           readerRef: reader.providerRef,
           readerId: reader.id,
+          log,
         },
         saleCfg,
         { ...body, zoneId },
@@ -814,12 +838,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           options?: OptionSelection[];
         } & LineExtras)[];
         label?: string;
+        revision?: unknown;
       }>(c);
-      await updateHeldOrder({ db: deps.db }, deps.cfg, id, {
+      const revision = await updateHeldOrder({ db: deps.db }, deps.cfg, id, {
         lines: body.lines,
         label: body.label,
+        revision: requireRevision(body.revision),
       });
-      return c.body(null, 200);
+      return c.json({ revision });
     }),
   );
 
@@ -873,15 +899,29 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  // The station's work, and the corrections to it (recalls, voids) a cook has not acknowledged.
   app.get("/api/stations/:id/queue", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("station.not_found", { stationId: id });
-      const queue = await withTransaction(deps.db, async (tx) => {
-        return listStationQueue(tx, id);
-      });
+      const queue = await withTransaction(deps.db, async (tx) => ({
+        items: await listStationQueue(tx, id),
+        notices: await VENUE_SERVICE.listStationNotices(tx, deps.cfg, id),
+      }));
       return c.json(queue);
+    }),
+  );
+
+  app.post("/api/kitchen-notices/:id/acknowledge", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("kitchen_notice.not_found", { noticeId: id });
+      await withTransaction(deps.db, async (tx) => {
+        await VENUE_SERVICE.acknowledgeKitchenNotice(tx, deps.cfg, id);
+      });
+      return c.body(null, 200);
     }),
   );
 
@@ -1214,22 +1254,41 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
+      // Absent voids the whole line; `voidTabLine` validates a given one.
+      const quantity = c.req.query("quantity");
       await withTransaction(deps.db, async (tx) => {
-        await voidTabLine(tx, deps.cfg, id, lineNo);
+        await voidTabLine(tx, deps.cfg, id, lineNo, quantity);
       });
       return c.body(null, 200);
     }),
   );
 
-  // A tab does not re-price: the stored locked gross rides back verbatim.
+  // A tab does not re-price: the stored locked gross rides back verbatim. The revision is read in
+  // the same transaction, so it is the one these lines are at.
   app.get("/api/working-orders/:id/lines", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
-      const lines = await withTransaction(deps.db, async (tx) => {
-        return readTabLines(tx, deps.cfg, id);
-      });
-      return c.json(lines);
+      const tab = await withTransaction(deps.db, async (tx) => ({
+        lines: await readTabLines(tx, deps.cfg, id),
+        revision: await readOrderRevision(tx, id),
+      }));
+      return c.json(tab);
+    }),
+  );
+
+  // One line of any open order, edited from the copy at `revision` (plan D10).
+  app.put("/api/working-orders/:id/lines/:lineNo", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_open");
+      const lineNo = requireLineNo(id, c.req.param("lineNo"));
+      const { revision, ...patch } = await readJsonBody<OrderLinePatch & { revision?: unknown }>(c);
+      const copy = requireRevision(revision);
+      const saved = await withTransaction(deps.db, (tx) =>
+        updateOrderLine(tx, deps.cfg, id, lineNo, patch, copy),
+      );
+      return c.json({ revision: saved });
     }),
   );
 

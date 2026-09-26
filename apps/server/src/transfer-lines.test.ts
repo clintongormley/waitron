@@ -430,7 +430,7 @@ describe("transferLines — guards", () => {
     const { cfg, tableAId, tableBId, cafeOffer, aguaOffer } = await setupVenue();
     const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: cafeOffer, quantity: "3" }]);
     const tabB = await openTabWith(cfg, tableBId, [{ menuItemId: aguaOffer, quantity: "1" }]);
-    for (const bad of ["0", "-1", "4", "0.000", "abc"]) {
+    for (const bad of ["0", "-1", "4", "0.000", "abc", "1.0004"]) {
       await expect(
         asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: bad }])),
       ).rejects.toMatchObject({
@@ -440,6 +440,20 @@ describe("transferLines — guards", () => {
     }
     // Nothing moved on any of the rejections.
     expect((await linesOf(tabA))[0]).toMatchObject({ quantity: "3.000" });
+    expect(await linesOf(tabB)).toHaveLength(1);
+  });
+
+  it("throws tab.transfer_quantity_invalid for a fraction of a line counted in whole units", async () => {
+    const { cfg, tableAId, tableBId, cafeOffer, aguaOffer } = await setupVenue();
+    const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: cafeOffer, quantity: "2" }]);
+    const tabB = await openTabWith(cfg, tableBId, [{ menuItemId: aguaOffer, quantity: "1" }]);
+    await expect(
+      asApp(cfg, (tx) => transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "0.5" }])),
+    ).rejects.toMatchObject({
+      code: "tab.transfer_quantity_invalid",
+      params: { tabId: tabA, lineNo: 1, quantity: "0.5" },
+    });
+    expect((await linesOf(tabA))[0]).toMatchObject({ quantity: "2.000" });
     expect(await linesOf(tabB)).toHaveLength(1);
   });
 

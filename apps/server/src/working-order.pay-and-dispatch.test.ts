@@ -690,6 +690,7 @@ describe("payWorkingOrder", () => {
     // retrieved-order pay path files the pre-edit lock and the edit is SILENTLY DROPPED (the till-app
     // side is pinned by `retrieve → edit → pay re-syncs …`).
     await updateHeldOrder({ db: suite.db }, cfg, id, {
+      revision: await revisionOf(id),
       lines: [{ menuItemId: cafe.menuItemId, quantity: "2" }],
     });
     expect((await draftAggregate(id)).total).toBe("3.00"); // the lock now reflects the edit
@@ -1209,9 +1210,10 @@ describe("cross-till end-to-end", () => {
     expect((await getHeldOrder({ db: suite.db }, nodeB, orderId)).id).toBe(orderId);
     await expect(
       updateHeldOrder({ db: suite.db }, nodeB, orderId, {
+        revision: await revisionOf(orderId),
         lines: [{ menuItemId: cafe.menuItemId, quantity: "2" }],
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(1);
 
     // The edit landed on the shared row: node A sees node B's rewritten basket (quantity 1 → 2).
     const afterEdit = await getHeldOrder({ db: suite.db }, nodeA, orderId);
@@ -1253,6 +1255,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
     // `require_open_parent` trigger is the DB backstop underneath — placing freezes for free (design §3).
     await expect(
       updateHeldOrder({ db: suite.db }, cfg, id, {
+        revision: await revisionOf(id),
         lines: [{ menuItemId: cafe.menuItemId, quantity: "2" }],
       }),
     ).rejects.toMatchObject({ code: "working_order.not_open" });
@@ -2587,3 +2590,12 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
     expect(after[0]!.fired === false).toBe(recalledSlips >= 1);
   });
 });
+
+/** The order's current revision, for an edit whose test is not about the out-of-date check. */
+async function revisionOf(orderId: string): Promise<number> {
+  const [row] = await suite.db
+    .select({ revision: workingOrders.revision })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  return row!.revision;
+}

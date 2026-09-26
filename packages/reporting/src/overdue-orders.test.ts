@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { CORE_MIGRATIONS, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedFiredLine,
@@ -232,6 +233,33 @@ describe("computeOverdueOrders", () => {
     );
     const rows = await run();
     expect(rows).toEqual([expect.objectContaining({ orderId: seeded.orderId, tableLabel: "12" })]);
+  });
+
+  it("carries the order's own label where no table points at it, and the table's where one does", async () => {
+    const seed = {
+      tillId: venue.tillId,
+      nodeId: venue.nodeId,
+      locationId: venue.locationId,
+      stationId,
+    };
+    // A check split off a tab: no table, the tab's table label as its own.
+    const check = await seedFiredOrder(suite.db, seed, { orderNumber: 1, ageMinutes: 11 });
+    const tab = await seedFiredOrder(suite.db, seed, {
+      orderNumber: 2,
+      ageMinutes: 11,
+      tableLabel: "12",
+    });
+    for (const [orderId, label] of [
+      [check.orderId, "T1"],
+      [tab.orderId, "Terraza"],
+    ] as const) {
+      await suite.db.update(workingOrders).set({ label }).where(eq(workingOrders.id, orderId));
+    }
+    const rows = await run();
+    expect(Object.fromEntries(rows.map((row) => [row.orderId, row.tableLabel]))).toEqual({
+      [check.orderId]: "T1",
+      [tab.orderId]: "12",
+    });
   });
 
   it("a bare walk-up (no table) carries a null tableLabel", async () => {

@@ -58,8 +58,14 @@ const cooked: OfferedModifier = {
   ],
 };
 
-/** One child line as a held order hands it back: values, and no list id anywhere. */
-function held(productId: string | null, name: string, price: string, quantity: number) {
+/** One child line as a held order hands it back: values, and the list the pick was taken from. */
+function held(
+  listId: string | null,
+  productId: string | null,
+  name: string,
+  price: string,
+  quantity: number,
+) {
   return {
     productId,
     name,
@@ -67,14 +73,15 @@ function held(productId: string | null, name: string, price: string, quantity: n
     kitchenName: null,
     price,
     quantity,
+    listId,
   };
 }
 
 describe("deriveExtraSelections", () => {
-  it("names the offered list that carries the picked product", () => {
+  it("names the list the pick was taken from", () => {
     const result = deriveExtraSelections(
       [toppings, cooked, sauces],
-      [held("p-ali", "Alioli", "0.40", 1)],
+      [held("list-sauces", "p-ali", "Alioli", "0.40", 1)],
     );
     expect(result).toEqual({
       extras: [
@@ -85,51 +92,72 @@ describe("deriveExtraSelections", () => {
   });
 
   it("keeps the price and the count the ORDER froze, not the price the offer shows today", () => {
-    const { extras } = deriveExtraSelections([toppings], [held("p-bacon", "Bacon", "1.10", 2)]);
+    const { extras } = deriveExtraSelections(
+      [toppings],
+      [held("list-toppings", "p-bacon", "Bacon", "1.10", 2)],
+    );
     expect(extras).toEqual([
       { listId: "list-toppings", productId: "p-bacon", name: "Bacon", price: "1.10", quantity: 2 },
     ]);
   });
 
-  it("takes the first offered list when two carry the same product", () => {
-    // The server refuses this pairing whichever list the till names, so the till picks
-    // deterministically.
+  it("keeps the list the pick came from when two offered lists carry the same product", () => {
+    // Owner decision (plan D10): a held pick carries its list, so the second list is not guessed
+    // away.
     const alsoBacon: OfferedModifier = {
       ...sauces,
-      id: "list-sauces",
       items: [item("p-bacon", "Bacon", "2.00")],
     };
     const { extras } = deriveExtraSelections(
       [toppings, alsoBacon],
-      [held("p-bacon", "Bacon", "1.50", 1)],
+      [held("list-sauces", "p-bacon", "Bacon", "2.00", 1)],
     );
-    expect(extras[0]!.listId).toBe("list-toppings");
+    expect(extras[0]!.listId).toBe("list-sauces");
   });
 
-  it("sets aside a pick no offered list carries any more, rather than sending a refusable one", () => {
-    const result = deriveExtraSelections([sauces], [held("p-bacon", "Bacon", "1.50", 2)]);
+  it("sets aside a pick whose own list no longer offers it, even where another list does", () => {
+    const result = deriveExtraSelections(
+      [toppings, sauces],
+      [held("list-sauces", "p-bacon", "Bacon", "1.50", 2)],
+    );
     expect(result.extras).toEqual([]);
     expect(result.notOffered).toEqual([
       { productId: "p-bacon", name: "Bacon", price: "1.50", quantity: 2 },
     ]);
   });
 
-  it("sets aside a child line that names no product at all", () => {
-    const result = deriveExtraSelections([toppings], [held(null, "Bacon", "1.50", 1)]);
+  it("sets aside a pick whose list the dish no longer offers", () => {
+    const result = deriveExtraSelections(
+      [sauces],
+      [held("list-toppings", "p-bacon", "Bacon", "1.50", 2)],
+    );
+    expect(result.extras).toEqual([]);
+    expect(result.notOffered).toHaveLength(1);
+  });
+
+  it("sets aside a child line that names no product, or no list", () => {
+    const result = deriveExtraSelections(
+      [toppings],
+      [held("list-toppings", null, "Bacon", "1.50", 1), held(null, "p-bacon", "Bacon", "1.50", 1)],
+    );
     expect(result.extras).toEqual([]);
     expect(result.notOffered).toEqual([
       { productId: null, name: "Bacon", price: "1.50", quantity: 1 },
+      { productId: "p-bacon", name: "Bacon", price: "1.50", quantity: 1 },
     ]);
   });
 
-  it("matches a picked product whatever case its id arrives in", () => {
-    const { extras } = deriveExtraSelections([toppings], [held("P-BACON", "Bacon", "1.50", 1)]);
+  it("matches a picked product and its list whatever case their ids arrive in", () => {
+    const { extras } = deriveExtraSelections(
+      [toppings],
+      [held("LIST-TOPPINGS", "P-BACON", "Bacon", "1.50", 1)],
+    );
     expect(extras[0]).toMatchObject({ listId: "list-toppings", productId: "p-bacon" });
   });
 
   it("answers nothing for a dish that offers nothing, and for a line that picked nothing", () => {
     expect(
-      deriveExtraSelections([], [held("p-bacon", "Bacon", "1.50", 1)]).notOffered,
+      deriveExtraSelections([], [held("list-toppings", "p-bacon", "Bacon", "1.50", 1)]).notOffered,
     ).toHaveLength(1);
     expect(deriveExtraSelections([toppings], undefined)).toEqual({ extras: [], notOffered: [] });
   });

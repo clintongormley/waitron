@@ -19,5 +19,7 @@ declare module "@waitron/shared" {
     "route.duplicate": Record<string, never>;
     "route.station_inactive": { stationId: string };
     "order.service_context_missing": { workingOrderId: string };
+    "kitchen_notice.not_found": { noticeId: string };
+    // `working_order.not_found` and `station.not_found` are declared in @waitron/db's errors.ts.
   }
 }

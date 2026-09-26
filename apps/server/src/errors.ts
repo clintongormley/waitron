@@ -236,11 +236,7 @@ declare module "@waitron/shared" {
      * absent or named no open session. The cookie's value is never echoed.
      */
     "session.required": Record<string, never>;
-    /**
-     * No OPEN working order with this id. An order that exists but is settled or abandoned reports
-     * this same code, so the answer does not confirm a closed order exists.
-     */
-    "working_order.not_found": { workingOrderId: string };
+    // `working_order.not_found` is declared in @waitron/db's errors.ts.
     /**
      * A working order this caller tried to MODIFY is not `open` (settled, abandoned, or absent — one
      * code for all). The triggers `working_orders_enforce_transition` and
@@ -248,6 +244,18 @@ declare module "@waitron/shared" {
      * caller a domain answer instead of a raw trigger error.
      */
     "working_order.not_open": { workingOrderId: string };
+    /**
+     * An edit was made from a copy of an OPEN order that another write has since changed: the
+     * `revision` the edit carried is not the order's. `revision` is the order's current one; the
+     * caller reloads the order and edits again.
+     */
+    "working_order.out_of_date": { workingOrderId: string; revision: number };
+    /**
+     * A write reached an OPEN order an integrated card payment is between pricing and filing
+     * (`working_orders.payment_attempt_at` is set, plan D22): the payment files what it priced, so the
+     * order is not changed under it. The caller waits for the payment to settle or fail.
+     */
+    "order.payment_in_flight": { workingOrderId: string };
     /**
      * A working order this caller tried to CANCEL or AMEND is not `placed` (still open, settled,
      * abandoned, or absent — one code for all).
@@ -321,10 +329,17 @@ declare module "@waitron/shared" {
     /** A transfer named the SAME tab as source and destination. */
     "tab.transfer_self": { tabId: string };
     /**
-     * A transfer named a `quantity` outside `0 < quantity ≤ line.quantity`, or one that is not a valid
-     * decimal. `quantity` is the caller's own text.
+     * A transfer named a `quantity` outside `0 < quantity ≤ line.quantity`, not a valid decimal, with
+     * more integer digits than a quantity holds, or finer than the line's unit counts. `quantity` is
+     * the caller's own text.
      */
     "tab.transfer_quantity_invalid": { tabId: string; lineNo: number; quantity: string };
+    /**
+     * A void named a `quantity` outside `0 < quantity ≤ line.quantity`, not a valid decimal, with
+     * more integer digits than a quantity holds, finer than the line's unit counts, or less than the
+     * whole of an extras line, whose quantity follows its dish. `quantity` is the caller's own text.
+     */
+    "tab.void_quantity_invalid": { tabId: string; lineNo: number; quantity: string };
     /**
      * A transfer batch named the same source `line_no` more than once. Refused because each entry is
      * checked against the line's quantity before the batch, so repeats would not conserve quantity.
@@ -337,6 +352,12 @@ declare module "@waitron/shared" {
      * (their quantity would no longer match the dish's). `lineNo` is the offending source line.
      */
     "tab.transfer_modifier_line": { tabId: string; lineNo: number };
+    /**
+     * A split onto a new check named a line whose kitchen ticket is still held (not fired). A check
+     * cannot be sent, so the held work would never reach the kitchen. `lineNo` is the offending
+     * source line.
+     */
+    "tab.split_held_line": { tabId: string; lineNo: number };
     /** No service status with this id. */
     "status.not_found": { statusId: string };
     /** A service status exists but is deactivated, so a table may not be set to it. */
@@ -349,11 +370,13 @@ declare module "@waitron/shared" {
     "zone.name_taken": { name: string };
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */
     "station.name_taken": { name: string };
+    // `station.not_found` is declared in @waitron/db's errors.ts.
     /**
-     * No kitchen station with this id in this venue, or one that is DEACTIVATED. Folded into one
-     * code: to a caller picking a routing or default target, absent and retired are the same fact.
+     * No kitchen notice with this id in this venue (for a station's own display, at its station).
+     * Declared by `@waitron/venue-service` too, with the same params: it throws it for an unknown
+     * notice, and the acknowledge routes here for an id that is not a UUID.
      */
-    "station.not_found": { stationId: string };
+    "kitchen_notice.not_found": { noticeId: string };
     /**
      * A line was fired but resolves no product- or category-level station and the venue has no
      * default station. Firing fails loud rather than silently dropping food from the kitchen.
@@ -368,9 +391,12 @@ declare module "@waitron/shared" {
      */
     "ticket.invalid_transition": { ticketItemId: string };
     /**
-     * A line was fired that already has a ticket item — a re-fire. `fireLines` catches the per-line
-     * unique violation on `ticket_items`, so every fire path is covered. Its own code because the
-     * colliding item is never read, so there is no `ticketItemId` to report.
+     * The line has already gone to the kitchen, so this write is refused: a re-fire (`fireLines`
+     * catches the per-line unique violation on `ticket_items`, so every fire path is covered), a
+     * re-course of a fired line (`setLineCourse`), and, when the venue has switched off changes to
+     * sent items (`edit_sent_lines`), a recall (`recallLines`) or an edit (`applyLineEdits`) of a
+     * line that was sent to a station. It names the order, not a ticket item, because the re-fire
+     * never reads the colliding item.
      */
     "ticket.already_fired": { workingOrderId: string };
     /**

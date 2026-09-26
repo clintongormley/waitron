@@ -3,6 +3,18 @@ import { currentLocale, pickLocale } from "./t.js";
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "working_order.out_of_date": {
+    en: "Someone else changed this order. Reload it and make your change again",
+    es: "Otra persona ha cambiado este pedido. Vuelve a cargarlo y repite el cambio",
+  },
+  "order.payment_in_flight": {
+    en: "A card payment for this order is in progress. Wait for it to finish before changing the order",
+    es: "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",
+  },
+  "product.unavailable": {
+    en: "An item on this order has sold out. Remove it and try again",
+    es: "Un artículo de este pedido está agotado. Quítalo e inténtalo de nuevo",
+  },
   "modifier.invalid": {
     en: "Check the modifier choices and try again",
     es: "Revisa las opciones del modificador e inténtalo de nuevo",

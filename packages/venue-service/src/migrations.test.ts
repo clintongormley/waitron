@@ -3,12 +3,15 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS, createCatalogue } from "@waitron/catalogue";
 import {
   captureError,
+  CHECK_VIOLATION,
   CORE_MIGRATIONS,
   engineErrorMessage,
   floorZones,
   FOREIGN_KEY_VIOLATION,
   isRefusal,
+  kitchenStations,
   locations,
+  tills,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@waitron/db";
@@ -37,6 +40,8 @@ const TABLES = [
   "department_hours",
   "order_service_contexts",
   "working_line_contexts",
+  "service_settings",
+  "kitchen_notices",
 ];
 
 /** One row of `pragma table_info`. `pk` is 0 for a non-key column and the 1-based position in the
@@ -193,6 +198,14 @@ describe("the venue-service migration set carries no tenant column", () => {
           "(working_order_line_id) -> working_order_lines(id) on delete cascade",
         ],
       },
+      service_settings: { primaryKey: ["id"], foreignKeys: [] },
+      kitchen_notices: {
+        primaryKey: ["id"],
+        foreignKeys: [
+          "(station_id) -> kitchen_stations(id)",
+          "(working_order_id) -> working_orders(id) on delete cascade",
+        ],
+      },
     });
   });
 
@@ -211,6 +224,10 @@ describe("the venue-service migration set carries no tenant column", () => {
       "category_id",
     ]);
     expect(columns("zone_menus_order_idx")).toEqual(["zone_id", "display_order"]);
+    expect(columns("kitchen_notices_open_idx")).toEqual(["station_id", "created_at"]);
+    expect(predicate("kitchen_notices_open_idx")).toBe(
+      `"kitchen_notices"."acknowledged_at" is null`,
+    );
     expect(columns("department_hours_interval_key")).toEqual([
       "department_id",
       "weekday",
@@ -402,5 +419,74 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     expect((await db.execute(sql`pragma defer_foreign_keys`)).rows).toEqual([
       { defer_foreign_keys: 0 },
     ]);
+  });
+});
+
+describe("the service settings and kitchen notices tables refuse what their rules forbid", () => {
+  it("holds at most one settings row, and it is row 1", async () => {
+    await db.execute(sql`insert into service_settings (id) values (1)`);
+    const second = await captureError(() =>
+      db.execute(sql`insert into service_settings (id) values (2)`),
+    );
+    expect(isRefusal(second, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(second)).toContain("service_settings_singleton_ck");
+    // The flag defaults ON in the database itself, so a row written by raw SQL gets it too.
+    expect((await db.execute(sql`select edit_sent_lines from service_settings`)).rows).toEqual([
+      { edit_sent_lines: 1 },
+    ]);
+  });
+
+  it("refuses a notice kind outside the vocabulary, a zero quantity, a missing station and a table on a notice that is not a move", async () => {
+    await seedTenant(db);
+    const [location] = await db
+      .insert(locations)
+      .values({ name: "Venue", invoiceLocales: ["en"], operationDescription: "Hospitality" })
+      .returning({ id: locations.id });
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId: location!.id, name: "Bar" })
+      .returning({ id: tills.id });
+    const [station] = await db
+      .insert(kitchenStations)
+      .values({ locationId: location!.id, name: "Grill" })
+      .returning({ id: kitchenStations.id });
+    const orderId = randomUUID();
+    await db.execute(sql`
+      insert into working_orders (id, till_id, order_number, opened_at)
+      values (${orderId}, ${till!.id}, 1, ${new Date().toISOString()})`);
+    const notice = (kind: string, quantity: number, stationId: string) =>
+      sql`insert into kitchen_notices
+            (id, station_id, working_order_id, order_label, kind, line_name, quantity, created_at)
+          values (${randomUUID()}, ${stationId}, ${orderId}, '#1', ${kind}, 'Burger', ${quantity},
+                  ${new Date().toISOString()})`;
+
+    // The control: a well-formed notice is accepted, and `was_started` defaults off.
+    await db.execute(notice("void", 1000, station!.id));
+    expect((await db.execute(sql`select was_started from kitchen_notices`)).rows).toEqual([
+      { was_started: 0 },
+    ]);
+
+    const kind = await captureError(() => db.execute(notice("lost", 1000, station!.id)));
+    expect(isRefusal(kind, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(kind)).toContain("kitchen_notices_kind_ck");
+    const zero = await captureError(() => db.execute(notice("void", 0, station!.id)));
+    expect(isRefusal(zero, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(zero)).toContain("kitchen_notices_quantity_ck");
+    const missing = await captureError(() =>
+      db.transaction((tx) => tx.execute(notice("void", 1000, randomUUID()))),
+    );
+    expect(isRefusal(missing, FOREIGN_KEY_VIOLATION)).toBe(true);
+
+    const movedTo = (kind: string) =>
+      sql`insert into kitchen_notices
+            (id, station_id, working_order_id, order_label, kind, line_name, quantity, moved_to,
+             created_at)
+          values (${randomUUID()}, ${station!.id}, ${orderId}, '#1', ${kind}, 'Burger', 1000,
+                  'Mesa 7', ${new Date().toISOString()})`;
+    // The control: a move names the table it went to.
+    await db.execute(movedTo("moved"));
+    const onVoid = await captureError(() => db.execute(movedTo("void")));
+    expect(isRefusal(onVoid, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(onVoid)).toContain("kitchen_notices_moved_to_ck");
   });
 });

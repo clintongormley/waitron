@@ -5,7 +5,9 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   diningTables,
   locations,
+  printJobs,
   tableServiceStatuses,
+  ticketItems,
   tills,
   withTransaction,
   workingOrderLines,
@@ -14,7 +16,8 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { listStationNotices } from "@waitron/venue-service";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -26,18 +29,35 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
+  thousandthsToDecimal,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable, setTableStatus } from "./tables.js";
 import {
+  addTabRound,
+  advanceTicketItem,
   createOpenOrder,
   joinTable,
+  listExpoQueue,
+  listStationQueue,
+  markLineServed,
+  mergeTabs,
+  moveTab,
+  moveTabLines,
   openTab,
   splitOffCheck,
   priceStoredOrder,
+  sendLines,
+  transferLines,
   unjoinTable,
+  updateOrderLine,
+  voidTabLine,
 } from "./working-order.js";
+import { createCourse } from "./kitchen.js";
+import { createPrinter } from "@waitron/printing";
+import { attachPrinterToStation } from "./station-printers.js";
+import { printedLines } from "./testing/decode-ticket.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -554,5 +574,804 @@ it("retains the frozen options answers and the frozen names when a dish quantity
     expect(check.lines[0]!.quantity).toBe("1.000");
     expect(source.total).toBe("3.00");
     expect(check.total).toBe("1.50");
+  });
+});
+
+/** A default kitchen station, with each product's route re-pointed at it, so a round fires there. */
+async function withKitchen(cfg: TillConfig): Promise<string> {
+  const stationId = await seedKitchenStation(db, { locationId: cfg.locationId });
+  const offers = await asApp(cfg, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
+  offersByCfg.set(cfg, offers);
+  return stationId;
+}
+
+/** Each line of an order in `line_no` order, with its ticket item, if any. */
+async function linesWithTickets(orderId: string) {
+  return db
+    .select({
+      id: workingOrderLines.id,
+      quantity: workingOrderLines.quantity,
+      sentAt: workingOrderLines.sentAt,
+      servedAt: workingOrderLines.servedAt,
+      courseId: workingOrderLines.courseId,
+      note: workingOrderLines.note,
+      extraListId: workingOrderLines.extraListId,
+      ticketId: ticketItems.id,
+      ticketOrderId: ticketItems.workingOrderId,
+      ticketQuantity: ticketItems.quantity,
+      ticketState: ticketItems.state,
+    })
+    .from(workingOrderLines)
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(eq(workingOrderLines.workingOrderId, orderId))
+    .orderBy(workingOrderLines.lineNo);
+}
+
+/** Every column of a line's ticket item, or `undefined` when it has none. */
+async function ticketOf(lineId: string) {
+  const [row] = await db
+    .select()
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderLineId, lineId));
+  return row;
+}
+
+async function revisionOf(orderId: string): Promise<number> {
+  const [row] = await db
+    .select({ revision: workingOrders.revision })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  return row!.revision;
+}
+
+/** A cloud-poll printer attached to the station, so a fire or a correction there prints. */
+async function printerAt(cfg: TillConfig, stationId: string): Promise<string> {
+  return asApp(cfg, async (tx) => {
+    const { id } = await createPrinter(
+      tx,
+      { locationId: cfg.locationId },
+      {
+        name: `P-${randomUUID().slice(0, 8)}`,
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      },
+    );
+    await attachPrinterToStation(tx, { stationId, printerId: id });
+    return id;
+  });
+}
+
+/** What each job enqueued for the printer prints, oldest first. */
+async function printedBy(printerId: string): Promise<string[][]> {
+  const jobs = await db
+    .select({ payload: printJobs.payload })
+    .from(printJobs)
+    .where(eq(printJobs.printerId, printerId))
+    .orderBy(sql`rowid`);
+  return jobs.map((job) => printedLines(job.payload));
+}
+
+/** The kitchen notices recorded against the orders, oldest first. */
+async function noticesOn(...orderIds: string[]) {
+  const { rows } = await db.execute<{ working_order_id: string; kind: string; quantity: number }>(
+    sql`select working_order_id, kind, quantity from kitchen_notices
+      where working_order_id in (${sql.join(
+        orderIds.map((id) => sql`${id}`),
+        sql`, `,
+      )})
+      order by rowid`,
+  );
+  return rows.map((row) => ({
+    orderId: row.working_order_id,
+    kind: row.kind,
+    quantity: row.quantity,
+  }));
+}
+
+/** Each order at the station, with the quantities its items ask for. */
+async function queueAt(cfg: TillConfig, stationId: string) {
+  const groups = await asApp(cfg, (tx) => listStationQueue(tx, stationId));
+  return Object.fromEntries(
+    groups.map((group) => [group.orderId, group.items.map((item) => item.quantity)]),
+  );
+}
+
+/** A tab at each of the venue's two tables, the first holding one round of Agua. */
+async function twoTabs(
+  seeded: Seeded,
+  round: { quantity: string; hold?: boolean },
+): Promise<{ from: string; to: string }> {
+  const { cfg, aguaId, tableId, tableId2 } = seeded;
+  const { tabId: from } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+  const { tabId: to } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId: tableId2 }));
+  await asApp(cfg, (tx) =>
+    addTabRound(tx, cfg, from, [
+      {
+        menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId),
+        quantity: round.quantity,
+        ...(round.hold === true ? { hold: true } : {}),
+      },
+    ]),
+  );
+  return { from, to };
+}
+
+/**
+ * The owner's decision of 2026-09-26, overturning plan D10 where they conflict: a partial split gives
+ * the moved row its own ticket item, copied from the original, whose own quantity drops by the part
+ * moved; a line the kitchen has started may be split; and a split onto a check, at the same table,
+ * tells the kitchen nothing.
+ */
+describe("splitting a line the kitchen has", () => {
+  it("gives the split row a ticket of its own, copied from the original, and takes the part moved off the original's", async () => {
+    const { cfg, aguaId, tableId } = await setupVenue();
+    const stationId = await withKitchen(cfg);
+    const course = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Principales", displayOrder: 1 }),
+    );
+    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        {
+          menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId),
+          quantity: "3",
+          courseId: course.id,
+          note: "sin hielo",
+        },
+      ]),
+    );
+    await asApp(cfg, (tx) => markLineServed(tx, cfg, tabId, 1));
+    const [before] = await linesWithTickets(tabId);
+    const original = (await ticketOf(before!.id))!;
+    expect(original).toMatchObject({ quantity: 3000, courseId: course.id, note: "sin hielo" });
+    expect(original.firedAt).not.toBeNull();
+
+    const { checkId } = await asApp(cfg, (tx) =>
+      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    );
+
+    const [source] = await linesWithTickets(tabId);
+    const [split] = await linesWithTickets(checkId);
+    expect(source!.sentAt).not.toBeNull();
+    expect(source!.servedAt).not.toBeNull();
+    expect(split).toMatchObject({
+      quantity: 1000,
+      sentAt: source!.sentAt,
+      servedAt: source!.servedAt,
+      courseId: course.id,
+      note: "sin hielo",
+      extraListId: null,
+    });
+    expect(await ticketOf(source!.id)).toEqual({ ...original, quantity: 2000 });
+    expect(split!.ticketId).not.toBeNull();
+    expect(split!.ticketId).not.toBe(original.id);
+    expect(await ticketOf(split!.id)).toEqual({
+      ...original,
+      id: split!.ticketId,
+      workingOrderId: checkId,
+      workingOrderLineId: split!.id,
+      quantity: 1000,
+    });
+    // The station still makes the three it was asked for, now as two rows.
+    expect(await queueAt(cfg, stationId)).toEqual({
+      [tabId]: [thousandthsToDecimal(2000)],
+      [checkId]: [thousandthsToDecimal(1000)],
+    });
+  });
+
+  it("takes the part moved off the line's quantity where the original ticket states none", async () => {
+    const { cfg, aguaId, tableId } = await setupVenue();
+    await withKitchen(cfg);
+    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "3" },
+      ]),
+    );
+    const [line] = await linesWithTickets(tabId);
+    // As every ticket item written before the column was.
+    await db.update(ticketItems).set({ quantity: null }).where(eq(ticketItems.id, line!.ticketId!));
+
+    const { checkId } = await asApp(cfg, (tx) =>
+      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    );
+
+    expect((await linesWithTickets(tabId))[0]).toMatchObject({ ticketQuantity: 2000 });
+    expect((await linesWithTickets(checkId))[0]).toMatchObject({ ticketQuantity: 1000 });
+  });
+
+  it.each(["preparing", "ready"] as const)(
+    "splits a %s line, the split row's ticket in the same state, and still refuses an edit of either row",
+    async (state) => {
+      const { cfg, aguaId, tableId } = await setupVenue();
+      await withKitchen(cfg);
+      const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+      await asApp(cfg, (tx) =>
+        addTabRound(tx, cfg, tabId, [
+          { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "2" },
+        ]),
+      );
+      const [line] = await linesWithTickets(tabId);
+      await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, line!.ticketId!, "preparing"));
+      if (state === "ready") {
+        await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, line!.ticketId!, "ready"));
+      }
+      const original = (await ticketOf(line!.id))!;
+
+      const { checkId } = await asApp(cfg, (tx) =>
+        splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+      );
+
+      const [source] = await linesWithTickets(tabId);
+      const [split] = await linesWithTickets(checkId);
+      expect(source).toMatchObject({ quantity: 1000, ticketQuantity: 1000, ticketState: state });
+      expect(await ticketOf(split!.id)).toEqual({
+        ...original,
+        id: split!.ticketId,
+        workingOrderId: checkId,
+        workingOrderLineId: split!.id,
+        quantity: 1000,
+      });
+      for (const [orderId, ticketItemId] of [
+        [tabId, source!.ticketId],
+        [checkId, split!.ticketId],
+      ] as const) {
+        const revision = await revisionOf(orderId);
+        await expect(
+          asApp(cfg, (tx) => updateOrderLine(tx, cfg, orderId, 1, { note: "otra" }, revision)),
+        ).rejects.toMatchObject({ code: "ticket.already_started", params: { ticketItemId } });
+      }
+    },
+  );
+
+  it("moves a whole line the kitchen has started with its ticket", async () => {
+    const { cfg, aguaId, tableId } = await setupVenue();
+    await withKitchen(cfg);
+    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "2" },
+      ]),
+    );
+    const [line] = await linesWithTickets(tabId);
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, line!.ticketId!, "preparing"));
+
+    const { checkId } = await asApp(cfg, (tx) => splitOffCheck(tx, cfg, tabId, [{ lineNo: 1 }]));
+
+    expect(await linesWithTickets(tabId)).toEqual([]);
+    expect((await linesWithTickets(checkId))[0]).toMatchObject({
+      id: line!.id,
+      quantity: 2000,
+      ticketId: line!.ticketId,
+      ticketOrderId: checkId,
+      ticketState: "preparing",
+    });
+  });
+
+  it("tells the kitchen nothing when the split goes onto a check: no notice and no print job", async () => {
+    const seeded = await setupVenue();
+    const { cfg } = seeded;
+    const stationId = await withKitchen(cfg);
+    const printerId = await printerAt(cfg, stationId);
+    const { from } = await twoTabs(seeded, { quantity: "4" });
+    const [line] = await linesWithTickets(from);
+    const printed = await printedBy(printerId);
+    expect(printed).toHaveLength(1);
+
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, line!.ticketId!, "preparing"));
+    const { checkId } = await asApp(cfg, (tx) =>
+      splitOffCheck(tx, cfg, from, [{ lineNo: 1, quantity: "1" }]),
+    );
+
+    expect(await printedBy(printerId)).toEqual(printed);
+    expect(await noticesOn(from, checkId)).toEqual([]);
+    expect(await queueAt(cfg, stationId)).toEqual({
+      [from]: [thousandthsToDecimal(3000)],
+      [checkId]: [thousandthsToDecimal(1000)],
+    });
+  });
+
+  it("voids the part moved to another tab at the kitchen, leaving the original's", async () => {
+    const seeded = await setupVenue();
+    const { cfg } = seeded;
+    const stationId = await withKitchen(cfg);
+    const printerId = await printerAt(cfg, stationId);
+    const { from, to } = await twoTabs(seeded, { quantity: "2" });
+    await asApp(cfg, (tx) => transferLines(tx, cfg, from, to, [{ lineNo: 1, quantity: "1" }]));
+
+    await asApp(cfg, (tx) => voidTabLine(tx, cfg, to, 1));
+
+    expect(await noticesOn(from, to)).toEqual([
+      { orderId: to, kind: "moved", quantity: 1000 },
+      { orderId: to, kind: "void", quantity: 1000 },
+    ]);
+    const slip = (await printedBy(printerId)).at(-1)!;
+    expect(slip).toContain("*** VOID ***");
+    expect(slip).toContain("1.000 ea x Agua");
+    expect(await queueAt(cfg, stationId)).toEqual({ [from]: [thousandthsToDecimal(1000)] });
+  });
+
+  it("voids only what the original row still asks for, leaving the part moved to another tab", async () => {
+    const seeded = await setupVenue();
+    const { cfg } = seeded;
+    const stationId = await withKitchen(cfg);
+    const { from, to } = await twoTabs(seeded, { quantity: "2" });
+    await asApp(cfg, (tx) => transferLines(tx, cfg, from, to, [{ lineNo: 1, quantity: "1" }]));
+
+    await asApp(cfg, (tx) => voidTabLine(tx, cfg, from, 1));
+
+    expect(await noticesOn(from, to)).toEqual([
+      { orderId: to, kind: "moved", quantity: 1000 },
+      { orderId: from, kind: "void", quantity: 1000 },
+    ]);
+    expect((await linesWithTickets(to))[0]).toMatchObject({ ticketQuantity: 1000 });
+    expect(await queueAt(cfg, stationId)).toEqual({ [to]: [thousandthsToDecimal(1000)] });
+  });
+
+  it("splits a held line so each tab's Send fires its own part", async () => {
+    const seeded = await setupVenue();
+    const { cfg } = seeded;
+    const stationId = await withKitchen(cfg);
+    const printerId = await printerAt(cfg, stationId);
+    const { from, to } = await twoTabs(seeded, { quantity: "2", hold: true });
+    await asApp(cfg, (tx) => transferLines(tx, cfg, from, to, [{ lineNo: 1, quantity: "1" }]));
+    expect(await printedBy(printerId)).toEqual([]);
+
+    await asApp(cfg, (tx) => sendLines(tx, cfg, to, []));
+
+    const [moved] = await linesWithTickets(to);
+    expect(moved!.sentAt).not.toBeNull();
+    expect((await ticketOf(moved!.id))!.firedAt).not.toBeNull();
+    const [kept] = await linesWithTickets(from);
+    expect(kept!.sentAt).toBeNull();
+    expect((await ticketOf(kept!.id))!.firedAt).toBeNull();
+    expect(await printedBy(printerId)).toHaveLength(1);
+    expect((await printedBy(printerId))[0]).toContain("1.000 ea x Agua");
+
+    await asApp(cfg, (tx) => sendLines(tx, cfg, from, []));
+
+    expect((await linesWithTickets(from))[0]!.sentAt).not.toBeNull();
+    expect(await ticketOf(kept!.id)).toMatchObject({ quantity: 1000 });
+    expect((await ticketOf(kept!.id))!.firedAt).not.toBeNull();
+    const printed = await printedBy(printerId);
+    expect(printed).toHaveLength(2);
+    expect(printed[1]).toContain("1.000 ea x Agua");
+    expect(printed[1]).not.toContain("2.000 ea x Agua");
+  });
+
+  it("names the origin's table on the slip voiding the part moved to a check", async () => {
+    const { cfg, aguaId, tableId } = await setupVenue();
+    const stationId = await withKitchen(cfg);
+    const printerId = await printerAt(cfg, stationId);
+    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "3" },
+      ]),
+    );
+    const [ticket] = await printedBy(printerId);
+    expect(ticket).toContain("T1");
+    const { checkId } = await asApp(cfg, (tx) =>
+      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "2" }]),
+    );
+    const revision = await revisionOf(checkId);
+
+    await asApp(cfg, (tx) => updateOrderLine(tx, cfg, checkId, 1, { quantity: "1" }, revision));
+
+    const slip = (await printedBy(printerId)).at(-1)!;
+    expect(slip).toContain("*** VOID ***");
+    expect(slip).toContain("T1");
+    expect(slip).toContain("1.000 ea x Agua");
+    expect(await noticesOn(checkId)).toEqual([{ orderId: checkId, kind: "void", quantity: 1000 }]);
+  });
+
+  it("names the origin's table for the check on the pass board", async () => {
+    const { cfg, aguaId, tableId } = await setupVenue();
+    await withKitchen(cfg);
+    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "2" },
+      ]),
+    );
+    const { checkId } = await asApp(cfg, (tx) =>
+      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    );
+    // A table pointing at the order wins over the order's own label.
+    await db.update(workingOrders).set({ label: "Terraza" }).where(eq(workingOrders.id, tabId));
+
+    const board = await asApp(cfg, (tx) => listExpoQueue(tx, cfg));
+
+    expect(Object.fromEntries(board.map((order) => [order.orderId, order.tableLabel]))).toEqual({
+      [tabId]: "T1",
+      [checkId]: "T1",
+    });
+  });
+
+  it("splits a line the kitchen does not have without making a ticket", async () => {
+    const { cfg, aguaId, tableId } = await setupVenue();
+    await withKitchen(cfg);
+    const { tabId } = await asApp(cfg, (tx) =>
+      openTabWith(tx, cfg, { tableId, lines: [{ productId: aguaId, quantity: "3" }] }),
+    );
+
+    const { checkId } = await asApp(cfg, (tx) =>
+      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    );
+
+    expect(await linesWithTickets(tabId)).toMatchObject([{ quantity: 2000, ticketId: null }]);
+    expect(await linesWithTickets(checkId)).toMatchObject([{ quantity: 1000, ticketId: null }]);
+  });
+});
+
+/**
+ * A check is paid straight after the split and cannot be sent (`sendLines` refuses anything but a
+ * tab), so held kitchen work never goes onto one.
+ */
+describe("splitting held kitchen work onto a check", () => {
+  it.each([
+    ["whole", undefined],
+    ["part", "1"],
+  ] as const)(
+    "refuses to move a held line (%s) onto a check, moving nothing, and still splits a fired one",
+    async (_, quantity) => {
+      const { cfg, aguaId, tableId } = await setupVenue();
+      await withKitchen(cfg);
+      const offer = offersByCfg.get(cfg)!.offerFor(aguaId);
+      const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+      await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "2" }]));
+      await asApp(cfg, (tx) =>
+        addTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "3", hold: true }]),
+      );
+      const before = await linesWithTickets(tabId);
+      const orderCount = async () =>
+        (await db.select({ id: workingOrders.id }).from(workingOrders)).length;
+      const ordersBefore = await orderCount();
+
+      await expect(
+        asApp(cfg, (tx) =>
+          splitOffCheck(tx, cfg, tabId, [
+            { lineNo: 1 },
+            quantity === undefined ? { lineNo: 2 } : { lineNo: 2, quantity },
+          ]),
+        ),
+      ).rejects.toMatchObject({ code: "tab.split_held_line", params: { tabId, lineNo: 2 } });
+
+      expect(await linesWithTickets(tabId)).toEqual(before);
+      expect(await orderCount()).toBe(ordersBefore);
+
+      const { checkId } = await asApp(cfg, (tx) =>
+        splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+      );
+      expect(await linesWithTickets(checkId)).toMatchObject([
+        { quantity: 1000, ticketQuantity: 1000 },
+      ]);
+    },
+  );
+});
+
+/** A station's notices, every field a cook reads, oldest first. */
+async function kitchenNoticesAt(cfg: TillConfig, stationId: string) {
+  return (await asApp(cfg, (tx) => listStationNotices(tx, cfg, stationId))).map((notice) => ({
+    stationId: notice.stationId,
+    workingOrderId: notice.workingOrderId,
+    orderLabel: notice.orderLabel,
+    kind: notice.kind,
+    lineName: notice.lineName,
+    quantity: notice.quantity,
+    note: notice.note,
+    wasStarted: notice.wasStarted,
+    movedTo: notice.movedTo,
+  }));
+}
+
+async function orderNumberOf(orderId: string): Promise<number> {
+  const [row] = await db
+    .select({ orderNumber: workingOrders.orderNumber })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  return row!.orderNumber;
+}
+
+/**
+ * A table in the venue's tables zone at a chosen id. A joined tab's kitchen slips name its table with
+ * the lowest id (`readOrderHeader`), so a test that joins tables picks the ids to say which.
+ */
+async function tableAt(cfg: TillConfig, id: string, label: string): Promise<string> {
+  await db
+    .insert(diningTables)
+    .values({ id, locationId: cfg.locationId, label, zoneId: offersByCfg.get(cfg)!.zoneId });
+  return id;
+}
+const LOW_ID = "00000000-0000-4000-8000-000000000001";
+const HIGH_ID = "ffffffff-ffff-4fff-bfff-fffffffffff1";
+
+/** A MOVED slip's printed lines, its time matched by shape. */
+function movedSlip(tables: string, orderNumbers: string, item: string): unknown[] {
+  return [
+    "*** MOVED ***",
+    "Cocina",
+    tables,
+    orderNumbers,
+    expect.stringMatching(/^\d\d:\d\d$/),
+    item,
+    "",
+  ];
+}
+
+/**
+ * The owner's decision of 2026-09-26 (lane C questions, menus Task 7b item 4): moving sent work to
+ * another table is allowed, and the kitchen is told. The table compared is the one a correction slip
+ * names for the order (`readOrderHeader`), read before the move and after it.
+ */
+describe("moving sent work to another table tells the kitchen", () => {
+  it("records a moved notice for the part of a sent line transferred, and prints a MOVED slip naming both tables", async () => {
+    const seeded = await setupVenue();
+    const { cfg } = seeded;
+    const stationId = await withKitchen(cfg);
+    const printerId = await printerAt(cfg, stationId);
+    const { from, to } = await twoTabs(seeded, { quantity: "4" });
+    const [fromNumber, toNumber] = [await orderNumberOf(from), await orderNumberOf(to)];
+
+    await asApp(cfg, (tx) => transferLines(tx, cfg, from, to, [{ lineNo: 1, quantity: "1" }]));
+
+    expect(await kitchenNoticesAt(cfg, stationId)).toEqual([
+      {
+        stationId,
+        workingOrderId: to,
+        orderLabel: `#${toNumber}`,
+        kind: "moved",
+        lineName: "Agua",
+        quantity: thousandthsToDecimal(1000),
+        note: null,
+        wasStarted: false,
+        movedTo: "T2",
+      },
+    ]);
+    const printed = await printedBy(printerId);
+    expect(printed).toHaveLength(2);
+    expect(printed[1]).toEqual(
+      movedSlip("T1 -> T2", `${fromNumber} -> ${toNumber}`, "1.000 ea x Agua"),
+    );
+    // The move itself still happens.
+    expect(await queueAt(cfg, stationId)).toEqual({
+      [from]: [thousandthsToDecimal(3000)],
+      [to]: [thousandthsToDecimal(1000)],
+    });
+  });
+
+  it("records a started whole line transferred at the quantity the kitchen was asked for, with no printer", async () => {
+    const seeded = await setupVenue();
+    const { cfg } = seeded;
+    const stationId = await withKitchen(cfg);
+    const { from, to } = await twoTabs(seeded, { quantity: "2" });
+    const [line] = await linesWithTickets(from);
+    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, line!.ticketId!, "preparing"));
+
+    await asApp(cfg, (tx) => transferLines(tx, cfg, from, to, [{ lineNo: 1 }]));
+
+    expect(await kitchenNoticesAt(cfg, stationId)).toEqual([
+      {
+        stationId,
+        workingOrderId: to,
+        orderLabel: `#${await orderNumberOf(to)}`,
+        kind: "moved",
+        lineName: "Agua",
+        quantity: thousandthsToDecimal(2000),
+        note: null,
+        wasStarted: true,
+        movedTo: "T2",
+      },
+    ]);
+    expect(await db.select({ id: printJobs.id }).from(printJobs)).toEqual([]);
+    expect(await linesWithTickets(from)).toEqual([]);
+    expect((await linesWithTickets(to))[0]).toMatchObject({ id: line!.id, ticketOrderId: to });
+  });
+
+  it("tells the kitchen nothing of held work transferred, which it has not been sent", async () => {
+    const seeded = await setupVenue();
+    const { cfg } = seeded;
+    const stationId = await withKitchen(cfg);
+    const printerId = await printerAt(cfg, stationId);
+    const { from, to } = await twoTabs(seeded, { quantity: "2", hold: true });
+
+    await asApp(cfg, (tx) => transferLines(tx, cfg, from, to, [{ lineNo: 1, quantity: "1" }]));
+
+    expect(await kitchenNoticesAt(cfg, stationId)).toEqual([]);
+    expect(await printedBy(printerId)).toEqual([]);
+    expect((await linesWithTickets(to))[0]).toMatchObject({ quantity: 1000 });
+  });
+
+  it("records a moved notice and slip for sent work an unjoin takes to the detached table", async () => {
+    const { cfg, aguaId } = await setupVenue();
+    const stationId = await withKitchen(cfg);
+    const printerId = await printerAt(cfg, stationId);
+    const low = await tableAt(cfg, LOW_ID, "Barra 1");
+    const high = await tableAt(cfg, HIGH_ID, "Barra 2");
+    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId: low }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "3" },
+      ]),
+    );
+    await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, high));
+
+    const { tabId: newTabId } = await asApp(cfg, (tx) =>
+      unjoinTable(tx, cfg, tabId, high, [{ lineNo: 1, quantity: "1" }]),
+    );
+
+    const [number, newNumber] = [await orderNumberOf(tabId), await orderNumberOf(newTabId!)];
+    expect(await kitchenNoticesAt(cfg, stationId)).toEqual([
+      {
+        stationId,
+        workingOrderId: newTabId,
+        orderLabel: `#${newNumber}`,
+        kind: "moved",
+        lineName: "Agua",
+        quantity: thousandthsToDecimal(1000),
+        note: null,
+        wasStarted: false,
+        movedTo: "Barra 2",
+      },
+    ]);
+    expect((await printedBy(printerId)).at(-1)).toEqual(
+      movedSlip("Barra 1 -> Barra 2", `${number} -> ${newNumber}`, "1.000 ea x Agua"),
+    );
+  });
+
+  it("tells the kitchen when an unjoin takes sent work to a joined table its slips already named", async () => {
+    const { cfg, aguaId } = await setupVenue();
+    const stationId = await withKitchen(cfg);
+    const printerId = await printerAt(cfg, stationId);
+    const low = await tableAt(cfg, LOW_ID, "Barra 1");
+    const high = await tableAt(cfg, HIGH_ID, "Barra 2");
+    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId: high }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "2" },
+      ]),
+    );
+    const [ticket] = await printedBy(printerId);
+    expect(ticket).toContain("Barra 2");
+    // The lower id joins, so the tab's correction slips now name "Barra 1".
+    await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, low));
+
+    const { tabId: newTabId } = await asApp(cfg, (tx) =>
+      unjoinTable(tx, cfg, tabId, low, [{ lineNo: 1 }]),
+    );
+
+    const [number, newNumber] = [await orderNumberOf(tabId), await orderNumberOf(newTabId!)];
+    expect((await kitchenNoticesAt(cfg, stationId)).map((notice) => notice.movedTo)).toEqual([
+      "Barra 1",
+    ]);
+    expect((await printedBy(printerId)).at(-1)).toEqual(
+      movedSlip("Barra 2 -> Barra 1", `${number} -> ${newNumber}`, "2.000 ea x Agua"),
+    );
+  });
+
+  it("records a moved notice and slip for the sent work of a tab merged into one at another table", async () => {
+    const seeded = await setupVenue();
+    const { cfg } = seeded;
+    const stationId = await withKitchen(cfg);
+    const printerId = await printerAt(cfg, stationId);
+    const { from, to } = await twoTabs(seeded, { quantity: "2" });
+
+    await asApp(cfg, (tx) => mergeTabs(tx, cfg, to, from, { freeSourceTable: true }));
+
+    const [fromNumber, toNumber] = [await orderNumberOf(from), await orderNumberOf(to)];
+    expect(await kitchenNoticesAt(cfg, stationId)).toEqual([
+      {
+        stationId,
+        workingOrderId: to,
+        orderLabel: `#${toNumber}`,
+        kind: "moved",
+        lineName: "Agua",
+        quantity: thousandthsToDecimal(2000),
+        note: null,
+        wasStarted: false,
+        movedTo: "T2",
+      },
+    ]);
+    expect((await printedBy(printerId)).at(-1)).toEqual(
+      movedSlip("T1 -> T2", `${fromNumber} -> ${toNumber}`, "2.000 ea x Agua"),
+    );
+    expect(await queueAt(cfg, stationId)).toEqual({ [to]: [thousandthsToDecimal(2000)] });
+  });
+
+  it("tells the kitchen nothing when a merge leaves the work under the table its slips already name", async () => {
+    const { cfg, aguaId } = await setupVenue();
+    const stationId = await withKitchen(cfg);
+    const printerId = await printerAt(cfg, stationId);
+    const low = await tableAt(cfg, LOW_ID, "Barra 1");
+    const high = await tableAt(cfg, HIGH_ID, "Barra 2");
+    const { tabId: from } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId: low }));
+    const { tabId: into } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId: high }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, from, [
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "2" },
+      ]),
+    );
+    const printed = await printedBy(printerId);
+
+    // The source table joins the tab it merges into, and has the lower id, so the kitchen's
+    // slips for the merged tab keep naming it.
+    await asApp(cfg, (tx) => mergeTabs(tx, cfg, into, from, { freeSourceTable: false }));
+
+    expect(await kitchenNoticesAt(cfg, stationId)).toEqual([]);
+    expect(await printedBy(printerId)).toEqual(printed);
+    expect(await queueAt(cfg, stationId)).toEqual({ [into]: [thousandthsToDecimal(2000)] });
+  });
+
+  it("tells the kitchen nothing when a check merges back into the tab it was split from", async () => {
+    const { cfg, aguaId, tableId } = await setupVenue();
+    const stationId = await withKitchen(cfg);
+    const printerId = await printerAt(cfg, stationId);
+    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "2" },
+      ]),
+    );
+    const { checkId } = await asApp(cfg, (tx) =>
+      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    );
+    const printed = await printedBy(printerId);
+
+    await asApp(cfg, (tx) => mergeTabs(tx, cfg, tabId, checkId, { freeSourceTable: true }));
+
+    expect(await kitchenNoticesAt(cfg, stationId)).toEqual([]);
+    expect(await printedBy(printerId)).toEqual(printed);
+    expect(await queueAt(cfg, stationId)).toEqual({
+      [tabId]: [thousandthsToDecimal(1000), thousandthsToDecimal(1000)],
+    });
+  });
+
+  it("records a moved notice and slip for each sent item of a party moved to another table, and none for held work", async () => {
+    const { cfg, aguaId, tableId, tableId2 } = await setupVenue();
+    const stationId = await withKitchen(cfg);
+    const printerId = await printerAt(cfg, stationId);
+    const offer = offersByCfg.get(cfg)!.offerFor(aguaId);
+    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "2" }]));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "5", hold: true }]),
+    );
+
+    await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, tableId2));
+
+    const number = await orderNumberOf(tabId);
+    expect(await kitchenNoticesAt(cfg, stationId)).toEqual([
+      {
+        stationId,
+        workingOrderId: tabId,
+        orderLabel: `#${number}`,
+        kind: "moved",
+        lineName: "Agua",
+        quantity: thousandthsToDecimal(2000),
+        note: null,
+        wasStarted: false,
+        movedTo: "T2",
+      },
+    ]);
+    const printed = await printedBy(printerId);
+    expect(printed).toHaveLength(2);
+    expect(printed[1]).toEqual(movedSlip("T1 -> T2", `${number}`, "2.000 ea x Agua"));
+    const [target] = await db
+      .select({ tabId: diningTables.tabId })
+      .from(diningTables)
+      .where(eq(diningTables.id, tableId2));
+    expect(target!.tabId).toBe(tabId);
+  });
+
+  it("records a moved notice for sent lines moved whole onto a tab at another table", async () => {
+    const seeded = await setupVenue();
+    const { cfg } = seeded;
+    const stationId = await withKitchen(cfg);
+    const { from, to } = await twoTabs(seeded, { quantity: "2" });
+
+    await asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to));
+
+    expect(await noticesOn(from, to)).toEqual([{ orderId: to, kind: "moved", quantity: 2000 }]);
+    expect(await queueAt(cfg, stationId)).toEqual({ [to]: [thousandthsToDecimal(2000)] });
   });
 });

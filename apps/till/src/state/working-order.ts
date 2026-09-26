@@ -128,6 +128,8 @@ export class WorkingOrderStore {
    * never reaches the filed sale.
    */
   #dirty = false;
+  /** The server revision the persisted order's copy is at; meaningless until {@link persisted}. */
+  #revision = 0;
 
   /** Changes only on {@link clear} and {@link loadFrom}. */
   get id(): string {
@@ -160,10 +162,19 @@ export class WorkingOrderStore {
     return this.#dirty;
   }
 
+  get revision(): number {
+    return this.#revision;
+  }
+
   /** No `"changed"` notification: not a rendering concern. */
   markPersisted(): void {
     this.#persisted = true;
     this.#dirty = false;
+  }
+
+  /** After a save of this copy landed, at the revision the server answered. */
+  markSaved(revision: number): void {
+    this.#revision = revision;
   }
 
   get #pricedOrder(): Priced {
@@ -199,8 +210,8 @@ export class WorkingOrderStore {
   }
 
   /**
-   * An edit sends each line without its not-offered picks, so the server re-prices the order without
-   * them; they leave the basket now to match. No prompt: the retrieve banner
+   * An edit sends each line without its not-offered picks, so the server takes them off the order;
+   * they leave the basket now to match. No prompt: the retrieve banner
    * (`held.extra_not_offered`) already said that changing the order removes them.
    */
   #markDirty(): void {
@@ -289,13 +300,15 @@ export class WorkingOrderStore {
     this.#invalidatePricing();
     this.#persisted = false;
     this.#dirty = false;
+    this.#revision = 0;
     this.emit("changed");
   }
 
   /** Adopts a RETRIEVED order's `id` verbatim, so paying it keys the same idempotency slot the server
-   * stored it under. */
-  loadFrom(id: string, lines: OrderLine[], label?: string): void {
+   * stored it under, and the `revision` its copy was read at. */
+  loadFrom(id: string, lines: OrderLine[], label?: string, revision = 0): void {
     this.#id = id;
+    this.#revision = revision;
     this.#lines.length = 0;
     this.#lines.push(...lines);
     this.#label = label;

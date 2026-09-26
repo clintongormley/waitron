@@ -414,7 +414,6 @@ describe("WorkingOrderStore", () => {
     s.addProduct(jamon, "0.100"); // a prior edit → dirty
     expect(s.dirty).toBe(true);
     s.loadFrom("held-1", [{ product: cafe, quantity: "1" }], "Mesa 4");
-    // An unedited retrieve→pay must not re-sync, which would re-price at pay time.
     expect(s.dirty).toBe(false);
   });
 
@@ -489,7 +488,7 @@ describe("WorkingOrderStore", () => {
   });
 
   // An unedited retrieved order is paid from its stored lines, which still bill these picks. An edit
-  // sends the lines without them, so the server replaces the whole order and re-prices it.
+  // sends the lines without them, so the server takes them off the order.
   describe("retrieved picks no list offers any more", () => {
     const milk = { productId: "p-milk", name: "Leche", price: "0.75", quantity: 2 };
     function loaded(): WorkingOrderStore {

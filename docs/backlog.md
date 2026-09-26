@@ -371,6 +371,21 @@ inserts create library sections and the update refuses any other, and none of th
 that file sets an image. So when Task 3 lets a menu's list carry a photo, link it to the menu editor or
 narrow the link to library sections.
 
+**A joined tab's kitchen slips can name a table its ticket did not print.** Correction and MOVED
+slips name a joined tab's lowest-id table (`readOrderHeader`, `apps/server/src/kitchen-print.ts`),
+so after a join a MOVED slip's "from" can name the other table; recording each ticket's printed
+table would fix it.
+
+**A line moved onto a split CHECK cannot be voided from the check.** `voidTabLine`
+(`apps/server/src/working-order.ts`) calls `assertAnchoredTabOpen`, which refuses `tab.not_open`
+for an open order no table points at, and a check is exactly that; `voidTabLine` did the same on
+`main` before menus Task 7b. What Task 7b adds (owner decision 2026-09-26): a part of a line the
+kitchen has started can now be split onto a check, so the kitchen's made-but-cancelled part cannot
+be voided there. A check can be merged back into its tab (`mergeTabs`, "tells the kitchen nothing
+when a check merges back into the tab it was split from" in `apps/server/src/split-bill.test.ts`).
+**Next action:** an owner decision — does a check get Void, with its kitchen notice, or do staff
+merge the check back into its tab first?
+
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
 shared look, and the rules for it live in [design-system.md](developers/design-system.md). That
 document is the contract, and it grows as we go: each screen tends to raise a question the rules do
@@ -885,7 +900,12 @@ rows: **this task needs no venue reset of its own.** What it left open:
   class, category and allergens, so a retrieved line can now show values that differ from what was
   billed. **Next action (a follow-up, not one of the plan's tasks):** save or read the chosen
   variant's values for a retrieved line.
-- **The server lets a tab split take a fraction of a whole-unit line.** `carveOffLines`
+- **DONE 2026-09-26 (menus plan Task 7b, branch `feat/menus-order-edits`):** `carveOffLines` now
+  refuses a quantity finer than the line's `unit_precision` with `tab.transfer_quantity_invalid`
+  (`assertQuantityPrecision`). Pinned through a transfer, which shares `carveOffLines` with the
+  split: "throws tab.transfer_quantity_invalid for a fraction of a line counted in whole units"
+  (`apps/server/src/transfer-lines.test.ts`). The entry as it stood:
+  **The server lets a tab split take a fraction of a whole-unit line.** `carveOffLines`
   (`apps/server/src/working-order.ts`) checks only that the quantity is above zero and no more than
   the line's. I believe this predates the branch: #537 leaves that check untouched. The till now
   offers only whole numbers for such a line, using the line's frozen unit precision. **Next
@@ -1045,6 +1065,9 @@ the plain product path; see "A sale needs a zone" below.) What Task 9 leaves ope
   carries the same mark. The first edit takes the extra off the basket, because the till cannot
   send it and the server re-prices an edited order without it — pinned by "bills a parked extra
   that gained an Active variant until an edit omits it" (`apps/server/src/till-sale.test.ts`).
+  (2026-09-26, branch `feat/menus-order-edits`: paying now refuses an unsent extra that can no
+  longer be sold, so the banner no longer says the extra is charged; it says paying is refused in
+  that case.)
 - **Retrieving a held order reads the counter's CURRENT zone offer, not the zone the order was
   parked in.** `#onRetrieveOrder` (`apps/till/src/till-app.ts`) matches each line against the
   till's `products`, which hold the offers of the zone the counter is showing (loaded by
@@ -1211,24 +1234,11 @@ re-priced every line. The review also found a dish offering one product on two l
 the wrong list's price; `matchExtraChildren` now refuses to pair a stored extras child whenever the
 picked product is offered by more than one of the dish's active lists.
 
-- **That refusal is not a complete guard, and the residue is worth knowing before anyone relies on
-  it.** It counts the offers as they are NOW, while the ambiguity is a property of the offers the
-  stored child was written against. The escape is one specific edit: the list the STORED CHILD came
-  off is deactivated, or loses the product (`PATCH /management-api/modifiers/extras/:id`), between
-  the park and the edit, so the count comes back to one, the re-sent pick names the surviving list,
-  and the line is preserved at the old row's price. Traced through the code, not run. The other
-  direction is closed by something else: a pick naming a list that no longer offers the product is
-  refused outright by `validateExtraSelections`, and the line takes the replacement path. There are
-  two ways to close the escape and neither is free — pair on the child's frozen price as well as its
-  product and quantity, which gives up the deliberate price lock that "keeps extras rows and
-  customisation on a quantity-only edit" pins; or let the child line carry the list it came off,
-  which is what spec §3.5 rules out when it says an open order's child points at the product and not
-  the list. Keeping the price lock AND closing the escape needs the second. **Also not examined:**
-  the refusal sits on the held-order edit path, which is where the wrong price was measured being
-  written; whether any other path can pair a stored child with the wrong list's price was not looked
-  at. **Next action:** an owner decision on whether an OPEN-ORDER extras child may carry its list
-  id. It is not Task 9's — that one writes the FILED sale line, which holds no catalogue key
-  (decision 11).
+- **Superseded by menus plan Task 7b (branch `feat/menus-order-edits`):** a stored extras child now
+  records its list (`working_order_lines.extra_list_id`) and a stored child pairs with a pick on list,
+  product and quantity (`editLineExtras`, which replaced `matchExtraChildren`), so the refusal and the
+  escape it left are gone. The till reads each held pick's `listId` too
+  (`apps/till/src/state/held-extras.ts`) and no longer guesses the list.
 
 Task 9 has landed as **#469**: the filed sale line carries a dish's frozen answers in
 `sale_lines.option_snapshots` (core migration 0041), written by both filing routes, and the customer
@@ -1422,6 +1432,9 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   the server re-prices. A staff-name rename or a withdrawn label matches nothing, and the till
   surfaces `held.options_changed` rather than substituting the list's default. Landed inside Task 12
   after the first cut of the picker refused every such edit with `options.label_required`.
+  **Superseded 2026-09-26 by menus plan Task 7b (branch `feat/menus-order-edits`):** the server no
+  longer re-prices an edited line; a re-sent answer is frozen onto the same row at its stored price
+  (plan D10).
 - **A child extras row still renders FLAT in the tab drawer**, as its own row beside the dishes, with
   its own name, quantity and price — where the basket and the settled ticket both nest a child under
   its dish. It is now correctly skipped by the per-line action, the course picker and the split and
@@ -1535,7 +1548,10 @@ What the order path (the plan's Task 7) left behind:
   uses. A STAFF-name rename between the two sends therefore does not match: the till asks the
   operator to choose again, and the re-answered line takes the replacement path described here. A
   customer- or kitchen-name rename still re-sends and still lands on that path, at the server's own
-  by-value comparison.
+  by-value comparison. **Superseded by menus plan Task 7b (branch `feat/menus-order-edits`):** an
+  edit no longer re-prices or re-issues a line; a renamed answer is frozen onto the same row at its
+  stored price, because an answer carries no price (plan D10). Pinned by "keeps the price of a held
+  line whose options list was renamed between the two sends, freezing the new name".
 - **Two different signals say whether a dish is sold by weight, and they disagree — MEASURED.** The
   order path refuses an extras pick on a dish that is not priced `each`
   (`extras.unsupported_product`; the legacy payload's `options.`-prefixed twin is retired in
@@ -3460,7 +3476,12 @@ image constraints under *Detail → Box image*.
     "(pre-merge review)", "(I1)" and "skipped a tenant" in `health.test.ts`, "the new guard" in
     `config.test.ts`.
   - Found by #623 (`apps/server` part b: working-order, tabs, tables), not fixable in a
-    comments-only change. **Editing a held order that has already sent lines to the kitchen deletes
+    comments-only change. (The first finding is fixed by menus plan Task 7b on
+    `feat/menus-order-edits`: an edit that changes or removes a sent line recalls or voids it with a
+    kitchen notice and slip, the changed line is sent again, and a line the edit adds reaches the
+    kitchen as a round's would, held where its course or the whole tab is held; the "editing a line
+    the kitchen has and has not started" and "new work an edit adds" cases in
+    `apps/server/src/tabs.test.ts`.) **Editing a held order that has already sent lines to the kitchen deletes
     their ticket items and never re-sends the new lines.** `PUT /api/working-orders/:id` checks only
     that the order is open; any edit that is not a pure quantity change takes `updateHeldOrder`'s
     replacement path (`apps/server/src/working-order.ts`), which deletes every line and inserts new
@@ -7194,6 +7215,7 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 | Q15 (short payment = descuento) | a *descuento* agreed at/before issuance is outside the base (LIVA 78.Tres.2º) | **Closed** on primary source |
 | Q5(a) (one series per till) | a series belongs to the server-SIF; two concurrent SIFs need **disjoint** series | needs advisor |
 | **Q14 (precuenta → amendment log)** | a printed pre-bill may oblige an amendment log | **Open** — the interpretive hinge |
+| Q21 (pre-bill, or the invoice when a table asks for the bill) | the table screen prints no pre-bill; when one is built, printing it never fires held food and never marks a line sent (menus plan D10) | needs advisor |
 | F3 canje (`IDOtro`, a separate F3 series, `Destinatarios` XSD) | foreign recipient refused; F3 reuses `standard` | needs advisor / XSD before the first real filing |
 
 **The laboral advisor** (a *graduado social / gestoría*) has its own list in

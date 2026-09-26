@@ -187,6 +187,23 @@ export function currentBusinessDay(input: { timeZone: string; dayCutover: string
 }
 
 /**
+ * The start of the daily close's window ({@link businessDayWindow}) that holds `instant`, as the
+ * canonical ISO-8601 string this engine's timestamp columns hold.
+ */
+export function businessDayStart(
+  instant: Date,
+  input: { timeZone: string; dayCutover: string },
+): string {
+  validateTimeZone(input.timeZone);
+  validateCutover(input.dayCutover);
+  const day = businessDayOf(instant, input);
+  const start = businessDayBoundary(day, 0, input);
+  // `businessDayOf` reads the offset at the instant and the boundary the offset at the cutover; a
+  // cutover inside a clock change's hour can put that boundary after the instant.
+  return start <= instant.toISOString() ? start : businessDayBoundary(day, -1, input);
+}
+
+/**
  * The window of ONE business day ({@link windowBetween}), for a report that applies it to several
  * columns: its boundaries are computed once, here, not once per column.
  */

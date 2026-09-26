@@ -72,31 +72,29 @@ sides are built in the order the dish OFFERS its answers, which reads as a fixed
 one: it is a stored position, and three columns hold parts of it, each re-numbered from the body of
 whatever save writes it. `docs/developers/modifiers.md` lists all three with what writes each. So a
 line parked before one of those saves keeps the OLD order while the rebuilt side comes back in the
-new one — and a comparison pairing the two up position by position reads that as a changed answer
-and re-prices a quantity-only edit. That is why the pairing is order-independent
-(`sameOptionSelections`, `matchExtraChildren`). Measured on 2026-09-20 for BOTH comparators, through
-the column a product save writes: the options half and the extras half each re-issued every line
-under a new id and re-priced the dish.
+new one — and a comparison pairing the two up position by position reads that as a changed answer.
+That is why the pairing is order-independent (`sameOptionSelections`, and for extras
+`editLineExtras`, which replaced `matchExtraChildren` with menus plan D10). Measured on 2026-09-20
+for BOTH comparators, through the column a product save writes: the options half and the extras
+half each re-issued every line under a new id and re-priced the dish. Since plan D10 a changed
+answer no longer re-prices anything (an answer carries no price), but an order-dependent pairing
+would still remove a kept extra and price it again as a new pick.
 
-**A picked product that two of the dish's ACTIVE lists offer refuses the pairing.** A child line
-records the product it is, its quantity and the price it was sold at, and never the list that
-offered it — so the comparison cannot tell a quantity change from a pick that MOVED between two
-lists offering the same product at different prices, and it keeps the price of whichever row it
-lands on. Two picks EXCHANGED between such lists is a regression order-independence introduced, and
-was found by running; ONE pick MOVED between them predates it, and bills the old list's 1.00 in a
-checkout of `main` at `68e36c6aa`. Both now take the replacement path, which rewrites the whole
-order — every line loses its id and its price lock, not only the refused one. The refusal counts
-TODAY's offers, so one edit escapes it: the list the stored child came off losing the product, or
-being deactivated, between the two sends. `docs/developers/modifiers.md` states that gap and what
-closing it would cost.
+**A stored extras child records the list it came off (`working_order_lines.extra_list_id`), and a
+pick pairs with it only on the same list, product and quantity.** A pick moved between two lists
+offering the same product, or two picks exchanging counts between them, pairs with nothing and is a
+new pick, priced now; an unchanged pick keeps its child at its own list's stored price.
+`docs/developers/modifiers.md` has the detail.
 
 What covers it, in `apps/server/src/working-order.test.ts`: "keeps extras rows and customisation on
 a quantity-only edit" raises the offer's price and the extra's price underneath the edit and asserts
 the parent and its child keep their ids and locked prices; "keeps the line's id and locked price when
 two options lists change places" and "keeps each extras child on its own row when two extras lists
-change places" do the same across a reorder; "replaces the line when a pick moves to another list
-offering the same product" and "replaces the line when two lists offering the same product have
-their picks swapped" pin the refusal above, by the BILL rather than by an id — two picks exchanged
+change places" do the same across a reorder; "keeps an extra's list and stored price on a quantity-only
+edit when two lists offer it" pins the list pairing; "prices a pick now when it moves to another list
+offering the same product: it is a new pick" and "prices both picks now when two lists offering the
+same product exchange their counts: each is a new pick" pin its refusals, by the BILL rather than by
+an id — two picks exchanged
 between a 1.00 list and a 3.00 one cost 5.00, not the 7.00 a crossed pairing charges.
 
 ## A replay reports the original transaction facts; side effects are gated separately

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { floorZones, locations, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -390,6 +391,75 @@ describe("table + tab routes", () => {
     expect(state.find((t) => t.id === id)).toMatchObject({ state: "open-tab", tabLineCount: 1 });
   });
 
+  it("DELETE .../lines/:lineNo?quantity= voids that part of the line, and refuses a quantity it cannot void", async () => {
+    const { id } = (await (
+      await request("/api/tables", {
+        method: "POST",
+        body: JSON.stringify({ label: `V-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+      })
+    ).json()) as { id: string };
+    const { tabId } = (await (
+      await request(`/api/tables/${id}/tab`, { method: "POST", body: JSON.stringify({}) })
+    ).json()) as { tabId: string };
+    await request(`/api/working-orders/${tabId}/round`, {
+      method: "POST",
+      body: JSON.stringify({ lines: [{ menuItemId, quantity: "3" }] }),
+    });
+
+    for (const quantity of ["0", "4", "abc"]) {
+      const refused = await request(`/api/working-orders/${tabId}/lines/1?quantity=${quantity}`, {
+        method: "DELETE",
+      });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "tab.void_quantity_invalid", params: { tabId, lineNo: 1, quantity } },
+      });
+    }
+
+    const voided = await request(`/api/working-orders/${tabId}/lines/1?quantity=1`, {
+      method: "DELETE",
+    });
+    expect(voided.status).toBe(200);
+    const { lines } = (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as {
+      lines: { quantity: string }[];
+    };
+    expect(lines.map((line) => line.quantity)).toEqual(["2.000"]);
+  });
+
+  it("POST .../lines/send answers 409 product.unavailable for a recalled line whose product sold out", async () => {
+    const { id } = (await (
+      await request("/api/tables", {
+        method: "POST",
+        body: JSON.stringify({ label: `S-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+      })
+    ).json()) as { id: string };
+    const { tabId } = (await (
+      await request(`/api/tables/${id}/tab`, { method: "POST", body: JSON.stringify({}) })
+    ).json()) as { tabId: string };
+    await request(`/api/working-orders/${tabId}/round`, {
+      method: "POST",
+      body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
+    });
+    await request(`/api/working-orders/${tabId}/lines/recall`, {
+      method: "POST",
+      body: JSON.stringify({ lineNos: [1] }),
+    });
+    await suite.db.execute(sql`update products set available = 0 where id = ${productId}`);
+    try {
+      const sent = await request(`/api/working-orders/${tabId}/lines/send`, {
+        method: "POST",
+        body: JSON.stringify({ lineNos: [1] }),
+      });
+      expect(sent.status).toBe(409);
+      expect(await sent.json()).toMatchObject({
+        error: { code: "product.unavailable", params: { productId } },
+      });
+    } finally {
+      // The suite shares one product across its cases.
+      await suite.db.execute(sql`update products set available = 1 where id = ${productId}`);
+    }
+  });
+
   it("GET /api/working-orders/:id/lines reads an open tab's lines with locked price + served state", async () => {
     const { id } = (await (
       await request("/api/tables", {
@@ -412,13 +482,18 @@ describe("table + tab routes", () => {
 
     const res = await request(`/api/working-orders/${tabId}/lines`);
     expect(res.status).toBe(200);
-    const lines = (await res.json()) as {
-      lineNo: number;
-      productId: string;
-      quantity: string;
-      unitPriceGross: string;
-      servedAt: string | null;
-    }[];
+    const { lines, revision } = (await res.json()) as {
+      lines: {
+        lineNo: number;
+        productId: string;
+        quantity: string;
+        unitPriceGross: string;
+        servedAt: string | null;
+      }[];
+      revision: number;
+    };
+    // The tab's revision rides with its lines: the round and the served mark each counted one.
+    expect(revision).toBe(2);
     expect(lines).toHaveLength(2);
     // Seeded product is 1.50; the locked gross unit rides back verbatim, and the quantity at the
     // three places `thousandthsToDecimal` renders.
@@ -487,6 +562,156 @@ describe("table + tab routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "tab.line_not_found" } });
   });
 
+  /** A tab on a fresh table with one line fired to the kitchen, and the revision a copy reads. */
+  async function firedTab(): Promise<{ tabId: string; revision: number }> {
+    const { id } = (await (
+      await request("/api/tables", {
+        method: "POST",
+        body: JSON.stringify({ label: `E-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+      })
+    ).json()) as { id: string };
+    const { tabId } = (await (
+      await request(`/api/tables/${id}/tab`, { method: "POST", body: JSON.stringify({}) })
+    ).json()) as { tabId: string };
+    await request(`/api/working-orders/${tabId}/round`, {
+      method: "POST",
+      body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
+    });
+    const { revision } = (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as {
+      revision: number;
+    };
+    return { tabId, revision };
+  }
+
+  it("PUT .../lines/:lineNo changes one line made from the current copy, and answers 409 working_order.out_of_date for an older one", async () => {
+    const { tabId, revision } = await firedTab();
+    const edit = (body: object) =>
+      request(`/api/working-orders/${tabId}/lines/1`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+
+    const landed = await edit({ note: "sin gas", revision });
+    expect(landed.status).toBe(200);
+    const stale = await edit({ quantity: "2", revision });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toMatchObject({
+      error: {
+        code: "working_order.out_of_date",
+        params: { workingOrderId: tabId, revision: revision + 1 },
+      },
+    });
+    const { lines } = (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as {
+      lines: { quantity: string }[];
+    };
+    expect(lines.map((line) => line.quantity)).toEqual(["1.000"]);
+  });
+
+  it.each([{}, { revision: "1" }, { revision: -1 }, { revision: 1.5 }])(
+    "PUT .../lines/:lineNo refuses a missing or malformed revision %j with 400 management.request_invalid",
+    async (revision) => {
+      const { tabId } = await firedTab();
+      const res = await request(`/api/working-orders/${tabId}/lines/1`, {
+        method: "PUT",
+        body: JSON.stringify({ note: "x", ...revision }),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "revision" } },
+      });
+    },
+  );
+
+  it("PUT /api/working-orders/:id answers 409 working_order.out_of_date for a copy another save changed, and requires the revision", async () => {
+    const { tabId, revision } = await firedTab();
+    await request(`/api/working-orders/${tabId}/lines/1`, {
+      method: "PUT",
+      body: JSON.stringify({ note: "first", revision }),
+    });
+
+    const res = await request(`/api/working-orders/${tabId}`, {
+      method: "PUT",
+      body: JSON.stringify({ revision, lines: [{ menuItemId, quantity: "1" }] }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "working_order.out_of_date" } });
+    for (const revision of [{ revision: "2" }, {}]) {
+      const malformed = await request(`/api/working-orders/${tabId}`, {
+        method: "PUT",
+        body: JSON.stringify({ ...revision, lines: [{ menuItemId, quantity: "1" }] }),
+      });
+      expect(malformed.status).toBe(400);
+      expect(await malformed.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "revision" } },
+      });
+    }
+  });
+
+  it("both edit routes answer the order's revision after the write, the same one when the edit changes nothing", async () => {
+    const { tabId, revision } = await firedTab();
+    const lineEdit = (body: object) =>
+      request(`/api/working-orders/${tabId}/lines/1`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+
+    const changed = await lineEdit({ note: "sin gas", revision });
+    expect(changed.status).toBe(200);
+    expect(await changed.json()).toEqual({ revision: revision + 1 });
+    const unchanged = await lineEdit({ note: "sin gas", revision: revision + 1 });
+    expect(await unchanged.json()).toEqual({ revision: revision + 1 });
+
+    const held = (await (await request(`/api/working-orders/${tabId}`)).json()) as {
+      lines: { workingOrderLineId: string }[];
+    };
+    const save = (quantity: string, copy: number) =>
+      request(`/api/working-orders/${tabId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          revision: copy,
+          lines: [
+            {
+              workingOrderLineId: held.lines[0]!.workingOrderLineId,
+              menuItemId,
+              quantity,
+              note: "sin gas",
+            },
+          ],
+        }),
+      });
+    const sameOrder = await save("1", revision + 1);
+    expect(sameOrder.status).toBe(200);
+    expect(await sameOrder.json()).toEqual({ revision: revision + 1 });
+    const moreOfIt = await save("2", revision + 1);
+    expect(await moreOfIt.json()).toEqual({ revision: revision + 2 });
+  });
+
+  it("answers 409 order.payment_in_flight to a round, a line edit and a void while a card payment is in flight", async () => {
+    const { tabId, revision } = await firedTab();
+    suite.db.run(
+      sql`update working_orders set payment_attempt_at = '2026-09-26T10:00:00.000Z' where id = ${tabId}`,
+    );
+    const refusals = [
+      await request(`/api/working-orders/${tabId}/round`, {
+        method: "POST",
+        body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
+      }),
+      await request(`/api/working-orders/${tabId}/lines/1`, {
+        method: "PUT",
+        body: JSON.stringify({ note: "x", revision }),
+      }),
+      await request(`/api/working-orders/${tabId}/lines/1`, { method: "DELETE" }),
+    ];
+
+    for (const res of refusals) {
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        error: { code: "order.payment_in_flight", params: { workingOrderId: tabId } },
+      });
+    }
+  });
+
   it("REJECTS every new table/tab route with 401 session.required when no cookie is present", async () => {
     // A fresh app driven WITHOUT the session cookie: every route below answers 401 with the one code.
     const noAuth = new Hono();
@@ -519,6 +744,11 @@ describe("table + tab routes", () => {
       }),
       noAuth.request(`/api/working-orders/${id}/lines`),
       noAuth.request(`/api/working-orders/${id}/lines/1`, { method: "DELETE" }),
+      noAuth.request(`/api/working-orders/${id}/lines/1`, {
+        method: "PUT",
+        headers: json,
+        body: JSON.stringify({ note: "x", revision: 0 }),
+      }),
     ];
     for (const res of await Promise.all(cases)) {
       expect(res.status).toBe(401);

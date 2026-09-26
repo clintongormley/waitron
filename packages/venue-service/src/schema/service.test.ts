@@ -11,6 +11,8 @@ import {
   zoneMenus,
   zoneServicePolicies,
 } from "./service.js";
+import { serviceSettings } from "./settings.js";
+import { kitchenNotices } from "./kitchen-notices.js";
 
 /**
  * The Drizzle declarations, read without a database. A foreign key's name exists only here: the
@@ -118,12 +120,32 @@ const EXPECTED: Record<
     uniqueConstraints: [],
     primaryKeys: ["working_line_contexts_pk"],
   },
+  service_settings: {
+    table: serviceSettings,
+    foreignKeys: [],
+    checks: ["service_settings_singleton_ck"],
+    indexes: [],
+    uniqueConstraints: [],
+    primaryKeys: [],
+  },
+  kitchen_notices: {
+    table: kitchenNotices,
+    foreignKeys: ["kitchen_notices_station_fk", "kitchen_notices_order_fk"],
+    checks: [
+      "kitchen_notices_kind_ck",
+      "kitchen_notices_quantity_ck",
+      "kitchen_notices_moved_to_ck",
+    ],
+    indexes: ["kitchen_notices_open_idx"],
+    uniqueConstraints: [],
+    primaryKeys: [],
+  },
 };
 
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
-  it("covers all eight of the package's tables", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(8);
+  it("covers all ten of the package's tables", () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(10);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {
@@ -147,6 +169,7 @@ describe("venue-service schema", () => {
       ...getTableConfig(departments).indexes,
       ...getTableConfig(zoneServicePolicies).indexes,
       ...getTableConfig(preparationRoutes).indexes,
+      ...getTableConfig(kitchenNotices).indexes,
     ].filter((index) => index.config.where !== undefined);
     expect(partial.map((index) => [index.config.name, index.config.unique])).toEqual([
       ["departments_one_default_per_location_key", true],
@@ -155,6 +178,7 @@ describe("venue-service schema", () => {
       ["preparation_routes_zone_category_key", true],
       ["preparation_routes_venue_product_key", true],
       ["preparation_routes_venue_category_key", true],
+      ["kitchen_notices_open_idx", false],
     ]);
   });
 });

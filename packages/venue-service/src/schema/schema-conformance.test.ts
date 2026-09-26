@@ -4,7 +4,7 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
 import { VENUE_SERVICE_MIGRATIONS } from "../migrations.js";
-import * as declarations from "./service.js";
+import * as declarations from "./index.js";
 
 describeSchemaConformance({
   subjectName: "venue-service",
@@ -12,7 +12,8 @@ describeSchemaConformance({
   prerequisites: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS],
   subject: VENUE_SERVICE_MIGRATIONS,
   declarations,
-  // Every value-set column here is a plain `label()` with a hand-written check; `service.ts` says
-  // why above `departments.default_service_mode`.
-  declaresClosedVocabularies: false,
+  // `kitchen_notices.kind` carries the `enumText`/`enumCheck` pair, through `enumType`. The
+  // value-set columns in `service.ts` are plain `label()`s beside a hand-written check, and that
+  // file says why above `departments.default_service_mode`.
+  declaresClosedVocabularies: true,
 });

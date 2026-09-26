@@ -1,4 +1,4 @@
-import { buildLineExtras, matchExtraChildren, sameOptionSelections } from "./modifier-selection.js";
+import { buildLineExtras, editLineExtras, sameOptionSelections } from "./modifier-selection.js";
 import type { ExtraChild, ExtraProductFacts } from "./modifier-selection.js";
 import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
@@ -7,7 +7,7 @@ import { readReceiptIssuer } from "./receipt-issuer.js";
 import "./errors.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, exists, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
-import type { GetColumnData } from "drizzle-orm";
+import type { GetColumnData, SQL } from "drizzle-orm";
 import {
   AppError,
   basisPointsToDecimal,
@@ -22,6 +22,7 @@ import {
   locationId as brandLocationId,
   MONEY_SCALE,
   multiplyDecimal,
+  perDishOptionQuantity,
   rawCentsToDecimal,
   type SaleId,
   type StationThresholds,
@@ -49,7 +50,6 @@ import {
   products,
   sales,
   ticketItems,
-  ticketState,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -57,6 +57,8 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
+  MAX_UNIT_PRECISION,
+  assertQuantityPrecision,
   expandDietaryDeclarations,
   priceBasket,
   priceBasketWithOptions,
@@ -93,7 +95,15 @@ import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
-import { enqueueCorrectionSlips, enqueueKitchenTickets } from "./kitchen-print.js";
+import {
+  enqueueCorrectionSlips,
+  enqueueKitchenTickets,
+  enqueueMovedSlips,
+  firedQuantity,
+  isStarted,
+  readSentWork,
+} from "./kitchen-print.js";
+import type { CorrectionItem, FiredItem, TicketState } from "./kitchen-print.js";
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
@@ -128,25 +138,21 @@ export type LineExtras = { note?: string; variantId?: string };
  * the till is offered is the set the validators answer. Receipt: docs/developers/modifiers.md.
  */
 interface BasketModifiers extends AttachedModifiers {
-  /** Every product an ACTIVE list offers, by id — what {@link buildLineExtras} freezes onto a child.
-   * When the basket is priced afresh, only the Active and Available ones (see `sellableOnly`). */
+  /** Every Active and Available product an ACTIVE list offers, by id — what
+   * {@link buildLineExtras} freezes onto a child. */
   extraProducts: ReadonlyMap<string, ExtraProductFacts>;
 }
 
 /**
  * Only an ACTIVE list's products are read: only an active list can be answered at all
- * (`validateExtraSelections`).
- *
- * `sellableOnly` drops Inactive and Unavailable products from every list, so a pick of one is
- * refused exactly as a pick the list never offered. The held-order edit that keeps lines already
- * rung passes `false`, so a line kept at or below its stored quantity keeps a pick that has since
- * sold out; a raised line is checked by {@link updateHeldOrder}.
+ * (`validateExtraSelections`). Inactive and Unavailable products are dropped from every list, so a
+ * pick of one is refused exactly as a pick the list never offered; an edit keeps a pick a stored line
+ * already holds by itself ({@link editLineExtras}).
  */
 async function resolveBasketModifiers(
   tx: Transaction,
   dishes: readonly { productId: string; menuItemId: string }[],
   defaultLanguage: string,
-  sellableOnly: boolean,
 ): Promise<BasketModifiers> {
   const attached = await resolveAttachedModifiers(tx, dishes);
 
@@ -171,13 +177,11 @@ async function resolveBasketModifiers(
       .from(products)
       .leftJoin(parentProducts, parentJoin)
       .where(
-        sellableOnly
-          ? and(
-              inArray(products.id, offeredProductIds),
-              eq(products.active, true),
-              eq(products.available, true),
-            )
-          : inArray(products.id, offeredProductIds),
+        and(
+          inArray(products.id, offeredProductIds),
+          eq(products.active, true),
+          eq(products.available, true),
+        ),
       );
     for (const row of rows) {
       extraProducts.set(row.id, {
@@ -199,7 +203,6 @@ async function resolveBasketModifiers(
       });
     }
   }
-  if (!sellableOnly) return { ...attached, extraProducts };
   const extrasByHolder = new Map(
     [...attached.extrasByHolder].map(([holder, lists]) => [
       holder,
@@ -224,12 +227,16 @@ async function priceOrderLines(
   // `courseId` absent or null = the offer's default course; a string is an override.
   // Each extras pick becomes a CHILD row taxed at the picked product's VAT class, never the dish's.
   // An ACTIVE options list must be answered even when `options` is absent.
+  // `frozenOptions` and `frozenExtras` stand for answers an edit has already settled: an options
+  // answer or an extras pick given that way is not validated or looked up again.
   requestedLines: ({
     menuItemId: string;
     quantity: string;
     courseId?: string | null;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
+    frozenOptions?: OptionSnapshot[];
+    frozenExtras?: ExtraChild[];
   } & LineExtras)[],
   zoneId?: string,
 ): Promise<{
@@ -269,7 +276,6 @@ async function priceOrderLines(
     tx,
     lines.map((line) => ({ productId: line.offer.productId, menuItemId: line.menuItemId })),
     contentConfig.defaultLanguage,
-    true,
   );
   // A product with an Active variant is never sold as itself, and an extras pick cannot name a
   // variant, so a pick of such a product is refused below.
@@ -285,7 +291,7 @@ async function priceOrderLines(
         courseId: string | null;
         note: string | null;
       }
-    | { kind: "child"; productId: string; menuItemId: string };
+    | { kind: "child"; productId: string; menuItemId: string; extraListId: string };
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
   for (const line of lines) {
@@ -307,28 +313,29 @@ async function priceOrderLines(
       kitchenName: selection.kitchenName,
     };
 
-    // Validated before pricing, so a bad note aborts the whole basket. The body is JSON, so a
-    // non-string is screened out before it can reach `.trim()` as a TypeError.
-    const NOTE_LIMIT = 200;
-    const screenedNote = line.note === undefined ? null : requireNullableString(line.note, "note");
-    const trimmedNote = screenedNote?.trim() ?? "";
-    if (trimmedNote.length > NOTE_LIMIT) {
-      throw new AppError("working_order.note_too_long", {
-        length: trimmedNote.length,
-        limit: NOTE_LIMIT,
-      });
-    }
-    const note = trimmedNote.length === 0 ? null : trimmedNote;
+    // Validated before pricing, so a bad note aborts the whole basket.
+    const note = screenNote(line.note);
 
-    const { extraChildren, optionSnapshots } = buildLineExtras(
+    const built = buildLineExtras(
       {
-        extras: modifiers.extrasByHolder.get(line.menuItemId) ?? [],
-        options: modifiers.optionsByProduct.get(offer.productId) ?? [],
+        extras:
+          line.frozenExtras === undefined
+            ? (modifiers.extrasByHolder.get(line.menuItemId) ?? [])
+            : [],
+        options:
+          line.frozenOptions === undefined
+            ? (modifiers.optionsByProduct.get(offer.productId) ?? [])
+            : [],
       },
       modifiers.extraProducts,
-      { extras: line.extras, options: line.options },
+      {
+        extras: line.frozenExtras === undefined ? line.extras : [],
+        options: line.frozenOptions === undefined ? line.options : [],
+      },
       contentConfig.defaultLanguage,
     );
+    const extraChildren = line.frozenExtras ?? built.extraChildren;
+    const optionSnapshots = line.frozenOptions ?? built.optionSnapshots;
     for (const child of extraChildren) {
       if (requiresVariant.has(child.productId)) {
         throw new AppError("product.variant_required", { productId: child.productId });
@@ -372,6 +379,7 @@ async function priceOrderLines(
         kind: "child",
         productId: child.productId,
         menuItemId: line.menuItemId,
+        extraListId: child.listId,
       });
     }
   }
@@ -444,6 +452,7 @@ async function priceOrderLines(
       category: line.category ?? null,
       courseId: meta.kind === "parent" ? meta.courseId : null,
       note: meta.kind === "parent" ? meta.note : null,
+      extraListId: meta.kind === "child" ? meta.extraListId : null,
       // From the priced row, never the request: only it holds the re-keyed customer text.
       variantName: line.variantName ?? null,
       variantDescriptions: line.variantDescriptions ?? null,
@@ -461,6 +470,27 @@ async function priceOrderLines(
   }));
   return { lineRows, priced, identities, lineContexts };
 }
+
+/**
+ * A line's free-text kitchen note, trimmed, or `null` for none. The body is JSON, so a non-string is
+ * screened out before it can reach `.trim()` as a TypeError.
+ */
+function screenNote(value: unknown): string | null {
+  const NOTE_LIMIT = 200;
+  const screened = value === undefined ? null : requireNullableString(value, "note");
+  const trimmed = screened?.trim() ?? "";
+  if (trimmed.length > NOTE_LIMIT) {
+    throw new AppError("working_order.note_too_long", {
+      length: trimmed.length,
+      limit: NOTE_LIMIT,
+    });
+  }
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+/** A line's product can be sold now: Active and Available, and so is its parent for a variant. */
+const productSellable = sql<number>`(${products.active} and ${products.available}
+  and (${parentProducts.id} is null or (${parentProducts.active} and ${parentProducts.available})))`;
 
 const storedLineColumns = {
   id: workingOrderLines.id,
@@ -515,9 +545,14 @@ export async function readLockedLines(
 async function readLockedLinesForIssuance(
   tx: Transaction,
   workingOrderId: string,
-): Promise<(StoredOrderLine & { vatClass: VatClass | null })[]> {
+): Promise<(StoredOrderLine & { vatClass: VatClass | null; payable: boolean })[]> {
   const rows = await tx
-    .select({ ...storedLineColumns, vatClass: effectiveProductColumns.vatClass })
+    .select({
+      ...storedLineColumns,
+      vatClass: effectiveProductColumns.vatClass,
+      sentAt: workingOrderLines.sentAt,
+      sellable: productSellable,
+    })
     .from(workingOrderLines)
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(parentProducts, parentJoin)
@@ -527,6 +562,9 @@ async function readLockedLinesForIssuance(
     ...line,
     // `working_order_lines_product_fk` is `on delete restrict`, so a line naming a product joins it.
     vatClass: line.identity.productId === null ? null : (rows[i]!.vatClass as VatClass),
+    // A sent line is committed work, payable whatever its product's availability now.
+    payable:
+      line.identity.productId === null || rows[i]!.sentAt !== null || Boolean(rows[i]!.sellable),
   }));
 }
 
@@ -598,12 +636,22 @@ export async function priceStoredOrder(
  * The resolved rate and its net unit price are written back, on the caller's transaction, onto each
  * line whose rate changed, but only while the order is open. A placed order's lines are not
  * written.
+ *
+ * A line never sent whose product cannot be sold now is refused `product.unavailable` (spec §11.3):
+ * staff remove it, or split the rest off, before paying. A sent line pays whatever its product's
+ * availability. `refuseUnsentUnavailable: false` is for a payment the card network has already
+ * captured, which is filed as it stands.
  */
 export async function priceStoredOrderForIssuance(
   tx: Transaction,
   workingOrderId: string,
+  options: { refuseUnsentUnavailable: boolean } = { refuseUnsentUnavailable: true },
 ): Promise<PricedOrder> {
   const stored = await readLockedLinesForIssuance(tx, workingOrderId);
+  const unpayable = stored.find((line) => !line.payable);
+  if (options.refuseUnsentUnavailable && unpayable !== undefined) {
+    throw new AppError("product.unavailable", { productId: unpayable.identity.productId! });
+  }
   const priced = priceLockedLines(
     stored.map(({ locked, vatClass }) =>
       // A line with no product names nothing to resolve from, so it keeps the rate it was added at.
@@ -887,6 +935,20 @@ async function assertAnchoredTabOpen(
   }
 }
 
+/** The columns of a stored line {@link fireLines} reads. */
+export const fireableLineColumns = {
+  id: workingOrderLines.id,
+  productId: workingOrderLines.productId,
+  courseId: workingOrderLines.courseId,
+  parentLineId: workingOrderLines.parentLineId,
+  note: workingOrderLines.note,
+  quantity: workingOrderLines.quantity,
+};
+
+type FireableLine = {
+  [K in keyof typeof fireableLineColumns]: GetColumnData<(typeof fireableLineColumns)[K]>;
+};
+
 /**
  * Fire lines to the kitchen: one `ticket_items` row per line, its station and course RESOLVED and
  * SNAPSHOTTED at fire time, so a later configuration change never moves an already-fired item. The
@@ -899,15 +961,10 @@ export async function fireLines(
   cfg: TillConfig,
   orderId: string,
   // A CHILD modifier line is part of its parent dish and gets no ticket item of its own.
-  // `hold: true` inserts the line unfired whatever its course; it is not stored.
-  lines: {
-    id: string;
-    productId: string | null;
-    courseId: string | null;
-    parentLineId: string | null;
-    note: string | null;
-    hold?: boolean;
-  }[],
+  // `quantity` is the line's stored thousandths, which the kitchen is asked to make.
+  // `hold: true` inserts the line unfired whatever its course, and `release: true` fires it whatever
+  // its course; neither is stored.
+  lines: (FireableLine & { hold?: boolean; release?: boolean })[],
 ): Promise<void> {
   const parentLines = lines.filter((line) => line.parentLineId === null);
   if (parentLines.length === 0) {
@@ -1002,8 +1059,10 @@ export async function fireLines(
   const earliestDisplayOrder =
     orderDisplayOrders.length === 0 ? null : Math.min(...orderDisplayOrders);
 
-  // One clock reading for the whole round, so every item of it carries the same `fired_at`.
+  // One clock reading for the whole round, so every item of it carries the same `fired_at` and
+  // every line sent in it the same `sent_at`.
   const firedAt = nowIso();
+  const sentLineIds: string[] = [];
   // A line with nowhere to go refuses the whole fire.
   const values = lines
     .map((line) => {
@@ -1012,6 +1071,16 @@ export async function fireLines(
         serviceContext === null || line.productId === null
           ? null
           : (serviceRouteByProduct.get(line.productId) ?? null);
+      const courseId = courseByLine.get(line.id) ?? null;
+      // A line not fired now is HELD (`fired_at` NULL) until `fireCourse` or `sendLines` releases it.
+      const fired =
+        line.release === true ||
+        (line.hold !== true &&
+          (courseId === null ||
+            firedCourseIds.has(courseId) ||
+            displayOrderByCourse.get(courseId) === earliestDisplayOrder));
+      // A no-preparation line has no kitchen work, and is sent when it would have fired.
+      if (fired) sentLineIds.push(line.id);
       if (serviceRoute?.kind === "no_preparation") return null;
       const stationId =
         serviceRoute?.kind === "station"
@@ -1020,14 +1089,6 @@ export async function fireLines(
       if (stationId === null || stationId === undefined) {
         throw new AppError("station.no_default", { locationId: cfg.locationId });
       }
-      const courseId = courseByLine.get(line.id) ?? null;
-      // A line not fired now is HELD (`fired_at` NULL) until `fireCourse` or `sendLines` releases it.
-      const fired =
-        line.hold === true
-          ? false
-          : courseId === null ||
-            firedCourseIds.has(courseId) ||
-            displayOrderByCourse.get(courseId) === earliestDisplayOrder;
       return {
         nodeId: cfg.nodeId,
         workingOrderId: orderId,
@@ -1037,9 +1098,11 @@ export async function fireLines(
         note: line.note,
         firedAt: fired ? firedAt : null,
         state: "queued" as const,
+        quantity: line.quantity,
       };
     })
     .filter((value): value is NonNullable<typeof value> => value !== null);
+  await stampSent(tx, orderId, sentLineIds, firedAt);
   if (values.length === 0) return;
   let inserted: { workingOrderLineId: string; stationId: string; firedAt: string | null }[];
   try {
@@ -1067,6 +1130,126 @@ export async function fireLines(
 }
 
 /**
+ * Stamp `sent_at` on dish lines not stamped yet, and on their extras children, which follow their
+ * dish. A line already stamped keeps its first stamp, so a recalled line sent again keeps it.
+ *
+ * Only while the order is open: `working_order_lines_require_open_parent_update` refuses a line
+ * update on any other order. `placeOrder` stamps its lines itself before the order leaves `open`,
+ * and a settled order sent to preparation is stamped by nothing.
+ */
+async function stampSent(
+  tx: Transaction,
+  orderId: string,
+  lineIds: readonly string[],
+  at: string,
+): Promise<void> {
+  if (lineIds.length === 0) return;
+  await tx
+    .update(workingOrderLines)
+    .set({ sentAt: at })
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, orderId),
+        or(
+          inArray(workingOrderLines.id, [...lineIds]),
+          inArray(workingOrderLines.parentLineId, [...lineIds]),
+        ),
+        isNull(workingOrderLines.sentAt),
+        exists(
+          tx
+            .select({ one: sql`1` })
+            .from(workingOrders)
+            .where(and(eq(workingOrders.id, orderId), eq(workingOrders.status, "open"))),
+        ),
+      ),
+    );
+}
+
+/**
+ * The dish lines of an order that have no ticket item and are not yet stamped sent, whose route is
+ * `no_preparation`, and that sit in one of `courseIds` (`null` standing for no course) or are named
+ * in `lineIds` — or every such line, with `"all"`: the no-route lines a send releases. Only a zoned
+ * order has no-preparation routes.
+ */
+async function heldNoRouteLines(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  scope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] } | "all",
+): Promise<string[]> {
+  let inScope: SQL | undefined;
+  if (scope !== "all") {
+    const namedCourses = scope.courseIds.filter((id): id is string => id !== null);
+    const any = [
+      ...(namedCourses.length > 0 ? [inArray(workingOrderLines.courseId, namedCourses)] : []),
+      ...(scope.courseIds.includes(null) ? [isNull(workingOrderLines.courseId)] : []),
+      ...(scope.lineIds.length > 0 ? [inArray(workingOrderLines.id, [...scope.lineIds])] : []),
+    ];
+    if (any.length === 0) return [];
+    inScope = or(...any);
+  }
+  const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
+  if (serviceContext === null) return [];
+  const candidates = await tx
+    .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+    .from(workingOrderLines)
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, orderId),
+        isNull(workingOrderLines.parentLineId),
+        isNotNull(workingOrderLines.productId),
+        isNull(workingOrderLines.sentAt),
+        isNull(ticketItems.id),
+        inScope,
+      ),
+    );
+  const routes = await VENUE_SERVICE.resolvePreparationRoutes(tx, cfg, serviceContext.zoneId, [
+    ...new Set(candidates.map((line) => line.productId!)),
+  ]);
+  return candidates
+    .filter((line) => routes.get(line.productId!)?.kind === "no_preparation")
+    .map((line) => line.id);
+}
+
+/**
+ * Refuse `product.unavailable` for the first of these dish lines, or their extras children, whose
+ * product cannot be sold now. A caller passes the lines it is about to send that have no fired
+ * ticket item — never fired, held, or recalled — so a sold-out dish is never sent to the kitchen
+ * again, whether or not the line was stamped sent before.
+ */
+async function assertSendable(tx: Transaction, lineIds: readonly string[]): Promise<void> {
+  if (lineIds.length === 0) return;
+  const [refused] = await tx
+    .select({ productId: workingOrderLines.productId })
+    .from(workingOrderLines)
+    .innerJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(parentProducts, parentJoin)
+    .where(
+      and(
+        or(
+          inArray(workingOrderLines.id, [...lineIds]),
+          inArray(workingOrderLines.parentLineId, [...lineIds]),
+        ),
+        sql`not ${productSellable}`,
+      ),
+    )
+    .orderBy(workingOrderLines.lineNo)
+    .limit(1);
+  if (refused !== undefined) {
+    throw new AppError("product.unavailable", { productId: refused.productId! });
+  }
+}
+
+async function isOpenOrder(tx: Transaction, orderId: string): Promise<boolean> {
+  const [order] = await tx
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  return order?.status === "open";
+}
+
+/**
  * Release held items of a course by stamping fired_at. Require the course to exist
  * in this venue, including a deactivated course whose food still needs release.
  * Already-fired items retain their timestamps; an empty held set is a no-op.
@@ -1078,9 +1261,10 @@ export async function fireCourse(
   courseId: string,
 ): Promise<void> {
   await requireCourse(tx, cfg, courseId);
+  const firedNow = nowIso();
   const firedItems = await tx
     .update(ticketItems)
-    .set({ firedAt: nowIso() })
+    .set({ firedAt: firedNow })
     .where(
       and(
         eq(ticketItems.workingOrderId, orderId),
@@ -1091,10 +1275,42 @@ export async function fireCourse(
     .returning({
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
+      quantity: ticketItems.quantity,
     });
-  // The `fired_at IS NULL` predicate makes `RETURNING` exactly the items that fired now, so a re-fire
-  // prints nothing.
-  await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
+  const noRoute = await heldNoRouteLines(tx, cfg, orderId, { courseIds: [courseId], lineIds: [] });
+  // Only an open order's lines can be removed, so only there is a sold-out line refused; a placed
+  // order's held course is committed work.
+  await finishRelease(
+    tx,
+    cfg,
+    orderId,
+    firedItems,
+    noRoute,
+    firedNow,
+    await isOpenOrder(tx, orderId),
+  );
+}
+
+/**
+ * The end of {@link fireCourse} and {@link sendLines}: refuse a sold-out line when
+ * `refuseSoldOut`, stamp the released lines sent, print the items that fired now, and count the
+ * write if anything was released. `fired` must be exactly the items this release fired (an
+ * update's `RETURNING` over `fired_at IS NULL`), so a re-send prints nothing.
+ */
+async function finishRelease(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  fired: FiredItem[],
+  noRoute: readonly string[],
+  at: string,
+  refuseSoldOut: boolean,
+): Promise<void> {
+  const released = [...fired.map((item) => item.workingOrderLineId), ...noRoute];
+  if (refuseSoldOut) await assertSendable(tx, released);
+  await stampSent(tx, orderId, released, at);
+  await enqueueKitchenTickets(tx, cfg, orderId, fired);
+  if (released.length > 0) await bumpRevision(tx, [orderId]);
 }
 
 /**
@@ -1109,12 +1325,11 @@ export async function sendLines(
 ): Promise<void> {
   await assertAnchoredTabOpen(tx, cfg, tabId);
   // An empty list fires every HELD line of the tab.
-  const lineFilter =
+  const namedLineIds =
     lineNos.length === 0
-      ? undefined
-      : inArray(
-          ticketItems.workingOrderLineId,
-          tx
+      ? []
+      : (
+          await tx
             .select({ id: workingOrderLines.id })
             .from(workingOrderLines)
             .where(
@@ -1122,8 +1337,8 @@ export async function sendLines(
                 eq(workingOrderLines.workingOrderId, tabId),
                 inArray(workingOrderLines.lineNo, lineNos),
               ),
-            ),
-        );
+            )
+        ).map((line) => line.id);
   // One clock reading for both stamps: `queued_at` is what every age on the boards is measured from.
   const firedNow = nowIso();
   const firedItems = await tx
@@ -1133,22 +1348,61 @@ export async function sendLines(
       and(
         eq(ticketItems.workingOrderId, tabId),
         isNull(ticketItems.firedAt),
-        ...(lineFilter ? [lineFilter] : []),
+        ...(lineNos.length === 0 ? [] : [inArray(ticketItems.workingOrderLineId, namedLineIds)]),
       ),
     )
     .returning({
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
+      courseId: ticketItems.courseId,
+      quantity: ticketItems.quantity,
     });
-  // As in `fireCourse`, a re-send of an already-fired line prints nothing.
-  await enqueueKitchenTickets(tx, cfg, tabId, firedItems);
+  // Sending everything held releases every held no-route line. Sending named lines releases the
+  // named ones, and a course's no-route lines once nothing routed in that course is still held.
+  const noRoute = await heldNoRouteLines(
+    tx,
+    cfg,
+    tabId,
+    lineNos.length === 0
+      ? "all"
+      : {
+          courseIds: await releasedCourses(
+            tx,
+            tabId,
+            firedItems.map((item) => item.courseId),
+          ),
+          lineIds: namedLineIds,
+        },
+  );
+  await finishRelease(tx, cfg, tabId, firedItems, noRoute, firedNow, true);
+}
+
+/** Of `courseIds` (`null` standing for no course), the ones with no held item left on the order. */
+async function releasedCourses(
+  tx: Transaction,
+  orderId: string,
+  courseIds: readonly (string | null)[],
+): Promise<(string | null)[]> {
+  const candidates = [...new Set(courseIds)];
+  if (candidates.length === 0) return [];
+  const stillHeld = await tx
+    .selectDistinct({ courseId: ticketItems.courseId })
+    .from(ticketItems)
+    .where(and(eq(ticketItems.workingOrderId, orderId), isNull(ticketItems.firedAt)));
+  const held = new Set(stillHeld.map((row) => row.courseId));
+  return candidates.filter((courseId) => !held.has(courseId));
 }
 
 /**
  * Recall selected lines of an open tab only while their items remain queued.
  * Refuse the whole call if a line is missing or any item has started. Previously
- * fired lines enqueue correction slips in the same transaction; held lines do not.
- * Leave queued_at untouched until a later send refreshes it.
+ * fired lines record a RECALLED kitchen notice and enqueue correction slips in the same
+ * transaction; held lines do neither. Leave queued_at untouched until a later send refreshes it.
+ *
+ * With changes to sent items switched off (`readEditSentLines`), a line that was ever sent to a
+ * station — stamped sent and holding a ticket item — is refused `ticket.already_fired`: a
+ * paper-only kitchen reports nothing, so a recall slip cannot be trusted, and a void is the only
+ * correction.
  */
 export async function recallLines(
   tx: Transaction,
@@ -1181,17 +1435,28 @@ export async function recallLines(
       state: ticketItems.state,
       firedAt: ticketItems.firedAt,
       stationId: ticketItems.stationId,
+      quantity: firedQuantity,
+      sentAt: workingOrderLines.sentAt,
     })
     .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .where(inArray(ticketItems.workingOrderLineId, lineIds));
-  const started = items.find((r) => r.state === "preparing" || r.state === "ready");
+  if (items.some((r) => r.sentAt !== null) && !(await VENUE_SERVICE.readEditSentLines(tx))) {
+    throw new AppError("ticket.already_fired", { workingOrderId: tabId });
+  }
+  const started = items.find((r) => isStarted(r.state));
   if (started !== undefined) {
     throw new AppError("ticket.already_started", { ticketItemId: started.ticketItemId });
   }
   // A held line never printed, so it gets no slip.
   const recalled = items
     .filter((r) => r.firedAt !== null && r.state === "queued")
-    .map((r) => ({ workingOrderLineId: r.workingOrderLineId, stationId: r.stationId! }));
+    .map((r) => ({
+      workingOrderLineId: r.workingOrderLineId,
+      stationId: r.stationId!,
+      quantity: r.quantity,
+      wasStarted: false,
+    }));
   await tx
     .update(ticketItems)
     .set({ firedAt: null })
@@ -1203,6 +1468,7 @@ export async function recallLines(
       ),
     );
   await enqueueCorrectionSlips(tx, cfg, tabId, recalled, "RECALLED");
+  await bumpRevision(tx, [tabId]);
 }
 
 /**
@@ -1285,14 +1551,10 @@ export async function addTabRound(
   const context = await VENUE_SERVICE.findOrderContext(tx, cfg, tabId);
   const { lineRows, lineContexts } = await priceOrderLines(tx, cfg, tabId, lines, context?.zoneId);
   const appended = lineRows.map((row, i) => ({ ...row, lineNo: maxLineNo + i + 1 }));
-  const appendedLines = await tx.insert(workingOrderLines).values(appended).returning({
-    id: workingOrderLines.id,
-    productId: workingOrderLines.productId,
-    courseId: workingOrderLines.courseId,
-    parentLineId: workingOrderLines.parentLineId,
-    note: workingOrderLines.note,
-    lineNo: workingOrderLines.lineNo,
-  });
+  const appendedLines = await tx
+    .insert(workingOrderLines)
+    .values(appended)
+    .returning({ ...fireableLineColumns, lineNo: workingOrderLines.lineNo });
   await VENUE_SERVICE.recordLineContexts(tx, cfg, tabId, lineContexts);
   // The k-th parent row by `line_no` is input line k. Correlated on `line_no`, not on the
   // `RETURNING` array position, so the mapping does not depend on the insert's row order.
@@ -1306,27 +1568,40 @@ export async function addTabRound(
     hold: row.parentLineId === null ? (holdByParentId.get(row.id) ?? false) : false,
   }));
   await fireLines(tx, cfg, tabId, withHold);
+  await bumpRevision(tx, [tabId]);
 }
 
 /**
- * Void ONE not-yet-paid line from an OPEN tab: pre-fiscal, a plain delete. A line that had already
- * fired gets a VOID correction slip.
+ * Void a not-yet-paid line, or `quantity` of it, from an OPEN tab: pre-fiscal, a plain delete or a
+ * reduction. `quantity` absent, or equal to the line's own, voids the whole line; a smaller one
+ * voids that part only, reducing the line, its extras children (which follow their dish) and its
+ * ticket item's fired quantity. A line that had already fired records a VOID kitchen notice for what
+ * was removed — marked started when the cook had started it — and gets a VOID correction slip where
+ * its station has a printer.
+ *
+ * Voiding stays open with changes to sent items switched off: it is then the only correction.
  */
 export async function voidTabLine(
   tx: Transaction,
   cfg: TillConfig,
   tabId: string,
   lineNo: number,
+  quantity?: string,
 ): Promise<void> {
   await assertAnchoredTabOpen(tx, cfg, tabId);
-  // The delete below takes the line's child modifier lines in the same statement: the parent
-  // alone would be refused by the self-referencing foreign key. Read first, because the delete's
-  // cascade removes the ticket item too.
+  // Read first, because the delete's cascade removes the ticket item too.
   const [target] = await tx
     .select({
       id: workingOrderLines.id,
+      parentLineId: workingOrderLines.parentLineId,
+      quantity: workingOrderLines.quantity,
+      unitPrecision: workingOrderLines.unitPrecision,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+      ticketItemId: ticketItems.id,
       firedAt: ticketItems.firedAt,
       stationId: ticketItems.stationId,
+      state: ticketItems.state,
+      firedQuantity,
     })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
@@ -1334,20 +1609,140 @@ export async function voidTabLine(
   if (target === undefined) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
+  const removed = quantity === undefined ? null : voidQuantity(tabId, lineNo, quantity, target);
+  const wasStarted = isStarted(target.state);
   const voided =
     target.firedAt !== null
-      ? [{ workingOrderLineId: target.id, stationId: target.stationId! }]
+      ? [
+          {
+            workingOrderLineId: target.id,
+            stationId: target.stationId!,
+            // A whole void takes away everything the station was asked for.
+            quantity: removed ?? target.firedQuantity,
+            wasStarted,
+          },
+        ]
       : [];
-  // Before the delete: the slip re-reads the line, which the delete removes.
+  // Before the delete or the reduction: the notice and the slip re-read the line.
   await enqueueCorrectionSlips(tx, cfg, tabId, voided, "VOID");
+  await bumpRevision(tx, [tabId]);
+  if (removed === null) {
+    // Takes the line's child modifier lines in the same statement: the parent alone would be
+    // refused by the self-referencing foreign key.
+    await tx
+      .delete(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, tabId),
+          or(eq(workingOrderLines.id, target.id), eq(workingOrderLines.parentLineId, target.id)),
+        ),
+      );
+    return;
+  }
+  const children = await tx
+    .select({
+      id: workingOrderLines.id,
+      quantity: workingOrderLines.quantity,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.parentLineId, target.id));
+  const dishQuantity = thousandthsToDecimal(target.quantity);
+  await reduceLine(
+    tx,
+    target,
+    removed,
+    children.map((child) => ({
+      child: { id: child.id, unitPriceGross: centsToDecimal(child.unitPriceGross) },
+      perDish: perDishOptionQuantity(thousandthsToDecimal(child.quantity), dishQuantity),
+    })),
+  );
+}
+
+/** A dish's extras child, and how many of it go with one of the dish. */
+interface KeptExtra {
+  child: { id: string; unitPriceGross: Decimal };
+  perDish: number;
+}
+
+/** Each child's quantity and total follow its dish to `dishQuantity`, at the child's stored gross
+ * price. */
+async function rescaleExtras(
+  tx: Transaction,
+  kept: readonly KeptExtra[],
+  dishQuantity: Decimal,
+): Promise<void> {
+  for (const { child, perDish } of kept) {
+    const quantity = multiplyDecimal(dishQuantity, decimal(String(perDish)));
+    await tx
+      .update(workingOrderLines)
+      .set({
+        quantity: decimalToThousandths(quantity),
+        lineTotal: decimalToCents(grossLineTotal(child.unitPriceGross, quantity)),
+      })
+      .where(eq(workingOrderLines.id, child.id));
+  }
+}
+
+/**
+ * Take `removed` thousandths off a dish line: its quantity and total at its stored gross price, its
+ * extras children's in proportion (they follow their dish), and its ticket item's fired quantity.
+ */
+async function reduceLine(
+  tx: Transaction,
+  target: {
+    id: string;
+    quantity: number;
+    unitPriceGross: number;
+    ticketItemId: string | null;
+    firedQuantity: number;
+  },
+  removed: number,
+  children: readonly KeptExtra[],
+): Promise<void> {
+  const remaining = subtractDecimal(
+    thousandthsToDecimal(target.quantity),
+    thousandthsToDecimal(removed),
+  );
   await tx
-    .delete(workingOrderLines)
-    .where(
-      and(
-        eq(workingOrderLines.workingOrderId, tabId),
-        or(eq(workingOrderLines.id, target.id), eq(workingOrderLines.parentLineId, target.id)),
-      ),
-    );
+    .update(workingOrderLines)
+    .set({
+      quantity: decimalToThousandths(remaining),
+      lineTotal: decimalToCents(grossLineTotal(centsToDecimal(target.unitPriceGross), remaining)),
+    })
+    .where(eq(workingOrderLines.id, target.id));
+  await rescaleExtras(tx, children, remaining);
+  if (target.ticketItemId !== null) {
+    await tx
+      .update(ticketItems)
+      .set({ quantity: target.firedQuantity - removed })
+      .where(eq(ticketItems.id, target.ticketItemId));
+  }
+}
+
+/**
+ * The part of a line a void removes, as thousandths, or `null` for the whole line. Refused
+ * `tab.void_quantity_invalid` unless it is a positive decimal no larger than the line, in the line's
+ * unit's decimal places, and the whole of an extras child, whose quantity follows its dish.
+ */
+function voidQuantity(
+  tabId: string,
+  lineNo: number,
+  quantity: string,
+  line: { quantity: number; parentLineId: string | null; unitPrecision: number | null },
+): number | null {
+  const invalid = () => new AppError("tab.void_quantity_invalid", { tabId, lineNo, quantity });
+  let asked: number;
+  try {
+    assertQuantityPrecision(quantity, line.unitPrecision ?? MAX_UNIT_PRECISION, { positive: true });
+    asked = stringToThousandths(quantity);
+  } catch {
+    throw invalid();
+  }
+  if (asked > line.quantity) throw invalid();
+  if (asked === line.quantity) return null;
+  if (line.parentLineId !== null) throw invalid();
+  return asked;
 }
 
 /**
@@ -1384,6 +1779,7 @@ export async function setLineCourse(
   await tx.update(workingOrderLines).set({ courseId }).where(eq(workingOrderLines.id, line.id));
   // The held ticket item's course snapshot too; no row when the line has no item yet.
   await tx.update(ticketItems).set({ courseId }).where(eq(ticketItems.workingOrderLineId, line.id));
+  await bumpRevision(tx, [tabId]);
 }
 
 /** Set or clear ONE line's `served_at` on an OPEN tab. Pre-fiscal: never read into a filed record. */
@@ -1403,6 +1799,7 @@ async function setLineServed(
   if (updated.length === 0) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
+  await bumpRevision(tx, [tabId]);
 }
 
 /** Mark one line of an open tab as served. */
@@ -1453,7 +1850,8 @@ async function assertServiceModesMatch(
 
 /**
  * Move lines (default all) from one OPEN tab to another at the destination's next `line_no`s. A move
- * NEVER re-prices, and keeps each line's id, modifier links and any fired ticket.
+ * NEVER re-prices, and keeps each line's id, modifier links and any fired ticket. Sent work that
+ * lands at another table is told to the kitchen ({@link enqueueMovedSlips}).
  */
 export async function moveTabLines(
   tx: Transaction,
@@ -1462,7 +1860,10 @@ export async function moveTabLines(
   toTabId: string,
   lineNos?: number[],
 ): Promise<void> {
+  const before = await readSentWork(tx, cfg, fromTabId);
   await moveOrderLines(tx, cfg, fromTabId, toTabId, lineNos, { modesChecked: false });
+  await bumpRevision(tx, [fromTabId, toTabId]);
+  await enqueueMovedSlips(tx, cfg, before, toTabId);
 }
 
 /**
@@ -1634,6 +2035,15 @@ export async function readTabLines(
   }));
 }
 
+/** An order's revision: what a copy of it read now carries back to an edit. */
+export async function readOrderRevision(tx: Transaction, orderId: string): Promise<number> {
+  const [order] = await tx
+    .select({ revision: workingOrders.revision })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  return order!.revision;
+}
+
 /**
  * Assert a move/join TARGET table exists, is `active`, and is FREE: its `tab_id` is null or a stale
  * pointer at a settled or abandoned order.
@@ -1675,6 +2085,7 @@ async function freeTablesCoveredBy(tx: Transaction, cfg: TillConfig, tabId: stri
 /**
  * Relocate a party to a free table: no line moves, no fiscal effect. Both tables are turned over, and
  * the clears are explicit because the settle trigger does not fire on a move (the tab stays open).
+ * The kitchen is told of the tab's sent work ({@link enqueueMovedSlips}).
  */
 export async function moveTab(
   tx: Transaction,
@@ -1701,6 +2112,7 @@ export async function moveTab(
   );
 
   const target = involved.find((table) => table.id === toTableId)!;
+  const before = await readSentWork(tx, cfg, tabId);
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, tabId);
   if (serviceContext !== null && target.zoneId !== null) {
     await VENUE_SERVICE.retargetOrderContext(tx, cfg, tabId, target.zoneId);
@@ -1711,6 +2123,7 @@ export async function moveTab(
     .update(diningTables)
     .set({ tabId, statusId: null })
     .where(eq(diningTables.id, toTableId));
+  await enqueueMovedSlips(tx, cfg, before, tabId);
 }
 
 /** Join an active, free table to an open tab. The existing tab lines remain in place. */
@@ -1758,7 +2171,8 @@ export async function joinTable(
  *
  * ORDER MATTERS: the re-point precedes the abandon. The `working_orders_clear_table_status` trigger
  * clears the status of tables pointing at an abandoned order, so abandoning first would clear it on a
- * table that stays joined.
+ * table that stays joined. The kitchen is told of moved sent work only after the re-point, which
+ * can change the table its slips name for `intoTab`.
  */
 export async function mergeTabs(
   tx: Transaction,
@@ -1784,7 +2198,9 @@ export async function mergeTabs(
   if (from === undefined || from.status !== "open") {
     throw new AppError("tab.not_open", { tabId: fromTabId });
   }
-  await moveTabLines(tx, cfg, fromTabId, intoTabId);
+  const before = await readSentWork(tx, cfg, fromTabId);
+  await moveOrderLines(tx, cfg, fromTabId, intoTabId, undefined, { modesChecked: false });
+  await bumpRevision(tx, [fromTabId, intoTabId]);
 
   // Before the abandon (see the docstring).
   if (options.freeSourceTable) {
@@ -1800,6 +2216,7 @@ export async function mergeTabs(
     .update(workingOrders)
     .set({ status: "abandoned" })
     .where(eq(workingOrders.id, fromTabId));
+  await enqueueMovedSlips(tx, cfg, before, intoTabId);
 }
 
 /**
@@ -1828,6 +2245,7 @@ function assertDistinctTransferLines(tabId: string, transfers: { lineNo: number 
 /**
  * Transfer selected lines between two open tabs. Whole-line transfers move the line; partial transfers
  * keep its stored unit prices and divide its quantity. The whole batch is validated before any move.
+ * Sent work that lands at another table is told to the kitchen ({@link enqueueMovedSlips}).
  */
 export async function transferLines(
   tx: Transaction,
@@ -1836,6 +2254,19 @@ export async function transferLines(
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
 ): Promise<void> {
+  const before = await readSentWork(tx, cfg, fromTabId);
+  const splitFrom = await carveBetweenTabs(tx, cfg, fromTabId, toTabId, transfers);
+  await enqueueMovedSlips(tx, cfg, before, toTabId, splitFrom);
+}
+
+/** {@link transferLines} without telling the kitchen; returns {@link carveOffLines}' split map. */
+async function carveBetweenTabs(
+  tx: Transaction,
+  cfg: TillConfig,
+  fromTabId: string,
+  toTabId: string,
+  transfers: { lineNo: number; quantity?: string }[],
+): Promise<ReadonlyMap<string, string>> {
   if (fromTabId === toTabId) {
     throw new AppError("tab.transfer_self", { tabId: fromTabId });
   }
@@ -1849,13 +2280,18 @@ export async function transferLines(
   // The only mode check on this path: `carveOffLines` makes none, whole lines or split.
   await assertServiceModesMatch(tx, cfg, fromTabId, toTabId);
 
-  await carveOffLines(tx, cfg, fromTabId, toTabId, transfers);
+  const splitFrom = await carveOffLines(tx, cfg, fromTabId, toTabId, transfers, {
+    refuseHeld: false,
+  });
+  await bumpRevision(tx, [fromTabId, toTabId]);
+  return splitFrom;
 }
 
 /**
  * Carry whole lines and partial splits between two orders, keeping each unit's LOCKED prices and
  * CONSERVING quantity. It makes no open-order check and no service-mode check of its own: the
- * CALLER must already have made both. Every transfer is validated before anything moves.
+ * CALLER must already have made both. Every transfer is validated before anything moves. Returns each
+ * ticket item a split made, mapped to the one it was copied from.
  */
 async function carveOffLines(
   tx: Transaction,
@@ -1863,7 +2299,8 @@ async function carveOffLines(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
-): Promise<void> {
+  opts: { refuseHeld: boolean },
+): Promise<Map<string, string>> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
     .select({
@@ -1885,8 +2322,16 @@ async function carveOffLines(
       variantDescriptions: workingOrderLines.variantDescriptions,
       variantKitchenName: workingOrderLines.variantKitchenName,
       kitchenName: workingOrderLines.kitchenName,
+      sentAt: workingOrderLines.sentAt,
+      servedAt: workingOrderLines.servedAt,
+      courseId: workingOrderLines.courseId,
+      note: workingOrderLines.note,
+      extraListId: workingOrderLines.extraListId,
+      ticketItemId: ticketItems.id,
+      ticketFiredAt: ticketItems.firedAt,
     })
     .from(workingOrderLines)
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(workingOrderLines.workingOrderId, fromTabId))
     .orderBy(workingOrderLines.lineNo);
   const sourceLines = sourceRows.map((l) => ({
@@ -1925,6 +2370,9 @@ async function carveOffLines(
     if (line.parentLineId != null) {
       throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
     }
+    if (opts.refuseHeld && line.ticketItemId !== null && line.ticketFiredAt === null) {
+      throw new AppError("tab.split_held_line", { tabId: fromTabId, lineNo: t.lineNo });
+    }
     const childLineNos = childLineNosByParent.get(t.lineNo) ?? [];
     if (t.quantity === undefined) {
       wholeLineNos.push(t.lineNo, ...childLineNos);
@@ -1933,9 +2381,10 @@ async function carveOffLines(
     // A malformed literal is reported as the same domain code as an out-of-range one.
     let inRange: boolean;
     try {
-      const q = decimal(t.quantity);
-      inRange =
-        compareDecimal(q, decimal("0")) > 0 && compareDecimal(q, decimal(line.quantity)) <= 0;
+      assertQuantityPrecision(t.quantity, line.unitPrecision ?? MAX_UNIT_PRECISION, {
+        positive: true,
+      });
+      inRange = compareDecimal(decimal(t.quantity), decimal(line.quantity)) <= 0;
     } catch {
       inRange = false;
     }
@@ -1962,6 +2411,7 @@ async function carveOffLines(
     await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos, { modesChecked: true });
   }
 
+  const splitFrom = new Map<string, string>();
   // Split line numbers are allocated after the moves, so they do not collide with moved rows.
   if (partials.length > 0) {
     const [{ maxLineNo }] = await tx
@@ -2007,10 +2457,57 @@ async function carveOffLines(
         variantDescriptions: line.variantDescriptions,
         variantKitchenName: line.variantKitchenName,
         kitchenName: line.kitchenName,
+        sentAt: line.sentAt,
+        servedAt: line.servedAt,
+        courseId: line.courseId,
+        note: line.note,
+        extraListId: line.extraListId,
       });
       await VENUE_SERVICE.copyLineContext(tx, cfg, line.id, splitLineId);
+      if (line.ticketItemId !== null) {
+        const splitTicketId = await splitTicketItem(
+          tx,
+          line.ticketItemId,
+          line.quantity,
+          toTabId,
+          splitLineId,
+          quantity,
+        );
+        splitFrom.set(splitTicketId, line.ticketItemId);
+      }
     }
   }
+  return splitFrom;
+}
+
+/**
+ * Give a split row its own copy of the source line's ticket item, asking for the part moved, and take
+ * that part off the source's; returns the copy's id. The total the kitchen makes is unchanged.
+ */
+async function splitTicketItem(
+  tx: Transaction,
+  ticketItemId: string,
+  lineQuantity: string,
+  toOrderId: string,
+  splitLineId: string,
+  moved: string,
+): Promise<string> {
+  const [ticket] = await tx.select().from(ticketItems).where(eq(ticketItems.id, ticketItemId));
+  const movedThousandths = stringToThousandths(moved);
+  const asked = ticket!.quantity ?? decimalToThousandths(decimal(lineQuantity));
+  await tx
+    .update(ticketItems)
+    .set({ quantity: asked - movedThousandths })
+    .where(eq(ticketItems.id, ticketItemId));
+  const id = randomUUID();
+  await tx.insert(ticketItems).values({
+    ...ticket!,
+    id,
+    workingOrderId: toOrderId,
+    workingOrderLineId: splitLineId,
+    quantity: movedThousandths,
+  });
+  return id;
 }
 
 /**
@@ -2041,7 +2538,9 @@ export async function splitOffCheck(
   // mode check on this path.
   await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
 
-  await carveOffLines(tx, cfg, fromTabId, checkId, transfers);
+  // A check is paid, never sent, so held work moved onto it would never fire.
+  await carveOffLines(tx, cfg, fromTabId, checkId, transfers, { refuseHeld: true });
+  await bumpRevision(tx, [fromTabId, checkId]);
 
   return { checkId };
 }
@@ -2077,7 +2576,7 @@ export async function unjoinTable(
   }
 
   // If this is the SOLE table anchoring `tabId`, the repoint below would leave `tabId` anchorless and
-  // `transferLines` would refuse it with a misleading `tab.not_open`.
+  // `carveBetweenTabs` would refuse it with a misleading `tab.not_open`.
   const [otherAnchor] = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
@@ -2087,7 +2586,7 @@ export async function unjoinTable(
     throw new AppError("table.not_shared", { tableId, tabId });
   }
 
-  // Repointed before the move, so `newTabId` is a tab when `transferLines` checks it.
+  // Repointed before the move, so `newTabId` is a tab when `carveBetweenTabs` checks it.
   const newTabId = randomUUID();
   await createOpenOrder(tx, cfg, newTabId, [], null);
   await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, newTabId);
@@ -2095,7 +2594,12 @@ export async function unjoinTable(
     await VENUE_SERVICE.retargetOrderContext(tx, cfg, newTabId, table.zoneId);
   }
   await tx.update(diningTables).set({ tabId: newTabId }).where(eq(diningTables.id, tableId));
-  await transferLines(tx, cfg, tabId, newTabId, transfers);
+  // Read after the repoint, so the kitchen is told of every sent item the unjoin takes: a joined
+  // tab's slips name its lowest-id table (`readOrderHeader`), which need not be the one its tickets
+  // printed before the join.
+  const before = await readSentWork(tx, cfg, tabId);
+  const splitFrom = await carveBetweenTabs(tx, cfg, tabId, newTabId, transfers);
+  await enqueueMovedSlips(tx, cfg, before, newTabId, splitFrom);
   return { tabId: newTabId };
 }
 
@@ -2117,6 +2621,8 @@ export interface HeldOrder {
   id: string;
   orderNumber: number;
   label: string | null;
+  /** What an edit of this copy sends back, so a save from a copy since changed is refused. */
+  revision: number;
   /**
    * PARENT rows only, each dish's child lines nested as `extras`. A row carries its stored offer and
    * display snapshot, so retrieval does not depend on the offer still being active; a row with no
@@ -2132,8 +2638,7 @@ export interface HeldOrder {
     /** The variant the line was sold as, absent when it names none. */
     variantId?: string;
     quantity: string;
-    /** One entry per CHILD line: frozen VALUES, not a re-sendable selection (a child holds no list
-     * id). */
+    /** One entry per CHILD line: the frozen values, and the list the pick was taken from. */
     extras?: {
       productId: string | null;
       name: string;
@@ -2141,6 +2646,8 @@ export interface HeldOrder {
       kitchenName: string | null;
       price: string;
       quantity: number;
+      /** Null only on a child older than `0014_order_edit_columns.sql`. */
+      listId: string | null;
     }[];
     note?: string;
     product?: {
@@ -2223,6 +2730,7 @@ export async function getHeldOrder(
         id: workingOrders.id,
         orderNumber: workingOrders.orderNumber,
         label: workingOrders.label,
+        revision: workingOrders.revision,
       })
       .from(workingOrders)
       .where(and(eq(workingOrders.id, id), eq(workingOrders.status, "open")));
@@ -2242,6 +2750,7 @@ export async function getHeldOrder(
         unitPriceGross: workingOrderLines.unitPriceGross,
         courseId: workingOrderLines.courseId,
         parentLineId: workingOrderLines.parentLineId,
+        extraListId: workingOrderLines.extraListId,
         note: workingOrderLines.note,
         // A line sold as a variant names the variant as its product; the dish the till rebuilds is
         // its parent, with the variant chosen on it, as the till built it at add time.
@@ -2301,6 +2810,7 @@ export async function getHeldOrder(
           kitchenName: child.kitchenName,
           price: child.unitPriceGross,
           quantity: Number(child.quantity) / Number(line.quantity),
+          listId: child.extraListId,
         }));
         return {
           workingOrderLineId: line.id,
@@ -2342,13 +2852,20 @@ export async function getHeldOrder(
         };
       });
 
-    return { id: order.id, orderNumber: order.orderNumber, label: order.label, lines };
+    return {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      label: order.label,
+      revision: order.revision,
+      lines,
+    };
   });
 }
 
 /**
- * The complete edited basket and an optional label. Prices come from stored lines for quantity-only
- * edits and from current definitions when selections change; the request never supplies a price.
+ * The complete edited basket and an optional label. A line naming a stored line by
+ * `workingOrderLineId`, with the same offer and variant, is an edit of it; any other line is new. A
+ * stored line the basket does not name is removed. The request never supplies a price.
  */
 export interface UpdateHeldOrderRequest {
   lines: ({
@@ -2359,243 +2876,755 @@ export interface UpdateHeldOrderRequest {
     options?: OptionSelection[];
   } & LineExtras)[];
   label?: string;
+  revision: number;
 }
 
-/** Update an open held order anywhere in the venue, preserving stored prices for quantity-only edits. */
+/** What `PUT /api/working-orders/:id/lines/:lineNo` changes on one line; an absent field is kept. */
+export interface OrderLinePatch {
+  quantity?: string;
+  note?: string | null;
+  options?: OptionSelection[];
+  extras?: ExtraSelection[];
+}
+
+/** A stored line as the edit path reads it, with its ticket item's kitchen state. */
+interface EditableLine {
+  id: string;
+  lineNo: number;
+  parentLineId: string | null;
+  productId: string | null;
+  /** Set on a variant line: the variant's parent, the dish whose lists the line answered. */
+  parentProductId: string | null;
+  quantity: Decimal;
+  unitPriceGross: Decimal;
+  unitPrecision: number | null;
+  note: string | null;
+  optionSnapshots: OptionSnapshot[];
+  extraListId: string | null;
+  courseId: string | null;
+  sentAt: string | null;
+  ticket: {
+    id: string;
+    firedAt: string | null;
+    state: TicketState;
+    stationId: string;
+    courseId: string | null;
+    /** Thousandths. */
+    firedQuantity: number;
+  } | null;
+}
+
+/** A stored dish line, its extras children and the offer it was sold through. */
+interface EditableParent extends EditableLine {
+  menuItemId: string | undefined;
+  children: EditableLine[];
+}
+
+interface EditableOrder {
+  lines: EditableLine[];
+  parents: EditableParent[];
+  maxLineNo: number;
+  /**
+   * What a line the edit adds gets from the kitchen: `fire` where some line of the order was sent,
+   * as a round's line would; `hold` where nothing was sent but the kitchen holds items, so Send
+   * releases it with them; `none` where the order has no ticket item and nothing sent, as a parked
+   * counter order, whose lines are fired when it is placed.
+   */
+  newWork: "fire" | "hold" | "none";
+  /** The courses in which the kitchen already has fired work, read before the edit changes any. */
+  firedCourseIds: Set<string>;
+}
+
+/** What an edit asks of one stored dish line. `null` options or extras keep the stored ones. */
+interface LineIntent {
+  quantity: string;
+  note: string | null;
+  options: { set: unknown } | null;
+  extras: { set: unknown } | null;
+}
+
+type RequestedLine = Parameters<typeof priceOrderLines>[3][number];
+
+/**
+ * An OPEN order, else `working_order.not_open`, whose revision is `revision`, else
+ * `working_order.out_of_date`.
+ */
+async function requireEditableOrder(
+  tx: Transaction,
+  orderId: string,
+  revision: number,
+): Promise<{ label: string | null }> {
+  const [order] = await tx
+    .select({
+      status: workingOrders.status,
+      revision: workingOrders.revision,
+      label: workingOrders.label,
+    })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  if (order === undefined || order.status !== "open") {
+    throw new AppError("working_order.not_open", { workingOrderId: orderId });
+  }
+  if (revision !== order.revision) {
+    throw new AppError("working_order.out_of_date", {
+      workingOrderId: orderId,
+      revision: order.revision,
+    });
+  }
+  return { label: order.label };
+}
+
+/**
+ * Refuse `order.payment_in_flight` when an integrated card payment is between pricing and filing on
+ * any of these OPEN orders (plan D22). It reads the order's own mark, never the payments store: the
+ * simulator writes no `attempting` row, and Stripe and SumUp write theirs after pricing committed.
+ * Only deciding when the mark may be RELEASED reads that store (`till-sale.ts`).
+ */
+export async function refusePaymentInFlight(
+  tx: Transaction,
+  orderIds: readonly string[],
+): Promise<void> {
+  const [paying] = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(
+      and(
+        inArray(workingOrders.id, [...orderIds]),
+        eq(workingOrders.status, "open"),
+        isNotNull(workingOrders.paymentAttemptAt),
+      ),
+    )
+    .orderBy(workingOrders.id)
+    .limit(1);
+  if (paying !== undefined) {
+    throw new AppError("order.payment_in_flight", { workingOrderId: paying.id });
+  }
+}
+
+/**
+ * Count one more write on each OPEN order named; a settled or placed order's revision stays. Every
+ * write to an open order's lines ends here, so this is also where a write to an order being paid is
+ * refused, rolling back what the write did before it.
+ */
+async function bumpRevision(tx: Transaction, orderIds: readonly string[]): Promise<void> {
+  await refusePaymentInFlight(tx, orderIds);
+  await tx
+    .update(workingOrders)
+    .set({ revision: sql`${workingOrders.revision} + 1` })
+    .where(and(inArray(workingOrders.id, [...orderIds]), eq(workingOrders.status, "open")));
+}
+
+async function readEditableOrder(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+): Promise<EditableOrder> {
+  const rows = await tx
+    .select({
+      id: workingOrderLines.id,
+      lineNo: workingOrderLines.lineNo,
+      parentLineId: workingOrderLines.parentLineId,
+      productId: workingOrderLines.productId,
+      parentProductId: products.parentId,
+      quantity: workingOrderLines.quantity,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+      unitPrecision: workingOrderLines.unitPrecision,
+      note: workingOrderLines.note,
+      optionSnapshots: workingOrderLines.optionSnapshots,
+      extraListId: workingOrderLines.extraListId,
+      courseId: workingOrderLines.courseId,
+      sentAt: workingOrderLines.sentAt,
+      ticketId: ticketItems.id,
+      firedAt: ticketItems.firedAt,
+      state: ticketItems.state,
+      stationId: ticketItems.stationId,
+      ticketCourseId: ticketItems.courseId,
+      firedQuantity,
+    })
+    .from(workingOrderLines)
+    .leftJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(eq(workingOrderLines.workingOrderId, orderId))
+    .orderBy(workingOrderLines.lineNo);
+  const lines: EditableLine[] = rows.map((row) => ({
+    id: row.id,
+    lineNo: row.lineNo,
+    parentLineId: row.parentLineId,
+    productId: row.productId,
+    parentProductId: row.parentProductId,
+    quantity: thousandthsToDecimal(row.quantity),
+    unitPriceGross: centsToDecimal(row.unitPriceGross),
+    unitPrecision: row.unitPrecision,
+    note: row.note,
+    optionSnapshots: row.optionSnapshots,
+    extraListId: row.extraListId,
+    courseId: row.courseId,
+    sentAt: row.sentAt,
+    ticket:
+      row.ticketId === null
+        ? null
+        : {
+            id: row.ticketId,
+            firedAt: row.firedAt,
+            state: row.state!,
+            stationId: row.stationId!,
+            courseId: row.ticketCourseId,
+            firedQuantity: row.firedQuantity,
+          },
+  }));
+  const menuItemByLine = new Map(
+    (await VENUE_SERVICE.listLineContexts(tx, cfg, orderId)).map((line) => [
+      line.workingOrderLineId,
+      line.menuItemId,
+    ]),
+  );
+  const parents = lines
+    .filter((line) => line.parentLineId === null)
+    .map((line) => ({
+      ...line,
+      menuItemId: menuItemByLine.get(line.id),
+      children: lines.filter((child) => child.parentLineId === line.id),
+    }));
+  return {
+    lines,
+    parents,
+    maxLineNo: Math.max(0, ...lines.map((line) => line.lineNo)),
+    newWork: lines.some((line) => line.sentAt !== null)
+      ? "fire"
+      : lines.some((line) => line.ticket !== null)
+        ? "hold"
+        : "none",
+    firedCourseIds: new Set(
+      lines
+        .filter((line) => line.ticket?.firedAt != null && line.ticket.courseId !== null)
+        .map((line) => line.ticket!.courseId!),
+    ),
+  };
+}
+
+/** Refuse `product.unavailable` for the first of these products that cannot be sold now. */
+async function assertProductsSellable(
+  tx: Transaction,
+  productIds: readonly string[],
+): Promise<void> {
+  if (productIds.length === 0) return;
+  const [refused] = await tx
+    .select({ id: products.id })
+    .from(products)
+    .leftJoin(parentProducts, parentJoin)
+    .where(and(inArray(products.id, [...productIds]), sql`not ${productSellable}`))
+    .limit(1);
+  if (refused !== undefined) {
+    throw new AppError("product.unavailable", { productId: refused.id });
+  }
+}
+
+/**
+ * Apply edits to an OPEN order's stored dish lines, remove the `removed` ones and add the `fresh`
+ * ones, as plan D10 rules:
+ *
+ * - A stored line keeps its gross price, names and the other facts it was added with; only what the
+ *   edit adds is priced now — a new line, and an extra added to a line. A note or an options answer
+ *   carries no price. A kept extra is matched by list, product and quantity.
+ * - A line the kitchen does not have (no ticket item, or one held or recalled) is changed in place.
+ * - A line the kitchen has, not started: a change recalls the old item with a notice and slip and
+ *   fires the changed line as a new item; a quantity rise leaves the item and adds the difference as
+ *   a new line; a drop voids the difference, with a notice and slip. Removing it voids it the same
+ *   way.
+ * - A started line is refused `ticket.already_started`; with changes to sent items switched off, a
+ *   line that was sent to a station is refused `ticket.already_fired`.
+ *
+ * New lines are numbered after the order's highest line number, and reach the kitchen as
+ * {@link EditableOrder.newWork} says: where work was sent, as a round's line would, a course the
+ * kitchen had fired before the edit counting as fired. A line that gains an extra moves after that
+ * number with its extras, so each dish is followed by its own extras in line order, as a ticket
+ * groups them.
+ */
+async function applyLineEdits(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  order: EditableOrder,
+  plan: {
+    edits: { parent: EditableParent; intent: LineIntent }[];
+    removed: EditableParent[];
+    fresh: RequestedLine[];
+  },
+): Promise<{ changed: boolean }> {
+  const context = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
+  let editSentLines: boolean | undefined;
+  /** Refuses what the kitchen state forbids; answers whether the kitchen holds fired work. */
+  const kitchenHas = async (line: EditableParent): Promise<boolean> => {
+    if (line.sentAt !== null && line.ticket !== null) {
+      editSentLines ??= await VENUE_SERVICE.readEditSentLines(tx);
+      if (!editSentLines) throw new AppError("ticket.already_fired", { workingOrderId: orderId });
+    }
+    if (line.ticket !== null && isStarted(line.ticket.state)) {
+      throw new AppError("ticket.already_started", { ticketItemId: line.ticket.id });
+    }
+    return line.ticket !== null && line.ticket.firedAt !== null;
+  };
+  const menuItemOf = (line: EditableParent): string => {
+    if (line.menuItemId === undefined) {
+      throw new AppError("order.service_context_missing", { workingOrderId: orderId });
+    }
+    return line.menuItemId;
+  };
+  const variantOf = (line: EditableParent) =>
+    line.parentProductId === null ? {} : { variantId: line.productId! };
+
+  const needsModifiers = plan.edits.some(
+    ({ intent }) => intent.options !== null || intent.extras !== null,
+  );
+  const defaultLanguage = needsModifiers
+    ? (await readContentLanguages(tx, cfg.locale)).defaultLanguage
+    : "";
+  const modifiers = needsModifiers
+    ? await resolveBasketModifiers(
+        tx,
+        plan.edits.map(({ parent }) => ({
+          productId: parent.parentProductId ?? parent.productId!,
+          menuItemId: menuItemOf(parent),
+        })),
+        defaultLanguage,
+      )
+    : null;
+
+  type Action = "free" | "change" | "raise" | "drop";
+  const changes: {
+    parent: EditableParent;
+    action: Action;
+    /** The dish quantity the stored row takes. */
+    quantity: Decimal;
+    note: string | null;
+    optionSnapshots: OptionSnapshot[];
+    kept: { child: EditableLine; perDish: number }[];
+    removedChildren: EditableLine[];
+    /** Index into `pricing` of the line carrying this line's added extras, if any. */
+    addedAt: number | null;
+  }[] = [];
+  // Every line priced now, in one offer read: a new dish line, which the kitchen gets as `kitchen`
+  // says, the carrier of extras added to a stored line, whose dish row is not kept, or a raised
+  // line's check, whose rows are discarded.
+  const pricing: RequestedLine[] = [...plan.fresh];
+  const pricedAs: (
+    { kind: "line"; kitchen: EditableOrder["newWork"] } | { kind: "extras" } | { kind: "check" }
+  )[] = plan.fresh.map(() => ({ kind: "line", kitchen: order.newWork }));
+  const raised: RequestedLine[] = [];
+  const resent: string[] = [];
+
+  for (const { parent, intent } of plan.edits) {
+    assertQuantityPrecision(intent.quantity, parent.unitPrecision ?? MAX_UNIT_PRECISION, {
+      positive: true,
+    });
+    const requested = decimal(intent.quantity);
+    const dishId = parent.parentProductId ?? parent.productId!;
+    let optionSnapshots = parent.optionSnapshots;
+    if (intent.options !== null) {
+      const frozen = buildLineExtras(
+        { extras: [], options: modifiers!.optionsByProduct.get(dishId) ?? [] },
+        modifiers!.extraProducts,
+        { options: intent.options.set },
+        defaultLanguage,
+      ).optionSnapshots;
+      // By value, never by order: see `docs/developers/modifiers.md`.
+      if (!sameOptionSelections(frozen, parent.optionSnapshots)) optionSnapshots = frozen;
+    }
+    const extras =
+      intent.extras === null
+        ? {
+            kept: parent.children.map((child) => ({
+              child,
+              perDish: perDishOptionQuantity(child.quantity, parent.quantity),
+            })),
+            added: [],
+            removed: [],
+          }
+        : editLineExtras(
+            modifiers!.extrasByHolder.get(menuItemOf(parent)) ?? [],
+            modifiers!.extraProducts,
+            intent.extras.set,
+            { children: parent.children, dishQuantity: parent.quantity },
+          );
+    const changed =
+      intent.note !== parent.note ||
+      optionSnapshots !== parent.optionSnapshots ||
+      extras.added.length > 0 ||
+      extras.removed.length > 0;
+    const rise = compareDecimal(requested, parent.quantity);
+    if (!changed && rise === 0) continue;
+    const fired = await kitchenHas(parent);
+    const action: Action = !fired ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
+
+    // The picks the line carries after the edit, as a request names them. A child older than
+    // `0014_order_edit_columns.sql` names none, and pricing it again refuses it as `extras.invalid`.
+    const picks: ExtraSelection[] =
+      intent.extras === null
+        ? [...new Set(parent.children.map((child) => child.extraListId))].map((listId) => ({
+            listId: listId!,
+            picks: extras.kept
+              .filter(({ child }) => child.extraListId === listId)
+              .map(({ child, perDish }) => ({ productId: child.productId!, quantity: perDish })),
+          }))
+        : (intent.extras.set as ExtraSelection[]);
+    const asOffered = (quantity: string): RequestedLine => ({
+      menuItemId: menuItemOf(parent),
+      ...variantOf(parent),
+      quantity,
+      ...(intent.note === null ? {} : { note: intent.note }),
+      frozenOptions: optionSnapshots,
+      extras: picks,
+    });
+    if (action === "raise" || (action === "change" && rise > 0)) {
+      pricing.push({
+        ...asOffered(subtractDecimal(requested, parent.quantity)),
+        courseId: parent.courseId,
+      });
+      pricedAs.push({ kind: "line", kitchen: "fire" });
+    }
+    if (action === "free" && rise > 0) raised.push(asOffered(requested));
+    if (action === "change") {
+      // The changed line goes to the kitchen again, which a sold-out dish never does.
+      resent.push(parent.productId!, ...extras.kept.map(({ child }) => child.productId!));
+    }
+    const quantity = action === "change" && rise > 0 ? parent.quantity : requested;
+    let addedAt: number | null = null;
+    if (extras.added.length > 0) {
+      addedAt = pricing.length;
+      pricing.push({
+        menuItemId: menuItemOf(parent),
+        ...variantOf(parent),
+        quantity,
+        frozenOptions: [],
+        frozenExtras: extras.added,
+      });
+      pricedAs.push({ kind: "extras" });
+    }
+    changes.push({
+      parent,
+      action,
+      quantity,
+      note: intent.note,
+      optionSnapshots,
+      kept: extras.kept,
+      removedChildren: extras.removed,
+      addedAt,
+    });
+  }
+
+  await assertProductsSellable(tx, resent);
+
+  // Raising a line the kitchen does not have sells more of it at its stored price, so the dish and
+  // its extras must still be offered and sellable: priced with the rest, and the price discarded.
+  // Last, so `addedAt` still indexes the groups below.
+  for (const line of raised) {
+    pricing.push(line);
+    pricedAs.push({ kind: "check" });
+  }
+
+  const voided: CorrectionItem[] = [];
+  for (const parent of plan.removed) {
+    if (await kitchenHas(parent)) {
+      voided.push({
+        workingOrderLineId: parent.id,
+        stationId: parent.ticket!.stationId,
+        quantity: parent.ticket!.firedQuantity,
+        wasStarted: false,
+      });
+    }
+  }
+
+  // Priced before anything is written, so a refused line leaves the order as it was.
+  const priced = await priceOrderLines(tx, cfg, orderId, pricing, context?.zoneId);
+  const groups: { rows: WorkingOrderLineInsert[]; contexts: typeof priced.lineContexts }[] = [];
+  priced.lineRows.forEach((row, index) => {
+    if (row.parentLineId === null) groups.push({ rows: [], contexts: [] });
+    groups[groups.length - 1]!.rows.push(row);
+    groups[groups.length - 1]!.contexts.push(priced.lineContexts[index]!);
+  });
+
+  // Before any line changes: a notice and a slip copy the line as it stands.
+  const recalled = changes
+    .filter(({ action }) => action === "change")
+    .map(({ parent }) => ({
+      workingOrderLineId: parent.id,
+      stationId: parent.ticket!.stationId,
+      quantity: parent.ticket!.firedQuantity,
+      wasStarted: false,
+    }));
+  const dropped = changes
+    .filter(({ action }) => action === "drop")
+    .map(({ parent, quantity, kept }) => ({
+      parent,
+      kept,
+      removed: decimalToThousandths(subtractDecimal(parent.quantity, quantity)),
+    }));
+  await enqueueCorrectionSlips(tx, cfg, orderId, recalled, "RECALLED");
+  await enqueueCorrectionSlips(
+    tx,
+    cfg,
+    orderId,
+    [
+      ...voided,
+      ...dropped.map(({ parent, removed }) => ({
+        workingOrderLineId: parent.id,
+        stationId: parent.ticket!.stationId,
+        quantity: removed,
+        wasStarted: false,
+      })),
+    ],
+    "VOID",
+  );
+  for (const { parent, kept, removed } of dropped) {
+    await reduceLine(
+      tx,
+      {
+        id: parent.id,
+        quantity: decimalToThousandths(parent.quantity),
+        unitPriceGross: decimalToCents(parent.unitPriceGross),
+        ticketItemId: parent.ticket!.id,
+        firedQuantity: parent.ticket!.firedQuantity,
+      },
+      removed,
+      kept,
+    );
+  }
+
+  let nextLineNo = order.maxLineNo;
+  const inserted: WorkingOrderLineInsert[] = [];
+  const insertedContexts: typeof priced.lineContexts = [];
+  const fireNow: Parameters<typeof fireLines>[3] = [];
+  for (const change of changes.filter(({ action }) => action === "free" || action === "change")) {
+    const { parent, quantity, note, optionSnapshots, kept } = change;
+    await tx
+      .update(workingOrderLines)
+      .set({
+        quantity: decimalToThousandths(quantity),
+        lineTotal: decimalToCents(grossLineTotal(parent.unitPriceGross, quantity)),
+        note,
+        optionSnapshots,
+      })
+      .where(eq(workingOrderLines.id, parent.id));
+    if (change.removedChildren.length > 0) {
+      await tx.delete(workingOrderLines).where(
+        inArray(
+          workingOrderLines.id,
+          change.removedChildren.map((child) => child.id),
+        ),
+      );
+    }
+    await rescaleExtras(tx, kept, quantity);
+    if (change.addedAt !== null) {
+      // The dish and the extras it keeps move after the highest number, and the added ones follow.
+      for (const line of [parent, ...kept.map(({ child }) => child)]) {
+        await tx
+          .update(workingOrderLines)
+          .set({ lineNo: ++nextLineNo })
+          .where(eq(workingOrderLines.id, line.id));
+      }
+      const group = groups[change.addedAt]!;
+      for (const [index, row] of group.rows.entries()) {
+        if (row.parentLineId === null) continue;
+        inserted.push({ ...row, parentLineId: parent.id, lineNo: ++nextLineNo });
+        insertedContexts.push(group.contexts[index]!);
+      }
+    }
+    if (change.action === "change") {
+      await tx.delete(ticketItems).where(eq(ticketItems.id, parent.ticket!.id));
+      fireNow.push({
+        id: parent.id,
+        productId: parent.productId,
+        courseId: parent.courseId,
+        parentLineId: null,
+        note,
+        quantity: decimalToThousandths(quantity),
+        release: true,
+      });
+    } else if (parent.ticket !== null) {
+      // A held or recalled item is sent later as the line now reads.
+      await tx
+        .update(ticketItems)
+        .set({ quantity: decimalToThousandths(quantity), note })
+        .where(eq(ticketItems.id, parent.ticket.id));
+    }
+  }
+
+  groups.forEach((group, index) => {
+    const as = pricedAs[index]!;
+    if (as.kind !== "line") return;
+    for (const [rowIndex, row] of group.rows.entries()) {
+      inserted.push({ ...row, lineNo: ++nextLineNo });
+      insertedContexts.push(group.contexts[rowIndex]!);
+      if (row.parentLineId === null && as.kitchen !== "none") {
+        const courseId = row.courseId ?? null;
+        fireNow.push({
+          id: row.id!,
+          productId: row.productId!,
+          courseId,
+          parentLineId: null,
+          note: row.note ?? null,
+          quantity: row.quantity,
+          hold: as.kitchen === "hold",
+          // A changed line's old item is deleted above, so `fireLines` alone could no longer see
+          // that its course had fired.
+          release: as.kitchen === "fire" && courseId !== null && order.firedCourseIds.has(courseId),
+        });
+      }
+    }
+  });
+  if (inserted.length > 0) {
+    await tx.insert(workingOrderLines).values(inserted);
+    await VENUE_SERVICE.recordLineContexts(tx, cfg, orderId, insertedContexts);
+  }
+  // Fired while the removed lines' items still stand, so a course they held counts as fired.
+  await fireLines(tx, cfg, orderId, fireNow);
+  if (plan.removed.length > 0) {
+    const removedIds = plan.removed.map((parent) => parent.id);
+    await tx
+      .delete(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, orderId),
+          or(
+            inArray(workingOrderLines.id, removedIds),
+            inArray(workingOrderLines.parentLineId, removedIds),
+          ),
+        ),
+      );
+  }
+  return { changed: changes.length > 0 || plan.removed.length > 0 || plan.fresh.length > 0 };
+}
+
+/**
+ * Count a write on the order's revision only when it changed something, and answer the revision the
+ * order is at after it: `copy` is the one {@link requireEditableOrder} matched in this transaction.
+ * One that changes nothing is still refused while a card payment of the order is in flight, as every
+ * other line write is.
+ */
+async function countEdit(
+  tx: Transaction,
+  orderId: string,
+  copy: number,
+  changed: boolean,
+): Promise<number> {
+  if (!changed) {
+    await refusePaymentInFlight(tx, [orderId]);
+    return copy;
+  }
+  await bumpRevision(tx, [orderId]);
+  return copy + 1;
+}
+
+/**
+ * Save an edited copy of an OPEN order, from any node of the venue, by the rules
+ * {@link applyLineEdits} states. A line of the basket naming a stored line by id, through the same
+ * offer and variant, edits it; a line naming a different offer or variant replaces it with a new
+ * item priced now; a line naming none is new; a stored line the basket leaves out is removed. An
+ * absent label clears it: the whole request is the new state. Answers the order's revision after
+ * the save.
+ */
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
   id: string,
   req: UpdateHeldOrderRequest,
-): Promise<void> {
+): Promise<number> {
   return withTransaction(deps.db, async (tx) => {
-    const [order] = await tx
-      .select({ status: workingOrders.status })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id));
-
-    if (order === undefined || order.status !== "open") {
-      throw new AppError("working_order.not_open", { workingOrderId: id });
-    }
-
+    const { label } = await requireEditableOrder(tx, id, req.revision);
     // Rewriting an order to zero lines is a discard, which is `abandonHeldOrder`'s job.
     if (req.lines.length === 0) {
       throw new AppError("sale.empty_basket", {});
     }
-
-    // A quantity-only edit keeps each line's locked price and stable id. Anything else takes the
-    // replacement path below and is priced from the current offer.
-    const storedLineRows = await tx
-      .select({
-        id: workingOrderLines.id,
-        optionSnapshots: workingOrderLines.optionSnapshots,
-        parentLineId: workingOrderLines.parentLineId,
-        productId: workingOrderLines.productId,
-        // Set on a variant line: the dish is then the parent, which holds the lists a variant offers.
-        parentProductId: products.parentId,
-        unitPriceGross: workingOrderLines.unitPriceGross,
-        quantity: workingOrderLines.quantity,
-        note: workingOrderLines.note,
-      })
-      .from(workingOrderLines)
-      .leftJoin(products, eq(products.id, workingOrderLines.productId))
-      .where(eq(workingOrderLines.workingOrderId, id))
-      .orderBy(workingOrderLines.lineNo);
-    const storedRows = storedLineRows.map((line) => ({
-      ...line,
-      quantity: thousandthsToDecimal(line.quantity),
-      unitPriceGross: centsToDecimal(line.unitPriceGross),
-    }));
-    type StoredLine = (typeof storedRows)[number];
-    const storedParents = storedRows.filter((line) => line.parentLineId === null);
-    const childrenByParent = new Map<string, typeof storedRows>();
-    for (const row of storedRows) {
-      if (row.parentLineId === null) continue;
-      const children = childrenByParent.get(row.parentLineId) ?? [];
-      children.push(row);
-      childrenByParent.set(row.parentLineId, children);
-    }
-    const contextByLine = new Map(
-      (await VENUE_SERVICE.listLineContexts(tx, cfg, id)).map((line) => [
-        line.workingOrderLineId,
-        line,
-      ]),
-    );
-
-    /**
-     * The stored parent a requested line would keep, or `null` when it is not the same line. These
-     * checks need no read, so an edit failing one skips the catalogue reads the answers comparison
-     * needs. `productId` in the result is the DISH.
-     */
-    const sameLines = req.lines.map((line, index) => {
-      const stored = storedParents[index];
-      const soldId = stored?.productId;
-      if (
-        stored === undefined ||
-        soldId === null ||
-        soldId === undefined ||
-        line.workingOrderLineId !== stored.id ||
-        (line.note?.trim() ?? null) !== stored.note
-      ) {
-        return null;
+    const order = await readEditableOrder(tx, cfg, id);
+    const byId = new Map(order.parents.map((parent) => [parent.id, parent]));
+    const claimed = new Set<string>();
+    const edits: { parent: EditableParent; intent: LineIntent }[] = [];
+    const fresh: RequestedLine[] = [];
+    for (const line of req.lines) {
+      const parent =
+        line.workingOrderLineId === undefined ? undefined : byId.get(line.workingOrderLineId);
+      if (parent === undefined || claimed.has(parent.id) || parent.productId === null) {
+        fresh.push(line);
+        continue;
       }
-      const productId = stored.parentProductId ?? soldId;
-      const { menuItemId } = line;
+      claimed.add(parent.id);
       // An offer line sells the variant it names, else the offer's own product. A line naming a
-      // product goes to the replacement path, which refuses it.
-      const sameIdentity =
-        contextByLine.get(stored.id)?.menuItemId === menuItemId &&
+      // product goes to the new-line path, which refuses it.
+      const sameItem =
+        parent.menuItemId === line.menuItemId &&
         !Object.hasOwn(line, "productId") &&
-        (line.variantId ?? productId) === soldId;
-      return menuItemId !== undefined && sameIdentity ? { stored, productId, menuItemId } : null;
-    });
-    const sameBasket =
-      req.lines.length === storedParents.length && sameLines.every((entry) => entry !== null);
-
-    /**
-     * What a requested line would freeze if re-priced now, or `null` when its answers differ from the
-     * stored ones. An invalid selection answers `null` too: the replacement path re-validates it and
-     * raises the refusal, so nothing is swallowed.
-     */
-    let rebuilt: ({
-      stored: StoredLine;
-      paired: { pick: ExtraChild; child: StoredLine }[];
-    } | null)[] = [];
-    if (sameBasket) {
-      const contentConfig = await readContentLanguages(tx, cfg.locale);
-      const modifiers = await resolveBasketModifiers(
-        tx,
-        sameLines.flatMap((entry) =>
-          entry === null ? [] : [{ productId: entry.productId, menuItemId: entry.menuItemId }],
-        ),
-        contentConfig.defaultLanguage,
-        false,
-      );
-      rebuilt = req.lines.map((line, index) => {
-        const entry = sameLines[index];
-        if (entry === null || entry === undefined) return null;
-        const { stored, productId, menuItemId } = entry;
-        let frozen;
-        try {
-          frozen = buildLineExtras(
-            {
-              extras: modifiers.extrasByHolder.get(menuItemId) ?? [],
-              options: modifiers.optionsByProduct.get(productId) ?? [],
-            },
-            modifiers.extraProducts,
-            { extras: line.extras, options: line.options },
-            contentConfig.defaultLanguage,
-          );
-        } catch {
-          return null;
-        }
-        // Compared by VALUES and never by either side's order: both sides are built in the OFFERED
-        // order, and that order is a stored position several columns hold and a save re-numbers, so
-        // a line parked before a reorder keeps the old one. `docs/developers/modifiers.md` names
-        // those columns; `matchExtraChildren` (modifier-selection.ts) carries what else the extras
-        // side has to refuse, and what its refusal does not cover.
-        if (!sameOptionSelections(frozen.optionSnapshots, stored.optionSnapshots)) return null;
-        const paired = matchExtraChildren(
-          modifiers.extrasByHolder.get(menuItemId) ?? [],
-          frozen.extraChildren,
-          childrenByParent.get(stored.id) ?? [],
-          stored.quantity,
-        );
-        return paired === null ? null : { stored, paired };
+        (line.variantId ?? parent.parentProductId ?? parent.productId) === parent.productId;
+      if (!sameItem) {
+        claimed.delete(parent.id);
+        fresh.push(line);
+        continue;
+      }
+      edits.push({
+        parent,
+        intent: {
+          quantity: line.quantity,
+          note: screenNote(line.note),
+          options: { set: line.options ?? [] },
+          extras: { set: line.extras ?? [] },
+        },
       });
     }
-    // A line whose quantity RISES sells more of its dish and its extras, so those products must be
-    // sellable now; failing that, the edit takes the replacement path, whose reads refuse it. The
-    // dish is the variant's parent on a variant line, and only the dish and its picks are
-    // re-checked: nothing else the replacement path's offer read refuses is, the variant's own
-    // Active and Available included. A kept or lowered quantity is not re-checked: existing work is
-    // not cancelled.
-    const keepsEveryLine = sameBasket && rebuilt.every((entry) => entry !== null);
-    const raised = keepsEveryLine
-      ? rebuilt.flatMap((entry, index) =>
-          compareDecimal(decimal(req.lines[index]!.quantity), decimal(entry!.stored.quantity)) > 0
-            ? [{ entry: entry!, dishId: sameLines[index]!.productId }]
-            : [],
-        )
-      : [];
-    const pickIds = raised.flatMap(({ entry }) => entry.paired.map(({ pick }) => pick.productId));
-    const raisedProductIds = new Set([...raised.map(({ dishId }) => dishId), ...pickIds]);
-    const soldIds = [...raised.map(({ entry }) => entry.stored.productId!), ...pickIds];
-    const raisesUnsellable =
-      raisedProductIds.size > 0 &&
-      ((
-        await tx
-          .select({ id: products.id })
-          .from(products)
-          .where(
-            and(
-              inArray(products.id, [...raisedProductIds]),
-              eq(products.active, true),
-              eq(products.available, true),
-            ),
-          )
-      ).length < raisedProductIds.size ||
-        (await parentsWithActiveVariants(tx, soldIds)).size > 0);
-    const preservesEveryLine = keepsEveryLine && !raisesUnsellable;
-    if (preservesEveryLine) {
-      for (let index = 0; index < req.lines.length; index++) {
-        const requested = req.lines[index]!;
-        const { stored, paired } = rebuilt[index]!;
-        await tx
-          .update(workingOrderLines)
-          .set({
-            quantity: stringToThousandths(requested.quantity),
-            lineTotal: decimalToCents(grossLineTotal(stored.unitPriceGross, requested.quantity)),
-          })
-          .where(
-            and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.id, stored.id)),
-          );
-        // From the STORED gross, so the price the line was sold at is untouched. A child is paired
-        // with its pick by `matchExtraChildren`, not by position.
-        for (const { pick, child } of paired) {
-          const childQuantity = multiplyDecimal(
-            decimal(requested.quantity),
-            decimal(String(pick.quantity)),
-          );
-          await tx
-            .update(workingOrderLines)
-            .set({
-              quantity: decimalToThousandths(childQuantity),
-              lineTotal: decimalToCents(grossLineTotal(child.unitPriceGross, childQuantity)),
-            })
-            .where(
-              and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.id, child.id)),
-            );
-        }
-      }
+    const { changed } = await applyLineEdits(tx, cfg, id, order, {
+      edits,
+      removed: order.parents.filter((parent) => !claimed.has(parent.id)),
+      fresh,
+    });
+    const relabelled = (req.label ?? null) !== label;
+    if (relabelled) {
       await tx
         .update(workingOrders)
         .set({ label: req.label ?? null })
         .where(eq(workingOrders.id, id));
-      return;
     }
-
-    // Priced BEFORE deleting anything, so a bad line aborts with the parked order still intact.
-    const context = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
-    const { lineRows, lineContexts } = await priceOrderLines(
-      tx,
-      cfg,
-      id,
-      req.lines,
-      context?.zoneId,
-    );
-    // Cascades to each line's `ticket_items` row, so a fired line's kitchen ticket is deleted, not
-    // recalled, and the new lines are not fired. `working_line_contexts` is re-recorded below.
-    await tx.delete(workingOrderLines).where(eq(workingOrderLines.workingOrderId, id));
-    await tx.insert(workingOrderLines).values(lineRows);
-    await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts);
-
-    // An absent label clears it: the whole request is the new state.
-    await tx
-      .update(workingOrders)
-      .set({ label: req.label ?? null })
-      .where(eq(workingOrders.id, id));
+    return countEdit(tx, id, req.revision, changed || relabelled);
   });
+}
+
+/**
+ * Edit ONE dish line of an OPEN order made from the copy at `revision`, by the rules
+ * {@link applyLineEdits} states; an absent field of `patch` keeps the line's own. A line number the
+ * order does not hold is `tab.line_not_found`, and an extras line, which follows its dish,
+ * `management.request_invalid`. Answers the order's revision after the edit.
+ */
+export async function updateOrderLine(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  lineNo: number,
+  patch: OrderLinePatch,
+  revision: number,
+): Promise<number> {
+  await requireEditableOrder(tx, orderId, revision);
+  const order = await readEditableOrder(tx, cfg, orderId);
+  const line = order.lines.find((candidate) => candidate.lineNo === lineNo);
+  if (line === undefined) {
+    throw new AppError("tab.line_not_found", { tabId: orderId, lineNo });
+  }
+  const parent = order.parents.find((candidate) => candidate.id === line.id);
+  if (parent === undefined) {
+    throw new AppError("management.request_invalid", { field: "lineNo" });
+  }
+  const { changed } = await applyLineEdits(tx, cfg, orderId, order, {
+    edits: [
+      {
+        parent,
+        intent: {
+          quantity: patch.quantity ?? parent.quantity,
+          note: Object.hasOwn(patch, "note") ? screenNote(patch.note) : parent.note,
+          options: patch.options === undefined ? null : { set: patch.options },
+          extras: patch.extras === undefined ? null : { set: patch.extras },
+        },
+      },
+    ],
+    removed: [],
+    fresh: [],
+  });
+  return countEdit(tx, orderId, revision, changed);
 }
 
 /** Abandon an open held order anywhere in the venue. An unknown id reads as `working_order.not_open`. */
@@ -2606,6 +3635,7 @@ export async function abandonHeldOrder(
 ): Promise<void> {
   void cfg;
   return withTransaction(deps.db, async (tx) => {
+    await refusePaymentInFlight(tx, [id]);
     const updated = await tx
       .update(workingOrders)
       .set({ status: "abandoned" })
@@ -2652,8 +3682,27 @@ export async function placeOrder(
     if (locked === undefined || locked.status !== "open") {
       throw new AppError("working_order.not_open", { workingOrderId: id });
     }
+    await refusePaymentInFlight(tx, [id]);
     const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
     const orderFlow = serviceContext?.serviceMode ?? cfg.orderFlow;
+
+    // Placing changes no line's quantity, course or note, so the lines read now are the ones fired.
+    const lines = await tx
+      .select(fireableLineColumns)
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    // Nothing on an open order has fired yet, so every dish line is about to be sent.
+    await assertSendable(
+      tx,
+      lines.filter((line) => line.parentLineId === null).map((line) => line.id),
+    );
+    // Placing commits the whole order, a course the kitchen holds included, so every line is sent.
+    // Stamped while the order is still open, which is the only time a line may be written.
+    await tx
+      .update(workingOrderLines)
+      .set({ sentAt: nowIso() })
+      .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.sentAt)));
 
     // Only invoice-first files at placing, from the stored locked lines: never a re-price.
     let placeResult: PlaceOrderResult = { id, status: "placed" };
@@ -2723,18 +3772,7 @@ export async function placeOrder(
       eventOffsetMinutes: now.offsetMinutes,
     });
 
-    const firedLines = await tx
-      .select({
-        id: workingOrderLines.id,
-        productId: workingOrderLines.productId,
-        courseId: workingOrderLines.courseId,
-        parentLineId: workingOrderLines.parentLineId,
-        note: workingOrderLines.note,
-      })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id))
-      .orderBy(workingOrderLines.lineNo);
-    await fireLines(tx, cfg, id, firedLines);
+    await fireLines(tx, cfg, id, lines);
 
     return placeResult;
   });
@@ -2798,16 +3836,11 @@ export async function sendToPrep(
     }
 
     const firedLines = await tx
-      .select({
-        id: workingOrderLines.id,
-        productId: workingOrderLines.productId,
-        courseId: workingOrderLines.courseId,
-        parentLineId: workingOrderLines.parentLineId,
-        note: workingOrderLines.note,
-      })
+      .select(fireableLineColumns)
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
+    // No sold-out check: a settled order's lines cannot be removed, so refusing would strand paid work.
     await fireLines(tx, cfg, id, firedLines);
   });
 }
@@ -2875,8 +3908,7 @@ function minutesSince(stamp: string, nowMs: number): number {
   return Math.floor((nowMs - Date.parse(stamp)) / 60_000);
 }
 
-/** `queued → preparing → ready`. */
-export type TicketState = (typeof ticketState.enumValues)[number];
+export type { TicketState } from "./kitchen-print.js";
 
 export type WorkingOrderStatus = (typeof workingOrderStatus.enumValues)[number];
 
@@ -3111,7 +4143,7 @@ export async function listStationQueue(
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
       optionSnapshots: workingOrderLines.optionSnapshots,
-      quantity: workingOrderLines.quantity,
+      quantity: firedQuantity,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
       lineNo: workingOrderLines.lineNo,
@@ -3241,7 +4273,7 @@ export interface ExpoCourse {
   items: ExpoItem[];
 }
 
-/** One order on the cross-station expo board. `tableLabel` is absent for a bare walk-up. */
+/** One order on the cross-station expo board. `tableLabel` is absent for an unlabelled walk-up. */
 export interface ExpoOrder {
   orderId: string;
   tableLabel?: string;
@@ -3277,7 +4309,7 @@ export async function listExpoQueue(
       variantName: workingOrderLines.variantName,
       variantKitchenName: workingOrderLines.variantKitchenName,
       optionSnapshots: workingOrderLines.optionSnapshots,
-      quantity: workingOrderLines.quantity,
+      quantity: firedQuantity,
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
       lineNo: workingOrderLines.lineNo,
@@ -3298,13 +4330,14 @@ export async function listExpoQueue(
       // A scalar subquery, not a LEFT JOIN, which would multiply the item rows when several tables
       // match (the tables joined to one tab, or a tab's table and a table the order delivers to).
       // The `order by` makes the label picked deterministic: a table whose `tab_id` is this order
-      // first, then the lowest table id.
-      tableLabel: sql<string | null>`(
+      // first, then the lowest table id. With no table, the order's own label: a check split off a
+      // tab carries the tab's table label as its own.
+      tableLabel: sql<string | null>`coalesce((
         select dt.label from dining_tables dt
         where dt.location_id = ${loc}
           and (dt.tab_id = ${workingOrders.id} or ${workingOrders.deliveryTableId} = dt.id)
         order by (dt.tab_id = ${workingOrders.id}) desc nulls last, dt.id
-        limit 1)`,
+        limit 1), ${workingOrders.label})`,
     })
     .from(ticketItems)
     .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))

@@ -216,7 +216,7 @@ export class TillStationScreen extends LitElement {
     if (this.activeStationId === undefined) return;
     const request = ++this.#queueRequest;
     try {
-      const groups = await this.api.getStationQueue(this.activeStationId);
+      const { items: groups } = await this.api.getStationQueue(this.activeStationId);
       if (this.isConnected && request === this.#queueRequest) this.groups = groups;
     } catch {
       // Non-fatal — leave the last-known queue; the next reload reconciles.

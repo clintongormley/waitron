@@ -159,6 +159,7 @@ import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./pr
 import { seedInstalledDemo } from "./demo-seed.js";
 import { runFiscalDrain } from "./onboarding-policy.js";
 import { resetBeforeFirstDrain } from "./restart-reset.js";
+import { releaseStalePaymentAttempts } from "./till-sale.js";
 import { adoptFromPrimary } from "./adopt.js";
 import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -361,6 +362,29 @@ export function withPendingSweep(
           error: String(error),
         });
       }
+    }
+    return report;
+  };
+}
+
+/**
+ * After each pass, release the in-flight marks (plan D22) no payment attempt is still behind
+ * (`releaseStalePaymentAttempts`). After the inner pass, so a card attempt its sweep resolved in
+ * this pass is judged on the resolved row. Like {@link withPendingSweep} it is log-only: a failure
+ * never changes the inner report. Exported for a direct test (`boot-pending-sweep.test.ts`).
+ */
+export function withStalePaymentRelease(
+  inner: (now: Date) => Promise<PassReport>,
+  release: () => Promise<number>,
+  log: Logger,
+): (now: Date) => Promise<PassReport> {
+  return async (now) => {
+    const report = await inner(now);
+    try {
+      const released = await release();
+      if (released > 0) log("info", "payment_attempt.released", { released });
+    } catch (error) {
+      log("warn", "payment_attempt.release_failed", { error: String(error) });
     }
     return report;
   };
@@ -1835,44 +1859,48 @@ async function bootServer(
     // a promotion starts them on the next tick; any other node gets an empty pass that still advances
     // `/health`. So on a non-singleton node `/health` reflects only process liveness: a mirror answers
     // healthy whatever its data.
-    pass: withPendingSweep(
-      singletonPass(
-        () => holders.singletonRole.current,
-        (at) =>
-          runPass(
-            {
-              drain: (at2) => runFiscalDrain(config, fiscalDrain, at2),
-              // Asked per pass, so a credential provisioned while the host runs is served on the next
-              // pass; without one there is nothing to reconcile.
-              reconcile: async (at2) =>
-                (await credentialProvisioned(db, "payments.stripe"))
-                  ? runDue(
-                      {
-                        db,
-                        duties: [duty],
-                        horizonDays: config.scheduler.horizonDays,
-                        maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
-                        maxAttempts: config.scheduler.maxAttempts,
-                        backoffBaseMs: config.scheduler.backoffBaseMs,
-                        staleAfterMs: config.scheduler.staleAfterMs,
-                        skipRetryMs: config.skipRetryMs,
-                      },
-                      at2,
-                    )
-                  : NOTHING_TO_RECONCILE,
-              awaitingCert: awaitingFiscalCert,
-              monotonicMs: () => performance.now(),
-              log,
-            },
-            at,
-          ),
+    pass: withStalePaymentRelease(
+      withPendingSweep(
+        singletonPass(
+          () => holders.singletonRole.current,
+          (at) =>
+            runPass(
+              {
+                drain: (at2) => runFiscalDrain(config, fiscalDrain, at2),
+                // Asked per pass, so a credential provisioned while the host runs is served on the next
+                // pass; without one there is nothing to reconcile.
+                reconcile: async (at2) =>
+                  (await credentialProvisioned(db, "payments.stripe"))
+                    ? runDue(
+                        {
+                          db,
+                          duties: [duty],
+                          horizonDays: config.scheduler.horizonDays,
+                          maxPeriodsPerTick: config.scheduler.maxPeriodsPerTick,
+                          maxAttempts: config.scheduler.maxAttempts,
+                          backoffBaseMs: config.scheduler.backoffBaseMs,
+                          staleAfterMs: config.scheduler.staleAfterMs,
+                          skipRetryMs: config.skipRetryMs,
+                        },
+                        at2,
+                      )
+                    : NOTHING_TO_RECONCILE,
+                awaitingCert: awaitingFiscalCert,
+                monotonicMs: () => performance.now(),
+                log,
+              },
+              at,
+            ),
+        ),
+        connectedCardProviderSweep({
+          db,
+          pool: cardPool,
+          contributions: CARD_PROVIDERS,
+          simulator: cardProvider,
+        }),
+        log,
       ),
-      connectedCardProviderSweep({
-        db,
-        pool: cardPool,
-        contributions: CARD_PROVIDERS,
-        simulator: cardProvider,
-      }),
+      () => releaseStalePaymentAttempts(db),
       log,
     ),
     now,

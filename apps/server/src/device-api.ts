@@ -19,6 +19,7 @@ import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limi
 import { requireBodyUuid, requireNullableBodyUuid, requireString } from "@waitron/server-kit";
 import { advanceTicketItem, listStationQueue, type TicketState } from "./working-order.js";
 import { isUuid } from "./till-session.js";
+import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 
@@ -86,6 +87,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "ticket.invalid_transition": 409,
   "ticket.item_held": 409,
+  "kitchen_notice.not_found": 404,
 };
 
 const run = createErrorBoundary(STATUS, "device.failed");
@@ -203,10 +205,28 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // existence nor its kind.
       if (device.stationId === null) throw new AppError("device.unauthorized", {});
       const stationId = device.stationId;
-      const queue = await withTransaction(deps.db, async (tx) => {
-        return listStationQueue(tx, stationId);
+      const station = await withTransaction(deps.db, async (tx) => ({
+        id: stationId,
+        queue: await listStationQueue(tx, stationId),
+        notices: await VENUE_SERVICE.listStationNotices(tx, deps.cfg, stationId),
+      }));
+      return c.json({ station });
+    }),
+  );
+
+  // ── Acknowledge one of the bound station's kitchen notices (DEVICE-GUARDED) ──────────────────────────
+  // A notice at another station answers as an unknown one does: the display names only its own.
+  app.post("/api/device/kitchen-notices/:id/acknowledge", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      if (device.stationId === null) throw new AppError("device.unauthorized", {});
+      const stationId = device.stationId;
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("kitchen_notice.not_found", { noticeId: id });
+      await withTransaction(deps.db, async (tx) => {
+        await VENUE_SERVICE.acknowledgeKitchenNotice(tx, deps.cfg, id, { stationId });
       });
-      return c.json({ station: { id: stationId, queue } });
+      return c.body(null, 204);
     }),
   );
 

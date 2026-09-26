@@ -592,6 +592,10 @@ asks for confirmation; after it, the sale files €2.50 + €2.50. It never file
   - a split or transfer copies the mark to the new row, and copies the line's course, note and
     served state with it; a partial split of a line the kitchen has STARTED is refused, because the
     split-off row would have no kitchen work of its own to guard it;
+    **(2026-09-26, the owner's answer, overturning the refusal:** the split-off part gets its own
+    kitchen ticket row, copied from the original, and the original's quantity drops by the part
+    moved; a started line may be split, while edits of it stay refused; the split tells the kitchen
+    nothing.)
   - a line with no preparation route under a held course is marked sent when that course fires,
     not before;
   - "sent" governs payment; whether a line can be SENT reads the kitchen state, so a recalled line
@@ -667,6 +671,16 @@ opened or after its own actions.
   Held courses on such a kitchen are held by not sending them, never by recalling.
 - **The kitchen screen refreshes on its own** (a poll, D11's interval), so a notice appears without
   a cook touching the screen.
+
+_2026-09-26, the owner's answer to menus Task 7b item 4 (lane C questions): moving sent work to
+another table is allowed and is a correction too, a fourth kind, MOVED. A line transfer (whole or
+part), an unjoin, moving a tab, merging tabs and moving a tab's lines each record a MOVED notice in
+the same transaction, naming the table the work now belongs to, and print a MOVED slip where the
+station has a printer. The table compared is the one a correction slip names for the order, read
+before the move and after it; a split onto a check keeps it and records nothing, and held work
+records nothing, because the kitchen has not been sent it. An unjoin that takes sent work always
+records one, because a joined tab's slips name its lowest-id table, which need not be the one its
+tickets printed._
 
 ### 11.6 Staff edit a sent line from the till, not through an API call
 

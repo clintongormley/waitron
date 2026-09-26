@@ -180,21 +180,25 @@ the basket resolved, and decides what is stored:
 
 Reading them back, four wire types carry `optionSnapshots`: `TabLine`, `HeldOrder.lines`,
 `StationQueueItem` and `ExpoItem`, all declared in `apps/server/src/working-order.ts`. A held order's lines also carry an
-`extras` array holding what each CHILD line froze. Those are VALUES, not a re-sendable selection:
-the child line holds no list id to name. The till rebuilds one from them against the dish's live
-offer (`deriveExtraSelections` and `deriveOptionSelections`, `apps/till/src/state/`) — see the end
-of this section.
+`extras` array holding what each CHILD line froze, with the list each pick was taken from
+(`listId`). The till rebuilds a selection from them against the dish's live offer: a pick goes back
+to its own list while that list still offers the product, and another list offering the same product
+is not used in its place (`deriveExtraSelections` and `deriveOptionSelections`,
+`apps/till/src/state/`) — see the end of this section.
 
-A quantity-only edit of a held order sends the same answers with a new quantity. `updateHeldOrder`
-rebuilds what those answers would freeze NOW and compares the result with what the stored line
-holds, by value; equal, every line and its locked price are kept — except that a line whose
-quantity rises also needs its dish's product and every extra's product to be Active and Available,
-and neither the product the line sold nor any extra's product may have an Active variant (spec
-§15.1). A line that fails either check sends the edit to the replacement path, where it is refused
-— a product with an Active variant as `product.variant_required`. One line that does not match
-sends the WHOLE order down the replacement path, which re-prices every line on it.
+An edit of a saved order sends each line's answers again, and prices only what the edit adds (menus
+plan D10). `updateHeldOrder` rebuilds what a stored line's options answers would freeze NOW and
+compares the result with what the line holds, by value; different, the new answers are frozen onto
+the same row, at the line's stored price, because an answer carries no price. Its extras picks are
+paired with the stored child lines by `editLineExtras`: a pick that pairs keeps its child at the
+price it was sold at, a pick that pairs with nothing is new and priced from its list now, and a
+child no pick keeps is removed. A line whose quantity rises, while the kitchen does not have it,
+keeps its stored price, but its dish and its picks are priced afresh as a check first, so a dish or
+an extra that is Inactive or Unavailable, or has gained an Active variant (spec §15.1), refuses the
+raise with the code a new line naming it gets (`product.variant_required` for the variant). A line
+the edit does not change is not touched.
 
-Neither side's ORDER is part of that comparison (`sameOptionSelections` and `matchExtraChildren`,
+Neither side's ORDER is part of that comparison (`sameOptionSelections` and `editLineExtras`,
 `apps/server/src/modifier-selection.ts`). Both sides are built in the order the dish offers its
 answers, which reads as a fixed thing and is not one: it is a stored position, and THREE columns
 hold parts of it, each re-numbered from the body of whatever save writes it.
@@ -206,56 +210,37 @@ hold parts of it, each re-numbered from the body of whatever save writes it.
 | `menu_item_extra_lists.display_order` | the extras lists of a line naming a MENU OFFER | `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`), from the body that sets a menu offer's extras lists | no — nothing outside `packages/catalogue` and the test suites calls it |
 
 So a line parked before any of those saves keeps the old order while the rebuilt side comes back in
-the new one, and a comparison pairing the two up position by position reads that as a changed answer
-and re-prices a quantity-only edit. The extras comparator answers the PAIRING of picks to stored
-child lines rather than a yes or no, because the update moves each child's quantity and the two
-sides are no longer in step.
+the new one, and a comparison pairing the two up position by position reads that as a changed answer.
+The extras comparison answers the PAIRING
+of picks to stored child lines rather than a yes or no, because the update moves each child's
+quantity and the two sides are no longer in step.
 
-**A picked product that more than one of the dish's ACTIVE lists offers refuses the pairing.** A
-child line records the product it is, its quantity and the price it was sold at, never the list that
-offered it (§3.4 of the design). So when two lists offer the same product at two prices, nothing on
-the stored side says which row belongs to which list, and the comparison cannot tell a quantity
-change from a pick that MOVED between the two — it keeps the price of whichever row it lands on.
+**A stored extras child records the list it was taken from, and pairs only with a pick from that
+list.** `buildLineExtras` gives each child its pick's `listId`, and the order path stores it as
+`working_order_lines.extra_list_id` (menus plan D10, which reverses §3.5 of the design here). A pick
+and a stored child pair on list, product and quantity. So when two lists offer the same product at
+two prices, an edit keeps the child at the price its own list sold it at, whatever either list
+charges now, and whether or not that list still offers it (spec §11.7 example 7); a pick MOVED to the
+other list, or two picks that EXCHANGED counts between the two lists, pair with nothing and are new
+picks, priced from today's offers. A child stored before the column existed records no list and
+pairs with nothing either. Pinned in `apps/server/src/working-order.test.ts` by "keeps an extra's
+list and stored price on a quantity-only edit when two lists offer it", "keeps an extra from the
+list it was taken from, whatever that list later charges or offers", and by "prices a pick now when
+it moves to another list offering the same product: it is a new pick" and "prices both picks now
+when two lists offering the same product exchange their counts: each is a new pick", which assert
+the BILL.
 
-Two halves, with different histories. Two picks EXCHANGED between the lists was introduced by making
-the pairing order-independent: the index-wise comparison that preceded it saw the quantities move at
-each position and replaced the line. ONE pick MOVED from one list to the other predates all of it —
-the same fixture run against `main` at `68e36c6aa` bills it at the old list's 1.00 there too. Both
-now take the replacement path and are re-priced from today's offers. The cost is not confined to the
-line that was refused: the replacement path rewrites the WHOLE order, so every line loses its id and
-its price lock whenever a picked product is doubly offered — re-priced from today's offers, which
-changes the number only where an offer has moved.
-
-Pinned in `apps/server/src/working-order.test.ts` by two cases that assert the BILL rather than the
-line ids, because the ids were right while the money was wrong: "replaces the line when a pick moves
-to another list offering the same product", and "replaces the line when two lists offering the same
-product have their picks swapped", where two picks exchanged between a 1.00 list and a 3.00 one cost
-5.00 against the 7.00 a crossed pairing charges.
-
-**The refusal is not a complete guard, and the gap is in the word "offers".** It counts the offers as
-they are NOW, while the ambiguity is a property of the offers the stored child was written against.
-The escape is one specific edit: the list the STORED CHILD came off is deactivated, or loses the
-product, between the park and the edit — the count comes back to one, the re-sent pick names the
-surviving list, and the line is preserved at the old row's price. Traced through the code, not run.
-The opposite edit is closed by something else: a pick naming a list that no longer offers the product
-is refused outright by `validateExtraSelections`, and the line is replaced. Two ways to close the
-escape, neither free — pair on the child's frozen price as well as its product and quantity, which
-gives up the price lock a quantity-only edit exists to keep; or let the child carry the list it came
-off, which is what §3.5 rules out when it says an open order's child points at the product and not
-the list. Recorded in `docs/backlog.md` as an owner decision rather than guessed at here.
-
-An OPTIONS list RENAMED between the two sends does make the two sides differ, and the WHOLE ORDER is
-replaced and re-priced — not just the line that answered it. The preserve test is all-or-nothing
-(`preservesEveryLine`, `apps/server/src/working-order.ts`), so one line that does not match sends
-the request down the replacement path, which prices every line at today's offers and then deletes
-and re-inserts them all under new ids. That is a decision, not an omission: an options answer
-freezes six names and no ids, so the wording is the only evidence the line carries about what was
-chosen, and a rename cannot be told from a different answer. Giving the comparison an id to use
-would mean putting one on the line, which §2.3 of the design rules out. Pinned by "re-prices a held
-line when the options list it answered was renamed between the two sends"
-(`apps/server/src/working-order.test.ts`). An EXTRAS list is different: its children are compared by
-the picked product's id, so renaming the list — or the product — disturbs nothing and the line is
-preserved.
+An OPTIONS list RENAMED between the two sends does make the two sides differ, so the renamed answer
+is frozen onto the line as a changed one; the line keeps its row and its stored price, and no other
+line is touched. That is a decision, not an omission: an options answer freezes six names and no
+ids, so the wording is the only evidence the line carries about what was chosen, and a rename cannot
+be told from a different answer. Giving the comparison an id to use would mean putting one on the
+line, which §2.3 of the design rules out. Pinned by "keeps the price of a held line whose options
+list was renamed between the two sends, freezing the new name"
+(`apps/server/src/working-order.test.ts`). On a line the kitchen already has, a changed answer is a
+change like any other: the kitchen gets a recall notice and a new ticket. An EXTRAS list is different: its children are compared by
+the list's and the picked product's ids, so renaming the list — or the product — disturbs nothing and
+the line is preserved.
 
 The till sends one `options` entry per answered list and one `extras` entry per list picked from,
 reads a line's frozen answers back as `optionSnapshots` on all five mirrors it keeps
@@ -266,7 +251,7 @@ answer's STAFF names back against the dish's live offer and rebuilds the `{ list
 which it has to, because leaving out an answer for an ACTIVE list refuses the whole edit with
 `options.label_required`. It matches on the STAFF name of each side only, leaving the other four to
 the server's own comparison — so a list whose CUSTOMER or KITCHEN wording moved still re-sends, and
-the server then re-prices the whole order as it does for any other changed wording. What it will not
+the server then freezes the new wording on that line, as it does for any other changed wording. What it will not
 do is guess: a staff-name rename on either side, or a withdrawn label, matches nothing, and the till
 tells the operator to open the line and choose again rather than substituting the list's own
 default.
@@ -314,12 +299,16 @@ Six things it is worth knowing about that payload:
   `resolveAttachedModifiers`: it sits in the two separate queries that read the items' `products`
   rows — `readExtraProducts` (`offered-modifiers.ts`) for what the till is offered, and
   `resolveBasketModifiers` (`apps/server/src/working-order.ts`) for a basket priced afresh, which
-  includes the replacement path of a held-order edit. The exception is a held-order edit in which
-  every line is quantity-only: a line kept at or below its stored quantity keeps a pick that has
-  since sold out, and for a line whose quantity rises `updateHeldOrder` checks the dish's and its
-  extras' states itself. Tests: "an extra the till cannot sell" in
-  `packages/catalogue/src/offered-modifiers.test.ts`, and "refuses an extras pick of an Unavailable
-  or an Inactive product as a pick the list does not offer" in `apps/server/src/till-sale.test.ts`.
+  includes a new line or a new pick in an edit of a saved order. A pick the stored line already
+  holds is kept even when its product has since sold out — through an edit of a line the kitchen
+  does not have (held or recalled), and a quantity drop of one it has — with two exceptions: a
+  CHANGE to a line the kitchen has sends the line again with the picks it keeps, so a sold-out one
+  is refused `product.unavailable`; and a line whose quantity rises, the kitchen's or not, is priced
+  afresh as a check, so there it is refused like a new pick. All of these are pinned by "keeps an extra whose product sold out on a line the kitchen does not have, and
+  refuses to send it again on one it has" in `apps/server/src/tabs.test.ts`. The filter's own tests:
+  "an extra the till cannot sell" in `packages/catalogue/src/offered-modifiers.test.ts`, and
+  "refuses an extras pick of an Unavailable or an Inactive product as a pick the list does not
+  offer" in `apps/server/src/till-sale.test.ts`.
   An extras list also leaves out a product that has an Active variant (spec §15.1: it is never sold
   as itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a
   different code, `product.variant_required`, in `priceOrderLines`

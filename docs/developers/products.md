@@ -284,20 +284,22 @@ such a product; a pick of a variant itself sells. That refusal comes from one re
 basket's picks (`parentsWithActiveVariants`, `packages/catalogue/src/variants.ts`). A product whose
 variants are all Inactive sells as itself.
 
-On the server, a held order keeps its stored lines — including one whose product, or one of whose
-extras, has since gained an Active variant — only when an edit re-sends every line as stored,
-changing at most their quantities, which a till cannot do for such an extra (below). Lowering or
-keeping such a line's quantity is allowed; raising it is refused `product.variant_required`, as a
-raise of a line whose product has become Inactive or Unavailable is refused. Any other edit
-replaces and re-prices the whole order (`updateHeldOrder`, `apps/server/src/working-order.ts`). Paying a held order bills its stored lines and does not
-re-check them; only each line's VAT rate is resolved again, as _What a sold line freezes_ says
-(`priceStoredOrderForIssuance`, same file). On the till, retrieving the order keeps such an extra
-in the basket, marked "Not offered now" and counted in the total, as it keeps a sold-out one,
-because the extras lists it rebuilds the picks from no longer offer it (`deriveExtraSelections`,
+On the server, an edit of a held order keeps each stored line it names, at its stored price —
+including one whose product, or one of whose extras, has since gained an Active variant — and
+prices only what the edit adds (menus plan D10; `updateHeldOrder`,
+`apps/server/src/working-order.ts`). Lowering or keeping such a line's quantity is allowed; raising
+it is refused `product.variant_required`, as a raise of a line whose product has become Inactive or
+Unavailable is refused. Paying a held order bills its stored lines at their stored prices, with
+each line's VAT rate resolved again, as _What a sold line freezes_ says; a line not yet sent, dish
+or extra, whose product is now Inactive or Unavailable is refused `product.unavailable`, while a
+sent one is billed whatever its product's availability (`priceStoredOrderForIssuance`, same file;
+a card payment already captured is filed as it stands). On the till, retrieving the order keeps
+such an extra in the basket, marked "Not offered now" and counted in the total, as it keeps a
+sold-out one, because the list the pick was taken from no longer offers it (`deriveExtraSelections`,
 `apps/till/src/state/held-extras.ts`) and paying with no edit still bills it: an unedited retrieved
 basket sends no update (`#syncIfDirty`, `apps/till/src/till-app.ts`). The till never sends such a
-pick, so the first edit takes it off the basket, and the server re-prices the edited order without
-it.
+pick, so the first edit takes it off the basket, and the server removes that extra from the line
+and keeps the rest at their stored prices.
 
 A line sold as a variant has the variant as its `product_id`. It is priced and taxed at the
 variant's effective values above, and freezes the parent's names beside the variant's own
@@ -425,8 +427,12 @@ Delete sends `active: false`, Restore sends `active: true`, and Delete removes n
 and it hides nothing in the dashboard. The till sells a product, or offers it as an extra, only when
 it is both (`listMenuOffers` and `readExtraProducts` in
 `packages/catalogue/src`, and `resolveBasketModifiers` in `apps/server/src/working-order.ts`) —
-except that a held order's line kept at or below its quantity is still billed although its dish or
-an extra has since become Inactive or Unavailable; a raise is checked in `updateHeldOrder`.
+except that an edit of a held order may keep a line at or below its quantity although its dish or
+an extra has since become Inactive or Unavailable (a raise is checked in `updateHeldOrder`, and a
+change to the note, options or extras of a line the kitchen already has is refused
+`product.unavailable` too, because the changed line is sent to the kitchen again — `applyLineEdits`),
+and paying bills such a line only once it has been sent; unsent, it is refused `product.unavailable`
+(`priceStoredOrderForIssuance`).
 `listMenuOffers` keeps an Unavailable product's offer only when its caller passes
 `includeUnavailable`, as the menu management route and the venue readiness check do. A variant is
 listed only under its parent's offer, only while Active, and as available only while Available and

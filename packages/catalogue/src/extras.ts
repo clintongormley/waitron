@@ -316,7 +316,8 @@ export async function updateExtraList(
 export async function deleteExtraList(tx: Transaction, extraListId: string): Promise<void> {
   await assertExtraListForWrite(tx, extraListId);
   // The list's items, its menu publications and their per-item overrides all go with it by ON DELETE
-  // CASCADE. No open-order check: an order's child line names the picked PRODUCT, not the list.
+  // CASCADE. No open-order check: an order's child line records the list's id with no foreign key
+  // into it.
   await tx.delete(extraLists).where(eq(extraLists.id, extraListId));
 }
 
@@ -447,8 +448,9 @@ export type { ExtraListDependants } from "./modifier-list-types.js";
 /**
  * What deleting this list would touch — the preview a delete confirmation reads: the products that
  * carry it and the menu offers that publish it, each detached by the delete rather than blocking it.
- * No order is consulted: an order's child line names the PRODUCT, not the list. A menu publication
- * has no name of its own, so it is identified by the menu item's id and its product's staff name.
+ * No order is consulted: an order's child line records the list's id with no foreign key into it,
+ * so the delete does not touch it. A menu publication has no name of its own, so it is identified by
+ * the menu item's id and its product's staff name.
  */
 export async function extraListDependants(
   tx: Transaction,

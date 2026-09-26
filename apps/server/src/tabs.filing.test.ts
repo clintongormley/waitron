@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -10,6 +10,7 @@ import {
   createProduct,
   listAvailableProducts,
 } from "@waitron/catalogue";
+import { catalogues, ticketItems, workingOrderLines } from "@waitron/db";
 import type { AvailableProduct } from "@waitron/catalogue";
 import { registerSif, VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -28,7 +29,14 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { addTabRound, openTab } from "./working-order.js";
+import {
+  addTabRound,
+  listStationQueue,
+  openTab,
+  splitOffCheck,
+  voidTabLine,
+} from "./working-order.js";
+import { createCourse } from "./kitchen.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -474,5 +482,121 @@ describe("H2 (column): the huella is independent of delivery_table_id", () => {
     expect(await deliveryTableOf(walkUpId, suiteB.db)).toBe(null);
 
     expect(await filedHuella(deliveredId, suite.db)).toBe(await filedHuella(walkUpId, suiteB.db));
+  });
+});
+
+/**
+ * Review Focus 6 of the menus plan (spec sections 11.3 and 11.7 examples 4 and 5, and 10.7 example
+ * 5), as the owner restated it on 2026-09-26: a line that was sent stays payable however its
+ * product's availability changes, through a split and with no preparation route; one that was never
+ * sent does not; and the split's two Burgers are one on each check.
+ */
+describe("a sent line is payable whatever its availability; an unsent one is not", () => {
+  it("pays two checks' fired Burgers and a served bottle after both sell out, and blocks the held Burger until it is removed", async () => {
+    const { cfg, tables } = await setupVenue();
+    const deps = { db: suite.db, backend, clock };
+    const { burgerId, beerId, offers, courseId } = await withTransaction(suite.db, async (tx) => {
+      const [carta] = await tx
+        .select({ id: catalogues.id })
+        .from(catalogues)
+        .where(eq(catalogues.name, "Delicatessen"));
+      const burger = await createProduct(tx, {
+        catalogueId: carta!.id,
+        categoryId: null,
+        name: "Burger staff",
+        customerName: { es: "Hamburguesa cliente" },
+        kitchenName: "Burger kitchen",
+        pricingUnit: "each",
+        unitPrice: "12.00",
+        vatClass: "reduced",
+      });
+      const beer = await createProduct(tx, {
+        catalogueId: carta!.id,
+        categoryId: null,
+        name: "Bottled beer staff",
+        customerName: { es: "Cerveza cliente" },
+        kitchenName: "Beer kitchen",
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      });
+      const offers = await offerProducts(tx, cfg, { zone: "tables" });
+      await tx.execute(sql`
+        update preparation_routes set station_id = null, no_preparation = 1
+        where product_id = ${beer.id}`);
+      const mains = await createCourse(tx, cfg, { name: "Principales", displayOrder: 2 });
+      return { burgerId: burger.id, beerId: beer.id, offers, courseId: mains.id };
+    });
+    expect(offers.zoneId).toBe(tables.zoneId);
+    const tableId = await seedTable(cfg, "Focus-6", suite.db, tables.zoneId);
+    const { tabId } = await withTransaction(suite.db, (tx) => openTab(tx, cfg, { tableId }));
+    await withTransaction(suite.db, async (tx) => {
+      // Line 1: two Burgers, fired. Line 2: a bottle with no preparation, sent with the round.
+      await addTabRound(tx, cfg, tabId, [
+        { menuItemId: offers.offerFor(burgerId), quantity: "2" },
+        { menuItemId: offers.offerFor(beerId), quantity: "1" },
+      ]);
+      // Line 3: a third Burger, held with its course and never sent.
+      await addTabRound(tx, cfg, tabId, [
+        { menuItemId: offers.offerFor(burgerId), quantity: "1", courseId, hold: true },
+      ]);
+    });
+
+    // Both products sell out.
+    await suite.db.execute(sql`
+      update products set available = 0 where id in (${burgerId}, ${beerId})`);
+
+    // One of the two fired Burgers goes to a check of its own, which pays.
+    const { checkId } = await withTransaction(suite.db, (tx) =>
+      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    );
+    const check = await payWorkingOrder(deps, cfg, {
+      id: checkId,
+      lines: [],
+      tender: { method: "cash", amount: "12.00" },
+    });
+    expect(check.total).toBe("12.00");
+
+    // The tab still holds the unsent Burger, which blocks it and files nothing.
+    await expect(
+      payWorkingOrder(deps, cfg, {
+        id: tabId,
+        lines: [],
+        tender: { method: "cash", amount: "50.00" },
+      }),
+    ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: burgerId } });
+    expect(await saleCount(tabId)).toBe(0);
+
+    // The kitchen still makes the two Burgers it was sent, one on each check, beside the held one.
+    const [ticket] = await suite.db
+      .select({ stationId: ticketItems.stationId })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    const queue = await withTransaction(suite.db, (tx) => listStationQueue(tx, ticket!.stationId!));
+    expect(
+      Object.fromEntries(
+        queue.map((group) => [
+          group.orderId,
+          group.items.map((item) => [item.name, item.quantity, item.firedAt !== null]),
+        ]),
+      ),
+    ).toEqual({
+      [tabId]: [
+        ["Burger kitchen", "1.000", true],
+        ["Burger kitchen", "1.000", false],
+      ],
+      [checkId]: [["Burger kitchen", "1.000", true]],
+    });
+
+    // Removing the held Burger lets the tab pay its fired Burger and the bottle.
+    await withTransaction(suite.db, (tx) => voidTabLine(tx, cfg, tabId, 3));
+    const tab = await payWorkingOrder(deps, cfg, {
+      id: tabId,
+      lines: [],
+      tender: { method: "cash", amount: "15.00" },
+    });
+    expect(tab.total).toBe("15.00");
+    expect(await orderState(tabId)).toEqual({ status: "settled", settledAtSet: true });
   });
 });

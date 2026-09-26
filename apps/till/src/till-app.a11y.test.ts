@@ -72,7 +72,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       .mockResolvedValue([
         { id: "st-default", name: "Cocina", displayOrder: 0, isDefault: true, active: true },
       ]),
-    getStationQueue: vi.fn().mockResolvedValue([]),
+    getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
     getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
@@ -117,24 +117,27 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
         nif: "B12345678",
         orderFlow: "invoice_first",
       }),
-      getStationQueue: vi.fn().mockResolvedValue([
-        {
-          orderId: "wo-1",
-          orderNumber: 5,
-          label: "Mesa 4",
-          queuedAt: "2026-08-17T10:00:00.000Z",
-          thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
-          items: [
-            {
-              id: "ti-1",
-              workingOrderLineId: "wol-1",
-              state: "queued",
-              descriptions: { "es-ES": "Paella" },
-              quantity: "2.000",
-            },
-          ],
-        },
-      ]),
+      getStationQueue: vi.fn().mockResolvedValue({
+        items: [
+          {
+            orderId: "wo-1",
+            orderNumber: 5,
+            label: "Mesa 4",
+            queuedAt: "2026-08-17T10:00:00.000Z",
+            thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+            items: [
+              {
+                id: "ti-1",
+                workingOrderLineId: "wol-1",
+                state: "queued",
+                descriptions: { "es-ES": "Paella" },
+                quantity: "2.000",
+              },
+            ],
+          },
+        ],
+        notices: [],
+      }),
     });
     const { el, host } = await mountWidget<TillApp>("till-app", { api }, theme);
     await flush(el);

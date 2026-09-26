@@ -2,10 +2,11 @@ import { and, eq, sql } from "drizzle-orm";
 import { floorZones, locations } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import { departments, zoneMenus, zoneServicePolicies } from "./schema/service.js";
+import { serviceSettings } from "./schema/settings.js";
 
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
-    summary: "Create the default department and counter zone",
+    summary: "Create the default department, counter zone and service settings",
     async run(tx, node) {
       // Through the insert builder: `id` and `created_at` are `$defaultFn` generators, which only
       // the builder runs. Read-then-insert is safe because a seed runs inside `withTransaction`,
@@ -96,7 +97,11 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
             ),
           );
       }
-      return "default department and counter zone ready";
+      await tx
+        .insert(serviceSettings)
+        .values({ id: 1 })
+        .onConflictDoNothing({ target: serviceSettings.id });
+      return "default department, counter zone and service settings ready";
     },
   },
 };

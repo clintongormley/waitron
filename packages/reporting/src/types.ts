@@ -184,8 +184,8 @@ export interface OverdueOrdersInput {
 export interface OverdueOrder {
   orderId: string;
   orderNumber: number;
-  /** The dining table this order is served at (a tab's back-pointer or a counter delivery), or
-   *  `null` for a bare walk-up. */
+  /** The dining table this order is served at (a tab's back-pointer or a counter delivery), else
+   *  the order's own label, or `null` for an unlabelled walk-up. */
   tableLabel: string | null;
   stationName: string;
   ageMinutes: number;

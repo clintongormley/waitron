@@ -4,7 +4,7 @@ import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillStationScreen } from "./till-station-screen.js";
-import type { Station, StationQueueGroup, TillApi } from "../api/client.js";
+import type { Station, StationQueue, StationQueueGroup, TillApi } from "../api/client.js";
 import type { TillStationQueue } from "../widgets/station-queue.js";
 
 const stations: Station[] = [
@@ -66,7 +66,7 @@ const barraQueue: StationQueueGroup[] = [
 function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   return {
     listStations: vi.fn().mockResolvedValue(stations),
-    getStationQueue: vi.fn().mockResolvedValue(cocinaQueue),
+    getStationQueue: vi.fn().mockResolvedValue({ items: cocinaQueue, notices: [] }),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     advanceTicket: vi.fn().mockResolvedValue(undefined),
     markCollected: vi.fn().mockResolvedValue(undefined),
@@ -116,8 +116,8 @@ describe("till-station-screen", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce(cocinaQueue) // default station on connect
-        .mockResolvedValueOnce(barraQueue), // the picked station
+        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] }) // default station on connect
+        .mockResolvedValueOnce({ items: barraQueue, notices: [] }), // the picked station
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
@@ -404,14 +404,14 @@ describe("till-station-screen", () => {
   });
 
   it("re-tapping the active station keeps its queue on screen while it reloads", async () => {
-    let resolveReload!: (value: StationQueueGroup[]) => void;
+    let resolveReload!: (value: StationQueue) => void;
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce(cocinaQueue)
+        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
         .mockImplementationOnce(
           () =>
-            new Promise<StationQueueGroup[]>((done) => {
+            new Promise<StationQueue>((done) => {
               resolveReload = done;
             }),
         ),
@@ -422,7 +422,7 @@ describe("till-station-screen", () => {
     await el.updateComplete;
     expect(api.getStationQueue).toHaveBeenCalledTimes(2);
     expect(queueWidget(el)!.groups).toEqual(cocinaQueue);
-    resolveReload(barraQueue);
+    resolveReload({ items: barraQueue, notices: [] });
     await vi.waitFor(() => expect(queueWidget(el)!.groups).toEqual(barraQueue));
   });
 
@@ -430,8 +430,8 @@ describe("till-station-screen", () => {
     const api = stubApi({
       getStationQueue: vi
         .fn()
-        .mockResolvedValueOnce(cocinaQueue)
-        .mockImplementationOnce(() => new Promise<StationQueueGroup[]>(() => {})),
+        .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
+        .mockImplementationOnce(() => new Promise<StationQueue>(() => {})),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
@@ -493,7 +493,9 @@ describe("till-station-screen", () => {
   it("suppresses the queue-surface header when embedded", async () => {
     // deviceMode renders the queue surface; embedded drops its own header (the card host supplies chrome).
     const api = stubApi({
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: [] } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: [], notices: [] } }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -506,7 +508,7 @@ describe("till-station-screen", () => {
 });
 
 describe("till-station-screen device mode (device-identity-1 §5a)", () => {
-  const boundStation = { id: "st-dev", queue: cocinaQueue };
+  const boundStation = { id: "st-dev", queue: cocinaQueue, notices: [] };
 
   /** Carries the session verbs the screen must NEVER reach in device mode, so a stray call is
    * observable. */
@@ -515,7 +517,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       getDeviceStation: vi.fn().mockResolvedValue({ station: boundStation }),
       deviceAdvance: vi.fn().mockResolvedValue(undefined),
       listStations: vi.fn().mockResolvedValue(stations),
-      getStationQueue: vi.fn().mockResolvedValue(cocinaQueue),
+      getStationQueue: vi.fn().mockResolvedValue({ items: cocinaQueue, notices: [] }),
       advanceTicketItem: vi.fn().mockResolvedValue(undefined),
       advanceTicket: vi.fn().mockResolvedValue(undefined),
       reprintOrder: vi.fn().mockResolvedValue(undefined),
@@ -543,7 +545,9 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     // getDeviceStation returns a DISTINCT queue, so losing the fast path would both re-fetch AND render
     // the wrong queue.
     const api = deviceApi({
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: barraQueue } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: barraQueue, notices: [] } }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -680,7 +684,7 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
     const api = deviceApi({
       getDeviceStation: vi
         .fn()
-        .mockResolvedValue({ station: { id: "st-dev", queue: heldCourseQueue } }),
+        .mockResolvedValue({ station: { id: "st-dev", queue: heldCourseQueue, notices: [] } }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -808,7 +812,9 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
       },
     ];
     const api = deviceApi({
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: twoLine } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: twoLine, notices: [] } }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api,
@@ -874,7 +880,9 @@ describe("till-station-screen device-mode whole-ticket bump selection", () => {
 
   function deviceApi(): TillApi {
     return {
-      getDeviceStation: vi.fn().mockResolvedValue({ station: { id: "st-dev", queue: mixed } }),
+      getDeviceStation: vi
+        .fn()
+        .mockResolvedValue({ station: { id: "st-dev", queue: mixed, notices: [] } }),
       deviceAdvance: vi.fn().mockResolvedValue(undefined),
       advanceTicket: vi.fn().mockResolvedValue(undefined),
     } as unknown as TillApi;
@@ -926,7 +934,9 @@ describe("station destination history", () => {
   it("restores a validated station after refresh and replaces an unavailable station", async () => {
     history.replaceState(null, "", "/tabs/counter/view/station/station/st-2");
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
-      api: stubApi({ getStationQueue: vi.fn().mockResolvedValue(barraQueue) }),
+      api: stubApi({
+        getStationQueue: vi.fn().mockResolvedValue({ items: barraQueue, notices: [] }),
+      }),
     });
     await flush(el);
     expect(queueWidget(el)!.stationId).toBe("st-2");
@@ -940,7 +950,7 @@ describe("station destination history", () => {
 
   it("does not let an older queue response replace the station reached through Back", async () => {
     history.replaceState(null, "", "/tabs/counter/view/station/station/st-1");
-    let resolve!: (value: StationQueueGroup[]) => void;
+    let resolve!: (value: StationQueue) => void;
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", {
       api: stubApi({
         getStationQueue: vi.fn((id: string) =>
@@ -948,7 +958,7 @@ describe("station destination history", () => {
             ? new Promise((done) => {
                 resolve = done;
               })
-            : Promise.resolve(cocinaQueue),
+            : Promise.resolve({ items: cocinaQueue, notices: [] }),
         ),
       }),
     });
@@ -958,7 +968,7 @@ describe("station destination history", () => {
     history.replaceState(null, "", "/tabs/counter/view/station/station/st-1");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush(el);
-    resolve(barraQueue);
+    resolve({ items: barraQueue, notices: [] });
     await flush(el);
     expect(queueWidget(el)!.stationId).toBe("st-1");
     expect(queueWidget(el)!.groups).toEqual(cocinaQueue);

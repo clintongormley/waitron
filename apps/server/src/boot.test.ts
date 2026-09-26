@@ -49,6 +49,7 @@ import {
   tenants,
   tills,
   withTransaction,
+  workingOrders,
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
@@ -2718,6 +2719,45 @@ describe("startServer, against a migrated venue directory", () => {
       }
     } finally {
       await sharedDb.execute(sql`delete from envios where registro_id in ${seeded.registroIds}`);
+    }
+  }, 60_000);
+
+  // A previous run died while a card was paying this order: P1 marked it and nothing else was
+  // written. No attempt of this process and no payment stands behind the mark, so the loop's
+  // release clears it after the first pass, and the order takes changes again.
+  it("clears a card-payment mark a previous run left with no payment behind it, on its first pass", async () => {
+    const port = await freePort();
+    const orderId = randomUUID();
+    await sharedDb.insert(workingOrders).values({
+      id: orderId,
+      tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+      orderNumber: 990_001,
+      paymentAttemptAt: new Date(Date.now() - 1_000).toISOString(),
+    });
+
+    try {
+      const server = await withCapturedStdout(async (lines) => {
+        const started = await startServer({
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "production",
+        });
+        await waitForEvent(lines, "loop.sleeping");
+        return started;
+      });
+      try {
+        const [row] = await sharedDb
+          .select({ mark: workingOrders.paymentAttemptAt })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, orderId));
+        expect(row).toEqual({ mark: null });
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await sharedDb.delete(workingOrders).where(eq(workingOrders.id, orderId));
     }
   }, 60_000);
 

@@ -286,6 +286,7 @@ export const en = {
     "Enter a quantity greater than zero and no more than the amount ordered",
   "table.split_options_together": "Dishes with options must be moved in full",
   "table.split_modifier_error": "Dishes with options must be moved in full",
+  "table.split_held_error": "Send held items to the kitchen before moving them to another bill",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "person.suspended": "This account is disabled — ask a manager",
@@ -302,10 +303,12 @@ export const en = {
   "held.park_error": "Could not hold the order, try again",
   "held.product_gone": "A product is no longer available and was dropped from the order",
   "held.extra_not_offered":
-    "An extra on this order is no longer offered. It is still charged; changing the order removes it.",
+    "An extra on this order is no longer offered. It stays on the order as saved, and changing the order removes it. If it can no longer be sold and has not gone to the kitchen, paying is refused until it is removed.",
   // Says what to DO, because reopening the line and choosing again is the only way out.
   "held.options_changed": "An item's choices have changed — open the line and choose again",
   "held.stale": "That order is no longer available",
+  "held.changed_elsewhere":
+    "This order was changed on another device. It has been reloaded: check it and make your change again",
   "place.error": "Could not place the order, try again",
   // Placing takes no tender, so unlike `sale.refused` this says nothing about charges or refunds.
   "place.refused":
@@ -596,6 +599,8 @@ export const es: Record<StringKey, string> = {
     "Introduce una cantidad mayor que cero y no superior a la cantidad pedida",
   "table.split_options_together": "Los platos con opciones deben moverse completos",
   "table.split_modifier_error": "Los platos con opciones deben moverse completos",
+  "table.split_held_error":
+    "Envía a cocina los artículos retenidos antes de pasarlos a otra cuenta",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "person.suspended": "Esta cuenta está desactivada. Avisa a un responsable",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
@@ -609,10 +614,12 @@ export const es: Record<StringKey, string> = {
   "held.park_error": "No se pudo aparcar el pedido, inténtalo de nuevo",
   "held.product_gone": "Un producto ya no está disponible y se quitó del pedido",
   "held.extra_not_offered":
-    "Un extra de este pedido ya no se ofrece. Se sigue cobrando; si cambias el pedido, se quita.",
+    "Un extra de este pedido ya no se ofrece. Sigue en el pedido tal como se guardó, y si cambias el pedido, se quita. Si ya no se puede vender y no se ha enviado a cocina, no se podrá cobrar hasta que se quite.",
   "held.options_changed":
     "Han cambiado las opciones de un producto: abre la línea y vuelve a elegir",
   "held.stale": "Ese pedido ya no está disponible",
+  "held.changed_elsewhere":
+    "Este pedido se ha cambiado en otro dispositivo. Se ha vuelto a cargar: revísalo y repite tu cambio",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",
   "place.refused":
     "Este pedido no se puede registrar en Hacienda. Reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja.",

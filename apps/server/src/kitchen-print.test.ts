@@ -30,11 +30,20 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
+  thousandthsToDecimal,
   tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, setProductStation } from "./kitchen.js";
-import { addTabRound, createOpenOrder, fireCourse, fireLines, openTab } from "./working-order.js";
+import {
+  addTabRound,
+  createOpenOrder,
+  fireCourse,
+  fireLines,
+  openTab,
+  voidTabLine,
+} from "./working-order.js";
+import { listStationNotices } from "@waitron/venue-service";
 import { attachPrinterToStation } from "./station-printers.js";
 import {
   enqueueCorrectionSlips,
@@ -212,6 +221,7 @@ async function fireNewOrder(
       courseId: workingOrderLines.courseId,
       parentLineId: workingOrderLines.parentLineId,
       note: workingOrderLines.note,
+      quantity: workingOrderLines.quantity,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))
@@ -263,6 +273,7 @@ async function fireContextlessDish(
       courseId: workingOrderLines.courseId,
       parentLineId: workingOrderLines.parentLineId,
       note: workingOrderLines.note,
+      quantity: workingOrderLines.quantity,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))
@@ -631,7 +642,13 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderId, orderId));
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));
-      await enqueueCorrectionSlips(tx, cfg, orderId, fired, "VOID");
+      await enqueueCorrectionSlips(
+        tx,
+        cfg,
+        orderId,
+        fired.map((item) => ({ ...item, quantity: 1000, wasStarted: false })),
+        "VOID",
+      );
       const slips = (await printJobsFor(tx)).filter((job) => !before.has(job.id));
       return { wide, narrow, slips };
     });
@@ -668,7 +685,13 @@ describe("correction slips for a station with no printer", () => {
         .where(eq(ticketItems.workingOrderId, orderId));
       expect(fired).toHaveLength(2);
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));
-      await enqueueCorrectionSlips(tx, cfg, orderId, fired, "VOID");
+      await enqueueCorrectionSlips(
+        tx,
+        cfg,
+        orderId,
+        fired.map((item) => ({ ...item, quantity: 1000, wasStarted: false })),
+        "VOID",
+      );
       const slips = (await printJobsFor(tx)).filter((job) => !before.has(job.id));
       return { printerId, slips };
     });
@@ -677,6 +700,100 @@ describe("correction slips for a station with no printer", () => {
     const slip = decodeTicket(slips[0]!.payload);
     expect(slip).toContain("Chuleton");
     expect(slip).not.toContain("Cerveza");
+  });
+});
+
+describe("every correction reaches the station as a notice, printer or not", () => {
+  it("records the notice at a station with no printer, and enqueues no print job", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { stationId, notices, jobs } = await asApp(cfg, async (tx) => {
+      const barra = await createStation(tx, cfg, { name: "Barra", isDefault: true });
+      const beer = await makeProduct(tx, cfg, catalogueId, "Cerveza", { stationId: barra.id });
+      const orderId = await fireNewOrder(tx, cfg, [line(beer)]);
+      const [fired] = await tx
+        .select({
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+        })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      await enqueueCorrectionSlips(
+        tx,
+        cfg,
+        orderId,
+        [{ ...fired!, stationId: fired!.stationId!, quantity: 1000, wasStarted: true }],
+        "VOID",
+      );
+      return {
+        stationId: barra.id,
+        notices: await listStationNotices(tx, cfg, barra.id),
+        jobs: await printJobsFor(tx),
+      };
+    });
+
+    expect(notices).toMatchObject([
+      { stationId, kind: "void", lineName: "Cerveza", quantity: "1.000", wasStarted: true },
+    ]);
+    expect(jobs).toEqual([]);
+  });
+
+  it("records the notice and prints the slip where the station has a printer", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { printerId, notices, slips } = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
+      const orderId = await fireNewOrder(tx, cfg, [line(steak)]);
+      const [fired] = await tx
+        .select({
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+        })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, orderId));
+      const before = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await enqueueCorrectionSlips(
+        tx,
+        cfg,
+        orderId,
+        [{ ...fired!, stationId: fired!.stationId!, quantity: 1000, wasStarted: false }],
+        "RECALLED",
+      );
+      return {
+        printerId,
+        notices: await listStationNotices(tx, cfg, cocina.id),
+        slips: (await printJobsFor(tx)).filter((job) => !before.has(job.id)),
+      };
+    });
+
+    expect(notices).toMatchObject([{ kind: "recalled", lineName: "Chuleton", wasStarted: false }]);
+    expect(slips.map((slip) => slip.printerId)).toEqual([printerId]);
+    expect(decodeTicket(slips[0]!.payload)).toContain("Chuleton");
+  });
+
+  it("a partial void's slip prints the quantity removed, not what is left", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const slips = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: cocina.id });
+      const offers = await offerProducts(tx, cfg, { zone: "tables" });
+      const [table] = await tx
+        .insert(diningTables)
+        .values({ locationId: cfg.locationId, label: "T1", zoneId: offers.zoneId })
+        .returning({ id: diningTables.id });
+      const { tabId } = await openTab(tx, cfg, { tableId: table!.id });
+      await addTabRound(tx, cfg, tabId, [{ menuItemId: offers.offerFor(steak), quantity: "3" }]);
+      const before = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await voidTabLine(tx, cfg, tabId, 1, "2");
+      return (await printJobsFor(tx)).filter((job) => !before.has(job.id));
+    });
+
+    expect(slips).toHaveLength(1);
+    const slip = decodeTicket(slips[0]!.payload);
+    expect(slip).toContain(`${thousandthsToDecimal(2000)} ea x Chuleton`);
   });
 });
 
@@ -900,6 +1017,49 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
     expect(groupTicket).toContain("Sopa");
     expect(groupTicket).toContain("Chuleton");
     expect(groupTicket).toContain("Cocina");
+  });
+
+  it("prints the quantity each item was fired at, not its line's current quantity", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { released, reprinted } = await asApp(cfg, async (tx) => {
+      const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Cocina printer", "station");
+      await attachPrinterToStation(tx, { stationId: cocina.id, printerId });
+      const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
+      const pri = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
+      const soup = await makeProduct(tx, cfg, catalogueId, "Sopa", {
+        stationId: cocina.id,
+        courseId: ent.id,
+      });
+      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+        stationId: cocina.id,
+        courseId: pri.id,
+      });
+      // Three soups fire; two steaks are held by their course.
+      const orderId = await fireNewOrder(tx, cfg, [
+        { productId: soup, quantity: "3" },
+        { productId: steak, quantity: "2" },
+      ]);
+      // Each line now bills one, as after splitting the rest off to another check.
+      await tx.execute(sql`
+        update working_order_lines set quantity = 1000 where working_order_id = ${orderId}`);
+      const beforeRelease = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await fireCourse(tx, cfg, orderId, pri.id);
+      const released = (await printJobsFor(tx)).filter((job) => !beforeRelease.has(job.id));
+      const beforeReprint = new Set((await printJobsFor(tx)).map((job) => job.id));
+      await reprintOrderTickets(tx, cfg, orderId);
+      const reprinted = (await printJobsFor(tx)).filter((job) => !beforeReprint.has(job.id));
+      return { released, reprinted };
+    });
+
+    expect(released).toHaveLength(1);
+    expect(decodeTicket(released[0]!.payload)).toContain(
+      `${thousandthsToDecimal(2000)} ea x Chuleton`,
+    );
+    expect(reprinted).toHaveLength(1);
+    const reprint = decodeTicket(reprinted[0]!.payload);
+    expect(reprint).toContain(`${thousandthsToDecimal(3000)} ea x Sopa`);
+    expect(reprint).toContain(`${thousandthsToDecimal(2000)} ea x Chuleton`);
   });
 
   it("enqueues nothing (and does NOT throw) for an order with no fired items", async () => {

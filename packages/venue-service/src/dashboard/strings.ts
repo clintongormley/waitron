@@ -83,6 +83,10 @@ const en = {
   "venue.readiness.menu_empty": "has no products for",
   "venue.readiness.route_missing": "needs a preparation route in",
   "venue.deactivate_department": "Deactivate department",
+  "venue.kitchen_changes": "Changes after sending",
+  "venue.edit_sent_lines": "Allow changes to items already sent to the kitchen",
+  "venue.edit_sent_lines_hint":
+    "When off, staff cannot change or recall an item the kitchen already has; they cancel it instead.",
 } as const;
 
 const es: Record<keyof typeof en, string> = {
@@ -168,6 +172,10 @@ const es: Record<keyof typeof en, string> = {
   "venue.readiness.menu_empty": "no tiene productos para",
   "venue.readiness.route_missing": "necesita una ruta de preparación en",
   "venue.deactivate_department": "Desactivar departamento",
+  "venue.kitchen_changes": "Cambios tras el envío",
+  "venue.edit_sent_lines": "Permitir cambios en los artículos ya enviados a cocina",
+  "venue.edit_sent_lines_hint":
+    "Si está desactivado, el personal no puede cambiar ni retirar un artículo que ya tiene la cocina; tiene que cancelarlo.",
 };
 
 export const VENUE_SERVICE_STRINGS = { en, es };
