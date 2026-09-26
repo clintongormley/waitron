@@ -8,6 +8,18 @@ describe("esc() ESC/POS builder", () => {
       0x1b, 0x61, 1, 65, 10, 0x1b, 0x61, 2, 0x1b, 0x61, 0,
     ]);
   });
+  it("sets a left-anchored print area in dots", () => {
+    expect([...esc().printArea(360).bytes()]).toEqual([
+      0x1d,
+      0x4c,
+      0x00,
+      0x00, // GS L: left margin = 0 dots
+      0x1d,
+      0x57,
+      0x68,
+      0x01, // GS W: width = 360 dots, low byte first
+    ]);
+  });
   it("init emits ESC @ (0x1B 0x40)", () => {
     expect([...esc().init().bytes()]).toEqual([0x1b, 0x40]);
   });

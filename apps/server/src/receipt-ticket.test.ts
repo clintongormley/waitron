@@ -100,6 +100,34 @@ function lineName(line: TillSaleResult["lines"][number]): string {
 }
 
 describe("formatReceipt — the faithful, legally-complete customer receipt", () => {
+  it.each([
+    [PRINTER_58, 0x68, 0x01],
+    [PRINTER_80, 0xf8, 0x01],
+  ] as const)(
+    "anchors a $paperWidth print area to the left before centring the receipt",
+    (printer, widthLowByte, widthHighByte) => {
+      const bytes = formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer,
+      });
+      expect([...bytes.slice(7, 18)]).toEqual([
+        0x1d,
+        0x4c,
+        0x00,
+        0x00,
+        0x1d,
+        0x57,
+        widthLowByte,
+        widthHighByte,
+        0x1b,
+        0x61,
+        1,
+      ]);
+    },
+  );
   it.each([PRINTER_80, PRINTER_58])(
     "centres the fixed-width body and the unpadded QR legend on $paperWidth",
     (printer) => {
@@ -110,7 +138,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
         invoiceLocale: "es-ES",
         printer,
       });
-      expect([...bytes.slice(7, 10)]).toEqual([0x1b, 0x61, 1]);
+      expect([...bytes.slice(15, 18)]).toEqual([0x1b, 0x61, 1]);
       const lines = printedLines(bytes).filter(Boolean);
       const width = printer.paperWidth === "80mm" ? 42 : 30;
       expect(lines).toContain("VERI*FACTU");
