@@ -124,6 +124,10 @@ async function errorOf(res: Response): Promise<{ code: string; params: unknown }
   return ((await res.json()) as { error: { code: string; params: unknown } }).error;
 }
 
+function errorEvents(p: Primary): string[] {
+  return p.lines.filter((l) => l.level === "error").map((l) => l.event);
+}
+
 async function removals(db: Database): Promise<Record<string, unknown>[]> {
   const { rows } = await db.execute<Record<string, unknown>>(
     sql`select removed_node_id, contact_url, person_id, term from membership_removals`,
@@ -428,6 +432,7 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
       expect(await readNodeMembership(p.db)).toEqual(before);
       expect(await removals(p.db)).toEqual([]);
       expect(p.lines.map((l) => l.event)).not.toContain("membership.node_removed");
+      expect(errorEvents(p)).toEqual(["membership.removal_failed"]);
     });
 
     it("gives up with 503 membership.write_contended when every round loses, recording nothing", async () => {
@@ -710,6 +715,7 @@ describe("POST /management-api/servers/:nodeId/clear", () => {
       expect(await readNodeMembership(p.db)).toEqual(before);
       expect(await clearances(p.db)).toEqual([]);
       expect(p.lines.map((l) => l.event)).not.toContain("membership.node_cleared");
+      expect(errorEvents(p)).toEqual(["membership.clearance_failed"]);
     });
 
     it("gives up with 503 membership.write_contended when every round loses, recording nothing", async () => {

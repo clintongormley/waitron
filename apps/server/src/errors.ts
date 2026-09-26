@@ -94,6 +94,12 @@ declare module "@waitron/shared" {
      * state, not a crash.
      */
     "node.membership_superseded_on_boot": Record<string, never>;
+    /**
+     * A booting box refused the chart its cloud peer returned because the chart failed its check
+     * (`failure` says which), so the chart was not adopted. Logged, never thrown, and no alert is
+     * raised.
+     */
+    "node.membership_refused_on_boot": { failure: VerifyFailure };
     /** `POST /api/node/enrol-self` reached from a non-loopback address. Self-enrol is a
      * loopback-only trust gate: anything that can reach the box's loopback can already read its
      * vault, so enrolling a loopback caller grants nothing new; a LAN caller must not. */

@@ -35,10 +35,10 @@ export async function reconcileMembershipOnBoot(
 
   const result = await deps.acceptDocument(peer, deps.held?.body.term ?? null);
   if (!result.accepted) {
-    // `signer_removed` has a cost: a standby A61's removal misjudged as never-joined and an operator
-    // later promoted signs charts this node refuses, so this node keeps selling beside it. No adopt
-    // can finish today (`finish-adoption.ts`), so no such standby exists yet. Logged so the refusal
-    // is visible; no alert is raised.
+    // `signer_removed` has a cost: a standby `judgeRemoval` (`membership-removal.ts`) misjudged as
+    // never-joined and an operator later promoted signs charts this node refuses, so this node keeps
+    // selling beside it. No adopt can finish today (`finish-adoption.ts`), so no such standby exists
+    // yet. Logged so the refusal is visible; no alert is raised.
     if (result.reason === "invalid") {
       deps.log("warn", "node.membership_refused_on_boot", { failure: result.failure });
     }

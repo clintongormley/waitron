@@ -36,6 +36,7 @@ export function mountMembershipRemovalApi(
   log: Logger,
 ): void {
   const run = createErrorBoundary(STATUS, "membership.removal_failed");
+  const runClear = createErrorBoundary(STATUS, "membership.clearance_failed");
 
   // Admin-only, the same permission that hands a standby its bundle.
   const authorize = (sessionId: string): Promise<string> =>
@@ -69,7 +70,7 @@ export function mountMembershipRemovalApi(
   );
 
   app.post("/management-api/servers/:nodeId/clear", (c) =>
-    run(c, log, async () => {
+    runClear(c, log, async () => {
       const personId = await authorize(requireManagementSession(c));
       const result = await clearRemovedMachine(
         { db: deps.db, ring: deps.ring, nodeId: deps.nodeId, log },

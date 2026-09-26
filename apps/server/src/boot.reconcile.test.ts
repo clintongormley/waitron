@@ -77,6 +77,7 @@ let proceedsVenueDir: string;
 let supersededDb: Database;
 let proceedsDb: Database;
 const openStores: VenueDatabase[] = [];
+const venueDirs: string[] = [];
 
 async function seed(db: Database): Promise<void> {
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
@@ -162,6 +163,7 @@ function peerFencingChart(term: number) {
 /** Migrated here, not by boot, because the identity rows have to exist before boot reads them. */
 async function migratedVenue(): Promise<[string, Database]> {
   const directory = await mkdtemp(join(tmpdir(), "waitron-reconcile-venue-"));
+  venueDirs.push(directory);
   await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
   const store = await openVenueDatabase(directory);
   openStores.push(store);
@@ -189,9 +191,7 @@ beforeAll(async () => {
 afterAll(async () => {
   while (openStores.length > 0) await openStores.pop()?.close();
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
-  for (const directory of [supersededVenueDir, proceedsVenueDir]) {
-    if (directory !== undefined) await rm(directory, { recursive: true, force: true });
-  }
+  for (const directory of venueDirs) await rm(directory, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
@@ -387,7 +387,6 @@ describe("returned-box membership reconciliation at boot", () => {
         process.stdout.write = original;
         await server?.close();
         await peer.stop();
-        await rm(venueDir, { recursive: true, force: true });
       }
     }
 
