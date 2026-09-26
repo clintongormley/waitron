@@ -624,14 +624,12 @@ its part done here when it lands.
   look for a row being dragged, with its own colour token, `--wt-color-surface-lifted`. Left for
   A66: at the stepper's 64px width (`--wt-stepper-field-width`) the box has 48px for text, and
   "No limit" needs 52px and "Sin límite" 62px at the body font size, so a "No limit" placeholder is
-  cut off unless that stepper is given more width. Seen while looking at every modal at 1024px, not
+  cut off unless that stepper is given more width (A66 gave it a wider box). Seen while looking at every modal at 1024px, not
   changed: the printers screen's list of discovered printers keeps its details column capped
   (`min(28vw, 24dvh)`), so the details wrap while half the row stands empty; and the till's option
   picker, 1024px wide on a 1280px screen, puts each price at the far end of a 1024px row, well
   away from its name (which adds to the "prices are not a column" item in the till layout pass,
-  under A4). Open for A66, the stepper's first user: its button names are text with a
-  `{label}` slot (as the plan chose) where other shared controls take a function; switch them there
-  unless the owner prefers the text form.
+  under A4). The stepper's button names were text with a `{label}` slot; A66 made them functions.
 - **A65 (the list tables and the Used by popup) — LANDED, #716.** Both tabs'
   Status column and its filter read Active / Inactive; each editor's on/off switch shares the
   "Active" string, so its label now reads "Active" where it read "In use". A new Used by column
@@ -649,6 +647,22 @@ its part done here when it lands.
   sideways inside their own box, further than before by the new column: Extras 511px of content in
   388px (439px before) in English, 610px (463px) in Spanish; Options 457px (402px) and 479px
   (405px). The page itself does not scroll sideways.
+- **A66 (the Extras editor) — LANDED.** The customer-facing and kitchen names fold into a
+  "Customer and kitchen names" section, closed until opened, whose heading counts the names filled
+  in ("1 of 3 filled in") and which opens by itself when the server refuses one of them. Minimum and
+  maximum choices are − / + steppers side by side (one above the other where the form is 30rem wide
+  or less), with short labels and the old parenthetical explanations moved to a line underneath;
+  the maximum's box uses a new, wider width token so "No limit" and "Sin límite" fit. In each
+  product row, the maximum quantity is a stepper, the price box is a fixed width (a new token) with
+  the product's unit shown after it as plain text, and Remove is a bin icon with the same spoken
+  name; the Price heading runs over the bin column. A row lines up its text: the product name, the
+  quantity, the Preselected label and the price all sit on one line. Shared changes it needed: the
+  stepper's button names are now functions (the A64 open point), the price field can hide its label
+  and show its unit as text, and a switch now takes its label's text as its line. On a phone the
+  Preselected text beside each switch is hidden (the column heading names them), which keeps the
+  table's sideways scroll below what it was: measured at 390px with a 9999.99 price and a "ración"
+  unit, 223px of scroll in English (234px before) and 266px in Spanish (271px before). Still to
+  come: A67, the Options editor.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
