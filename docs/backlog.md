@@ -3047,7 +3047,7 @@ image constraints under *Detail → Box image*.
     cannot (`sleepMsFor` in `loop.ts` is `Math.min(max, Math.max(min, wait))`, and config refuses
     `minTickMs > maxTickMs`; #653 corrected the same claim in `config.ts`); `config.test.ts`'s
     test title (near line 572) says "round back down past the floor" where it means "to the
-    floor". **Done (2026-09-26, lane A's A38, branch `chore/membership-reader-header`):**
+    floor". **Done (2026-09-26, lane A's A38, #669):**
     `packages/db/src/node-membership.ts`'s header said the caller of `readNodeMembership` re-runs
     `verifyMembershipDocument` / `acceptMembershipDocument` on what it reads, and none did; it now
     says a peer's document is stored only after `acceptMembershipDocument` passes it, every other
@@ -5697,7 +5697,7 @@ endorsement stored when that round reads, not the first round's"
   start runs whenever that box next starts trading unfenced and not as a mirror. Whether a rejoin
   should clear it is the owner's call.
 - A sell-only local secondary that is not fenced runs the first start and signs the next term.
-- **Open, left by A38 (branch `chore/membership-reader-header`): a restored membership row is signed
+- **Open, left by A38 (#669): a restored membership row is signed
   over unchecked.** A restore (archive or bucket) puts the copy's `node_membership` row back as it
   was, and whatever this node next mints over it signs the next term over that row's node list
   without verifying it — the start that finishes the restore (`completeRebuild`), or before it a
