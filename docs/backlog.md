@@ -2609,6 +2609,12 @@ image constraints under *Detail → Box image*.
     primary refuses the new primary's charts (`signer_removed`) and keeps selling; the refusal is
     logged at warn and raises no alert. No adopt can finish today (`finish-adoption.ts`), so no such
     standby exists yet.
+    **A test gap found by A63, measured:** A61's three cases in
+    `apps/dashboard/src/screens/servers-screen.a11y.test.ts` that open the Remove dialog (the
+    confirmation, a refused removal, and a machine with no address) never check that it opened. With
+    the screen changed so no dialog could open (`.open=${false}`), all three still passed in both
+    themes, so they would not catch a problem inside that dialog. The fix is the open-dialog
+    assertion A63's `openClear` helper in the same file makes before its axe scan.
     A56's open items, continued:
     (2) An adopt saved before this
     change carries no proof, so the reset refuses it (`password.invalid`). (3) The proof shows the
