@@ -2,17 +2,20 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
-// Proves a change touched comments and nothing else. It reads commits, never an uncommitted edit:
-// every file changed between where HEAD left the base and HEAD must be a TypeScript or JavaScript
-// file, present at both ends as a regular file with the same mode, that parses at both ends to the
-// same syntax tree with the same token text, give or take the trailing comma Prettier adds or
-// drops, except after a spread, where the comma Prettier writes is refused (see `isRest`). Anything
-// else fails. A comment counts as code only when it is the shebang or matches TOOL_COMMENT, a
-// hand-written list, so a comment read by a tool the list does not name is dropped unseen; and a
-// tool comment is placed by the tokens around it, not by its line, so one moved to another line
-// without crossing a token passes, `eslint-disable-line` and `eslint-disable-next-line` included.
-// ESLint then reports any problem it no longer suppresses, and the stranded directive only as a
-// warning. A line break counts only where it changes the tree, or before `=>` or `using`.
+// Proves a change touched nothing but comments in its code files. It reads commits, never an
+// uncommitted edit: every file changed between where HEAD left the base and HEAD must be a
+// TypeScript or JavaScript file, present at both ends as a regular file with the same mode, that
+// parses at both ends to the same syntax tree with the same token text, give or take the trailing
+// comma Prettier adds or drops, except after a spread, where the comma Prettier writes is refused
+// (see `isRest`). Anything else fails, except a file whose path ends in lowercase `.md`, which is
+// listed as not compared and never read. Every other file is checked, and every refused file is
+// named with its reason, which for a compared file is its first difference. A comment counts as
+// code only when it is the shebang or matches TOOL_COMMENT, a hand-written list, so a comment read
+// by a tool the list does not name is dropped unseen; and a tool comment is placed by the tokens
+// around it, not by its line, so one moved to another line without crossing a token passes,
+// `eslint-disable-line` and `eslint-disable-next-line` included. ESLint then reports any problem it
+// no longer suppresses, and the stranded directive only as a warning. A line break counts only
+// where it changes the tree, or before `=>` or `using`.
 //
 // It needs the root's version 6 compiler API; a package's TypeScript 7 has no `createSourceFile`.
 //
@@ -22,6 +25,7 @@ import ts from "typescript";
 // line break can change what `return` returns while leaving every token the same.
 
 const CODE_FILE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
+const MARKDOWN_FILE = /\.md$/;
 const REGULAR_FILE = new Set(["100644", "100755"]);
 
 // All but the last two are anchored where the tool itself looks (the `@ts-` one at the start of any
@@ -148,8 +152,9 @@ function refusal(status, oldMode, newMode, file) {
 }
 
 /**
- * Checks every file changed between where HEAD left `base` and HEAD. Renames are not followed, so
- * a moved file shows as deleted and added — a move is not a comment edit.
+ * Checks every file changed between where HEAD left `base` and HEAD, except a `.md` file, which is
+ * returned in `skipped` unread. Renames are not followed, so a moved file shows as deleted and
+ * added — a move is not a comment edit.
  */
 export function checkCommentsOnly(base, options) {
   const from = git(["merge-base", base, "HEAD"], options).trim();
@@ -157,12 +162,21 @@ export function checkCommentsOnly(base, options) {
     .split("\0")
     .filter(Boolean);
   const checked = [];
+  const skipped = [];
+  const failures = [];
   for (let i = 0; i < changes.length; i += 2) {
     // `:<old mode> <new mode> <old blob> <new blob> <status>`, then the path.
     const [oldMode, newMode, , , status] = changes[i].slice(1).split(" ");
     const file = changes[i + 1];
+    if (MARKDOWN_FILE.test(file)) {
+      skipped.push(file);
+      continue;
+    }
     const reason = refusal(status, oldMode, newMode, file);
-    if (reason !== null) return { checked, failure: { file, reason } };
+    if (reason !== null) {
+      failures.push({ file, reason });
+      continue;
+    }
     checked.push(file);
     const before = git(["show", `${from}:${file}`], options);
     const after = git(["show", `HEAD:${file}`], options);
@@ -170,10 +184,10 @@ export function checkCommentsOnly(base, options) {
     if (difference !== null) {
       const { line, base: was, head: now } = difference;
       const reason = `line ${line}: code changed from ${JSON.stringify(was)} to ${JSON.stringify(now)}`;
-      return { checked, failure: { file, reason } };
+      failures.push({ file, reason });
     }
   }
-  return { checked, failure: null };
+  return { checked, skipped, failures };
 }
 
 export function main(argv, { cwd, env, stdout, stderr }) {
@@ -188,15 +202,18 @@ export function main(argv, { cwd, env, stdout, stderr }) {
     stderr(`comments-only: ${error.message}`);
     return 2;
   }
-  if (result.failure !== null) {
-    stderr(`comments-only: ${result.failure.file}: ${result.failure.reason}`);
-    return 1;
-  }
+  for (const file of result.checked) stdout(`comments-only: ${file}: compared`);
+  for (const file of result.skipped) stdout(`comments-only: ${file}: Markdown, so not compared`);
+  for (const { file, reason } of result.failures) stderr(`comments-only: ${file}: ${reason}`);
+  if (result.failures.length > 0) return 1;
   const count = result.checked.length;
-  if (count === 0) stdout("comments-only: no files changed");
+  if (count === 0 && result.skipped.length > 0) {
+    stdout("comments-only: no code file changed, so nothing was compared");
+  } else if (count === 0) stdout("comments-only: no files changed");
   else
     stdout(
-      `comments-only: ${count} code file${count === 1 ? "" : "s"} compared; only comments changed`,
+      `comments-only: ${count} code file${count === 1 ? "" : "s"} compared; ` +
+        `only comments changed in ${count === 1 ? "it" : "them"}`,
     );
   return 0;
 }
