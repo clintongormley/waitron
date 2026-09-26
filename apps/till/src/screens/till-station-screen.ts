@@ -29,10 +29,10 @@ const ADVANCE_FROM: Record<Exclude<TicketState, "queued">, TicketState> = {
 const REFRESH_MS = 15_000;
 
 /**
- * How long a refresh read may stay out before it is cancelled. Longer than {@link REFRESH_MS}, so a
- * server that is slow but answering still updates the screen; at most two refresh reads are ever out.
+ * How long a refresh read may stay out before it is cancelled: longer than {@link REFRESH_MS}, so a
+ * slow server's answer still lands, and due well before the tick after next.
  */
-const READ_LIMIT_MS = 2 * REFRESH_MS;
+const READ_LIMIT_MS = 25_000;
 
 /**
  * The TILL station-display screen: one station's queue. It fetches its own data and handles the queue

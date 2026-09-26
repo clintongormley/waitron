@@ -1296,9 +1296,16 @@ describe("till-station-screen 15-second refresh", () => {
       getStationQueue: vi
         .fn()
         .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
-        .mockImplementation(() => {
+        .mockImplementation((_stationId: string, options?: { signal?: AbortSignal }) => {
           const answer = answerNumber(++read);
-          return new Promise((resolve) => setTimeout(() => resolve(answer), 20_000));
+          // As fetch does, a cancelled read never answers.
+          return new Promise((resolve, reject) => {
+            const answering = setTimeout(() => resolve(answer), 20_000);
+            options!.signal!.addEventListener("abort", () => {
+              clearTimeout(answering);
+              reject(options!.signal!.reason);
+            });
+          });
         }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
@@ -1322,7 +1329,7 @@ describe("till-station-screen 15-second refresh", () => {
         .fn()
         .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
         .mockImplementationOnce(
-          () => new Promise((resolve) => setTimeout(() => resolve(answerNumber(2)), 25_000)),
+          () => new Promise((resolve) => setTimeout(() => resolve(answerNumber(2)), 20_000)),
         )
         .mockImplementationOnce(
           () => new Promise((resolve) => setTimeout(() => resolve(answerNumber(3)), 1_000)),
@@ -1334,13 +1341,13 @@ describe("till-station-screen 15-second refresh", () => {
     await flush(el);
     await queueWidget(el)!.updateComplete;
     expect(shownRead(el)).toEqual(["kn-read-3"]);
-    vi.advanceTimersByTime(9_000); // read 2 answers at 40 s
+    vi.advanceTimersByTime(4_000); // read 2 answers at 35 s
     await flush(el);
     await queueWidget(el)!.updateComplete;
     expect(shownRead(el)).toEqual(["kn-read-3"]);
   });
 
-  it("a read that never answers is cancelled 30 seconds after it set out, silently, and later reads go ahead", async () => {
+  it("a read that never answers is cancelled 25 seconds after it set out, silently, and later reads go ahead", async () => {
     const signals: AbortSignal[] = [];
     const api = stubApi({
       getStationQueue: vi
@@ -1354,34 +1361,41 @@ describe("till-station-screen 15-second refresh", () => {
     vi.advanceTimersByTime(15_000); // the hung read sets out
     await flush(el);
     expect(signals).toHaveLength(1);
-    vi.advanceTimersByTime(29_999);
+    vi.advanceTimersByTime(24_999);
     await flush(el);
     expect(signals[0]!.aborted).toBe(false);
     vi.advanceTimersByTime(1);
     await flush(el);
     expect(signals[0]!.aborted).toBe(true);
+    vi.advanceTimersByTime(5_000);
+    await flush(el);
     expect(api.getStationQueue).toHaveBeenCalledTimes(4); // at 30 s and 45 s the reads went ahead
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
     expect(queueWidget(el)!.groups).toEqual(barraQueue);
     expect(queueWidget(el)!.notices).toEqual(later.notices);
   });
 
-  it("reads that never answer do not pile up: no more than two are ever out at once", async () => {
+  it("reads that never answer do not pile up: when a read sets out, at most one other is still out", async () => {
     const signals: AbortSignal[] = [];
+    const outWhenSettingOut: number[] = [];
+    const hang = hangUntilAborted(signals);
     const api = stubApi({
       getStationQueue: vi
         .fn()
         .mockResolvedValueOnce({ items: cocinaQueue, notices: [] })
-        .mockImplementation(hangUntilAborted(signals)),
+        .mockImplementation((stationId: string, options?: { signal?: AbortSignal }) => {
+          // Counted as the read starts: a limit due at the same moment as a tick is still pending here.
+          outWhenSettingOut.push(signals.filter((signal) => !signal.aborted).length + 1);
+          return hang(stationId, options);
+        }),
     });
     const { el } = await mountWidget<TillStationScreen>("till-station-screen", { api });
     await flush(el);
     for (let tick = 0; tick < 10; tick++) {
       vi.advanceTimersByTime(15_000);
       await flush(el);
-      expect(signals.filter((signal) => !signal.aborted).length).toBeLessThanOrEqual(2);
     }
-    expect(signals).toHaveLength(10);
+    expect(outWhenSettingOut).toEqual([1, 2, 2, 2, 2, 2, 2, 2, 2, 2]);
   });
 
   it("taking the screen off the page cancels a read still out", async () => {
@@ -1455,7 +1469,7 @@ describe("till-station-screen 15-second refresh", () => {
     await flush(el);
     await queueWidget(el)!.updateComplete;
     expect(shownRead(el)).toEqual(["kn-read-2"]);
-    vi.advanceTimersByTime(25_000); // read 4 answered at 45 s; read 3 is cancelled at 60 s
+    vi.advanceTimersByTime(25_000); // read 4 answered at 45 s; read 3 is cancelled at 55 s
     await flush(el);
     await queueWidget(el)!.updateComplete;
     expect(signals[0]!.aborted).toBe(true);
