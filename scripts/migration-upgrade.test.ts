@@ -15,16 +15,18 @@ import { orderedMigrationSets } from "../packages/module/src/module.js";
 /**
  * One database upgraded the way a box is: every shipped migration applied in date order, with what
  * boot does after migrating (the change feed) done between each step. A fresh database migrated in
- * one go never meets a trigger a previous boot left behind; a box that upgraded on 2026-09-26 did,
- * and could not start.
+ * one go never meets a trigger a previous boot left behind.
  *
- * Weaker than its name in three ways. Every set's first migration, and everything up to
+ * Weaker than its name in four ways. Every set's first migration, and everything up to
  * {@link FLOOR}, is applied together, because the baselines were regenerated out of date order
- * (core's is dated after the sets that build on it).
- * The change feed and the append-only tables at each step are TODAY's lists, less whatever that
- * step's schema lacks, not the lists the image of that date carried. And the
- * tables hold no rows, so a migration that fails only on data — a new `not null` column, a table
- * rebuild whose drop cascades — passes here.
+ * (core's is dated after the sets that build on it), and because core's `0003` rebuilds `products`
+ * while a trigger whose BODY reads `products` exists (media's `products_media_image_fk_parent_delete`).
+ * The change feed at each step is TODAY's list, less whatever that step's schema lacks, and the
+ * append-only tables are TODAY's list filtered to the tables the PREVIOUS step left, so a table a
+ * step creates has no append-only trigger while the NEXT step migrates, and gets one only after it; neither is the list the image of
+ * that date carried. The tables hold no rows, so a migration that fails only on data — a new
+ * `not null` column, a table rebuild whose drop cascades — passes here. And it asserts only that
+ * each step does not throw, so a trigger a rebuild silently drops is not seen.
  */
 
 interface JournalEntry {
@@ -34,9 +36,9 @@ interface JournalEntry {
 }
 
 /**
- * Applied together with the baselines rather than stepped onto. It rebuilds `products` while
- * media's triggers name that table, and SQLite refuses the rename that ends a rebuild when a trigger
- * names a table that is missing at that moment. The box upgraded on 2026-09-26 was already past it.
+ * Applied together with the baselines rather than stepped onto. It rebuilds `products` while a
+ * trigger whose BODY reads `products` exists (media's `products_media_image_fk_parent_delete`), and
+ * SQLite refuses the rename that ends the rebuild.
  */
 const FLOOR = { set: "core", tag: "0003_variant_inherited_nullable" };
 

@@ -956,7 +956,7 @@ passed in Chromium. Check host execution before deferring browser testing to ano
 
 ## Migration-upgrade test coverage
 
-### A migration can fail only on a box that has booted before
+### A migration can fail on a database that already carries earlier migrations and what boot installed after them
 
 Drizzle applies a set's pending migrations in one transaction, so a statement that is legal on a
 fresh database — where the same batch creates everything it then names — can be refused on one that
@@ -973,21 +973,26 @@ adds); deleting the feed's triggers and retrying started the box, and boot recre
 `packages/db/src/change-feed.ts`).
 
 `scripts/migration-upgrade.test.ts` walks one database through every shipped migration in date
-order, installing the change feed between steps as boot does. With the removal deleted it fails at
-core `0006_drop_line_variant_id` (`working_order_lines.variant_id`), so a box that booted before
-that migration would have failed the same way. It also found a second shape it cannot yet walk
-past: core `0003_variant_inherited_nullable` rebuilds `products` while media's
-`0001_image_references` triggers name it, and SQLite refuses the rename that ends the rebuild
-(`error in trigger products_media_image_fk_parent_delete: no such table: main.products`). The guard
-applies everything up to `0003` together for that reason; a future rebuild of a table another set's
-trigger names fails it. It seeds no rows, so a migration that fails only on data passes it.
+order, installing the change feed between steps as boot does. Measured 2026-09-26: with
+`removeChangeFeed(store.venue)` deleted from `packages/migrations/src/apply.ts`,
+`pnpm exec vitest run scripts/migration-upgrade.test.ts` failed dropping
+`working_order_lines.variant_id` (core `0006_drop_line_variant_id`) with
+`no such column: new.variant_id`. Inferred from that, not run against a real box: a box that booted
+before that migration would have failed the same way. The guard also meets the shape
+[conventions-data.md](conventions-data.md#a-migration-set-depends-on-another-through-a-foreign-key-a-trigger-on-its-table-or-a-trigger-body-naming-its-table)
+already records: core `0003_variant_inherited_nullable` rebuilds `products` while a trigger from
+media's `0001_image_references` reads it in its body, and SQLite refuses the rename that ends the
+rebuild (`error in trigger products_media_image_fk_parent_delete: no such table: main.products`).
+The guard applies everything up to `0003` together for that reason; a future rebuild of a table
+another set's trigger BODY reads fails it. It seeds no rows, so a migration that fails only on data
+passes it.
 
 The earlier upgrade regression, which migrated real PostgreSQL databases from each release point
 for `core` alone, was deleted with the PostgreSQL test harness on 2026-09-22.
 
-**2026-09-21, the SQLite storage switch.** The one instance of that shape this repository ever met
-was PostgreSQL's rule that a label added by `ALTER TYPE … ADD VALUE` may not be named in the
-transaction that added it, and a root guard read every set's SQL for it —
+**2026-09-21, the SQLite storage switch.** The PostgreSQL instance of that shape was PostgreSQL's
+rule that a label added by `ALTER TYPE … ADD VALUE` may not be named in the transaction that added
+it, and a root guard read every set's SQL for it —
 `enum-add-value-safety.test.ts`, written here without its `scripts/` directory on purpose, because
 a backticked path to a file that no longer exists fails `scripts/claude-md-pointers.test.ts`.
 SQLite has no enum types and no `ALTER TYPE`, and the regenerated baselines carry a text column

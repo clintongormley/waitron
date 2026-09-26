@@ -173,7 +173,7 @@ describe("removing the change feed", () => {
 
   // The feed goes back at the end because the suite's reset replays the triggers it found after
   // setup, and a drop of one that is gone fails it.
-  it("stops recording changes and leaves every other trigger in place", async () => {
+  it("stops recording changes and leaves a trigger it did not install in place", async () => {
     try {
       removeChangeFeed(suite.db);
       suite.db.run(sql.raw(`insert into live_probe values ('p1')`));

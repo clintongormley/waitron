@@ -239,13 +239,17 @@ hook, or how tests are scheduled:
   2026-09-24). What is NOT allowed is adding one beside a backgrounded whole-workspace
   `pnpm -r test:coverage` — check what else is testing on the machine first. Chromium's launch depends on a Codex seat's PERMISSIONS,
   not on Codex — check host execution before deferring browser testing to another agent.
-- **A migration can fail only on a box that already has a trigger naming what it changes**, which a
+- **A migration can fail on a box that already has a trigger naming what it changes**, which a
   fresh database migrated in one go never has — so most suites cannot see it. `applyMigrations`
-  removes the change feed first for that reason (boot reinstalls it); a rebuild of a table another
-  set's trigger names still fails (measured on core `0003`). Guard: `scripts/migration-upgrade.test.ts`, weaker than its
-  name — its tables hold no rows, it installs today's change-feed and append-only lists at every
-  step, and it applies everything up to core's `0003` in one go. Cost: an earlier bricked box that was
-  wiped, and a box that failed three starts on 2026-09-26. See [ci-and-gates.md](docs/developers/ci-and-gates.md).
+  removes the change feed first for that reason (`installChangeFeed` in `apps/server/src/boot.ts` reinstalls it); a rebuild of a table
+  another set's trigger BODY reads still fails (measured on core `0003`). Guard:
+  `scripts/migration-upgrade.test.ts`, weaker than its name — its tables hold no rows; it installs
+  today's change-feed list, and today's append-only list less the tables the previous step lacked, at every step; it applies everything up to core's
+  `0003` in one go; and it asserts only that each step does not throw, so a rebuild that silently
+  drops a trigger ON the rebuilt table passes it (SQLite drops one silently:
+  [conventions-data.md](docs/developers/conventions-data.md)). Cost: an earlier bricked box that
+  was wiped, and a box that failed three starts on 2026-09-26. See
+  [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 Bypassing the hook with `--no-verify` is for emergencies; the failure still has to be fixed because
 CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the

@@ -39,7 +39,8 @@ const LOCK_WAIT_MS = 120_000;
  * `appendOnlyTables` gets a migrated database with no triggers on it.
  *
  * It removes the change feed first and does not put it back, because a migration cannot drop a
- * column the feed's update trigger names.
+ * column the feed's update trigger names; `installChangeFeed` in
+ * `apps/server/src/boot.ts` installs it again.
  */
 export async function applyMigrations(
   directory: string,
@@ -66,7 +67,6 @@ async function migrateEverySet(
 ): Promise<void> {
   const store = await openVenueDatabase(directory);
   try {
-    // Boot installs it again once migrating is done (`installChangeFeed`, `apps/server/src/boot.ts`).
     removeChangeFeed(store.venue);
     // Sets apply in the order the caller passes. Boot derives it from each module's declared
     // `requires` (`orderedMigrationSets`, which refuses a missing dependency or a cycle). Core must
