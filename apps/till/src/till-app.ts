@@ -6,6 +6,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { UrlStateController, baseStyles } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { codeMessage } from "./i18n/codes.js";
 import { diag } from "./diagnostics.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi, isNetworkFailure } from "./api/client.js";
@@ -121,6 +122,19 @@ function tableWriteError(error: unknown): StringKey {
     ? "table.payment_in_flight"
     : "table.error";
 }
+
+/** Refusals the counter shows in their own words (`codeMessage`): each names what to do next, where
+ * the generic "try again" would send the operator round the same refusal. */
+const ACTIONABLE_REFUSALS = new Set(["order.payment_in_flight", "product.unavailable"]);
+
+/** A counter pay, place or hold refusal: its own message when it is actionable, else `fallback`. */
+function counterError(error: unknown, fallback: StringKey): CounterError {
+  const code = (error as { code?: string } | undefined)?.code;
+  return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? { code } : fallback;
+}
+
+/** A banner's string key, or a refusal shown through its code's own message. */
+type CounterError = StringKey | { code: string };
 
 function isPermanentSaleRefusal(error: unknown): boolean {
   const code = (error as { code?: string }).code;
@@ -429,8 +443,8 @@ export class TillApp extends LitElement {
   @state() private capabilities: CapabilityFlag[] = [];
   /** The non-fiscal receipt trim; `{}` when the server omits it. */
   @state() private receipt: ReceiptConfig = {};
-  /** The string key of a non-fatal error to show over the counter, or `undefined` for none. */
-  @state() private errorKey?: StringKey;
+  /** The non-fatal error to show over the counter, or `undefined` for none. */
+  @state() private errorKey?: CounterError;
   /**
    * Authorizers for an open cash-drawer override; `undefined` means the dialog is closed, and a possibly
    * empty array opens it.
@@ -956,7 +970,7 @@ export class TillApp extends LitElement {
         ? "sale.refused"
         : reachedFiscal && isNetworkFailure(error)
           ? "sale.unconfirmed"
-          : "sale.error";
+          : counterError(error, "sale.error");
     } finally {
       this.submitting = false;
     }
@@ -1005,7 +1019,7 @@ export class TillApp extends LitElement {
         ? "sale.refused"
         : reachedFiscal && isNetworkFailure(error)
           ? "sale.unconfirmed"
-          : "sale.error";
+          : counterError(error, "sale.error");
     } finally {
       this.submitting = false;
     }
@@ -1082,7 +1096,7 @@ export class TillApp extends LitElement {
         ? "place.refused"
         : reachedFiscal && isNetworkFailure(error)
           ? "sale.unconfirmed"
-          : "place.error";
+          : counterError(error, "place.error");
     } finally {
       this.placing = false;
     }
@@ -1196,8 +1210,8 @@ export class TillApp extends LitElement {
       this.#store.clear();
       this.cardOutcome = undefined;
       await this.#refreshAfterWrite("held", "refresh.held_after_park");
-    } catch {
-      this.errorKey = "held.park_error";
+    } catch (error) {
+      this.errorKey = counterError(error, "held.park_error");
     } finally {
       this.parking = false;
     }
@@ -2147,7 +2161,17 @@ export class TillApp extends LitElement {
                 ${t(`mode.${this.onboardingIntent}`)}
               </p>`
         }
-        ${this.errorKey ? html`<p class="error" role="alert">${t(this.errorKey)}</p>` : nothing}
+        ${
+          this.errorKey
+            ? html`<p class="error" role="alert">
+                ${
+                  typeof this.errorKey === "string"
+                    ? t(this.errorKey)
+                    : codeMessage(this.errorKey.code)
+                }
+              </p>`
+            : nothing
+        }
         ${this.#renderRefreshNotice("held")} ${this.#renderRefreshNotice("station")}
         <!-- The waiting-for-promotion banner (till-reroute §4.4). On the shell surface (an operator
              mid-shift), the lock-screen's own status line is not visible, so the shell surfaces the same

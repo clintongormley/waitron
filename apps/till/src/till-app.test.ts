@@ -8,6 +8,7 @@ import { TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
@@ -7823,5 +7824,80 @@ describe("a failed list refresh after a successful write", () => {
     expect(message(el, "station")).toBe("");
     expect(tryNow(el, "station")).toBeNull();
     expect(getStationQueue).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("a counter pay, place or hold refused for a reason the operator can act on", () => {
+  // Each of these refusals names what to do (wait for the card, remove the sold-out item); the
+  // generic "try again" would send the operator round the same refusal.
+  const actions = [
+    ["confirm-payment", { method: "cash", amount: "5" }, "recordSale", undefined, "sale.error"],
+    ["collect-card", {}, "pay", undefined, "sale.error"],
+    ["place-order", undefined, "placeOrder", "invoice_first", "place.error"],
+  ] as const;
+
+  for (const code of ["order.payment_in_flight", "product.unavailable"]) {
+    it.each(actions)(
+      `${code}: %s shows the code's own message, not the generic one`,
+      async (type, detail, method, orderFlow, generic) => {
+        const { el } = await mountApp({
+          ...(orderFlow === undefined
+            ? {}
+            : { getTill: vi.fn().mockResolvedValue({ ...till, orderFlow }) }),
+          [method]: vi.fn().mockRejectedValue({ code }),
+        });
+        const c = await toCounter(el);
+        c.store.addProduct(cafe, "1");
+        await el.updateComplete;
+
+        emit(c, type, detail);
+        await flush(el);
+
+        const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+        expect(banner.textContent).toContain(codeMessage(code));
+        expect(banner.textContent).not.toContain(t(generic));
+        expect(el.shadowRoot!.textContent).not.toContain(code);
+        expect(c.store.lines).toHaveLength(1);
+      },
+    );
+
+    it(`${code}: a Hold whose save is refused shows the code's own message, not held.park_error`, async () => {
+      const updateWorkingOrder = vi.fn().mockRejectedValue({ code });
+      const { el } = await mountApp({ updateWorkingOrder });
+      const c = await toCounter(el);
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      c.store.addProduct(cafe, "1");
+      await el.updateComplete;
+
+      emit(c, "park-order", { label: "Mesa 4" });
+      await flush(el);
+
+      expect(updateWorkingOrder).toHaveBeenCalledOnce();
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(codeMessage(code));
+      expect(banner.textContent).not.toContain(t("held.park_error"));
+      expect(c.store.lines).toHaveLength(2);
+    });
+  }
+
+  it("clears the coded message when the next action starts", async () => {
+    const recordSale = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "order.payment_in_flight" })
+      .mockRejectedValueOnce({ code: "server.internal" });
+    const { el } = await mountApp({ recordSale });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+    expect(banner.textContent).toContain(t("sale.error"));
+    expect(banner.textContent).not.toContain(codeMessage("order.payment_in_flight"));
   });
 });
