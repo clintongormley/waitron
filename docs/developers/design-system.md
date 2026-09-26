@@ -192,16 +192,7 @@ Guard: the phone-width cases in `apps/dashboard/src/widgets/product-editor.test.
 that the table does not scroll, that each row menu ends inside both the table's box and the frame,
 that the price column is hidden and each price sits on one line inside the name's cell, that the
 Available heading sits on one line, that the heading's unit select is hidden, and that the price
-field's unit button is a tap target on both axes. There was a third, the old modifier form's choices
-table, until Task 13 of the extras-and-options plan deleted that form. That deleted table was the
-ONLY one that ever spelled the literal out for itself:
-`git log -S140px --oneline --all -- apps packages` returns two commits, and
-between them the only files they write the number into are `modifier-form.ts` (added, then removed
-by the change that created this token) and `packages/ui-core/src/tokens/structure.css` (the token's own
-value). So neither the variants table nor the attached-lists table has ever carried the number. The
-no-hardcoded-chrome guard (`packages/ui/src/no-hardcoded-chrome.test.ts`) would not have caught the
-literal in `modifier-form.ts` either way, because it scans the primitives under
-`packages/ui/src/components/` and that file did not live there.
+field's unit button is a tap target on both axes.
 
 As a **flex basis** it sizes the extras list form's product picker, which is a combobox rather
 than a table cell and sizes its open panel to its trigger.
@@ -1180,8 +1171,7 @@ branches without updating any ref skips the hook. Package browser and database s
 rather than in the hook.
 
 Run a package's tests or coverage locally when you need them to reproduce a failure or investigate
-changed behavior, for example `pnpm --filter @waitron/ui test:coverage`. Use `pnpm reap` before local
-database tests when earlier interrupted runs left fixtures behind. A focused local pass does not
+changed behavior, for example `pnpm --filter @waitron/ui test:coverage`. A focused local pass does not
 replace the required CI result: check that CI selected the expected packages and passed on your
 current commit. CI also runs mutation and bundle checks where applicable.
 

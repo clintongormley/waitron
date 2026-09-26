@@ -241,10 +241,6 @@ options as before: **escape** (`quoteIdent`/`quoteLiteral`,
 `packages/db/src/testing/identifiers.ts`, which records the same reading at its own head). Neither is
 not acceptable; "the callers only pass safe values" is the §1 defect class.
 
-The old dead examples, kept only so a reader meeting them elsewhere knows what they were: on
-PostgreSQL the unbindable statements were the utility ones — `CREATE ROLE … $1`, `CREATE DATABASE`,
-`GRANT`. None of the three exists here.
-
 ## A `sql` scalar subquery correlated to the OUTER query's table breaks silently when that table is the `.from()` base rather than a join
 
 Drizzle renders `` `${table.column}` `` as the bare quoted column; joined tables are aliased so it
@@ -295,11 +291,7 @@ rewritten this way.
 The SECOND is that two writers replacing the same set must be serialised. That condition is about
 the WRITE, not about row identity, and the grep says nothing about it: an unserialised second
 transaction's `delete` cannot see the first's uncommitted inserts, so it removes nothing, and its own
-inserts then meet the first's committed rows on `(list_id, product_id)`. On PostgreSQL that collision
-was a `23505` reaching `writeItems` as a drizzle `Failed query:` error carrying no `code` of its own,
-which the server's error boundary answered as an opaque 500 rather than as a domain refusal, and
-`updateExtraList` and `deleteExtraList` took a `select … for update` on the `extra_lists` row to keep
-two saves of one list apart.
+inserts then meet the first's committed rows on `(list_id, product_id)`.
 
 **What serialises them now is the venue file's write queue, and there is no lock left to take.**
 `withTransaction` (`packages/db/src/tenancy.ts`) runs its body inside `db.withWriteLock`, and
@@ -364,13 +356,6 @@ files `scripts/write-path-tables.json` names, which is where such a write is all
 Keeping them in a handful of named files is the whole of the property now, because no connection
 makes the distinction for us any more.
 
-HISTORICAL, and the reason the guard exists. Asked of the database rather than of the file, in
-PGlite against the core migrations inside a transaction that had run `set local role app_user`: an
-insert and an update of `tenants`, an insert of `nodes`, an update of `deployment` and a delete from
-`mirror_config` each came back `42501 permission denied for table <name>`, while `select 1 from
-tenants` in the same shape was allowed. Read on 2026-09-19, on PostgreSQL. Nothing in the tree
-prints that now.
-
 ## A money column holds a count of whole cents, and the conversion happens at the row
 
 Landed 2026-09-20 as task P5 of the SQLite storage swap
@@ -409,63 +394,6 @@ by `decimalToCents` on the amount after rounding it to cents, and by `packages/c
 validators — and it is now the only thing
 enforcing anything. That figure is well inside the 9007199254740991 a JavaScript number counts
 exactly, so nothing in range loses a cent to the number type.
-
-**Kept as the dated PostgreSQL receipt that chose eight bytes**, run 2026-09-20 against the
-development PostgreSQL container `waitron-db-1` (`show server_version` reported 18.6), with a control
-in both directions:
-
-```
-docker exec waitron-db-1 psql -U postgres -Atc "select 2147483647::integer"
-# 2147483647          (exit 0)
-docker exec waitron-db-1 psql -U postgres -Atc "select 2147483648::integer"
-# ERROR:  integer out of range   (exit 1)
-```
-
-As cents a four-byte column stopped at 21,474,836.47, which left a band of amounts the converters
-accepted and the column refused with a bare `22003`. That band is what turned a catalogue projection
-test red while money was being moved into whole cents (#475); the test itself went with the old
-modifier model in Task 13, so the receipt was the two `psql` lines above rather than a file. No money
-column is stored in PostgreSQL any more, so nothing can raise that refusal, and the band is enforced
-only by the converters — the point the paragraph above makes. The `psql` above will not run against
-anything the dev stack starts either: `docker-compose.yml` declares mailpit and nothing else.
-
-**HISTORICAL, PostgreSQL only, and the reason the raw-read rule below exists: an uncast `bigint`
-COLUMN read differently on the two test targets, and a `::text` cast made them agree.** Measured
-2026-09-20, when there were two targets, over a table `probe(amount bigint not null, dec
-numeric(12, 2) not null)` holding (1234, 6.75) and (2147483648, 6.75).
-
-**What the instrument could see mattered, so it is named rather than summarised.** The probe was a
-node script printing `typeof` beside every value, run through two clients: this repository's own `pg`
-(8.23.0) against the development container `waitron-db-1`, where `show server_version` reported 18.6,
-and the `@electric-sql/pglite` 0.5.8 JavaScript API. It could not be `psql`: psql renders every value
-as text, so no psql output can tell a driver returning a JavaScript string from one returning a
-number.
-
-| expression | `pg` 8.23 / PostgreSQL 18.6 | PGlite 0.5.8 |
-| --- | --- | --- |
-| `select amount::text` | `"1234"`, a string | `"1234"`, a string |
-| `sum(amount)::text` | `"2147484882"`, a string | `"2147484882"`, a string |
-| `coalesce(sum(amount), 0)::text` over no rows | `"0"`, a string | `"0"`, a string |
-| `sum(round(dec, 0))::text` | `"14"`, a string | `"14"`, a string |
-| `select amount` — CONTROL, no cast | `"1234"`, a STRING | `1234`, a NUMBER |
-| `select sum(amount)` — CONTROL, no cast | `"2147484882"`, a string | `"2147484882"`, a string |
-| `sum(dec)::text` — CONTROL, unrounded | `"13.50"`, a string | `"13.50"`, a string |
-
-The uncast COLUMN was the control that made the rest of the table mean anything: without a cast the
-two engines really did differ, so a raw money read a PGlite suite passed on a number arrived as a
-string against the real server. The uncast AGGREGATE narrowed that rather than widening it — `sum()`
-over a `bigint` is a `numeric`, which BOTH drivers rendered as a string, so the disagreement was
-about the int8 column and not about raw reads in general. The remaining rows are the cases a reader
-would reasonably worry about: an empty aggregate, which gave `"0"` rather than a null or an empty
-string; a rounded `numeric`, which gave `"14"` with no decimal point; and the unrounded `numeric`
-sum, which keeps its scale in the text and is what a dropped `round(…, 0)` would look like. Nothing
-in this repository sets an int8 type parser (`grep -rn "setTypeParser"` over `packages`, `apps`,
-`scripts` and `deploy` still returns nothing, 2026-09-22), so the difference in the control row was
-the driver's default and not something we chose.
-
-**There is one driver and one target now**, so none of that is a live disagreement to guard against.
-What survives it is the habit: a raw read is untyped at both ends, and the cast is what decides the
-JavaScript type the value arrives as.
 
 Drizzle's typed `.select()` needs no cast at all: the column maps the value, and the read mapping is
 now the ONLY thing separating helpers that emit the same SQL type — `money`, `quantity`, `count` and
@@ -566,24 +494,6 @@ unchecked — states `line_total numeric(12,2)` at line 130 and
 they are. The rule for the class is stated once, here and in `CLAUDE.md` §3, rather than by
 editing each plan; a session picking one of those up reads this section first.
 
-A second pass on 2026-09-20 did the same for source comments that still named the retired column
-type in `apps/till` (`src/api/client.ts`, `src/state/working-order.ts`) and
-`apps/server/scripts` (`demo-seed/menu.ts`) — the same sentence restated somewhere the first sweep
-did not look. `till-demo.ts` is in this branch for the cast, not for that sweep: it never named the
-column type (`git grep -n numeric HEAD~1 -- apps/server/scripts/till-demo.ts` returns nothing).
-
-> **2026-09-22:** `till-demo.ts` was deleted, with `catalogue-demo.ts`, `integrated-card-demo.ts`
-> and `park-retrieve-demo.ts`, when the storage swap left them reading a connection string that no
-> longer exists. The paragraph above records what the 2026-09-20 sweep found; the file it names is
-> gone.
-
-**The migration rounded, and that was deliberate.** `ALTER COLUMN ... SET DATA TYPE bigint` cast an
-existing decimal by rounding, so a development database holding rows ended up holding whole euros. No
-data-migration code is allowed before production, so the generated migration was left unedited and a
-box needed `wa-wt reset demo <name>`. _Dated 2026-09-20._ The SQLite flip (F1) regenerated every set,
-and there is no `ALTER COLUMN ... SET DATA TYPE` left anywhere in the tree, so this describes a
-migration that no longer exists.
-
 ## A quantity counts whole thousandths and a rate whole basis points, and neither is the money scale
 
 Task P6, 2026-09-21. Seven columns followed money out of `numeric`: two quantities
@@ -618,13 +528,6 @@ of them. The rounding is `toScale`'s, in BigInt, half away from zero — which i
 decimal columns applied on the way in, so the conversion is exact rather than close. The guard was
 extended to `scales.ts` and proved by deletion: a `Math.round` added to the file turns
 `contains no Math.round` red.
-
-**The two widths differed, and choosing them was not decoration — but no width survived the flip.**
-`numeric(12, 3)` admitted 999999999.999, which is 999999999999 thousandths, past `integer`'s
-2147483647, so `quantity` was declared `bigint`; `numeric(5, 2)` admitted 999.99, which is 99999
-basis points, so `rate` was `integer`. Both are `integer()` in `packages/db/src/schema/columns.ts`
-today and both emit plain `integer`, because SQLite's INTEGER is 64-bit whatever the declared type
-says. What is left of the widths is the digit bounds in the converters, which is the next paragraph.
 
 **Each decimal column's bound moved into the converter.** `numeric(12, 3)` refused a quantity past
 nine integer digits with a `22003` and `numeric(5, 2)` refused a rate past three; an integer column
@@ -682,21 +585,6 @@ behind the change are in the money rule's raw-insert bullet above, re-taken 2026
    thousandth of what the author meant: a quantity sent as `'2'` stores 2, which is 0.002 units.
    Seen in `packages/core`'s pre-fix failure dump.
 
-**The migration rounded, exactly as P5's did, and which of two bad outcomes a development database
-got turned on whether it held a small quantity.** `ALTER COLUMN ... SET DATA TYPE` cast each existing
-decimal by rounding with no scaling `USING` expression — none was allowed, because no data-migration
-code may exist before production. Measured on PostgreSQL 18.6 against populated old-type tables,
-2026-09-21: any quantity below half a unit rounded to `0` and tripped `quantity <> 0` with a `23514`
-(`0.320::numeric(12,3)::bigint` and `0.499` are both `0`, `0.500` is `1`), which errored the whole
-`ALTER` and left the database un-migrated; and without such a row it succeeded quietly with every
-value wrong — a quantity of `1.500` became `2`, reading back as 0.002 units, and a rate of `21.00`
-became `21`, reading back as 0.21%, both inside the rebuilt CHECK constraints. Either way a box
-needed `wa-wt reset demo <name>`.
-
-_Dated 2026-09-21, and folded under the F1 note above._ There is no `ALTER COLUMN ... SET DATA TYPE`
-in the tree, so there is no migration left for this to describe — only the reason the guard exists. A
-box a demo command had already written a small quantity into is still in whatever state it reached.
-
 **A column-level codec was weighed and not taken.** Drizzle's `customType` with `toDriver`/`fromDriver`
 would put each crossing in `columns.ts` once and leave every typed `.select()` and `.values()` call
 site handling decimal strings unchanged — roughly twenty-five hand-written conversions that would not
@@ -726,34 +614,6 @@ table file on the same day it stopped being used in any. The guard now carries a
 `RETIRED` set beside the derived one, holding `numeric`. That list GROWS as builders retire, where
 the `ALLOWED` list only shrinks. It still cannot cover a builder the vocabulary never imported —
 `bigserial` is the standing example.
-
-**The module set was probed rather than grepped**, and the probe itself is dated PostgreSQL work.
-The schema-conformance suite covered the CORE set only then, and P5's nine stale objects were all
-found by applying the migrations and reading the catalogue back. The one module set this task
-touched is `workforce-es`. Probed 2026-09-21 by applying `CORE_MIGRATIONS` then
-`WORKFORCE_ES_MIGRATIONS` and querying `information_schema.columns` and `pg_get_constraintdef` over
-`convenio_config`:
-`night_premium_pct` was `integer` with a null default, `split_shift_premium` was `bigint` from P5,
-and not one of the nineteen constraints on the table named either column. So there was nothing to
-re-derive there — established by running it, not by reading the migration.
-
-**Neither half of that probe can be re-run**, and the two columns read differently now. SQLite has no
-`information_schema` and no `pg_get_constraintdef`; and
-`packages/workforce-es/src/schema/convenio-config.ts` declares `nightPremiumPct` with `rate(…)` and
-`splitShiftPremium` with `money(…)`, both of which emit plain `integer`. What stands is the method:
-probe a module set, do not grep it.
-
-_Dated 2026-09-23._ Those two paragraphs are the record of a hand probe, and they stay as written.
-By the date of this note, four module sets no longer needed one (`ls
-packages/*/src/schema/schema-conformance.test.ts` gives the current list) — `catalogue`, `payments`,
-`workforce` and `workforce-es` each call the shared schema-conformance suite factory
-(`packages/db/src/testing/schema-conformance.ts`) from a
-`packages/<pkg>/src/schema/schema-conformance.test.ts` of their own, so for those four the method is
-a suite that runs with the package's own tests rather than something to remember to do (which pushes
-run which packages is CI's scoping question, and is in ci-and-gates.md). For a set with no call site
-the paragraphs above still describe the only option, minus the two PostgreSQL readers: the SQLite
-equivalents are `pragma table_info` and the CREATE statement SQLite stores verbatim in
-`sqlite_master.sql`, which is what the factory reads.
 
 **What the conversion did NOT touch.** The pricer, `assertQuantityPrecision`, the purchasing
 validators, every receipt and ticket formatter, the HTTP contract, `apps/till` and `apps/dashboard`.
@@ -788,34 +648,7 @@ zero` case in `packages/shared/src/scales.test.ts`. The case's other two asserti
 
 ## A new table is classified `ledger`, `state` or `local` (swap design §2.1) in its module's `<MODULE>_CLASSIFICATION` list via `classify()` (`@waitron/sync-enrolment`), and a table that must never be corrected is declared with `appendOnly()` instead
 
-**`ENABLE ALWAYS` and its guard are both gone — task F1 step group 6, 2026-09-21.** Everything from
-here down to the paragraph headed *2026-09-21, task F1 step group 6* is the history behind that, not
-a description of the tree; the live account starts there.
-
-A replication apply worker skips ordinary triggers, and a copy of a corrupted row is exactly what
-those triggers exist to refuse: that is what the flag bought on PostgreSQL. It was kept for a while
-after the PostgreSQL replication that motivated it was removed on 2026-09-19, for the plain reason
-that the tree still stored everything in PostgreSQL — the flag was a live setting on a live trigger,
-and its guard still ran on every push.
-
-Do not read that as a prediction about the replacement — the design this branch points at says the
-opposite. `docs/superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md` lists `ENABLE
-ALWAYS` triggers in §8.1, *Deleted* — the subsection of §8, *What the repo deletes, keeps, adds* —
-giving as the reason "the follower is our own restore, not a replication apply worker"; §4 states the
-mechanism behind that — "a mirror is not a database that receives rows. It is a place the stream
-lands, plus optionally a follower that keeps a local read-only copy warm". What §8.2 KEEPS is the
-classification, "now also choosing the file". So the CLASS carries into the replacement and the flag
-does not, and §8.1 sends their guards the same two ways: it names `append-only-enable-always` among
-the guards it deletes alongside the flag. That was a statement about the storage switch rather than about the
-day it was written, when both halves were still guarded on every non-docs push. Only the CLASS is
-guarded now: the live guards are `scripts/append-only-triggers.test.ts` and
-`scripts/classification-complete.test.ts`, with `scripts/two-file-foreign-keys.test.ts` beside them,
-and nothing guards a flag that no longer exists.
-
-**2026-09-21, task F1 step group 6: everything above the line is now history, and it went the way
-§8.1 said.** The flag and its guard are both deleted. `ENABLE ALWAYS` was a PostgreSQL trigger state
-and SQLite has no equivalent, so the thing the flag protected — an apply worker copying a corrupted
-row past an ordinary trigger — has no path left to take. The enforcement is no longer written into
+The enforcement is no longer written into
 each migration by hand: `installAppendOnlyTriggers` (`packages/store/src/append-only.ts`) puts a
 `RAISE(ABORT)` trigger pair on each named table, and `applyMigrations`
 (`packages/migrations/src/apply.ts`) calls it after each set migrates, so boot
@@ -936,32 +769,10 @@ node-filtered read of the same id (the "belong to the node" cases in
 (`readSealedStateRow`, the "reads only the named node's row" case in
 `apps/server/src/sealed-state.test.ts`).
 
-HISTORICAL, kept for the mechanism it records: while `ledger`/`state` tables were PUBLISHED for
-PostgreSQL logical replication (removed 2026-09-19), such a table also needed a PRIMARY KEY, not a
-bare UNIQUE constraint. A published table with no replica identity accepts INSERTs and refuses UPDATEs, with
-`ERROR: 55000: cannot update table "t" because it does not have a replica identity and publishes
-updates`. Reproduced on a real PostgreSQL server on 2026-09-13 — `create table t (a int, b int,
-unique (a, b)); create publication p for table t; insert; update` gives the error above, and the same
-sequence with `primary key (a, b)` instead reports `UPDATE 1`. Cost: `product_units` shipped with only
-a unique `(tenant_id, product_id)`, so creating a product worked and changing its unit answered 500;
-the table now carries a primary key. It was created by the catalogue set's migration
-0000_catalogue_baseline, a file the SQLite flip (F1) deleted on 2026-09-21 when it regenerated every
-set as one baseline — named here without a backticked path for that reason. The primary key itself is
-declared in the schema and is in the regenerated baseline.
-No guard covers this. The defect passed every existing test because no test published the table;
-one was written that did, and **the SQLite flip deleted it on 2026-09-21** — SQLite has neither
-publications nor a replication identity, so there is no statement left to make and nothing to
-reproduce. The reasoning above records what was true on PostgreSQL. A per-table check would have to
-read each module's `_CLASSIFICATION` list against its schema file's primary keys.
-
 ## A migration set depends on another through a foreign key, a trigger on its table, or a trigger body naming its table
 
 FK `REFERENCES`, and a `CREATE TRIGGER … ON <table>` where the TABLE is owned by a different
-migration set. Both exist in the tree today, but the second kind is no longer spelled the way it was.
-It used to be `EXECUTE FUNCTION <f>` with `<f>` owned by another set — the `reject_mutation()` case —
-and none of that survives: `grep -rni reject_mutation packages --include='*.sql'` returns nothing,
-because append-only refusals are not written into migrations at all now
-(`installAppendOnlyTriggers` puts them on at runtime).
+migration set. Both exist in the tree today.
 
 The live instance of the trigger edge is `packages/media`. Its
 `drizzle/0001_image_references.sql` carries eight triggers standing in for two foreign keys, and four
@@ -1060,16 +871,6 @@ transaction at a time, because `withTransaction` runs its body inside `db.withWr
 (`packages/db/src/tenancy.ts`, `packages/store/src/write-queue.ts`). So `Promise.all` over a
 transaction's queries buys nothing and hides the order the statements really run in. **No timing has
 been taken on this engine**, and none is claimed here.
-
-HISTORICAL, PostgreSQL: a transaction held one connection and the driver queued a second query on it
-until the first finished, so starting them together saved nothing. Measured with `pg@8.22.0` against
-`postgres:18-alpine` on 2026-09-14: two 200 ms `pg_sleep` queries took 426 ms through one client
-under `Promise.all` and 214 ms through two clients (Codex measured 411 ms and 203 ms on the same
-branch). That driver also warned _"Calling client.query() when the client is already executing a
-query is deprecated and will be removed in pg@9.0"_, printing for three queries started together and
-not for two, because it fired only when a query was already waiting behind the running one.
-`computeDailyClose` (`packages/reporting/src/daily-close.ts`) started three this way until
-2026-09-14.
 
 **No test or guard enforces this rule anywhere.** The `fireLines` single-call test and the
 preparation-route read-count test count calls and queries; neither can tell whether queries overlap.
@@ -1179,25 +980,8 @@ day inside a transaction that then committed and left the row count of every tab
 the control, a close for a new day, moved `daily_closes` from 1 to 2 — the table's only triggers are
 its append-only pair, on update and delete (2026-09-24).
 
-HISTORICAL, PostgreSQL, and the cost that put the savepoints there in the first place. Measured on
-PostgreSQL 18.6 (`postgres:18-alpine`, 2026-09-21): in one transaction, an insert into a second table
-and then a duplicate key on a primary key; the next statement answered `ERROR: current transaction is
-aborted, commands ignored until end of transaction block`, `COMMIT` printed `ROLLBACK`, and the second
-table held 0 rows afterwards — the control being the same sequence without the duplicate key, which
-left 1 row. `enqueueSuccessor` caught the duplicate key a lost race produces and returned `false`,
-with no savepoint. Its only caller writes the run completion first and enqueues second on the same
-transaction — `completeRun` at `packages/scheduler/src/run.ts:181`, `enqueueSuccessor` at `:195` — so
-the completion was already written when the abort happened, and it went away when the transaction
-committed as a rollback. The run stayed `running` with a `started_at` that never cleared, which is
-the state another runner reclaims as stale once it is older than `staleAfterMs` (one hour by default,
-`DEFAULTS` in `packages/scheduler/src/derive.ts`). Nothing raised an error at any point. The loser's-second-enqueue case that guarded it is no longer
-in `packages/scheduler/src/store.concurrency.test.ts`; its "enqueueSuccessor's duplicate-key catch"
-cases cover the catch itself (2026-09-24).
-
 Since 2026-09-21 `withTransaction` ends every transaction with a drain of `change_log`
-(`packages/db/src/tenancy.ts`). On PostgreSQL that made the mistake above at least loud, because a
-transaction that had already aborted failed on the drain rather than committing quietly as a
-rollback. On this engine the drain is there for the change feed alone.
+(`packages/db/src/tenancy.ts`). On this engine the drain is there for the change feed alone.
 
 **The test corollary, and its REASON is gone.** A test for a refusal caught it around the whole
 `withTransaction` call and never inside the callback, because inside, the expectation itself ran in
@@ -1442,15 +1226,9 @@ maintain that buys nothing — and the first draft of the settlement design carr
 ever GUESS which tender a tip belonged to, which is worse than discarding. This rule expires the day a
 real venue is live; add its replacement in the same change.
 
-## An empty value is a valid value (first met as: an empty connection string is a valid connection string)
+## An empty value is a valid value
 
-`new Client({ connectionString: "" })` resolved to localhost with every default (`pg@8.23.0`), so an
-empty string was never "no value given". **No reader of a connection string is left** — the storage
-switch took the last two with it on 2026-09-22, `waitron-provision instance` with the PostgreSQL
-deployment model and then `venue`'s own admin string when that command was repointed at a venue
-directory. The rule is kept because the SHAPE outlived the driver.
-
-The SQLite shape, and the same one-line answer: a path variable that is unset OR empty falls back to
+A path variable that is unset OR empty falls back to
 its default through `isUnset` (`apps/server/src/env-value.ts`) and never through `resolve("")`,
 which is the process's working directory. `apps/server/src/config.ts` states it at `stateDir`,
 `venueDir` and `logDir`. The refusal shape is the other half, for a reader with no default to fall
@@ -1589,12 +1367,6 @@ them. Regression: `apps/server/src/location-settings-api.test.ts`, "refuses a ma
 belonging to another tenant". Printer routes enforce the same check; their regression is
 `apps/server/src/print-api.printer-wiring.test.ts`, "refuses another tenant's manager…".
 
-**Carried from the retired Copilot instructions file** (deleted 2026-09-12; read it with
-`git show f5941462:.github/instructions/waitron.instructions.md`). What was checked before deleting it: Copilot's automatic review was removed from
-this repo's ruleset on 2026-09-06, no workflow under `.github/workflows/` references the file, and
-Claude does not load `.github/instructions/`. Not checked: whether anyone's IDE Copilot still reads
-it — an `applyTo: "**"` instructions file would be picked up there.
-
 ## Two more packages are Spanish by design, and one guard runs on a different axis
 
 `packages/reporting` (the modelo-303 form, Spain's VAT return) is Spanish by design, alongside
@@ -1614,16 +1386,6 @@ identifier into a generic package, a regime term in any language into `packages/
 module's word to the base list instead of the module's own declaration, or one that drops a generic
 package from `GENERIC_PACKAGES` (and its pin) to make a scan pass, is a design question to raise,
 not a nit to wave through.
-
-## Schema-qualify helpers used by expression indexes — RETIRED
-
-PostgreSQL only, and nothing it turned on survives: this engine has no schemas, no `search_path` and
-no user-defined SQL functions at all. Kept as one dated sentence because the incident is worth
-recognising if it recurs in another form. On 2026-09-12 a restore rebuilt an index with an empty
-`search_path` and the populated-image restore failed with `media_text_config` missing, until the
-media search functions named their schema as `public.media_text_config`. That function no longer
-exists: image search now scores and filters in JavaScript (`listImages`,
-`packages/media/src/images.ts`).
 
 ## Default optional input only when it is absent
 
@@ -1656,15 +1418,6 @@ errcode 1, and keeps being refused until a unique index over the parent's refere
 the control being the same insert passing the moment that index is created. So the refusal moved from
 migrate time to the first write, which is a worse place to find it. A generated set that references a
 parent's unique target is checked by WRITING a row, never by watching the migration finish.
-
-HISTORICAL, PostgreSQL, 2026-09-13. Products' generated catalogue migration created the
-`menu_item_variants` foreign key before adding its `(tenant_id, id, product_id)` unique target to
-`menu_items`, and PostgreSQL rejected the whole migration with `42830`; moving the generated
-unique-constraint statement before the foreign key made it succeed, with the journal and snapshot
-unchanged. (That target became `(id, product_id)` when the tenant column went, 2026-09-14.) The
-receipt was `pnpm --filter @waitron/catalogue test src/variants.db.test.ts`, which exercised the
-migration; the suite still exists, while the `TESTCONTAINERS_RYUK_DISABLED=true` prefix it ran under
-does not — there is no Testcontainers PostgreSQL tier any more.
 
 ## A streamed `venue.db` holds Litestream's own tables and a directory beside it
 

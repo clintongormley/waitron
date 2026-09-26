@@ -189,17 +189,6 @@ Reproduced end to end before the line was written: the pre-#340 migration root m
 scratch database, one category row seeded, then this branch's root applied over it — the hint printed
 and the original error still arrived intact.
 
-`dev-setup` bootstraps no ownership of any kind. There is no migrator role and no owner to be:
-`grep -niE "waitron_migrator|migrator|psql|postgres|role" apps/server/scripts/dev-setup.ts` returned
-nothing on 2026-09-23, and `packages/provisioning/README.md` records that the command this sentence
-used to compare against, `waitron-provision instance` — which created a database, created the
-`waitron_migrator` and `waitron_app` roles, migrated and stamped it — was deleted with the
-PostgreSQL deployment model. What `dev-setup` does instead is call the product's own
-`applyMigrations` and `openVenueDatabase` over the venue directory
-(`apps/server/scripts/dev-setup.ts`, the same two entry points `apps/server/src/boot.ts` uses), and
-then provision into it. So a `wa-wt reset demo` boot still migrates through the code a box migrates
-through; what has no counterpart any more is the ownership the old sentence was really about.
-
 The print agent's dev launcher treats the inherited `WAITRON_STATE_DIR` as the server's box state
 and nests its own state under `print-agent/`, so worktree switches retain its token and target
 resets clear it. Wait for the server listener before choosing HTTP or HTTPS: onboarding can mint

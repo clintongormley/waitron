@@ -15,17 +15,6 @@ is handed, and installs the append-only triggers those sets declare. There is no
 between: PGlite, the Testcontainers PostgreSQL tier, the helper that ran a suite against both, and
 the `*.pg.test.ts` suffix all went with the storage switch on 2026-09-22.
 
-**What went with them, so nobody assumes it is still covered.** SQLite has no roles and no grants —
-one process opens one file, and what a caller may do is decided outside the database. Every
-privilege assertion is deleted. The record of what each one bought is in the pull requests that
-deleted them, not in the file headers: those carried it for a while and were then thinned, because a
-comment carries the invariant and not the history (CLAUDE.md §1).
-
-The one worth restating here, because it is the sharpest thing the grants ever caught: a
-column-scoped `grant update (next_number)` was what made invoice-number allocation fail in
-production and pass in every test that skipped the role switch. **Nothing now states which
-privileges that allocation needed**, and nothing checks it.
-
 Contention is a separate question and has its own section further down, "A contention test proves
 the write queue serialises writers, not that a lock blocked".
 
@@ -189,18 +178,6 @@ back with `getMappedPort(9000)`, which is the same shape the failure above took.
 briefly pruned from `CLAUDE.md` §4 on 2026-09-23 on the ground that no PACKAGE fixture binds a port
 — true, and narrower than "the tree" — and restored with that hedge the same day.
 
-## Reuse a supplied test container before probing Docker again — RETIRED
-
-Retired on 2026-09-23 along with the `CLAUDE.md` §4 rule of the same name: no suite in this tree is
-handed a container by a global setup any more, so there is nothing left to reuse. Kept as the
-receipt for why the rule existed, not as a rule. Do not restore it without a fixture that supplies a
-container.
-
-A failing `docker info` command is not evidence that a container global setup already started is
-absent. Run 34507423350 failed `deployment.test.ts` at exactly that redundant check. The suites
-that held this lesson went with the PostgreSQL test harness on 2026-09-22, and nothing in this tree
-probes `docker info` today, so it is carried here without a prover.
-
 ## Locate the unfinished package before diagnosing a silent shard as database contention.
 
 Four inspected `test-light-a` hangs left only Bookings' browser files unfinished while Sync and
@@ -290,9 +267,7 @@ and the experiment separates them. Under Vitest's default per-test timeout of 50
 So the failure mode is precisely this: **a run that completes normally is failed for its duration
 alone.** Nothing is lost about a genuine hang; what is lost is the healthy slow run. (Measured
 2026-09-18 on an 18-core Mac. The earlier wording here — that a larger spawn timeout is "capped" or
-"unreachable" — was wrong, and was corrected after a review ran the control above.
-`scripts/ci-workflow.test.mjs` had the mechanism right first, and records that an earlier version of
-its own comment had it wrong.)
+"unreachable" — was wrong, and was corrected after a review ran the control above.)
 
 What a bound has to clear, then, is the longest a healthy TEST can take: the SUM of every wait it
 performs plus whatever untimed work sits between them. The largest single wait is only one term.
@@ -468,17 +443,6 @@ value that no longer arrives usually leaves the stub taking its default, which i
 that passes. Neutralise each variable in turn and confirm the cases that depend on it fail — done
 for both suites above, every variable accounted for.
 
-## A container given network aliases also joins the default bridge, and a second bridge can stall larger queries.
-
-Measured on PostgreSQL containers on this Docker Desktop host: Testcontainers 12's
-`withNetworkAliases()` also attached the default bridge, which left the container with interfaces at
-MTU 65535 and MTU 1500 — a 1,400-byte query passed, a 1,600-byte query stalled, and removing the
-unused bridge made queries up to 100 KB pass. The remedy was one Docker network plus unique
-container names for DNS, and the fixture that applied it went with the rest of the PostgreSQL test
-harness on 2026-09-22. **No fixture in this tree calls `withNetworkAliases()` today**, so this is
-the mechanism with no live example; reach for it again if a networked fixture comes back. Evidence:
-`docs/superpowers/specs/2026-09-09-test-load-design.md`.
-
 ## `TESTCONTAINERS_RYUK_DISABLED=true` is required locally, for the `bench/` rigs.
 
 Two rigs start a container: `bench/sqlite-failover`, whose `startStore` opens a MinIO container
@@ -488,8 +452,7 @@ an interrupted run leaks, which is the next section.
 
 **A recurrent stall needs a retained log and a live database snapshot.** This was recorded against
 the PostgreSQL test harness: the #286 boot retry and cluster mutex did not eliminate the later
-migration stall, whose backend was waiting for client input with no blocking backend, and reducing
-concurrency alone did not fix the dual-bridge defect above. What carries is the method: locate
+migration stall, whose backend was waiting for client input with no blocking backend. What carries is the method: locate
 the stalled operation before assigning its cause to resource contention.
 
 ## With Ryuk off, INTERRUPTED runs leak containers
@@ -667,58 +630,6 @@ MD5-only checksums, eleven listening ports and three-second stop before swapping
 **An interrupted run can leave either binary running.** `pnpm reap` kills a parentless process whose
 command starts with a Waitron checkout's `.bin/litestream` or `.bin/versitygw`
 (`scripts/reap-testcontainers.mjs`, `isTestBinaryProcess`).
-
-## A probe that needs a Unix SOCKET runs inside the container — RETIRED from CLAUDE.md
-
-Taken out of `CLAUDE.md` on 2026-09-23: no suite starts a container, and the measurement below was
-taken on a harness that is gone. The mechanism is kept here for whoever writes the next one.
-
-Bind-mounting a socket directory out of Docker Desktop's VM gives `ECONNREFUSED` on macOS, and a
-scratchpad path blows the 104-byte `sun_path` limit before you get that far. Install what the probe
-needs inside the container and run it there; parsing-only probes are fine on the host. Measured
-against a PostgreSQL container, on a harness this tree no longer has.
-
-**The `SET PUBLICATION` trap — the suites that reproduced it are gone, logical replication is not**
-
-The FAILOVER suites were deleted on 2026-09-19 with the machinery they tested. What went, read off
-`git diff origin/main --diff-filter=D --name-only` on that branch: the packages/replication-tests
-package and @waitron/sync whole (both packages, suites and source together);
-@waitron/provisioning's replication-bootstrap and replication-readiness suites; and in apps/server
-the replication suites (replication, replication-arc.e2e, box-status.replication,
-box-status.disposal) together with the rejoin and fence suites that needed a REAL replication slot
-(rejoin-e2e, boot.fence — each opened a `startLogicalPostgresContainer` and imported
-`@waitron/sync`, so neither could outlive that package). **Rejoin and fence are still tested**: the
-suites that work over fixtures survive with the code they cover — `apps/server/src/rejoin.test.ts`,
-`apps/server/src/rejoin-command.test.ts` and `apps/server/src/membership-fence.test.ts`, green on
-2026-09-19 under
-`pnpm --filter @waitron/server exec vitest run src/rejoin.test.ts src/rejoin-command.test.ts src/membership-fence.test.ts`.
-Dropping boot.fence left no behaviour uncovered: what it proved — that a fence-LSN drain watermark
-really flips once the carrier's slot advances past it — is gone from the product too, and
-`apps/server/src/rejoin.ts`'s header says so under "WHAT IS GONE": rejoin now wipes without any drain
-confirmation.
-
-What stood here was a measured account of one trap those suites hit — `ALTER SUBSCRIPTION … SET
-PUBLICATION` returning before the subscriber's apply worker restarts, so a publisher write committed
-in that window is LOST rather than delayed (10 / 10 with the worker paused; 8 / 500 under load
-unpaused). Nothing reproduces it, in the narrow sense that no code or test issues that statement:
-`grep -rni "set publication" packages apps scripts deploy` matched nothing on 2026-09-19. If the
-replacement failover mechanism ever streams over PostgreSQL replication again, re-measure rather than
-trust this paragraph. The measured detail — a 2026-09-14 probe on PostgreSQL 18.6, plus a reading of
-the PostgreSQL source behind it — was removed from this file on 2026-09-19 with those suites; the
-trap surfaced as a CI failure in #356 and the fix landed in #361.
-
-PostgreSQL logical replication was exercised here until 2026-09-22: a "copies a row A→B over the
-network via a raw publication/subscription" case created a publication on one containerised node
-and a subscription on the other, then waited for the row to arrive. It went with the two-node
-fixture and the rest of the PostgreSQL test harness, so **no live example of it remains in this
-tree.** The change feed's own replicated case had gone earlier, at the SQLite flip —
-`installChangeFeed` emits SQLite triggers now, and this engine has no apply worker and no
-`ENABLE ALWAYS` for one to skip. A third suite, in
-`packages/catalogue`, created a publication with no subscriber at all,
-so that `product_units` was PUBLISHED while the test reassigned a product's unit — the UPDATE
-PostgreSQL refuses with `55000` when a published table has only a UNIQUE and no primary key
-(CLAUDE.md §3; it asserted the success path, not the refusal). **The SQLite flip deleted it on
-2026-09-21**, because SQLite has neither publications nor a replication identity.
 
 **Shelling out to git from a test**
 
@@ -901,34 +812,6 @@ real-PostgreSQL job-claim suite then held. What keeps a row from being claimed t
 it was not measured and is not a property of the helper: it depends on whether the CALLER's
 predicate excludes the state its stamp writes, which `claimPrintJobs`'s does.
 
-## The key a claim stamps by must be the row's identifier, not its physical address.
-
-**Historical as of 2026-09-22 (task F1, the SQLite switch).** Everything below was measured on
-PostgreSQL, and the rule it paid for has been removed from CLAUDE.md rather than reworded: SQLite
-has no `ctid` to key on, and a claim runs inside a write transaction no other writer can interleave
-with, so the failure shape cannot arise. It is kept here because the *lesson* — a locking selection
-has to carry its choice out on something that survives a rewrite — is about databases, not about
-PostgreSQL. The suite named below was deleted with the rest
-of the real-PostgreSQL tier; read it with
-`git show aabdde6a8^:packages/db/src/job-claim.pg.test.ts`.
-
-`ctid` is the obvious way to carry a locking selection's choice out to the UPDATE around it, and it
-is wrong. Measured 2026-09-21 on PostgreSQL 18, with a claim parked mid-statement on an advisory
-lock inside its own predicate while another transaction committed a change to the row it was about
-to take: keyed on `ctid` the claim returned NOTHING — the outer scan still saw the row where it used
-to be, while the selection had followed it to where it now was — and keyed on the row's primary key
-the same claim took the row and carried the other transaction's change.
-
-The measurement is one row, so what it shows is that a rewritten row is MISSED. In a batch the rows
-nobody touched are still stamped, which is the shape worth worrying about: the claim comes back
-short and says nothing.
-
-The case was "takes a row another transaction rewrote while the claim was running", in the deleted
-suite above; set its `key` to `ctid` and it failed with `expected [] to deeply equal
-[ { position: 1, ... } ]`. What survives on SQLite is `packages/db/src/job-claim.sqlite.test.ts`,
-which pins the one-statement claim's shape but cannot pin this property — there is no second writer
-to rewrite the row.
-
 ## Vitest 4 ships no default coverage excludes, and `include`/`exclude` replace rather than merge.
 
 `coverageConfigDefaults.exclude` is `[]` in 4.1.11 and the object has no `all` key; in 3.2.7 it was a
@@ -1050,21 +933,6 @@ repeat — 405/407 and 402/404, reproduced independently by a second reviewer �
 the same BASE tree gave 98/101 and 99/102 branches, so a before/after branch comparison across runs
 measures nothing. Compare statements; do not quote a branch delta.
 
-**Carried from the retired Copilot instructions file** (deleted 2026-09-12; read it with
-`git show f5941462:.github/instructions/waitron.instructions.md`). What was checked before deleting it: Copilot's automatic review was removed from
-this repo's ruleset on 2026-09-06, no workflow under `.github/workflows/` references the file, and
-Claude does not load `.github/instructions/`. Not checked: whether anyone's IDE Copilot still reads
-it — an `applyTo: "**"` instructions file would be picked up there.
-
-## A grant assertion had to switch role first — retired with the grants themselves
-
-**Historical.** On PGlite the connection arrived as a superuser, so a privilege test that never
-switched role ran as the owner and asserted nothing, however much it asserted; a helper running
-`set local role app_user` was what made such a test mean anything. SQLite has neither roles nor
-grants, so there is no privilege left to switch to and the helper is gone. The shape is worth
-keeping even though its subject is gone: a test that asserts something is REFUSED has to put itself
-on the refused side first, or it proves nothing about the refusal.
-
 ## A contention test proves the write queue serialises writers, not that a lock blocked
 
 **This section replaces one that said PGlite cannot test lock contention and that chain-append
@@ -1077,20 +945,6 @@ both — existed to keep someone from dropping those two packages' Testcontainer
 neither package declares one now. That suite is named here without a backticked path deliberately:
 the pointer guard (`scripts/claude-md-pointers.test.ts`) requires a backticked path to resolve, and
 this one no longer does.
-
-Testcontainers itself has not left the repository, and which members still declare it is a property
-to check rather than a list to remember. **The bare key is only half the search.** `testcontainers`
-and `@testcontainers/postgresql` are two separate dependency names, and most of the members that
-kept one kept only the second, so a `grep -rn '"testcontainers"'` over the manifests reports a
-handful and misses the rest. The grep that answers the question is
-`grep -rn testcontainers --include=package.json . | grep -v node_modules`, which catches both
-spellings. What still IMPORTS one of them is a much shorter list:
-`grep -rn 'from "testcontainers"\|from "@testcontainers/postgresql"'` over `packages`, `apps`,
-`bench` and `scripts`, taken 2026-09-23, returned `bench/sqlite-failover/src/store.ts` and
-`bench/pglite-throughput/src/bench.ts` and nothing else — nothing under `packages/` or `apps/` at
-all. Neither of those two is a test suite: neither bench declares a `test`
-script, so no suite in this repository starts a container by importing them. Every remaining
-declaration is a leftover the flip did not remove.
 
 What a contention suite asserts now is that one writer holds the venue file at a time
 (`packages/store/src/write-queue.ts`). `packages/fiscal-verifactu/src/chain.concurrency.test.ts` is
@@ -1131,47 +985,6 @@ here was a memo cache write whose arguments were both plain identifiers.
 During the Categories review on 2026-09-13, deleting the duplicate-membership guard left
 `categories.test.ts` green: the later unique-constraint failure also matched `toBeInstanceOf(Error)`.
 Keep rollback assertions, and assert the domain code that the API maps to its client response.
-
-**The mutation below was run on PostgreSQL and has NOT been re-run on this engine.** Replacing the
-duplicate-set condition in `replaceProductCategories` with `false` and running
-`TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/catalogue test -- src/categories.test.ts
--t 'validates replacement primaries and rolls back invalid saves'` failed: expected
-`category.membership_invalid`, received a wrapped PostgreSQL `23505`, "duplicate key value violates
-unique constraint product_categories_tenant_id_product_id_category_id_pk" (2026-09-13; that
-constraint lost its tenant column on 2026-09-14, so the name was already stale before the engine
-changed). What SQLite raises in its place is not recorded here, because nobody has re-run it — and
-the command itself now carries a pointless `TESTCONTAINERS_RYUK_DISABLED`, since this package starts
-no container. None of that touches the rule: a constraint failure satisfies `toBeInstanceOf(Error)`
-whichever database raises it, so assert the domain code. The test named above, and
-`replaceProductCategories` itself, were removed on 2026-09-25 when a product stopped having several
-categories; the rule stands without them.
-Note the test name — an earlier version of this paragraph named a test that no longer exists, and
-because a `-t` filter matching nothing skips every test and still exits 0, following it produced a
-green run that looked like a passing control.
-
-**Historical, and the code is gone: `deleteCategory` takes no lock today.** The `for("update")` went
-with the storage switch, so the paragraph below is a PostgreSQL measurement and not a description of
-current behaviour. It is kept because it records what the lock was FOR.
-
-The second guard in the same function family WAS the category identity row lock — the
-`for("update")` on the category row in `deleteCategory`. Removing it made the category-route race
-suite fail, but not where you would expect, and no longer on a `category.in_use` code: since that delete cascades rather than refusing, nothing throws that
-code on this path any more. What happens instead is that the delete still waits, because its final
-`delete from categories` collides with the KEY SHARE lock the concurrent route insert holds through
-its foreign key — it just waits too late. By then the earlier step that clears `preparation_routes`
-has already run and seen nothing, because the insert had not committed when it looked. So once the
-insert does commit, PostgreSQL rejects the category delete with `23503` on
-`preparation_routes_category_fk`, "Key (id)=(…) is still referenced from table preparation_routes",
-and the test fails on `expected 'rejected' to be 'fulfilled'`. The lock's job is to move the wait in
-front of the cascade reads, not to create the wait. Both controls passed again with the production
-guards restored.
-
-**That second control has no prover any more, and nothing replaced it (2026-09-22).** The suite it
-ran against staged the wait on two PostgreSQL backends and watched it with `pg_blocking_pids`; the
-storage switch leaves one writer per venue file, so the wait cannot be staged and the suite was
-deleted. The `for("update")` clause itself went with the switch. The paragraph above is kept because
-it records what the lock was FOR — but it is a measurement about an engine this product no longer
-runs, and nothing today would notice if the ordering it describes were wrong.
 
 ## A default you did not state is not a value you tested
 

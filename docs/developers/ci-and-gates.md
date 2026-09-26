@@ -127,12 +127,6 @@ there is outside it. And its check that `pnpm ls` returned the workspace is only
 meets `MIN_TESTED_MEMBERS`, a loose minimum well under today's count — which stops an empty list
 from passing having read nothing, but lets a listing that drops a few other members pass.
 
-While the split stood, a hardcoded list of promoted packages lived in that guard, and prose that
-re-enumerated it drifted: three places were wrong at once, two naming four packages after the flip
-(#489) made it five and a third asserting six. There is no list to enumerate now. Historical plans
-and specs under `docs/superpowers/` still describe the split; they record what was true when they
-were written and are left alone.
-
 The root project keeps the high bar. Its `coverage.include` names `scripts/**/*.mjs` plus
 `packages/db/src/english-only.ts`, so its table is the root's own non-test `.mjs` scripts — among
 them the two classifiers that decide what CI and the hook run — and the vocabulary module. Every
@@ -263,14 +257,6 @@ dev tooling rather than to a coverage bar, which is why T3 did not make it. The 
 considering, and not taken here because it is a refactor rather than a bar decision, is to move the
 file into a package where its coverage would count.
 
-**Two questions were left for the owner rather than decided here** — answered 2026-09-23: every
-package to `98/98/98/95`, see the top of this section. Both would change the
-basis of the 2026-09-05 split, which is consequence — the fiscal core, the data layer — and not how
-well a package happens to be covered today. They are in this task's pull request with the
-numbers attached: whether to promote the packages that now clear `98/98/98/95` on all four metrics,
-and whether to raise the floor's functions bar of 85, which no package in the workspace comes within
-six points of.
-
 ## Mutation floors, and where each one actually bites
 
 A mutation run makes one small change to a source file at a time and reruns the tests; a change
@@ -296,10 +282,7 @@ is not a package-wide one. Neither is `packages/db`'s, for a smaller reason: one
 `mutate` set — `src/english-only.ts`, whose only suite lives in the root vitest project and which
 nothing under `packages/db` imports, so every one of its mutants survives by construction. The
 receipt is at `scripts/mutation-shard.mjs`'s `NOT_MUTATED`, which holds that one entry and no other
-(read at HEAD, 2026-09-23: `export const NOT_MUTATED = ["src/english-only.ts"];`). The second
-entry this paragraph used to name, `src/testing/global-setup.ts`, no longer exists:
-`git log --diff-filter=D` on that path returns the single commit d0c5589,
-"Delete the PostgreSQL test harness the box no longer needs". And `scripts/mutation-break-thresholds.test.mjs`, which pins which package
+(read at HEAD, 2026-09-23: `export const NOT_MUTATED = ["src/english-only.ts"];`). And `scripts/mutation-break-thresholds.test.mjs`, which pins which package
 holds which bar, is weaker than its name: it reads `mutation.yml` as TEXT for db's bar, so a step
 that reached the same command through a variable would be invisible to it.
 
@@ -361,18 +344,6 @@ few dozen — and into `packages/db/src/testing/schema-conformance.ts`, with not
 | after the move, no other change | 98.41 | 93.03 | 98.73 | 99.32 |
 
 The second row exits 1: branches at 93.03 against a bar of 95.
-
-**What those uncovered lines were, as of that reading and not as of today.** The file has been
-restructured since, so this describes the version the row was measured against. They were of two
-kinds, and only one of them is a gap anybody would call a gap. Some were defensive refusals the core
-set's shape never trips — a declared default that renders with bind parameters, an unnamed unique
-constraint, a declared table the database stored no CREATE TABLE for. The rest were the prerequisite
-sets: the factory applied them itself, in a loop of its own, and core was then the only caller
-passing no prerequisites, so that loop's body never ran inside `packages/db`. The four module suites
-written later did reach it, but they run in their own packages, where their coverage counts. That
-loop no longer exists — the factory now hands the prerequisites to `useVenueDb` as its `migrations`
-and keeps only a `?? []` for the set that has none (`packages/db/src/testing/schema-conformance.ts`)
-— so this half of the explanation is history, while the row above it is a measurement that stands.
 
 **Where the package ended up.** Getting back above the bar took a unit suite written against the
 moved code from inside `packages/db`. Measured 2026-09-23 on the finished branch with the same
@@ -986,20 +957,6 @@ rebuild (`error in trigger products_media_image_fk_parent_delete: no such table:
 The guard applies everything up to `0003` together for that reason; a future rebuild of a table
 another set's trigger BODY reads fails it. It seeds no rows, so a migration that fails only on data
 passes it.
-
-The earlier upgrade regression, which migrated real PostgreSQL databases from each release point
-for `core` alone, was deleted with the PostgreSQL test harness on 2026-09-22.
-
-**2026-09-21, the SQLite storage switch.** The PostgreSQL instance of that shape was PostgreSQL's
-rule that a label added by `ALTER TYPE … ADD VALUE` may not be named in the transaction that added
-it, and a root guard read every set's SQL for it —
-`enum-add-value-safety.test.ts`, written here without its `scripts/` directory on purpose, because
-a backticked path to a file that no longer exists fails `scripts/claude-md-pointers.test.ts`.
-SQLite has no enum types and no `ALTER TYPE`, and the regenerated baselines carry a text column
-with a named `CHECK` instead, so no file in the tree can hold the statement that guard searched
-for. It was deleted rather than left green over a spelling that can no longer appear, which is a
-state it could only reach by having its anti-vacuity floor lowered. The upgrade coverage above is
-unaffected: it is not about enums.
 
 ## Check every command's exit status
 

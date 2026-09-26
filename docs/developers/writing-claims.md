@@ -46,23 +46,14 @@ controller who was supposed to be watching for it. The instances:
    back only on an absent value, never on an empty string. That version survives only in a local
    reflog, which expires — which is why it is written out here rather than pointed at.
 
-4. **"PGlite cannot judge a privilege."** False, and this one came out of `CLAUDE.md` section 4
-   itself, which said in as many words that PGlite does not enforce grants. Nobody had checked it;
-   the branch reached for a Docker container on its authority, in a comment reasoning that a PGlite
-   connection would prove nothing about the application role — true of the superuser connection the
-   author had in mind, and not true of the same session once it assumes the role, which is the
-   version that decided the test. The probe that settled it is under "Two targets" in
-   [testing-guide.md](testing-guide.md); the rule is now corrected. A rule file is the worst place
-   for this defect, because everyone downstream repeats it in good faith.
-
-5. **"The same transaction, and therefore the same snapshot."** The second half does not follow from
+4. **"The same transaction, and therefore the same snapshot."** The second half does not follow from
    the first. The helper (`packages/db/src/tenancy.ts` — `withTenant` when this was written,
    `withTransaction` since the tenant column went on 2026-09-14) opens an ordinary transaction and
    sets no isolation level, so it runs at PostgreSQL's default of read committed, where every
    statement takes a fresh snapshot. Only a repeatable-read transaction gives you the one snapshot the sentence
    assumed.
 
-6. **"The property initializers are gone."** A negative grep, reported as a defect, over the output of
+5. **"The property initializers are gone."** A negative grep, reported as a defect, over the output of
    a toolchain that had just been swapped. Moving the front-ends from vite 6 to vite 8 replaced
    esbuild with Oxc; searching the new till bundle for `this.variant="secondary"` — the exact string
    the vite 6 bundle contained — returned nothing, and every decorated Lit property looked as though
@@ -79,7 +70,7 @@ controller who was supposed to be watching for it. The instances:
    and only then conclude something is missing. Here that was searching for the identifier
    (`_t=class extends x{constructor`) rather than the quoted value.
 
-7. **"The two versions parse this repository's XML identically."** Said after two probes that both
+6. **"The two versions parse this repository's XML identically."** Said after two probes that both
    looked thorough. Moving `fast-xml-parser` from 4.5.7 to 5.11.1 was checked first by replaying 217
    real AEAT documents — captured by wrapping `parser.parse` while the suites ran — through both
    versions under the four options `@waitron/verifactu`'s XML reader sets: byte-identical.

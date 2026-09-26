@@ -3,14 +3,7 @@
 This file holds the evidence behind the UI-facing conventions in the repo root `CLAUDE.md` section
 3 — forms, the dashboard shell and its sessions, hardware and printing, and the unauthenticated
 recovery page: the regressions, measurements and pointers that paid for each rule. `CLAUDE.md` keeps
-the one-line version of each rule and points here for the rest. The component-level rules further
-down (no hardcoded chrome, real-Chromium testing, the two tests a new primitive needs, event
-discipline, and the rest) came from a Copilot review-instructions file deleted on
-2026-09-12 (`git show f5941462:.github/instructions/waitron.instructions.md`) — worth stating here, since a reader may never
-otherwise have seen them. What was checked before deleting it: Copilot's automatic review was removed
-from this repo's ruleset on 2026-09-06, no workflow under `.github/workflows/` references the file,
-and Claude does not load `.github/instructions/`. Not checked: whether anyone's IDE Copilot still
-reads it — an `applyTo: "**"` file would be picked up there.
+the one-line version of each rule and points here for the rest.
 
 **Forms and the shared UI contract**
 
@@ -331,13 +324,6 @@ password in a URL. So the convention that params never carry a secret (stated in
 carrying a credential in its params, or a logged message carrying one in any other form, puts it on
 that page. Pointer: `docs/superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md` §5 and
 its 2026-09-26 pointer; `apps/server/src/recovery-surface.ts`.
-
-The retired file's "Database tests that assert nothing" and "Workspace package boundaries" sections
-mostly restated rules that already live elsewhere in `CLAUDE.md` or in
-`docs/developers/conventions-data.md`. The part of them that was MORE specific than the general rule
-was kept, but it is not here: the database-test rules went to [testing-guide.md](testing-guide.md)
-and the package-boundary and vocabulary rules to [conventions-data.md](conventions-data.md), each
-under the same provenance note.
 
 ## Printed documents take the printer's own layout settings
 

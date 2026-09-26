@@ -117,7 +117,7 @@ rule is spelled out away from `product-presentation.ts`. A list and a label carr
 there is no whole `customerPresentationText` to call, only the same
 `nonBlankTranslations(…) ?? <the staff name>` fold written out again. Checked by following every
 use of `nonBlankTranslations` in the tree: the other callers use it to normalise a map on a write
-path and none of them falls back to a staff name. The move `docs/backlog.md` asked for has happened.
+path and none of them falls back to a staff name.
 These builders lived in `apps/server` until Task 12 (2026-09-21) and went into `packages/catalogue`
 there, because the till had to show the same labels on its own settled ticket and a browser cannot
 import from `apps/server`. A third builder for the till's own staff wording
@@ -384,9 +384,7 @@ its hint.
 
 The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by
 each row's handle — a pointer drag or the arrow keys (`reorder-table.ts`'s `handle`) — with each row
-naming the list's plain STAFF name and which kind it is. It replaced the option-group
-section, which went with the flat `modifierIds`/`optionGroupIds` body fields it wrote; what it sends
-is the ordered `modifiers` list the write body carries (below).
+naming the list's plain STAFF name and which kind it is.
 
 Sections always start collapsed; open and closed state is not remembered. A section holding a
 validation error opens itself and cannot be collapsed until the error is fixed — that is
@@ -401,14 +399,10 @@ it carries no labels of its own. See [Product categories](product-categories.md)
 
 ## One save, one transaction
 
-**Station and course are saved with the product.** They used to be two save-on-change requests the
-editor fired the moment you picked one — written immediately, outside the product's own Save, so
-Cancel did not undo them, and only offered at all for a product that already existed (the events
-carried `this.value!.id`). Now `applyRouting` runs inside the same transaction the product write
+**Station and course are saved with the product.** `applyRouting` runs inside the same transaction the product write
 already opened (`apps/server/src/catalogue-api.ts`), so a station or course id the venue does not
 have rolls the whole product back rather than leaving a half-saved routing behind, and a brand-new
-product can be routed as you create it. The `wt-set-product-station` and `wt-set-product-course`
-events are gone.
+product can be routed as you create it.
 
 The product write body carries `name` (required, plain text), `customerName` (a language map or
 `null`), `description`, `kitchenName`, `image`, the price and tax fields, `primaryCategoryId` (the
