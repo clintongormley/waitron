@@ -1,4 +1,4 @@
-import { mkdir, readFile, realpath } from "node:fs/promises";
+import { chmod, mkdir, readFile, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { AppError } from "@waitron/shared";
 import { type BundleFiles } from "./recovery-bundle.js";
@@ -67,16 +67,28 @@ export async function resolveSafeEntryPath(
   return target;
 }
 
-/** The inverse of `collectStateSecrets`: each file written atomically, 0600. */
+/**
+ * The inverse of `collectStateSecrets`: each file written atomically, 0600. The destination and every
+ * folder between it and an entry end 0700 whether or not they already existed (`mkdir`'s mode applies
+ * only to a folder it creates); nothing above the destination is changed.
+ */
 export async function unpackBundleToDir(files: BundleFiles, destDir: string): Promise<void> {
-  // Created before the guard's `realpath`, which fails on a missing path. Only a directory created
-  // here is made 0700.
+  // Created before the guard's `realpath`, which fails on a missing path.
   await mkdir(destDir, { recursive: true, mode: 0o700 });
   const realDestRoot = await realpath(resolve(destDir));
+  await chmod(realDestRoot, 0o700);
   for (const [rel, contents] of Object.entries(files)) {
     const target = await resolveSafeEntryPath(rel, destDir, realDestRoot, () => {
       throw new AppError("recovery.bundle_invalid", { reason: "unsafe_path" });
     });
+    // A resolved path holds no symlink, and the guard has confirmed it lies inside the destination.
+    for (
+      let dir = await realpath(dirname(target));
+      dir.startsWith(realDestRoot + sep);
+      dir = dirname(dir)
+    ) {
+      await chmod(dir, 0o700);
+    }
     await writeFileAtomic(target, contents, 0o600);
   }
 }

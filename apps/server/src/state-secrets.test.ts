@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { mkdir, writeFile, readFile, stat, symlink, readdir } from "node:fs/promises";
+import { chmod, mkdir, writeFile, readFile, stat, symlink, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -76,14 +76,16 @@ describe("state-secrets", () => {
   it("rejects a key whose parent is a symlink escaping destDir, writing nothing outside", async () => {
     const dest = mkdtempSync(join(tmpdir(), "state-secrets-symlink-"));
     const outside = mkdtempSync(join(tmpdir(), "state-secrets-outside-"));
+    await chmod(outside, 0o755);
     // Pre-existing `destDir/tls -> outside`: the key `tls/server.key` is lexically fine, but writing
     // it would follow the symlink and land in `outside`. The symlink-aware guard must reject it.
     await symlink(outside, join(dest, "tls"));
     await expect(unpackBundleToDir({ "tls/server.key": "pwned\n" }, dest)).rejects.toThrow(
       new AppError("recovery.bundle_invalid", { reason: "unsafe_path" }),
     );
-    // Nothing was written into the outside dir the symlink pointed at.
+    // Nothing was written into the outside dir the symlink pointed at, and its mode is untouched.
     expect(await readdir(outside)).toEqual([]);
+    expect((await stat(outside)).mode & 0o777).toBe(0o755);
   });
 
   it("unpacks a bundle to a dir with 0600 files and a tls/ subdir, round-tripping contents", async () => {
@@ -95,5 +97,34 @@ describe("state-secrets", () => {
       expect(await readFile(join(dest, rel), "utf8")).toBe(files[rel]);
       expect((await stat(join(dest, rel))).mode & 0o777).toBe(0o600);
     }
+  });
+
+  it("makes an EXISTING destination and entry folder owner-only", async () => {
+    const files = await collectStateSecrets(await seedStateDir());
+    const dest = mkdtempSync(join(tmpdir(), "state-secrets-existing-"));
+    await mkdir(join(dest, "tls"));
+    await chmod(dest, 0o755);
+    await chmod(join(dest, "tls"), 0o755);
+    await unpackBundleToDir(files, dest);
+    expect((await stat(dest)).mode & 0o777).toBe(0o700);
+    expect((await stat(join(dest, "tls"))).mode & 0o777).toBe(0o700);
+  });
+
+  it("creates a missing destination and entry folder owner-only", async () => {
+    const files = await collectStateSecrets(await seedStateDir());
+    const dest = join(mkdtempSync(join(tmpdir(), "state-secrets-fresh-")), "state");
+    await unpackBundleToDir(files, dest);
+    expect((await stat(dest)).mode & 0o777).toBe(0o700);
+    expect((await stat(join(dest, "tls"))).mode & 0o777).toBe(0o700);
+  });
+
+  it("leaves the folder above the destination as it was", async () => {
+    const files = await collectStateSecrets(await seedStateDir());
+    const above = mkdtempSync(join(tmpdir(), "state-secrets-above-"));
+    await chmod(above, 0o755);
+    const dest = join(above, "state");
+    await mkdir(dest, { mode: 0o755 });
+    await unpackBundleToDir(files, dest);
+    expect((await stat(above)).mode & 0o777).toBe(0o755);
   });
 });

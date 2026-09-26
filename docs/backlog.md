@@ -3028,7 +3028,12 @@ image constraints under *Detail → Box image*.
     `unpackBundleToDir` into an existing folder and it stayed 0755, reproduced with a control. The
     `mkdir` lines date from `f57ab02acf` (2026-08-29) and `2956302ebe` (2026-09-05), before the
     branch. Whether a restore ever unpacks into a folder another process made world-readable is
-    not checked. **Next action:** decide whether the writer should `chmod` an existing destination.
+    not checked. **Done (2026-09-26, lane A's A41, branch `fix/secrets-folder-owner-only`):**
+    `unpackBundleToDir` now makes the destination and every folder between it and an entry 0700
+    whether or not they existed, after the symlink guard has confirmed the folder is inside the
+    destination; nothing above the destination changes. `resolveSafeEntryPath` itself is unchanged,
+    so the archive restore's own entries (through `assertSafeEntryName`) still keep an existing
+    folder's mode.
     The lock-file measurement kept in `db-wipe.ts` names no engine version or platform.
   - Found by #657 (`apps/server` part f2: the node, identity and setup files), outside its files
     or not fixable in a comments-only change. A code defect its review reproduced, which predates
