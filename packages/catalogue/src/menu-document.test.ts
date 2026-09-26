@@ -149,7 +149,7 @@ describe("buildMenuDocument", () => {
     for (const label of options.labels) expect(Object.keys(label)).not.toContain("available");
   });
 
-  it("holds every extras item and option label, available or not", async () => {
+  it("holds an extras item and an option label whatever their availability", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
       await tx.update(optionLabels).set({ available: false }).where(eq(optionLabels.id, WITH_ICE));

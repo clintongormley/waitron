@@ -23,8 +23,8 @@ export type FrozenExtraItem = Omit<OfferedExtraItem, OverlayExtraItemField> & {
 };
 export type FrozenOptionLabel = Omit<OptionLabel, "available">;
 
-/** Every item and every label, available or not: availability is applied when the document is
- * served. */
+/** Every option label, and every extras item whose product is Active and has no Active variant,
+ * available or not: availability is applied when the document is served. */
 export type FrozenOfferedModifier =
   | (Omit<OfferedExtrasList, "items"> & { items: FrozenExtraItem[] })
   | (Omit<OfferedOptionsList, "labels"> & { labels: FrozenOptionLabel[] });

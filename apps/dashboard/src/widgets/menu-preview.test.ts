@@ -511,8 +511,19 @@ it("shows a never-published menu whole, as its first publish would make it live"
 it("names the whole-menu view in Spanish", async () => {
   setLocale("es-ES");
   const el = await mount({});
-  expect(text(q(el, '[data-test="document"] h2'))).toBe(t("menu_preview.document_heading"));
-  expect(t("menu_preview.document_heading")).not.toBe("The menu as it will be published");
+  expect(text(q(el, '[data-test="document"] h2'))).toBe("El menú tal como se publicará");
+});
+
+it("names the whole-menu view in Spanish when there is nothing to publish", async () => {
+  setLocale("es-ES");
+  const current: MenuStatus = {
+    state: "current",
+    version: 4,
+    publishedAt: PUBLISHED_AT,
+    hash: NEW_HASH,
+  };
+  const el = await mount({ status: current, preview: { ...preview([]), status: current } });
+  expect(text(q(el, '[data-test="document"] h2'))).toBe("El menú tal como está publicado");
 });
 
 it("maps a document's lists to the tree, keyed by what each member names, with each name once", () => {

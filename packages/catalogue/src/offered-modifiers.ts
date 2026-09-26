@@ -119,7 +119,7 @@ const activeVariant = alias(products, "active_variant");
 
 /** One query for every product any offered list names, and none at all when no list names one.
  * With `includeEveryModifierItem`, an Unavailable product is read too, but never an Inactive one:
- * availability must not change a published document, and deleting a product must. */
+ * availability must not change the document a publish would write, and deleting a product must. */
 async function readExtraProducts(
   tx: Transaction,
   productIds: string[],

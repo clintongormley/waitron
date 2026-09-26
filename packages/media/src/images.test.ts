@@ -834,9 +834,13 @@ it("protects the photo of a product a live menu version offers only as an extra"
       },
     ];
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
+    expect((await readImage(tx, image.id)).usageCount).toBe(1);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
     await publish(tx, menu.id);
     expect(await listImageUsages(tx, image.id)).toEqual([]);
+    expect((await readImage(tx, image.id)).usageCount).toBe(0);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
   });
 });

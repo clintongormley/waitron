@@ -131,9 +131,10 @@ export function publishFailure(menu: string, status: MenuStatus | null, reason: 
 
 /**
  * What publishing one menu would change from its live version, each change in words with where it
- * came from, the warnings that do not stop it, and the button that publishes the menu. The host reads
- * the preview and performs the publish: the button asks for it as `wt-menu-publish` with the hash the
- * preview showed, and a failed read offers `wt-preview-retry`.
+ * came from, the warnings that do not stop it, the button that publishes the menu, and the whole menu
+ * read-only as the publish would make it live, or as it is live when there is nothing to publish. The
+ * host reads the preview and performs the publish: the button asks for it as `wt-menu-publish` with
+ * the hash the preview showed, and a failed read offers `wt-preview-retry`.
  */
 @customElement("dashboard-menu-preview")
 export class MenuPreviewPanel extends LitElement {
