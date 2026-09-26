@@ -545,6 +545,55 @@ describe("deleteMany — S3's multi-object delete", () => {
   });
 });
 
+describe("the bucket's own error name", () => {
+  // The body is XML, so the markup is escaped on the wire and the client decodes it back.
+  const unlisted: [string, string][] = [
+    ["a name off the list", "ProviderSpecificRefusal"],
+    ["a secret-looking name", "sk_live_0123456789abcdefSECRET"],
+    ["a name carrying markup", "&lt;script&gt;alert(1)&lt;/script&gt;"],
+  ];
+
+  it.each(unlisted)("is kept out of the error's params when it is %s", async (_, wire) => {
+    const { store } = storeOver([{ status: 403, headers: xml, body: errorBody(wire, "no") }]);
+    expect(await rejection(store.get("k"))).toEqual({
+      code: "backup.stream_request_failed",
+      params: { operation: "get", key: "k", status: 403, name: "other" },
+    });
+  });
+
+  it("is kept when it is on the list", async () => {
+    const { store } = storeOver([
+      { status: 403, headers: xml, body: errorBody("AccessDenied", "no") },
+      {
+        status: 200,
+        headers: xml,
+        body: `<?xml version="1.0" encoding="UTF-8"?><DeleteResult><Error><Key>waitron/a</Key><Code>AccessDenied</Code><Message>no</Message></Error></DeleteResult>`,
+      },
+    ]);
+    expect((await rejection(store.get("k"))).params).toMatchObject({ name: "AccessDenied" });
+    expect((await rejection(store.deleteMany(["a"]))).params).toMatchObject({
+      name: "AccessDenied",
+    });
+  });
+
+  it.each(unlisted)(
+    "is kept out of a batch delete's per-file refusal when it is %s",
+    async (_, wire) => {
+      const { store } = storeOver([
+        {
+          status: 200,
+          headers: xml,
+          body: `<?xml version="1.0" encoding="UTF-8"?><DeleteResult><Error><Key>waitron/a</Key><Code>${wire}</Code><Message>no</Message></Error></DeleteResult>`,
+        },
+      ]);
+      expect(await rejection(store.deleteMany(["a"]))).toEqual({
+        code: "backup.stream_request_failed",
+        params: { operation: "delete", key: "a", status: 200, name: "other" },
+      });
+    },
+  );
+});
+
 describe("deleteMany — one DELETE per key, where the batch is not implemented", () => {
   /** A 501 for every batch, then each single DELETE held until the test releases it. */
   function heldNetwork(failKey?: string) {

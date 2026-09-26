@@ -107,9 +107,21 @@ export const ANSWER_REFUSALS = [
 
 export type AnswerRefusal = (typeof ANSWER_REFUSALS)[number];
 
+/**
+ * Names the client gives a request that got no answer, so none of them is the bucket's text:
+ * `TimeoutError` is what `@smithy/node-http-handler` (4.12.1, `dist-cjs/index.js`, its socket
+ * inactivity rejection) names an idle connection, and `Error` is Node's plain error, as a dropped
+ * connection arrives.
+ */
+const CLIENT_ERROR_NAMES = ["Error", "TimeoutError"] as const;
+
 export const UNLISTED_ERROR_NAME = "other";
 
-const LISTED: ReadonlySet<string> = new Set<string>([...S3_ERROR_NAMES, ...ANSWER_REFUSALS]);
+const LISTED: ReadonlySet<string> = new Set<string>([
+  ...S3_ERROR_NAMES,
+  ...ANSWER_REFUSALS,
+  ...CLIENT_ERROR_NAMES,
+]);
 
 export function loggableErrorName(name: string): string {
   return LISTED.has(name) ? name : UNLISTED_ERROR_NAME;

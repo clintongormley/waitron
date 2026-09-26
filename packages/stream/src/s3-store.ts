@@ -15,7 +15,7 @@ import type {
 } from "@aws-sdk/client-s3";
 import { setTimeout as sleep } from "node:timers/promises";
 import { AppError } from "@waitron/shared";
-import type { AnswerRefusal } from "./bucket-error-names.js";
+import { loggableErrorName, type AnswerRefusal } from "./bucket-error-names.js";
 import "./errors.js";
 import type { BucketOperation } from "./errors.js";
 import { normalisePrefix } from "./names.js";
@@ -73,13 +73,19 @@ function nameOf(error: unknown): string {
   return error instanceof Error ? error.name : "Unknown";
 }
 
+// Vetted here because callers log these params, and answer them over HTTP, as they are.
 function requestFailed(
   operation: BucketOperation,
   key: string,
   status: number | null,
   name: string,
 ): AppError {
-  return new AppError("backup.stream_request_failed", { operation, key, status, name });
+  return new AppError("backup.stream_request_failed", {
+    operation,
+    key,
+    status,
+    name: loggableErrorName(name),
+  });
 }
 
 function answerRefused(

@@ -19,10 +19,11 @@ declare module "@waitron/shared" {
      * pointer that was deleted (a bucket answering 404 gives `backup.stream_request_failed`). */
     "backup.stream_precondition_failed": { key: string };
     /** Any other failure talking to the bucket, after conflict retries are spent. `status` is the HTTP
-     * status, or null when no answer arrived at all. A file refused inside a batch delete the bucket
-     * otherwise answered carries that answer's status (200) and the file's own error code as `name`.
-     * `name` is "IncompleteDeleteResult" when the refusal gives no code or names no file of the batch;
-     * in the latter case `key` is the batch's first file. */
+     * status, or null when no answer arrived at all. From `createS3ObjectStore`, `name` is the error's
+     * name as `loggableErrorName` passes it: a name on its lists, or "other". A file refused inside a
+     * batch delete the bucket otherwise answered carries that answer's status (200) and the file's own
+     * error code as `name`. `name` is "IncompleteDeleteResult" when the refusal gives no code or names
+     * no file of the batch; in the latter case `key` is the batch's first file. */
     "backup.stream_request_failed": {
       operation: BucketOperation;
       key: string;
