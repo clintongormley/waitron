@@ -353,6 +353,75 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     }
   }, 60_000);
 
+  it("an old-key archive stored while reload() waits for the old sweep does NOT make archiveUnderCurrentKey true", async () => {
+    const dest = await makeDestDir();
+    const venueDir = await makeVenueDir();
+    const refs: Refs = {
+      config: localFsConfig([dest], STRONG_KEY_1),
+      role: "primary",
+      venueDir,
+      logs: [],
+      managed: false,
+    };
+    let entered!: () => void;
+    const oldCopyEntered = new Promise<void>((r) => (entered = r));
+    let release!: () => void;
+    const oldCopyReleased = new Promise<void>((r) => (release = r));
+    let opens = 0;
+    const sup = new BackupSupervisor({
+      buildConfig: async () => refs.config,
+      isManagedByEnvironment: () => refs.managed,
+      readSingletonRole: () => refs.role,
+      venueDir,
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir: await makeStateDir(),
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00" }),
+      log: (level, event) => refs.logs.push({ level, event }),
+      // The first sweep's copy is held until the second reload is waiting for it; the second
+      // sweep's copy fails, so nothing is ever stored under the new key.
+      openVenue: async (dir) => {
+        const first = opens++ === 0;
+        const opened = await openVenueDatabase(dir);
+        const realArchive = opened.venue.archiveTo.bind(opened.venue);
+        const venue = Object.assign(
+          Object.create(Object.getPrototypeOf(opened.venue) as object),
+          opened.venue,
+          {
+            archiveTo: first
+              ? async (outFile: string) => {
+                  entered();
+                  await oldCopyReleased;
+                  return realArchive(outFile);
+                }
+              : () => Promise.reject(new Error("the new sweep stores nothing")),
+          },
+        ) as typeof opened.venue;
+        return { ...opened, venue };
+      },
+    });
+    try {
+      await sup.reload();
+      await oldCopyEntered;
+      refs.config = localFsConfig([dest], STRONG_KEY_2);
+      const reloading = sup.reload();
+      release();
+      await reloading;
+      await waitForEvent(refs, "backup.failed");
+
+      // The old sweep did store, under the old key, during the reload.
+      const [archive] = await listArchives(dest);
+      expect(archive).toBeDefined();
+      const bytes = await readFile(join(dest, archive!));
+      expect(() => decryptArtifact(bytes, STRONG_KEY_1)).not.toThrow();
+      expect(sup.current().keyFingerprint).toBe(keyFingerprint(STRONG_KEY_2));
+      expect((await sup.status()).archiveUnderCurrentKey).toBe(false);
+    } finally {
+      await sup.stop();
+    }
+  }, 60_000);
+
   it("a venue directory that will not open leaves backup off and never throws at the caller", async () => {
     // The positive twin is `enable from off` above.
     const dest = await makeDestDir();
