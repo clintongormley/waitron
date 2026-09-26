@@ -52,8 +52,9 @@ already *sold* — see below.
 
 ## What a sold line freezes
 
-A line freezes what it was sold as and never reads the catalogue again, so editing a product does not
-rewrite yesterday's receipt. `working_order_lines` and `sale_lines` each carry:
+A line freezes its names and its gross price when it is added and never reads them from the
+catalogue again, so editing a product does not rewrite yesterday's receipt. The one exception is the
+VAT rate of a line not yet invoiced, below. `working_order_lines` and `sale_lines` each carry:
 
 - `name` — the product's staff name at add time; on a line sold as a variant, the PARENT's. On a
   line with no variant this is what the basket and a retrieved tab show after the product has been
@@ -80,6 +81,19 @@ or the product itself when it has no Active variant. The filed `sale_lines` row 
 names, and records the same product in its own `product_id` and a variant's parent in
 `parent_product_id`, as plain values with no foreign key, so no catalogue edit reaches a filed line
 (sales classification spec §3). Neither table has a `variant_id` column.
+
+**An open order's line takes its VAT rate from the catalogue again when the invoice is issued.** A
+held order, a tab or an invoice-first order keeps each line's gross price as it was added, but the
+pass that issues the invoice record resolves each line's VAT rate from its product's current VAT
+class — a variant with no class of its own reads its parent's, and an extras line reads its picked
+product's — so the customer pays the same gross and only the VAT split follows the rate in force
+(`priceStoredOrderForIssuance`, `apps/server/src/working-order.ts`; menus spec
+`2026-09-20-menus-categories-and-home-layouts-design.md` §11.4). The filed `sale_lines` row carries
+the resolved rate. That pass also writes the rate and the net `unit_price` back onto
+`working_order_lines` while the order is still open; an order issued while placed (a ticket-then-pay
+collect) keeps its stored rate there, because `working_order_lines_require_open_parent_update`
+refuses an update of a line whose order is not open. A reprint or a replay rebuilds its lines from the stored
+lines at their stored rates and never resolves again (`priceStoredOrder`, same file).
 
 Because both customer maps (`descriptions` and `variant_descriptions`) had their fallback applied
 *before* being frozen, neither falls back again at render time, except that
@@ -276,7 +290,8 @@ changing at most their quantities, which a till cannot do for such an extra (bel
 keeping such a line's quantity is allowed; raising it is refused `product.variant_required`, as a
 raise of a line whose product has become Inactive or Unavailable is refused. Any other edit
 replaces and re-prices the whole order (`updateHeldOrder`, `apps/server/src/working-order.ts`). Paying a held order bills its stored lines and does not
-re-check them (`priceStoredOrder`, same file). On the till, retrieving the order keeps such an extra
+re-check them; only each line's VAT rate is resolved again, as _What a sold line freezes_ says
+(`priceStoredOrderForIssuance`, same file). On the till, retrieving the order keeps such an extra
 in the basket, marked "Not offered now" and counted in the total, as it keeps a sold-out one,
 because the extras lists it rebuilds the picks from no longer offer it (`deriveExtraSelections`,
 `apps/till/src/state/held-extras.ts`) and paying with no edit still bills it: an unedited retrieved

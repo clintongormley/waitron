@@ -1530,6 +1530,14 @@ and the pricing it feeds, or in the issuance pass, not in the `priceStoredOrder`
   the integrated-payment suite with the stub provider, and the golden and `inmutabilidad` suites
   (unedited).
 
+_2026-09-26: as built, the write-back happens only while the order is open, because
+`working_order_lines_require_open_parent_update` refuses an update of a line whose order is not
+open. An order issued while placed (a ticket-then-pay collect) is priced at collect and keeps its
+stored rate on the line, while the filed record carries the issued rate; a rebuilt ticket takes its
+VAT breakdown from the filed record (`readSettledTicket`, `apps/server/src/till-sale.ts`). The rate
+resolution reads the VAT class in the same query as the lines, not through a separate catalogue
+reader._
+
 - [ ] **Step 1: Write the failing tests:** the table's six cases, plus:
   - the same for a tab line and for an extras child line whose own product's VAT class changed;
   - a variant with no VAT class of its own follows its parent's CURRENT class;

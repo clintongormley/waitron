@@ -6,7 +6,8 @@ import { readReceiptIssuer } from "./receipt-issuer.js";
 // its codes.
 import "./errors.js";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, exists, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import type { GetColumnData } from "drizzle-orm";
 import {
   AppError,
   basisPointsToDecimal,
@@ -61,6 +62,7 @@ import {
   priceBasketWithOptions,
   priceLockedLines,
   resolveAttachedModifiers,
+  resolveVatRate,
   toInvoiceLineDescriptions,
   readContentLanguages,
   readInvoiceLocales,
@@ -460,10 +462,34 @@ async function priceOrderLines(
   return { lineRows, priced, identities, lineContexts };
 }
 
+const storedLineColumns = {
+  id: workingOrderLines.id,
+  productId: workingOrderLines.productId,
+  parentLineId: workingOrderLines.parentLineId,
+  grossUnitPrice: workingOrderLines.unitPriceGross,
+  quantity: workingOrderLines.quantity,
+  vatRate: workingOrderLines.vatRate,
+  name: workingOrderLines.name,
+  descriptions: workingOrderLines.descriptions,
+  optionSnapshots: workingOrderLines.optionSnapshots,
+  category: workingOrderLines.category,
+  unitName: workingOrderLines.unitName,
+  unitPrecision: workingOrderLines.unitPrecision,
+  variantName: workingOrderLines.variantName,
+  variantDescriptions: workingOrderLines.variantDescriptions,
+  variantKitchenName: workingOrderLines.variantKitchenName,
+  kitchenName: workingOrderLines.kitchenName,
+};
+
+type StoredLineRow = {
+  [K in keyof typeof storedLineColumns]: GetColumnData<(typeof storedLineColumns)[K]>;
+};
+
 /**
  * Read a persisted order's STORED lines, snapshotted at add time, so every path that files a
  * persisted order files the same locked composition and a later catalogue price change never moves
- * the filed total.
+ * the filed total. Each line's rate is the stored one; issuance replaces it while the order is open
+ * ({@link priceStoredOrderForIssuance}).
  *
  * Refuses a LINELESS order with `sale.empty_basket`: an empty tab is a reachable state, and this is
  * the last check before its pay or place reaches a fiscal write or a card charge.
@@ -471,30 +497,40 @@ async function priceOrderLines(
 export async function readLockedLines(
   tx: Transaction,
   workingOrderId: string,
-): Promise<{ locked: LockedLine[]; identities: OrderLineIdentity[] }> {
-  const stored = await tx
-    .select({
-      id: workingOrderLines.id,
-      productId: workingOrderLines.productId,
-      lineNo: workingOrderLines.lineNo,
-      parentLineId: workingOrderLines.parentLineId,
-      grossUnitPrice: workingOrderLines.unitPriceGross,
-      quantity: workingOrderLines.quantity,
-      vatRate: workingOrderLines.vatRate,
-      name: workingOrderLines.name,
-      descriptions: workingOrderLines.descriptions,
-      optionSnapshots: workingOrderLines.optionSnapshots,
-      category: workingOrderLines.category,
-      unitName: workingOrderLines.unitName,
-      unitPrecision: workingOrderLines.unitPrecision,
-      variantName: workingOrderLines.variantName,
-      variantDescriptions: workingOrderLines.variantDescriptions,
-      variantKitchenName: workingOrderLines.variantKitchenName,
-      kitchenName: workingOrderLines.kitchenName,
-    })
+): Promise<StoredOrderLine[]> {
+  return toStoredLines(
+    await tx
+      .select(storedLineColumns)
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, workingOrderId))
+      .orderBy(workingOrderLines.lineNo),
+  );
+}
+
+/**
+ * {@link readLockedLines}, with each line's product's CURRENT effective VAT class read in the same
+ * query — a variant with none of its own reads its parent's — or `null` for a line that names no
+ * product.
+ */
+async function readLockedLinesForIssuance(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<(StoredOrderLine & { vatClass: VatClass | null })[]> {
+  const rows = await tx
+    .select({ ...storedLineColumns, vatClass: effectiveProductColumns.vatClass })
     .from(workingOrderLines)
+    .leftJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(parentProducts, parentJoin)
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);
+  return toStoredLines(rows).map((line, i) => ({
+    ...line,
+    // `working_order_lines_product_fk` is `on delete restrict`, so a line naming a product joins it.
+    vatClass: line.identity.productId === null ? null : (rows[i]!.vatClass as VatClass),
+  }));
+}
+
+function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   if (stored.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
@@ -502,23 +538,32 @@ export async function readLockedLines(
   // the stored `line_no` space: a void or a transfer leaves stored numbers with gaps, and keying on
   // them would file a child under the wrong parent in the immutable record.
   const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
-  const locked = stored.map((line) => ({
-    grossUnitPrice: centsToDecimal(line.grossUnitPrice),
-    quantity: thousandthsToDecimal(line.quantity),
-    vatRate: basisPointsToDecimal(line.vatRate),
-    name: line.name,
-    descriptions: line.descriptions,
-    optionSnapshots: line.optionSnapshots,
-    category: line.category,
-    unitName: line.unitName,
-    unitPrecision: line.unitPrecision,
-    parentLineNo: line.parentLineId == null ? null : (positionById.get(line.parentLineId) ?? null),
-    variantName: line.variantName,
-    variantDescriptions: line.variantDescriptions,
-    variantKitchenName: line.variantKitchenName,
-    kitchenName: line.kitchenName,
+  return stored.map((line) => ({
+    identity: { id: line.id, productId: line.productId },
+    locked: {
+      grossUnitPrice: centsToDecimal(line.grossUnitPrice),
+      quantity: thousandthsToDecimal(line.quantity),
+      vatRate: basisPointsToDecimal(line.vatRate),
+      name: line.name,
+      descriptions: line.descriptions,
+      optionSnapshots: line.optionSnapshots,
+      category: line.category,
+      unitName: line.unitName,
+      unitPrecision: line.unitPrecision,
+      parentLineNo:
+        line.parentLineId == null ? null : (positionById.get(line.parentLineId) ?? null),
+      variantName: line.variantName,
+      variantDescriptions: line.variantDescriptions,
+      variantKitchenName: line.variantKitchenName,
+      kitchenName: line.kitchenName,
+    },
   }));
-  return { locked, identities: stored.map(({ id, productId }) => ({ id, productId })) };
+}
+
+/** A stored working-order line: its identity and its locked composition. */
+export interface StoredOrderLine {
+  identity: OrderLineIdentity;
+  locked: LockedLine;
 }
 
 /** A working-order line's own identity. The filed sale line does not keep the line `id`. */
@@ -533,22 +578,79 @@ export interface PricedOrder {
   identities: OrderLineIdentity[];
 }
 
-/** {@link priceStoredOrderForIssuance} without the line identities, to rebuild a filed ticket. */
+/** Price a persisted order exactly as its lines are stored, rates included, to rebuild a filed
+ * ticket's lines. The stored rate is not always the filed one (an order issued while placed keeps
+ * its stored rate), so a rebuilt ticket takes its VAT breakdown from the filed record, never from
+ * these lines. */
 export async function priceStoredOrder(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<PricedLines> {
-  return (await priceStoredOrderForIssuance(tx, workingOrderId)).priced;
+  return priceLockedLines((await readLockedLines(tx, workingOrderId)).map(({ locked }) => locked));
 }
 
-/** Price a persisted order from its add-time locked prices, with each priced line's working-order
- * identity for `issuancePass`; refuses a lineless order (see {@link readLockedLines}). */
+/**
+ * Issue a persisted order's price: each line's stored gross unit price, at the VAT rate of its
+ * product's CURRENT effective VAT class (spec §11.4), read with the lines themselves. Returns each
+ * priced line's working-order identity for `issuancePass`, and refuses a lineless order (see
+ * {@link readLockedLines}).
+ *
+ * The resolved rate and its net unit price are written back, on the caller's transaction, onto each
+ * line whose rate changed, but only while the order is open. A placed order's lines are not
+ * written.
+ */
 export async function priceStoredOrderForIssuance(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<PricedOrder> {
-  const { locked, identities } = await readLockedLines(tx, workingOrderId);
-  return { priced: priceLockedLines(locked), identities };
+  const stored = await readLockedLinesForIssuance(tx, workingOrderId);
+  const priced = priceLockedLines(
+    stored.map(({ locked, vatClass }) =>
+      // A line with no product names nothing to resolve from, so it keeps the rate it was added at.
+      vatClass === null ? locked : { ...locked, vatRate: resolveVatRate(vatClass) },
+    ),
+  );
+  const changed = stored.flatMap(({ identity, locked }, i) => {
+    const line = priced.lines[i]!;
+    const vatRate = stringToBasisPoints(line.vatRate);
+    return vatRate === stringToBasisPoints(locked.vatRate)
+      ? []
+      : [{ id: identity.id, vatRate, unitPrice: stringToCents(line.unitPrice) }];
+  });
+  await writeBackIssuedRates(tx, workingOrderId, changed);
+  return { priced, identities: stored.map(({ identity }) => identity) };
+}
+
+async function writeBackIssuedRates(
+  tx: Transaction,
+  workingOrderId: string,
+  changed: readonly { id: string; vatRate: number; unitPrice: number }[],
+): Promise<void> {
+  if (changed.length === 0) return;
+  const byLine = (value: (line: (typeof changed)[number]) => number) =>
+    sql`case ${workingOrderLines.id} ${sql.join(
+      changed.map((line) => sql`when ${line.id} then ${value(line)}`),
+      sql` `,
+    )} end`;
+  await tx
+    .update(workingOrderLines)
+    .set({ vatRate: byLine((line) => line.vatRate), unitPrice: byLine((line) => line.unitPrice) })
+    .where(
+      and(
+        inArray(
+          workingOrderLines.id,
+          changed.map((line) => line.id),
+        ),
+        // `working_order_lines_require_open_parent_update` refuses an update of a line whose order
+        // is not open, so an order issued while placed keeps its stored rate on the line.
+        exists(
+          tx
+            .select({ one: sql`1` })
+            .from(workingOrders)
+            .where(and(eq(workingOrders.id, workingOrderId), eq(workingOrders.status, "open"))),
+        ),
+      ),
+    );
 }
 
 /** Read a filed sale's invoice number ("A/1"); the fiscal record reference is regime-opaque and

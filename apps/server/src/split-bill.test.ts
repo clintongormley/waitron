@@ -539,8 +539,6 @@ it("retains the frozen options answers and the frozen names when a dish quantity
     const { checkId } = await splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]);
     const source = await priceStoredOrder(tx, tabId);
     const check = await priceStoredOrder(tx, checkId);
-    // The answers are read off the LINES: `priceStoredOrder` projects the locked per-unit values a
-    // sale is filed from, and the options answers are not among them.
     const answersOn = async (orderId: string) =>
       (
         await tx

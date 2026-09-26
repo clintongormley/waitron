@@ -50,9 +50,9 @@ export interface BasketItem {
 }
 
 /**
- * A working-order line filed from its stored LOCK, not the live catalogue. Deliberately the STORED
- * gross unit and rate, never `line_total ÷ quantity` — recovering a fractional line by division
- * drifts off the add-time VAT breakdown.
+ * A stored working-order line to price. Deliberately the STORED gross unit, never
+ * `line_total ÷ quantity`, which drifts for a fractional line. The rate is the caller's: the one
+ * resolved at issuance, or the stored one to rebuild a filed ticket.
  */
 export interface LockedLine {
   /** The stored `working_order_lines.unit_price_gross` — GROSS, per selected unit. */
@@ -212,7 +212,7 @@ export function priceBasket(items: readonly BasketItem[]): PricedLines {
   );
 }
 
-/** Reprices a retrieved/parked working order from its STORED lock, not the live catalogue. */
+/** Prices stored working-order lines from their stored gross unit prices at the rates given. */
 export function priceLockedLines(lines: readonly LockedLine[]): PricedLines {
   return priceRows(
     lines.map((line) => ({
