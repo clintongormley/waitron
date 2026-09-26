@@ -175,6 +175,109 @@ it("moves nothing while the pointer is over the dragged row itself or outside ev
   pointer(document, "pointerup", 1);
 });
 
+function row(el: LitElement, id: string): HTMLElement {
+  return el.shadowRoot!.querySelector<HTMLElement>(`tr[data-choice="${id}"]`)!;
+}
+function handle(el: LitElement, id: string): HTMLElement {
+  return el.shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)!;
+}
+
+it("marks the row being dragged, and clears it on release", async () => {
+  const el = await mount();
+  pointer(handle(el, "a"), "pointerdown", 1);
+  await el.updateComplete;
+  expect(row(el, "a").hasAttribute("data-dragging")).toBe(true);
+  expect(row(el, "b").hasAttribute("data-dragging")).toBe(false);
+  pointer(document, "pointerup", 1);
+  await el.updateComplete;
+  expect(row(el, "a").hasAttribute("data-dragging")).toBe(false);
+});
+
+it("clears the mark when the system cancels the pointer", async () => {
+  const el = await mount();
+  pointer(handle(el, "a"), "pointerdown", 1);
+  pointer(document, "pointercancel", 1);
+  await el.updateComplete;
+  expect(row(el, "a").hasAttribute("data-dragging")).toBe(false);
+});
+
+it("keeps the mark on the dragged row after it moves past another", async () => {
+  // Passes with no re-marking after a render: the rows are keyed, so the moved <tr> is the same
+  // element and keeps its attribute.
+  const el = await mount();
+  pointer(handle(el, "a"), "pointerdown", 1);
+  pointer(document, "pointermove", 1, rowCentre(el, "b"));
+  await el.updateComplete;
+  expect(order(el)).toEqual(["b", "a", "c"]);
+  expect(row(el, "a").hasAttribute("data-dragging")).toBe(true);
+  expect(row(el, "b").hasAttribute("data-dragging")).toBe(false);
+  pointer(document, "pointerup", 1);
+});
+
+it("marks no row for a busy handle or a second pointer", async () => {
+  const el = await mount(three(), true);
+  pointer(handle(el, "a"), "pointerdown", 1);
+  expect(row(el, "a").hasAttribute("data-dragging")).toBe(false);
+  el.busy = false;
+  await el.updateComplete;
+  pointer(handle(el, "b"), "pointerdown", 1);
+  pointer(handle(el, "c"), "pointerdown", 2);
+  expect(row(el, "c").hasAttribute("data-dragging")).toBe(false);
+  pointer(document, "pointerup", 1);
+});
+
+it("shows a grabbing cursor across the page while dragging, and puts the page's back on release", async () => {
+  const el = await mount();
+  document.body.style.cursor = "help";
+  try {
+    pointer(handle(el, "a"), "pointerdown", 1);
+    expect(document.body.style.cursor).toBe("grabbing");
+    pointer(document, "pointerup", 1);
+    expect(document.body.style.cursor).toBe("help");
+  } finally {
+    document.body.style.cursor = "";
+  }
+});
+
+it("puts the page's cursor back when the system cancels the pointer", async () => {
+  const el = await mount();
+  pointer(handle(el, "a"), "pointerdown", 1);
+  expect(document.body.style.cursor).toBe("grabbing");
+  pointer(document, "pointercancel", 1);
+  expect(document.body.style.cursor).toBe("");
+});
+
+it("puts the page's cursor back when the table is removed mid-drag", async () => {
+  const el = await mount();
+  pointer(handle(el, "a"), "pointerdown", 1);
+  el.remove();
+  expect(document.body.style.cursor).toBe("");
+});
+
+it("leaves the page's cursor alone when a table that is not dragging is removed", async () => {
+  const el = await mount();
+  document.body.style.cursor = "help";
+  try {
+    el.remove();
+    expect(document.body.style.cursor).toBe("help");
+  } finally {
+    document.body.style.cursor = "";
+  }
+});
+
+it("paints the dragged row lifted, from tokens", async () => {
+  const { el, host } = await mountWidget<TestReorderHost>("test-reorder-host", { items: three() });
+  host.style.setProperty("--wt-color-surface-lifted", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-shadow-2", "rgb(4, 5, 6) 0px 0px 0px 1px");
+  pointer(handle(el, "a"), "pointerdown", 1);
+  expect(getComputedStyle(row(el, "a")).backgroundColor).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(row(el, "a")).boxShadow).toBe("rgb(4, 5, 6) 0px 0px 0px 1px");
+  expect(getComputedStyle(handle(el, "a")).cursor).toBe("grabbing");
+  expect(getComputedStyle(row(el, "b")).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(getComputedStyle(handle(el, "b")).cursor).toBe("grab");
+  pointer(document, "pointerup", 1);
+});
+
 it("starts no drag from a busy handle", async () => {
   const el = await mount(three(), true);
   pointer(el.shadowRoot!.querySelector('[data-test="drag-a"]')!, "pointerdown", 1);

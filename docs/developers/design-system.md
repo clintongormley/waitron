@@ -104,14 +104,21 @@ This works whether or not `#app` also carries `data-theme` — see "Themes" abov
 
 ### Colour
 
-`--wt-color-bg`, `--wt-color-surface`, `--wt-color-surface-raised`, `--wt-color-text`,
-`--wt-color-text-muted`, `--wt-color-primary`, `--wt-color-on-primary`, `--wt-color-danger`,
+`--wt-color-bg`, `--wt-color-surface`, `--wt-color-surface-raised`, `--wt-color-surface-lifted`,
+`--wt-color-text`, `--wt-color-text-muted`, `--wt-color-primary`, `--wt-color-on-primary`, `--wt-color-danger`,
 `--wt-color-on-danger`, `--wt-color-success`, `--wt-color-warning`, `--wt-color-on-warning`,
 `--wt-color-border`, `--wt-color-focus`, `--wt-color-scrim`
 
 Colours are semantic, not literal. There is no `--wt-color-blue`. `--wt-color-scrim` was added
 after the rest of the palette to back `wt-dialog`'s `::backdrop` — if you need a similar
 overlay/veil colour elsewhere, reuse it rather than inventing a new one.
+
+`--wt-color-surface-lifted` is the background of something picked up and moving — a table row
+while a pointer drags it (`apps/dashboard/src/widgets/reorder-table.ts`). A dragged row can sit
+inside a `wt-modal`, which is painted `--wt-color-surface-raised`, so the lifted surface differs
+from `--wt-color-bg`, `--wt-color-surface` and `--wt-color-surface-raised` in both themes, and
+keeps `--wt-color-text` and `--wt-color-text-muted` at 4.5:1 or more; the "lifted surface" test
+in `packages/ui-core/src/tokens/colors.test.ts` holds both.
 
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
 badge when no open alert is an error. Text on it uses `--wt-color-on-warning`.

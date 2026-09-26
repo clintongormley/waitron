@@ -38,6 +38,8 @@ export class ReorderController implements ReactiveController {
   #rowBounds: { id: string; top: number; bottom: number }[] | null = null;
   #refocus: string | null = null;
   #announcement = "";
+  /** The page's own inline cursor, put back when a drag ends. */
+  #pageCursor = "";
 
   static readonly styles: CSSResult = css`
     .handle {
@@ -60,6 +62,14 @@ export class ReorderController implements ReactiveController {
        the same row apply themselves. */
     .handle:disabled {
       ${disabledStyles}
+    }
+    /* A lifted row, marked by the controller while a pointer drag is in progress. */
+    tr[data-dragging] {
+      background: var(--wt-color-surface-lifted);
+      box-shadow: var(--wt-shadow-2);
+    }
+    tr[data-dragging] .handle {
+      cursor: grabbing;
     }
     /* Off screen but still announced: the live region below, and a header cell whose column holds
        only controls and so has no visible label of its own. */
@@ -180,6 +190,10 @@ export class ReorderController implements ReactiveController {
     // Keep the press from selecting the row's text or starting the browser's own drag.
     event.preventDefault();
     this.#drag = { id, pointerId: event.pointerId };
+    // Relies on the host keying its rows (`repeat` by id), so the marked <tr> moves with the row.
+    (event.currentTarget as HTMLElement).closest("tr")?.setAttribute("data-dragging", "");
+    this.#pageCursor = document.body.style.cursor;
+    document.body.style.cursor = "grabbing";
     document.addEventListener("pointermove", this.#onPointerMove);
     document.addEventListener("pointerup", this.#onPointerEnd);
     document.addEventListener("pointercancel", this.#onPointerEnd);
@@ -204,6 +218,10 @@ export class ReorderController implements ReactiveController {
   };
 
   #endDrag(): void {
+    if (this.#drag !== null) document.body.style.cursor = this.#pageCursor;
+    for (const row of this.#host.shadowRoot?.querySelectorAll("tr[data-dragging]") ?? []) {
+      row.removeAttribute("data-dragging");
+    }
     this.#drag = null;
     this.#rowBounds = null;
     document.removeEventListener("pointermove", this.#onPointerMove);
