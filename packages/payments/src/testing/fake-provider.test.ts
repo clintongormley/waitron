@@ -10,7 +10,12 @@ import {
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
-import { associatePaymentWithSale, findPaymentByRef } from "../store.js";
+import {
+  associatePaymentWithSale,
+  findPaymentByRef,
+  getPaymentByRef,
+  insertAttempting,
+} from "../store.js";
 import { FakePaymentProvider } from "./fake-provider.js";
 import { freshNif, seedPaymentPolicy, seedSale, seedWorkingOrder } from "../../test/seed.js";
 import type { Seeded } from "../../test/seed.js";
@@ -280,5 +285,82 @@ describe("FakePaymentProvider.forward", () => {
       declined: 0,
       incidentsRaised: 0,
     });
+  });
+});
+
+describe("FakePaymentProvider.resolveAbandonedAttempt", () => {
+  const NOW = new Date("2026-09-26T12:00:00Z");
+
+  async function abandoned(paymentRef: string): Promise<void> {
+    const s = await seedTenant();
+    await pg.db.transaction((tx) =>
+      insertAttempting(tx, {
+        workingOrderId: s.workingOrderId,
+        provider: "fake",
+        paymentRef,
+        amount: decimal("10.00"),
+      }),
+    );
+  }
+  const rowOf = (paymentRef: string) =>
+    pg.db.transaction((tx) => getPaymentByRef(tx, { provider: "fake", paymentRef }));
+
+  it("unscripted, answers unknown/unreachable and leaves the row attempting", async () => {
+    await abandoned("ab-1");
+    const provider = new FakePaymentProvider(pg.db);
+    expect(await provider.resolveAbandonedAttempt("ab-1", NOW)).toEqual({
+      outcome: "unknown",
+      reason: "unreachable",
+    });
+    expect((await rowOf("ab-1"))?.state).toBe("attempting");
+    expect(provider.abandonedAttemptCalls).toEqual([{ paymentRef: "ab-1", now: NOW }]);
+  });
+
+  it("scripted captured, captures the row at `now` with a processor reference", async () => {
+    await abandoned("ab-2");
+    const provider = new FakePaymentProvider(pg.db);
+    provider.scriptAbandonedAttempt({ outcome: "captured" });
+    expect(await provider.resolveAbandonedAttempt("ab-2", NOW)).toEqual({ outcome: "captured" });
+    const row = await rowOf("ab-2");
+    expect(row?.state).toBe("captured");
+    expect(row?.settledAt).toBe(NOW.toISOString());
+    expect(row?.externalRef).toBe("fake-ext-ab-2");
+  });
+
+  it("scripted failed, fails the row and echoes whether the provider cancelled", async () => {
+    await abandoned("ab-3");
+    const provider = new FakePaymentProvider(pg.db);
+    provider.scriptAbandonedAttempt({ outcome: "failed", cancelledAtProvider: true });
+    expect(await provider.resolveAbandonedAttempt("ab-3", NOW)).toEqual({
+      outcome: "failed",
+      cancelledAtProvider: true,
+    });
+    expect((await rowOf("ab-3"))?.state).toBe("failed");
+  });
+
+  it("scripted unknown, echoes the reason and status and leaves the row attempting", async () => {
+    await abandoned("ab-4");
+    const provider = new FakePaymentProvider(pg.db);
+    provider.scriptAbandonedAttempt({
+      outcome: "unknown",
+      reason: "ambiguous",
+      providerStatus: "processing",
+    });
+    expect(await provider.resolveAbandonedAttempt("ab-4", NOW)).toEqual({
+      outcome: "unknown",
+      reason: "ambiguous",
+      providerStatus: "processing",
+    });
+    expect((await rowOf("ab-4"))?.state).toBe("attempting");
+  });
+
+  it("refuses payment.not_found for a row that is no longer attempting", async () => {
+    await abandoned("ab-5");
+    const provider = new FakePaymentProvider(pg.db);
+    provider.scriptAbandonedAttempt({ outcome: "failed", cancelledAtProvider: false });
+    await provider.resolveAbandonedAttempt("ab-5", NOW);
+    const error = await provider.resolveAbandonedAttempt("ab-5", NOW).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe("payment.not_found");
   });
 });

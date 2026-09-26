@@ -36,6 +36,7 @@ const EXPECTED = [
   "menu_version_images",
   "menu_versions",
   "order_amendments",
+  "payment_resolutions",
   "registros_facturacion",
   "sale_lines",
   "sale_settlements",

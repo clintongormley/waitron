@@ -32,6 +32,19 @@ export function stripeClient(stripe: Stripe): StripeClient {
     async cancelReaderAction(readerId) {
       await stripe.terminal.readers.cancelAction(readerId);
     },
+    async retrievePaymentIntent(paymentIntentId) {
+      const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+      return {
+        id: pi.id,
+        status: pi.status,
+        amount: pi.amount,
+        amountReceived: pi.amount_received,
+      };
+    },
+    async cancelPaymentIntent(paymentIntentId) {
+      const pi = await stripe.paymentIntents.cancel(paymentIntentId);
+      return { status: pi.status };
+    },
     async refund({ paymentIntentId, amount, idempotencyKey }) {
       const refund = await stripe.refunds.create(
         { payment_intent: paymentIntentId, ...(amount ? { amount: toMinorUnits(amount) } : {}) },

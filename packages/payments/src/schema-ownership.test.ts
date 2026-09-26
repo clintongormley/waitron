@@ -13,6 +13,7 @@ const OWNED = [
   "payment_policy",
   "card_readers",
   "device_card_readers",
+  "payment_resolutions",
 ];
 
 /**

@@ -432,16 +432,19 @@ export async function listAttempting(
 }
 
 /** Matches only a row still `attempting`, so a late stamp never clobbers the refundable reference
- * `captureAttempting` wrote. A no-match is silent: it lost to a concurrent resolution. */
+ * `captureAttempting` wrote. Answers whether it stamped; false means it lost to a concurrent
+ * resolution. */
 export async function stampAttemptingRef(
   tx: Transaction,
   params: Key,
   externalRef: string,
-): Promise<void> {
-  await tx
+): Promise<boolean> {
+  const stamped = await tx
     .update(payments)
     .set({ externalRef, updatedAt: nowIso() })
-    .where(and(keyWhere(params), eq(payments.state, "attempting")));
+    .where(and(keyWhere(params), eq(payments.state, "attempting")))
+    .returning({ id: payments.id });
+  return stamped.length > 0;
 }
 
 export async function settleForwarded(tx: Transaction, params: Key): Promise<void> {

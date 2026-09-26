@@ -95,6 +95,7 @@ describe("payments migrations", () => {
         "device_card_readers",
         "payment_policy",
         "payment_refunds",
+        "payment_resolutions",
         "payments",
       ]);
     } finally {

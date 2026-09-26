@@ -89,6 +89,23 @@ export interface ForwardResult {
 }
 
 /**
+ * What `resolveAbandonedAttempt` did to one `attempting` row. `captured`: the row is now captured,
+ * with its settlement time and processor reference. `failed`: the row is now failed and nothing was
+ * or can still be charged through it; `cancelledAtProvider` says the processor's own payment is
+ * cancelled, so the working order's next card payment must not reuse it. `unknown`: the row is
+ * untouched — the processor could not be asked (`unreachable`) or answered something that is
+ * neither a charge nor a certain refusal (`ambiguous`, with its own status when it gave one).
+ */
+export type AbandonedAttemptOutcome =
+  | { outcome: "captured" }
+  | { outcome: "failed"; cancelledAtProvider: boolean }
+  | {
+      outcome: "unknown";
+      reason: "unreachable" | "ambiguous";
+      providerStatus?: string;
+    };
+
+/**
  * No method takes a transaction handle: every method makes a network call, and a database
  * transaction is never held across one. Each does its own short-transaction bookkeeping and returns
  * a `PaymentResult`, which the caller passes into `recordSale` as data.
@@ -116,6 +133,12 @@ export interface PaymentProvider {
    * `declined` rows failed. An adapter whose `collect` never leaves a row `attempting` answers
    * all-zeros. */
   resolvePending(now: Date): Promise<ForwardResult>;
+
+  /** Settle one `attempting` row that nothing in this process is still driving — the caller
+   * guarantees that — by asking the processor what became of it. Throws `payment.not_found` when
+   * the row is missing or no longer `attempting`. Absent on an adapter that never leaves such a row
+   * for a person to resolve. */
+  resolveAbandonedAttempt?(paymentRef: string, now: Date): Promise<AbandonedAttemptOutcome>;
 
   /** Reverse a captured payment in full — a same-day void, distinct from a refund. Throws
    * `payment.not_voidable` if the payment is not `captured`. */
