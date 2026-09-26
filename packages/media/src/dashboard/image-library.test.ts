@@ -139,9 +139,8 @@ it("refreshes image ordering passively after content-language settings change", 
   ).toBe("Draft label");
 });
 
-// `countUsages` and `listImageUsages` (packages/media/src/images.ts) read a live version's photos
-// from these, and name its menu from `catalogues`.
-it.each(["menu_publications", "menu_versions", "menu_version_images", "catalogues"])(
+// `countUsages` (packages/media/src/images.ts) counts a live version's photos from these two.
+it.each(["menu_publications", "menu_version_images"])(
   "refreshes the library passively when %s changes",
   async (type) => {
     const liveData = new LiveData();
@@ -150,6 +149,20 @@ it.each(["menu_publications", "menu_versions", "menu_version_images", "catalogue
     await mount(client);
     liveData.invalidate([{ type }]);
     await vi.waitFor(() => expect(background.listImages).toHaveBeenCalledOnce());
+  },
+);
+
+// The library's reads name neither, so a change to one alone leaves the library as it is.
+it.each(["menu_versions", "catalogues"])(
+  "does not refresh the library when %s changes",
+  async (type) => {
+    const liveData = new LiveData();
+    const background = api();
+    const client = Object.assign(api(), { background, liveData });
+    await mount(client);
+    liveData.invalidate([{ type }]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(background.listImages).not.toHaveBeenCalled();
   },
 );
 afterEach(() => {

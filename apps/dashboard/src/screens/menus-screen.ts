@@ -82,6 +82,16 @@ function statusLine(status: MenuStatus) {
     : html`${label} · ${live.version} · <span class="time">${live.time}</span>`;
 }
 
+/** The state a publish answered as version `number` left, shown until the next read replaces it.
+ * The answer carries no publication time, so a new version shows this browser's clock. */
+function publishedStatus(number: number, hash: string, before: MenuStatus | null): MenuStatus {
+  const publishedAt =
+    before !== null && before.state !== "unpublished" && before.version === number
+      ? before.publishedAt
+      : new Date().toISOString();
+  return { state: "current", version: number, publishedAt, hash };
+}
+
 function refusal(error: unknown): Record<string, string> {
   return { [fieldOf(error)]: codeMessage(codeOf(error)) };
 }
@@ -656,7 +666,8 @@ export class MenusScreen extends LitElement {
 
   /** Follows every menu's state while the list is shown, and the open menu's alone while its
    * editor is — except on the Preview tab, where the preview's own answer carries it and a second
-   * query would only repeat the read. `again` reads it afresh even when it is already followed. */
+   * query would only repeat the read. `again` reads it afresh even when it is already followed,
+   * keeping the open menu's state on screen until that read replaces it. */
   #followStatus(again = false): void {
     const menuId = this.menuId;
     const ownQuery = menuId !== null && this.view !== "preview";
@@ -677,13 +688,11 @@ export class MenusScreen extends LitElement {
       return;
     }
     this.#statusQueries.release("getMenuStatuses");
-    // Moving between tabs of one menu keeps the state on screen until the next read replaces it.
-    if (again || !sameMenu) {
-      this.status = null;
-      this.statusError = false;
-    }
+    if (!sameMenu) this.status = null;
+    if (again || !sameMenu) this.statusError = false;
     if (!ownQuery) {
       this.#statusQueries.release("getMenuStatus");
+      if (again) void this.#watchPreview(menuId);
       return;
     }
     void this.#statusQueries
@@ -895,8 +904,10 @@ export class MenusScreen extends LitElement {
     this.publishResult = result;
     if (result.kind === "failed") return;
     // A publish that succeeded is never reported as a failed one: a failure here is a load failure.
-    if (result.kind === "published") this.#followStatus(true);
-    if (this.view === "preview") void this.#watchPreview(menuId);
+    if (result.kind === "published") {
+      this.status = publishedStatus(result.number, hash, live);
+      this.#followStatus(true);
+    } else if (this.view === "preview") void this.#watchPreview(menuId);
   }
 
   // ── The list being edited ────────────────────────────────────────────────────────────────────

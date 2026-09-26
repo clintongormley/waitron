@@ -2911,6 +2911,23 @@ describe("publishing", () => {
     expect(client.getMenuStatuses).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps the open menu's state and reads its preview again when a failed load is retried on the Preview tab", async () => {
+    const client = api({
+      listCatalogues: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(menus),
+    });
+    const el = await mount(client, PREVIEW_PATH);
+    expect(q(el, '[data-test="load-error"]')).not.toBeNull();
+    const shown = `Unpublished changes · Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)}`;
+    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(shown));
+    const previews = client.getMenuPreview.mock.calls.length;
+    await click(el, "retry");
+    expect(text(q(el, '[data-test="menu-status"]'))).toBe(shown);
+    await vi.waitFor(() => expect(client.getMenuPreview.mock.calls.length).toBe(previews + 1));
+    await vi.waitFor(() => expect(q(el, '[data-test="load-error"]')).toBeNull());
+    expect(text(q(el, '[data-test="menu-status"]'))).toBe(shown);
+    expect(client.getMenuStatus).not.toHaveBeenCalled();
+  });
+
   it("shows each menu's state under its name on a phone-width list, with no status column", async () => {
     const reported: string[] = [];
     const report = (event: ErrorEvent) => reported.push(event.message);
@@ -3114,6 +3131,40 @@ describe("publishing", () => {
     expect(inPanel(el, "publish")).toBeNull();
     expect(text(q(el, '[data-test="menu-status"]'))).toBe(
       `Published · Version 3 · ${formatIsoMinute("2026-09-26T11:00:00.000Z")}`,
+    );
+  });
+
+  it("shows the version it published in the header when the preview cannot be read again", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    vi.setSystemTime(new Date("2026-09-26T11:00:00.000Z"));
+    const client = api();
+    const el = await mountPreview(client);
+    client.getMenuPreview.mockRejectedValue(new Error("offline"));
+    await publish(el);
+    await vi.waitFor(() =>
+      expect(text(inPanel(el, "result"))).toBe("Lunch Menu version 3 is now live."),
+    );
+    await vi.waitFor(() => expect(inPanel(el, "preview-error")).not.toBeNull());
+    expect(text(q(el, '[data-test="menu-status"]'))).toBe(
+      `Published · Version 3 · ${formatIsoMinute("2026-09-26T11:00:00.000Z")}`,
+    );
+    expect(text(inPanel(el, "live"))).toBe(
+      `Version 3, published ${formatIsoMinute("2026-09-26T11:00:00.000Z")}`,
+    );
+    cleanupWidgets();
+
+    // Answered with the version already live, as when that content was published already: its
+    // own publication time stays.
+    const again = api({ publishMenu: vi.fn().mockResolvedValue({ versionId: "v2", number: 2 }) });
+    const kept = await mountPreview(again);
+    again.getMenuPreview.mockRejectedValue(new Error("offline"));
+    await publish(kept);
+    await vi.waitFor(() => expect(inPanel(kept, "preview-error")).not.toBeNull());
+    expect(text(q(kept, '[data-test="menu-status"]'))).toBe(
+      `Published · Version 2 · ${formatIsoMinute(PUBLISHED_AT)}`,
     );
   });
 
