@@ -236,11 +236,7 @@ declare module "@waitron/shared" {
      * absent or named no open session. The cookie's value is never echoed.
      */
     "session.required": Record<string, never>;
-    /**
-     * No OPEN working order with this id. An order that exists but is settled or abandoned reports
-     * this same code, so the answer does not confirm a closed order exists.
-     */
-    "working_order.not_found": { workingOrderId: string };
+    // `working_order.not_found` is declared in @waitron/db's errors.ts.
     /**
      * A working order this caller tried to MODIFY is not `open` (settled, abandoned, or absent — one
      * code for all). The triggers `working_orders_enforce_transition` and
@@ -373,11 +369,7 @@ declare module "@waitron/shared" {
     "zone.name_taken": { name: string };
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */
     "station.name_taken": { name: string };
-    /**
-     * No kitchen station with this id in this venue, or one that is DEACTIVATED. Folded into one
-     * code: to a caller picking a routing or default target, absent and retired are the same fact.
-     */
-    "station.not_found": { stationId: string };
+    // `station.not_found` is declared in @waitron/db's errors.ts.
     /**
      * No kitchen notice with this id in this venue (for a station's own display, at its station).
      * Declared by `@waitron/venue-service` too, with the same params: it throws it for an unknown

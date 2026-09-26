@@ -15,6 +15,19 @@ declare module "@waitron/shared" {
      * secret. A DEACTIVATED table is the distinct `table.inactive`.
      */
     "table.not_found": { tableId: string };
+    /**
+     * No working order with this id where the caller looked. Declared here, as `table.not_found`
+     * is, because it has throwers in more than one package. Retrieving a held order reads OPEN
+     * orders only, so there a settled or abandoned order reports this same code, and the answer does
+     * not confirm a closed order exists.
+     */
+    "working_order.not_found": { workingOrderId: string };
+    /**
+     * No kitchen station with this id in this venue, or, for a caller picking a routing or default
+     * target, one that is DEACTIVATED: to that caller absent and retired are the same fact.
+     * Declared here, as `table.not_found` is, because it has throwers in more than one package.
+     */
+    "station.not_found": { stationId: string };
     "series.not_found": { seriesId: string };
     /**
      * A node has no `purpose='standard'` invoice series. A corruption/misuse refusal, structured so
