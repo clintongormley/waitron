@@ -5567,8 +5567,8 @@ one reader (`packages/stream/src/bucket-config.ts`), and the kit is sent with `C
 The kit is read in its turn too, since a retroactive Codex review of #627 found that a Save and a
 rotation landing between the kit's reads could pair the old bucket with the new key.
 That startup hands both route groups the one queue is held by a boot test (`apps/server/src/boot.test.ts`,
-"gives the archive routes and the bucket-copy routes one queue"; 2026-09-26, lane A's A36, branch
-`test/boot-shared-backup-queue`), weaker than the rule: it holds one rotation in its turn and sees a
+"gives the archive routes and the bucket-copy routes one queue"; 2026-09-26, lane A's A36,
+#667), weaker than the rule: it holds one rotation in its turn and sees a
 kit read wait behind it, so it fails if either group is given a queue of its own or if the rotation
 or the kit read stops taking its turn, but it does not check the other routes.
 Left open: the pointer write left open under
