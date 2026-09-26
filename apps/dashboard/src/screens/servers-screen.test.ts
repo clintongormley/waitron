@@ -1,16 +1,19 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import "./servers-screen.js";
 import type { ServersScreen } from "./servers-screen.js";
 import type { DashboardApi, ServerListing } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
+import { en, es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 
 const SELF = "11111111-1111-4111-8111-111111111111";
 const STANDBY = "22222222-2222-4222-8222-222222222222";
 const FORMER = "33333333-3333-4333-8333-333333333333";
 const REMOVED = "44444444-4444-4444-8444-444444444444";
+const BLANK = "55555555-5555-4555-8555-555555555555";
 
 const listing: ServerListing = {
   term: 3,
@@ -161,8 +164,15 @@ describe("servers screen list", () => {
     el.shadowRoot!.append(probe);
     const muted = getComputedStyle(probe).color;
     probe.remove();
+    probe.style.fontSize = "var(--wt-font-size-sm)";
+    el.shadowRoot!.append(probe);
+    const small = getComputedStyle(probe).fontSize;
+    probe.remove();
     expect(getComputedStyle(tag).color).toBe(muted);
     expect(getComputedStyle(tag).borderTopStyle).toBe("solid");
+    expect(getComputedStyle(tag).fontSize).toBe(small);
+    // The control: the address is at the body size, so the tag's size is the part rule's doing.
+    expect(getComputedStyle(address).fontSize).not.toBe(small);
     // The control: the address beside it is NOT muted, so the tag's colour is the part rule's doing.
     expect(getComputedStyle(address).color).not.toBe(muted);
   });
@@ -200,6 +210,101 @@ describe("servers screen list", () => {
       );
     });
     expect(api.listServers).toHaveBeenCalledTimes(2);
+  });
+  it("shows a short machine id on every row, beside the address or its placeholder", async () => {
+    const el = await mount();
+    for (const id of [SELF, STANDBY, FORMER, REMOVED]) {
+      const tag = inTable(el, `machine-${id}`)!;
+      expect(tag.textContent!.replace(/\s+/g, " ").trim()).toBe(
+        `${t("servers.machine")} ${id.slice(0, 8)}`,
+      );
+    }
+  });
+
+  it("paints the machine id in the monospace font token", async () => {
+    const el = await mount();
+    const id = inTable(el, `machine-id-${STANDBY}`)!;
+    const probe = document.createElement("span");
+    probe.style.fontFamily = "var(--wt-font-family-mono)";
+    el.shadowRoot!.append(probe);
+    const mono = getComputedStyle(probe).fontFamily;
+    probe.remove();
+    expect(getComputedStyle(id).fontFamily).toBe(mono);
+    expect(getComputedStyle(inTable(el, `address-${STANDBY}`)!).fontFamily).not.toBe(mono);
+  });
+
+  it("names a removable machine with no address by its short id, on the button and in the confirmation", async () => {
+    const withBlank: ServerListing = {
+      term: 3,
+      nodes: [
+        ...listing.nodes,
+        {
+          nodeId: BLANK,
+          contactUrl: "",
+          standing: "serving-secondary",
+          isSelf: false,
+          removable: true,
+        },
+      ],
+    };
+    const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(withBlank) }));
+    const button = inTable(el, `remove-${BLANK}`)!;
+    expect(button.getAttribute("aria-label")).toBe(
+      t("servers.remove_label_id").replace("{id}", "55555555"),
+    );
+    await openRemove(el, BLANK);
+    const body = dialog(el).textContent!.replace(/\s+/g, " ");
+    expect(body).toContain(t("servers.no_address"));
+    expect(body).toContain(`${t("servers.machine")} 55555555`);
+  });
+
+  it("says why nothing can be removed when this server is not the primary", async () => {
+    const onStandby: ServerListing = {
+      term: 3,
+      nodes: listing.nodes.map((n) => ({
+        ...n,
+        isSelf: n.nodeId === STANDBY,
+        removable: false,
+      })),
+    };
+    const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(onStandby) }));
+    expect(el.shadowRoot!.querySelector("[data-test=not-primary]")!.textContent!.trim()).toBe(
+      t("servers.not_primary"),
+    );
+  });
+
+  it("says the same when no listed machine is this server", async () => {
+    const notListed: ServerListing = {
+      term: 3,
+      nodes: listing.nodes.map((n) => ({ ...n, isSelf: false, removable: false })),
+    };
+    const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(notListed) }));
+    expect(el.shadowRoot!.querySelector("[data-test=not-primary]")).not.toBeNull();
+  });
+
+  it("gives no not-primary note on the primary, on an empty list, or after a load failure", async () => {
+    const onPrimary = await mount();
+    expect(onPrimary.shadowRoot!.querySelector("[data-test=not-primary]")).toBeNull();
+    cleanupWidgets();
+    // `listServers` answers an empty list whenever no chart is held, primary or not.
+    const empty = await mount(
+      stubApi({ listServers: vi.fn().mockResolvedValue({ term: null, nodes: [] }) }),
+    );
+    expect(empty.shadowRoot!.querySelector("[data-test=not-primary]")).toBeNull();
+    cleanupWidgets();
+    const failed = await mount(
+      stubApi({ listServers: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+    );
+    expect(failed.shadowRoot!.querySelector("[data-test=not-primary]")).toBeNull();
+  });
+
+  it("does not promise that a till never tries a removed machine, in either language", () => {
+    for (const key of ["servers.intro", "servers.remove_explanation"] as const) {
+      expect(en[key]).toContain("so tills stop trying to reach it");
+      expect(en[key]).not.toMatch(/never try/);
+      expect(es[key]).toContain("para que las cajas dejen de intentar conectar con él");
+      expect(es[key]).not.toMatch(/nunca intenten/);
+    }
   });
 });
 
@@ -300,7 +405,7 @@ describe("servers screen removal", () => {
     await flush(el);
   });
 
-  it("a close while the removal is in flight keeps the confirmation, so its refusal is still shown", async () => {
+  it("Escape pressed while the removal is in flight keeps the confirmation open, so its refusal is still shown", async () => {
     let refuse!: (error: unknown) => void;
     const api = stubApi({
       removeServer: vi.fn(
@@ -314,9 +419,14 @@ describe("servers screen removal", () => {
     await openRemove(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-remove]")!.click();
     await flush(el);
-    dialog(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    await userEvent.keyboard("{Escape}");
+    await closeReportsDelivered();
+    await flush(el);
+    const native = dialog(el).shadowRoot!.querySelector("dialog")!;
+    expect(native.open).toBe(true);
     refuse({ code: "membership.standby_joined" });
     await flush(el);
+    expect(native.open).toBe(true);
     expect(dialog(el).open).toBe(true);
     expect(dialog(el).querySelector("[role=alert]")!.textContent!.trim()).toBe(
       codeMessage("membership.standby_joined"),

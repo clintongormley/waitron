@@ -835,12 +835,15 @@ export const en = {
   "diagnostics.empty": "No log lines yet",
   "servers.title": "Servers",
   "servers.intro":
-    "Every machine on this venue's list of servers. A standby that never finished joining can be removed, so tills never try to reach it. To use that machine again, it has to join from scratch.",
+    "Every machine on this venue's list of servers. A standby that never finished joining can be removed, so tills stop trying to reach it. To use that machine again, it has to join from scratch.",
   "servers.server": "Server",
   "servers.actions": "Actions",
   "servers.loading": "Loading servers…",
   "servers.empty": "This server holds no list of the venue's servers.",
   "servers.no_address": "No address",
+  "servers.machine": "Machine",
+  "servers.not_primary":
+    "Only the primary server can remove machines. Open this screen on the primary.",
   "servers.this_server": "This server",
   "servers.standing.primary": "Primary",
   "servers.standing.standby": "Standby",
@@ -848,9 +851,10 @@ export const en = {
   "servers.standing.removed": "Removed",
   "servers.remove": "Remove",
   "servers.remove_label": "Remove {address}",
+  "servers.remove_label_id": "Remove machine {id}",
   "servers.remove_title": "Remove this standby?",
   "servers.remove_explanation":
-    "It will be taken off the list of servers, so tills never try to reach it. This cannot be undone: to use that machine again, it has to join from scratch.",
+    "It will be taken off the list of servers, so tills stop trying to reach it. This cannot be undone: to use that machine again, it has to join from scratch.",
   "backup.title": "Backups",
   "backup.configuration.title": "Move your preparation to production",
   "backup.configuration.explanation":
@@ -2564,12 +2568,15 @@ export const es: Record<StringKey, string> = {
   "diagnostics.empty": "Aún no hay líneas de registro",
   "servers.title": "Servidores",
   "servers.intro":
-    "Todas las máquinas de la lista de servidores del local. Un servidor en espera que no terminó de unirse se puede retirar, para que las cajas nunca intenten conectar con él. Para volver a usar esa máquina, tiene que unirse de nuevo desde el principio.",
+    "Todas las máquinas de la lista de servidores del local. Un servidor en espera que no terminó de unirse se puede retirar, para que las cajas dejen de intentar conectar con él. Para volver a usar esa máquina, tiene que unirse de nuevo desde el principio.",
   "servers.server": "Servidor",
   "servers.actions": "Acciones",
   "servers.loading": "Cargando servidores…",
   "servers.empty": "Este servidor no tiene la lista de servidores del local.",
   "servers.no_address": "Sin dirección",
+  "servers.machine": "Máquina",
+  "servers.not_primary":
+    "Solo el servidor principal puede retirar máquinas. Abre esta pantalla en el principal.",
   "servers.this_server": "Este servidor",
   "servers.standing.primary": "Principal",
   "servers.standing.standby": "En espera",
@@ -2577,9 +2584,10 @@ export const es: Record<StringKey, string> = {
   "servers.standing.removed": "Retirado",
   "servers.remove": "Retirar",
   "servers.remove_label": "Retirar {address}",
+  "servers.remove_label_id": "Retirar la máquina {id}",
   "servers.remove_title": "¿Retirar este servidor en espera?",
   "servers.remove_explanation":
-    "Se quitará de la lista de servidores, para que las cajas nunca intenten conectar con él. No se puede deshacer: para volver a usar esa máquina, tiene que unirse de nuevo desde el principio.",
+    "Se quitará de la lista de servidores, para que las cajas dejen de intentar conectar con él. No se puede deshacer: para volver a usar esa máquina, tiene que unirse de nuevo desde el principio.",
   "backup.title": "Copias de seguridad",
   "backup.configuration.title": "Lleva tu preparación a producción",
   "backup.configuration.explanation":

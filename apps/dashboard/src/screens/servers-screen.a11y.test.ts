@@ -54,9 +54,9 @@ async function flush(el: ServersScreen): Promise<void> {
   await el.shadowRoot!.querySelector("wt-data-table")?.updateComplete;
 }
 
-async function openRemove(el: ServersScreen): Promise<void> {
+async function openRemove(el: ServersScreen, nodeId = STANDBY): Promise<void> {
   el.shadowRoot!.querySelector("wt-data-table")!
-    .shadowRoot!.querySelector<HTMLElement>(`[data-test="remove-${STANDBY}"]`)!
+    .shadowRoot!.querySelector<HTMLElement>(`[data-test="remove-${nodeId}"]`)!
     .click();
   await flush(el);
 }
@@ -95,6 +95,45 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
     await openRemove(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-remove]")!.click();
     await flush(el);
+    await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a no-address standby's confirmation accessibly", async () => {
+    const blank = "55555555-5555-4555-8555-555555555555";
+    const withBlank: ServerListing = {
+      term: 3,
+      nodes: [
+        ...listing.nodes,
+        {
+          nodeId: blank,
+          contactUrl: "",
+          standing: "serving-secondary",
+          isSelf: false,
+          removable: true,
+        },
+      ],
+    };
+    const { el, host } = await mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      { api: stubApi({ listServers: vi.fn().mockResolvedValue(withBlank) }) },
+      theme,
+    );
+    await flush(el);
+    await openRemove(el, blank);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the not-primary note accessibly", async () => {
+    const onStandby: ServerListing = {
+      term: 3,
+      nodes: listing.nodes.map((n) => ({ ...n, isSelf: n.nodeId === STANDBY, removable: false })),
+    };
+    const { el, host } = await mountWidget<ServersScreen>(
+      "dashboard-servers-screen",
+      { api: stubApi({ listServers: vi.fn().mockResolvedValue(onStandby) }) },
+      theme,
+    );
     await flush(el);
     await expectNoA11yViolations(host);
   });

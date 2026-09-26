@@ -66,14 +66,32 @@ export class ServersScreen extends LitElement {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-sm);
         color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-xs);
+        font-size: var(--wt-font-size-sm);
         white-space: nowrap;
+      }
+      wt-data-table::part(server-machine) {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        white-space: nowrap;
+      }
+      wt-data-table::part(server-machine-id),
+      .machine-id {
+        font-family: var(--wt-font-family-mono);
       }
       .target {
         margin: 0 0 var(--wt-space-3);
         font-weight: var(--wt-font-weight-bold);
         color: var(--wt-color-text);
         overflow-wrap: anywhere;
+      }
+      .machine {
+        margin: 0 0 var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+      }
+      .note {
+        max-width: 70ch;
+        margin: 0 0 var(--wt-space-4);
+        color: var(--wt-color-text);
       }
       .explanation {
         margin: 0;
@@ -157,6 +175,21 @@ export class ServersScreen extends LitElement {
     return row.contactUrl === "" ? t("servers.no_address") : row.contactUrl;
   }
 
+  /** Distinguishes two machines that gave no address. */
+  #shortId(row: ServerRow): string {
+    return row.nodeId.slice(0, 8);
+  }
+
+  #removeLabel(row: ServerRow): string {
+    return row.contactUrl === ""
+      ? t("servers.remove_label_id").replace("{id}", this.#shortId(row))
+      : t("servers.remove_label").replace("{address}", row.contactUrl);
+  }
+
+  #onPrimary(): boolean {
+    return this.servers.some((row) => row.isSelf && row.standing === "serving-primary");
+  }
+
   #columns(): DataTableColumn<ServerRow>[] {
     return [
       {
@@ -175,7 +208,12 @@ export class ServersScreen extends LitElement {
                       >${t("servers.this_server")}</span
                     >`
                   : nothing
-              }
+              }<span part="server-machine" data-test=${`machine-${row.nodeId}`}
+                >${t("servers.machine")}
+                <span part="server-machine-id" data-test=${`machine-id-${row.nodeId}`}
+                  >${this.#shortId(row)}</span
+                ></span
+              >
             </div>
             <span part="server-role" data-test=${`role-${row.nodeId}`}
               >${t(STANDING_KEY[row.standing])}</span
@@ -191,7 +229,7 @@ export class ServersScreen extends LitElement {
                 variant="secondary"
                 size="sm"
                 data-test=${`remove-${row.nodeId}`}
-                aria-label=${t("servers.remove_label").replace("{address}", this.#address(row))}
+                aria-label=${this.#removeLabel(row)}
                 @click=${() => this.#openRemove(row)}
                 >${t("servers.remove")}</wt-button
               >`
@@ -213,6 +251,9 @@ export class ServersScreen extends LitElement {
         target === null
           ? nothing
           : html`<p class="target" data-test="remove-address">${this.#address(target)}</p>
+              <p class="machine" data-test="remove-machine">
+                ${t("servers.machine")} <span class="machine-id">${this.#shortId(target)}</span>
+              </p>
               <p class="explanation">${t("servers.remove_explanation")}</p>`
       }
       ${
@@ -244,6 +285,12 @@ export class ServersScreen extends LitElement {
     return html`
       <h1 class="title">${t("servers.title")}</h1>
       <p class="intro">${t("servers.intro")}</p>
+      ${
+        // An empty list comes back whenever no chart is held, primary or not, so it says nothing.
+        this.loading || this.loadErrorKey !== null || this.servers.length === 0 || this.#onPrimary()
+          ? nothing
+          : html`<p class="note" data-test="not-primary">${t("servers.not_primary")}</p>`
+      }
       <wt-data-table
         aria-label=${t("servers.title")}
         .rows=${this.servers}

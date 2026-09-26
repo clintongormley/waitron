@@ -125,8 +125,6 @@ const DRAWER_BREAKPOINT = "(max-width: 48rem)";
 const WAITRON_LOGO_URL = new URL("../../../packages/ui/brand/waitron-lockup.svg", import.meta.url)
   .href;
 
-/** `requiresPermission` hides an item from a session whose `getMe` permissions lack it; the route
- * behind the screen still makes its own check. */
 type NavItem = {
   screen: ScreenId;
   labelKey: StringKey;
