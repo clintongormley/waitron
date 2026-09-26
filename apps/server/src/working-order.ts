@@ -1094,7 +1094,7 @@ export async function fireLines(
         note: line.note,
         firedAt: fired ? firedAt : null,
         state: "queued" as const,
-        // What the kitchen is asked to make. A split or a partial void reduces it.
+        // What the kitchen is asked to make.
         quantity: quantityByLine.get(line.id)!,
       };
     })
@@ -2251,7 +2251,7 @@ export async function transferLines(
   // The only mode check on this path: `carveOffLines` makes none, whole lines or split.
   await assertServiceModesMatch(tx, cfg, fromTabId, toTabId);
 
-  await carveOffLines(tx, cfg, fromTabId, toTabId, transfers);
+  await carveOffLines(tx, cfg, fromTabId, toTabId, transfers, { refuseHeld: false });
   await bumpRevision(tx, [fromTabId, toTabId]);
 }
 
@@ -2266,6 +2266,7 @@ async function carveOffLines(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
+  opts: { refuseHeld: boolean },
 ): Promise<void> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
@@ -2294,6 +2295,7 @@ async function carveOffLines(
       note: workingOrderLines.note,
       extraListId: workingOrderLines.extraListId,
       ticketItemId: ticketItems.id,
+      ticketFiredAt: ticketItems.firedAt,
     })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
@@ -2334,6 +2336,9 @@ async function carveOffLines(
     // A modifier CHILD transfers only WITH its dish.
     if (line.parentLineId != null) {
       throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
+    }
+    if (opts.refuseHeld && line.ticketItemId !== null && line.ticketFiredAt === null) {
+      throw new AppError("tab.split_held_line", { tabId: fromTabId, lineNo: t.lineNo });
     }
     const childLineNos = childLineNosByParent.get(t.lineNo) ?? [];
     if (t.quantity === undefined) {
@@ -2435,8 +2440,7 @@ async function carveOffLines(
 
 /**
  * Give a split row its own copy of the source line's ticket item, asking for the part moved, and take
- * that part off the source's. Each row is then voided, recalled and fired on its own; the kitchen is
- * told nothing, since the total it makes is unchanged.
+ * that part off the source's. The kitchen is told nothing: the total it makes is unchanged.
  */
 async function splitTicketItem(
   tx: Transaction,
@@ -2490,7 +2494,8 @@ export async function splitOffCheck(
   // mode check on this path.
   await VENUE_SERVICE.copyOrderContext(tx, cfg, fromTabId, checkId);
 
-  await carveOffLines(tx, cfg, fromTabId, checkId, transfers);
+  // A check is paid, never sent, so held work moved onto it would never fire.
+  await carveOffLines(tx, cfg, fromTabId, checkId, transfers, { refuseHeld: true });
   await bumpRevision(tx, [fromTabId, checkId]);
 
   return { checkId };
@@ -4225,7 +4230,7 @@ export interface ExpoCourse {
   items: ExpoItem[];
 }
 
-/** One order on the cross-station expo board. `tableLabel` is absent for a bare walk-up. */
+/** One order on the cross-station expo board. `tableLabel` is absent for an unlabelled walk-up. */
 export interface ExpoOrder {
   orderId: string;
   tableLabel?: string;
@@ -4282,13 +4287,14 @@ export async function listExpoQueue(
       // A scalar subquery, not a LEFT JOIN, which would multiply the item rows when several tables
       // match (the tables joined to one tab, or a tab's table and a table the order delivers to).
       // The `order by` makes the label picked deterministic: a table whose `tab_id` is this order
-      // first, then the lowest table id.
-      tableLabel: sql<string | null>`(
+      // first, then the lowest table id. With no table, the order's own label: a check split off a
+      // tab carries the tab's table label as its own.
+      tableLabel: sql<string | null>`coalesce((
         select dt.label from dining_tables dt
         where dt.location_id = ${loc}
           and (dt.tab_id = ${workingOrders.id} or ${workingOrders.deliveryTableId} = dt.id)
         order by (dt.tab_id = ${workingOrders.id}) desc nulls last, dt.id
-        limit 1)`,
+        limit 1), ${workingOrders.label})`,
     })
     .from(ticketItems)
     .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))

@@ -43,14 +43,15 @@ export async function computeOverdueOrders(
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
       // A scalar subquery, not a LEFT JOIN, which could multiply rows if two tables pointed at this
       // order: a seated tab (`dt.tab_id` back-points here) or a counter delivery
-      // (`working_orders.delivery_table_id` points at `dt`); `null` for a bare walk-up.
-      // `workingOrders` is JOINed, never this query's `.from()` base, so CLAUDE.md §3's
-      // correlated-subquery trap does not apply.
-      tableLabel: sql<string | null>`(
+      // (`working_orders.delivery_table_id` points at `dt`). With no table, the order's own label
+      // (a check split off a tab carries the tab's table label as its own); `null` for an
+      // unlabelled walk-up. `workingOrders` is JOINed, never this query's `.from()` base, so
+      // CLAUDE.md §3's correlated-subquery trap does not apply.
+      tableLabel: sql<string | null>`coalesce((
         select dt.label from dining_tables dt
         where (dt.tab_id = ${workingOrders.id} or ${workingOrders.deliveryTableId} = dt.id)
         order by (dt.tab_id = ${workingOrders.id}) desc nulls last, dt.id
-        limit 1)`,
+        limit 1), ${workingOrders.label})`,
     })
     .from(ticketItems)
     .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))

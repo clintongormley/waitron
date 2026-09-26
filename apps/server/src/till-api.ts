@@ -294,6 +294,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "table.not_joined": 409,
   "table.not_shared": 409,
   "tab.transfer_modifier_line": 400,
+  "tab.split_held_line": 400,
   "status.not_found": 404,
   "status.inactive": 409,
   "drawer.no_printer": 400,

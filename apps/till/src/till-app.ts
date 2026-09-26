@@ -1772,10 +1772,13 @@ export class TillApp extends LitElement {
       const { checkId } = await this.api.splitTab(this.activeTabId, transfers);
       this.activeTabId = checkId;
     } catch (error) {
+      const code = (error as { code?: string }).code;
       this.errorKey =
-        (error as { code?: string }).code === "tab.transfer_modifier_line"
+        code === "tab.transfer_modifier_line"
           ? "table.split_modifier_error"
-          : tableWriteError(error);
+          : code === "tab.split_held_line"
+            ? "table.split_held_error"
+            : tableWriteError(error);
       return;
     }
     await Promise.all([this.#loadTabLines(), this.#reloadTables()]);

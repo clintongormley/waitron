@@ -349,6 +349,12 @@ declare module "@waitron/shared" {
      * (their quantity would no longer match the dish's). `lineNo` is the offending source line.
      */
     "tab.transfer_modifier_line": { tabId: string; lineNo: number };
+    /**
+     * A split onto a new check named a line whose kitchen ticket is still held (not fired). A check
+     * cannot be sent, so the held work would never reach the kitchen. `lineNo` is the offending
+     * source line.
+     */
+    "tab.split_held_line": { tabId: string; lineNo: number };
     /** No service status with this id. */
     "status.not_found": { statusId: string };
     /** A service status exists but is deactivated, so a table may not be set to it. */

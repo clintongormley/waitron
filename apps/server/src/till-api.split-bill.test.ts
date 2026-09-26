@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { locations, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -28,7 +28,7 @@ import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
-import { joinTable, openTab } from "./working-order.js";
+import { addTabRound, joinTable, openTab } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
@@ -253,6 +253,25 @@ describe("POST /api/tabs/:id/split", () => {
     );
     // 3 − 1 = 2 units remain on the origin tab, stored as 2000 thousandths
     expect(origin.rows).toEqual([{ quantity: "2000" }]);
+  });
+
+  it("400 tab.split_held_line when a named line is held for the kitchen", async () => {
+    const { app, d, tabA, cookie } = await setupTabApp();
+    await seedKitchenStation(suite.db, { locationId: d.cfg.locationId });
+    // Offered again so the product's preparation route points at the new station.
+    await withTransaction(suite.db, (tx) => offerProducts(tx, d.cfg, { zone: "tables" }));
+    await withTransaction(suite.db, (tx) =>
+      addTabRound(tx, d.cfg, tabA, [{ menuItemId: cafeMenuItemId, quantity: "1", hold: true }]),
+    );
+    const res = await app.request(`/api/tabs/${tabA}/split`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ transfers: [{ lineNo: 2 }] }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "tab.split_held_line", params: { tabId: tabA, lineNo: 2 } },
+    });
   });
 
   it("409 tab.not_open when the tab is not open", async () => {

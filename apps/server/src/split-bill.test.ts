@@ -38,6 +38,7 @@ import {
   advanceTicketItem,
   createOpenOrder,
   joinTable,
+  listExpoQueue,
   listStationQueue,
   markLineServed,
   openTab,
@@ -955,6 +956,29 @@ describe("splitting a line the kitchen has", () => {
     expect(await noticesOn(checkId)).toEqual([{ orderId: checkId, kind: "void", quantity: 1000 }]);
   });
 
+  it("names the origin's table for the check on the pass board", async () => {
+    const { cfg, aguaId, tableId } = await setupVenue();
+    await withKitchen(cfg);
+    const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        { menuItemId: offersByCfg.get(cfg)!.offerFor(aguaId), quantity: "2" },
+      ]),
+    );
+    const { checkId } = await asApp(cfg, (tx) =>
+      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    );
+    // A table pointing at the order wins over the order's own label.
+    await db.update(workingOrders).set({ label: "Terraza" }).where(eq(workingOrders.id, tabId));
+
+    const board = await asApp(cfg, (tx) => listExpoQueue(tx, cfg));
+
+    expect(Object.fromEntries(board.map((order) => [order.orderId, order.tableLabel]))).toEqual({
+      [tabId]: "T1",
+      [checkId]: "T1",
+    });
+  });
+
   it("splits a line the kitchen does not have without making a ticket", async () => {
     const { cfg, aguaId, tableId } = await setupVenue();
     await withKitchen(cfg);
@@ -969,4 +993,50 @@ describe("splitting a line the kitchen has", () => {
     expect(await linesWithTickets(tabId)).toMatchObject([{ quantity: 2000, ticketId: null }]);
     expect(await linesWithTickets(checkId)).toMatchObject([{ quantity: 1000, ticketId: null }]);
   });
+});
+
+/**
+ * A check is paid straight after the split and cannot be sent (`sendLines` refuses anything but a
+ * tab), so held kitchen work never goes onto one.
+ */
+describe("splitting held kitchen work onto a check", () => {
+  it.each([
+    ["whole", undefined],
+    ["part", "1"],
+  ] as const)(
+    "refuses to move a held line (%s) onto a check, moving nothing, and still splits a fired one",
+    async (_, quantity) => {
+      const { cfg, aguaId, tableId } = await setupVenue();
+      await withKitchen(cfg);
+      const offer = offersByCfg.get(cfg)!.offerFor(aguaId);
+      const { tabId } = await asApp(cfg, (tx) => openTabWith(tx, cfg, { tableId }));
+      await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "2" }]));
+      await asApp(cfg, (tx) =>
+        addTabRound(tx, cfg, tabId, [{ menuItemId: offer, quantity: "3", hold: true }]),
+      );
+      const before = await linesWithTickets(tabId);
+      const orderCount = async () =>
+        (await db.select({ id: workingOrders.id }).from(workingOrders)).length;
+      const ordersBefore = await orderCount();
+
+      await expect(
+        asApp(cfg, (tx) =>
+          splitOffCheck(tx, cfg, tabId, [
+            { lineNo: 1 },
+            quantity === undefined ? { lineNo: 2 } : { lineNo: 2, quantity },
+          ]),
+        ),
+      ).rejects.toMatchObject({ code: "tab.split_held_line", params: { tabId, lineNo: 2 } });
+
+      expect(await linesWithTickets(tabId)).toEqual(before);
+      expect(await orderCount()).toBe(ordersBefore);
+
+      const { checkId } = await asApp(cfg, (tx) =>
+        splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+      );
+      expect(await linesWithTickets(checkId)).toMatchObject([
+        { quantity: 1000, ticketQuantity: 1000 },
+      ]);
+    },
+  );
 });
