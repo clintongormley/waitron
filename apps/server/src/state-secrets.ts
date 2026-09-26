@@ -70,7 +70,8 @@ export async function resolveSafeEntryPath(
 /**
  * The inverse of `collectStateSecrets`: each file written atomically, 0600. The destination and every
  * folder between it and an entry end 0700 whether or not they already existed (`mkdir`'s mode applies
- * only to a folder it creates); nothing above the destination is changed.
+ * only to a folder it creates). Nothing above the destination is changed, provided nothing else
+ * changes the folders during the unpack: a folder replaced by a symlink mid-run is followed.
  */
 export async function unpackBundleToDir(files: BundleFiles, destDir: string): Promise<void> {
   // Created before the guard's `realpath`, which fails on a missing path.
@@ -81,7 +82,8 @@ export async function unpackBundleToDir(files: BundleFiles, destDir: string): Pr
     const target = await resolveSafeEntryPath(rel, destDir, realDestRoot, () => {
       throw new AppError("recovery.bundle_invalid", { reason: "unsafe_path" });
     });
-    // A resolved path holds no symlink, and the guard has confirmed it lies inside the destination.
+    // Stops at the destination. Goes by path, like the write below: a folder swapped for a symlink
+    // after `realpath` is followed.
     for (
       let dir = await realpath(dirname(target));
       dir.startsWith(realDestRoot + sep);

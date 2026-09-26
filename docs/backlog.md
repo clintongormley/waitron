@@ -3023,17 +3023,23 @@ image constraints under *Detail → Box image*.
     leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
   - Found by #658 (`apps/server` part h2: the remaining held-back files), not fixable in a
     comments-only change. `unpackBundleToDir` and `resolveSafeEntryPath`
-    (`apps/server/src/state-secrets.ts`) make only a folder they CREATE owner-only (`mkdir` with
-    mode 0700): an existing destination keeps its permissions. The run-it review ran the real
+    (`apps/server/src/state-secrets.ts`) made only a folder they CREATED owner-only (`mkdir` with
+    mode 0700): an existing destination kept its permissions. The run-it review ran the real
     `unpackBundleToDir` into an existing folder and it stayed 0755, reproduced with a control. The
     `mkdir` lines date from `f57ab02acf` (2026-08-29) and `2956302ebe` (2026-09-05), before the
     branch. Whether a restore ever unpacks into a folder another process made world-readable is
-    not checked. **Done (2026-09-26, lane A's A41, branch `fix/secrets-folder-owner-only`):**
+    not checked. **Done (2026-09-26, lane A's A41):**
     `unpackBundleToDir` now makes the destination and every folder between it and an entry 0700
     whether or not they existed, after the symlink guard has confirmed the folder is inside the
     destination; nothing above the destination changes. `resolveSafeEntryPath` itself is unchanged,
-    so the archive restore's own entries (through `assertSafeEntryName`) still keep an existing
-    folder's mode.
+    so the archive restore's two entries outside `secrets/` (`manifest.json` and `db.dump`) are
+    checked against the staging folder, which receives nothing and keeps an existing folder's mode.
+    Still open, not fixed: the walk and the file write go by path, so a folder inside the destination
+    swapped for a symlink during the unpack is followed. The A41 run-it review reproduced an outside
+    folder being set to 0700 and receiving the secret that way; the same swap between the guard and
+    the write already put the secret outside before this change (reproduced 2026-09-26 on
+    `09e0e0de3` by hooking `writeFileAtomic` to swap `tls` for a symlink: the outside folder then
+    held `key`). It needs someone able to write inside the destination.
     The lock-file measurement kept in `db-wipe.ts` names no engine version or platform.
   - Found by #657 (`apps/server` part f2: the node, identity and setup files), outside its files
     or not fixable in a comments-only change. A code defect its review reproduced, which predates

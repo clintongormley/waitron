@@ -110,6 +110,17 @@ describe("state-secrets", () => {
     expect((await stat(join(dest, "tls"))).mode & 0o777).toBe(0o700);
   });
 
+  it("makes every existing folder between the destination and an entry owner-only", async () => {
+    const dest = mkdtempSync(join(tmpdir(), "state-secrets-deep-"));
+    await mkdir(join(dest, "a", "b"), { recursive: true });
+    await chmod(dest, 0o755);
+    await chmod(join(dest, "a"), 0o755);
+    await chmod(join(dest, "a", "b"), 0o755);
+    await unpackBundleToDir({ "a/b/key": "x\n" }, dest);
+    expect((await stat(join(dest, "a"))).mode & 0o777).toBe(0o700);
+    expect((await stat(join(dest, "a", "b"))).mode & 0o777).toBe(0o700);
+  });
+
   it("creates a missing destination and entry folder owner-only", async () => {
     const files = await collectStateSecrets(await seedStateDir());
     const dest = join(mkdtempSync(join(tmpdir(), "state-secrets-fresh-")), "state");
