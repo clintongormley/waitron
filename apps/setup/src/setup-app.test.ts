@@ -1291,6 +1291,20 @@ describe("setup-app", () => {
     },
   );
 
+  it("maps setup.operation_conflict on adopt to the terminal saved-setup message with a reload (no retry)", async () => {
+    const adopt = vi.fn().mockRejectedValue({ code: "setup.operation_conflict", params: {} });
+    const el = await mountSetupApp(stubApi({ adopt }));
+    adoptRequest(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).toBeNull();
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("saved setup");
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent?.trim()).toBe(
+      "Reload",
+    );
+  });
+
   it("re-adopts when the connect form re-emits adopt-requested after a routed-back failure", async () => {
     const adopt = vi
       .fn()
