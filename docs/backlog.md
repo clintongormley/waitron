@@ -3538,6 +3538,20 @@ image constraints under *Detail → Box image*.
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
+**Comments and test titles still cite sections of specs that were deleted — OPEN (2026-09-26).**
+The docs prune that day deleted every spec and plan for built work (#711 and the direct docs commits
+before it). Every pointer that named a deleted file was re-pointed at the pull request that built the
+work, but a pointer that names only a SECTION ("spec §3.2", "design §3", "(till-reroute §3.6)") was
+fixed only for the last 28 documents. Find the rest with
+`git grep -nE "(spec|design|plan)[^)]{0,40}§[0-9]" -- apps packages scripts bench`. Some hits point
+into specs that were kept (menus, service and billing, sales classification, the SQLite topology),
+so check which document each one names before cutting it. Two were left on purpose:
+`packages/db/drizzle/0004_variant_one_level.sql` ("spec §1.2, §15.7"), because a shipped migration
+is not edited, and `packages/fiscal-verifactu/src/write-path.e2e.test.ts` ("(spec §2)"), which could
+not be traced to a deleted document. **Next action:** fold into the comment-pruning sweeps: re-point
+each to the pull request that built the work, or drop the tag. A test title is not a comment, so
+changing one does not pass `scripts/comments-only.mjs` as a comments-only change.
+
 **The bookings seat picker keeps a table it no longer offers — OPEN (found 2026-09-23, writing
 bookings' coverage tests, PR #503).** `packages/bookings/src/dashboard/bookings-screen.ts` stores the
 picker's choice when a Seat click arms it. A throwaway browser test armed the picker on `t-1`, then
