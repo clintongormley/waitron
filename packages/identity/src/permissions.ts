@@ -25,7 +25,8 @@ export const PERMISSIONS = [
   "payments.manage",
   "print.resend",
   "cash.drawer",
-  // Hands out a data-access sync token, so admin-only.
+  // Decides which machines are in the venue's membership chart and hands one its identity, so
+  // admin-only.
   "mirror.create",
   "node.promote",
   "diagnostics.view",
