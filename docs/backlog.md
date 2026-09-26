@@ -313,6 +313,14 @@ reads are bounded); a refusal that lands after the tab is paid, or after a serve
 ordinary unnamed message; the till's screen-to-app events use plain names, while
 [conventions-ui.md](developers/conventions-ui.md) says every custom event is `wt-*` — the rule or
 the till needs to change.
+**Menus M7b3 landed (#713, 2026-09-26): an unpaid split bill goes back on its tab.** When the
+waiter leaves a separate bill made with "Split by item" without paying it, the till that made it
+merges it back into the table's tab (`mergeTabs`; the kitchen is told nothing). Every other case
+leaves it in the counter's Held orders, where it can be paid — run end to end in real Chromium
+before building, as the PR records. No migration. Left open: if the waiter leaves before the split
+itself answers, the bill arrives after they have gone and is not merged back (it stays in Held
+orders); and the counter's Held orders list shows every open order, a table's own tab included
+(seen in the same run, not investigated).
 **M7b2 landed (#702, 2026-09-26): a manager can clear a card payment a crash left running.** The
 Payments screen lists open orders locked by a card payment nothing is finishing any more, and "Check
 with the card provider" files the sale once if the card was charged, marks the payment failed and
