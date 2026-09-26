@@ -3523,7 +3523,7 @@ image constraints under *Detail → Box image*.
     sent. The installation number the primary reserved for that standby is burned by design
     (`reserveInstallationNumber`, `packages/fiscal-verifactu/src/registro-sif.ts`: "a
     never-promoted standby simply burns it — gaps are permitted").
-    **Done for (1) (2026-09-26, lane A's A61):** before A61 nothing on the primary removed another
+    **Done for (1) (2026-09-26, lane A's A61, #708):** before A61 nothing on the primary removed another
     node; now the dashboard's Servers screen lets an admin
     (`mirror.create`) on the serving primary remove a standby that never finished joining
     (`apps/server/src/membership-removal.ts`, `POST /management-api/servers/:nodeId/remove`). The
