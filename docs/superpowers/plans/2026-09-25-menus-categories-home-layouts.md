@@ -693,8 +693,8 @@ Every task's requirements implicitly include this section.
   - `apps/server/src/live-resources.ts`
   - `apps/server/scripts/demo-seed/`
   - `docs/developers/product-categories.md`
-- **Error codes name the domain concept and are never renamed** (CLAUDE.md §3). (2026-09-26: a
-  rename is now a migration, CLAUDE.md §3.) New ones in this plan: `menu_section.member_cycle`,
+- **Error codes name the domain concept and are never renamed** (CLAUDE.md §3). (2026-09-26: before
+  a venue is live a code may be renamed or deleted freely, CLAUDE.md §3.) New ones in this plan: `menu_section.member_cycle`,
   `menu_section.member_duplicate`, `menu_section.not_library`, `menu_section.invalid` (with
   `params.field`), `menu_section.membership_invalid`, `menu.changed_since_preview`,
   `menu.version_changed`, `menu.shortcut_unreachable`, `menu.default_layout_required`,

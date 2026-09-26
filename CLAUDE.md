@@ -362,13 +362,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   — each proven by widening `=== undefined` to `== null`. One field is deliberately outside the rule
   and pinned separately: an extras list's `maxPicks` null MEANS uncapped.
 - **Error codes name the DOMAIN CONCEPT, never the throwing package** — `series.not_found`, not
-  `db.series_not_found`. **A rename is a migration, made in one change** (owner decision 2026-09-26,
-  replacing "never renamed once shipped; deprecate and add a sibling"): every copy in the tree moves
-  with it, and a reader outside this repository accepts both names until both sides are deployed.
-  Stored copies and prefix matchers, which a grep for the code cannot find, are listed in
-  [conventions-data.md](docs/developers/conventions-data.md); stored copies are not rewritten before
-  a venue is live (the no-data-migration rule below). `server.*` is reserved for facts about the
-  process itself. Every file that throws a code imports its registry.
+  `db.series_not_found`. **Before a venue is live, a code may be renamed or deleted freely; once one
+  is live, either is a migration** (owner decision 2026-09-26, replacing "never renamed once shipped;
+  deprecate and add a sibling"). Either way it is one change in which every copy in the tree moves or
+  goes; once live, stored copies are rewritten too and a reader outside this repository accepts both
+  names until both sides are deployed. Stored copies and prefix matchers, which a grep for the code
+  cannot find, are listed in [conventions-data.md](docs/developers/conventions-data.md). `server.*`
+  is reserved for facts about the process itself. Every file that throws a code imports its registry.
 - **A recorded incident code needs an area claim and English and Spanish alert wording.** Guard:
   `scripts/alert-codes.test.ts`, which reads only double-quoted, one-dot, lowercase-and-underscore literals
   in hand-listed files and counts a code recorded even if production never raises it; more: [conventions-data.md](docs/developers/conventions-data.md).

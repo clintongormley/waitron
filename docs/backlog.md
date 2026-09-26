@@ -1130,10 +1130,8 @@ What B4 leaves open:
   refused `service_zone.offer_not_allowed` instead. The code stays registered, with its note in
   `apps/server/src/errors.ts` saying nothing raises it, and keeps its 400 in the till surface's
   status map (`apps/server/src/till-api.ts`), under the rule of the time that a shipped code was
-  never renamed (replaced 2026-09-26: a rename is now a migration, CLAUDE.md §3); whether a shipped
-  code may be removed is still open, under *Three shipped error codes were deleted…* below.
-  **Next action:** none unless a retired code should also leave the status map; recorded so a
-  reader who meets it knows it is retired.
+  never removed. **Next action:** delete it, under *Delete the error codes nothing raises any more*
+  below (the owner ruled on 2026-09-26 that before a venue is live a code may be deleted freely).
 
 Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end, and the demo
 steak now carries a `Punto` cooking options list instead. The per-line free-text note stays.
@@ -1231,9 +1229,8 @@ What option lists left open, none of it taken in #436 or #445:
   modifier code this replaced had already learned that lesson in an `openOrderUse` helper, and that
   file went with the old model in Task 13.
 - **`options.in_use` is registered and nothing throws it.** Deleting a list is designed to cascade
-  its product attachments rather than be refused, so there may never be a thrower. It stays
-  registered; whether a shipped code may be removed is still open, under *Three shipped error codes
-  were deleted…* below.
+  its product attachments rather than be refused, so there may never be a thrower. **Next action:**
+  delete it, under *Delete the error codes nothing raises any more* below.
 - **A trap that fooled three readers on #445, not yet written into `CLAUDE.md`.**
   `pnpm --filter <pkg> test <file> -t "name"` SILENTLY DROPS the `-t` and runs the whole file; only a
   bare `--` before it passes it through. Measured both ways: without `--` the echoed command is
@@ -4597,15 +4594,20 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   (`packages/identity/src/staff.ts` and `account-action.ts`), `persons_tenant_live_display_name_uq`
   and `persons_tenant_pending_email_uq` (`staff.ts`) — so renaming them changes behaviour and wants
   its own failing tests first. Only `persons_tenant_google_subject_uq` is declared and never matched.
-- **Three shipped error codes were deleted rather than deprecated, and the owner has not ruled on
-  it.** `stripe.tenant_mismatch`, `sumup.tenant_mismatch` and `payment.webhook_tenant_mismatch` went
-  when the condition they described — two taxpayers disagreeing — stopped being reachable. `CLAUDE.md`
-  §3 said a shipped code is never renamed and that you deprecate and add a sibling (replaced
-  2026-09-26: a rename is now a migration, which settles renaming but not deleting); this backlog says
-  removing one is the owner's call; and the nearest precedent, in a file #378 edited, keeps a retired
-  code registered with a note saying codes are never deleted once shipped. The case for deleting them
-  is that Waitron is pre-production with no deployed consumer reading them. **Next action:** the owner
-  decides. Re-registering all three as deprecated entries is a small change either way round.
+- **Three shipped error codes were deleted rather than deprecated — SETTLED 2026-09-26.**
+  `stripe.tenant_mismatch`, `sumup.tenant_mismatch` and `payment.webhook_tenant_mismatch` went when
+  the condition they described — two taxpayers disagreeing — stopped being reachable. The owner ruled
+  that before a venue is live a code may be renamed or deleted freely (CLAUDE.md §3), so the deletion
+  stands. Nothing to do.
+- **Delete the error codes nothing raises any more** (owner, 2026-09-26: before a venue is live a
+  code may be deleted freely). Several are still registered only because the old rule said a shipped
+  code is never removed, each with a comment saying so: the "Not thrown. Kept because a shipped code
+  is never removed" entries in `packages/catalogue/src/errors.ts`, the deprecated entry in
+  `packages/provisioning/src/errors.ts`, `sale.unknown_product` (below, *`sale.unknown_product` is no
+  longer raised*), `options.in_use` (above) and the retired entry in
+  `apps/dashboard/src/i18n/codes.ts`. Delete each with its
+  wording, status-map entry and tests in one change, after checking that nothing raises it and that
+  no prefix matcher or stored copy needs it (docs/developers/conventions-data.md lists both).
 - **`server.credential_unusable` names an unusable credential, although `server.*` is reserved for
   facts about the process itself.** It is thrown for AEAT's certificate
   (`packages/fiscal-verifactu/src/aeat-transport.ts`) and for Stripe's secret key and webhook secret
