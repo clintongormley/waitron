@@ -1751,6 +1751,44 @@ it("names the list on the menus list when a move in it is refused after the pers
   );
 });
 
+it("names the list when a change to it is refused after the person went up to the menu's top level", async () => {
+  const adding = deferred<SectionMember>();
+  const client = api({ addSectionMember: vi.fn(() => adding.promise) });
+  const el = await mountLunch(client);
+  await editDrinks(el);
+  emit(memberList(el), "wt-member-add", { ref: { kind: "section", sectionId: "s-fav" } });
+  await vi.waitFor(() => expect(client.addSectionMember).toHaveBeenCalledOnce());
+  await click(el, "crumb-0");
+  expect(breadcrumb(el)).toBe("Lunch Menu");
+  adding.reject({ code: "menu_section.member_duplicate" });
+  await vi.waitFor(() =>
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.change_not_saved")
+        .replace("{name}", "Drinks")
+        .replace("{reason}", codeMessage("menu_section.member_duplicate")),
+    ),
+  );
+});
+
+it("names the list when a move in it is refused after the person went up to the menu's top level", async () => {
+  const moving = deferred<SectionMember[]>();
+  const client = api({ moveSectionMember: vi.fn(() => moving.promise) });
+  const el = await mountLunch(client);
+  await editDrinks(el);
+  emit(memberList(el), "wt-member-move", { memberId: "m-lager", to: 1 });
+  await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
+  await click(el, "crumb-0");
+  expect(breadcrumb(el)).toBe("Lunch Menu");
+  moving.reject({ code: "menu_section.invalid" });
+  await vi.waitFor(() =>
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.change_not_saved")
+        .replace("{name}", "Drinks")
+        .replace("{reason}", codeMessage("menu_section.invalid")),
+    ),
+  );
+});
+
 it("shows a refused move without naming the list when the person is still on its menu", async () => {
   const moving = deferred<SectionMember[]>();
   const client = api({ moveSectionMember: vi.fn(() => moving.promise) });

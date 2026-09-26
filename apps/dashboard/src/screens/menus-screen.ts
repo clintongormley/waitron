@@ -398,11 +398,11 @@ export class MenusScreen extends LitElement {
       this.memberError = t("menus.list_gone_saved").replace("{name}", target.name);
   }
 
-  /** When a change to `target` is refused while another menu, or none, is on screen, names the
-   * list with the refusal, so the refusal is not read as being about what is on screen. Says whether
-   * it did. */
+  /** When a change to `target` is refused while the list on screen is not `target`'s — it is
+   * another menu's, another list of the same menu, or there is none — names the list with the
+   * refusal, so the refusal is not read as being about what is on screen. Says whether it did. */
   #reportRefusedElsewhere(target: ListTarget, error: unknown): boolean {
-    if (target.menuId === this.menuId) return false;
+    if (target.menuId === this.menuId && target.listId === this.#listId) return false;
     this.memberError = t("menus.change_not_saved")
       .replace("{name}", target.name)
       .replace("{reason}", codeMessage(codeOf(error)));
@@ -410,9 +410,11 @@ export class MenusScreen extends LitElement {
   }
 
   /** Closes a window whose request was refused while another menu, or none, is on screen, so it is
-   * never left open over a menu it does not belong to. Says whether it closed one. */
+   * never left open over a menu it does not belong to. Within the same menu it leaves the window
+   * open for its caller to show the refusal there. Says whether it closed one. */
   #closeRefusedElsewhere(target: ListTarget, error: unknown): boolean {
-    if (!this.#reportRefusedElsewhere(target, error)) return false;
+    if (target.menuId === this.menuId) return false;
+    this.#reportRefusedElsewhere(target, error);
     this.addingProducts = null;
     this.creatingSection = null;
     return true;
