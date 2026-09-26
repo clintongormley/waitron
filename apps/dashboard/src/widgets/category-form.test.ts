@@ -1,7 +1,12 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { CategoryForm, categoryPath, categoryWithDescendants } from "./category-form.js";
+import {
+  CategoryForm,
+  categoryAncestors,
+  categoryPath,
+  categoryWithDescendants,
+} from "./category-form.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
 afterEach(cleanupWidgets);
@@ -337,6 +342,18 @@ it("gathers a category and every category below it, whatever order the list is i
     "leaf",
   ]);
   expect([...categoryWithDescendants("leaf", [leaf, other, child, food])]).toEqual(["leaf"]);
+});
+
+it("walks up from a category to the top, stopping at a missing parent or a loop", () => {
+  const leaf: CategorySummary = { ...child, id: "leaf", parentId: "child" };
+  const ids = (from: CategorySummary, list: CategorySummary[]) =>
+    categoryAncestors(from, list).map(({ id }) => id);
+  expect(ids(leaf, [food, leaf, child])).toEqual(["leaf", "child", "food"]);
+  expect(ids(leaf, [leaf, food])).toEqual(["leaf"]);
+  // The walk starts from the category it is given, which the list need not hold.
+  expect(ids(child, [food])).toEqual(["child", "food"]);
+  const looped: CategorySummary = { ...food, parentId: "leaf" };
+  expect(ids(leaf, [looped, leaf, child])).toEqual(["leaf", "child", "food"]);
 });
 
 it("submits the chosen parent and returns to no parent when None is chosen", async () => {

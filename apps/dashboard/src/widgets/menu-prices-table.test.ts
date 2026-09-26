@@ -266,7 +266,7 @@ it("names a section or category the library no longer holds as missing, and a pr
   const el = await mount({
     rows: [
       { ...lager, categoryId: null, placements: [["s-gone"]] },
-      { ...burger, categoryId: "c-gone", productPrice: null },
+      { ...burger, categoryId: "c-gone" },
     ],
   });
   expect(column(el, "placements")).toEqual([t("members.missing"), t("menu_prices.top_level")]);
@@ -274,7 +274,6 @@ it("names a section or category the library no longer holds as missing, and a pr
     t("categories.uncategorised"),
     t("editor.missing_choice"),
   ]);
-  expect(column(el, "product-price")).toEqual(["2.00", "—"]);
   await choose(el, "category", "c-drinks");
   expect(shown(el)).toEqual([]);
 });
@@ -320,6 +319,28 @@ it("filters by a reporting category, including the categories inside it", async 
 
 it("shows only the products this menu sets its own price for", async () => {
   const el = await mount();
+  await choose(el, "menu-price", "overridden");
+  expect(shown(el)).toEqual(["mi-lemonade"]);
+});
+
+it("counts a product whose only price on this menu is a variant's as overridden, and not one whose variant is only switched off", async () => {
+  const el = await mount({
+    rows: [
+      {
+        ...lemonade,
+        override: null,
+        variants: [
+          { variantId: "v-small", price: null, offered: true },
+          { variantId: "v-large", price: "4.25", offered: true },
+        ],
+      },
+      {
+        ...lager,
+        variants: [{ variantId: "v-small", price: null, offered: false }],
+      },
+      burger,
+    ],
+  });
   await choose(el, "menu-price", "overridden");
   expect(shown(el)).toEqual(["mi-lemonade"]);
 });
@@ -412,7 +433,7 @@ it("passes the loading, failed and empty states to the table", async () => {
   expect(text(table(el).shadowRoot.querySelector("[role=status]"))).toBe(t("menu_prices.empty"));
 });
 
-it("edits the menu price, with the product price as the empty field's hint, the menu's switch and each variant", async () => {
+it("edits the menu price, with the product price as the empty field's placeholder, the menu's switch and each variant", async () => {
   const el = await mount({ editing: "mi-lemonade" });
   expect(modal(el).open).toBe(true);
   expect(modal(el).heading).toBe(
@@ -447,8 +468,7 @@ it("edits the menu price, with the product price as the empty field's hint, the 
   expect(heard).toHaveBeenCalledExactlyOnceWith({
     menuItemId: "mi-lemonade",
     name: "Lemonade",
-    grossPrice: "2.80",
-    active: false,
+    item: { grossPrice: "2.80", active: false },
     variants: [
       { variantId: "v-small", price: "1.90", offered: true },
       { variantId: "v-large", price: null, offered: true },
@@ -456,7 +476,7 @@ it("edits the menu price, with the product price as the empty field's hint, the 
   });
 });
 
-it("hints the product price on an empty menu price, and sends no variants for a product without them", async () => {
+it("shows the product price as an empty menu price's placeholder and in its hint, and sends no variants for a product without them", async () => {
   const el = await mount({ editing: "mi-burger" });
   expect(field(el, "grossPrice").value).toBe("");
   expect(field(el, "grossPrice").placeholder).toBe("12.00");
@@ -468,15 +488,99 @@ it("hints the product price on an empty menu price, and sends no variants for a 
   ).toBe(help.id);
   expect(modal(el).querySelector("fieldset")).toBeNull();
   expect(modal(el).querySelector('[data-test="use-product-price"]')).toBeNull();
+  await flip(el, "active", false);
   const heard = saves(el);
   await click(el, "offer-save");
   expect(heard).toHaveBeenCalledExactlyOnceWith({
     menuItemId: "mi-burger",
     name: "Burger",
-    grossPrice: null,
-    active: true,
+    item: { grossPrice: null, active: false },
     variants: null,
   });
+});
+
+it("asks for nothing to be written when nothing was changed, reading an empty price as no price of the menu's own", async () => {
+  const el = await mount({ editing: "mi-burger" });
+  const heard = saves(el);
+  await click(el, "offer-save");
+  expect(heard).toHaveBeenCalledExactlyOnceWith({
+    menuItemId: "mi-burger",
+    name: "Burger",
+    item: null,
+    variants: null,
+  });
+});
+
+it("compares the settings by value: the same amount written differently, and variants read back in another order, are no change", async () => {
+  const reversed = { ...lemonade, variants: [...lemonade.variants].reverse() };
+  const el = await mount({ editing: "mi-lemonade", rows: [burger, reversed, lager] });
+  await type(el, "grossPrice", "2.5");
+  el.rows = [burger, lemonade, lager];
+  await el.updateComplete;
+  const heard = saves(el);
+  await click(el, "offer-save");
+  expect(heard).toHaveBeenCalledExactlyOnceWith({
+    menuItemId: "mi-lemonade",
+    name: "Lemonade",
+    item: null,
+    variants: null,
+  });
+});
+
+it("compares with the settings the window opened with, so a change read in meanwhile is not written back", async () => {
+  const el = await mount({ editing: "mi-lemonade" });
+  el.rows = [
+    burger,
+    {
+      ...lemonade,
+      override: "2.60",
+      active: false,
+      variants: [
+        { variantId: "v-small", price: "1.00", offered: false },
+        { variantId: "v-large", price: "3.75", offered: false },
+      ],
+    },
+    lager,
+  ];
+  await el.updateComplete;
+  const heard = saves(el);
+  await click(el, "offer-save");
+  expect(heard).toHaveBeenCalledExactlyOnceWith({
+    menuItemId: "mi-lemonade",
+    name: "Lemonade",
+    item: null,
+    variants: null,
+  });
+});
+
+it("asks for the menu item alone when only the price changed on a product with variants", async () => {
+  const el = await mount({ editing: "mi-lemonade" });
+  await type(el, "grossPrice", "2.60");
+  const heard = saves(el);
+  await click(el, "offer-save");
+  expect(heard).toHaveBeenCalledExactlyOnceWith({
+    menuItemId: "mi-lemonade",
+    name: "Lemonade",
+    item: { grossPrice: "2.60", active: true },
+    variants: null,
+  });
+});
+
+it.each([
+  ["a variant's price", "variants.0.price", "1.20"],
+  ["a variant's offer", "variants.1.offered", true],
+] as const)("asks for the variants alone when only %s changed", async (_, name, value) => {
+  const el = await mount({ editing: "mi-lemonade" });
+  if (typeof value === "string") await type(el, name, value);
+  else await flip(el, name, value);
+  const heard = saves(el);
+  await click(el, "offer-save");
+  const save = heard.mock.calls[0]![0];
+  expect(save.item).toBeNull();
+  expect(save.variants).toEqual([
+    { variantId: "v-small", price: typeof value === "string" ? value : null, offered: true },
+    { variantId: "v-large", price: "3.75", offered: value === true },
+  ]);
 });
 
 it("'Use product price' empties the menu price, so saving clears it", async () => {
@@ -487,7 +591,7 @@ it("'Use product price' empties the menu price, so saving clears it", async () =
   expect(modal(el).querySelector('[data-test="use-product-price"]')).toBeNull();
   const heard = saves(el);
   await click(el, "offer-save");
-  expect(heard.mock.calls[0]![0].grossPrice).toBeNull();
+  expect(heard.mock.calls[0]![0].item).toEqual({ grossPrice: null, active: true });
 });
 
 it.each(["-1", "2.555", "abc", "007"])(
@@ -495,7 +599,7 @@ it.each(["-1", "2.555", "abc", "007"])(
   async (price) => {
     const el = await mount({ editing: "mi-lemonade" });
     await type(el, "grossPrice", price);
-    // An unreadable menu price is no hint for a variant.
+    // An unreadable menu price is no placeholder for a variant.
     expect(field(el, "variants.0.price").placeholder).toBe("3.00");
     const heard = saves(el);
     await click(el, "offer-save");
@@ -592,6 +696,20 @@ it("asks to close on Cancel, and holds both buttons while a save is out", async 
   expect(saved).not.toHaveBeenCalled();
   modal(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
   expect(heard).toHaveBeenCalledOnce();
+});
+
+it("stops the Save and Cancel clicks that ask, so nothing past the widget hears them", async () => {
+  const el = await mount({ editing: "mi-lemonade" });
+  const clicks: Event[] = [];
+  el.addEventListener("click", (event) => clicks.push(event));
+  const heard = saves(el);
+  const cancels = vi.fn();
+  el.addEventListener("wt-offer-cancel", cancels);
+  await click(el, "offer-save");
+  await click(el, "offer-cancel");
+  expect(heard).toHaveBeenCalledOnce();
+  expect(cancels).toHaveBeenCalledOnce();
+  expect(clicks).toEqual([]);
 });
 
 it("keeps the window open on Escape while a save is out", async () => {

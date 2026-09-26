@@ -12,6 +12,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
+import { stringToCents } from "@waitron/shared";
 import type {
   CategorySummary,
   LibrarySection,
@@ -20,17 +21,17 @@ import type {
   Product,
 } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { byLabel, categoryPath } from "./category-form.js";
+import { byLabel, categoryAncestors, categoryPath } from "./category-form.js";
 import { switchField, textField, type FieldContext } from "./form-fields.js";
 
-/** What saving one product's settings on the menu asks the host to write. `variants` is null for a
- * product with no Active variants, which has none to write. */
+/** What saving one product's settings on the menu asks the host to write. `item` is null when the
+ * menu's price and switch are unchanged, and `variants` is null when no variant changed, which
+ * includes a product with no Active variants. */
 export interface OfferSave {
   menuItemId: string;
   /** The product's staff name, for a refusal reported away from the window. */
   name: string;
-  grossPrice: string | null;
-  active: boolean;
+  item: { grossPrice: string | null; active: boolean } | null;
   variants: MenuVariant[] | null;
 }
 
@@ -41,6 +42,10 @@ interface Draft {
 }
 
 const blankToNull = (text: string): string | null => (text.trim() === "" ? null : text.trim());
+
+/** By amount, so "2.5" typed over a stored "2.50" is no change. */
+const samePrice = (a: string | null, b: string | null): boolean =>
+  a === null || b === null ? a === b : stringToCents(a) === stringToCents(b);
 
 /** Only a refusal naming the menu price is shown beside a field; any other goes to the summary. */
 const refusedField = (field: string): string => (field === "grossPrice" ? field : "_form");
@@ -125,17 +130,23 @@ export class MenuPricesTable extends LitElement {
   @state() private errors: Record<string, string> = {};
 
   #sectionNames: ReadonlyMap<string, string> = new Map();
+  /** Each row's sections, every placement's together, for the section filter. */
+  #reached: ReadonlyMap<MenuPriceRow, string[]> = new Map();
   #categoryPaths: ReadonlyMap<string, string> = new Map();
   /** Each category with the categories above it, so a filter on a category keeps those inside it. */
   #categoryChains: ReadonlyMap<string, string[]> = new Map();
   #variants: ReadonlyMap<string, Product["variants"][number]> = new Map();
   #columns: DataTableColumn<MenuPriceRow>[] = [];
-  #seededFor: string | null = null;
+  /** The row as the window opened with it. A save compares the draft with this, not with the row
+   * the live read keeps replacing, so a change someone else made meanwhile is not written back. */
+  #opened: MenuPriceRow | null = null;
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("sections"))
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
     if (changed.has("categories")) this.#readCategories();
+    if (changed.has("rows"))
+      this.#reached = new Map(this.rows.map((row) => [row, row.placements.flat()]));
     if (changed.has("products"))
       this.#variants = new Map(
         this.products.flatMap(({ variants }) => variants.map((variant) => [variant.id, variant])),
@@ -163,32 +174,25 @@ export class MenuPricesTable extends LitElement {
         categoryPath(category, this.categories, language, config),
       ]),
     );
-    const parents = new Map(this.categories.map(({ id, parentId }) => [id, parentId]));
     this.#categoryChains = new Map(
-      this.categories.map(({ id }) => {
-        const chain: string[] = [];
-        for (
-          let at: string | null | undefined = id;
-          at && !chain.includes(at);
-          at = parents.get(at)
-        )
-          chain.push(at);
-        return [id, chain];
-      }),
+      this.categories.map((category) => [
+        category.id,
+        categoryAncestors(category, this.categories).map(({ id }) => id),
+      ]),
     );
   }
 
   /** Starts the draft from the stored settings once per opening, when the row is there to read. */
   #seed(): void {
     if (this.editing === null) {
-      this.#seededFor = null;
+      this.#opened = null;
       this.draft = null;
       return;
     }
-    if (this.#seededFor === this.editing) return;
+    if (this.#opened?.menuItemId === this.editing) return;
     const row = this.#row();
     if (row === undefined) return;
-    this.#seededFor = this.editing;
+    this.#opened = row;
     this.errors = {};
     this.draft = {
       grossPrice: row.override ?? "",
@@ -220,7 +224,7 @@ export class MenuPricesTable extends LitElement {
   }
 
   #buildColumns(): DataTableColumn<MenuPriceRow>[] {
-    const reached = new Set(this.rows.flatMap(({ placements }) => placements.flat()));
+    const reached = new Set([...this.#reached.values()].flat());
     const sectionOptions = [...reached]
       .map((id) => ({ value: id, label: this.#sectionNames.get(id) ?? t("members.missing") }))
       .sort((a, b) => byLabel(a.label, b.label));
@@ -270,7 +274,7 @@ export class MenuPricesTable extends LitElement {
         filter: {
           label: t("menu_prices.section_filter"),
           allLabel: t("menu_prices.all_sections"),
-          value: (row) => row.placements.flat(),
+          value: (row) => this.#reached.get(row)!,
           options: sectionOptions,
         },
       },
@@ -289,7 +293,7 @@ export class MenuPricesTable extends LitElement {
       },
       {
         ...price("product-price", t("menu_prices.product_price"), (row) => row.productPrice),
-        cell: (row) => row.productPrice ?? html`<span part="muted">—</span>`,
+        cell: (row) => row.productPrice,
       },
       {
         ...price("menu-price", t("menu_prices.menu_price"), (row) => row.override),
@@ -298,7 +302,10 @@ export class MenuPricesTable extends LitElement {
         filter: {
           label: t("menu_prices.price_filter"),
           allLabel: t("menu_prices.all_prices"),
-          value: (row) => (row.override === null ? "product" : "overridden"),
+          value: (row) =>
+            row.override !== null || row.variants.some(({ price }) => price !== null)
+              ? "overridden"
+              : "product",
           options: [{ value: "overridden", label: t("menu_prices.overridden_only") }],
         },
       },
@@ -338,7 +345,8 @@ export class MenuPricesTable extends LitElement {
     );
   }
 
-  #save(): void {
+  #save(event: Event): void {
+    event.stopPropagation();
     const draft = this.draft;
     if (draft === null || this.busy) return;
     const errors: Record<string, string> = {};
@@ -353,16 +361,25 @@ export class MenuPricesTable extends LitElement {
     });
     this.errors = errors;
     if (Object.keys(errors).length) return;
+    const row = this.#opened!;
+    // The draft's variants were built from the opened row's, one for one and in its order.
+    const variantsChanged = variants.some(({ price, offered }, at) => {
+      const was = row.variants[at]!;
+      return was.offered !== offered || !samePrice(price, was.price);
+    });
     this.#emit("wt-offer-save", {
       menuItemId: this.editing!,
-      name: this.#row()!.name,
-      grossPrice,
-      active: draft.active,
-      variants: variants.length ? variants : null,
+      name: row.name,
+      item:
+        samePrice(grossPrice, row.override) && draft.active === row.active
+          ? null
+          : { grossPrice, active: draft.active },
+      variants: variantsChanged ? variants : null,
     } satisfies OfferSave);
   }
 
-  #cancel(): void {
+  #cancel(event: Event): void {
+    event.stopPropagation();
     if (!this.busy) this.#emit("wt-offer-cancel", {});
   }
 
@@ -372,7 +389,7 @@ export class MenuPricesTable extends LitElement {
       locales: [],
       error: (key) => this.errors[key] ?? "",
     };
-    const productPrice = row.productPrice ?? "";
+    const productPrice = row.productPrice;
     const typed = draft.grossPrice.trim();
     // A variant with no price of its own sells at the product's price on this menu
     // (`resolveOfferPrice`), taken from the field while it holds a valid price.
@@ -465,7 +482,7 @@ export class MenuPricesTable extends LitElement {
       }}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
-        if (this.editing !== null) this.#cancel();
+        if (this.editing !== null) this.#cancel(event);
       }}
     >
       ${form ? this.#renderForm(form.row, form.draft) : nothing}
@@ -475,14 +492,14 @@ export class MenuPricesTable extends LitElement {
           variant="secondary"
           data-test="offer-cancel"
           .disabled=${this.busy}
-          @click=${() => this.#cancel()}
+          @click=${(event: Event) => this.#cancel(event)}
           >${t("action.cancel")}</wt-button
         ><wt-button
           variant="primary"
           data-test="offer-save"
           .loading=${this.busy}
           .disabled=${this.busy}
-          @click=${() => this.#save()}
+          @click=${(event: Event) => this.#save(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions
       >
