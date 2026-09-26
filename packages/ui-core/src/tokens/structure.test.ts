@@ -54,6 +54,15 @@ test("dialog max width is 48rem, capped at 90% of the viewport", () => {
   expect(token(el, "--wt-dialog-max-width")).toBe("min(90vw, 48rem)");
 });
 
+test("the standard modal is 64rem wide, and a dialog keeps its own 48rem", () => {
+  // Forms go in a wt-modal; wt-dialog and wt-help-tooltip hold confirmations and hints, so their
+  // width does not follow the modal's.
+  const el = mount();
+  expect(token(el, "--wt-modal-max-width")).toBe("64rem");
+  el.style.setProperty("--wt-modal-max-width", "10rem");
+  expect(token(el, "--wt-dialog-max-width")).toBe("min(90vw, 48rem)");
+});
+
 test("a name cell may grow wider than the controls that sit beside it", () => {
   // The cap exists to make a long name WRAP, not to squeeze the row: a value at or below the tap
   // minimum would make the name column narrower than the switch or menu button next to it, which is

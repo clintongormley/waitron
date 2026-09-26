@@ -28,8 +28,10 @@
   --wt-opacity-disabled: 0.5;
   --wt-opacity-hover: 0.85;
 
-  --wt-modal-max-width: 48rem;
-  --wt-dialog-max-width: min(90vw, var(--wt-modal-max-width));
+  --wt-modal-max-width: 64rem;
+  /* Its own width, not the modal's: a wt-dialog or wt-help-tooltip holds a confirmation or a hint,
+     not a form. */
+  --wt-dialog-max-width: min(90vw, 48rem);
 
   /* A modal's side margin and inline padding shrink on a phone so the width goes to its content.
      Fluid rather than a breakpoint: a media query cannot read a token, and the no-hardcoded-chrome

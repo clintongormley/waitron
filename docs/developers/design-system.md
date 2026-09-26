@@ -160,10 +160,10 @@ buttons" under "Page composition" below for the pattern this exists for.
 `--wt-dialog-max-width` (`min(90vw, 48rem)`) exists so `wt-dialog` never spells out a literal
 `rem` value inline — the no-hardcoded-chrome guard (see below) checks `rem`/`em` sizing, not just
 `px`, so any component-level size, including one wrapped in `min()`/`max()`/`clamp()`, must resolve
-through a token. It is written `min(90vw, var(--wt-modal-max-width))`, so overriding
-`--wt-modal-max-width` on the theme root also resizes every `wt-dialog` and `wt-help-tooltip`
-that does not set `--wt-dialog-max-width` itself (the till's device chooser does); overriding it on
-an element below the root does not, because the dialog token is resolved where it is declared.
+through a token. It holds its own `48rem` rather than following `--wt-modal-max-width`: a
+`wt-dialog` or `wt-help-tooltip` holds a confirmation or a hint, not a form, so it stays narrower
+than the modal's `64rem`. Overriding `--wt-modal-max-width` therefore resizes `wt-modal` alone; to
+resize a dialog, set `--wt-dialog-max-width` (the till's device chooser does).
 
 `--wt-cell-name-max-width` is one sizing value for the NAME column of a table a form owns, and it
 is used in **three different directions**, which its name does not say. Grep for the token before
@@ -362,7 +362,7 @@ In tree mode the table keeps a match's ancestor rows and tells each cell, via it
 `ancestorOnly`, whether the row is present only to hold a descendant's place — mute those with a
 `part` on the cell.
 
-Use `wt-modal` for an add or edit form. Its width is `--wt-modal-max-width` (`48rem`) bounded by the
+Use `wt-modal` for an add or edit form. Its width is `--wt-modal-max-width` (`64rem`) bounded by the
 viewport minus its side margins, and it fills the viewport height with 24px top and bottom margins.
 Its side margins (`--wt-modal-inline-margin`) and the inline padding of its body and footer
 (`--wt-modal-inline-padding`) are 24px from 800px wide and shrink on a phone to 4px and 12px, so the
