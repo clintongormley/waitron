@@ -2548,8 +2548,7 @@ describe("basket-wide modifier resolution (perf)", () => {
   // of a stored line reads the zone's offers once.
   //
   // Every definition a line answers comes from the menu's published version, which the zone's
-  // offers snapshot carries (`VENUE_SERVICE.listZoneOffers`), so the live-row walk
-  // `resolveAttachedModifiers` is never reached from the order path.
+  // offers snapshot carries (`VENUE_SERVICE.listZoneOffers`), so that read is what is counted.
 
   it("reads each definition once for a basket of offers priced at their products' prices", async () => {
     const { cfg, cafeId, aguaId, catalogueId } = await setupVenue();
@@ -2561,7 +2560,6 @@ describe("basket-wide modifier resolution (perf)", () => {
       return { cafe, agua };
     });
     const offers = await counterOffers(cfg);
-    const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
     const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
 
     await parkProducts(cfg, {
@@ -2585,7 +2583,6 @@ describe("basket-wide modifier resolution (perf)", () => {
       ],
     });
 
-    expect(resolve).not.toHaveBeenCalled();
     expect(listOffers).toHaveBeenCalledTimes(1);
     expect(listOffers.mock.calls[0]![2]).toBe(offers.zoneId);
   });
@@ -2605,7 +2602,6 @@ describe("basket-wide modifier resolution (perf)", () => {
     const held = await getHeldOrder({ db }, cfg, id);
 
     const contentLanguages = vi.spyOn(catalogue, "readContentLanguages");
-    const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
     const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
 
     // A changed note is an edit of the stored line, which prices nothing: the zone's offers are read
@@ -2623,7 +2619,6 @@ describe("basket-wide modifier resolution (perf)", () => {
     });
 
     expect(contentLanguages).toHaveBeenCalledTimes(1);
-    expect(resolve).not.toHaveBeenCalled();
     expect(listOffers).toHaveBeenCalledTimes(1);
 
     const stored = await db
@@ -2631,6 +2626,39 @@ describe("basket-wide modifier resolution (perf)", () => {
       .from(workingOrderLines)
       .where(and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.parentLineId)));
     expect(stored).toEqual([{ note: "con sal" }]);
+  });
+
+  it("reads the zone's offers once for an edit that re-checks a stored answer and prices a new line", async () => {
+    const { cfg, cafeId, aguaId } = await setupVenue();
+    const punto = await withTransaction(db, (tx) => addOptionList(tx, cafeId, "Punto"));
+    const answer = { listId: punto.listId, labelId: punto.labelIds[0]! };
+    const id = randomUUID();
+    await parkProducts(cfg, {
+      id,
+      lines: [{ productId: cafeId, quantity: "1", options: [answer] }],
+    });
+    const held = await getHeldOrder({ db }, cfg, id);
+    const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
+
+    await updateProducts(cfg, id, {
+      lines: [
+        {
+          workingOrderLineId: held.lines[0]!.workingOrderLineId,
+          productId: cafeId,
+          quantity: "1",
+          options: [answer],
+        },
+        { productId: aguaId, quantity: "1" },
+      ],
+    });
+
+    expect(listOffers).toHaveBeenCalledTimes(1);
+    const stored = await db
+      .select({ productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(stored).toEqual([{ productId: cafeId }, { productId: aguaId }]);
   });
 
   it("reads each MENU-side definition once for an offer basket", async () => {
@@ -2653,7 +2681,6 @@ describe("basket-wide modifier resolution (perf)", () => {
       await republishMenus(tx);
       return { aguaOfferId: aguaOffer.id, cafe, agua };
     });
-    const resolve = vi.spyOn(catalogue, "resolveAttachedModifiers");
     const listOffers = vi.spyOn(VENUE_SERVICE, "listZoneOffers");
 
     await parkOrder({ db }, cfg, {
@@ -2678,7 +2705,6 @@ describe("basket-wide modifier resolution (perf)", () => {
       ],
     });
 
-    expect(resolve).not.toHaveBeenCalled();
     expect(listOffers).toHaveBeenCalledTimes(1);
     expect(listOffers.mock.calls[0]![2]).toBe(zoneId);
   });

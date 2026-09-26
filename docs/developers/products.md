@@ -417,8 +417,9 @@ A product has two states. **Active / Inactive** is whether it exists for the ven
 Delete sends `active: false`, Restore sends `active: true`, and Delete removes no row.
 **Available / Unavailable** is "sold out for now": the editor's Available switch sends `available`,
 and it hides nothing in the dashboard. The till sells a product, or offers it as an extra, only when
-it is both (`listMenuOffers` and `readExtraProducts` in
-`packages/catalogue/src`, and `resolveBasketModifiers` in `apps/server/src/working-order.ts`) —
+it is both (`applyLiveFields` in `packages/catalogue/src/menu-document.ts` marks it on each
+served offer and extras item, and `priceOrderLines` in `apps/server/src/working-order.ts` refuses
+what it marks) —
 except that an edit of a held order may keep a line at or below its quantity although its dish or
 an extra has since become Inactive or Unavailable (a raise is checked in `updateHeldOrder`, and a
 change to the note, options or extras of a line the kitchen already has is refused

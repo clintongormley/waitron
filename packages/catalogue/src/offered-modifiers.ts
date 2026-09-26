@@ -22,42 +22,20 @@ export interface ModifierHolder {
 }
 
 /**
- * Every extras and options definition a set of dishes attaches, read together.
- *
- * The ORDER path and the sell-side reads resolve this from one body so they stay in step: what a
- * till is offered has to be exactly the set the selection validators will answer, or a required list
- * the till never drew refuses the order.
+ * Every extras and options definition a set of dishes attaches, read together, with each product's
+ * ordered attachment list keyed by the LOWER-CASED product id, which {@link readOfferedModifiers}
+ * walks to interleave extras and options. A bounded number of queries whatever the number of
+ * dishes, and never one per dish (CLAUDE.md §3). INACTIVE lists come back too; the walk filters
+ * them.
  */
-export interface AttachedModifiers {
+interface WalkedAttachments {
   /** Keyed by MENU-ITEM id on the offer path and by PRODUCT id otherwise — extras are published by
    * the offer when there is one and held by the product when there is not. */
   extrasByHolder: ReadonlyMap<string, ResolvedExtraList[]>;
   /** Keyed by the underlying PRODUCT id on both paths: an options list is attached to the product
    * and a menu offer neither republishes nor narrows one. */
   optionsByProduct: ReadonlyMap<string, OptionList[]>;
-}
-
-/**
- * {@link AttachedModifiers} plus each product's ordered attachment list, keyed by the LOWER-CASED
- * product id, which {@link readOfferedModifiers} walks to interleave extras and options.
- */
-interface WalkedAttachments extends AttachedModifiers {
   attachments: ReadonlyMap<string, ProductModifierRef[]>;
-}
-
-/**
- * Resolve {@link AttachedModifiers} for a set of dishes: a bounded number of queries whatever the
- * number of dishes, and never one per dish (CLAUDE.md §3).
- *
- * INACTIVE lists come back too, because the two validators read each list's `active` flag
- * themselves. A read that DRAWS the lists filters them itself.
- */
-export async function resolveAttachedModifiers(
-  tx: Transaction,
-  dishes: readonly ModifierHolder[],
-): Promise<AttachedModifiers> {
-  const { extrasByHolder, optionsByProduct } = await walkAttachedModifiers(tx, dishes);
-  return { extrasByHolder, optionsByProduct };
 }
 
 async function walkAttachedModifiers(

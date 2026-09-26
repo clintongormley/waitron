@@ -2164,30 +2164,45 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(await versionOf(heldId)).toEqual([{ menuVersionId: added }, { menuVersionId: added }]);
     expect(await versionOf(tabId)).toEqual([{ menuVersionId: added }]);
 
-    await withTransaction(suite.db, async (tx) => {
-      await updateProduct(tx, v.burgerId, { unitPrice: "11.00" });
-      await republishMenus(tx);
-    });
-    expect(await liveVersion()).not.toBe(added);
+    const republish = (unitPrice: string) =>
+      withTransaction(suite.db, async (tx) => {
+        await updateProduct(tx, v.burgerId, { unitPrice });
+        await republishMenus(tx);
+      });
+    await republish("11.00");
+    const second = await liveVersion();
+    expect(second).not.toBe(added);
+    // A second round on the same tab, from the second version; then a third version is published.
+    await withTransaction(suite.db, (tx) =>
+      addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.offerFor(v.burgerId), quantity: "1" }]),
+    );
+    await republish("13.00");
+    expect(await liveVersion()).not.toBe(second);
 
     const deps = { db: suite.db, backend, clock };
     const tender = { method: "cash" as const, amount: "20.00" };
-    // 9.00 + Bacon 0.50, and 9.00: the prices each line was added at.
+    // 9.00 + Bacon 0.50; and 9.00 + 11.00: the prices each line was added at.
     expect((await payWorkingOrder(deps, v.cfg, { id: heldId, lines: [], tender })).total).toBe(
       "9.50",
     );
     expect((await payWorkingOrder(deps, v.cfg, { id: tabId, lines: [], tender })).total).toBe(
-      "9.00",
+      "20.00",
     );
-    for (const id of [heldId, tabId]) {
-      const filed = await suite.db
+    const filedVersions = (id: string) =>
+      suite.db
         .select({ menuVersionId: saleLines.menuVersionId })
         .from(saleLines)
         .innerJoin(sales, eq(sales.id, saleLines.saleId))
-        .where(eq(sales.workingOrderId, id));
-      expect(filed.length).toBeGreaterThan(0);
-      expect(filed.every((line) => line.menuVersionId === added)).toBe(true);
-    }
+        .where(eq(sales.workingOrderId, id))
+        .orderBy(saleLines.lineNo);
+    expect(await filedVersions(heldId)).toEqual([
+      { menuVersionId: added },
+      { menuVersionId: added },
+    ]);
+    expect(await filedVersions(tabId)).toEqual([
+      { menuVersionId: added },
+      { menuVersionId: second },
+    ]);
   });
 });
 

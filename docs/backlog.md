@@ -323,9 +323,13 @@ orders); and the counter's Held orders list shows every open order, a table's ow
 (seen in the same run, not investigated).
 **Menus Task 7 (tills sell from the published version), on `feat/menus-sell-published`:** a till
 is offered, and every new line is charged, what each menu's published version says: the dish, its
-variant, its extras and its options. Only availability is read from the current rows: a sold-out
-dish is served in its place marked unavailable, and a line for it is refused `product.unavailable`;
-an extras item sold out or switched off on the offer is refused as a pick the list does not offer.
+variant, its extras and its options. What is still read from the current rows: availability (a
+sold-out dish is served in its place marked unavailable, and a line for it is refused
+`product.unavailable`; an extras item sold out or switched off on the offer is refused as a pick the
+list does not offer); the VAT class, kitchen course and reporting category the served offer carries
+(`applyLiveFields`, `packages/catalogue/src/menu-document.ts`), so a VAT change still reaches a new
+line without a publish, which menus M7v changes next; and whether a picked extra has since gained
+an Active variant, which refuses the pick `product.variant_required`.
 Each unsaved line a till sends may name the version it was priced against (`menuVersionId`); a
 request naming one that is no longer live is refused `menu.version_changed` (409), listing each
 affected menu's live version, before anything is priced or written. A held or tab line records the
@@ -1213,27 +1217,19 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   transfer pickers (`apps/till/src/screens/till-table-order-screen.ts`), so nothing offers it an
   action it cannot take; whether the drawer should also INDENT it is a display question nobody has
   decided. Deliberately left as it is.
-- **The `products` row behind an extra is read by TWO bodies, and that is deliberate.**
-  `readExtraProducts` (`packages/catalogue/src/offered-modifiers.ts`) and `resolveBasketModifiers`
-  (`apps/server/src/working-order.ts`) each issue their own `select … from products where id in (…)`
-  for the products an extras list offers. The review asked for them to be merged; they were left
-  separate because neither result can be derived from the other. The order path resolves customer
-  text under the order's `defaultLanguage`, which no sell-side caller has; the sell-side read expands
-  dietary declarations through `validateDietaryDeclarations`, which THROWS `diet.declaration_invalid`
-  (`packages/catalogue/src/dietary-declarations.ts`), and putting that on the order path would add a
-  refusal it does not have today. Sharing only the `select` would make the order path fetch
-  `allergens` and `dietary_declarations` it discards. The branch's own docblock was narrowed to say
-  this — the LIST maps come from one body, the product facts do not — and the two shapes no longer
-  share the name `ExtraProductFacts`. Revisit if a third caller appears, or if the order path ever
-  needs an extra's allergens.
+- **Resolved by menus Task 7: the `products` row behind an extra is no longer read by two bodies.**
+  The order path's own read (`resolveBasketModifiers`) is gone; an extra's names, price and
+  availability now come from the menu's published version, which `readExtraProducts` built.
 - **A published-but-DETACHED extras list is offered by nothing and demanded by the validator, and
   nothing cleans the publication up.** The two sides read different sets on ONE of the three reads
   that build those maps — the MENU-OFFER extras read, which is the read this scenario uses. The
   picker's source (`readOfferedModifiers`) keeps only the lists the product's `product_modifiers`
   attachments name, while `readMenuExtras` (`packages/catalogue/src/extra-projection.ts:131`)
   reads `menu_item_extra_lists` and nothing else, and the order path
-  (`priceOrderLines` and `updateHeldOrder` in `apps/server/src/working-order.ts`) consumes `extrasByHolder`/`optionsByProduct`
-  straight — so the detached list reaches it. **Not true of the other two reads, checked rather
+  (`priceOrderLines` and `updateHeldOrder` in `apps/server/src/working-order.ts`) consumed `extrasByHolder`/`optionsByProduct`
+  straight — so the detached list reached it. (Since menus Task 7 the order path reads the menu's
+  published version instead, which `readOfferedModifiers` builds from the attachments; whether that
+  closes this entry has been read, not run.) **Not true of the other two reads, checked rather
   than generalised:** `optionsByProduct` is BUILT from the attachments
   (`packages/catalogue/src/offered-modifiers.ts:109`), and the PRODUCT-side extras read is handed
   them and keeps only what they carry (`readProductExtras`,
@@ -1297,8 +1293,11 @@ What the order path (the plan's Task 7) left behind:
   nothing: `readMenuExtras` and `readProductExtras` (`packages/catalogue/src/extra-projection.ts`),
   `readOptionListsByIds` (`packages/catalogue/src/options.ts`) and `readProductModifiers`
   (`packages/catalogue/src/product-modifiers.ts`), all four reached from one body,
-  `resolveAttachedModifiers` in `packages/catalogue/src/offered-modifiers.ts`, which the sale path
-  enters through `resolveBasketModifiers` (`apps/server/src/working-order.ts`). Their writers
+  `walkAttachedModifiers` in `packages/catalogue/src/offered-modifiers.ts`. Since menus Task 7 the
+  sale path no longer reaches them: it prices from each menu's published version, read through
+  `listZoneOffers` (`packages/venue-service/src/operations.ts`), except that an edit of a saved line
+  whose dish the live version no longer offers reads the dish's own options lists
+  (`productOptionLists`, `apps/server/src/working-order.ts`). Their writers
   serialise, but no longer by taking a lock, and the two functions this entry used to name are both
   gone: `lockExtraList`'s `for update` is now `assertExtraListForWrite`, a plain existence read
   (`packages/catalogue/src/extras.ts`), and `writeProductModifiers`'s per-list `for key share` is

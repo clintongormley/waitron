@@ -375,9 +375,12 @@ async function priceOrderLines(
   const invoiceLocales = await readInvoiceLocales(tx, cfg.locationId);
   const contentConfig = await readContentLanguages(tx, cfg.locale);
 
-  const modifiersByOffer = new Map(
-    lines.map((line) => [line.offer.id, offerModifiers(line.offer, contentConfig.defaultLanguage)]),
-  );
+  const modifiersByOffer = new Map<string, OfferModifiers>();
+  for (const { offer } of lines) {
+    if (!modifiersByOffer.has(offer.id)) {
+      modifiersByOffer.set(offer.id, offerModifiers(offer, contentConfig.defaultLanguage));
+    }
+  }
   // A product with an Active variant is never sold as itself, and an extras pick cannot name a
   // variant, so a pick of such a product is refused below, before the published lists are asked:
   // a version published after the variant was switched on no longer offers the product at all.
@@ -3503,21 +3506,28 @@ async function applyLineEdits(
   const snapshot = needsModifiers
     ? await readBasketOffers(tx, cfg, orderId, context?.zoneId, plan.fresh)
     : undefined;
-  const offerOf = (line: EditableParent) =>
-    snapshot!.offers.find((candidate) => candidate.id === menuItemOf(line));
+  const offerById = new Map(snapshot?.offers.map((offer) => [offer.id, offer]));
   // A stored line whose dish the live version no longer offers has no published lists left: its
   // options answer, which carries no price, is checked against the dish's own lists instead.
   const withdrawnDishes = needsModifiers
     ? plan.edits.flatMap(({ parent }) =>
-        offerOf(parent) === undefined ? [parent.parentProductId ?? parent.productId!] : [],
+        offerById.has(menuItemOf(parent)) ? [] : [parent.parentProductId ?? parent.productId!],
       )
     : [];
   const ownOptions = await productOptionLists(tx, withdrawnDishes);
+  const modifiersByOffer = new Map<string, OfferModifiers>();
   const modifiersOf = (line: EditableParent): OfferModifiers => {
-    const offer = offerOf(line);
-    if (offer !== undefined) return offerModifiers(offer, defaultLanguage);
-    const dishId = (line.parentProductId ?? line.productId!).toLowerCase();
-    return { ...NO_MODIFIERS, options: ownOptions.get(dishId) ?? [] };
+    const offer = offerById.get(menuItemOf(line));
+    if (offer === undefined) {
+      const dishId = (line.parentProductId ?? line.productId!).toLowerCase();
+      return { ...NO_MODIFIERS, options: ownOptions.get(dishId) ?? [] };
+    }
+    let modifiers = modifiersByOffer.get(offer.id);
+    if (modifiers === undefined) {
+      modifiers = offerModifiers(offer, defaultLanguage);
+      modifiersByOffer.set(offer.id, modifiers);
+    }
+    return modifiers;
   };
 
   type Action = "free" | "change" | "raise" | "drop";
