@@ -3031,9 +3031,10 @@ image constraints under *Detail → Box image*.
     not checked. **Done (2026-09-26, lane A's A41):**
     `unpackBundleToDir` now makes the destination and every folder between it and an entry 0700
     whether or not they existed, after the symlink guard has confirmed the folder is inside the
-    destination; nothing above the destination changes. `resolveSafeEntryPath` itself is unchanged,
-    so the archive restore's two entries outside `secrets/` (`manifest.json` and `db.dump`) are
-    checked against the staging folder, which receives nothing and keeps an existing folder's mode.
+    destination; no existing folder above the destination changes, except through the symlink swap
+    below. `resolveSafeEntryPath` itself is unchanged, and nothing chmods the staging folder that
+    the archive restore's two entries outside `secrets/` (`manifest.json` and `db.dump`) are
+    checked against; it receives nothing and keeps an existing folder's mode.
     Still open, not fixed: the walk and the file write go by path, so a folder inside the destination
     swapped for a symlink during the unpack is followed. The A41 run-it review reproduced an outside
     folder being set to 0700 and receiving the secret that way; the same swap between the guard and

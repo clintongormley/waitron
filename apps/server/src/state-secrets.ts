@@ -70,8 +70,9 @@ export async function resolveSafeEntryPath(
 /**
  * The inverse of `collectStateSecrets`: each file written atomically, 0600. The destination and every
  * folder between it and an entry end 0700 whether or not they already existed (`mkdir`'s mode applies
- * only to a folder it creates). Nothing above the destination is changed, provided nothing else
- * changes the folders during the unpack: a folder replaced by a symlink mid-run is followed.
+ * only to a folder it creates). No existing folder above the destination is changed (missing ones
+ * are created 0700), provided nothing else changes the folders during the unpack: a folder inside
+ * the destination replaced by a symlink mid-run is followed, wherever it points.
  */
 export async function unpackBundleToDir(files: BundleFiles, destDir: string): Promise<void> {
   // Created before the guard's `realpath`, which fails on a missing path.
