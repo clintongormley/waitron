@@ -181,7 +181,9 @@ function errorText(error: CounterError): string | TemplateResult {
   if (typeof error === "string") return t(error);
   if ("code" in error) return codeMessage(error.code);
   const late = lateChangeMessage(error.lateChange);
-  return error.also === undefined ? late : html`${late}<br />${t(error.also)}`;
+  return error.also === undefined
+    ? late
+    : html`<span class="error-part">${late}</span><span class="error-part">${t(error.also)}</span>`;
 }
 
 function isPermanentSaleRefusal(error: unknown): boolean {
@@ -221,6 +223,16 @@ export class TillApp extends LitElement {
         color: var(--wt-color-on-danger);
         font-weight: var(--wt-font-weight-bold);
         text-align: center;
+      }
+
+      .error-part {
+        display: block;
+      }
+
+      .error-part + .error-part {
+        margin-top: var(--wt-space-2);
+        padding-top: var(--wt-space-2);
+        border-top: 1px solid var(--wt-color-on-danger);
       }
 
       .refresh-message {
@@ -1780,12 +1792,13 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * The reload runs on every path, so the line shows what the server stored and a refused change
-   * leaves no stale actions. A change refused because the kitchen has started the line offers to
-   * cancel it after the reload. An answer that arrives once the waiter has started leaving the order,
-   * and has not come back to it, changes nothing on screen but the message: a failure is still said,
-   * naming the line, and its table while the floor lists it, because the waiter may believe a note (an
-   * allergy, say) was saved. Back on the same order, the answer is handled as if it had come at once.
+   * A saved change stores the new revision and reads the order again whenever that order is still the
+   * open one, wherever the waiter is, so the next change is not refused as out of date. A refusal
+   * reads the order again too, and one because the kitchen has started the line offers to cancel it.
+   * When {@link #orderVisit} says the waiter left the order and did not come back to it, a refusal
+   * changes nothing on screen but the message, which names the line, and its table while the floor
+   * lists it, because the waiter may believe a note (an allergy, say) was saved. Paying the tab and a
+   * server switch take the order off screen without that counter moving.
    */
   async #onChangeLine(event: Event): Promise<void> {
     const { lineNo, lineName, patch, revision } = (event as CustomEvent<ChangeLineDetail>).detail;
@@ -1805,34 +1818,31 @@ export class TillApp extends LitElement {
     } catch (error) {
       outcome = { error };
     }
-    if (left()) {
-      if ("error" in outcome) {
-        const unanswered = isNetworkFailure(outcome.error);
-        const code = (outcome.error as { code?: string } | undefined)?.code;
-        const tableLabel = this.tables.find((table) => table.id === tableId)?.label;
-        this.errorKey = {
-          lateChange: {
-            lineName,
-            unanswered,
-            ...(tableLabel === undefined ? {} : { tableLabel }),
-            ...(code === undefined ? {} : { code }),
-          },
-        };
-      }
+    if ("saved" in outcome) {
+      if (this.activeTabId !== orderId) return;
+      this.tabRevision = outcome.saved.revision;
+      await this.#loadTabLines();
       return;
     }
-    let refusal: string | undefined;
-    if ("saved" in outcome) {
-      this.tabRevision = outcome.saved.revision;
-    } else {
-      refusal = (outcome.error as { code?: string } | undefined)?.code;
-      this.errorKey =
-        refusal === "working_order.out_of_date"
-          ? "held.changed_elsewhere"
-          : lineWriteError(outcome.error);
+    const code = (outcome.error as { code?: string } | undefined)?.code;
+    if (left()) {
+      const tableLabel = this.tables.find((table) => table.id === tableId)?.label;
+      this.errorKey = {
+        lateChange: {
+          lineName,
+          unanswered: isNetworkFailure(outcome.error),
+          ...(tableLabel === undefined ? {} : { tableLabel }),
+          ...(code === undefined ? {} : { code }),
+        },
+      };
+      return;
     }
+    this.errorKey =
+      code === "working_order.out_of_date"
+        ? "held.changed_elsewhere"
+        : lineWriteError(outcome.error);
     await this.#loadTabLines();
-    if (refusal === "ticket.already_started" && !left()) this.cancelOffer = lineNo;
+    if (code === "ticket.already_started" && !left()) this.cancelOffer = lineNo;
   }
 
   /** Leaving an order clears the banner, except a failed change to a line of an order already left,

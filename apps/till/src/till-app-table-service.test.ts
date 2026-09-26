@@ -1186,6 +1186,30 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       expect(text).toContain(t("table.error"));
     });
 
+    it("shows the named refusal and the failed open as two visibly separate messages", async () => {
+      const { el, settle } = await changeThenLeave({
+        listZoneOffers: vi
+          .fn()
+          .mockResolvedValueOnce(burgerOffers)
+          .mockRejectedValue(new Error("offers down")),
+      });
+      settle().reject({ code: "ticket.already_started" });
+      await flush(el);
+      await openFromFloor(el, otherTable);
+      await flush(el);
+
+      const parts = [...banner(el)!.querySelectorAll<HTMLElement>(".error-part")];
+      expect(parts.map((part) => part.textContent!.trim())).toEqual([
+        startedRefusal,
+        t("table.error"),
+      ]);
+      const second = getComputedStyle(parts[1]!);
+      expect(second.display).toBe("block");
+      expect(parseFloat(second.borderTopWidth)).toBeGreaterThan(0);
+      expect(parseFloat(second.paddingTop)).toBeGreaterThan(0);
+      expect(parseFloat(second.marginTop)).toBeGreaterThan(0);
+    });
+
     it("drops the failed open from the banner, and keeps the named refusal, when the waiter tries a table again", async () => {
       let offersUp = true;
       const { el, settle } = await changeThenLeave({
@@ -1336,6 +1360,61 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       expect(reads()).toBe(readsBack + 1);
       expect(tableOrder(el)!.revision).toBe(8);
       expect(banner(el)).toBeNull();
+    });
+
+    it("takes the saved revision when a tablet's open of another table fails and leaves the order on screen", async () => {
+      const tablet: CanvasDef = {
+        formFactor: "tablet-landscape",
+        tabs: [
+          {
+            key: "floor",
+            title: "Floor",
+            columns: 24,
+            cards: [
+              { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
+              { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
+            ],
+          },
+        ],
+      };
+      const { el, settle, saved, reads } = await changeHeld(tablet, {
+        listZoneOffers: vi
+          .fn()
+          .mockResolvedValueOnce(burgerOffers)
+          .mockRejectedValue(new Error("offers down")),
+      });
+      await openFromFloor(el, otherTable);
+      await flush(el);
+      expect(tableOrder(el)!.orderId).toBe("wo-7");
+      const readsBefore = reads();
+
+      saved();
+      settle().resolve({ revision: 8 });
+      await flush(el);
+
+      expect(reads()).toBe(readsBefore + 1);
+      expect(tableOrder(el)!.orderId).toBe("wo-7");
+      expect(tableOrder(el)!.revision).toBe(8);
+      expect(tableOrder(el)!.lines[0]!.note).toBe("no onions");
+    });
+
+    it("reads the order again at once when the change is saved while a till is reopening the same table", async () => {
+      const { el, settle, saved, release, reads } = await changeHeld(tillCanvas);
+      emit(tableOrder(el)!, "back-to-floor");
+      await flush(el);
+      await openFromFloor(el, openTable);
+      const readsBefore = reads();
+
+      saved();
+      settle().resolve({ revision: 8 });
+      await flush(el);
+      expect(reads()).toBe(readsBefore + 1);
+
+      release();
+      await flush(el);
+      await flush(el);
+      expect(tableOrder(el)!.orderId).toBe("wo-7");
+      expect(tableOrder(el)!.revision).toBe(8);
     });
 
     it("names the refusal when a handheld goes back to the order while another table is still opening", async () => {
