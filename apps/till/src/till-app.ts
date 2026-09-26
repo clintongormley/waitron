@@ -119,8 +119,6 @@ const PERMANENT_SALE_REFUSALS = new Set([
   "fiscal.foreign_recipient_unsupported",
 ]);
 
-/** A table write refused because a card payment of the order is running says so, in the words the
- * counter uses; any other says the generic `table.error`. */
 /** Table refusals shown in their code's own words: each tells the operator what to do instead. */
 const TABLE_REFUSALS = new Set([
   "order.payment_in_flight",
@@ -567,6 +565,10 @@ export class TillApp extends LitElement {
   @state() private tabRevision = 0;
   /** Every bill of the party at {@link activeTableId}, read when the table opens and after it changes. */
   @state() private visitBills: VisitBill[] = [];
+  /** The party of the order on screen as it was read just before that order's lines and bills: what
+   * the screen shows of it, and the revision every command on it sends (D19). A floor read on its own
+   * does not move it, so a glance at the floor cannot lend the order view a revision it never showed. */
+  @state() private orderParty: TableVisit | null = null;
   /** Finish table was refused because a bill of the party is unpaid. */
   @state() private finishRefused = false;
   /** The venue's setting for changing sent lines, read with {@link tabLines}. */
@@ -1757,16 +1759,27 @@ export class TillApp extends LitElement {
     this.finishRefused = false;
     if (guestCount === undefined) {
       this.activeTabId = table?.tabId;
+      this.orderParty = table?.visit ?? null;
     } else {
       try {
-        const { tabId } = await this.api.seatTable(tableId, guestCount);
+        const { tabId, visitId, revision } = await this.api.seatTable(tableId, guestCount);
         this.activeTabId = tabId;
+        this.orderParty = {
+          id: visitId,
+          revision,
+          guestCount,
+          state: "open",
+          outstanding: "0.00",
+          billCount: 1,
+          tableIds: [tableId],
+        };
       } catch (error) {
         this.errorKey = tableWriteError(error);
         await this.#refreshFloor();
         return;
       }
       await this.#reloadTables();
+      this.#rememberOrderParty();
     }
     await this.#loadTabLines();
     await this.#loadVisitBills();
@@ -1804,9 +1817,19 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** The party at the open table, as the floor last read it. */
-  #activeVisit(): TableVisit | null {
-    return this.tables.find((table) => table.id === this.activeTableId)?.visit ?? null;
+  /** Takes the order's party from the floor just read, before the order's lines and bills are read
+   * after it. A floor that does not list the table, as after a failed read, keeps the party known. */
+  #rememberOrderParty(): void {
+    const row = this.tables.find((table) => table.id === this.activeTableId);
+    if (row !== undefined) this.orderParty = row.visit;
+  }
+
+  /** The floor, then the order's party from it, then the order's lines and bills. */
+  async #reloadOrder(): Promise<void> {
+    await this.#reloadTables();
+    this.#rememberOrderParty();
+    await this.#loadTabLines();
+    await this.#loadVisitBills();
   }
 
   /** The party a tab's table belongs to, as the floor last read it. */
@@ -1816,7 +1839,7 @@ export class TillApp extends LitElement {
 
   /** A failed read leaves the list empty rather than showing another party's bills. */
   async #loadVisitBills(): Promise<void> {
-    const visit = this.#activeVisit();
+    const visit = this.orderParty;
     if (visit === null) {
       this.visitBills = [];
       return;
@@ -1830,7 +1853,7 @@ export class TillApp extends LitElement {
 
   /** The revision of the party at the open table, and of another party the command reaches into. */
   #revisions(other: TableVisit | null, otherIsSource: boolean): VisitRevisions {
-    const own = this.#activeVisit();
+    const own = this.orderParty;
     const theirs = other !== null && other.id !== own?.id ? other : null;
     const destination = otherIsSource ? own : (theirs ?? own);
     const source = otherIsSource ? theirs : theirs === null ? null : own;
@@ -1848,13 +1871,13 @@ export class TillApp extends LitElement {
   async #onVisitOutOfDate(error: unknown): Promise<void> {
     const named = (error as { visitId?: unknown }).visitId;
     const before = this.tables;
+    const shown = this.#tableCatalogueActive() ? this.orderParty : null;
     const was =
-      typeof named === "string" ? visitOf(before, named) : (this.#activeVisit() ?? undefined);
-    await this.#reloadTables();
-    if (this.#tableCatalogueActive()) {
-      await this.#loadTabLines();
-      await this.#loadVisitBills();
-    }
+      typeof named === "string" && named !== shown?.id
+        ? visitOf(before, named)
+        : (shown ?? undefined);
+    if (this.#tableCatalogueActive()) await this.#reloadOrder();
+    else await this.#reloadTables();
     this.errorKey =
       was === undefined
         ? { code: "visit.out_of_date" }
@@ -1885,9 +1908,10 @@ export class TillApp extends LitElement {
     if (landedOn !== this.activeTabId) {
       this.activeTabId = landedOn;
       await this.#reloadTables();
+      this.#rememberOrderParty();
     }
     await this.#loadTabLines();
-    if (this.#activeVisit() !== null) await this.#loadVisitBills();
+    if (this.orderParty !== null) await this.#loadVisitBills();
   }
 
   async #onFireCourse(event: Event): Promise<void> {
@@ -2079,7 +2103,7 @@ export class TillApp extends LitElement {
       return;
     }
     this.activeTableId = toTableId;
-    await this.#reloadTables();
+    await this.#reloadOrder();
   }
 
   async #onJoinTable(event: Event): Promise<void> {
@@ -2092,7 +2116,7 @@ export class TillApp extends LitElement {
       await this.#onTableRefusal(error);
       return;
     }
-    await this.#reloadTables();
+    await this.#reloadOrder();
   }
 
   async #onMergeTabs(event: Event): Promise<void> {
@@ -2112,7 +2136,7 @@ export class TillApp extends LitElement {
       await this.#onTableRefusal(error);
       return;
     }
-    await this.#afterBillsMoved();
+    await this.#reloadOrder();
   }
 
   async #onTransferLines(event: Event): Promise<void> {
@@ -2132,13 +2156,7 @@ export class TillApp extends LitElement {
       await this.#onTableRefusal(error);
       return;
     }
-    await this.#afterBillsMoved();
-  }
-
-  /** Each read swallows its own error. The bills follow the floor, which names the party. */
-  async #afterBillsMoved(): Promise<void> {
-    await Promise.all([this.#loadTabLines(), this.#reloadTables()]);
-    await this.#loadVisitBills();
+    await this.#reloadOrder();
   }
 
   /** Carve selected tab lines into a detached check, then point the existing table payment screen at
@@ -2160,13 +2178,13 @@ export class TillApp extends LitElement {
       else await this.#onTableRefusal(error);
       return;
     }
-    await this.#afterBillsMoved();
+    await this.#reloadOrder();
   }
 
   /** Finish frees the party's tables, or leaves them to clear; either way the floor comes next. A bill
    * still unpaid is said on the screen, beside the offer to take its payment. */
   async #onFinishTable(): Promise<void> {
-    const visit = this.#activeVisit();
+    const visit = this.orderParty;
     if (visit === null) return;
     this.errorKey = undefined;
     this.finishRefused = false;
@@ -2188,6 +2206,7 @@ export class TillApp extends LitElement {
   #leaveTable(): void {
     this.activeTabId = undefined;
     this.activeTableId = undefined;
+    this.orderParty = null;
     this.tabLines = [];
     this.visitBills = [];
     const floorTab = this.canvas?.tabs.find((tab) => this.#tabNeedsFloorData(tab))?.key;
@@ -2544,7 +2563,7 @@ export class TillApp extends LitElement {
       .editSentLines=${this.editSentLines}
       .cancelOffer=${this.cancelOffer}
       .orderId=${this.activeTabId}
-      .visit=${this.#activeVisit()}
+      .visit=${this.orderParty}
       .visitBills=${this.visitBills}
       .finishRefused=${this.finishRefused}
     ></till-card-grid>`;
@@ -2575,7 +2594,7 @@ export class TillApp extends LitElement {
           .fireControl=${this.fireControl}
           .tables=${this.tables}
           .orderId=${this.activeTabId}
-          .visit=${this.#activeVisit()}
+          .visit=${this.orderParty}
           .bills=${this.visitBills}
           .finishRefused=${this.finishRefused}
           .busy=${this.submitting}

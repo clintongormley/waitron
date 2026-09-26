@@ -1839,6 +1839,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   joined to it, but merging another table's bill into its paid bill, or moving items to or from
   that paid bill, is refused with `tab.not_open` until a new round opens the party's next bill.
   Decide whether a paid party should be mergeable before the till offers it.
+- **An invoiced but unpaid bill on a party cannot be charged from the table screen (plan Task 2,
+  2026-09-26).** In a venue that issues the invoice first, a party merged into another can bring a
+  bill whose invoice is issued but not yet paid. The table screen lists it with what it owes, but
+  offers Take payment only on bills that are still open, so there is no button to charge it. Finish
+  table is then refused because that bill is unpaid; once no open bill is left, the refusal tells
+  the person to take payment but offers no button that does it. Charging it belongs to plan Task 14 (bill payments).
+- **The floor and the table screen write amounts differently (plan Task 2, 2026-09-26).** The floor
+  shows `44.00 €` while the table screen shows `44,00 €` in Spanish. The floor's format predates
+  the visits work; Task 2 now also uses it for what a party still owes. Make the floor follow the
+  locale, as the table screen does.
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
   this is designed. For now, orders remain at table/tab level and staff select items manually
   when splitting bills; seat assignment is not a prerequisite for the service workflow.

@@ -288,6 +288,33 @@ describe("till-app: seating a party", () => {
     expect(api.getVisitBills).toHaveBeenCalledWith("v-new");
   });
 
+  it("acts on the party the seat answered with when the floor cannot be read after seating", async () => {
+    const getTablesState = vi
+      .fn()
+      .mockResolvedValueOnce([mesa4, mesa7, mesa9])
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({
+      getTablesState,
+      getVisitBills: vi.fn().mockResolvedValue([]),
+      finishTable: vi.fn().mockRejectedValue({ code: "visit.bill_outstanding" }),
+    });
+    const screen = await toFloor(el);
+
+    emit(screen, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+    const order = tableOrder(el)!;
+    expect(order.orderId).toBe("wo-new");
+    expect(api.getVisitBills).toHaveBeenCalledWith("v-new");
+
+    emit(order, "finish-table", {});
+    await flush(el);
+    expect(api.finishTable).toHaveBeenCalledWith("v-new", 0);
+
+    emit(tableOrder(el)!, "join-table", { tableId: "t4" });
+    await flush(el);
+    expect(api.joinTable).toHaveBeenCalledWith("wo-new", "t4", { expectedVisitRevision: 0 });
+  });
+
   it("says why when another device seated the table first, and re-reads the floor", async () => {
     const { el } = await mountApp({
       seatTable: vi.fn().mockRejectedValue({ code: "tab.already_open" }),
@@ -422,6 +449,67 @@ describe("till-app: the party on a handheld", () => {
     expect(api.finishTable).toHaveBeenCalledWith("v1", 3);
     expect((shell(el) as HTMLElement & { activeTabKey?: string }).activeTabKey).toBe("floor");
   });
+
+  /** The server's side of D19: a command carrying any revision but the party's current one is
+   * refused. */
+  function currentRevisionOnly<R>(current: number, answer: R) {
+    return vi.fn(async (...args: unknown[]) => {
+      const sent = (args.at(-1) as { expectedVisitRevision?: number }).expectedVisitRevision;
+      if (sent !== current) throw { code: "visit.out_of_date", visitId: "v1", revision: current };
+      return answer;
+    });
+  }
+
+  it.each([
+    ["split-lines", { transfers: [{ lineNo: 1 }] }, "splitTab", { checkId: "wo-check" }],
+    ["join-table", { tableId: "t9" }, "joinTable", undefined],
+  ] as const)(
+    "refuses %s sent from an order read before a glance at the floor saw another device's change",
+    async (type, detail, method, answer) => {
+      const splitElsewhere = seated({}, { revision: 6, billCount: 2 });
+      const reads = floorThat([mesa4, mesa9], [splitElsewhere, mesa9]);
+      const command = currentRevisionOnly(6, answer);
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+        getTablesState: reads.getTablesState,
+        [method]: command,
+      });
+      await flush(el);
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      emit(shell(el), "tab-select", { key: "floor" });
+      await flush(el);
+      emit(shell(el), "open-table", { tableId: "t4", seated: true });
+      await flush(el);
+      const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+      const billReads = vi.mocked(api.getVisitBills).mock.calls.length;
+
+      reads.other.acted = true;
+      emit(shell(el), "tab-select", { key: "floor" });
+      await flush(el);
+      emit(shell(el), "tab-select", { key: "order" });
+      await flush(el);
+      expect(api.getTabLines).toHaveBeenCalledTimes(lineReads);
+      emit(orderCard(el)!, type, detail);
+      await flush(el);
+
+      expect(command).toHaveBeenCalledOnce();
+      await expect(command.mock.results[0]!.value).rejects.toMatchObject({
+        code: "visit.out_of_date",
+      });
+      expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+      expect(api.getVisitBills).toHaveBeenCalledTimes(billReads + 1);
+      expect(orderCard(el)!.visit).toEqual(splitElsewhere.visit);
+      const text = banner(el)!.textContent!;
+      expect(text).toContain(t("visit.changed").replace("{table}", "4"));
+      expect(text).toContain(
+        t("visit.changed_bills").replace("{amount}", formatMoney("44.00", "en")),
+      );
+    },
+  );
 });
 
 describe("till-app: reads and refusals around the party", () => {
