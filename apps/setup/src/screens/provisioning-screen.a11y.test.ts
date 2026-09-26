@@ -36,4 +36,13 @@ describe.each(["light", "dark"] as const)("setup-provisioning-screen a11y (%s th
     );
     await expectNoA11yViolations(host);
   });
+
+  it("has no violations with the reset action offered", async () => {
+    const { host } = await mountWidget<SetupProvisioningScreen>(
+      "setup-provisioning-screen",
+      { message: "A previous attempt to join this server stopped partway.", canReset: true },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

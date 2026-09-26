@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { helpLinkStyles, actionsStyles, errorStyles, statusStyles } from "../form-styles.js";
-import { dispatchProvisionRequested } from "../events.js";
+import { dispatchProvisionRequested, dispatchSetupGoto } from "../events.js";
 
 /** Renders the provision state the shell maps onto its props; the shell does the POST
  * (`apps/setup/src/setup-app.ts`). */
@@ -27,6 +27,9 @@ export class SetupProvisioningScreen extends LitElement {
 
   @property({ type: Boolean }) canRetry = false;
 
+  /** Offered only for a join that stopped partway, which the reset screen can clear. */
+  @property({ type: Boolean }) canReset = false;
+
   @property() reloadLabel?: string;
 
   @property({ attribute: false }) reload: () => void = location.reload.bind(location);
@@ -48,19 +51,28 @@ export class SetupProvisioningScreen extends LitElement {
           in a new tab. Your entries stay in this tab until you close or reload it.
         </p>
         ${
-          this.canRetry
+          this.canReset
             ? html`<div class="actions">
-                <wt-button variant="primary" data-test="retry" @click=${() => this.#retry()}
-                  >Try again</wt-button
+                <wt-button
+                  variant="primary"
+                  data-test="reset"
+                  @click=${() => dispatchSetupGoto(this, "reset")}
+                  >Reset this server</wt-button
                 >
               </div>`
-            : this.reloadLabel === undefined
-              ? nothing
-              : html`<div class="actions">
-                  <wt-button variant="primary" data-test="reload" @click=${() => this.reload()}
-                    >${this.reloadLabel}</wt-button
+            : this.canRetry
+              ? html`<div class="actions">
+                  <wt-button variant="primary" data-test="retry" @click=${() => this.#retry()}
+                    >Try again</wt-button
                   >
                 </div>`
+              : this.reloadLabel === undefined
+                ? nothing
+                : html`<div class="actions">
+                    <wt-button variant="primary" data-test="reload" @click=${() => this.reload()}
+                      >${this.reloadLabel}</wt-button
+                    >
+                  </div>`
         }
       `;
     }

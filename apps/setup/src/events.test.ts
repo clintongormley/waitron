@@ -3,6 +3,7 @@ import {
   dispatchAdoptRequested,
   dispatchConfigurationRequested,
   dispatchProvisionRequested,
+  dispatchResetRequested,
   dispatchSetupAdvance,
   dispatchSetupGoto,
   dispatchSetupPatch,
@@ -54,6 +55,14 @@ test("dispatchAdoptRequested fires a composed, bubbling adopt-requested wrapping
   };
   const e = capture("adopt-requested", (el) => dispatchAdoptRequested(el, body));
   expect(e.detail).toEqual({ body });
+  expect(e.bubbles).toBe(true);
+  expect(e.composed).toBe(true);
+});
+
+test("dispatchResetRequested fires a composed, bubbling reset-requested wrapping the login", () => {
+  const credential = { personId: "op-1", password: "correct horse" };
+  const e = capture("reset-requested", (el) => dispatchResetRequested(el, credential));
+  expect(e.detail).toEqual({ credential });
   expect(e.bubbles).toBe(true);
   expect(e.composed).toBe(true);
 });

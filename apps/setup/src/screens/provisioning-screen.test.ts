@@ -89,6 +89,30 @@ describe("setup-provisioning-screen", () => {
     expect(reload).toHaveBeenCalledOnce();
   });
 
+  it("offers Reset this server, which moves the wizard to the reset screen, when canReset is set", async () => {
+    const { el, host } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
+      message: "A previous attempt to join this server stopped partway.",
+      canReset: true,
+    });
+    const gotos: unknown[] = [];
+    host.addEventListener("setup-goto", (e) => gotos.push((e as CustomEvent).detail));
+    const reset = q(el, "[data-test=reset]")!;
+    expect(reset.textContent?.trim()).toBe("Reset this server");
+    expect(q(el, "[data-test=retry]")).toBeNull();
+    expect(q(el, "[data-test=reload]")).toBeNull();
+    reset.click();
+    expect(gotos).toEqual([{ screen: "reset" }]);
+  });
+
+  it("offers no reset action when canReset is not set", async () => {
+    const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
+      message: "This server has saved setup work for a different request.",
+      reloadLabel: "Reload",
+    });
+    expect(q(el, "[data-test=reset]")).toBeNull();
+    expect(q(el, "[data-test=reload]")).not.toBeNull();
+  });
+
   it("offers retry (not reload) for a retryable failure", async () => {
     const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
       message: "Provisioning failed. You can try again.",
