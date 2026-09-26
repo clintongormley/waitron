@@ -85,8 +85,8 @@ export class BackupSupervisor {
    * tearing down anything it opened — rather than start (or leave) a worker after a stop. */
   #stopped = false;
   /** True once the running sweep has stored an archive to ≥1 destination since the last reload — the
-   * in-process proof that an artifact exists under the CURRENT key. Set by the sweep's `onStored`
-   * callback, reset to false at the start of every `reload()`. `archiveUnderCurrentKey` is this flag. */
+   * in-process proof that an artifact exists under the CURRENT key. `archiveUnderCurrentKey` is this
+   * flag. */
   #storedUnderCurrentKey = false;
 
   constructor(deps: BackupSupervisorDeps) {
@@ -151,7 +151,9 @@ export class BackupSupervisor {
         outcomes: this.#deps.outcomes,
         signal: controller.signal,
         onStored: () => {
-          this.#storedUnderCurrentKey = true;
+          // A replaced sweep is aborted before `reload()` waits for it, and its in-flight tick can
+          // still store an archive under the OLD key during that wait.
+          if (!controller.signal.aborted) this.#storedUnderCurrentKey = true;
         },
         sleep: this.#deps.sleep ?? realSleep,
         now: this.#deps.now,
