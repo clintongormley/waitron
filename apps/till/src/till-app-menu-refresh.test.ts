@@ -1437,3 +1437,52 @@ describe("a round refused sold out whose offers could not be read again", () => 
     expect(roundStore(el).lines[0]!.blocked).toBe("unavailable");
   });
 });
+
+// ── Fix round 5 ──────────────────────────────────────────────────────────────────────────────────
+
+describe("a remembered round when another table's menu cannot be loaded", () => {
+  async function refusedThenOpen(tableC: typeof table, diningReadsFail: boolean) {
+    const soldOut = {
+      ...DINING,
+      offers: [offer("offer-lemonade", "Lemonade", "3.00", { available: false }), burgerOffer()],
+    };
+    const { el } = await mountApp(
+      tableStubs(soldOut, {
+        getTablesState: vi.fn().mockResolvedValue([table, tableC]),
+        addTabRound: vi.fn().mockRejectedValue(soldOutRefusal),
+      }),
+    );
+    await toTable(el);
+    await sendLemonadeRound(el);
+    const round = roundStore(el);
+    expect(round.lines[0]!.blocked).toBe("unavailable");
+
+    if (diningReadsFail)
+      api.listZoneOffers.mockImplementation((zoneId: string) =>
+        zoneId === "zone-dining"
+          ? Promise.reject({ code: "server.internal" })
+          : Promise.resolve(V1),
+      );
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    await flush(el);
+    emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: tableC.id,
+      hasOpenTab: true,
+    });
+    await flush(el);
+    return round;
+  }
+
+  it("keeps its mark when the other table's offers fail to load", async () => {
+    const round = await refusedThenOpen(tableB, true);
+    expect(round.lines[0]!.blocked).toBe("unavailable");
+  });
+
+  it("keeps its mark when the other table has no service zone", async () => {
+    const round = await refusedThenOpen(
+      { ...tableB, zoneId: null } as unknown as typeof table,
+      false,
+    );
+    expect(round.lines[0]!.blocked).toBe("unavailable");
+  });
+});

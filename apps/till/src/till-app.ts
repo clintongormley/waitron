@@ -1257,15 +1257,17 @@ export class TillApp extends LitElement {
     this.#evaluateBasket();
   }
 
+  /** With `loaded` false (a failed load, or a table with no zone) no remembered round is marked. */
   #loadTableOffers(
     zoneId: string | undefined,
     catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">,
+    loaded = true,
   ): void {
     this.#tableZoneId = zoneId;
-    this.#tableOffers.load(catalogue);
+    this.#tableOffers.load(catalogue, loaded);
     this.tableMenus = catalogue.menus;
     this.tableProducts = this.#tableOffers.products();
-    this.#markRounds(true);
+    if (loaded) this.#markRounds(true);
   }
 
   /** A round refused because a dish in it sold out is marked against the table's offers from now on,
@@ -2076,7 +2078,7 @@ export class TillApp extends LitElement {
         this.tableSelectedCatalogueId = defaultMenuId ?? this.#defaultCatalogueId(menus);
       } catch {
         if (offerRequest !== this.#tableOfferRequest) return;
-        this.#loadTableOffers(undefined, { offers: [], menus: [] });
+        this.#loadTableOffers(undefined, { offers: [], menus: [] }, false);
         this.tableSelectedCatalogueId = "";
         // Both are said: a canvas showing the floor and the order together keeps the previous
         // table's order on screen, so the failed open needs saying even beside a late change.
@@ -2086,7 +2088,7 @@ export class TillApp extends LitElement {
         return;
       }
     } else {
-      this.#loadTableOffers(undefined, { offers: [], menus: [] });
+      this.#loadTableOffers(undefined, { offers: [], menus: [] }, false);
       this.tableSelectedCatalogueId = "";
     }
     // `set-status` is keyed by table id, so it is remembered alongside the tab's order id.

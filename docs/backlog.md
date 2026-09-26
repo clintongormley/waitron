@@ -352,7 +352,12 @@ A table's round is also not marked by the poll's sold-out list, only when a send
 Follow-up: a round the waiter has built but not yet sent belongs to the order it was built on, so
 when a split moves the table screen to the split-off check, the round is not shown on the check
 (before this branch the screen's one round went with it); when a split answers, move the unsent
-round to the check.
+round to the check. Likewise a round built on a tab that is then merged into another tab stays
+under the merged-away tab's order id and can no longer be reached.
+Follow-up: every remembered round (one refused sold out or after a menu change) is marked again
+against the open table's menu, so opening a table in another service zone can mark another table's
+round wrongly or clear its mark. Remember each round's zone and re-mark only that zone's rounds, or
+keep rounds on the app, one per order.
 Follow-up: a round kept after a refused send survives leaving the table only on a canvas that shows
 the floor and the order side by side, because the table screen holds it; on the till's drill view
 and a handheld's separate order tab, leaving destroys the screen and the round. Keeping rounds on
