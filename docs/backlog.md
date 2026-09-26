@@ -2242,13 +2242,16 @@ address that answers is then asked for its paper sizes on port 631.
     the cash-up now counts money on the day it moves, in Task 14 (§9a), and a card refund is a
     durable attempt that survives an interrupted call (§6b), both added that day. Task 14, several
     payments against one bill, does not start until the amended design is approved.
-  - **A refund of an already-invoiced card sale can refund twice after a crash** (found by the owner
-    reviewing Task 0, 2026-09-26). `reverseViaStripe` (`packages/payments-stripe/src/reverse.ts`)
-    sends a fresh `randomUUID()` idempotency key on every call and records the refund only after the
-    call returns, so a crash between the two leaves no record and a retry refunds again. SumUp's
-    refund sends no key at all. Task 14 fixes this for refunds before the invoice only (design
-    §6b). **Next action:** apply §6b's durable-attempt rule to the post-invoice refund path when
-    that path is built or touched.
+  - **The card refund path records only after the provider call, with a fresh key each time**
+    (found by the owner reviewing Task 0, 2026-09-26). `reverseViaStripe`
+    (`packages/payments-stripe/src/reverse.ts`) sends a fresh `randomUUID()` idempotency key on
+    every call and writes `payment_refunds` only after the call returns, so a crash between the two
+    leaves no record, and a repeat would send a new key. SumUp's refund sends no key at all. No
+    product route refunds a card today; the only product caller is the reconciler's reversal of an
+    abandoned order's capture (`packages/payments-stripe/src/reconciler.ts`). Task 14 uses a
+    separate, durable path for refunds before the invoice (design §6b). **Next action:** give the
+    reconciler's reversal, and any post-invoice refund route when one is built, the same
+    durable-attempt rule.
   - **Task 1** (adjustment reasons and policies, a new module) is the one build task that can start
     now.
   - **Every other task waits for lane C's menus tasks that change the same order and till code**

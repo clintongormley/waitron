@@ -1814,9 +1814,14 @@ themselves:
   Its guard suites and the daily-close tests are in this task;
 - **durable card refunds** (design §6b): the refund row is written `pending` before the provider
   call; the call carries a key derived from the row; recovery by retry, by the loop and by M7b2's
-  manager action; a pending refund locks the whole bill and holds back the invoice. The payments
-  package's reverse path gains an optional caller-given idempotency key (a cross-package contract
-  change).
+  manager action; a pending refund locks the whole bill and holds back the invoice. **The
+  cross-package contract change** (design §6b): each card provider gains a refund call that does
+  NOT record (the existing `refund`, `partialRefund` and `reverseViaStripe` record in their own
+  transactions), taking a caller-given idempotency key and metadata; and a refund lookup by
+  payment. The bill path writes `payment_refunds` only in its own completion transaction.
+  - **The cash-up's node scope and the refund-only till** (design §9a): bill payments and refunds
+    are scoped through their bill's node, and the close forces a count for any till whose cash
+    takings are not zero.
 
 - [ ] **Step 0: Read the approved design** (`docs/superpowers/specs/2026-09-26-bill-payments-design.md`)
   and re-map the payment path after M7b2. Read Stripe's current documentation for how long it keeps
