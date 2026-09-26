@@ -382,15 +382,32 @@ export async function enqueueCorrectionSlips(
     tx,
     cfg,
     orderId,
-    items.map((item) => ({
-      workingOrderLineId: item.workingOrderLineId,
-      stationId: item.stationId,
-      quantity: thousandthsToDecimal(item.quantity),
-      wasStarted: item.wasStarted,
-    })),
+    items.map(toNoticeItem),
     kind === "VOID" ? "void" : "recalled",
   );
+  await printCorrectionSlips(tx, cfg, orderId, items, { kind });
+}
 
+function toNoticeItem(item: CorrectionItem) {
+  return {
+    workingOrderLineId: item.workingOrderLineId,
+    stationId: item.stationId,
+    quantity: thousandthsToDecimal(item.quantity),
+    wasStarted: item.wasStarted,
+  };
+}
+
+/** One slip per item, to every active printer on its station, headed with the order's CURRENT table. */
+async function printCorrectionSlips(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+  items: CorrectionItem[],
+  change:
+    | { kind: "VOID" | "RECALLED" }
+    | { kind: "MOVED"; movedFrom: { tableLabel: string | null; orderNumber: string } },
+  knownHeader?: { orderNumber: string; tableLabel: string | null },
+): Promise<void> {
   const stationIds = [...new Set(items.map((i) => i.stationId))];
   const mappingRows = await activePrinterMappings(tx, stationIds);
   if (mappingRows.length === 0) return;
@@ -398,7 +415,7 @@ export async function enqueueCorrectionSlips(
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
   const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
   const stationNames = await readStationNames(tx, stationIds);
-  const header = await readOrderHeader(tx, cfg, orderId);
+  const header = knownHeader ?? (await readOrderHeader(tx, cfg, orderId));
 
   const printersByStation = new Map<string, (KitchenPrinterLayout & { printerId: string })[]>();
   for (const mapping of mappingRows) {
@@ -423,7 +440,7 @@ export async function enqueueCorrectionSlips(
     for (const group of groupByLayout(attachedPrinters)) {
       const bytes = formatCorrectionSlip(
         {
-          kind,
+          ...change,
           stationName: stationNames.get(target.stationId)!,
           tableLabel: header.tableLabel,
           orderNumber: header.orderNumber,
@@ -437,6 +454,90 @@ export async function enqueueCorrectionSlips(
       }
     }
   }
+}
+
+/** An order's fired kitchen work, and the table and order number its correction slips name. */
+export interface SentWork {
+  tableLabel: string | null;
+  orderNumber: string;
+  ticketItemIds: ReadonlySet<string>;
+}
+
+/** Read before a path moves an order's lines, or the order itself, to another table. */
+export async function readSentWork(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+): Promise<SentWork> {
+  const fired = await tx
+    .select({ id: ticketItems.id })
+    .from(ticketItems)
+    .where(and(eq(ticketItems.workingOrderId, orderId), isNotNull(ticketItems.firedAt)));
+  if (fired.length === 0) return { tableLabel: null, orderNumber: "", ticketItemIds: new Set() };
+  return {
+    ...(await readOrderHeader(tx, cfg, orderId)),
+    ticketItemIds: new Set(fired.map((row) => row.id)),
+  };
+}
+
+/**
+ * Tell the kitchen of sent work that moved to another table. When the table a correction slip names
+ * for `toOrderId` now differs from the one `before` read, each of `before`'s fired items now on
+ * `toOrderId` gets a `moved` notice, at the quantity its ticket asks for, and a MOVED slip where its
+ * station has an active printer. `splitFrom` maps a ticket item a split made to the one it copied.
+ */
+export async function enqueueMovedSlips(
+  tx: Transaction,
+  cfg: TillConfig,
+  before: SentWork,
+  toOrderId: string,
+  splitFrom: ReadonlyMap<string, string> = new Map(),
+): Promise<void> {
+  if (before.ticketItemIds.size === 0) return;
+  const header = await readOrderHeader(tx, cfg, toOrderId);
+  if (header.tableLabel === before.tableLabel) return;
+
+  const fired = await tx
+    .select({
+      id: ticketItems.id,
+      workingOrderLineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
+      state: ticketItems.state,
+      quantity: sql<number>`coalesce(${ticketItems.quantity}, ${workingOrderLines.quantity})`,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .where(eq(ticketItems.workingOrderId, toOrderId))
+    .orderBy(workingOrderLines.lineNo);
+  const moved: CorrectionItem[] = fired
+    .filter((item) => before.ticketItemIds.has(splitFrom.get(item.id) ?? item.id))
+    .map((item) => ({
+      workingOrderLineId: item.workingOrderLineId,
+      stationId: item.stationId!,
+      quantity: item.quantity,
+      wasStarted: item.state === "preparing" || item.state === "ready",
+    }));
+  if (moved.length === 0) return;
+
+  await VENUE_SERVICE.recordKitchenNotices(
+    tx,
+    cfg,
+    toOrderId,
+    moved.map(toNoticeItem),
+    "moved",
+    header.tableLabel,
+  );
+  await printCorrectionSlips(
+    tx,
+    cfg,
+    toOrderId,
+    moved,
+    {
+      kind: "MOVED",
+      movedFrom: { tableLabel: before.tableLabel, orderNumber: before.orderNumber },
+    },
+    header,
+  );
 }
 
 /**

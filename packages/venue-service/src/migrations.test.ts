@@ -436,7 +436,7 @@ describe("the service settings and kitchen notices tables refuse what their rule
     ]);
   });
 
-  it("refuses a notice kind outside the vocabulary, a zero quantity and a missing station", async () => {
+  it("refuses a notice kind outside the vocabulary, a zero quantity, a missing station and a table on a notice that is not a move", async () => {
     await seedTenant(db);
     const [location] = await db
       .insert(locations)
@@ -476,5 +476,17 @@ describe("the service settings and kitchen notices tables refuse what their rule
       db.transaction((tx) => tx.execute(notice("void", 1000, randomUUID()))),
     );
     expect(isRefusal(missing, FOREIGN_KEY_VIOLATION)).toBe(true);
+
+    const movedTo = (kind: string) =>
+      sql`insert into kitchen_notices
+            (id, station_id, working_order_id, order_label, kind, line_name, quantity, moved_to,
+             created_at)
+          values (${randomUUID()}, ${station!.id}, ${orderId}, '#1', ${kind}, 'Burger', 1000,
+                  'Mesa 7', ${new Date().toISOString()})`;
+    // The control: a move names the table it went to.
+    await db.execute(movedTo("moved"));
+    const onVoid = await captureError(() => db.execute(movedTo("void")));
+    expect(isRefusal(onVoid, CHECK_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(onVoid)).toContain("kitchen_notices_moved_to_ck");
   });
 });

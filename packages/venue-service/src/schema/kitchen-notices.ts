@@ -15,7 +15,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 
-export const kitchenNoticeKind = enumType(["recalled", "void", "changed"]);
+export const kitchenNoticeKind = enumType(["recalled", "void", "changed", "moved"]);
 
 /**
  * A correction to work already sent to a station, kept until a cook acknowledges it. The line is
@@ -33,6 +33,8 @@ export const kitchenNotices = table(
     quantity: quantity("quantity").notNull(),
     note: label("note"),
     wasStarted: flag("was_started").notNull().default(false),
+    /** On a `moved` notice, the table the work now belongs to; null where it has none. */
+    movedTo: label("moved_to"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     acknowledgedAt: tsString("acknowledged_at"),
   },
@@ -52,5 +54,6 @@ export const kitchenNotices = table(
       .where(sql`${t.acknowledgedAt} is null`),
     check("kitchen_notices_kind_ck", enumCheck(t.kind)),
     check("kitchen_notices_quantity_ck", sql`${t.quantity} > 0`),
+    check("kitchen_notices_moved_to_ck", sql`${t.kind} = 'moved' or ${t.movedTo} is null`),
   ],
 );

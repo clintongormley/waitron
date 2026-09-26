@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f8e20b42-7587-46c7-a62f-30fcca2a8342",
+  "id": "393688a2-fccd-496d-81be-6513ccfce152",
   "prevId": "6a1f8d42-14d4-425d-a1bf-9bdb22e10349",
   "tables": {
     "department_hours": {
@@ -979,6 +979,13 @@
           "autoincrement": false,
           "default": false
         },
+        "moved_to": {
+          "name": "moved_to",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -1038,11 +1045,15 @@
       "checkConstraints": {
         "kitchen_notices_kind_ck": {
           "name": "kitchen_notices_kind_ck",
-          "value": "\"kitchen_notices\".\"kind\" in ('recalled', 'void', 'changed')"
+          "value": "\"kitchen_notices\".\"kind\" in ('recalled', 'void', 'changed', 'moved')"
         },
         "kitchen_notices_quantity_ck": {
           "name": "kitchen_notices_quantity_ck",
           "value": "\"kitchen_notices\".\"quantity\" > 0"
+        },
+        "kitchen_notices_moved_to_ck": {
+          "name": "kitchen_notices_moved_to_ck",
+          "value": "\"kitchen_notices\".\"kind\" = 'moved' or \"kitchen_notices\".\"moved_to\" is null"
         }
       }
     }

@@ -131,7 +131,11 @@ const EXPECTED: Record<
   kitchen_notices: {
     table: kitchenNotices,
     foreignKeys: ["kitchen_notices_station_fk", "kitchen_notices_order_fk"],
-    checks: ["kitchen_notices_kind_ck", "kitchen_notices_quantity_ck"],
+    checks: [
+      "kitchen_notices_kind_ck",
+      "kitchen_notices_quantity_ck",
+      "kitchen_notices_moved_to_ck",
+    ],
     indexes: ["kitchen_notices_open_idx"],
     uniqueConstraints: [],
     primaryKeys: [],

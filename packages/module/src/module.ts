@@ -266,7 +266,8 @@ export interface VenueServiceContribution {
       quantity: Decimal;
       wasStarted: boolean;
     }[],
-    kind: "recalled" | "void" | "changed",
+    kind: "recalled" | "void" | "changed" | "moved",
+    movedTo?: string | null,
   ): Promise<void>;
   /** A station's unacknowledged notices, oldest first: the newest fifty of the business day. */
   listStationNotices(
@@ -279,11 +280,12 @@ export interface VenueServiceContribution {
       stationId: string;
       workingOrderId: string;
       orderLabel: string;
-      kind: "recalled" | "void" | "changed";
+      kind: "recalled" | "void" | "changed" | "moved";
       lineName: string;
       quantity: Decimal;
       note: string | null;
       wasStarted: boolean;
+      movedTo: string | null;
       createdAt: string;
     }[]
   >;

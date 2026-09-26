@@ -33,6 +33,7 @@ export interface KitchenNotice {
   quantity: Decimal;
   note: string | null;
   wasStarted: boolean;
+  movedTo: string | null;
   createdAt: string;
 }
 
@@ -53,7 +54,7 @@ const INSERTION_ORDER = sql`"kitchen_notices"."rowid"`;
  * they stand now, so a void calls it BEFORE deleting the line. The order and every station must be
  * at the caller's location (`working_order.not_found`, `station.not_found`) and every quantity
  * positive (`quantity.invalid`). An item whose line is not on the order is the caller's fault and
- * throws a plain `Error`.
+ * throws a plain `Error`. `movedTo` is for a `moved` notice only.
  */
 export async function recordKitchenNotices(
   tx: Transaction,
@@ -61,6 +62,7 @@ export async function recordKitchenNotices(
   orderId: string,
   items: readonly KitchenNoticeItem[],
   kind: KitchenNoticeKind,
+  movedTo: string | null = null,
 ): Promise<void> {
   if (items.length === 0) return;
   const [order] = await tx
@@ -128,6 +130,7 @@ export async function recordKitchenNotices(
         quantity: quantities[index]!,
         note: line.note,
         wasStarted: item.wasStarted,
+        movedTo,
         createdAt,
       };
     }),
@@ -162,6 +165,7 @@ export async function listStationNotices(
       quantity: kitchenNotices.quantity,
       note: kitchenNotices.note,
       wasStarted: kitchenNotices.wasStarted,
+      movedTo: kitchenNotices.movedTo,
       createdAt: kitchenNotices.createdAt,
     })
     .from(kitchenNotices)

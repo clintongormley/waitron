@@ -674,8 +674,9 @@ export interface StationQueueCourse {
  * One order's lines at a station. `queuedAt` is that of the order's OLDEST line at this station — the
  * group's ordering key and the age-colouring anchor.
  */
-/** What a kitchen notice tells a station: a line recalled, voided or changed after it was sent. */
-export type KitchenNoticeKind = "recalled" | "void" | "changed";
+/** What a kitchen notice tells a station: a line recalled, voided, changed or moved to another
+ *  table after it was sent. */
+export type KitchenNoticeKind = "recalled" | "void" | "changed" | "moved";
 
 /**
  * A correction to work a station was sent, until a cook acknowledges it. `lineName` is the kitchen
@@ -691,6 +692,8 @@ export interface KitchenNotice {
   quantity: string;
   note: string | null;
   wasStarted: boolean;
+  /** On a `moved` notice, the table the work now belongs to. */
+  movedTo: string | null;
   createdAt: string;
 }
 

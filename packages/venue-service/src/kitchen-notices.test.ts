@@ -201,6 +201,7 @@ describe("recordKitchenNotices", () => {
         quantity: ONE,
         note: "no onions",
         wasStarted: true,
+        movedTo: null,
         createdAt: expect.any(String),
       },
     ]);
@@ -355,6 +356,43 @@ describe("recordKitchenNotices", () => {
     expect(notices.map((notice) => [notice.orderLabel, notice.kind])).toEqual([
       ["#7", "recalled"],
       ["#7", "changed"],
+    ]);
+  });
+
+  it("records a moved notice with the table the work moved to", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 9, null);
+    await inTx((tx) =>
+      recordKitchenNotices(
+        tx,
+        v.cfg,
+        order.orderId,
+        [
+          {
+            workingOrderLineId: order.burgerLineId,
+            stationId: v.grill,
+            quantity: ONE,
+            wasStarted: false,
+          },
+        ],
+        "moved",
+        "Mesa 7",
+      ),
+    );
+    expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([
+      {
+        id: expect.any(String),
+        stationId: v.grill,
+        workingOrderId: order.orderId,
+        orderLabel: "#9",
+        kind: "moved",
+        lineName: "BRGR",
+        quantity: ONE,
+        note: "no onions",
+        wasStarted: false,
+        movedTo: "Mesa 7",
+        createdAt: expect.any(String),
+      },
     ]);
   });
 

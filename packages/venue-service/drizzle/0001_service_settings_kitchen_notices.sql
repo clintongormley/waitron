@@ -14,12 +14,14 @@ CREATE TABLE `kitchen_notices` (
 	`quantity` integer NOT NULL,
 	`note` text,
 	`was_started` integer DEFAULT false NOT NULL,
+	`moved_to` text,
 	`created_at` text NOT NULL,
 	`acknowledged_at` text,
 	FOREIGN KEY (`station_id`) REFERENCES `kitchen_stations`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "kitchen_notices_kind_ck" CHECK("kitchen_notices"."kind" in ('recalled', 'void', 'changed')),
-	CONSTRAINT "kitchen_notices_quantity_ck" CHECK("kitchen_notices"."quantity" > 0)
+	CONSTRAINT "kitchen_notices_kind_ck" CHECK("kitchen_notices"."kind" in ('recalled', 'void', 'changed', 'moved')),
+	CONSTRAINT "kitchen_notices_quantity_ck" CHECK("kitchen_notices"."quantity" > 0),
+	CONSTRAINT "kitchen_notices_moved_to_ck" CHECK("kitchen_notices"."kind" = 'moved' or "kitchen_notices"."moved_to" is null)
 );
 --> statement-breakpoint
 CREATE INDEX `kitchen_notices_open_idx` ON `kitchen_notices` (`station_id`,`created_at`) WHERE "kitchen_notices"."acknowledged_at" is null;

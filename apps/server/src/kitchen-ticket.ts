@@ -116,16 +116,19 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: KitchenLayout
 
 /**
  * A slip for one already-fired line, telling the cook what changed without reprinting the order:
- * `VOID` (cancelled after firing) or `RECALLED` (pulled back to held).
+ * `VOID` (cancelled after firing), `RECALLED` (pulled back to held) or `MOVED` (now belongs to
+ * another table, `tableLabel`, where `movedFrom` names the table and order its ticket had).
  */
-export interface CorrectionSlip {
-  kind: "VOID" | "RECALLED";
+export type CorrectionSlip = {
   stationName: string;
   tableLabel: string | null;
   orderNumber: string;
   at: string;
   item: KitchenTicketItem;
-}
+} & (
+  | { kind: "VOID" | "RECALLED" }
+  | { kind: "MOVED"; movedFrom: { tableLabel: string | null; orderNumber: string } }
+);
 
 /** Reuses {@link emitItem}, so the item prints exactly as on the original ticket. */
 export function formatCorrectionSlip(slip: CorrectionSlip, layout: KitchenLayout): Uint8Array {
@@ -136,8 +139,18 @@ export function formatCorrectionSlip(slip: CorrectionSlip, layout: KitchenLayout
 
   b.line(`*** ${slip.kind} ***`);
   text(slip.stationName);
-  if (slip.tableLabel !== null) text(slip.tableLabel);
-  text(slip.orderNumber);
+  if (slip.kind === "MOVED") {
+    const { movedFrom } = slip;
+    text(`${movedFrom.tableLabel ?? "-"} -> ${slip.tableLabel ?? "-"}`);
+    text(
+      movedFrom.orderNumber === slip.orderNumber
+        ? slip.orderNumber
+        : `${movedFrom.orderNumber} -> ${slip.orderNumber}`,
+    );
+  } else {
+    if (slip.tableLabel !== null) text(slip.tableLabel);
+    text(slip.orderNumber);
+  }
   b.line(hhmm(new Date(slip.at)));
   emitItem(b, slip.item, layout);
 

@@ -95,7 +95,12 @@ import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
-import { enqueueCorrectionSlips, enqueueKitchenTickets } from "./kitchen-print.js";
+import {
+  enqueueCorrectionSlips,
+  enqueueKitchenTickets,
+  enqueueMovedSlips,
+  readSentWork,
+} from "./kitchen-print.js";
 import type { CorrectionItem } from "./kitchen-print.js";
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
@@ -1845,7 +1850,8 @@ async function assertServiceModesMatch(
 
 /**
  * Move lines (default all) from one OPEN tab to another at the destination's next `line_no`s. A move
- * NEVER re-prices, and keeps each line's id, modifier links and any fired ticket.
+ * NEVER re-prices, and keeps each line's id, modifier links and any fired ticket. Sent work that
+ * lands at another table is told to the kitchen ({@link enqueueMovedSlips}).
  */
 export async function moveTabLines(
   tx: Transaction,
@@ -1854,8 +1860,10 @@ export async function moveTabLines(
   toTabId: string,
   lineNos?: number[],
 ): Promise<void> {
+  const before = await readSentWork(tx, cfg, fromTabId);
   await moveOrderLines(tx, cfg, fromTabId, toTabId, lineNos, { modesChecked: false });
   await bumpRevision(tx, [fromTabId, toTabId]);
+  await enqueueMovedSlips(tx, cfg, before, toTabId);
 }
 
 /**
@@ -2077,6 +2085,7 @@ async function freeTablesCoveredBy(tx: Transaction, cfg: TillConfig, tabId: stri
 /**
  * Relocate a party to a free table: no line moves, no fiscal effect. Both tables are turned over, and
  * the clears are explicit because the settle trigger does not fire on a move (the tab stays open).
+ * The kitchen is told of the tab's sent work ({@link enqueueMovedSlips}).
  */
 export async function moveTab(
   tx: Transaction,
@@ -2103,6 +2112,7 @@ export async function moveTab(
   );
 
   const target = involved.find((table) => table.id === toTableId)!;
+  const before = await readSentWork(tx, cfg, tabId);
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, tabId);
   if (serviceContext !== null && target.zoneId !== null) {
     await VENUE_SERVICE.retargetOrderContext(tx, cfg, tabId, target.zoneId);
@@ -2113,6 +2123,7 @@ export async function moveTab(
     .update(diningTables)
     .set({ tabId, statusId: null })
     .where(eq(diningTables.id, toTableId));
+  await enqueueMovedSlips(tx, cfg, before, tabId);
 }
 
 /** Join an active, free table to an open tab. The existing tab lines remain in place. */
@@ -2160,7 +2171,8 @@ export async function joinTable(
  *
  * ORDER MATTERS: the re-point precedes the abandon. The `working_orders_clear_table_status` trigger
  * clears the status of tables pointing at an abandoned order, so abandoning first would clear it on a
- * table that stays joined.
+ * table that stays joined. The kitchen is told of moved sent work only after the re-point, which
+ * can change the table its slips name for `intoTab`.
  */
 export async function mergeTabs(
   tx: Transaction,
@@ -2186,7 +2198,9 @@ export async function mergeTabs(
   if (from === undefined || from.status !== "open") {
     throw new AppError("tab.not_open", { tabId: fromTabId });
   }
-  await moveTabLines(tx, cfg, fromTabId, intoTabId);
+  const before = await readSentWork(tx, cfg, fromTabId);
+  await moveOrderLines(tx, cfg, fromTabId, intoTabId, undefined, { modesChecked: false });
+  await bumpRevision(tx, [fromTabId, intoTabId]);
 
   // Before the abandon (see the docstring).
   if (options.freeSourceTable) {
@@ -2202,6 +2216,7 @@ export async function mergeTabs(
     .update(workingOrders)
     .set({ status: "abandoned" })
     .where(eq(workingOrders.id, fromTabId));
+  await enqueueMovedSlips(tx, cfg, before, intoTabId);
 }
 
 /**
@@ -2230,6 +2245,7 @@ function assertDistinctTransferLines(tabId: string, transfers: { lineNo: number 
 /**
  * Transfer selected lines between two open tabs. Whole-line transfers move the line; partial transfers
  * keep its stored unit prices and divide its quantity. The whole batch is validated before any move.
+ * Sent work that lands at another table is told to the kitchen ({@link enqueueMovedSlips}).
  */
 export async function transferLines(
   tx: Transaction,
@@ -2238,6 +2254,19 @@ export async function transferLines(
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
 ): Promise<void> {
+  const before = await readSentWork(tx, cfg, fromTabId);
+  const splitFrom = await carveBetweenTabs(tx, cfg, fromTabId, toTabId, transfers);
+  await enqueueMovedSlips(tx, cfg, before, toTabId, splitFrom);
+}
+
+/** {@link transferLines} without telling the kitchen; returns {@link carveOffLines}' split map. */
+async function carveBetweenTabs(
+  tx: Transaction,
+  cfg: TillConfig,
+  fromTabId: string,
+  toTabId: string,
+  transfers: { lineNo: number; quantity?: string }[],
+): Promise<ReadonlyMap<string, string>> {
   if (fromTabId === toTabId) {
     throw new AppError("tab.transfer_self", { tabId: fromTabId });
   }
@@ -2251,14 +2280,18 @@ export async function transferLines(
   // The only mode check on this path: `carveOffLines` makes none, whole lines or split.
   await assertServiceModesMatch(tx, cfg, fromTabId, toTabId);
 
-  await carveOffLines(tx, cfg, fromTabId, toTabId, transfers, { refuseHeld: false });
+  const splitFrom = await carveOffLines(tx, cfg, fromTabId, toTabId, transfers, {
+    refuseHeld: false,
+  });
   await bumpRevision(tx, [fromTabId, toTabId]);
+  return splitFrom;
 }
 
 /**
  * Carry whole lines and partial splits between two orders, keeping each unit's LOCKED prices and
  * CONSERVING quantity. It makes no open-order check and no service-mode check of its own: the
- * CALLER must already have made both. Every transfer is validated before anything moves.
+ * CALLER must already have made both. Every transfer is validated before anything moves. Returns each
+ * ticket item a split made, mapped to the one it was copied from.
  */
 async function carveOffLines(
   tx: Transaction,
@@ -2267,7 +2300,7 @@ async function carveOffLines(
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
   opts: { refuseHeld: boolean },
-): Promise<void> {
+): Promise<Map<string, string>> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
     .select({
@@ -2379,6 +2412,7 @@ async function carveOffLines(
     await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos, { modesChecked: true });
   }
 
+  const splitFrom = new Map<string, string>();
   // Split line numbers are allocated after the moves, so they do not collide with moved rows.
   if (partials.length > 0) {
     const [{ maxLineNo }] = await tx
@@ -2432,15 +2466,24 @@ async function carveOffLines(
       });
       await VENUE_SERVICE.copyLineContext(tx, cfg, line.id, splitLineId);
       if (line.ticketItemId !== null) {
-        await splitTicketItem(tx, line.ticketItemId, line.quantity, toTabId, splitLineId, quantity);
+        const splitTicketId = await splitTicketItem(
+          tx,
+          line.ticketItemId,
+          line.quantity,
+          toTabId,
+          splitLineId,
+          quantity,
+        );
+        splitFrom.set(splitTicketId, line.ticketItemId);
       }
     }
   }
+  return splitFrom;
 }
 
 /**
  * Give a split row its own copy of the source line's ticket item, asking for the part moved, and take
- * that part off the source's. The kitchen is told nothing: the total it makes is unchanged.
+ * that part off the source's; returns the copy's id. The total the kitchen makes is unchanged.
  */
 async function splitTicketItem(
   tx: Transaction,
@@ -2449,7 +2492,7 @@ async function splitTicketItem(
   toOrderId: string,
   splitLineId: string,
   moved: string,
-): Promise<void> {
+): Promise<string> {
   const [ticket] = await tx.select().from(ticketItems).where(eq(ticketItems.id, ticketItemId));
   const movedThousandths = stringToThousandths(moved);
   const asked = ticket!.quantity ?? decimalToThousandths(decimal(lineQuantity));
@@ -2457,13 +2500,15 @@ async function splitTicketItem(
     .update(ticketItems)
     .set({ quantity: asked - movedThousandths })
     .where(eq(ticketItems.id, ticketItemId));
+  const id = randomUUID();
   await tx.insert(ticketItems).values({
     ...ticket!,
-    id: randomUUID(),
+    id,
     workingOrderId: toOrderId,
     workingOrderLineId: splitLineId,
     quantity: movedThousandths,
   });
+  return id;
 }
 
 /**
@@ -2532,7 +2577,7 @@ export async function unjoinTable(
   }
 
   // If this is the SOLE table anchoring `tabId`, the repoint below would leave `tabId` anchorless and
-  // `transferLines` would refuse it with a misleading `tab.not_open`.
+  // `carveBetweenTabs` would refuse it with a misleading `tab.not_open`.
   const [otherAnchor] = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
@@ -2542,7 +2587,7 @@ export async function unjoinTable(
     throw new AppError("table.not_shared", { tableId, tabId });
   }
 
-  // Repointed before the move, so `newTabId` is a tab when `transferLines` checks it.
+  // Repointed before the move, so `newTabId` is a tab when `carveBetweenTabs` checks it.
   const newTabId = randomUUID();
   await createOpenOrder(tx, cfg, newTabId, [], null);
   await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, newTabId);
@@ -2550,7 +2595,12 @@ export async function unjoinTable(
     await VENUE_SERVICE.retargetOrderContext(tx, cfg, newTabId, table.zoneId);
   }
   await tx.update(diningTables).set({ tabId: newTabId }).where(eq(diningTables.id, tableId));
-  await transferLines(tx, cfg, tabId, newTabId, transfers);
+  // Read after the repoint, so the kitchen is told of every sent item the unjoin takes: a joined
+  // tab's slips name its lowest-id table (`readOrderHeader`), which need not be the one its tickets
+  // printed before the join.
+  const before = await readSentWork(tx, cfg, tabId);
+  const splitFrom = await carveBetweenTabs(tx, cfg, tabId, newTabId, transfers);
+  await enqueueMovedSlips(tx, cfg, before, newTabId, splitFrom);
   return { tabId: newTabId };
 }
 

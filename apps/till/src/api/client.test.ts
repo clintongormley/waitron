@@ -727,6 +727,7 @@ describe("TillApi", () => {
         quantity: "1",
         note: "sin gambas",
         wasStarted: true,
+        movedTo: null,
         createdAt: "2026-08-17T10:05:00.000Z",
       },
     ];
