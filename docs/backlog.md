@@ -81,57 +81,27 @@ specs/plans in `docs/superpowers/` hold the detail — do not paste receipts bac
 
 ## Cloud connection integration — 2026-09-24
 
-The Settings → Cloud services screen and local manager adapter now implement the
-[connection journey](developers/cloud-connection.md). Two real Waitron SQLite servers
-pass the Cloud repository's browser integration proof, including restart, a lost
-completion reply and swapped installation proof refusal. Cloud and local approvals
-remain separate; the local server checks live manager permission and serving-primary
-status before final signing. Installation keys stay in node-local state.
+Built: the Settings → Cloud services screen and local manager adapter implement the
+[connection journey](developers/cloud-connection.md); installation credentials use key-bound
+one-hour leases with a background refresh worker and owner/manager revocation; the local
+remote-access integration covers venue-owned staff certificate keys, CSR/install commands, live TLS
+reload and the minimal public availability endpoint; the serving-primary test installation schedules
+signed, encrypted daily snapshots and uploads them to Cloud; the setup wizard guides a fresh
+replacement through Cloud owner approval of one verified snapshot for a test venue; and the restored
+test-server Cloud replacement path has landed (#638). Observations are synthetic until service
+adapters exist. Cloud owns the two-server WireGuard/HAProxy proof, bot gate, DNS override, gateway
+replacement and revocation.
 
-Installation credentials now use key-bound one-hour leases, with a background refresh
-worker, cached status and explicit owner/manager revocation. Pending operations survive
-lost replies and restarts; the real two-server runner proves renewal and revocation
-recovery without changing fiscal authority. Both languages show service configuration
-and observed health separately. Observations are synthetic until service adapters exist.
+Open:
 
-The local remote-access integration now covers venue-owned staff certificate keys,
-CSR/install commands, live TLS reload and the minimal public availability endpoint.
-Cloud owns the two-server WireGuard/HAProxy proof, bot gate, DNS override, gateway
-replacement and revocation. Customer remote setup UI and production deployment remain
-open. Disposable backup fixtures now capture real SQLite archives and restore them
-through Waitron validation, migration and module hooks for Cloud's local two-venue
-proof. The backup fixture supplies normal on-disk identity/TLS state, proves source
-Cloud credentials and staff TLS keys are excluded, and drops old backup destination
-settings on the test replacement. The signed capture client now reserves upload authority,
-uploads directly with scoped credentials, and publishes exact snapshot metadata through Cloud.
-It renews the current control lease, rejects unbound replies and keeps upload secrets out
-of connection state. The serving-primary test installation now schedules daily snapshots,
-keeps one encrypted archive for exact retries across restart and assigns monthly retention
-to the first successful capture in each venue-local calendar month. The file uploader
-streams with a 14-minute/credential-expiry deadline and bounded retry backoff; shutdown
-cancellation does not record an outage. The Cloud local proof crashes after upload and
-restores the resumed archive without recapture. Production deployment remains open. Confirmed
-uploads retry publication without retransferring; an acknowledged
-object lost by storage waits until the 24-hour expiry before recapture. Capture requests
-waiting on the Cloud client can be cancelled. Shutdown waits for an in-progress local
-database copy or encryption step. Next: measure that shutdown latency, real venue uplink
-budgets and spool disk use, and stream
-archive assembly beyond its current in-memory 512 MiB format limit. Cloud documentation:
-`docs/authenticated-captures.md` in waitron-cloud.
-The setup wizard now guides a fresh replacement through Cloud owner approval of one verified
-snapshot for a test venue. The replacement keeps its request key private, downloads only the
-approved encrypted object with temporary read authority, rechecks approval, then stages it through
-the existing cold restore. Its completion report follows actual local restore. The managed path
-excludes old backup destination credentials; local-file restore remains available. The Cloud
-integration proof exercises owner approval, restart, lost replies and the real target restore.
-
-The restored test-server Cloud replacement path has landed (#638). You use the reported guided
-recovery request and its original approval link and code. The replacement stores fresh installation
-and WireGuard keys before contacting Cloud, then imports registration only after the original owner
-confirms it. The two-repository local proof covers replacement, a new capture, archive restore and
-refusal of the old installation's grant. Installing the new tunnel and TLS certificate remains an
-operator step. Continuous complete-server recovery, planned final-write handover and production
-recovery remain open. Cloud owns route placement and fencing in its backlog.
+- Customer remote setup UI and production deployment remain open.
+- Shutdown waits for an in-progress local database copy or encryption step. Next: measure that
+  shutdown latency, real venue uplink budgets and spool disk use, and stream archive assembly beyond
+  its current in-memory 512 MiB format limit. Cloud documentation: `docs/authenticated-captures.md`
+  in waitron-cloud.
+- After a Cloud replacement (#638), installing the new tunnel and TLS certificate remains an
+  operator step. Continuous complete-server recovery, planned final-write handover and production
+  recovery remain open. Cloud owns route placement and fencing in its backlog.
 
 The Litestream stream's sealed-state restore and activation still need integration with Cloud
 storage and owner recovery. Connected does
@@ -147,13 +117,8 @@ brainstorm → spec → plan → PR; fiscal-adjacent ones take owner sign-off at
 1. **The till does not load its menu until a manual refresh** (A4). Seen on the blank-box-to-selling
    run; the box and sale path worked.
 
-2. **Somewhere for things that went wrong to show up** (A5) — designed 2026-09-14; the `till.configure`
-   split it depended on has LANDED (#363). Branch 1, the alerts framework and recorded incidents, has
-   LANDED (#368): it shows recorded incidents such as a rejected filing or a payment drift in the
-   dashboard's bell and Alerts screen. Branch 2, the ongoing checks, has LANDED (#371): a silent print
-   agent, a fiscal outbox that has stopped or fallen behind, a missing tax certificate, print jobs
-   stuck at a printer, a low reader battery, and backups that are off, failing or stale now surface
-   too. What A5 still lacks is the pairing alert ("devices tried to join") and a standby that has
+2. **Somewhere for things that went wrong to show up** (A5) — the alerts framework and recorded
+   incidents LANDED (#363, #368), and the ongoing checks (#371). What A5 still lacks is the pairing alert ("devices tried to join") and a standby that has
    fallen behind; see A5.
 
 3. **Backups that leave the box** (B2) — S3 first, then Drive. With the mirror deferred, a bucket is a
@@ -193,8 +158,7 @@ menus Tasks 1–6, 7a, 7b, 7c, 7, 8, 9, then classification Task 3 — fifteen p
 task. Lane C runs it (`~/waitron-campaign-c`). **Classification Task 1 — LANDED #645
 (2026-09-25):** one main reporting category per product in a strict tree, flat labels
 (`labels`, `product_labels`, a Labels tab on the Categories screen), `product_categories` dropped,
-and a category delete that says where its products and subcategories go. A seeded venue built by the
-previous `main` upgraded cleanly (measured), so no reset is needed for it. Left open for the owner:
+and a category delete that says where its products and subcategories go. Left open for the owner:
 confirm the deletion defaults (spec §2.1: products and subcategories go to the parent; for a
 top-level category, products become Uncategorised and subcategories top-level); whether label names
 should ignore capitals (today "Alcoholic" and "alcoholic" can both exist — a small migration if so);
@@ -204,19 +168,13 @@ label routes and `?descendants=1` on a category's products have no dashboard cal
 every till filing path records each sale line's product, a variant's parent, its menu, its gross
 and its reporting chain and labels when the record is issued. `sale_lines.menu_version_id` stays
 null on every line until the menus plan's Task 7 (sell from the published version) fills it; that
-task wires it, because it lands second. Two follow-ups it leaves: the till shows "try again" when `sale_classification.invalid` refuses a sale (it happens only on corrupt category data, and retrying cannot succeed), so the code wants its own till message on the permanent-refusal list; and a card recovery refused that way leaves a captured payment unlinked until the catalogue is fixed, as recovery's existing below-locked-total refusal already does. The demo seed (`apps/server/scripts/demo-seed/seed-sales.ts`), the other scripts that call `recordSale` directly (`record-one-sale.ts`, `settle-invoice-first.ts`, `daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts` file sales without the issuance pass, so seeded demo lines carry no product id, classification or gross, and the spec's category reports would show every one as Not recorded — classification Task 3 cannot measure its reports on seeded sales until the seed records them. A dev venue that applied the branch's first migration name before it was regenerated as `0010_sale_line_classification` needs `wa-wt reset demo <name>`. **Menus Task 1 (sections), landed as #651 (2026-09-25):**
+task wires it, because it lands second.
+Two follow-ups it leaves: the till shows "try again" when `sale_classification.invalid` refuses a sale (it happens only on corrupt category data, and retrying cannot succeed), so the code wants its own till message on the permanent-refusal list; and a card recovery refused that way leaves a captured payment unlinked until the catalogue is fixed, as recovery's existing below-locked-total refusal already does. The demo seed (`apps/server/scripts/demo-seed/seed-sales.ts`), the other scripts that call `recordSale` directly (`record-one-sale.ts`, `settle-invoice-first.ts`, `daily-close-demo.ts`, `daily-close-z-demo.ts`, `modelo-303-demo.ts`) and `apps/server/src/fiscal-readiness-runner.ts` file sales without the issuance pass, so seeded demo lines carry no product id, classification or gross, and the spec's category reports would show every one as Not recorded — classification Task 3 cannot measure its reports on seeded sales until the seed records them.
+**Menus Task 1 (sections), landed as #651 (2026-09-25):**
 reusable, ordered, nestable sections (`sections`, `section_members`), with section and member
 routes under `/management-api/sections` (add, add several products, move, remove, replace in
 place, duplicate — optionally replacing in the same request — and usages), and four media triggers
-guarding a section's image. Menus do not use them yet; Task 3 does. Measured: a venue built and
-demo-seeded by `main` at `f19d556d4`, upgraded by this task through `applyMigrations`, applied one
-catalogue and one media migration and changed no row count in the fourteen tables compared, and the
-upgraded file refused a section naming a missing image — so this task needs no venue reset. The
-three things it left for Task 2 were done by Task 2 (#654): the
-image library links a section to its editor (`/manage/sections?section=<id>`),
-`docs/content-and-images.md` points at the new screen, and `SECTION_ROLES` moved into
-`packages/catalogue/src/schema/sections.ts` so `section-types.ts` joined the type-only list in
-`scripts/dashboard-browser-purity.test.ts`. A follow-up that is not Task 2's: each table that can hold a photo is
+guarding a section's image. A follow-up that is not Task 2's: each table that can hold a photo is
 named by hand in several places in `packages/media` (the triggers, `listImageUsages`,
 `countUsages`, the live-query dependencies, the `before` lists in `module.ts`, the `ImageUsage`
 unions), and only a comment keeps `countUsages` and `listImageUsages` in step; one list of
@@ -242,8 +200,7 @@ prices or counts.
 top-level list (a menu-owned `sections` row, pointed at by `menu_details`); `menu_sections` is
 dropped and `menu_items` rebuilt to hang off the menu; an offer carries every section path that
 reaches it (`placements`); the menu's own price, switch, variant prices and extras for a product
-reset when the menu stops reaching it. New routes: `GET /management-api/catalogues/:id/structure`
-and `POST /management-api/catalogues/:id/items`. Left by #659, none blocking: the image library
+reset when the menu stops reaching it. Left by #659, none blocking: the image library
 links a menu-owned section's photo to the sections screen, though nothing puts a photo on one yet;
 `DELETE /management-api/catalogues/:id/items/:itemId` (`deactivateMenuItem`) still switches a
 product off but the dashboard no longer calls it, since `PATCH` now carries `active` (and since menus
@@ -253,13 +210,9 @@ three routes and their tests stay until someone removes them); and
 today, so it bites only when something does. A product reached through a section offers no extras
 list; that was already so before #659 (checked at `002b79f69`).
 **Menus Task 4 (the Menus screen), landed as #664 (2026-09-26):** **Products and recipes → Menus**
-(`/manage/menus`) lists, creates and renames menus, and a menu's Structure tab
-(`/manage/menus/menu/<id>/view/structure`) shows its whole tree, edits any list in it (add, remove,
-reorder by arrow keys, create a section in place, add several products at once) with a breadcrumb
-and where else a section is used, and offers "Duplicate and use the copy here" as one request
-(`replaceIn`). Creating a product on the Products screen now ends with an optional "Add to menus"
-step (`apps/dashboard/src/widgets/add-to-menus.ts`); a failed placement leaves the product saved and
-says which places failed. Left, none blocking: `POST /management-api/catalogues` accepts a blank
+(`/manage/menus`) lists, creates and renames menus; a menu's Structure tab shows and edits its whole
+tree; and creating a product on the Products screen ends with an optional "Add to menus" step.
+Left, none blocking: `POST /management-api/catalogues` accepts a blank
 name (read, not run; the rename route refuses one), so the screen's own check is the only guard on
 create; "New section here" asks only for the internal name, so a section's customer names, image
 and colour are still edited on the Sections screen; which section is being edited is not in the
@@ -272,60 +225,33 @@ on a phone the tree sits between it and the list it names; if someone else exact
 while it is still saving, the move's answer is shown over their change until the menu is next read
 (stated in a comment at the site); and no accessibility test covers that message while it shows.
 **Menus Task 5 (menu prices, and the old Menus tab goes), landed as #670 (2026-09-26):** a menu's
-Prices tab (`/manage/menus/menu/<id>/view/prices`) lists each product the menu reaches once, with
-where it appears, its main category, its own price, this menu's price and the price that results,
-filtered by search, section, main category and "overridden only" (which also counts a variant's
-price set on this menu); its settings window sets or clears
-this menu's price ("Use product price"), switches the product on or off for this menu, and sets each
-variant's price and whether it is offered here. The read is `GET /management-api/catalogues/:id/prices`
-(`menuPrices`, `packages/catalogue/src/operations.ts`). Venue operations loses its Menus tab; its
-Zones tab still assigns menus to zones, and an old `…/venue-operations/view/menus` address opens the
-Status tab. `wt-data-table` filters may now match a list of values per row, and `wt-input` gains an
-optional always-shown `hint` line its input is described by. No migration. Left, none blocking:
+Prices tab (`/manage/menus/menu/<id>/view/prices`) lists each product the menu reaches once and
+sets or clears this menu's price, switches the product on or off for this menu, and sets each
+variant's price and whether it is offered here; Venue operations loses its Menus tab.
+Left, none blocking:
 removing a product's last placement on the Structure tab clears its menu price and variant settings
 with no warning, where the old tab asked first (the owner decided 2026-09-26 that none is needed);
 the main-category filter offers every category, not only those on the menu; and the product
 editor's help lines, and the price window's variant help sentence (`menu_prices.variants_help`), are
 still paragraphs beside their inputs rather than `wt-input`'s `hint`, so they are not linked to their
-inputs. (#670's other two open points — a variant-only product showing the product's own price, and
-"Overridden only" disagreeing with a "None" menu price — were settled by #680, below.)
+inputs.
 **The Prices tab shows variants, price ranges and a choice of columns, landed as #680 (2026-09-26,
-the owner's answers to #670's FYI):** each product's Active variants are rows under it (a tree,
-closed until opened), each with its own product price, this menu's price and the price charged; a
-product sold only as its variants shows ranges — product price over all its variants, charged price
-over the OFFERED ones, or "No variant offered" — never the product's own price; its Menu price reads
-"Variant overrides" when only variants carry a menu price, agreeing with "Overridden only". Both
-price displays exist: the three separate columns, and #541's struck-out "Price on this menu" column,
-hidden by default. `wt-data-table` gains a column chooser (`choosable: "shown" | "hidden"` on a
-column, `columnsLabel`, a `wt-columns-change` event; a hidden column's filter stays drawn and still
-filters, a hidden column stops sorting) remembered per browser in `localStorage` under
-`<viewKey>:columns`, and a `rowToggleLabel` for per-row expand/collapse names. No migration. Left,
+the owner's answers to #670's FYI):** each product's Active variants are rows under it, a product
+sold only as its variants shows price ranges, #541's struck-out "Price on this menu" column is kept
+but hidden by default, and `wt-data-table` gains a column chooser remembered per browser in
+`localStorage` under `<viewKey>:columns`. Left,
 none blocking: the stored key uses a colon (`waitron.menus.prices:columns`) where every other stored
 key uses dots or dashes — cheap to change until a venue is live; a variant row is announced by its
 name alone ("Glass"), not with its product's, relying on the tree's level; and, from reading only, a
 Columns panel wider than a very narrow screen would not shrink to fit, and is not re-placed if the
 window is resized while it is open.
-**Menus Task 6 (publishing), landed as #677 (2026-09-26):** a menu can be published. Publishing
-freezes the menu's working state (structure, names, prices, photos, variants, extras, options,
-allergens and diet) as a numbered version in `menu_versions`, which can never be changed or deleted,
-and points `menu_publications` at it; availability, VAT class, course and reporting category are left
-out, so changing them marks no menu as changed (`packages/catalogue/src/menu-document.ts`,
-`menu-publication.ts`). The Menus list shows each menu's status (under its name at phone width) and a
-Preview tab words each change with where it came from and publishes the one menu; routes
-`GET /management-api/catalogues/status`, `GET …/:id/status`, `GET …/:id/preview`, `POST …/:id/publish`
-(`menu.changed_since_preview`, 409, when the preview is out of date). A photo a live version shows
-cannot be deleted or renamed (media migration `0003`). The money formatter moved into
-`@waitron/shared`, used by the dashboard and the till. No fiscal file changed; the golden fingerprint
-test and `inmutabilidad` pass unedited. The migrations only add tables and triggers, and a venue main
-had migrated and demo-seeded upgraded cleanly (measured); a dev venue that applied an earlier copy of
-this branch's media `0003` lacks its insert check and needs `wa-wt reset demo <name>`. **Tills still
-sell from the working state until menus Task 7.** **M6c** (#705, 2026-09-26) closed two of the gaps this
-left and added the owner's second Preview view: an extras item's photo (a variant's borrowed from its
-parent) is in the frozen copy, so changing it flags every menu offering it and a live version's
-extras photos cannot be deleted; a deleted (switched-off) product leaves the frozen copy's extras
-lists, so deleting it flags its menus, shown as the dish's "extras" change; and the Preview tab shows
-the whole proposed menu below the changes, read-only in the Structure tab's tree, from the copy the
-preview answer now carries. A version published before M6c has no photo on its extras items, so each
+**Menus Task 6 (publishing), landed as #677 (2026-09-26):** a menu can be published: publishing
+freezes the menu's working state as a numbered version in `menu_versions`, which can never be
+changed or deleted, and points `menu_publications` at it; the Menus list shows each menu's status and
+a Preview tab words each change and publishes the one menu. **Tills still
+sell from the working state until menus Task 7.** **M6c** (#705, 2026-09-26): an extras item's photo
+is in the frozen copy, so changing it flags every menu offering it; deleting a product flags its
+menus; and the Preview tab shows the whole proposed menu below the changes. A version published before M6c has no photo on its extras items, so each
 menu with extras shows unpublished changes until it is published again. Left, none blocking: after a
 publish the editor's heading shows the browser's clock until the next read, because the publish
 answer carries no time; a re-enabled product's "added" change can name its section as the
@@ -340,26 +266,22 @@ Also seen once while landing it: `apps/dashboard/src/widgets/variant-form.test.t
 touch) failed in one local dashboard coverage run and passed three times alone — an intermittent
 failure that needs its cause found and fixed, not a re-run.
 **Menus Task 7a (VAT is resolved when the invoice record is issued), landed as #683 (2026-09-26):**
-every filing path for a stored order — a held order, tab or split check paid at the till, a card
-payment's pricing before the reader, card recovery, invoice-first placing and ticket-then-pay
-collect — now files each line at the rate of its product's CURRENT VAT class (a variant with no
-class of its own reads its parent's; an extras line reads its own product's), read in the same query
-as the lines; the customer pays the same gross. Walk-up sales were already current. Reprints and
-replays price the stored lines and never read the catalogue. The resolved rate and net unit price
+every filing path for a stored order now files each line at the rate of its product's CURRENT VAT
+class (a variant with no class of its own reads its parent's; an extras line reads its own
+product's); the customer pays the same gross. The resolved rate and net unit price
 are written back onto `working_order_lines` only while the order is OPEN: a placed order (a
 ticket-then-pay collect, or a card payment of a placed order) keeps its stored rate on the line,
 because `working_order_lines_require_open_parent_update` refuses an update of a line whose order
 is not open. Nothing prints or files that stored rate — receipt lines are gross only and a reprint's
 VAT breakdown comes from the filed record — so this is an owner FYI, not a defect: allowing the
-write would mean loosening that trigger in a core migration. No migration; golden fingerprint and
-`inmutabilidad` unedited. Still open: asesor Q26 (the adviser confirming the rule); the new test
+write would mean loosening that trigger in a core migration. Still open: asesor Q26 (the adviser confirming the rule); the new test
 file `apps/server/src/vat-at-issuance.test.ts` copies about 150 lines of setup from
 `issuance-pass.test.ts`, which a shared helper could absorb.
 **Menus Task 7b landed (#696, 2026-09-26): editing a saved order — the server rules.** An edit keeps
 each line's locked price and prices only what it adds; every change to work the kitchen has is a
-recall or a void recorded as a kitchen notice (and printed where a printer is mapped); a line records
-when it was sent; an order carries a revision, so an edit made from an older copy is refused; and a
-second device cannot change an order while a card payment of it runs (D22). Owner decisions applied:
+recall or a void recorded as a kitchen notice; an order carries a revision, so an edit made from an
+older copy is refused; and a second device cannot change an order while a card payment of it runs
+(D22). Owner decisions applied:
 a partial split takes its own copy of the kitchen ticket and a started line may be split (D10 and
 Review Focus 6 overturned); moving sent work to another table prints a MOVED slip and records a
 `moved` notice; held kitchen work cannot be split onto a check (`tab.split_held_line`). The core
@@ -367,40 +289,24 @@ migrations add five columns and replace the `working_orders_enforce_transition` 
 venue-service adds `kitchen_notices` and `service_settings`; the upgrade succeeds, but
 rows written before it misbehave (a dish sent before the upgrade counts as unsent, an extra saved
 before it blocks a one-line edit) — the PR has the measured table; settle open orders or reset
-before upgrading. Golden fingerprint and `inmutabilidad` unedited. Still open: showing notices on
+before upgrading. Still open: showing notices on
 the kitchen screen (menus Task 7c); the `changed` notice kind is declared but nothing writes it.
 **M7b2 landed (#702, 2026-09-26): a manager can clear a card payment a crash left running.** The
-Payments screen lists open orders locked by a card payment nothing is finishing any more, and a
-"Check with the card provider" button asks the provider for the payment's own record. If the card
-was charged, the sale is filed once through the existing recovery path. If it was not, the payment
-is marked failed (cancelled at Stripe first, when Stripe holds a PaymentIntent for it), and the
-order is unlocked unless another of its card payments is still unresolved. If the provider is unreachable
-or unclear, the action refuses and the order stays locked. Stripe Terminal now records its
-PaymentIntent id before the reader is asked to charge, and the Stripe key gains a suffix after a
-cancellation so the order can be paid by card again. Each resolution is recorded, with the
-manager, in the new append-only `payment_resolutions` table. The upgrade adds only that table; it
-was measured, and existing payment rows came through unchanged. Golden fingerprint and
-`inmutabilidad` unedited. What it leaves open is under "What M7b2 left open" in the payments
-section.
+Payments screen lists open orders locked by a card payment nothing is finishing any more, and "Check
+with the card provider" files the sale once if the card was charged, marks the payment failed and
+unlocks the order if it was not, and refuses if the provider is unreachable or unclear; each
+resolution is recorded in the append-only `payment_resolutions` table. What it leaves open is under
+"What M7b2 left open" in the payments section.
 Next in the lane (was M7b2): 7c, then 7 (M6c landed as #705). The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
 adds tables or columns only and measures its own upgrade. Every dev venue then needs
 `wa-wt reset demo <name>`, and the owner's box should be wiped once after menus Task 7 lands.
-Menus Task 3's upgrade, measured on a venue seeded at `002b79f69`: with no open order it applies
-but silently empties `menu_item_variant_overrides`, `menu_item_extra_lists` and
-`menu_item_extra_items`, and leaves every menu with no top-level list, so no menu offers anything
-and `readMenuStructure` refuses with `catalogue.not_found`; with an open order line pointing at a
-menu item it is refused with `FOREIGN KEY constraint failed` and rolls back. Do not upgrade the
-owner's box mid-plan.
+Do not upgrade the owner's box mid-plan.
 A note Task 2 leaves for Task 3: the image library links every `section` use of a photo to
 `/manage/sections?section=<id>`, but that use can also be a list a menu owns, which the sections
-screen does not list and so does nothing for. The writes of `sections` that
-`git grep -nP "(insert|update)\((schema\.)?sections\b|into sections|update sections|INTO sections" -- apps packages scripts deploy bench ':!*.test.ts' ':!*.md'`
-finds, none of them puts a photo on a menu's own list: in `packages/catalogue/src/sections.ts` the
-inserts create library sections and the update refuses any other, and none of the writes outside
-that file sets an image. So when Task 3 lets a menu's list carry a photo, link it to the menu editor or
+screen does not list and so does nothing for. So when Task 3 lets a menu's list carry a photo, link it to the menu editor or
 narrow the link to library sections.
 
 **A joined tab's kitchen slips can name a table its ticket did not print.** Correction and MOVED
@@ -467,14 +373,10 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
 
 1. **Overview and Sales** — `dashboard-overview-screen.ts`, `dashboard-sales-screen.ts`.
 2. **Catalogue and product depth** — `catalogue-screen.ts` and `purchases-screen.ts`. The owner-requested
-   Products overhaul is specified as four parallel builds: Units, Modifiers, Categories and Products.
-   Categories has landed (#340, see below), with [integration notes](developers/product-categories.md),
-   and Modifiers has landed (#341, see below), with its
-   [integration contract](developers/modifiers.md). Units has landed too (#342, see below), and
-   Products has now landed as well (#345, see below), which completes the overhaul: all four builds
-   are in. Products integrated the three supporting sections into one replacement editor, withdrew
-   recipe authoring from the dashboard, carried variants through menus and saved sales, and added
-   [operator guidance](products.md). One question is left hanging over it: the existing zero-rate class
+   Products overhaul has landed in all four of its builds: Categories (#340,
+   [integration notes](developers/product-categories.md)), Modifiers (#341,
+   [integration contract](developers/modifiers.md)), Units (#342) and Products (#345,
+   [operator guidance](products.md)). One question is left hanging over it: the existing zero-rate class
    is shown as **No tax (0%)**, and asesor Q20 asks whether any intended case legally needs N1 or N2
    instead — to be answered before the first live filing, not before more building. See the
    [checkpoint](superpowers/plans/2026-09-13-product-editor-checkpoint.md),
@@ -500,11 +402,9 @@ shared components. Whether they follow in this pass or later is open — decide 
 component rules harden around the dashboard alone.
 
 **Content languages and the image library — LANDED #339 (2026-09-12).** The operator picks which
-languages product and menu text is written in and which one is the fallback (receipt languages stay a
-separate setting); photos live in a shared library with translated names, alt text, search and reuse,
-and a picture cannot be deleted while a product uses it. Image bytes and metadata moved into a new
-mandatory `packages/media` module, so backup, restore, replication and configuration transfer carry
-them like any other module's tables.
+languages product and menu text is written in and which one is the fallback; photos live in a shared
+library (the mandatory `packages/media` module) with translated names, alt text, search and reuse,
+and a picture cannot be deleted while a product uses it.
 [Image-library design](superpowers/specs/2026-09-12-image-library-design.md),
 [content-language design](superpowers/specs/2026-09-12-content-languages-design.md),
 [operator guide](content-and-images.md).
@@ -522,10 +422,9 @@ What it left open:
   choosing a language are built and tested; the customer-facing online ordering surface they were
   built for does not exist. This is a prerequisite that landed early, not a half-finished feature.
 
-**Follow-up — the image library was unusable as shipped, fixed in #344 (2026-09-13).** Three faults in
-`packages/media` were fixed: the screen returned a 500 on its first (empty-search) load; alt text was
-wrongly required both to save a picture and to switch the default content language; and the upload and
-edit dialog now shows a preview of the chosen picture.
+**Follow-up — the image library was unusable as shipped, fixed in #344 (2026-09-13).** The screen
+no longer returns a 500 on its first load, alt text is optional, and the upload and edit dialog
+shows a preview of the chosen picture.
 
 What that leaves open:
 
@@ -546,13 +445,10 @@ What that leaves open:
   the TEST-SHAPE half is still unwritten — a matrix that varies two things separately and never
   crosses them proves less than it looks. That is a different rule and wants its own line.
 
-**Photos are shrunk on upload (slice 2, Task 0) — LANDED #543 (2026-09-24).** Every upload is resized to at most 1600 pixels on its longer side, turned upright,
-stripped of its metadata (GPS position included) and stored as WebP at quality 80 by `prepareImage`
-(`packages/media/src/prepare.ts`), which the upload route calls before it opens the write
-transaction (`packages/media/src/routes.ts`). Measured on ten real food photos by the slice-2 plan's
-Task 0 drafter, a stored photo averages 171 KiB, so 5,000 take about 0.87 GB instead of about 18 GB.
-sharp does the work; every server bundle leaves it out (`--external:sharp`) and the box image
-carries it in `/app/node_modules`.
+**Photos are shrunk on upload (slice 2, Task 0) — LANDED #543 (2026-09-24).** Every upload is
+resized to at most 1600 pixels on its longer side, turned upright, stripped of its metadata (GPS
+position included) and stored as WebP at quality 80 by `prepareImage`
+(`packages/media/src/prepare.ts`).
 
 What it leaves open:
 
@@ -570,11 +466,10 @@ What it leaves open:
   notices and a written source offer in `/app/third-party/` (`deploy/third-party/`). The legal
   advisor is asked to confirm it (`docs/compliance/action-plan.md`, 2026-09-23).
 
-**Product categories — LANDED #340 (2026-09-13).** A product can belong to several categories without
-its sales being double-counted; at most one membership is primary and names the order line and the
-kitchen route. Categories get their own page at `/manage/categories` with translation, a picture, a
-parent, and a delete that previews what will change and then proceeds rather than refusing. Labels on
-past orders stay readable. [Design](superpowers/specs/2026-09-12-product-categories-design.md),
+**Product categories — LANDED #340 (2026-09-13).** Categories get their own page at
+`/manage/categories` with translation, a picture, a parent, and a delete that previews what will
+change and then proceeds rather than refusing; labels on past orders stay readable.
+[Design](superpowers/specs/2026-09-12-product-categories-design.md),
 [API and integration guide](developers/product-categories.md). _2026-09-25: the several-categories
 membership is gone. Sales classification Task 1 gives each product one main reporting category in a
 strict tree, plus any number of flat labels, and drops `product_categories`; the guide above is
@@ -582,19 +477,6 @@ rewritten for it._
 
 What it left open:
 
-- **A populated database cannot be migrated onto this — it has to be reset.** Core migration
-  `0020_category_names` drops the old text `categories.name` column and recreates it as required JSON,
-  with no translation and no backfill. A disposable probe ran the real SQL against a category that had
-  a text name and it failed with `23502` (a required column left empty), which is the expected and
-  documented outcome. So any preproduction or development database with categories in it goes through
-  the normal reset workflow (`wa-wt reset demo` or `wa-wt reset onboarding`), not a plain migrate.
-  **This happened, on 2026-09-13** — the next person to start the dev stack got a dead server, a raw
-  driver stack trace, and a dashboard that answered a sign-in attempt with nothing more than its
-  generic "Something went wrong, try again". Boot now names the reset as a conditional remedy
-  instead of leaving the stack trace to decode
-  (`apps/server/src/dev-migration-hint.ts`, `WAITRON_ENV=dev` only); the mechanism and the limits of
-  what that line can claim are in [the workflow guide](developers/workflow-guide.md). The underlying
-  trap is unchanged: **a populated development database still has to be reset by hand.**
 - **Category authoring serialises across the whole database, and nobody has measured what that
   costs.** Hierarchy edits, main-category changes and category deletion take no lock of their own
   since the storage switch: `withTransaction` admits one write transaction per venue file, which is
@@ -621,82 +503,42 @@ What it left open:
   looks feasible and would catch this whole kind of bug; nobody has tried to write it.
 
 **Categories screen rebuilt — LANDED #353 (2026-09-14).** `/manage/categories` became a table
-switchable between a tree and a flat list with a name filter, a per-category colour shown as a swatch
-and lozenge, and a per-category products window with bulk add. Reporting category became optional and
-delete previews then proceeds; what it left open is recorded in the #340 list above.
+switchable between a tree and a flat list with a name filter, a per-category colour swatch and a
+per-category products window with bulk add; what it left open is recorded in the #340 list above.
 [Design](superpowers/specs/2026-09-13-categories-screen-design.md),
 [plan](superpowers/plans/2026-09-13-categories-screen.md).
 
-**Category management reworked — LANDED #362 (2026-09-14).** The categories screen, its form, the
-product-categories editor and the products dialog share one layout with searchable `wt-combobox`
-pickers and reader-language names, and the shared `wt-data-table` gained opt-in search, per-column
-filters, a starting sort, filtered-tree parent rows and a remembered per-tab view. What it left open is
-recorded in the #340 and A7 lists. [Design](superpowers/specs/2026-09-14-category-overhaul-design.md),
+**Category management reworked — LANDED #362 (2026-09-14).** The category screens share one layout
+with searchable `wt-combobox` pickers, and the shared `wt-data-table` gained opt-in search,
+per-column filters, a starting sort, filtered-tree parent rows and a remembered per-tab view. What it
+left open is recorded in the #340 and A7 lists.
+[Design](superpowers/specs/2026-09-14-category-overhaul-design.md),
 [plan](superpowers/plans/2026-09-14-category-overhaul.md).
 
-**Category colour and membership layout — LANDED #383 (2026-09-16).** Two presentation fixes on the
-categories screen: the colour picker now lays its twenty-four swatches out as hue columns so no hue
-splits across a line break (the palette order is now pinned by a test), and a product's other-category
-tags collapse to a localized count once there are four or more.
+**Category colour and membership layout — LANDED #383 (2026-09-16).** The colour picker lays its
+twenty-four swatches out as hue columns so no hue splits across a line break.
 
-What it left open was a fixed preview limit of three other-category tags, and a collapsed count that
-said how many categories a product had but not which. _2026-09-25: both are gone with the
-several-categories membership (sales classification Task 1)._
-
-**Product modifiers — LANDED #341 (2026-09-13).** Modifiers (free text, extras, options and a plain
-yes/no) are written once and attached to many products, and the till asks for them when the dish is
-ordered. What the customer chose is stored on the order line as a fact, so a held order, a fiscal
-invoice, the kitchen ticket and the receipt all show the same answers even after the modifier is later
-edited. [Design](superpowers/specs/2026-09-12-product-modifiers-design.md),
+**Product modifiers — LANDED #341 (2026-09-13); replaced by Extras and Options below.** What the
+customer chose is stored on the order line as a fact, so a held order, a fiscal invoice, the kitchen
+ticket and the receipt all show the same answers even after the modifier is later edited.
+[Design](superpowers/specs/2026-09-12-product-modifiers-design.md),
 [integration contract](developers/modifiers.md).
 
 What it left open:
 
-- **Catalogue rows created before this migration keep their old caps, and nothing upgrades them.**
-  The old per-group `max_select` limit does not become the new `maxTotalQuantity` cap. Following the
-  repo's no-backfill rule, the fix is to recreate disposable pre-production catalogue data under the
-  new schema rather than to write a data migration. Unlike Categories' migration this one does not
-  force a database reset by itself — it is the old rows that will look wrong, not the schema.
 - **The Units build has to keep its own quantity and precision checks.** Modifier validation runs
   independently of the product's selling unit, and extras multiply by the parent quantity even when
   that quantity is fractional. **Next action:** whoever builds Units adds its validator alongside this
   one and does not gate either on `pricingUnit === "each"` — that shortcut would silently skip
   modifier validation for anything not sold by the each.
-- **The independent review did not cover the browser and rendering paths.** Claude's run-it reviewer
-  worked to a bounded brief and said so; what it did run found a real repricing bug — reordering
-  unchanged selections on a held order repriced an extra from 1.00 to 9.00 — which was fixed by
-  comparing saved answers by value rather than by their order in the payload. The browser, receipt and
-  kitchen-rendering evidence comes from the build's own focused tests plus CI's package suites, not
-  from a second pair of eyes. Worth knowing before anyone treats those paths as double-checked.
 
 **Modifiers become Extras and Options — DONE, all thirteen pull requests landed (2026-09-21).** The
 single modifier idea was split into Extras (reusable product lists, each pick becoming its own sale
 line) and Options (reusable label lists, saved as a note on the dish line), composed through one
 ordered attachment list per product. Landed across #412, #436, #445, #449, #452, #456, #462, #465,
-#469, #471, #476, #478 and #480; Task 13 (#480) deleted the legacy option-group tables, routes,
-widgets and fields, leaving the shipped error codes registered and unthrown. Design:
+#469, #471, #476, #478 and #480. Design:
 [one product model](superpowers/specs/2026-09-18-one-product-model-design.md); plan:
 [modifiers to extras and options](superpowers/plans/2026-09-18-modifiers-extras-options.md).
-
-**THE PART OF IT THE PLAN DID NOT ANTICIPATE, and the shape worth carrying: dropping a CORE table
-that a MODULE baseline references cannot be done by appending a migration to each set.**
-`packages/migrations/src/apply.ts` applies sets in manifest order, core first, so a core migration
-dropping `option_groups` runs BEFORE the catalogue baseline creates
-`menu_item_option_groups` with a foreign key into it. Measured rather than reasoned about: with a
-drop appended to each set, the virgin migrate fails inside the migrator with
-`relation "public.option_groups" does not exist`, SQLSTATE `42P01`. What works is a drop appended to
-the CORE set and the CATALOGUE set REGENERATED, so its baseline never names the core tables at all —
-the same move `#378` made for this same set. Every module set is migrated from a virgin database
-only, so a regeneration is safe there in a way it would not be for core.
-
-Two consequences of that regeneration, both stated so nobody meets them cold. A module set's schema
-version is its journal entry count (`packages/migrations/src/schema-version.ts`), so the catalogue
-set goes from thirteen entries to two — a dev database migrated before this reads as AHEAD of the
-image until `wa-wt reset demo <name>` rebuilds it, and nothing live is affected because Waitron is
-pre-production. And about fifteen comments across `packages/catalogue/src` and its tests cited a
-catalogue migration by number and line; the numbers no longer exist and the pointers were rewritten
-with the change. The alternative — hand-editing the baseline instead — was weighed and is worse: it
-reaches four SQL files and thirteen snapshots, and a hand-edited snapshot fails silently.
 
 **What branch 1 deliberately did NOT build, both recorded in the design rather than forgotten:**
 
@@ -726,25 +568,14 @@ reaches four SQL files and thirteen snapshots, and a hand-edited snapshot fails 
 - **A menu item created today offers its product's options lists and none of its extras lists, and
   the function that would publish one has NO non-test caller.** Options need no publication, so they
   always travel; an extras list reaches an offer only through `setMenuItemExtraLists`
-  (`packages/catalogue/src/extras.ts`), and there is no management route to it. The receipt, run on
-  this branch:
-  `grep -rn setMenuItemExtraLists packages apps --exclude-dir=coverage | grep -v "\.test\.ts"`
-  returns the function's own definition and the comments that name it, and no call at all — every
-  call is in a test suite, in `packages/catalogue` and in `apps/server` alike. The
-  `--exclude-dir=coverage` is not decoration: on a checkout where a coverage run has left its report
-  behind, the same command without it also returns the gitignored HTML under
-  `packages/catalogue/coverage/`, which is neither source nor a caller. `createMenuItem`
+  (`packages/catalogue/src/extras.ts`), and there is no management route to it. `createMenuItem`
   (`packages/catalogue/src/operations.ts`) used to auto-seed a new offer with the product's active
   option groups, and Task 13 removed that with the old model; the new model has no twin, and did not
-  have one before either. So the publication half of the extras feature is reachable only from
-  tests, while both its tables carry full CRUD for the application role —
-  `GRANT SELECT, INSERT, UPDATE, DELETE ON "menu_item_extra_lists", "menu_item_extra_items" TO app_user`
-  in `packages/catalogue/drizzle/0001_catalogue_baseline_sql.sql` — which is the wider version of
-  the open `UPDATE` question recorded further down this file. Pinned by "omits an extras list the
+  have one before either. Pinned by "omits an extras list the
   offer does not publish, and keeps the options list"
   (`packages/catalogue/src/offered-modifiers.test.ts`). **Next action:** decide whether a new menu
   item should inherit its product's extras lists by default, or whether publication stays explicit
-  and a route is built for it — and settle the grants in the same decision rather than separately.
+  and a route is built for it.
 
 **Branch 2, variants as products — LANDED** (spec
 `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §4, §15;
@@ -753,39 +584,21 @@ behind a `parent_id`; the separate `product_variants` and `menu_item_variants` t
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
 Task 7 #545, Task 8 #551, and Task 9 #556. How the model works now is in
 [products.md](developers/products.md), under _Variants_. The open items each task left are in its
-paragraph below. **Two of its tasks cannot upgrade a venue that holds data**
-(measured): Task 1's migration aborts outright, and Task 4's either reports success while emptying
-the menus' extras publications, their per-item extras prices and the variant price overrides, or,
-once any order has been rung up from a menu offer (paid orders keep their lines), fails and the box
-does not boot. So every dev venue needs
-`wa-wt reset demo <name>` after each, and a provisioned box should be wiped once, after Task 4.
-Task 3's migration drops the per-menu variant table, `menu_item_variants`
-(`packages/catalogue/drizzle/0001_drop_menu_item_variants.sql`), and from Task 3 on nothing but
-the configuration transfer read the old `product_variants` table, so variants a venue stored there
-no longer appear: a dev venue needs `wa-wt reset demo <name>` to see variants again. Task 9 drops
-that table.
+paragraph below. **Two of its tasks (1 and 4) cannot upgrade a venue that holds data**, so every dev
+venue needs `wa-wt reset demo <name>` after each, and a provisioned box should be wiped once, after
+Task 4, the owner's home box included.
 
-**Task 1 LANDED as #511 (2026-09-23): every dev venue now needs `wa-wt reset demo <name>`, and no
-provisioned box takes the image without a wipe — the owner's home box included.** Migrating a
-venue `main` had already migrated aborts at the rebuild of `products` with
-`error in trigger products_media_image_fk_parent_delete: no such table: main.products` and rolls
-back, so the box does not boot until it is wiped (re-run 2026-09-23 through `applyMigrations`).
-What it left open, each already written into the plan's later tasks: the kitchen station routing,
-preparation routes and the kitchen screen's allergens and dietary labels still read a variant
-line's raw columns (Task 5, dish and extras — done by #537); and republishing a variant's allergens and diet must
-not write values that hide its parent's (Task 6 — done: `republishOverlays`,
-`packages/catalogue/src/operations.ts`, stores a variant's column blank when it has no overlay of
-its own for it, so the variant reads its parent's). Deliberately left: the counts of `products`'
+**Task 1 LANDED as #511: every dev venue now needs `wa-wt reset demo <name>`, and no
+provisioned box takes the image without a wipe — the owner's home box included.** Deliberately
+left: the counts of `products`'
 columns, keys and checks in the comment of the shipped `packages/media/drizzle/0001_image_references.sql`
 are stale, because editing a shipped migration changes the hash `packages/migrations/src/journal-hashes.ts`
 compares. The same file's paragraph saying `product_variants.image` is deliberately not guarded is
 stale too: since Task 3 a variant's photo is `products.image`, which that file's triggers guard. It
 stays unedited for the same reason.
 
-**Task 2 LANDED as #517 (2026-09-23): a product's one on/off switch is now two — Active (it exists)
-and Available (sold out for now).** Delete makes a product Inactive, the products list gained a
-Status filter that starts on Active, and the till offers a product or an extra only when it is
-both. Its migration adds a column and needs no reset of its own. What it left open:
+**Task 2 LANDED as #517: a product's one on/off switch is now two — Active (it exists)
+and Available (sold out for now).** What it left open:
 - **Reopening a held order on the till drops a sold-out item** — an extra the menu no longer lists,
   and every extra of a dish that has sold out — with a "no longer available" message. The same
   already happened to an Inactive product. `docs/superpowers/specs/2026-09-20-service-ordering-and-billing-design.md`
@@ -809,24 +622,9 @@ both. Its migration adds a column and needs no reset of its own. What it left op
   that name travels in the `unit.in_use` error's details, so renaming it changes an error's shape.
   **Next action:** rename the field to `active` and head the column "Status", in one change.
 
-**Task 3 LANDED as #528 (2026-09-23): variants are stored as products and follow their product onto
-every menu.** A menu now stores something for a variant only to override its price or switch it off
-there (`menu_item_variant_overrides`), and the price charged is the most specific one set: the
-variant's price on that menu, then its own, then its product's price on that menu. Every dev venue
-needs `wa-wt reset demo <name>` (see above). What it left open:
-- **A removed variant can be reached again, and its photo cleared (resolved by Task 7).**
-  Removing a variant makes it Inactive and keeps its row, photo included. Since Task 7 a removed
-  variant is shown behind the status filter in the products list and in its product's variants
-  section, and its own page opens from either; that page's Remove image clears the variant's photo,
-  after which the image library no longer counts it for that variant (`countUsages`,
-  `packages/media/src/images.ts`, counts a variant's photo only through the variant's own
-  `products` row). The translation-gap report skips
-  Inactive variants (`packages/catalogue/src/content-languages.ts`). A variant's customer name is
-  checked against the venue's default content language only when the variant is saved Active —
-  through its product's save (`setProductVariants`, `packages/catalogue/src/variants.ts`) and
-  through its own page (`saveProductEditor`, `packages/catalogue/src/product-editor.ts`) alike — so
-  removing a variant is never refused because its own customer name lacks that language, and
-  restoring one is checked.
+**Task 3 LANDED as #528: variants are stored as products and follow their product onto
+every menu.** What it left open:
+- **A removed variant can be reached again, and its photo cleared (resolved by Task 7, #545).**
 - **A variant's id is refused by the management routes that read or write a product by id**, each
   answering as it does for an id naming no product (the recipe route answers `product.not_found`) —
   except the product editor's two routes, which since Task 6 are a variant's own page. The
@@ -842,10 +640,7 @@ needs `wa-wt reset demo <name>` (see above). What it left open:
   `assignProductUnit` and `deactivateProduct` are left without one: a variant's own page gives it
   its own unit through the first, and the second (which nothing outside the tests calls) makes a row
   Inactive, which a variant may be (V6).
-- **DONE (2026-09-26, menus Task 5, #670): a menu price is checked by the
-  server's rule.** The menu offer editor, whose pattern accepted a price such as `007.5` the server
-  then refused, went with the old Menus tab; the Prices tab's settings window checks prices with
-  `isProductPrice` (`packages/catalogue/src/modifier-limits.ts`).
+- **DONE (menus Task 5, #670): a menu price is checked by the server's rule** (`isProductPrice`).
 - **A variant's price may be left blank on its own page and in its product's variants list, and a
   blank variant is charged its product's price** (on a menu, a price that menu sets for the variant
   or its product comes first).
@@ -866,65 +661,24 @@ needs `wa-wt reset demo <name>` (see above). What it left open:
   **Next action:** decide whether the units screen should list variants, and how to label that
   target for them.
 
-**Task 4 LANDED as #532 (2026-09-23): a blank menu price follows the product's own price.** A menu row's price
-(`menu_items.gross_price`) may be left empty, meaning the product's own price — the last step of the
-price chain, for every product on a menu, with variants or without. The menu screen shows the
-product's price as the empty field's hint and saves an emptied field as blank. **It cannot upgrade a
-venue that holds data, and part of the damage is silent.** Making the column nullable rebuilds
-`menu_items` (`packages/catalogue/drizzle/0003_menu_price_nullable.sql`), and inside the migrator's
-transaction foreign keys stay on, so dropping the old table acts on every row pointing at it.
-Measured 2026-09-23 through `applyMigrations` on Node v26.7.0, on a venue migrated with `main`'s
-catalogue set and holding one menu offer with an extras publication, one per-item extras override
-and one variant price override, then migrated with this branch's sets: with no order line naming the
-offer the upgrade reports success and empties `menu_item_extra_lists`, `menu_item_extra_items` and
-`menu_item_variant_overrides` (1 → 0 each, no error); with one `working_line_contexts` row naming
-the offer it fails at `DROP TABLE menu_items` with `FOREIGN KEY constraint failed` and rolls back,
-so the box does not boot. The control — the same row naming a menu item that does not exist — let
-the upgrade through. A paid order keeps that row (measured 2026-09-23: after a completed walk-up
-cash sale from a menu offer, its `working_line_contexts` row was still there on a `settled` order),
-so any venue that has sold from a menu fails to boot, not only one with an order still open. A
-fresh database migrates cleanly. So **every dev venue needs
-`wa-wt reset demo <name>`, and any provisioned box must be wiped**, the owner's home box included,
-now that it has landed. What it left open, both put to the owner in #532 — now both closed:
+**Task 4 LANDED as #532: a blank menu price follows the product's own price.** It cannot upgrade a
+venue that holds data (see above). What it left open, both put to the owner in #532 — now both closed:
 - **Creating a menu offer with no price field at all is still refused** (`management.request_invalid`);
   only an explicit `null` means "blank, charge the product's own price". **DECIDED 2026-09-23 by the
   owner: keep refusing** — _"we don't want to confuse 0.00 with `""`"_, so a missing field is never read
   as blank or as zero. Pinned by a test in `apps/server/src/catalogue-api.test.ts`.
-- **DONE (2026-09-24, #541, lane C's A11b): the menu's offers list marks a blank price.** The owner's
-  answer: show the product's own price struck out beside a menu price that differs from it, and grey
-  out a price that is blank and following the product. A menu price equal to the product's own shows
-  plainly. The struck and greyed prices carry hidden text for a screen reader ("Was", "(product's own
-  price)"), and the column still sorts by the price charged
-  (`packages/venue-service/src/dashboard/venue-operations-screen.ts`, `#offerPrice`). The cell reads
-  the product's own price from the product list the screen already loads, not from the offers
-  response: an offer is always a top-level product, which owns its price. Where that list lacks the
-  product, a price the menu sets shows plainly, as before; a blank price is still greyed, since the
-  offer itself records that its price is blank. The edit form is unchanged.
-  (2026-09-26: that offers list went with menus Task 5. The Prices tab shows the product's own
-  price, this menu's price and the resulting price in separate columns; since #680 the struck-out
-  display is also there, as a "Price on this menu" column a manager can choose to show.)
+- **DONE (#541, lane C's A11b): the menu's offers list marks a blank price.** That list went with
+  menus Task 5; since #680 the Prices tab can show the struck-out display as a "Price on this menu"
+  column.
   Two follow-ups #541's review raised, not taken, neither blocking: (1) the dashboard's product list
   shows a variant's blank price as its parent's with no marking
   (`apps/dashboard/src/widgets/product-list.ts`, the `price` column's cell) — whether it should grey
   it the way the offers list now does is the owner's call; (2) the rule that hides screen-reader
   text is copied into each widget that needs it (`grep -rln "clip: rect(0, 0, 0, 0)"` over
   `apps/*/src` and `packages/*/src` lists them); a shared one in `packages/ui-core/src/base-styles.ts` would be an optional tidy-up.
-The till's "+€" label on a variant, priced from the parent's resolved price, was Task 5's work and
-landed with #537.
 
-**Task 5 LANDED as #537 (2026-09-23): a variant is sold as the product it is.** The order line's
-product is now the variant itself, priced and taxed at the variant's own values (a value it leaves
-blank is its parent's), and printed under the variant's own names on the receipt, kitchen ticket,
-basket, tab and expo queue — a blank customer or kitchen name falls back to the variant's own staff
-name, never the parent's. The sale line still keeps the parent's names beside the variant's, so
-a report can group by parent (Task 8). A product with an Active variant rung up from a menu without one is
-refused (`product.variant_required`). On the till, every Active, Available product on a menu gets a
-button whether or not it is sold alone; tapping one with variants opens a picker that lists only
-the variants, with the first available one preselected and a "+€1.50"-style label on a variant
-priced differently from its parent. A variant line takes its parent's preparation routes, and its
-parent's kitchen station, course, allergens and dietary labels unless the variant sets its own. The two `variant_id` columns (`working_order_lines`, `sale_lines`) are dropped with
-`ALTER TABLE … DROP COLUMN` (`packages/db/drizzle/0006_drop_line_variant_id.sql`), which keeps the
-rows: **this task needs no venue reset of its own.** What it left open:
+**Task 5 LANDED as #537: a variant is sold as the product it is.** The order line's
+product is now the variant itself. What it left open:
 - **A held order brought back to the till shows a variant line with its PARENT's VAT class,
   category and allergens.** The till reads them from the offer snapshot saved in
   `working_line_contexts`, which is the parent's. Filing is unaffected — the price and rate billed
@@ -932,55 +686,22 @@ rows: **this task needs no venue reset of its own.** What it left open:
   class, category and allergens, so a retrieved line can now show values that differ from what was
   billed. **Next action (a follow-up, not one of the plan's tasks):** save or read the chosen
   variant's values for a retrieved line.
-- **DONE 2026-09-26 (menus plan Task 7b, #696):** `carveOffLines` now
-  refuses a quantity finer than the line's `unit_precision` with `tab.transfer_quantity_invalid`
-  (`assertQuantityPrecision`). Pinned through a transfer, which shares `carveOffLines` with the
-  split: "throws tab.transfer_quantity_invalid for a fraction of a line counted in whole units"
-  (`apps/server/src/transfer-lines.test.ts`). The entry as it stood:
-  **The server lets a tab split take a fraction of a whole-unit line.** `carveOffLines`
-  (`apps/server/src/working-order.ts`) checks only that the quantity is above zero and no more than
-  the line's. I believe this predates the branch: #537 leaves that check untouched. The till now
-  offers only whole numbers for such a line, using the line's frozen unit precision. **Next
-  action:** refuse a quantity finer than the line's `unit_precision` on the server too.
-- **DONE (Task 9): on a venue with no service zones a parent with Active variants is refused.**
-  The owner's answer to lane B's question Q3, as the supervising watcher relayed it: _"a parent
-  product should never be for sale as itself — you should always have to pick a variant. This
-  doesn't depend on zones."_ And: _"a zone is required."_ At the time the
-  till's three line-carrying routes priced by bare `productId` on such a venue, a path that cannot
-  name a variant, so #556 made `priceOrderLines` (`apps/server/src/working-order.ts`) refuse the
-  parent there with `product.variant_required`, Available variants or not. That path is gone since
-  B4 (the next bullet), so the refusal now happens only on a zone's menu offer. A product whose
-  variants are all Inactive still sells as itself. The same refusal covers an extras pick of such a
-  product (a pick of a variant still sells), and a raised quantity on a held line whose product, or
-  one of whose extras, has gained an Active variant since it was parked (`updateHeldOrder`).
-  The till's extras lists no
-  longer offer such a product (`readExtraProducts`, `packages/catalogue/src/offered-modifiers.ts`).
-  Pinned by the "a parent with Active variants is never sold as itself, as an extra or on a raise"
-  cases and "refuses a parent with Active variants rung up alone, and sells one whose variants are
-  all Inactive as itself" in `apps/server/src/working-order.test.ts`, "sells an extras pick of a
-  product whose only variant is Inactive" in `apps/server/src/till-api.zone-required.test.ts`, and
-  "an extra that is a parent with Active variants" in
-  `packages/catalogue/src/offered-modifiers.test.ts`. `GET /api/products`
+- **DONE (menus plan Task 7b, #696):** a tab split or transfer refuses a quantity finer than the
+  line's `unit_precision` (`tab.transfer_quantity_invalid`).
+- **DONE (Task 9): on a venue with no service zones a parent with Active variants is refused**
+  (#556); since B4 the refusal happens on a zone's menu offer, and covers an extras pick and a
+  raised held-line quantity too. The owner's rule (lane B's question Q3): _"a parent product should never be for sale as
+  itself — you should always have to pick a variant. This doesn't depend on zones."_ `GET /api/products`
   (`listAvailableProducts`) still lists such a parent; nothing in `apps/till` outside its tests
   calls it (the till builds its buttons from zone offers).
-- **DONE (B4, 2026-09-24): a venue with no service zone sells nothing.** The path that priced a
-  line by bare `productId` is gone. See "A sale needs a zone" below Task 9 for what now happens and
-  what it left open.
+- **DONE (B4, #571): a venue with no service zone sells nothing.** See "A sale needs a zone" below
+  Task 9.
 - **`@waitron/fiscal-verifactu`'s tests now depend on `@waitron/catalogue`** (its VAT-per-variant
   test runs the real `selectMenuVariant`), so a catalogue change also runs fiscal-verifactu's test
   shard in CI. Kept deliberately; worth revisiting only if that shard's time becomes a problem.
 
-**Task 6 LANDED as #539 (2026-09-24): a variant has its own product page on the server.**
-`GET`/`PUT /management-api/products/:id/editor` now accept a variant's id. The editor value carries
-`parentId` and `inherited` (the parent's effective values, allergens as published); a variant's own
-fields come back as stored, so a blank reads blank and a cleared field goes back to following its
-parent. A variant may not change its parent, carry variants of its own, or carry extras or options
-lists. Its published allergens and diet stay blank unless it overrides them, so it reads its
-parent's; a parent's recipe or diet change republishes the variants that do override. The "is this
-a product in its own right" check that was written out at each product-by-id route is now one
-shared function, and every route other than the editor still refuses a variant's id as before. No
-migration: **no venue reset needed.** The dashboard screen for a variant's page is Task 7 (#545). What it
-left open, besides the bullets above that it updated:
+**Task 6 LANDED as #539: a variant has its own product page on the server.**
+`GET`/`PUT /management-api/products/:id/editor` now accept a variant's id. What it left open:
 - **Reassigning a unit's products to another real unit (not Each) does not update their stored
   pricing unit** — for top-level products as well as variants. Found by the review; I believe it
   predates Task 6, not checked with `git blame`. **Next action:** check whether anything still reads
@@ -994,27 +715,13 @@ left open, besides the bullets above that it updated:
   reconsider on their own; nothing waits on them. Task 9's cleanup removes the old variant table
   and its shapes, not the editor's types, so it does not cover them.
 
-**Task 7 LANDED as #545 (2026-09-24): a variant has its own page in the dashboard.** The products
-list shows each variant under its product with its own name, and the price and categories it is
-sold and reported under, plus a note of its VAT where that differs from its product's (the list
-still has no VAT column, as #387 decided). A removed variant is kept Inactive, shown behind the
-list's Status filter and the product editor's "Show variants" filter, and can be restored from
-either; the editor's save body now carries each variant's `active`, so a save never brings one back
-by accident. A variant's own page shows its product's values as hints in every field it leaves
-blank (never in its three names), and has no Modifiers or Variants section; adding the first
-variant adds one row, with no "Regular". A variant can be opened from its product's variants table
-(held while the product has unsaved changes) and from the image library. On a narrow table the
-variants' prices move under their names and the price column is hidden. Shared primitives changed
-with it: `wt-price-input` gained a `placeholder`, `wt-input`'s and `wt-price-input`'s hints use the
-muted text colour, `wt-switch` gained `hide-label`, and `wt-dialog` no longer lets a late close
-report shut a dialog that has been reopened. No migration: **no venue reset needed.** Task 8
-(#551) follows the list below. What Task 7 leaves open:
+**Task 7 LANDED as #545: a variant has its own page in the dashboard.** What Task 7 leaves open:
 - **The product list shows "—" for a variant's allergens**, because the list's data carries none for
   a variant (`ListedVariant`, `packages/catalogue/src/product-types.ts`). **Next action:** decide
   whether the list should read a variant's effective allergens, and add them to that read if so.
 - **Each variants-table row's Available switch is named only "Available"** to a screen reader, not
-  with the variant's name (`apps/dashboard/src/widgets/variant-table.ts`). `main` at `5add727d7`
-  already labelled it the same way. **Next action:** name the switch after its variant.
+  with the variant's name (`apps/dashboard/src/widgets/variant-table.ts`). **Next action:** name the
+  switch after its variant.
 - **Not yet looked at on a phone (390px wide):** a variant's name may sit a few pixels low in its
   product-list row. **Next action:** open it at that width, in both themes, and look. (The variants
   table's unit select, once cut to "Unid" in Spanish at that width, is no longer shown there: a
@@ -1057,17 +764,8 @@ report shut a dialog that has been reopened. No migration: **no venue reset need
   screen sends it to `apps/dashboard/src/dashboard-app.ts`, so pick names that cannot reach that
   handler by mistake.
 
-**Task 8 LANDED as #551 (2026-09-24): top sellers now roll variants up under
-their parent.** The top-sellers list on the dashboard's overview and sales screens groups lines under
-the parent's name and ranks them by quantity sold — "Wine by the glass", 5 sold, 24.50 — and shows each variant sold under it on its
-own indented row beneath, under the variant's own name ("Wine 175", then "Wine 125", biggest seller
-first). A product's own figures count every line sold under its name, including any sold as the
-product itself with no variant, and the list's length counts products, not variants.
-Previously each variant was ranked as a separate seller and there was no product total. Each variant
-row's heading cell also holds the product's name as visually hidden text, so its text reads "Wine by
-the glass, Wine 175". The filed sale is unchanged: the
-report reads the two names every sale line already records. No migration: **no venue reset
-needed.** What Task 8 leaves open:
+**Task 8 LANDED as #551: top sellers now roll variants up under
+their parent.** What Task 8 leaves open:
 - **The overview's top-sellers table can reach into its card's padding at desktop width** when a
   variant has a long one-word name and the figures run to five digits. Measured 2026-09-24 at
   1280px: with "Café con leche pequeño descafeinado" at 1000.000 / 10000.00 the table ended 12px
@@ -1075,31 +773,12 @@ needed.** What Task 8 leaves open:
   with no variant rows, it ended at the padding's edge. **Next action:** decide whether a long name
   in that table may wrap mid-word.
 
-**Task 9 LANDED as #556 (2026-09-24): the old variant table is gone.** The catalogue
-migration `packages/catalogue/drizzle/0004_drop_product_variants.sql` drops `product_variants`, which
-since Task 3 only the configuration transfer still copied; that copy and `resolveMenuVariant`, a
-reader no product path called, went with it.
-A dev venue's old rows in that table go with the drop; the migration needs no reset of its own —
-measured 2026-09-24 through `applyMigrations` on Node v26.7.0: a venue migrated through catalogue
-`0003` and holding one product with one `product_variants` row took the new migration with no
-error, the table was gone and the product row kept. A
-product with Active variants is now refused on the till's plain product path, as an extras pick on
-either path, and on a raised held line (the Task 5 bullet above). (2026-09-24: B4 has since removed
-the plain product path; see "A sale needs a zone" below.) What Task 9 leaves open:
-- **DONE (#575, owner decision 2026-09-24): paying a held order bills its lines as parked, and the till
-  shows what it bills.** A line, or an extras pick, whose product gained an Active variant after
-  the order was parked is billed as parked: the cash and card pays price a retrieved order from its
-  stored lines (`priceStoredOrder`, `apps/server/src/working-order.ts`), following the 2026-09-20
-  service spec §10 (existing work is not cancelled); only a raised quantity is refused. On the till,
-  retrieving the order keeps an extra that no list offers any
-  more in the basket, marked "Not offered now" and counted in the total, and the banner says it is
-  still charged (`held.extra_not_offered`); a retrieved line whose offer the till no longer lists
-  carries the same mark. The first edit takes the extra off the basket, because the till cannot
-  send it and the server re-prices an edited order without it — pinned by "bills a parked extra
-  that gained an Active variant until an edit omits it" (`apps/server/src/till-sale.test.ts`).
-  (2026-09-26, #696: paying now refuses an unsent extra that can no
-  longer be sold, so the banner no longer says the extra is charged; it says paying is refused in
-  that case.)
+**Task 9 LANDED as #556: the old variant table is gone.** The catalogue
+migration `packages/catalogue/drizzle/0004_drop_product_variants.sql` drops `product_variants`, and
+needs no reset of its own. What Task 9 leaves open:
+- **DONE (#575): paying a held order bills its lines as parked, and the till shows what it bills.**
+  Only a raised quantity is refused; since #696 paying refuses an unsent extra that can no longer be
+  sold.
 - **Retrieving a held order reads the counter's CURRENT zone offer, not the zone the order was
   parked in.** `#onRetrieveOrder` (`apps/till/src/till-app.ts`) matches each line against the
   till's `products`, which hold the offers of the zone the counter is showing (loaded by
@@ -1116,17 +795,11 @@ the plain product path; see "A sale needs a zone" below.) What Task 9 leaves ope
   `REVIEW label calls [] []`). Re-holding a retrieved order saves only through `#syncIfDirty`
   (`apps/till/src/till-app.ts`), which does nothing unless the order has been saved before AND a
   line was edited, and a label change deliberately does not count as a line edit (the `#dirty`
-  comment in `apps/till/src/state/working-order.ts`). It predates that branch: the dirty check came
-  in c64b96fb7 (2026-08-07, #63), where it guarded only paying and placing an order, and re-holding
-  a retrieved order was routed through `#syncIfDirty` in 29b7234ae (2026-08-18, #101). **Next action:** give the till a way to save a label
+  comment in `apps/till/src/state/working-order.ts`). **Next action:** give the till a way to save a label
   without re-sending the lines, so the stored extras and locked prices are kept.
-- **DONE (owner decision 2026-09-24, #578, main 6a6e2c614): an extras list can no longer offer a product
-  with Active variants.** Saving an extras list that names such a product is refused
-  `extras.product_has_variants` (409), naming the item; a save that would give a product an extras
-  list offers an Active variant, from the parent's editor or the variant's own page, is refused
-  `product.offered_as_extra` (409), naming every list that offers it. A variant itself may still be
-  an extra, and a product whose variants are all Inactive may still be offered. The order-path
-  refusals stay.
+- **DONE (#578): an extras list can no longer offer a product with Active variants**
+  (`extras.product_has_variants`, `product.offered_as_extra`). A variant itself may still be an
+  extra.
 - **The extras form cannot pick a variant.** The catalogue accepts a variant as an extras item
   (owner decision 2026-09-24), but the extras form's product picker lists top-level products only
   (`listProducts`, `packages/catalogue/src/operations.ts`), so a manager cannot choose one from the
@@ -1149,30 +822,11 @@ the plain product path; see "A sale needs a zone" below.) What Task 9 leaves ope
   tables existed, and its one reader (`scripts/write-path-tables.test.ts`) reads only its
   read-but-never-written rows, which these two are not. Left as it is.
 
-**A sale needs a zone — DONE (B4, #571, main 342d69fd4, 2026-09-24; lane B's queue item B4, not Track B's B4 below).**
-The owner said _"a zone is required"_ (the Task 5 bullets above), so every sale line is now priced
-from the menu offers of its order's service zone, and the path that priced a line by bare
-`productId` is gone:
-- `POST /api/sales`, `POST /api/pay` and `POST /api/working-orders`, sent with lines and no
-  `zoneId`, take the venue's counter-default zone. A venue with none, including one with no zones
-  at all, is refused `service_zone.default_missing` (409) (`resolveHttpOrderZone`,
-  `apps/server/src/till-api.ts`, and `resolveNewOrderZone`,
-  `packages/venue-service/src/operations.ts`).
-- `priceOrderLines` (`apps/server/src/working-order.ts`) refuses a line on an order with no zone
-  with `order.service_context_missing` (409), and a line that names a product instead of a menu
-  offer with `management.request_invalid`, field `lines` (400). An order with no lines still opens
-  without a zone.
-- Pricing reads the invoice languages through `readInvoiceLocales`
-  (`packages/catalogue/src/operations.ts`), one row of `locations`, no longer through
-  `listAvailableProducts`.
-- The till always sends a line's `menuItemId`; `toWireProductIdentity`
-  (`apps/till/src/state/order-line.ts`) throws for a product that has none.
-- `CoreServices.openTab` (`packages/module/src/module.ts`) takes only `{ tableId }`.
-- A server test gives its venue a zone whose menu offers its products with `offerProducts`
-  (`apps/server/src/testing/zone-offers.ts`).
-
-The refusals are pinned by `apps/server/src/till-api.zone-required.test.ts`. No migration: the
-branch adds no file under any `drizzle/` directory. What B4 leaves open:
+**A sale needs a zone — DONE (B4, #571; lane B's queue item B4, not Track B's B4 below).**
+Every sale line is now priced from the menu offers of its order's service zone, and the path that
+priced a line by bare `productId` is gone; a sale sent with no `zoneId` takes the venue's
+counter-default zone, and a venue with none is refused `service_zone.default_missing`.
+What B4 leaves open:
 - **The old station chain in `fireLines` routes nothing the till can sell now.** For an order with
   no zone, `fireLines` (`apps/server/src/working-order.ts`) takes each line's kitchen station from
   the product, then its category, then the venue's default station, and refuses
@@ -1225,8 +879,7 @@ branch adds no file under any `drizzle/` directory. What B4 leaves open:
   (`findOrderContext`, then `retargetOrderContext` or the `service_zone.join_mismatch` check), and
   a tab opened on a table in no zone has none. So after either one, a round naming an offer the
   new table's zone lists is refused `order.service_context_missing` (409), and the tab can never
-  take a round. Measured 2026-09-24 by the B4 review with a scratch HTTP test. Before B4 the till's
-  round, which names menu offers, also failed there, with `sale.unknown_product`. **Next action:**
+  take a round. **Next action:**
   the same owner decision as the entry above; if tabs on tables in no zone stay allowed, `moveTab`
   and `joinTable` must create the zone record rather than only re-point one.
 - **Two branches still read a held line that names no menu offer, and only an order parked before
@@ -1235,13 +888,7 @@ branch adds no file under any `drizzle/` directory. What B4 leaves open:
   and the till's retrieve (`#onRetrieveOrder`, `apps/till/src/till-app.ts`, the `liveByProduct`
   lookup) finds it among today's offers by product id or drops it with `held.product_gone`. Every
   line priced since B4 records its offer (`lineContexts`, `priceOrderLines`), and a partial transfer
-  copies it to the new line (`copyLineContext`, `transferLines`). Measured 2026-09-24: with a
-  `throw` planted at the top of that server arm, seven suites all passed: `till-api.test.ts`,
-  `till-api.courses.test.ts`, `till-api.reprint.test.ts`, `till-api.fiscal-sale-paths.test.ts`,
-  `working-order.test.ts` and `working-order.pay-and-dispatch.test.ts` under `apps/server/src`, and
-  `apps/server/scripts/demo-seed/seed.integration.test.ts`. They include every `apps/server` suite
-  whose text calls `getHeldOrder` or builds a `/api/working-orders/${…}` URL, so none of those
-  reaches it.
+  copies it to the new line (`copyLineContext`, `transferLines`).
   **Next action:** delete both branches, since no backwards-compatibility code is owed before
   production (CLAUDE.md §3), or say what keeps them.
 - **`sale.unknown_product` is no longer raised.** A line naming an item the zone does not offer is
@@ -1251,38 +898,24 @@ branch adds no file under any `drizzle/` directory. What B4 leaves open:
   **Next action:** none unless a retired code should also leave the status map; recorded so a
   reader who meets it knows it is retired.
 
-Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end (the enum, its
-order-line and fired-ticket columns, the prominent kitchen-ticket line and the till's meat-gated
-dropdown), and the demo steak now carries a `Punto` cooking options list instead. The per-line
-free-text note stays.
+Task 10 has landed as **#471**: the built-in `doneness` field was removed end to end, and the demo
+steak now carries a `Punto` cooking options list instead. The per-line free-text note stays.
 
 Whether a `+ <list>: <label>` sub-line is prominent enough on a kitchen ticket to replace the old
 `** MEDIUM RARE **` framing is still an open question nobody has put to a real cook.
 
-Task 8 has landed as **#465**: the held-order preserve-path comparison moved into two
-order-independent functions, `sameOptionSelections` and `matchExtraChildren`
-(`apps/server/src/modifier-selection.ts`), fixing a reorder bug where a quantity-only edit deleted and
-re-priced every line. The review also found a dish offering one product on two lists could be billed at
-the wrong list's price; `matchExtraChildren` now refuses to pair a stored extras child whenever the
-picked product is offered by more than one of the dish's active lists.
+Task 8 has landed as **#465**: the held-order preserve-path comparison became order-independent,
+fixing a reorder bug where a quantity-only edit deleted and re-priced every line.
 
-- **Superseded by menus plan Task 7b (#696):** a stored extras child now
-  records its list (`working_order_lines.extra_list_id`) and a stored child pairs with a pick on list,
-  product and quantity (`editLineExtras`, which replaced `matchExtraChildren`), so the refusal and the
-  escape it left are gone. The till reads each held pick's `listId` too
-  (`apps/till/src/state/held-extras.ts`) and no longer guesses the list.
+- **Superseded by menus plan Task 7b (#696):** a stored extras child now records its list and pairs
+  with a pick on list, product and quantity, and the till no longer guesses the list.
 
 Task 9 has landed as **#469**: the filed sale line carries a dish's frozen answers in
-`sale_lines.option_snapshots` (core migration 0041), written by both filing routes, and the customer
-receipt prints one `<list>: <label>` line under each dish. Fiscal fingerprints are unchanged, pinned
-byte-identical by `write-path.e2e.test.ts`; a bilingual-receipt language bug found on the way was fixed
-by resolving names through `resolveSnapshotText`.
+`sale_lines.option_snapshots`, and the customer receipt prints one `<list>: <label>` line under each
+dish.
 
-Task 11 has landed as **#476**, the dashboard side: `/manage/modifiers` is now one screen with
-**Extras** and **Options** tabs, each a Categories-pattern table with its own authoring form; the
-product editor gained an always-visible **Modifiers** section over one ordered mixed list, and the
-products list a sold-alone column and filter. Neither delete is blocked nor previews an order count.
-The token layer also learnt to set `color-scheme` so native controls follow the theme.
+Task 11 has landed as **#476**, the dashboard side: `/manage/modifiers` is one screen with **Extras**
+and **Options** tabs, and the product editor gained an always-visible **Modifiers** section.
 
 What Task 11 left open:
 
@@ -1301,10 +934,7 @@ What Task 11 left open:
   wired `fieldErrors` from the create controller into the two list forms, after a review seat
   reproduced a refused nested create sitting in an open modal that said nothing. The same gap is
   still open on `unit-form.ts` and `category-form.ts`: each declares a `fieldErrors` property and
-  `apps/dashboard/src/screens/catalogue-screen.ts` passes it to neither. It was three forms until
-  Task 13 deleted the third, `modifier-form.ts`. Verified pre-existing rather than assumed —
-  `git diff 2b354d5638ebb81f87e8421a25db83f14556440e -- apps/dashboard/src/screens/catalogue-screen.ts`
-  has no added or removed line mentioning any of them. **Next action:** wire the same
+  `apps/dashboard/src/screens/catalogue-screen.ts` passes it to neither. **Next action:** wire the same
   `#childFieldErrors()` into both, one line each, and check each form's own field mapping rather
   than assuming the paths match.
 - **Dismissing a nested form fires TWO cancels, and only two of five forms guard it.** The form
@@ -1319,8 +949,7 @@ What Task 11 left open:
   (`alerts-screen.ts`, `printers-screen.ts`, `profile-screen.ts`, `venue-operations-screen.ts`, and
   the Modifiers screen Task 11 rebuilt). CLAUDE.md §3 says a custom event stops the triggering event
   before re-emitting; `wt-tabs` does not. **Next action:** give the strip its own event name, or
-  have it stop the inner event, and retire the guard in all five. Raised when the copy count reached
-  five, which is what makes it worth the root fix.
+  have it stop the inner event, and retire the guard in all five.
 - **Two things on the Venue operations screen that #546's review raised and left for the owner**
   (`packages/venue-service/src/dashboard/venue-operations-screen.ts`; found 2026-09-24, not fixed
   because #546 changed tests only). (1) A zone-menu row whose menu is not in the loaded list shows
@@ -1406,23 +1035,13 @@ What extras lists left open, and what #449 found on the way:
   cause — `packages/catalogue/src/options.ts` and `modifiers.ts` — were checked and are safe today,
   because neither table carries a unique constraint beyond its primary key. **Next action:** that is a
   property of those tables, not of the code, so adding a unique index to either one reopens it.
-- **An `ON DELETE RESTRICT` key raises `23001 restrict_violation`, not `23503 foreign_key_violation`.**
-  The plan implies `23503`. Cost: one wrong expected literal in a test whose behaviour held on the
-  first run.
-- **A defect found in the options sibling and fixed out of scope.** `updateOptionList` compared a
-  stored, lower-cased `list_id` against the caller's id in JavaScript, so a save whose list id
-  arrived upper-cased had every one of its own labels read as another list's and was refused with
-  `options.invalid`. The route is real (`PATCH /management-api/modifiers/options/:id`, whose
-  `requireUuidParam` checks shape and does not normalise). #449 fixed it and added the regression
-  test, because the identical bug was already proven and fixed on the extras side.
+- **A defect found in the options sibling and fixed out of scope.** `updateOptionList` refused a save
+  whose list id arrived upper-cased; #449 fixed it and added the regression test.
 - **`packages/catalogue/src/options.ts` still says `findContentTranslationGap` returns rather than
   throwing.** It does throw `content.translation_invalid` for a non-text value. The extras twin of
   that sentence was narrowed in #449; this one was left, being pre-existing and out of scope.
-- **The design's stated reason for `min_picks`/`max_picks` is false.** It says bare `min`/`max`
-  "collide with SQL function names". Measured on PostgreSQL 18.3: a table with columns named `min`
-  and `max` takes a check constraint over them, selects them unqualified and aggregates `min(min)` /
-  `max(max)`. The spelling stands — it reads better — and a dated pointer now sits on the design
-  document saying only the reason was wrong.
+- **The design's stated reason for `min_picks`/`max_picks` is false.** The spelling stands, and a
+  dated pointer on the design document says only the reason was wrong.
 - **An extras list's `dependants` fills its two sides from two different tables.** The plan's
   Task 5 added the per-menu publication row, which options lists do not have, so
   `extraListDependants` (`packages/catalogue/src/extras.ts`) reads the menus a delete would touch
@@ -1436,37 +1055,22 @@ What extras lists left open, and what #449 found on the way:
   id collided, and that is what the refusal names. Not worth changing for a list of a dozen labels;
   worth knowing if extras lists turn out to be much longer.
 
-Task 12 has landed as **#478**, the till side: the picker walks a dish's `offeredModifiers`, drawing an
-extras list's products (a checkbox or a stepper within the list's allowance) and an options list's
-labels (radios, default preselected), and the basket nests each pick as a child row with its own
-allergens and price. A child extras row is told from a dish by `TabLine.parentLineNo`, and the legacy
-modifier and option-group till types and the free-text `text` modifier are gone.
-
-- **A generated `DROP TABLE … CASCADE` is a decision, not a default.** Drizzle emitted the three
-  drops in an order that needs `CASCADE`; both sibling drop migrations in the same directory carry
-  the opposite instruction verbatim, because `CASCADE` turns a dependency the drop did not expect
-  into a silent success. Reordering the statements removes the need entirely. Measured with a
-  control: put the parent back second without `CASCADE` and the virgin migrate fails `2BP01`
-  naming the constraint. **Worth looking for in any generated drop.**
+Task 12 has landed as **#478**, the till side: the picker walks a dish's `offeredModifiers`, drawing
+an extras list's products and an options list's labels, and the basket nests each pick as a child
+row with its own allergens and price.
 
 What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
 
 - **The legacy `optionGroups` and `modifiers` fields stayed on both sell-side payloads, and the
-  legacy demo seed stayed.** The till read neither, so there was nothing to gain by removing them
-  early and the removal belonged with the tables. Task 13 took all of it.
+  legacy demo seed stayed.** Task 13 took all of it.
 - **The per-line kitchen NOTE was not touched**, despite living in a file called
   `line-extras-editor.ts`. It was never part of this feature; the file name is now misleading and
   nobody has renamed it.
-- **A retrieved line's options answers are re-sent by matching their WORDING**, because a frozen
-  answer carries six names and no ids (spec §2.3). `deriveOptionSelections`
-  (`apps/till/src/state/held-options.ts`) matches each answer's staff names against the dish's live
-  offer — the STAFF name of each side only, so a moved customer or kitchen name still re-sends and
-  the server re-prices. A staff-name rename or a withdrawn label matches nothing, and the till
-  surfaces `held.options_changed` rather than substituting the list's default. Landed inside Task 12
-  after the first cut of the picker refused every such edit with `options.label_required`.
-  **Superseded 2026-09-26 by menus plan Task 7b (#696):** the server no
-  longer re-prices an edited line; a re-sent answer is frozen onto the same row at its stored price
-  (plan D10).
+- **A retrieved line's options answers are re-sent by matching their WORDING**
+  (`deriveOptionSelections`, `apps/till/src/state/held-options.ts`); a staff-name rename or a
+  withdrawn label matches nothing, and the till surfaces `held.options_changed`. Since menus plan
+  Task 7b (#696) the server no longer re-prices an edited line; a re-sent answer is frozen onto the
+  same row at its stored price (plan D10).
 - **A child extras row still renders FLAT in the tab drawer**, as its own row beside the dishes, with
   its own name, quantity and price — where the basket and the settled ticket both nest a child under
   its dish. It is now correctly skipped by the per-line action, the course picker and the split and
@@ -1512,12 +1116,7 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   — the dish cannot be rung up at all. **This was established by READING the call chain, not by
   running it**, and the reachability of the authoring sequence was not tested either. The
   experiment that would settle it: publish a list on a menu item, detach it from the product, then
-  ring the dish up on the till. It was left here rather than fixed because the defect is in the
-  AUTHORING path (Task 6's code, and the order path's non-intersection is Task 7's), not in the
-  till surfaces this task owns — widening a till branch into the catalogue's write path is the
-  blast radius the campaign's rules forbid. What Task 12 changed is only that the divergence is
-  now VISIBLE: before it, the till drew the legacy attachments and could not answer one of these
-  lists at all.
+  ring the dish up on the till.
 - **Reopening the picker on a line whose dish has VARIANTS *and* at least one offered list loses
   the variant, and says it saved.** Both halves of that precondition are needed: the basket draws
   its Edit button only when the line's product carries an offered list
@@ -1528,26 +1127,16 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   line and no variant radio is selected, because `willUpdate` seeds the picks and the answers from
   `initialSelections` and never seeds `variantId`. Save is shut until the operator picks one — and
   when they do, `setLineModifiers` (`apps/till/src/state/working-order.ts`) discards it, because
-  it reapplies `extras`, `options` and `optionSnapshots` and never touches `line.product`. The
-  probe returned `{ checkedVariant: 0, saveDisabled: true, variantIdAfterSave: "v-large",
-  unitPriceAfterSave: "1.50" }` after "Pequeño" was chosen and saved, with the dialog closing as
-  though it had worked. **PRE-EXISTING, checked rather than assumed:** `git show
-  ef1f6b91:apps/till/src/widgets/modifier-picker.ts` and the same for `basket.ts` show the shape
-  on `main` too. Left unfixed on purpose — it needs a decision first about whether a basket edit
+  it reapplies `extras`, `options` and `optionSnapshots` and never touches `line.product`. Left
+  unfixed on purpose — it needs a decision first about whether a basket edit
   may change a variant AT ALL. If the answer is no, the cheaper fix is to stop offering the
-  variant control on a reopened line; if yes, `setLineModifiers` has to carry the product. Task 12
-  did close the neighbouring gap, and in ONE place only: the tender-pay quantity path now asks for
-  a variant, where it used to ring straight up at the base product's price. The grid already asked
-  before this task (`git show main:apps/till/src/widgets/product-grid.ts`); what changed there is
-  only that both now ask through one `needsModifierPicker`
-  (`apps/till/src/state/order-line.ts`).
+  variant control on a reopened line; if yes, `setLineModifiers` has to carry the product.
 - **Both of the modifier picker's LIST inputs still carry a generated id as their `name`.** An
   extras checkbox group is named `extras-${list.id}` and an options radio group `options-${list.id}`
   (`apps/till/src/widgets/modifier-picker.ts`), and a list id is a uuid — so a kind in front of one
   is still the generated widget id `docs/developers/conventions-ui.md` refuses, and CLAUDE.md §3
   with it. NOT every input: the variant radios are `name="product-variant"` already, so they are not
-  part of this. What Task 12 changed is only that the two LIST kinds now spell it the SAME way; the
-  extras checkbox carried a bare list id before, where its options sibling was already prefixed.
+  part of this.
   Left because the offered-list wire carries no stable per-list IDENTIFIER to use instead: an
   offered list arrives with its uuid `id`, its `kind`, its three display names and its items or its
   labels (`OfferedExtrasList`/`OfferedOptionsList`, `packages/catalogue/src/menu-types.ts`), and a
@@ -1555,63 +1144,20 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
 
 What the order path (the plan's Task 7) left behind:
 
-- **A quantity-only edit made after an OPTIONS list is RENAMED re-prices the line.** `updateHeldOrder`'s
-  preserve path asks whether the request's answers, resolved against the lists as they are NOW,
-  equal what the line froze. An options answer freezes NAMES and no ids (spec §2.3), so after a
-  rename the two sides differ, the line takes the replacement path, and it is re-priced at today's
-  price and re-frozen with the new wording. The LINE IDENTITY goes with it: the replacement path
-  deletes every line of the order and inserts fresh rows, so the parent and its children all come
-  back under new ids. The run-it review seat measured a parent reading
-  `quantity 1.000, price 2.50, listName "Cook list staff"` before the edit and
-  `quantity 2.000, price 19.00, listName "Renamed"` after it, under a new id. So a rename between
-  two sends can change what a saved order says the diner chose, what it costs, and which rows it is
-  made of. The old model compared by id and survived a rename. Whether today's till can reach it is
-  UNVERIFIED — it sends no `extras`/`options` until Task 12. **SETTLED by Task 8:** a rename drops
-  the line onto the replacement path, and that is now pinned by a test rather than left as a
-  consequence ("re-prices a held line when the options list it answered was renamed between the two
-  sends", `apps/server/src/working-order.test.ts`). The other option on the table — carrying ids the
-  comparison could use — would mean putting a list or label id on the line, which is exactly what
-  spec §2.3 rules out and what makes editing or deleting a list unable to change a saved order. With
-  no id on either side there is nothing but the wording to compare, so a rename is indistinguishable
-  from a different answer. **The reachability line above is out of date as of 2026-09-21:** the till
-  does send `extras`/`options` now, so this IS reachable from a real basket. The till re-derives a
-  retrieved line's answers from their WORDING (`deriveOptionSelections`,
-  `apps/till/src/state/held-options.ts`), which is the same evidence the server's own comparison
-  uses. A STAFF-name rename between the two sends therefore does not match: the till asks the
-  operator to choose again, and the re-answered line takes the replacement path described here. A
-  customer- or kitchen-name rename still re-sends and still lands on that path, at the server's own
-  by-value comparison. **Superseded by menus plan Task 7b (#696):** an
-  edit no longer re-prices or re-issues a line; a renamed answer is frozen onto the same row at its
-  stored price, because an answer carries no price (plan D10). Pinned by "keeps the price of a held
-  line whose options list was renamed between the two sends, freezing the new name".
-- **Two different signals say whether a dish is sold by weight, and they disagree — MEASURED.** The
-  order path refuses an extras pick on a dish that is not priced `each`
-  (`extras.unsupported_product`; the legacy payload's `options.`-prefixed twin is retired in
-  `apps/server/src/errors.ts` rather than deleted), because a child is priced
-  `dishQuantity × pickQuantity` and a fraction of a dish would bill a fraction of an extra. But the
-  two order paths read that fact from different places: the MENU-OFFER path derives it from the unit
-  the offer carries (`priceOrderLines`, `offer.unit.hardwareUnit === null ? "each" : "weight"`),
-  while the plain PRODUCT path reads `products.pricing_unit` — and `assignProductUnit`
-  (`packages/catalogue/src/units.ts`) writes `product_units` without touching that column. So one
-  product, moved onto the kg unit that way, is refused through its menu offer and billed
-  fractionally through its product id. Measured on this branch: the same fixture was refused on the
-  offer path — under the code's earlier name, `options.unsupported_product` — and went through on
-  the product path. Only the
-  refusing half is pinned by a test ("refuses an extras pick on a menu offer whose dish is sold by
-  weight", `apps/server/src/working-order.test.ts`). This is a second instance of the shape the
-  Units entry above already warns about. **Update (B4, 2026-09-24):** the product path is gone, so
-  the order path now reads only the unit (`priceOrderLines`, `selection.unit.hardwareUnit === null ?
-  "each" : "weight"`) and the fractional billing above can no longer happen on a sale. B4 did not
+- **A quantity-only edit made after an OPTIONS list is RENAMED re-prices the line** — superseded by
+  menus plan Task 7b (#696): an edit no longer re-prices or re-issues a line; a renamed answer is
+  frozen onto the same row at its stored price.
+- **Two different signals say whether a dish is sold by weight, and they disagree — MEASURED.** Since
+  B4 (#571) the order path reads only the unit (`priceOrderLines`, `selection.unit.hardwareUnit ===
+  null ? "each" : "weight"`), so fractional billing can no longer happen on a sale; `assignProductUnit`
+  (`packages/catalogue/src/units.ts`) writes `product_units` without touching `products.pricing_unit`.
+  B4 did not
   touch `products.pricing_unit` or what writes it, so the two can still disagree in storage (the
   Task 6 bullet on reassigning a unit's products is the same shape). **Next action:** whoever builds
   Units decides whether `products.pricing_unit` is kept in step with the unit or dropped, now that
   no sale reads it.
 - **The definition reads on the sale path take NO lock at all, while their writers serialise.** The
-  entry used to set the four new reads against an OLD lock, `lockModifierDefinitions(tx, "read")`,
-  that `priceOrderLines` still took over the `option_groups` tables. That lock is gone with them —
-  `packages/catalogue/src/modifier-lock.ts` existed on `main` at `47aee357`, does not exist here, and
-  `grep -rn lockModifierDefinitions apps packages` matches nothing — so there is no lock left
-  anywhere on the read side, which makes the shape plainer rather than safer. The four reads take
+  four reads take
   nothing: `readMenuExtras` and `readProductExtras` (`packages/catalogue/src/extra-projection.ts`),
   `readOptionListsByIds` (`packages/catalogue/src/options.ts`) and `readProductModifiers`
   (`packages/catalogue/src/product-modifiers.ts`), all four reached from one body,
@@ -1651,46 +1197,26 @@ What the product attachment (#456, the plan's Task 6) left behind:
   condition to `CLAUDE.md` §3 with its receipt in
   [conventions-data.md](developers/conventions-data.md) — a root `CLAUDE.md` edit takes the normal
   branch-and-pull-request flow.
-- **A two-transaction concurrency test that starts both sides in sequence is racing itself.** The
-  first version of the test above started the transaction that holds a row and the save that should
-  wait for it one after the other, without waiting for the first to actually hold anything. It
-  passed locally and failed on CI with "timed out waiting for the save to reach the row the blocker
-  holds", having proved nothing rather than having found a bug. The blocker now signals once its
-  lock is held. Nothing guards the shape; it is worth looking for in any new racing test.
-- **`scripts/spawn-timeout-budget.test.ts` was failing healthy runs of itself**, which is the rule
-  it exists to enforce. Its scan of every package and app suite read each file twice and declared no
-  bound, so the non-vacuity case timed out at Vitest's 5000ms default inside a loaded full root run
-  while the whole file measures 1.4s alone. Fixed in #456: one read per file, and a declared bound
-  on each scanning case. **Next action:** none — noted because the same shape is latent in any root
-  guard that walks the whole tree without declaring a bound.
-  _2026-09-22: the scan this describes no longer exists. The guard reads `scripts/` alone again —
-  the packages-and-apps half was retired with the real-PostgreSQL harness — so the rule holds under
-  those two roots with nothing enforcing it, as `CLAUDE.md` §4 and
-  [testing-guide.md](developers/testing-guide.md) both say._
+- **A two-transaction concurrency test that starts both sides in sequence is racing itself.** Nothing
+  guards the shape; it is worth looking for in any new racing test.
+- **`scripts/spawn-timeout-budget.test.ts` was failing healthy runs of itself** — fixed in #456; the
+  scan it describes has since been retired, and the guard reads `scripts/` alone again.
 
 What the per-menu publication (#452, the plan's Task 5) left behind:
 
 - **`readProductExtras` and the product-attachment check both moved to Task 6, and both have
-  landed there.** `readProductExtras` (`packages/catalogue/src/extra-projection.ts`) reads the
-  extras lists a PRODUCT itself carries, with no menu offer in the question, and
-  `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`) refuses to publish a list the dish's
-  product does not carry — `assertProductCarries` in that file, which reads `product_modifiers`, the
-  table Task 6 added. What it does NOT refuse is a body that LEAVES OUT a list the product carries,
-  and the function's own doc comment says so: "Nothing refuses an offer that publishes none of the
-  product's lists". When this entry was written the second check had a model to copy from, the
-  options half of the old feature, which made it against `product_option_groups`; Task 13 deleted
-  that half, so there is no sibling left to copy and the decision stands on its own. There is also no
+  landed there.** `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`) refuses to publish a
+  list the dish's product does not carry. What it does NOT refuse is a body that LEAVES OUT a list
+  the product carries, and the function's own doc comment says so: "Nothing refuses an offer that
+  publishes none of the product's lists". There is also no
   "required list" to refuse against: an extras list carries no `required` flag (the spec makes
-  "required" `min_picks >= 1`, §3.1) and §3.2 does not say a required list must be published. The
-  dated note on Task 5 in the plan describes the gap as it was, and stays as history.
+  "required" `min_picks >= 1`, §3.1) and §3.2 does not say a required list must be published.
   **Next action:** settle whether an offer may publish none of a product's required extras lists,
   when the menu-offer screen is built.
 - **Two review findings deliberately not taken, both of them structural.** Splitting the publication
   write path out of `packages/catalogue/src/extras.ts` into a module of its own, and moving
   `resolveExtraPrice` from there into `extra-contract.ts` beside the price parsing it belongs with.
-  Both were declined as churn on a branch about to land. Task 6 has since added the attachment check
-  to that file, and the extras ROUTES went where the option ones live
-  (`apps/server/src/catalogue-api.ts`), so the file was not reshaped after all. **Next action:**
+  Both were declined as churn on a branch about to land. **Next action:**
   still open — settle whether the publication write path and `resolveExtraPrice` move.
 - **`setMenuItemExtraLists` keeps its membership check as its own query rather than a `LEFT JOIN`.**
   A review asked for the join. Not taken: `assertProductsOffered` reads `extra_list_items` for only
@@ -1705,55 +1231,37 @@ What the per-menu publication (#452, the plan's Task 5) left behind:
   children, and none of them joins `products`, `product_modifiers` or either `menu_item_extra_*`
   table. So `menu_item_extra_lists` and `menu_item_extra_items` stay unnamed in both dependency maps
   — the dashboard's and `packages/venue-service/src/dashboard/live-queries.ts`'s `operations` entry,
-  which names neither of them. That entry no longer names the two option-group equivalents either:
-  it carried `menu_item_option_groups` and `menu_item_options` on `main` at `47aee357`, and Task 13
-  took both out with their tables, leaving a list that ends at `menu_items`. **Next action:** revisit
+  which names neither of them. **Next action:** revisit
   when a screen that actually publishes an extras list on a menu offer is built; nothing in the
   dashboard reads either table today.
-- **CLOSED by the storage switch, 2026-09-23 — there is no grant to decide about.** This entry
-  asked whether the application role should hold `UPDATE` on the two extras-publication tables, on
-  the strength of a `GRANT` in the catalogue migration set. Every premise it rested on has been
-  deleted: there is no application role and no `GRANT` statement anywhere in the migrations
-  (`grep -rln GRANT packages/*/drizzle/*.sql` matches no file), the migration that carried the
-  grant is gone — the thirteen PostgreSQL chains became one baseline per set, and
-  `packages/catalogue/drizzle/` holds `0000_baseline.sql` alone — the grants walkthrough in
-  `packages/catalogue/src/extra-projection.test.ts` was removed with the grants and that file says
-  so at its own header, and `packages/fiscal-verifactu/src/privileges.test.ts` no longer exists.
-  `privileges.expected.ts` does survive, but its header now calls itself a frozen record of what
-  was granted BEFORE the switch, with nothing checking those letters against anything. The
-  underlying design fact is unchanged and still worth knowing: no production path updates a row in
-  either table — `setMenuItemExtraLists` replaces rows rather than editing them. What refuses a
-  stray write today is nothing at all.
+- **CLOSED by the storage switch, 2026-09-23 — there is no grant to decide about.** No production
+  path updates a row in either extras-publication table — `setMenuItemExtraLists` replaces rows
+  rather than editing them. What refuses a stray write today is nothing at all.
 
-**Product selling units — LANDED #342 (2026-09-13).** You say what you sell a product by — the each
-(the default), or by weight or volume — and how many decimal places (0 to 3) its quantity may have; a
-price is always a price per that unit. Units get their own dashboard page, a new venue is seeded with
-five weight and volume units, and a unit's name and precision are frozen onto sold lines. Deleting a
-unit is refused while any product uses it. [Design](superpowers/specs/2026-09-12-product-units-design.md),
+**Product selling units — LANDED #342.** A product is sold by the each, or by weight or volume, with
+0 to 3 decimal places on its quantity and a price per that unit; units have their own dashboard page,
+and a unit's name and precision are frozen onto sold lines.
+[Design](superpowers/specs/2026-09-12-product-units-design.md),
 [plan](superpowers/plans/2026-09-12-product-units.md).
 
-**Update (2026-09-15) — unit abbreviations and screen rebuild.** Every unit gained a short
-translatable **abbreviation** (`kg`, `ml`), which is now what prints on sold lines, receipts, kitchen
-tickets and the till; the full name shows only in the dashboard. The frozen `unit_name` column is
-presentation only and does not enter the fiscal hash. The units page was rebuilt on the shared table
-conventions, and the seeded `each` unit was dropped so a product's unit is optional.
+**Update — unit abbreviations and screen rebuild.** Every unit has a short translatable
+abbreviation (`kg`, `ml`), which is what prints on sold lines, receipts, kitchen tickets and the till;
+the frozen `unit_name` column is presentation only and does not enter the fiscal hash.
 [Design](superpowers/specs/2026-09-14-units-screen-and-abbreviation-design.md),
 [plan](superpowers/plans/2026-09-14-units-screen-and-abbreviation.md).
 
-**Update (2026-09-15) — a product's unit is optional, and a unit lists its products — LANDED #375.** A
-product no longer needs a unit (Each stores nothing); the units screen lists a unit's products and can
-bulk-reassign them to Each so a unit can be emptied and deleted, and reassigning a weight product to
-Each flips its stored `pricing_unit`. [Design](superpowers/specs/2026-09-15-optional-product-unit-design.md),
+**Update — a product's unit is optional, and a unit lists its products — LANDED #375.** A product no
+longer needs a unit (Each stores nothing), and the units screen can bulk-reassign a unit's products to
+Each so the unit can be emptied and deleted.
+[Design](superpowers/specs/2026-09-15-optional-product-unit-design.md),
 [plan](superpowers/plans/2026-09-15-optional-product-unit.md). Left open (small,
 unowned): `createProduct` and `updateProduct` still duplicate the legacy-`pricingUnit` fallback, so a
 shared helper would keep the two from drifting; and the synthetic `EACH_UNIT` id lives as a literal in
 both `packages/catalogue/src/units.ts` and the till's `product-name.ts` with nothing pinning them equal.
 
-**Update (2026-09-16) — clicking a unit row is now a delete, and precision is a dropdown — LANDED
-#382.** The row's accessible label and the dialog heading now read Delete unit and list the products
-that must be moved first; the in-use sentence is painted in the danger colour, and Precision became a
-0-to-3 dropdown that reopens on the unit's own value. #382 touched only `apps/dashboard`, so the small
-`packages/catalogue` items above stay open.
+**Update — clicking a unit row is now a delete, and precision is a dropdown — LANDED #382.** The row
+and dialog read Delete unit and list the products that must be moved first; Precision is a 0-to-3
+dropdown.
 
 What it left open:
 
@@ -1783,15 +1291,12 @@ What it left open:
   weighing — the quantity is typed. That is the intended design, not an oversight, but it is the kind
   of boundary somebody will otherwise rediscover by trying it.
 - **Deleting a unit no longer asks first, and a blocked delete offers a way out** — a searchable modal
-  moves products onto another unit so the unit can be emptied and deleted, and the fix gave
-  `product_units` a primary key. LANDED #350 (2026-09-13).
+  moves products onto another unit so the unit can be emptied and deleted. LANDED #350.
 
-**The integrated product editor — LANDED #345 (2026-09-13), and the four-part Products overhaul (Units,
-Categories, Modifiers, Products) is complete.** One Products list and one editor replace the old
-combined catalogue screen, saving a product's names, image, tax choice, unit, categories (at most one
-reporting), reusable modifiers, direct allergen and dietary declarations, and variants in one
-transaction; menus publish and price variants, and sold facts are frozen onto order lines. Recipe
-authoring was withdrawn from the dashboard. [Operator guide](products.md),
+**The integrated product editor — LANDED #345, and the four-part Products overhaul (Units,
+Categories, Modifiers, Products) is complete.** One Products list and one editor save a product's
+names, image, tax choice, unit, categories, modifiers, allergen and dietary declarations and variants
+in one transaction; recipe authoring was withdrawn from the dashboard. [Operator guide](products.md),
 [design](superpowers/specs/2026-09-12-product-editor-design.md). (Later reworked — see #377 and #379
 below.)
 
@@ -1827,12 +1332,10 @@ What it left open:
   review and CI and still returned a 500 to the first person who opened it. **Next action:** walk it
   once on a dev stack before treating the overhaul as finished.
 
-**Product catalogue management improved — LANDED #387 (2026-09-16).** The Products page was rebuilt on
-the shared table (one search box, variants nested and folded under their product, and a Delete that
-deactivates rather than removes so a sold product stays readable in history), and the editor adopted
-the shared allergen and dietary picker. Two shared components changed beyond Products: `wt-data-table`
-gained `initiallyCollapsed`, and `wt-disclosure` was redrawn — both now written down in
-[design-system.md](developers/design-system.md).
+**Product catalogue management improved — LANDED #387.** The Products page was rebuilt on the shared
+table, its Delete deactivates rather than removes, and the editor adopted the shared allergen and
+dietary picker; `wt-data-table` gained `initiallyCollapsed` and `wt-disclosure` was redrawn
+([design-system.md](developers/design-system.md)).
 
 What it left open:
 
@@ -1851,16 +1354,12 @@ What it left open:
   and a run-it review, not one pass through the actual page against a real database. **Next action:**
   as above — walk it once on a dev stack.
 
-**Modifier editing, reworked — LANDED #352 (2026-09-13).** Editing a modifier's choices became a table
-with drag and arrow-key reordering, each choice's detail opening in its own window. (Its yes/no model
-change was later removed by the modifier nutrition redesign, and its one open item — a keyboard reorder
-that announced nothing to a screen reader — was closed by the product-editor rework's shared
-`ReorderController`.)
+**Modifier editing, reworked — LANDED #352.** Editing a modifier's choices became a table with drag
+and arrow-key reordering, each choice's detail opening in its own window.
 
-**Modifier nutrition redesign (pass 1) — LANDED #377 (2026-09-15).** Each modifier choice now carries
-its own nutrition information and the app no longer combines a dish with its extras; the yes/no type
-was dropped, a choice's allergens became one contains list, and dietary suitability became a positive
-`suitableFor` list over vegan, vegetarian, halal and kosher. Fiscal records are unaffected.
+**Modifier nutrition redesign (pass 1) — LANDED #377.** Each modifier choice carries its own
+nutrition information and the app no longer combines a dish with its extras; the yes/no type was
+dropped and dietary suitability became a positive `suitableFor` list.
 [Design](superpowers/specs/2026-09-15-modifier-nutrition-redesign-design.md),
 [developer guide](developers/modifiers.md).
 
@@ -1877,11 +1376,9 @@ What it left open:
   whether an unreviewed dish should show that food-allergen warning always, or never on the basis of
   options, then make `#allergenRow` depend on the review state alone and update the test.
 
-**Modifiers screen rebuilt — LANDED #370 (2026-09-15).** `/manage/modifiers` was rebuilt on the
-Categories-screen shape (search, a Type filter, a remembered per-tab sort, a read-only details panel,
-and a delete flow that detaches then deletes), and choice allergens and diets moved to the shared
-`allergen-dietary-picker` widget. (Later superseded: the nutrition redesign dropped the yes/no type,
-and Task 11 replaced the whole page with Extras and Options tabs.)
+**Modifiers screen rebuilt — LANDED #370.** `/manage/modifiers` was rebuilt on the Categories-screen
+shape and choice allergens and diets moved to the shared `allergen-dietary-picker` widget. (Later
+superseded: Task 11 replaced the whole page with Extras and Options tabs.)
 
 What it left open:
 
@@ -1911,11 +1408,9 @@ What it left open:
   `apps/server/src/working-order.ts` and the till), so behaviour is unchanged — only the manager's
   view of it is gone.
 
-**Modifier tables and nutrition editing refined — LANDED #385 (2026-09-16).** Clicking a modifier's row
-now opens one combined Products and Menu-items table with a sortable, filterable Type column, and the
-modifiers list's Choices column shows the searchable choice names instead of a count. In the choice
-editor, the Nutritional information section opens expanded and is summary-first, with allergens and
-dietary preferences both edited through `wt-combobox`.
+**Modifier tables and nutrition editing refined — LANDED #385.** Clicking a modifier's row opens one
+combined Products and Menu-items table, the modifiers list's Choices column shows the choice names,
+and the choice editor's nutrition section is summary-first, edited through `wt-combobox`.
 
 What it left open:
 
@@ -1944,20 +1439,17 @@ What it left open:
   the editor snapping shut mid-selection, make the collapse depend on `relatedTarget` rather than on
   the event alone.
 
-**The product editor reworked — LANDED #379 (2026-09-16).** A product's Name is now plain staff-facing
-text, with an optional translated customer-facing name and a plain kitchen name beside it (all name
-resolution lives in `packages/catalogue/src/product-presentation.ts`); the editor became a short form
-with collapsible sections, a product's kitchen station and course now save inside its one transaction,
-and a product has no variants or at least two. Two shared primitives came out of it, `wt-disclosure`
-and `wt-price-input`. [Developer guide](developers/products.md),
+**The product editor reworked — LANDED #379.** A product has a plain staff-facing Name, an optional
+translated customer-facing name and a plain kitchen name (resolved in
+`packages/catalogue/src/product-presentation.ts`); the editor is a short form with collapsible
+sections, a product has no variants or at least two, and it added the shared `wt-disclosure` and
+`wt-price-input`. [Developer guide](developers/products.md),
 [design](superpowers/specs/2026-09-15-product-editor-rework-design.md).
 
 What it left open:
 
 - **A variant's image has no foreign key, unlike a product's — CLOSED by variants plan Task 3.** A
-  variant is now a `products` row, so its photo is `products.image` and the database guards it with
-  the same triggers as a product's photo; the measurement is under *Variants* in the
-  [developer guide](developers/products.md).
+  variant is now a `products` row, so its photo is guarded by the same triggers as a product's.
 
 - **A product's name can be stored blank.** `products.name` is `NOT NULL` with no non-empty check,
   and only the editor's own parser refuses a blank; `createProduct` writes what it is given. Its
@@ -1967,12 +1459,9 @@ What it left open:
   `products.name` now.) **Next action:** decide whether the columns want a check
   constraint and the write paths a domain refusal.
 
-- **DONE (B4, 2026-09-24): the legacy product-id order path lost the configured kitchen name.**
-  `AvailableProduct` carries no kitchen name, so a line added by product id froze `kitchen_name` as
-  null. B4 removed that path: every line is now priced from a menu offer, whose selection carries the
-  product's and the variant's kitchen names (`selectMenuVariant`, frozen by `priceOrderLines` in
-  `apps/server/src/working-order.ts`), and the developer guide says so
-  ([products.md](developers/products.md)).
+- **DONE (B4): the legacy product-id order path lost the configured kitchen name.** B4 removed that
+  path: every line is now priced from a menu offer, whose selection carries the product's and the
+  variant's kitchen names.
 
 - **A refused customer name cannot say which value it refused.** `content.translation_required`
   carries only the language, so the editor resolves the offending field by reading the body it just
@@ -2001,8 +1490,7 @@ What it left open:
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
 
 A record AEAT could not accept is now refused at the chain seam before anything is written, and the
-same rules reach the setup boundary and the `waitron-provision venue` command through a seat on the
-regime-neutral fiscal contract; each refusal is proven by deletion rather than a text-walking guard.
+same rules reach the setup boundary and the `waitron-provision venue` command.
 
 ### A1c. Dead pointers to deleted test suites
 
@@ -2107,12 +1595,9 @@ seen in a throwaway test, since deleted, and none has a test pinning it:
   "Provisioning…", with no retry. The connection check releases itself in the same case. The app
   mounts the wizard once and never removes it, so this may be unreachable in use.
 
-**Restoring a backup and importing a configuration failed in a real browser — FIXED #584 (found by
-#567, 2026-09-24).** `restore` and `stageConfiguration` in `apps/setup/src/api/client.ts` called
-`this.#fetchImpl(...)` as a method, which the browser's own `fetch` refuses with `Illegal
-invocation`. Both now copy it into a local first, as `#request` does; `client.test.ts` runs
-`getStatus` (for the shared `#request` path), `restore` and `stageConfiguration` against a stub that
-refuses a wrong receiver, and against Chromium's real `fetch`.
+**Restoring a backup and importing a configuration failed in a real browser — FIXED #584.** `restore`
+and `stageConfiguration` in `apps/setup/src/api/client.ts` now copy `fetch` into a local first, as
+`#request` does, so the browser no longer refuses them with `Illegal invocation`.
 
 **The dashboard's configuration export has the same fault, masked — OPEN (found 2026-09-24, fixing
 the setup client; lane B's package).** `apps/dashboard/src/api/client.ts`'s configuration export
@@ -2125,43 +1610,33 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard
 
-**Printer paper width, resolution and character set — LANDED #367 (2026-09-14).** The printer editor
-now stores paper width, resolution and character set per printer, all documents format to them, and
-the fiscal QR prints as a raster sized to land as close as possible to the legal 30-40mm.
+**Printer paper width, resolution and character set — LANDED #367.** The printer editor stores
+paper width, resolution and character set per printer, and all documents format to them.
 
-**Setup refinements — LANDED #380 (2026-09-16).** Add opens a prefilled naming dialog, identifiers
-are read-only, test answers use radio buttons, feedback separates addition from refresh failures,
-printed instructions follow the user's language, and text init cancels Kanji mode before single-byte
-text. Development servers no longer advertise `waitron.local`.
+**Setup refinements — LANDED #380.** Add opens a prefilled naming dialog and printed instructions
+follow the user's language; development servers no longer advertise `waitron.local`.
 
-**Printer calibration follow-up — LANDED #388 (2026-09-16).** A physical NT-806 byte-grid print made
-encoding and the `ESC t` table number independent printer settings, the editor prints a clearly
-simulated sample receipt with unsaved settings, sample characters follow the site's language, and the
-Add-printer layout was tidied.
+**Printer calibration follow-up — LANDED #388.** Encoding and the `ESC t` table number are
+independent printer settings, and the editor prints a clearly simulated sample receipt with unsaved
+settings.
 
-The later calibration chooser starts with tables 0–15 and offers further ranges. **Calibration
-wizard, drawer auditing and receipt layout — LANDED #689 (2026-09-26):** a three-step wizard replaces the combined calibration editor, using
-`W-nn`/`8-nn` labels and remembering printed ranges. Drawer attachment belongs to the printer and
-has a separate audited test. The owner's network printer reproduced the finder failure: removing
-table-zero resets and slowing the bytes did not fix it. Initializing before each candidate line
-produced full finder matches at W-11 and 8-14 on the owner's NT-806. The actual sample receipt at
-PC858/table 14 printed Spanish text and euro amounts correctly. Why these table numbers differ
-from the supplied manual remains unknown; do not use them as defaults for other printers.
-Receipt QRs now use the largest whole-dot size up to 40mm that fits the paper with its blank border,
-rather than the size closest to 35mm. The receipt body, QR and its VERI*FACTU legend are centred;
-the owner confirmed the centred body and QR on paper, then requested the centred legend.
-The Printers screen also gained a remembered status filter, one-click disable, links to each print
-agent's setup page, and shows the agent that last saw each printer without implying it is bound to it.
-The print-agent list gained its own remembered Active/Revoked/All filter in #704 (2026-09-26).
+**Calibration wizard, drawer auditing and receipt layout — LANDED #689:** a calibration wizard
+replaces the combined calibration editor, starts with tables 0–15, offers further ranges and
+remembers printed ranges; drawer attachment belongs to the printer and has a separate audited test;
+receipt QRs use the largest whole-dot size up to 40mm that fits the paper with its blank border, and
+the receipt body, QR and VERI*FACTU legend are centred; the Printers screen gained a remembered
+status filter, one-click disable, links to each print agent's setup page and the agent that last saw
+each printer, and the print-agent list its own remembered Active/Revoked/All filter (#704). On the
+owner's NT-806 the finder matched at W-11 and 8-14, and PC858/table 14 printed Spanish text and euro
+amounts correctly. Why these table numbers differ from the supplied manual remains unknown; do not
+use them as defaults for other printers.
 [Current design and physical evidence](superpowers/specs/2026-09-26-printer-calibration-wizard.md).
 
-**Calibration and status follow-up — LANDED #699 (2026-09-26):** four calibration steps separate
-the cash-drawer question from the receipt test. Finder codes use `nn-W`/`nn-8` and are available
-before printing; the paper-width lines are restored. Clicking a printer opens its status and
-connection details, with drawer attachment distinct from till assignment. Completed print jobs
-provide a last-seen agent when discovery has expired. Bluetooth scans show progress and report
-failures, but real Bluetooth discovery and delivery remain hardware-unverified; the per-device
-Bluetooth delivery connection is still unimplemented in `liveBtDevicePath`.
+**Calibration and status follow-up — LANDED #699:** four calibration steps separate the
+cash-drawer question from the receipt test, finder codes use `nn-W`/`nn-8`, and clicking a printer
+opens its status and connection details. Bluetooth scans show progress and report failures, but real
+Bluetooth discovery and delivery remain hardware-unverified; the per-device Bluetooth delivery
+connection is still unimplemented in `liveBtDevicePath`.
 
 - **The setup-page link is unproven on the box.** The print agent now builds it from
   `WAITRON_SETUP_URL` (set on the box as `WAITRON_PRINT_AGENT_SETUP_URL`, which `deploy/compose.yml`
@@ -2204,10 +1679,9 @@ Bluetooth delivery connection is still unimplemented in `liveBtDevicePath`.
 - **The Edit-printer dialog follows the dashboard's own language, not the venue's** (ruling I) — a
   recorded departure from the spec, which asked for the venue language.
 
-**Office printers greyed out in the scan — LANDED #359 (2026-09-14).** Once per job pull the agent
-now asks each network printer for its paper sizes over a read-only IPP query on port 631; one
-reporting A4 or US letter is greyed out in the Add dialog with no Add button, unless it matches a
-disabled registration. No answer, a late answer or an unreadable reply leaves it addable as before.
+**Office printers greyed out in the scan — LANDED #359.** A network printer whose read-only IPP
+query on port 631 reports A4 or US letter is greyed out in the Add dialog with no Add button; no
+answer, a late answer or an unreadable reply leaves it addable as before.
 
 - **Proven on one office printer only.** The owner's HP Color LaserJet MFP M181fw's real reply is a
   test fixture, and the live query marked it from a Mac on the owner's network; the Epson (port 631
@@ -2224,10 +1698,8 @@ disabled registration. No answer, a late answer or an unreadable reply leaves it
   later, because the server keeps only each agent's latest report — unless another agent reporting
   the same address has marked it. Accepted as the fail-open cost.
 
-**Check a known address — LANDED #335 (2026-09-12).** The Add-printer dialog takes an IP and port and
-asks the approved print agents to try it (opening a TCP connection, sending no bytes), so a printer
-the two discovery passes cannot see can still be added, including reactivating a disabled one; an
-address that answers is then asked for its paper sizes on port 631.
+**Check a known address — LANDED #335.** The Add-printer dialog takes an IP and port and asks the
+approved print agents to try it, so a printer the two discovery passes cannot see can still be added.
 
 - **Nobody has yet typed a real printer's address into it.** Everything proven so far is loopback
   sockets and browser tests. The owner's home is the case that motivated it: the box sits on
@@ -2286,10 +1758,9 @@ address that answers is then asked for its paper sizes on port 631.
     separate, durable path for refunds before the invoice (design §6b). **Next action:** give the
     reconciler's reversal, and any post-invoice refund route when one is built, the same
     durable-attempt rule.
-  - **Task 1 landed as #706** (2026-09-26): the new module `packages/adjustments` (tier
-    `mandatory`), whose own migration set adds one table, `adjustment_reasons`; the policy check
-    `evaluateAdjustment`; `roleAtLeast` in `packages/identity/src/permissions.ts`; a dashboard
-    screen for managers (permission `adjustment.manage`); and its own CI job, `test-adjustments`.
+  - **Task 1 landed as #706** (2026-09-26): the new module `packages/adjustments`, holding
+    adjustment reasons (table `adjustment_reasons`), the policy check `evaluateAdjustment` and a
+    managers' dashboard screen (permission `adjustment.manage`).
     Nothing applies a reason to an order yet — Task 11 does. Two points Task 11 inherits:
     `evaluateAdjustment` counts a cancel's reduction against the reason's euro limit, and it
     throws a `RangeError` on a malformed request (a negative amount, or a percentage discount
@@ -2380,15 +1851,8 @@ address that answers is then asked for its paper sizes on port 631.
   `--wt-color-danger` the dish picker's refusals now use — and then check every OTHER `var(--wt-*, …)`
   fallback in the tree the same way, because this one was found by accident.
 - **Five measured till layout defects and one seen in a screenshot, all of them older than the
-  extras-and-options work.** Found by looking at the real screens on branch
-  `feat/modifiers-till-surfaces` (B1 Task 12), then each checked against `main` rather than assumed
-  older: extracted rule by rule, `.line`, `.option`, `.option-total` and `.remove` in the basket and
-  `.option`, `.option-name` and `.group-name` in the picker are character-for-character what `main`
-  has, product-grid's single `css` block is identical, and the picker's legend — in a file this
-  branch rewrote whole — still appends its required marker after a plain space exactly as `main`
-  does. So none of them arrived with that branch. Three siblings from the same pass WERE fixed on
-  it — the tab screen's child extras row painted exactly like a dish, the picker's Add button below the fold at phone width, and the
-  picker's counter and refusals rendering as ordinary body copy. **Next action:** take these six as
+  extras-and-options work.** Found while looking at the real screens for B1 Task 12. **Next action:**
+  take these six as
   one till layout pass over `apps/till`, at 390 and at 1024, measuring rectangles rather than
   reading rules — and set the width with `page.viewport(w, h)`, never `commands.setViewportSize`,
   which resizes the outer page and leaves the components' own iframe alone
@@ -2450,18 +1914,14 @@ address that answers is then asked for its paper sizes on port 631.
 
 ### A5. Incidents and notifications
 
-**Dashboard alerts — designed 2026-09-14, LANDED #363/#368/#371 (2026-09-14/15).** One bell, panel
-and Alerts screen for recorded incidents and live checks (backups, fiscal submission, printing, reader
-battery); `till.configure` was split into permissions named for what they guard. The printing checks
+**Dashboard alerts — LANDED #363/#368/#371.** One bell, panel and Alerts screen for recorded
+incidents and live checks (backups, fiscal submission, printing, reader battery). The printing checks
 shipped as `agent.silent` and `printer.jobs_waiting`, worked out live on each dashboard read and never
 saved, so they can still be renamed cleanly until a venue is live or anything starts saving them.
 
-**Incidents reader and dashboard notification surface — LANDED #368/#371** (owner decision
-2026-09-12). #368 added `listOpenIncidents`/`listHandledIncidents`; #371 added the pop-up toast, a
-venue-shared handled state in the `incidents` table, incident-change push plus a one-minute refresh,
-and the ongoing-check consumers (silent agent, stalled fiscal outbox, missing certificate, jobs stuck
-at a printer, low reader battery, backups off/failing/stale). Still not built: the pairing consumer,
-and a standby that has fallen behind.
+**Incidents reader and dashboard notification surface — LANDED #368/#371.** A pop-up toast, a
+venue-shared handled state, live incident push and the ongoing-check consumers. Still not built: the
+pairing consumer, and a standby that has fallen behind.
 
 ### A6. Payments
 
@@ -2561,13 +2021,11 @@ and a standby that has fallen behind.
 
 ### A7. Users, roles and the dashboard shell
 
-**The dashboard shell restyle landed (#333, 2026-09-12).** Collapsible sidebar groups with the
-current item highlighted, a Settings group, a single person-icon account menu with the profile moved
-into a modal, and `wt-row-actions`/`wt-button` gaining `icon`/`iconSize`/`align` options instead of
-being copied. Two bugs found while checking it were fixed test-first. The rules went into
-[design-system.md](developers/design-system.md) and CLAUDE.md §3.
+**The dashboard shell restyle landed (#333).** Collapsible sidebar groups, a Settings group and a
+single person-icon account menu; the rules went into [design-system.md](developers/design-system.md)
+and CLAUDE.md §3.
 
-Left open by that branch: no review finding was deferred — they were all applied — but the restyle
+Left open by that branch: the restyle
 was only ever checked in screenshots on a desktop browser. Nobody has walked it on the real box or a
 phone, so the narrow-viewport banner and drawer are unverified on hardware; that walk belongs with
 the display walkthrough in [ui-review.md](ui-review.md). The rest of the dashboard's screens are the
@@ -2620,12 +2078,9 @@ ongoing overhaul listed at the top of Track A.
   and nothing in the tree calls that route — grepped across `apps/` and `packages/` on 2026-09-24,
   which found only the route and its tests — so no screen sets one today.
 - **The built-in doneness picker is gone; doneness is a modifier the venue adds itself — DONE as Task
-  10** (owner decision 2026-09-14). The `doneness` enum, its two columns, the
-  `working_order.invalid_doneness` code, the kitchen-ticket line and the till picker are all deleted
-  (core migration 0042), the demo seed grows a cooking options list on the steak, and Task 12
-  (2026-09-21) has the till OFFER it. An options answer already prints on the kitchen ticket as an
-  indented `+ <list kitchen name>: <label kitchen name>` line, taking the venue's upper-case shorthand
-  for emphasis rather than the old `** MEDIUM RARE **` framing. **Open, and worth a cook's eye before a
+  10**: the demo seed's steak carries a cooking options list, the till offers it (Task 12), and an
+  options answer prints on the kitchen ticket as an indented
+  `+ <list kitchen name>: <label kitchen name>` line. **Open, and worth a cook's eye before a
   real service:** whether a `+` sub-line is enough for something a cook must not miss, or whether an
   options answer deserves its own prominent form on the ticket. Nobody has watched a real kitchen read
   one, nor opened and tapped a real demo box to settle it outside the code.
@@ -2649,21 +2104,16 @@ ongoing overhaul listed at the top of Track A.
   `apps/server/vitest.config.ts` excludes `scripts/**` from coverage. **Next action:** extract
   `apps/server/scripts/demo-seed/testing/provision-venue.ts` taking the NIF base as an argument —
   each file genuinely needs its own range — and convert the siblings as they are next touched.
-- **`wt-combobox`** (#351, 2026-09-13). It is a searchable dropdown in `packages/ui`: pick one option
-  or several (`multiple`), and optionally offer to add what was typed when nothing matches. It landed
-  with nothing using it; #362 (2026-09-14) is the first adopter, for the
-  category form's parent picker (`apps/dashboard/src/widgets/category-form.ts`) and the
-  product-categories editor's category and reporting-category dropdowns
-  (`apps/dashboard/src/widgets/category-membership-picker.ts`). _2026-09-25: the product-categories
-  editor is gone; the product's main-category and labels pickers
-  (`apps/dashboard/src/widgets/classification-fields.ts`) use it now._ Left out on purpose, per its
+- **`wt-combobox`** (#351): a searchable dropdown in `packages/ui` — pick one option or several
+  (`multiple`), and optionally offer to add what was typed when nothing matches. The category form's
+  parent picker (#362) and the product's main-category and labels pickers
+  (`apps/dashboard/src/widgets/classification-fields.ts`) use it. Left out on purpose, per its
   [design](superpowers/specs/2026-09-13-wt-combobox-design.md): searching on the server, disabling
   single options, taking part in a native `<form>`, and showing chosen options as chips (it shows a
   count instead). **Undecided:** how it relates to the `wt-select` row above. The combobox does not
   sort its options, and neither its design nor that row mentions the other, so decide whether
   `wt-select` becomes a non-searchable mode of the combobox or stays a separate element before
-  building either. #362 adopted the combobox for the pickers above without
-  answering the `wt-select` question, which is still open for the owner. **Next action:** the owner
+  building either. **Next action:** the owner
   answers the `wt-select` question.
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
   first). 50 per page with a server-enforced maximum; search and sort over the whole dataset; debounce,
@@ -2685,12 +2135,9 @@ ongoing overhaul listed at the top of Track A.
 - **The admin's Edit user form has no Language** chooser; a person's `locale` can only be set on Your
   profile.
 - **Typed values are only partly checked — a generic phone-format screen landed, a country-specific
-  one has not.** Done 2026-09-13: a shared format check, `isValidTelephone` in `@waitron/shared`
-  (optional leading `+`, then digits separated by spaces, dots, hyphens or parentheses, 6–15 digits in
-  total), runs on both the browser forms and the server write paths. Identity throws
-  `person.telephone_invalid` when a non-empty number fails it (`packages/identity/src/profile.ts`,
-  `staff.ts`), and both routes map that to 400 (`apps/server/src/me-api.ts`,
-  `management-api.ts`). Resolved along the way: a number is kept exactly as typed, not normalised.
+  one has not.** Done: a shared format check, `isValidTelephone` in `@waitron/shared`, runs on both
+  the browser forms and the server write paths (a failing number is refused with
+  `person.telephone_invalid`), and a number is kept exactly as typed, not normalised.
   Still open: the country-pack seat (`CountryPack.telephone`, filled by `validateSpanishPhone`) is
   still not called, so no country-specific rule runs yet — a Spanish mobile that fails the national
   rule but passes the generic one is still accepted; other typed fields (email aside) are still
@@ -2806,12 +2253,9 @@ till → a recorded preproduction sale.
 
 ### B1. Onboarding must surface the CA-trust step — LANDED #330 (2026-09-12)
 
-The branch added certificate-trust guidance before collecting setup details, connection retry/help,
-matching download/help paths over HTTP and HTTPS, and an installer QR pointing at the guide, covering
-macOS, Windows, Linux, ChromeOS, Android and iPhone/iPad with browser-specific instructions. #346
-(2026-09-13) reworked both pages after an owner review — the guide opens the visitor's own device's
-steps and shows roughly half the on-screen text it did, and the wizard's connection step shrank to one
-question.
+Certificate-trust guidance before the setup details, connection retry/help and a per-OS,
+per-browser certificate walkthrough (#330; reworked #346 to open the visitor's own device's steps),
+walked on real devices by the owner; `deploy/README.md` keeps the advice for whoever installs the box.
 
 One guard here is narrower than its name. `scripts/trust-page-logo.test.ts` checks that the logo
 pasted into the server's source still matches the brand lockup — the two drawings agree, and nothing
@@ -2819,10 +2263,6 @@ else. It does not check that the page renders, that either theme is readable, or
 visible at all. That distinction is exactly what the new `CLAUDE.md` §4 rule is about, but the guard
 itself is not named there. **Next action:** name it and its hedge on that rule's line, whenever
 `CLAUDE.md` is next opened for a PR.
-
-Walked on real devices — the owner reported the certificate installation, reopening without a
-warning, and replacement after a re-image done on 2026-09-14. Which OS and browser versions were
-walked was not recorded here. `deploy/README.md` keeps the advice for whoever installs the box.
 
 ### B2. Backups that leave the box
 
@@ -2842,7 +2282,7 @@ walked was not recorded here. `deploy/README.md` keeps the advice for whoever in
 - **Reconsider the backup container against off-the-shelf tools** (a brainstorm): `WBA1` plus
   `artifact-cipher.ts` holds the whole database copy in memory and is restorable only by Waitron
   code, where piping the engine's own copy through a standard encrypter into a tar is the obvious
-  alternative. (Reworded 2026-09-21: this line named `pg_dump`, which the storage switch removed.)
+  alternative.
 - Carry-forwards under *Detail → Backup*.
 
 ### B3. The bootable USB installer
@@ -2873,20 +2313,14 @@ image constraints under *Detail → Box image*.
     new image, is the test that matches what a box does.
 
 - **Core release points 1 to 6 could not upgrade — CLOSED 2026-09-23.** The storage switch (#489)
-  regenerated every migration set, so the journal that had that shape no longer exists
-  ([conventions-data.md](developers/conventions-data.md) → the core journal's contradictory shape),
-  and the `db:generate` hazard went with it: run on 2026-09-23 in a throwaway checkout whose schema
-  and migration files are `main`'s at `9cd2fda58`, `pnpm --filter @waitron/db db:generate` printed `No schema changes, nothing to migrate` and
-  wrote no file.
+  regenerated every migration set, so the journal with that shape and the `db:generate` hazard are
+  gone.
 - **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.** No
   count belongs here: `conventions-data.md` holds the list, re-grepped 2026-09-25, and it is longer
   than what CLAUDE.md §3 names — it adds a readiness runner and the dev, demo and Cloud fixture
   scripts under `apps/server/scripts`, two of the Cloud fixture scripts migrating through
   `restore.ts` rather than calling `applyMigrations` themselves, which a grep for that name alone
   does not find.
-  `instance-apply.ts` is no longer among them: it went with `waitron-provision instance` when a venue
-  became a directory of SQLite files, and with it the question of gating a migrate that could lock a
-  trading shop's tables.
 - **Provisioning's migrate path still runs the linear full `manifestSets()`** — route it through the
   resolver once it gains per-module enablement.
 - **`modules.json` has no flow-down channel** from a primary to its standby (matters under
@@ -2929,19 +2363,11 @@ image constraints under *Detail → Box image*.
 - **On-device agent** — a till hosting a print agent, the single-box venue's box-death printing path.
   Needs a native app; parked behind the go-native decision.
 - **`runAgentOnce` catches a database refusal and then writes again on the same transaction, with no
-  savepoint** (`packages/printing/src/runtime.ts`; found reviewing `feat/sqlite-slice1-change-log`,
-  2026-09-21, and NARROWED by the storage switch — the code and its comment were corrected on
-  `feat/sqlite-slice1-flip`). The batch-down failure this used to describe is gone with PostgreSQL:
-  it rested on an aborted transaction making the `catch`'s own `reportPrintJob` fail `25P02`, and on
-  this engine a refused statement backs ITSELF out and leaves the transaction usable
-  (`CLAUDE.md` §3; measurement in `bench/sqlite-failover/README.md` → "What S5 measures, and the
-  savepoint it does not need"). What is still wrong, and is the whole of the item now: when the
+  savepoint** (`packages/printing/src/runtime.ts`). What is still wrong, and is the whole of the item
+  now: when the
   refusal is the `done` `reportPrintJob` inside the `try` rather than `transport.send`, the `catch`
   records `failed` for a job whose bytes were already sent, so a later batch prints it again.
-  #572's probe (Node v26.7.0) found the refused report itself leaves nothing behind: inside one
-  transaction an `UPDATE` refused by a `raise(abort)` trigger left the row unchanged and undid
-  another trigger's insert, and a later `UPDATE` in the same transaction committed; #572's review
-  reproduced the reprint. No caller in the tree reaches it —
+  No caller in the tree reaches it —
   `apps/server/src/print-api.ts` uses the split `claimPrintJobs`/`reportPrintJob`, and
   `runAgentOnce`'s only callers are this package's own `runtime.test.ts`, `runtime.race.test.ts` and
   `runtime.reclaim.test.ts` — but it is exported from the package's `index.ts`, so that is a fact
@@ -2959,24 +2385,16 @@ image constraints under *Detail → Box image*.
   readers still pass a missing field on unchecked and are the work: `apps/server/src/email-delivery.ts`
   (`url`/`from` with `!`) and `apps/server/src/node-identity.ts`'s `readNodeIdentityKey` (`privateKey`
   cast `as string`); both should raise `server.credential_unusable` naming the field, as
-  `apps/server/src/stripe-account.ts` does, each with a failing test first. #378 (2026-09-14) removed
-  the tenant parameter that had blocked this. `rotate` re-checks a secret against the current list
+  `apps/server/src/stripe-account.ts` does, each with a failing test first. `rotate` re-checks a
+  secret against the current list
   only when it re-seals one: it skips a secret already on the current key (`rotateCredentials`,
   `packages/credentials/src/store.ts`), so an out-of-date one stops a key rotation only when it is
   on an older key, until it is re-entered (measured by #577's review).
 - **`CardProviderBuildDeps.nodeId` is dead weight — nothing reads it** (2026-09-16, traced through
   both adapters). `packages/payments-sumup/src/provider.ts` declares the field and never touches it,
   and `reverseViaStripe` (`packages/payments-stripe/src/reverse.ts`) requires it on its options
-  object but destructures only `resolveProcessorRef`. Removing it is a code change, deliberately
-  left out of the claims-only fix wave that found it. **Next action:** delete the field and the
+  object but destructures only `resolveProcessorRef`. **Next action:** delete the field and the
   values every caller passes, or, if a record path is meant to use it, wire it up and say where.
-- **The same hand-built SQL array appears in several packages** — `sql.join` of each value inside
-  `array[...]::text[]`, in `packages/catalogue/src/provisioning.ts`,
-  `packages/provisioning/src/venue-apply.ts` and `apps/server/src/configuration-transfer.ts` (find
-  others with `grep -rn "::text\[\]"`). It is rebuilt by hand because interpolating a JavaScript
-  array as one value makes Drizzle emit a list of values rather than an array, which PostgreSQL
-  refuses. One shared helper would stop a wrong copy being written; its home has to be added to
-  `@waitron/db`'s enumerated `exports` map, which is why it is not a five-minute change.
 - **A box that mints its certificate before NTP sync persists a wrong validity window**, with no
   renewal path yet. Ties to a time-health check and certificate renewal.
 - **Server shutdown can skip closing its database pools.** In `makeStartedServer`
@@ -2987,9 +2405,6 @@ image constraints under *Detail → Box image*.
   feed is no longer among them: it runs in process, so shutdown unsubscribes it with a synchronous
   call and there is no connection to close. From reading the code these are believed not to reject
   today; that has not been tested.
-- **Hardening from onboarding 2b:** a DB-level advisory lock spanning guard→stamp→`applyVenue`
-  (see the next item); a wizard-only box runs its trading life on the owner role rather than
-  `app_user` until the role-split retrofit.
 - **Two concurrent first provisions can still race past the venue guard** (2026-09-14). Both can
   pass the empty-`locations` check and carry on down the venue path; `apps/server/src/provision.ts`
   says in as many words that callers must serialise provisioning, and nothing enforces it — the
@@ -3013,8 +2428,8 @@ image constraints under *Detail → Box image*.
   `runEntry` (`apps/server/src/node-entry.ts`) now calls `assertNotAhead`
   (`provisioning.database_ahead`) before `startServer`, which is what migrates. The
   `node-entry.test.ts` case "counts a boot that fails BEFORE the server" rejects with
-  `provisioning.database_ahead` but does not assert that `startServer` was never called (#617's review
-  found the stale pointer; the missing assertion was read on 2026-09-25). **Next action:** add that assertion, prove it by moving the call after
+  `provisioning.database_ahead` but does not assert that `startServer` was never called.
+  **Next action:** add that assertion, prove it by moving the call after
   `startServer`, then delete this entry.
 
 ### B8. Module framework follow-ons
@@ -3035,166 +2450,32 @@ image constraints under *Detail → Box image*.
 ### B9. CI and test infra
 
 - **`scripts/waitron-sh.test.mjs` failed at random when its temporary folder's name held a word it
-  matched — DONE (2026-09-26, lane A's A31b, **PR #661**, main `cccf8a926`).** Two cases
-  matched a word anywhere on a recorded `docker compose` line, and the line carries the sandbox's
-  `mkdtemp` path: "when the pull fails" (`/docker compose .*up/`, red on `main`'s CI run for
-  `47ee3a7ba`) and "asks compose to remove orphans" (`\b(up -d|down)\b`). Reproduced 2026-09-25:
-  under `TMPDIR=/tmp/probe-up-dir` the first failed with CI's message, under
-  `TMPDIR=/tmp/probe-down-dir` the second failed with `expected [ …(6) ] to have a length of 2 but
-  got 6`, and under `/tmp/probe-ab-dir` all 32 passed. The docker stub now drops `compose` and one
-  leading `-f <file>`, takes the subcommand by position, and refuses (exit 97) a call whose next
-  word is not `pull`, `ps`, `logs`, `run`, `exec`, `up` or `down`; it logs a newline inside an argument as `\n`, so each call is one log line. Every check on
-  a compose subcommand — `pull`, `up`, `down` and `run` — reads the calls through `composeCalls`,
-  which removes the box's own `-f` by its exact path. The pull-failure case refuses `up` as a whole
-  word anywhere in a compose call, and the orphans case asserts one `down` then one `up`. Run
-  2026-09-26: all 32 pass with `TMPDIR` set to `/tmp/probe-up-dir`, `/tmp/probe-down-dir`,
-  `/tmp/probe-ab-dir` and `"/tmp/probe run dir"`, and each of four temporary breakages of
-  `deploy/waitron.sh` turned at least one case red under both `"/tmp/probe run dir"` and
-  `/tmp/probe-up-dir`: reset's reads switched from compose `run` to `exec`; reset's `up` replaced by
-  a second `down --remove-orphans`; an `up` (also `--env-file /dev/null up -d`) added after the
-  failed pull; the pull removed. Before the change, the `exec` breakage passed all 32 cases under
-  `"/tmp/probe run dir"`, and the reset-`up` breakage left the orphans case green (only the volumes
-  case caught it). The matchers still reading the raw log are `docker volume rm` and `docker build`,
-  whose lines carry no sandbox path, and the "aborts when a volume removal fails" case's negative
-  `/! -name tls/`, which the random part of a `mkdtemp` name cannot hold. `scripts/main-tag-guard.test.mjs` asserts on recorded
-  stub arguments (for example `expect(result.dockerArgs).toContain(IMAGE)`), which are image names
-  and API paths carrying no sandbox path.
+  matched — DONE (lane A's A31b, **PR #661**).** The docker stub now drops `compose` and one leading
+  `-f <file>` and takes the subcommand by position, and every check on a compose subcommand reads
+  the calls through `composeCalls`.
 
 - **A pull request that changes only `scripts/bundle-node.mjs` builds no bundle — DONE (the
-  owner's answer (a), 2026-09-24, to the note lane B's campaign queue item B8 raised about #580 —
-  not §B8 above; **PR #593**, main `97467c013`; checked on real CI with the throwaway draft #595, whose one-line change to `scripts/bundle-node.mjs` selected the four members and ran `bundle-smoke`, run 36045110201).** `scripts/changed-scope.mjs` now carries
-  `ROOT_SCOPE_CONSUMERS`, which maps `scripts/bundle-node.mjs` to the four members whose `build`
-  runs it (server, print-agent, credentials, provisioning) and `scripts/dev-server-proxy.ts` to the
-  three front-ends whose `vite.config.ts` imports it; `scopeForPaths` selects those members, so a
-  change to either is `code=true` and `bundle-smoke` runs. The list is hand-written, and
-  `scripts/root-scope-consumers.test.mjs` fails in both directions — a member file naming a root
-  `scripts/` file by relative path that is not listed, or a listed pair no file makes. That guard
-  reads text: a path assembled from parts is invisible to it. (2026-09-26: since A34 the guard also
-  accepts a pair a ci.yml job makes — see [ci-and-gates.md](developers/ci-and-gates.md).)
+  owner's answer (a) to lane B's campaign queue item B8 about #580 — not §B8 above; **PR #593**).**
+  `scripts/changed-scope.mjs`'s `ROOT_SCOPE_CONSUMERS` maps a root script to the members that use
+  it, so a change to it selects them and `bundle-smoke` runs; guard
+  `scripts/root-scope-consumers.test.mjs`, which reads text: a path assembled from parts is
+  invisible to it.
   **Still open:** `bundle-smoke` builds only the credentials and server bundles, so a change to the
   shared script selects print-agent and provisioning for typecheck and tests but builds neither of
   their bundles in CI. `bundle-smoke` built the same two before #580
   (`git show 7b1ad8889^:.github/workflows/ci.yml`).
 - **Every package to the high coverage bar, `98/98/98/95` — DONE (owner decision 2026-09-23; the
-  floor retired 2026-09-24 by **PR #549**).** Every package and the root project now hold
-  the bar, and `scripts/coverage-thresholds.test.ts` pins one bar for all of them, a new package
-  included from its first commit; the `90/90/85/85` floor is removed from the guard and retired as
-  policy (live prose mentions it only as retired; dated history still records it). The first
-  promotion LANDED as **PR #498** (2026-09-23, main `0988e9af`): every
-  package that already cleared all four metrics on 2026-09-23 was promoted in one change, 21 of
-  them; the starting figures are in [ci-and-gates.md](developers/ci-and-gates.md) → *The first
-  promotion — measured 2026-09-23*, and the per-package figures at the end are in
-  **PR #549**'s description.
-  Promoted since, one pull request each: `printing` (**PR #500**, 2026-09-23 —
-  tests for the calibration locale fallback, the encoding name and a mid-payload switch to plain;
-  100/100/100/100); `bookings` (**PR #503**, 2026-09-23 — tests for the seat refusal when a booking leaves
-  `booked` inside `openTab`, a location with no row, the passive refresh copy, and the dashboard's
-  single-flight guards; 99.76/100/100/98.38); `tunnel` (**PR #506**, 2026-09-23 — tests for a
-  repeated `ack`, a frame the client ignores before `go`, and the test relays surviving a peer's
-  connection reset; 100/100/100/100); `print-agent-app` (**PR #508**, 2026-09-23 — tests for
-  malformed mDNS packets, out-of-range subnet addresses, non-printer usbmisc entries, a late socket
-  event, an IPP reply cut off mid-body, and the setup page's fallbacks and non-text form fields;
-  99.23/99.65/98.4/97.83); `provisioning` (**PR #510**, 2026-09-23 — tests for the tenant and
-  venue readers the one-taxpayer and one-venue guards consume, and for a same-taxpayer re-run
-  refused when the database already holds two venues or its till, node or series differs from the
-  plan; 100/100/100/99.03); `payments-sumup` (**PR #512**, 2026-09-23 — tests for the default
-  one-second poll, a reversal with no row or no SumUp key, a removed reader's status, a declined
-  duplicate incident, and the dashboard dialogs' single-flight, detach and dismiss paths;
-  99.24/99.71/98.03/98.93); `payments-stripe` (**PR #514**, 2026-09-23 — tests for a negative
-  minor-unit amount, a reader cancel refused after a timeout or a network error, a restricted key
-  of unknown environment, the default SDK factory, an on-device forward pass the device resolved
-  none of and one with two declines sharing an incident, and the dashboard forms' single-flight,
-  dismiss, default-callback and error-copy paths; 100/100/100/100); `server-kit` (**PR #515**,
-  2026-09-23 — tests for the mTLS test server recording the first of two CNs, serving a client
-  certificate with no CN, and refusing a second close; 100/100/100/98); `sync-enrolment` (**PR
-  #518**, 2026-09-23 — tests for a drop and re-create inside one migration file and for table names
-  read without regard to case; 100/100/100/100); `dashboard-kit` (**PR #521**, 2026-09-23 — tests
-  for the live event stream's default credentialed open, a stream it has replaced, a reset, an
-  error the stream retries itself, malformed change and session-invalid messages, a stop before the
-  first open, and the query controller's reads without a live-data session and a throwing apply;
-  one unreachable guard in `live-data.ts` deleted; 100/100/100/100); `fiscal-none` (**PR #522**,
-  2026-09-23 — tests for the slot binding no authority endpoint into activation evidence, even for
-  a certificate secret the verifactu slot turns into one; for the void and substitution refs and
-  the node registration checked field by field, where an empty void or substitution record id
-  had passed; and for a correction or substitution returning the new sale's id rather than the
-  replaced sale's; no source file changed; 100/100/100/100); `setup` (**PR #523**, 2026-09-23 —
-  tests across the wizard shell, its API client and nine screens, among them answers arriving
-  after the wizard is removed, a newer connection check winning over a late boot read, a country
-  pack with no provinces, and a draft country with no pack; one bug fixed, going back to "Select
-  province" now clears the province where it had kept the old one and submitted it;
-  99.78/100/100/98.68); `print-agent` (**PR #525**, 2026-09-23 — tests for a join refused for a
-  reason other than closed pairing, an unreadable join status, a denial dropping the saved
-  verification number, the environment named when no primary accepts, the agent's own client
-  built on the host's fetch, non-Error failures from a send, a scan, an address probe, an
-  office-printer check and a whole tick, a stop during a tick, an enrol that times out, malformed
-  join, enrol and job-list replies, and the test fake host's defaults and recording behaviour; its
-  two unused setters (`setToken`, `setConfig` in `src/testing/fake-host.ts`) deleted;
-  100/100/100/100); `identity` (**PR #526**, 2026-09-23 — tests for the refusals in issuing,
-  inspecting and completing an account action and in confirming an email change by code, a
-  Google subject linked to a person who is not active, an MFA secret that does not authenticate,
-  a profile read for a person row that no longer exists, and the refusals and side effects of
-  editing, deactivating, resetting, clearing the PIN of and re-inviting staff; a collision that
-  reaches the write past its availability check is planted by a test-only trigger, since one
-  writer at a time leaves no race to win; no source file changed; 100/100/100/100); `catalogue`
-  (**PR #530**, 2026-09-23 — tests for listing and renaming a menu's sections, the
-  unit reads and writes refused for an id that names nothing, a variant refused as
-  Unavailable or not offered on a menu, a product with no variant sold as itself, a delete
-  preview's menus in offer-id order, a product extras read handed a wider attachment map or one
-  naming a deleted list, and non-text names and ids in the extras and options contracts; no
-  source file changed; 98.82/99.53/100/97.37); `apps/server` (**PR #534**, 2026-09-23 — tests
-  for the boot's wiring (account email through the saved SMTP gateway, read on each send; a
-  language change refused while a library image has no name in it; a failing tunnel client or log
-  directory; the plain-HTTP landing page; and, in setup mode, a provision resumed after its venue
-  committed, a restore refused before staging, an adoption refused for an unreachable primary, and
-  a staged configuration import), the setup routes' refusals, locks and restart resumption, the
-  management and profile API's Google sign-in, password back-off, invitations, staff status, PIN
-  and authenticator paths, the till's reader, kitchen-display and PIN back-off refusals, payment
-  and backup refusals, print-agent screening and payment slips with nothing to print, and the
-  recovery commands failing part-way; no source file changed; 99.18/99.21/99.29/97.33);
-  `apps/till` (**PR #536**, 2026-09-23 — tests for the till app's table service, boot and
-  counter paths, the server router's start and error statuses, the session's wake lock and idle
-  timer, tender entry by the Enter key, idle choices and weighed dishes, and nine screens; one bug
-  fixed, a sale or a new table answering after the operator had logged out took the till off the
-  lock screen with nobody signed in, and now leaves it locked; no test added to the files the
-  variants branch `feat/variants-sale-line` (not yet pushed on 2026-09-23) changes, which is why
-  the table-service, boot-and-counter and three `tender-pay-*` suites are separate files that can
-  be folded back into `till-app.test.ts` and `tender-pay.test.ts` once it lands;
-  98.82/99.08/98.97/96.93); `apps/dashboard` (**PR #538**, 2026-09-23 — tests for the login
-  screen's Google, passkey, two-step, emailed-link and reset paths, the app shell's session signals,
-  module navigation and screens opened from their address, the printers, backup, payments,
-  kitchen, devices and email screens (a disabled printer offered again keeps its id), the canvas
-  editor and grid preview, categories, units and their forms, the modifiers screen and the extra
-  and option list forms, the API client's routes and refusals, and the staff, profile, roster,
-  schedule and purchases screens; no source file changed; none added to the files lane B's variants
-  work is changing; 99.2/99.58/99.42/97.73 statements/lines/functions/branches, 97.71 branches on a
-  second run); `venue-service` (**PR #546**, 2026-09-24 — tests for the opening-hours,
-  zone-menu display-order and product-route bodies the management routes refuse, a device's own
-  default zone winning over the counter default, moving an order to another zone's department and
-  service mode with its line snapshots kept, an empty round, one menu-item read per round,
-  copying from an order or line with no snapshot, route refusals and a route widened to the whole
-  venue, and the operations screen's sorting, fallbacks, form refusals, keyboard paths and focus
-  return; no source file changed; seven guards in `operations.ts` and four branches in the
-  operations screen left uncovered because no current caller reaches them — by reading, except the
-  missing-department refusal in `recordWorkingLineContexts`, which a foreign key was measured to
-  block; each is listed with its reason in the pull request; 99.4/99.34/100/97.61); `media`
-  (**PR #547**, 2026-09-24 — tests for the configuration-transfer refusals of a
-  label spelled in two cases and a bundle with no usable default language, search's leading or
-  doubled OR, a term scored at its best field and an image at its best OR group, name and date
-  ties broken by id, an edit to an unknown id reported as not found first, the upload fallback
-  language when the venue sets none, the module descriptor's permission, transfer check and
-  translation-gap entry, and the image library's cancel, Enter-to-save, Escape and Close paths,
-  retry after a failed load, the previous page, single-flight delete and late usage lookups, plus
-  the image picker waiting for a request and following a replaced live-data source once the
-  library loads again; one redundant check deleted — `updateImage`'s "no row updated" refusal,
-  because the function ends by calling `readImage` again, which throws the same `image.not_found`
-  for a row that is gone, so no caller can see a difference (by reading; the review restored the
-  check with an error of its own and the package's node images suite, 38 tests, passed without it
-  firing); six branches left uncovered, by reading, because no operator action or database state
-  reaches them — except the image picker's first draw with neither a request nor a live-data source,
-  which does reach one but draws nothing whichever way it goes, so no test could tell the two apart;
-  each is listed with its reason in the pull request; 99.82/100/100/98.46). With `media`, no
-  package was left at the floor.
-
+  floor retired 2026-09-24 by **PR #549**).** Every package and the root project hold the bar,
+  pinned by `scripts/coverage-thresholds.test.ts`, a new package included from its first commit.
+  First promotion **PR #498** (21 packages); then one pull request each: `printing` (#500),
+  `bookings` (#503), `tunnel` (#506), `print-agent-app` (#508), `provisioning` (#510),
+  `payments-sumup` (#512), `payments-stripe` (#514), `server-kit` (#515), `sync-enrolment` (#518),
+  `dashboard-kit` (#521), `fiscal-none` (#522), `setup` (#523), `print-agent` (#525), `identity`
+  (#526), `catalogue` (#530), `apps/server` (#534), `apps/till` (#536), `apps/dashboard` (#538),
+  `venue-service` (#546) and `media` (#547).
+  - From #536: the table-service, boot-and-counter and three `tender-pay-*` suites are separate
+    files that can be folded back into `till-app.test.ts` and `tender-pay.test.ts` once
+    `feat/variants-sale-line` lands.
 - **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
   Keep a comment only for an invariant, or a non-obvious why, that the code cannot show (CLAUDE.md
   §1). The rule change and the checker every pruning pull request passes,
@@ -3207,73 +2488,22 @@ image constraints under *Detail → Box image*.
   ones under the same gates as any other fiscal change: the golden huella test and the
   `inmutabilidad` suite pass unedited. Not reached by any package's pull request: `bench/` (about
   2,300 comment lines) and the root `vitest.config.ts` and `eslint.config.js`. Landed so far:
-  `workforce` (#555, about 2,700 comment lines to about 750), `payments` (#558, about 2,000 to
-  about 750), `identity` (#559, about
-  2,000 to about 640), `provisioning` (#561, about 1,740 to about 400), `fiscal-verifactu` (#562,
-  about 3,250 to about 1,550), `apps/setup` (#567, about 1,390 to about 310), `packages/store`
-  (#568, about 1,120 to about 555, tests included), `packages/payments-stripe` (#570, about 1,080
-  to about 270, tests included), `packages/printing` (#572, about 1,040 to about 350, tests
-  included), `packages/bookings` (#574, about 1,020 to about 270, tests included),
-  `packages/credentials` (#577, about 990 to about 410, tests included), `packages/shared` (#579,
-  about 945 to about 330, tests included) and `packages/scheduler` (#581, about 820 to about 350,
-  tests included) and `packages/db/src/schema` (#585, about 2,430 to about 1,110, tests included)
-  and the rest of `packages/db` (#589, about 3,000 to about 1,950, tests included) and
-  `packages/fiscal` (#592, about 690 to about 245, tests included) and `packages/payments-sumup`
-  with `packages/migrations` (#597, about 1,090 to about 800, tests included) and `packages/core`
-  (#598, about 1,870 to about 660, tests included) and the small packages as one pull request
-  (#600, about 2,980 to about 1,720, tests included: `apps/print-agent`, `print-agent`,
-  `server-kit`, `tunnel`, `membership`, `sync-enrolment`, `workforce-es`, `purchasing`, `recipes`,
-  `fiscal-none`, `composition`, `diagnostics`, `dashboard-modules`, the `country*` packages,
-  `ui-core` and `dashboard-kit`) and `packages/reporting` (#601, about 1,885 to about 1,265, tests
-  included; the generated `src/dr303-layout.ts`, 185 of those lines, is untouched) and `scripts/`
-  (#602, every `.ts` and `.mjs` file, about 4,870 to about 2,770 counted with the same `grep -cE`;
-  the `.sh` files and `write-path-tables.json` are outside the checker and were left) and
-  `packages/catalogue` (#603, about 3,560 to about 2,200 counted with a parse-tree walk over every
-  `.ts` file, tests included) and `packages/ui` (#604, about 1,144 to about 503 with the `grep -cE`
-  count, tests included; comments inside `css` and `html` template literals are strings and were
-  left) and `packages/module` (#606, about 363 to about 200 counted with the parse-tree walk, tests
-  included) and `apps/dashboard/src/screens` (#607, about 3,170 to about 1,110 counted with the
-  parse-tree walk, tests included) and `apps/dashboard/src/api` + `src/widgets` (#610, about 2,830
-  to about 980, parse-tree walk, tests included) and the rest of `apps/dashboard` — the files
-  directly in `src/`, `src/i18n`, `src/state` and the two configs (#612, about 1,375 to about 377,
-  parse-tree walk, tests included; comments inside `css` template text are strings and were left) and `packages/media` (#609, about 505 to about 310, parse-tree walk, tests included; the shipped
-  `drizzle/` SQL untouched) and `packages/venue-service` (#611, about 478 to about 220, parse-tree
-  walk, tests included) and `apps/server`'s `till-*` files, part a of eight (#613, about 4,330 to
-  about 1,915, parse-tree walk, tests included) and `apps/till/src/screens`, part a of four (#614,
-  about 2,233 to about 800, parse-tree walk, tests included, plus stale twins of its corrected claims
-  in `till-app.ts`, `api/client.ts` and `widgets/card-grid.ts`; text inside `css` templates left)
-  and `apps/server`'s errors, management, catalogue, configuration, purchasing and recipe files,
-  part d of eight (#615, about 4,110 to about 1,340, parse-tree walk, tests included; five other
-  server files' pointers into the pruned text repointed) and `apps/till/src/widgets`, part b of
-  four (#616, about 1,870 to about 725, parse-tree walk, tests included, plus stale twins of its
-  corrected claims in `till-app.ts`, `api/client.ts` and three screens; text inside `css` templates
-  left) and `apps/server`'s join, node, membership, enrol, trust, setup, box, provision and device
-  files, part f1 (#617, about 2,360 to about 1,110, parse-tree walk, tests included; the 13 part-f
-  files the SQLite slice-2 plan will change are held back as f2) and `apps/till`'s `src/api`,
-  `src/state` and `src/i18n`, part c of four (#618, about 2,420 to about 1,130, parse-tree walk,
-  tests included) and `apps/server`'s remaining files, part h1 (#620, about 4,010 to about 1,970,
-  parse-tree walk, tests included; the 17 part-h files lane A's slice-2 branch or plan Tasks 7–10
-  name are held back as h2) and the rest of `apps/till` — the files directly in `src/` and the
-  two configs, part d of four (#621, about 2,660 to about 1,250, parse-tree walk, tests included;
-  `till-app.ts` alone 1,286 to 349) and `apps/server`'s kitchen, print, receipt, station, report,
-  payments, webhook, pass, me, transfer, served, sale, split, move and modifier files, part g (#622,
-  about 4,120 to about 1,750, parse-tree walk, tests included) and `apps/server`'s working-order,
-  tabs and tables files, part b (#623, about 4,040 to about 1,920, parse-tree walk, tests included;
-  `working-order.ts` alone 1,854 to 471) and `apps/server`'s boot, health, SPA and dev-hint
-  files, part c1 (#624, about 1,455 to about 400, parse-tree walk, tests included) and `apps/server`'s adopt, backup, break-glass, mirror, primary-url, promote,
-  recovery, rejoin, restore-entry-guard, restore-gate and retire files, part e1 (#625, about 3,090 to
-  about 760 over the 64 files, parse-tree walk, tests included; the 14 part-e files the SQLite
-  slice-2 plan's Tasks 8a–10 name are held back as e2). #625 also deleted the false "the verb is the
-  whole guard" note from `tables.ts`, `management-api.ts` (five copies) and `till-api.ts`. Then
-  `apps/server`'s `box-status.ts` and `awaiting-fiscal-cert.test.ts`, two held-back files the
-  SQLite slice-2 plan's remaining tasks no longer name, part x (#629, 91 to 16 comment lines).
-  Then `apps/server`'s `boot.ts`, `boot.test.ts` and `config.ts`, part c2 (#653, 2,536 to 820
-  comment lines, parse-tree walk, tests included), the 14 held-back backup and restore files, part
-  e2 (#656, 979 to 614 comment lines), and the 11 held-back node, identity and setup files, part
-  f2 (#657, 1,194 to 524 comment lines; `membership-mint.ts` left as #655 wrote it, `box-status.ts`
-  and its test already done by #629), and the remaining held-back files, part h2 (#658, 607 to
-  281 comment lines in 13 of 16 files; `sealed-state.ts`, its test and `stream-host.test.ts` needed
-  nothing).
+  `workforce` (#555), `payments` (#558), `identity` (#559), `provisioning` (#561),
+  `fiscal-verifactu` (#562), `apps/setup` (#567), `packages/store` (#568),
+  `packages/payments-stripe` (#570), `packages/printing` (#572), `packages/bookings` (#574),
+  `packages/credentials` (#577), `packages/shared` (#579), `packages/scheduler` (#581),
+  `packages/db/src/schema` (#585), the rest of `packages/db` (#589), `packages/fiscal` (#592),
+  `packages/payments-sumup` with `packages/migrations` (#597), `packages/core` (#598), the small
+  packages as one pull request (#600: `apps/print-agent`, `print-agent`, `server-kit`, `tunnel`,
+  `membership`, `sync-enrolment`, `workforce-es`, `purchasing`, `recipes`, `fiscal-none`,
+  `composition`, `diagnostics`, `dashboard-modules`, the `country*` packages, `ui-core` and
+  `dashboard-kit`), `packages/reporting` (#601; the generated `src/dr303-layout.ts` untouched),
+  `scripts/` (#602, every `.ts` and `.mjs` file; the `.sh` files and `write-path-tables.json` are
+  outside the checker and were left), `packages/catalogue` (#603), `packages/ui` (#604),
+  `packages/module` (#606), `packages/media` (#609), `packages/venue-service` (#611),
+  `apps/dashboard` (#607 screens, #610 api and widgets, #612 the rest), `apps/till` (#614 screens,
+  #616 widgets, #618 api, state and i18n, #621 the rest) and `apps/server` in parts (a #613, b #623,
+  c1 #624, c2 #653, d #615, e1 #625, e2 #656, f1 #617, f2 #657, g #622, h1 #620, h2 #658, x #629).
   A pruning pull request
   cannot carry this file (the checker refuses it), so each one's line lands here as a docs-only
   push after the merge. Found by #555, #558, #559, #561, #562, #567, #568, #570, #572, #574, #577,
@@ -3299,255 +2529,74 @@ image constraints under *Detail → Box image*.
     `packages/catalogue/src/migrations.test.ts` (near line 304) is wider than the reset, which
     leaves the migration journals (`packages/db/src/testing/venue-db.ts`).
   - Found by #658 (`apps/server` part h2: the remaining held-back files), not fixable in a
-    comments-only change. `unpackBundleToDir` and `resolveSafeEntryPath`
-    (`apps/server/src/state-secrets.ts`) made only a folder they CREATED owner-only (`mkdir` with
-    mode 0700): an existing destination kept its permissions. The run-it review ran the real
-    `unpackBundleToDir` into an existing folder and it stayed 0755, reproduced with a control. The
-    `mkdir` lines date from `f57ab02acf` (2026-08-29) and `2956302ebe` (2026-09-05), before the
-    branch. Whether a restore ever unpacks into a folder another process made world-readable is
-    not checked. **Done (2026-09-26, lane A's A41, #673):**
-    `unpackBundleToDir` now makes the destination and every folder between it and an entry 0700
-    whether or not they existed, after the symlink guard has confirmed the folder is inside the
-    destination; no existing folder above the destination changes, except through the symlink swap
-    below. `resolveSafeEntryPath` itself is unchanged, and nothing chmods the staging folder that
+    comments-only change. **Done (lane A's A41, #673):** `unpackBundleToDir`
+    (`apps/server/src/state-secrets.ts`) now makes the destination and every folder between it and
+    an entry 0700 whether or not they existed. `resolveSafeEntryPath` itself is unchanged, and
+    nothing chmods the staging folder that
     the archive restore's two entries outside `secrets/` (`manifest.json` and `db.dump`) are
     checked against; it receives nothing and keeps an existing folder's mode.
     Still open, not fixed: the walk and the file write go by path, so a folder inside the destination
     swapped for a symlink during the unpack is followed. The A41 run-it review reproduced an outside
     folder being set to 0700 and receiving the secret that way; the same swap between the guard and
-    the write already put the secret outside before this change (reproduced 2026-09-26 on
-    `09e0e0de3` by hooking `writeFileAtomic` to swap `tls` for a symlink: the outside folder then
-    held `key`). It needs someone able to write inside the destination.
-    Also from #673's review: `waitron-recovery unpack` chmodded whatever folder it was given, so a
-    symlinked destination's real folder became 0700 and received the files, and `/tmp` (root-owned,
-    run as another user) stopped on a raw `EPERM` from `chmod` — both reproduced 2026-09-26 on
-    `49f4af659`. And a start left an existing `tls/` folder's mode as it found it, while a restore
-    tightened it. **Done (2026-09-26, lane A's A47, #681):** the command now refuses, before reading the
-    bundle or writing anything, a destination that is a symbolic link, that another user owns, or
-    that is not a folder (a regular file used to stop it on a raw `EEXIST` after decrypting the
-    bundle); each refusal exits 1 with a fixed message saying what to give instead, and a
-    destination that does not exist yet is still created. The setup-mode start, before a venue is
-    bound (`ensureBoxSecrets`, called only there from `boot.ts`), now makes a real `tls/` folder
-    0700 as a restore does; a `tls/` that is a symbolic link it leaves as it found it, and still
-    writes the box's files through it (a restore refuses one pointing outside the destination).
-    **Done (2026-09-26, lane A's A52, #687):** a trading start now makes a real `tls/` folder 0700 too,
-    through the same `tightenTlsDir` (`box-secrets.ts`), called in `boot.ts` ahead of the
-    adoption-pending branch and both trading listeners. It creates none where there is none, and
-    it opens the folder without following a link, so a linked `tls/` and the folder it points to
-    are left as found, by the owner's choice, even when `tls/` itself is swapped for a link
-    mid-call; a link swapped in for the state folder or a folder above it is followed. And a
-    folder its owner cannot read refuses a non-root open, so it is changed by path after an
-    `lstat`, and a link swapped in between the two would be followed. A failure to tighten does not
-    stop a trading start: it logs `tls.tighten_failed` with the errno alone and the box serves
-    (`chflags uchg` on the folder, then the chmod through the open folder, answers `EPERM`, measured 2026-09-26 on macOS,
-    Node v26.7.0; the boot test injects that refusal). A setup-mode start still stops on such a
-    failure, as before. **Done (2026-09-26, lane A's A58, #700):** a start that serves the recovery page
-    now runs the same `tightenTlsDir` in `serveRecovery` (`node-entry.ts`) before it reads the
-    certificate and binds, with the trading start's rules: a linked `tls/` left as found, none
-    created, and a failure logged `tls.tighten_failed` with the page still served. The restore itself (`restoreSecrets`) keeps none of the
+    the write already put the secret outside before this change. It needs someone able to write
+    inside the destination.
+    **Done (lane A's A47, #681):** `waitron-recovery unpack` refuses a destination that is a
+    symbolic link, that another user owns, or that is not a folder, and the setup-mode start makes a
+    real `tls/` folder 0700 as a restore does. **Done (lane A's A52, #687):** a trading start makes
+    a real `tls/` folder 0700 too, through `tightenTlsDir` (`box-secrets.ts`); a linked `tls/` and
+    the folder it points to are left as found, by the owner's choice, and a link swapped in for the
+    state folder or a folder above it is followed; a folder its owner cannot read is changed by
+    path after an `lstat`, and a link swapped in between the two would be followed; a failure to
+    tighten logs `tls.tighten_failed`
+    and the box serves, while a setup-mode start still stops on such a failure. **Done (lane A's
+    A58, #700):** a start that serves the recovery page runs the same `tightenTlsDir` in
+    `serveRecovery` (`node-entry.ts`), with the trading start's rules. The restore itself
+    (`restoreSecrets`) keeps none of the
     command's destination refusals (a symbolic link, another user's folder, not a folder) on the
     state folder it is given. A41's swap race above stays open, by the owner's
     choice.
     The lock-file measurement kept in `db-wipe.ts` names no engine version or platform.
   - Found by #657 (`apps/server` part f2: the node, identity and setup files), outside its files
-    or not fixable in a comments-only change. A code defect its review reproduced, which predates
-    the branch (`git blame`: `fabdb224d1`, 2026-09-10): in `POST /setup-api/provision`
-    (`apps/server/src/setup-api.ts`), when recording the setup operation fails before `execute`
-    starts (for example with `setup.operation_conflict`), the in-memory setup lock stays set, so
-    every later setup request answers `409 setup.already_provisioning` until the server restarts;
-    the adopt route has the same shape (read, not run). **Done (2026-09-26, lane A's A42, #674):**
-    provision and adopt now release the lock whenever the request does not end in a success
-    answer, reading the body for its hash and recording the operation included; reproduced on the
-    old code for provision (a recorded operation for another request, an unreadable
-    `setup-operation.json`, a body that fails while it is read) and for adopt (the first and
-    third). Adopt also answered that operation conflict with a plain-text 500, because the
-    recording ran outside its error handling; it now answers the 409 its status table already
-    listed. The three restore routes already released on every failure (a new case each for the
-    archive and bucket restores; the Cloud restore's existing cases fail when its release is
-    deleted); `fiscal-test` and `configuration` release in a `finally` and never restart. A
+    or not fixable in a comments-only change. **Done (2026-09-26, lane A's A42, #674):** when
+    recording the setup operation failed before `execute` started, the in-memory setup lock stayed
+    set until a restart; provision and adopt now release the lock whenever the request does not
+    end in a success answer. A
     completed provision or adopt operation replayed on a later request still answers 200 without
     restarting and keeps the lock set, as before (measured on the old and new code; the Cloud
-    restore's replay does restart). A body that fails while it is read now answers a 500 with the
-    JSON code `server.internal` on provision and adopt, instead of a plain-text 500.
-    Found open, predating A42: a refused adopt kept its recorded operation. Adopt's inner
-    `runAdopt` turned a refusal into a returned answer, and the operation store deletes its record
-    only when the work throws while the record is at phase "started", so `setup-operation.json`
-    stayed on disk at that phase. Measured with a real operation store on A42's code: after the
-    `adopt` step failed with `mirror.bundle_fetch_failed` (502), the original body resent got the
-    502 again while the primary still failed and 200 once it recovered; after the body was refused
-    with `setup.request_invalid` (400), the original body resent got the 400 again, because the body
-    itself is the cause; in both, a different body got `409 setup.operation_conflict`. So an
-    operator who corrected a wrong password could not adopt. On the old code (same probe) it was
-    worse: the different body got a plain-text 500 and the lock stayed set, so even the original
-    body then got `setup.already_provisioning`. Not measured: whether a server restart clears it.
-    Provision's own refusals before the venue is committed are thrown, so the record is deleted and
-    a corrected body succeeds; a provision failure after `advance("venue_committed")` keeps the
-    record by design, so the same request can resume. **Done (2026-09-26, lane A's A43, #675):** run
-    first on the unfixed code, through the real route and a real operation store
-    (`apps/server/src/setup-api.test.ts`): after an adopt refused 502 `mirror.bundle_fetch_failed`
-    (a wrong password), 400 `setup.request_invalid` (no credential) or 400
-    `mirror.primary_url_invalid` (`http://169.254.169.254/…`), `setup-operation.json` stayed and a
-    corrected adopt got `409 setup.operation_conflict`; after the 502, provision, the archive
-    restore, the bucket restore and the Cloud restore each got that 409 too, because the store's
-    conflict check compares the operation's kind as well as its hash. Adopt's refusals are now
-    thrown inside the recorded operation and turned into the answer by the route's outer error
-    handling, as provision's are: after each of the three refusals the file is gone and the
-    corrected adopt answers 200; after the 502, provision answers 200 and the three restores 202.
-    The record is kept once adopt is past its own checks: `adoptFromPrimary`
-    (`apps/server/src/adopt.ts`) awaits a `beforeFirstWrite` step, supplied by the route,
-    immediately before `stampDeployment`, its first writing step, and the route moves the
-    record to phase "venue_committed" there. A fake adopt that took that step and then failed left
-    the record at "venue_committed", and a different adopt body was refused
-    `409 setup.operation_conflict`. So a failed adopt's record is deleted at "started" and kept once
-    it has moved past it. In `apps/server/src/adopt.test.ts` the step runs once while the
-    deployment is still unstamped, a throw from it leaves the deployment unstamped, and an
-    environment mismatch, a foreign tenant, an unknown module (`module.config_unknown`) and a
-    same-tenant venue (`provisioning.second_venue`) never reach it. `stampDeployment`'s own
-    `deployment.already_stamped` refusal came after the step, and a running server could reach it:
-    the provision route stamps the environment its request picks (`parseProvisionPayload` in
-    `apps/server/src/setup-api.ts`: live outside dev mode is production, anything else
-    preproduction), and a provision refused inside `applyVenue` keeps that stamp while its own
-    record is deleted. Adopt now reads the stamp before the step and refuses there with
-    `deployment.already_stamped` when it names another environment than the bundle's. In
-    `adopt.test.ts`, on a database stamped for the other environment, the step was called once
-    without the check and is not called with it; a database already stamped for the same
-    environment still adopts. A new case in `apps/server/src/boot.test.ts` runs the real server in
-    setup mode against a local fake primary, stamps its database production after start, and sends
-    two adopts with different passwords: without the check the first answered 400
-    `deployment.already_stamped` and the second `409 setup.operation_conflict`; with it both answer
-    400 `deployment.already_stamped` and nothing restarts. The setup wizard's `#mapAdoptError`
-    (`apps/setup/src/setup-app.ts`) had no `setup.operation_conflict` case, so that 409 sent the
-    operator back to the connect form with "Couldn't connect to the primary…"; it now shows
-    provision's saved-setup message with Reload and no retry (`apps/setup/src/setup-app.test.ts`,
-    with a stubbed server). Each fix was deleted and its new tests failed: restoring adopt's inner
-    error handling (the seven refused-adopt route cases), dropping the route's move to
-    "venue_committed" (the kept-record case), dropping the step in `adoptFromPrimary` or moving it
-    after the stamp (two cases), moving it above the refusals (the never-reached case), moving it
-    between the foreign-tenant and second-venue checks (the unknown-module and same-tenant-venue
-    case), and dropping the wizard case. The step is now a required argument of `adoptFromPrimary`,
-    so deleting its forwarding in `apps/server/src/boot.ts` (from the call and the wrapper's
-    parameter) fails `pnpm --filter @waitron/server typecheck` with `TS2554: Expected 3 arguments,
-    but got 2`; before, that deletion typechecked clean and `adopt.test.ts` and `setup-api.test.ts`
-    passed. One existing case changed: the retried-adoption case (from #534) asserted the record
-    stayed at "started" after a 502, which is the behaviour removed here; it now asserts no record,
-    and still asserts the same request resent answers 200 and ends at "complete".
-    Open for the owner: adopt answers `deployment.already_stamped` with 400 (`ADOPT_STATUS` in
-    `setup-api.ts` has no entry for it), where provision answers 409; the wizard shows "This server
-    is already set up." for that code (`apps/setup/src/setup-app.ts`, read, not run), which does
-    not describe a box a failed provision only stamped.
-    **Done (2026-09-26, lane A's A50, #685):** adopt now answers `deployment.already_stamped` with 409,
-    as provision does, and on both the provision and adopt paths the wizard says a previous attempt
-    left the server partly set up for a different environment, tells the operator to contact
-    support to reset it, and offers a plain "Reload" with no retry. Before the change the
-    two-password boot case in `apps/server/src/boot.test.ts` answered 400 (it now asserts 409), a
-    new route case in `setup-api.test.ts` failed `expected 400 to be 409`, and the new wizard cases
-    for that code failed `expected 'This server is already set up.' to contain 'partly set up'`.
-    Open, measured in A43's review: after a failure past the first write (module config
-    persistence made to fail), resending the same adopt body answered 200 and ended at
-    "complete", but the retry ran adopt from the start and generated a second standby identity
-    (two different node ids), because the adopt route does not read the record's phase the way
-    provision does (`setupPhaseReached` in the provision route). This predates the branch: before
-    it, every failed adopt kept its record at "started" and a resend ran adopt from the start too
-    (the old `execute` had no phase check — visible in
-    `git diff 4cb93dd85 -- apps/server/src/setup-api.ts`). Not measured: what the first identity's
-    reservation on the primary and its rows on this node leave behind. Whether adopt should
-    resume, refuse, or discard the first identity is the owner's decision.
-    **Done (2026-09-26, lane A's A50, #685):** the owner chose to refuse. The same adopt body resent after
-    a failure past the first write now answers 409 `setup.adopt_incomplete` without calling adopt
-    again, leaves `setup-operation.json` byte for byte as it was and schedules no restart, and a
-    request after that gets the same answer rather than `setup.already_provisioning`, so the lock
-    is released. The wizard tells the operator the join stopped partway and to contact support to
-    reset the server, with a plain "Reload" and no retry. Measured before the fix with a new case
-    in `apps/server/src/setup-api.test.ts` whose fake adopt fails once past the first write: the
-    resend answered 200 (`expected 200 to be 409`), adopt was called twice, and the record moved
-    from "venue_committed" to "complete". Still not measured: what the first identity leaves
-    behind on the primary and on this node; the wizard has no way to reset such a box.
-    **Found after A50 (#685); (a) done box-side by A56 below, (b) done by A55 below:** the owner answered both on
-    2026-09-26 — (a) "wizard now", a reset driven from the setup wizard, queued as A56; (b) "queue
-    it", queued as A55. (a) several wizard messages, among them
-    `ALREADY_STAMPED_MESSAGE` (`apps/setup/src/setup-app.ts`), tell the operator to contact support,
-    and nothing tells support what to do for this case. The reset is
-    `sudo bash waitron.sh reset` (`deploy/README.md`, "Resetting a box"), run by someone with a
-    terminal on the box: it empties the box's state volume except its certificate folder, which
-    removes the venue database, `setup-operation.json`, `modules.json`, `pending-adoption.json`
-    and `trading.env`. Once adopt has stamped this box with the primary's environment, the reset on
-    a standby of a production primary refuses without `--force-production`. It runs on this box
-    only, so it leaves what the primary recorded for the abandoned standby: the standby's place in
-    the primary's membership list, and what the primary's modules reserved for it (with
-    `fiscal-verifactu` enabled, an installation number). (2026-09-26: an admin can now remove
-    such a standby from the primary's membership list on the dashboard Servers screen, A61, which
-    marks it `evicted`; the reserved installation number stays burned — see the A56 note's open
-    item (1) below.)
-    (b) Found by reading, not measured: when
-    the primary's admin uses an authenticator, the wizard's adopt most likely meets
-    `setup.operation_conflict` rather than `setup.adopt_incomplete`. The setup route identifies a
-    request by a SHA-256 of its raw body (`requestHash` in the adopt handler,
-    `apps/server/src/setup-api.ts`), and that body carries the one-time code
-    (`apps/setup/src/screens/connect-screen.ts`), which changes every 30 seconds, so a resend is a
-    different request. The server still refuses it and mints no second identity, but the wizard then
-    shows `OPERATION_CONFLICT_MESSAGE` ("Resume the original setup or contact support"), and
-    resuming a half-finished adopt is always refused. Also, the FIRST failure past the first write
-    reaches the wizard as a generic error that sends the operator back to the connect form with "try
-    again", which is now always refused. Choosing the fix (for example, the wizard reading the saved
-    operation from `/setup-api/status` after a failed adopt) is the owner's.
-    **Done (2026-09-26, lane A's A55, #691), for (b) and the first-failure sentence; (a) stays open:** a
-    new case in `apps/server/src/setup-api.test.ts`, whose fake adopt fails once past the first
-    write, resends the adopt with a different one-time code: on unchanged server code it answered
-    409 `setup.operation_conflict`, adopt was called once, and `GET /setup-api/status` then reported
-    an operation of kind "adopt" at phase "venue_committed". With the
-    resend's code made equal to the first, the same case failed on `setup.adopt_incomplete`. The
-    wizard (`#mapAdoptError`, `apps/setup/src/setup-app.ts`) now reads the status after the server
-    answered a failed adopt (the error carries an HTTP status) with `setup.operation_conflict` or
-    any code it has no terminal message for, and shows the stopped-partway message with a plain
-    "Reload" and no retry when the status reports an adopt past "started" and short of "complete";
-    with no saved operation, an adopt at "started" or "complete", a provision or restore record, or
-    a failed status read, it maps the failure as before. Four codes never read the status:
-    `setup.already_provisioning`, because an adopt still running on the server can be past
-    "started" too; and `setup.already_provisioned`, `deployment.already_stamped` and
-    `setup.adopt_incomplete`, which already show a final message. Nor does a failure with no HTTP
-    status, such as a dropped connection, because the adopt may still be running on the server: a wizard
-    case rejecting with a bare `TypeError("Failed to fetch")` while the status reports an adopt at
-    "venue_committed" failed `expected "vi.fn()" to be called 1 times, but got 2 times` before
-    that condition was added. Before the change, the new wizard cases failed
-    `expected 'This server has saved setup work for …' to contain 'stopped partway'` (conflict) and
-    `expected <setup-connect-screen …> to be null` (`server.internal`, and
-    `mirror.bundle_fetch_failed` at HTTP 502, run alone against the wizard of `17dd4b147`). Not run:
-    the wizard against a real server.
+    restore's replay does restart).
+    **Done (2026-09-26, lane A's A43, #675):** a refused adopt no longer keeps its recorded
+    operation, so a corrected adopt (or another setup) no longer meets `409 setup.operation_conflict`;
+    the record is kept once adopt is past its own checks (`adoptFromPrimary` awaits a
+    `beforeFirstWrite` step just before `stampDeployment`, where the route moves it to
+    "venue_committed"), adopt refuses `deployment.already_stamped` before that step, and the wizard
+    maps `setup.operation_conflict` to provision's saved-setup message.
+    **Done (2026-09-26, lane A's A50, #685):** adopt now answers `deployment.already_stamped` with
+    409, as provision does, and the wizard says a previous attempt left the server partly set up.
+    **Done (2026-09-26, lane A's A50, #685):** the owner chose to refuse. The same adopt body resent
+    after a failure past the first write now answers 409 `setup.adopt_incomplete` without calling
+    adopt again (before, the retry generated a second standby identity). Still not measured: what
+    the first identity leaves behind on the primary and on this node.
+    **Found after A50 (#685); (a) done box-side by A56 below, (b) done by A55 below:** (a) nothing
+    told support how to reset a box whose adopt stopped partway; (b) with an authenticator, a resent
+    adopt carries a new one-time code, so it met `setup.operation_conflict` rather than
+    `setup.adopt_incomplete`.
+    **Done (2026-09-26, lane A's A55, #691), for (b) and the first-failure sentence; (a) stays open:**
+    after a failed adopt, the wizard (`#mapAdoptError`, `apps/setup/src/setup-app.ts`) reads
+    `/setup-api/status` and shows the stopped-partway message with a plain "Reload" and no retry
+    when an adopt is saved past "started" and short of "complete". Not run: the wizard against a
+    real server.
     **Done (2026-09-26, lane A's A56, #694), for (a), box side only:** where the wizard shows the
-    stopped-partway message it now offers "Reset this server" instead of "contact support". The
-    operator types the admin person ID and password the join used; `POST
-    /setup-api/reset-incomplete-adopt` (`apps/server/src/setup-api.ts`) checks them against a proof
-    adopt now saves in `setup-operation.json` when the primary has accepted that login (the person
-    id and a scrypt hash of the password; `/setup-api/status` never returns it), with the dashboard
-    login's delay policy after repeated wrong passwords, counted against the saved login whatever
-    person id is sent. It answers `setup.operation_conflict` when `setup-operation.json` holds
-    something that is not a valid setup record, and `setup.reset_unavailable` unless an adopt is saved past "started" and short of
-    "complete". The route deletes nothing: it stages
-    `reset-request.json` and restarts, and the next start (`runStagedReset`,
-    `apps/server/src/reset-request.ts`, run by `runEntry` after the staged restore) takes the venue
-    lock, re-checks that no `trading.env` exists, that the saved adopt is the one staged and still
-    stopped partway, and that the database holds no tenant and no operational venue, then removes
-    the venue databases (`wipeVenueDatabases`), `pending-adoption.json`, `modules.json` and the
-    record, the request marker last. Any failed check discards the request having deleted nothing.
-    Tests on a real migrated venue folder carrying adopt's own rows; a case in the same file adopts
-    again after the reset (409 before it, 200 after). Unlike `waitron.sh reset`, it does not refuse
-    a box stamped for production: what it guards instead is the venue data (tenant and venue rows),
-    which a half-finished adopt never writes. Left open: (1) **the primary still lists the abandoned
-    standby** in its signed list of machines, as a serving secondary with the contact address it
-    sent. The installation number the primary reserved for that standby is burned by design
+    stopped-partway message it now offers "Reset this server": the operator types the admin person
+    ID and password the join used, `POST /setup-api/reset-incomplete-adopt` checks them against a
+    proof adopt saves in `setup-operation.json`, and the next start (`runStagedReset`,
+    `apps/server/src/reset-request.ts`) removes the venue databases, `pending-adoption.json`,
+    `modules.json` and the record. Left open: (1) **the primary still lists the abandoned
+    standby** — the installation number the primary reserved for that standby is burned by design
     (`reserveInstallationNumber`, `packages/fiscal-verifactu/src/registro-sif.ts`: "a
     never-promoted standby simply burns it — gaps are permitted").
-    **Done for (1) (2026-09-26, lane A's A61, #708):** before A61 nothing on the primary removed another
-    node; now the dashboard's Servers screen lets an admin
+    **Done for (1) (2026-09-26, lane A's A61, #708):** the dashboard's Servers screen lets an admin
     (`mirror.create`) on the serving primary remove a standby that never finished joining
-    (`apps/server/src/membership-removal.ts`, `POST /management-api/servers/:nodeId/remove`). The
-    node is marked `evicted` in a chart this node re-signs, not dropped: a node absent from the
-    chart counts as unfenced and could promote, while a node whose own held chart lists it
-    `evicted` is refused promotion (`assertNotFenced`, `apps/server/src/promote.ts`), and the
-    server list a node gives its tills leaves out a node its held chart lists `evicted`
-    (`routableServers`, `packages/membership/src/fence.ts`). Each removal writes an append-only
-    `membership_removals` row naming the admin, in the same transaction as the chart. A
-    `mirror-bundle` request naming a removed id is refused `mirror.standby_removed`. Still open: an
+    (`POST /management-api/servers/:nodeId/remove`), marking it `evicted`. Still open: an
     `evicted` entry keeps its place under `MAX_NODES` (see "The membership chart grows without
     bound" under *Replication, membership & failover — residuals*); "never finished joining" is read as `serving-secondary` with no
     `nodes` row in the primary's database, and a remote standby writes that row in its own
@@ -3587,11 +2636,8 @@ image constraints under *Detail → Box image*.
     the backup status, so anyone who can read the status can test a guessed key against it (Codex's
     probe matched one of three candidates); #656 deleted the comment calling it revealing nothing,
     and the owner decided on 2026-09-25 to leave it as it is. **Done (2026-09-26, lane A's A40,
-    #672):** an archive the old sweep stored under the OLD key
-    while `reload()` waited for it to stop set `archiveUnderCurrentKey`, so the backup status
-    reported it true (the Backups screen shows "yes" beside "Backup under the current key") before
-    the new sweep had stored anything — reproduced at the supervisor in `backup-supervisor.test.ts`,
-    and the old sweep's `onStored` now does nothing once it is aborted.
+    #672):** the backup status no longer reports an archive the old sweep stored under the OLD key
+    as under the current key: the old sweep's `onStored` now does nothing once it is aborted.
   - Found by #653 (`apps/server` part c2: `boot.ts`, `boot.test.ts`, `config.ts`), outside its
     files or not fixable in a comments-only change. `apps/server/README.md` (near line 230, the
     `WAITRON_SKIP_RETRY_MS` row) says the sleep clamp can round a value "past" a bound, which it
@@ -3599,41 +2645,26 @@ image constraints under *Detail → Box image*.
     `minTickMs > maxTickMs`; #653 corrected the same claim in `config.ts`); `config.test.ts`'s
     test title (near line 572) says "round back down past the floor" where it means "to the
     floor". **Done (2026-09-26, lane A's A38, #669):**
-    `packages/db/src/node-membership.ts`'s header said the caller of `readNodeMembership` re-runs
-    `verifyMembershipDocument` / `acceptMembershipDocument` on what it reads, and none did; it now
-    says a peer's document is stored only after `acceptMembershipDocument` passes it, every other
-    one is minted and signed by this node, and readers trust the row. The restore question it raised
-    is open under Task 9a (the archive and bucket first start now checks the row, #678; the rest stays open there). Two notes #653's prune deleted and
+    `packages/db/src/node-membership.ts`'s header no longer says the caller of `readNodeMembership`
+    re-runs `verifyMembershipDocument` / `acceptMembershipDocument`; readers trust the row. The
+    restore question it raised is open under Task 9a (the archive and bucket first start now checks
+    the row, #678; the rest stays open there). Two notes #653's prune deleted and
     nothing else recorded: nobody knows why the 5-second busy timeout did not absorb a
     `database is locked` in the pending-payment sweep; and nothing proves `startServer` itself
     survives a backup duty that cannot start — only `backup-supervisor.test.ts` covers that, at the
-    supervisor. **Done (2026-09-26, lane A's A39, #671):**
-    a start that failed after boot's long-lived open left the venue store open, holding the folder
-    for this process — reproduced for an unreadable pending-adoption file, an empty fiscal slot, and
-    an unreadable certificate on an adoption-pending start and on a trading start (read after the
-    backup and stream duties start). Setup mode already closed it.
-    When its body throws, `startServer` now undoes what boot had reached, newest first — on a
-    trading start the cloud workers, mDNS, the background loop, the change feed, the listener, the
-    tunnel, the bucket copy and the backup supervisor; on an adoption-pending start mDNS, the
-    listener and the adoption worker; in setup mode mDNS and the listener — then closes the store;
-    a failing undo cannot replace the boot's error. The landing listener, started last, is not
-    undone. `apps/server/src/boot.failed-start.test.ts` holds this, weaker than it reads: no test
-    observes the ORDER (work stopping before the store closes), `liveEvents.close()`, the waits on
-    the loop and the cloud workers (the tests see the unsubscribe, `loop.stopped` and the abort
-    signals), or that the adoption worker is waited for before the close; and the setup,
-    adoption-pending and throwing-undo cases close a listener that has not bound yet (its close
-    reports `ERR_SERVER_NOT_RUNNING`, which the unwind drops), so only the trading and tunnel cases
-    close a bound one. Receipt: `docs/developers/conventions-data.md`, "A failed start undoes what
+    supervisor. **Done (2026-09-26, lane A's A39, #671):** a start that failed after boot's
+    long-lived open no longer leaves the venue store open: when its body throws, `startServer`
+    undoes what boot had reached, newest first, then closes the store; the landing listener,
+    started last, is not undone (`apps/server/src/boot.failed-start.test.ts`, weaker than it
+    reads). Receipt: `docs/developers/conventions-data.md`, "A failed start undoes what
     it started". Left open by #671: each stop is written twice, once in the unwind list and once
     in the mode's `stopWork`; sharing one list was declined because it would change the normal
     shutdown order, which no test pins either.
     Test titles #653 could not touch in `boot.test.ts` carry the history tags
     "(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
   - Found by #625 (`apps/server` part e1), outside its files or not fixable in a comments-only
-    change. Docs: `docs/developers/conventions-ui.md` (the recovery page section) says a
-    caught error's own text goes to the container's stdout only, but the page's log tail can carry
-    it (the file sink masks only credentials in a URL) — fixed by
-    #695, which rewrote that section; `docs/developers/conventions-data.md`'s
+    change. Docs: `docs/developers/conventions-ui.md`'s recovery page section was fixed by
+    #695; `docs/developers/conventions-data.md`'s
     `busy_timeout` receipt, which `recovery-lock.ts` now points at, should carry the date and Node
     version the deleted comment had (2026-09-24, Node v26.7.0). Tests and code, read not run unless
     stated: three `adopt.test.ts` titles say "before any mutation", but by then the primary has
@@ -3669,20 +2700,10 @@ image constraints under *Detail → Box image*.
     "(pre-merge review)", "(I1)" and "skipped a tenant" in `health.test.ts`, "the new guard" in
     `config.test.ts`.
   - Found by #623 (`apps/server` part b: working-order, tabs, tables), not fixable in a
-    comments-only change. (The first finding is fixed by menus plan Task 7b,
-    #696: an edit that changes or removes a sent line recalls or voids it with a
-    kitchen notice and slip, the changed line is sent again, and a line the edit adds reaches the
-    kitchen as a round's would, held where its course or the whole tab is held; the "editing a line
-    the kitchen has and has not started" and "new work an edit adds" cases in
-    `apps/server/src/tabs.test.ts`.) **Editing a held order that has already sent lines to the kitchen deletes
-    their ticket items and never re-sends the new lines.** `PUT /api/working-orders/:id` checks only
-    that the order is open; any edit that is not a pure quantity change takes `updateHeldOrder`'s
-    replacement path (`apps/server/src/working-order.ts`), which deletes every line and inserts new
-    ones, and deleting a line cascades to its ticket item. Run in the review on a real database: a
-    tab whose one line had been fired was edited to a different dish, its ticket-item count went from
-    1 to 0, and the new line was never fired. Whether a correction slip prints was not established
-    (no printer in the setup); read, not run: `updateHeldOrder` never calls
-    `enqueueCorrectionSlips`. Split-off checks may reach the same path (read, not run). Also: the
+    comments-only change. **Editing a held order that has already sent lines to the kitchen deletes
+    their ticket items and never re-sends the new lines** — fixed by menus plan Task 7b, #696: an
+    edit that changes or removes a sent line recalls or voids it with a kitchen notice and slip, and
+    the changed line is sent again. Split-off checks may reach the same path (read, not run). Also: the
     walk-up concurrent double-pay case in `working-order.pay-and-dispatch.test.ts` replays through
     the settled branch and never reaches `payWorkingOrder`'s duplicate-key catch; nothing tests two
     `openTab` calls racing on one table or concurrent rounds landing on consecutive line numbers
@@ -3737,15 +2758,9 @@ image constraints under *Detail → Box image*.
     ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)", "Task 8", "(SP-B2.1)"), as do three
     `session-activity.test.ts` titles ("(C3)").
   - Found by #620 (`apps/server` part h1), not fixable in a comments-only change.
-    **The demo seed does not refuse a production stamp** — DONE (#644, owner instruction 2026-09-25):
-    `demoSeedEnvironment` in `scripts/demo-seed/seed-sales.ts` refuses `production` with
-    `deployment.demo_data_refused` before `seedDemoRestaurant` or `seedSales` writes anything, and
-    `devSetup` (`scripts/dev-setup.ts`) calls it before it reads the `.env` or migrates the venue —
-    the run-it review measured the earlier shape committing the taxpayer and one staff row
-    (`{ tenants: 1, staff: 1, sales: 0 }`) before the seed refused, and a retry under `dev` on that
-    directory refused it as already holding a venue. Each call site's test was run red before its
-    guard existed, then green: the two seed tests resolved instead of rejecting, and the `devSetup`
-    test rejected through the seed's guard but found `venue.db` already on disk.
+    **The demo seed does not refuse a production stamp** — DONE (#644): `demoSeedEnvironment` in
+    `scripts/demo-seed/seed-sales.ts` refuses `production` with `deployment.demo_data_refused`
+    before anything is written, and `devSetup` (`scripts/dev-setup.ts`) calls it first.
     `redact-secrets.ts` was written against the PostgreSQL connection-string parser, and `pg` is now
     installed only for `bench/pglite-throughput`; whether a credential-bearing URL can still reach
     the log is unchecked. `apps/server/vitest.config.ts`'s `coverage.exclude` lists `scripts/**`,
@@ -3932,8 +2947,7 @@ image constraints under *Detail → Box image*.
     `scripts/ci-workflow.test.mjs` "had the mechanism right first"; #602's review corrected that
     file's comment to what testing-guide itself measured (the per-test timer does not fire during
     a blocking `spawnSync`; the test is failed afterwards for its length), so the credit no longer
-    matches. (The advisory-lock sentence in `packages/catalogue/src/options.ts` went with #603, and
-    the "Checking one product's translations" entry below no longer says a lock is taken.)
+    matches.
     `packages/media/drizzle/0001_image_references.sql` (about lines 22-24) says `workspace-cycles`
     refuses an "import"; that guard reads `package.json` files (a shipped migration, likely left).
     Two reasons #602 deleted and did not restore, for the owner to confirm: the hook bullet at the
@@ -3942,16 +2956,10 @@ image constraints under *Detail → Box image*.
     provisioning-test exemption lost its end condition ("until that test runs against fiscal-none",
     spec §6 step 5).
   - Found by #601 (`packages/reporting`). **Re-deriving a closed day does not reproduce its
-    snapshot once a later void touches that day's sales**: #601's Codex seat recorded a void on 5
-    August for a 4 August sale, and 4 August's recomputed VAT went from 21.00 to 0.00. So
-    `docs/superpowers/specs/2026-08-07-frozen-daily-close-z-design.md`'s "Determinism" claim that
-    re-deriving a closed day and comparing it to its snapshot is a valid audit does not hold as
-    written (a dated pointer there says so). **Owner decision 2026-09-24: a void counts on the day it is
-    made, not the day of the sale**, so a later void no longer changes a closed day's re-derived
-    figures — DONE in #605: the daily close's VAT, the period VAT
-    summary and top sellers count a sale on its issue day and subtract it on the void's business
-    day; the close counts keep the sale in `sales` on its issue day and count the void under
-    `voids` on its own day; the cash-up is unchanged (a void writes no tender). The quarterly
+    snapshot once a later void touches that day's sales** — DONE in #605 (owner decision
+    2026-09-24: a void counts on the day it is made, not the day of the sale): the daily close's
+    VAT, the period VAT summary and top sellers count a sale on its issue day and subtract it on
+    the void's business day. The quarterly
     *modelo 303* keeps its old behaviour, pinned by a test in `vat-return.test.ts`, until the
     asesor answers `docs/compliance/asesor-questions.md` Q25 (which VAT period a later annulment
     lands in). No till screen or server route calls `recordVoid` yet. `stableStringify`
@@ -3998,7 +3006,7 @@ image constraints under *Detail → Box image*.
     `sale.already_settled` (`packages/core/src/settle-sale.ts`); #598 measured the earlier check
     stopping both concurrent-settlement tests first. `sale.number_reused` is registered in
     `packages/core/src/errors.ts` and `git grep number_reused -- apps packages` finds no thrower.
-    Outside core (`till-sale.ts`'s copies went with #613),
+    Outside core,
     `docs/developers/conventions-data.md` says the stored breakdown holds "the literals a fiscal
     record hashes" (#598 found the hash covers the totals, not the breakdown).
   - Found by #597 (`packages/payments-sumup`, `packages/migrations`), not fixable in a
@@ -4108,9 +3116,6 @@ image constraints under *Detail → Box image*.
       `test/fixtures.ts`. Correct them only in a change allowed to touch that file.
   - `apps/setup` code, found by #567 and not changed: `#onGoto` in `setup-app.ts` does not clear
     `fiscalTestError`, so the routed-back fiscal-test banner survives navigating away and back;
-    `deployment.already_stamped` was labelled "Reload to open the till" on the provision path and
-    plain "Reload" on the adopt path, and a reload of a box still in setup mode reopens the wizard
-    (done 2026-09-26 in A50, #685: both paths now say "Reload" for that code);
     `AdoptOutcome`'s `breakGlassSecret` is typed as required, but a replayed adopt answers without
     it (`apps/server/src/setup-api.ts`); the done screen treats any failed status read as "the box
     is trading", so a passing 503 could offer the reload early; the mode screen's own text says a
@@ -4168,18 +3173,11 @@ image constraints under *Detail → Box image*.
     `packages/db/src/schema/columns.test.ts` still imports `../index.js` and `./drawer-opens.js`
     dynamically; the comment #585 deleted was the only note that this was meant to be temporary, so
     making them static imports is a small code follow-up.
-  - Found by #589 (`packages/db` outside `src/schema`), not changed. Line pointers from other
-    packages into `packages/db/src/schema`, most of them made wrong by #585 and some pointing past
-    the end of their file — all now removed (`apps/server/src/boot.test.ts`'s by #653,
-    `retire.test.ts`'s by #625, the `scripts/catalogue-engine-neutral.test.ts` pointers by #602,
-    `packages/venue-service/src/operations.ts`'s by #611, the `till-*` ones by #613, `join-requests.test.ts`'s by #617, and `kitchen-print.test.ts`'s and
-    `sale-till-source.receipt.test.ts`'s by #622)
-    — name the file and the column instead, with each package's pruning. In
+  - Found by #589 (`packages/db` outside `src/schema`), not changed. The line pointers from other
+    packages into `packages/db/src/schema` that #585 made wrong are all now removed (#653, #625,
+    #602, #611, #613, #617, #622). In
     `packages/db/src/change-log.test.ts` the case under "THIS CASE NO LONGER SEPARATES ANYTHING"
-    repeats the first case under another name (a test change, not a comment one). The same
-    "as the table owner" wording #589 deleted from `packages/db/src/change-feed.ts` and
-    `configuration-transfer.ts` (this engine has no table owners) was also in
-    `docs/developers/dashboard-live-updates.md`, removed by the docs push after the land.
+    repeats the first case under another name (a test change, not a comment one).
   - `packages/credentials`, found by #577 and not changed. Nothing now checks at run time that a
     read returns something other than a Node `Buffer` (the runtime case went with the PostgreSQL
     suite; a 2026-09-22 measurement read `Uint8Array`, `Buffer.isBuffer` false). Nothing checks
@@ -4188,11 +3186,8 @@ image constraints under *Detail → Box image*.
     `credentials.test.ts`'s fixtures `sk_test_rls`/`whsec_rls` carry a PostgreSQL-era name. The
     `beforeEach` deletes in the store, cli and rotate suites may be redundant beside `useVenueDb`'s
     per-test reset (not tried).
-  - The same false comments outside credentials, found by #577 (the "open database files keep the
-    process alive" claim is gone from all three scripts: #620 removed it from `register-till.ts`
-    and `settle-invoice-first.ts`, #658 from `record-one-sale.ts`) (#657 removed `node-identity.ts`'s "ONE tenant transaction" and its incomplete list
-    of read failures) (the pointers to a missing `errors.reachability.test.ts` are gone:
-    `git grep errors.reachability -- apps packages` prints nothing after #601); and two
+  - The same false comments outside credentials, found by #577, are gone from code (#620, #658,
+    #657, #601); two
     2026-07-26 specs still call the FNMT seal certificate's export unverified, which
     `docs/compliance/getting-to-production.md` §4 closed that day.
   - `packages/bookings`, found by #574 and not changed (code, not comments). Seating a booking at a
@@ -4210,15 +3205,10 @@ image constraints under *Detail → Box image*.
     `payments-sumup`'s and `venue-service`'s config copies to a pointer at CLAUDE.md §4).
   - Found by #588 (`packages/layouts`), not fixable in a comments-only change. Two test titles in
     `packages/layouts/src/canvas-store.db.test.ts` (lines 144 and 249) still quote PostgreSQL's
-    error numbers 23001 and 23505; the stores match SQLite's. The false "Inert: nothing here reads
-    it" comment #588 removed from layouts (it was written about the deleted `tenantId` field and
-    left on the next field down) went from `packages/db` with #589 and from `packages/core` with
-    #598, both fields being read. (#612 removed the dashboard's comments quoting the PostgreSQL
-    numbers for these two stores, #615 `apps/server`'s.) `packages/printing/src/errors.test.ts:5` says the
+    error numbers 23001 and 23505; the stores match SQLite's. `packages/printing/src/errors.test.ts:5` says the
     error construction typechecks "ONLY because" of one import — #588's review measured the same
-    claim false for printing and layouts (#615 removed `apps/server/src/errors.test.ts`'s copy). The shipped `packages/media/drizzle/0001_image_references.sql` says `canvas-store.ts`
-    tells 787 from 1811; it reads only 1811 (`device-profile-store.ts` reads both). #609 removed
-    the same claim from `packages/media/src/image-references.test.ts`. Both layouts database
+    claim false for printing and layouts. The shipped `packages/media/drizzle/0001_image_references.sql` says `canvas-store.ts`
+    tells 787 from 1811; it reads only 1811 (`device-profile-store.ts` reads both). Both layouts database
     suites create a manager session in `beforeAll`, while `useVenueDb` empties every data table after
     each test by default (`resetPerTest`, `packages/db/src/testing/venue-db.ts`), so only a
     suite's first test can use that session; they pass today because only the first does.
@@ -4235,8 +3225,7 @@ image constraints under *Detail → Box image*.
     the outer transaction usable "the whole point of the savepoint"; a test name in
     `packages/fiscal-verifactu/src/chain.test.ts:225` says a collision would "poison the whole
     transaction" (a test title, which a comments-only change cannot touch).
-    `packages/reporting/src/record-daily-close.ts`'s PostgreSQL-era comments went with #601;
-    `packages/store` was pruned by #568 before this was found. The reason "v8 reports phantom uncovered branches" given for excluding
+    The reason "v8 reports phantom uncovered branches" given for excluding
     barrel `index.ts` files from coverage did not hold in scheduler: with the exclusion removed,
     both barrels reported 0 branches at 100% and the totals did not move. So scheduler's two barrel
     excludes in `vitest.config.ts` can go (a config change, not made), and the same reason is still
@@ -4249,11 +3238,7 @@ image constraints under *Detail → Box image*.
   - Found by #579 (`packages/shared`). **DONE 2026-09-24 (PR #583)** for the way
     in — see the P6 entry's DONE items: `decimalToCents` now rounds to cents first and then refuses
     an amount that, once rounded to cents, has more than twelve integer digits, so 99999999999999 cents, the bound
-    `docs/developers/conventions-data.md` gives, is now the bound enforced. The receipt: `assertMoney`
-    checked the integer digits before rounding, so `decimalToCents` turned `999999999999.999` into
-    100000000000000 cents, and `centsToDecimal` turned that back into `1000000000000.00` without
-    refusing it (measured 2026-09-24 with a throwaway vitest case in `packages/shared`; control:
-    `999999999999.99` round-trips unchanged). Still open: `centsToDecimal` itself has no digit
+    `docs/developers/conventions-data.md` gives, is now the bound enforced. Still open: `centsToDecimal` itself has no digit
     bound, so a count past 99999999999999 cents that reaches it by another route is still turned
     into an amount without refusal. `docs/developers/conventions-data.md` (the "no column width left
     to measure" paragraph) has only the PostgreSQL raw-read table, not the
@@ -4276,61 +3261,21 @@ image constraints under *Detail → Box image*.
   comment handling. Until then the hedge is in `CLAUDE.md` §3.
 
 - **No guard holds a MODULE migration set to its declared schema — LANDED for four of them
-  (**PR #491**, 2026-09-23, main `8428395a`).** The comparison the core set had — build a database
-  from the migrations, then check every table, column, key, index and check constraint against what
-  the drizzle declarations say — is now a reusable suite factory,
-  `packages/db/src/testing/schema-conformance.ts`, published from `@waitron/db`'s enumerated
-  `exports` map as `@waitron/db/testing/schema-conformance.js`. Each set that calls it does so from
-  its own `packages/<pkg>/src/schema/schema-conformance.test.ts`; the first five were core,
-  `catalogue`, `payments`, `workforce` and `workforce-es`. **No drift was found in any of the four
-  modules** — the guard went in over a clean tree, which is worth writing down so the next reader
-  does not assume it has already caught something here. What it replaced: P6 got away with a one-off
-  probe of `workforce-es` (its only scaled column had no default and appeared in none of its table's
-  constraints), and #475 found its instances by hand.
-- **Every migration set that builds a table now has a call site — LANDED (2026-09-23), one set per
+  (**PR #491**).** `packages/db/src/testing/schema-conformance.ts` is a reusable suite factory that
+  builds a database from a set's migrations and checks every table, column, key, index and check
+  constraint against the drizzle declarations; the first call sites were core, `catalogue`,
+  `payments`, `workforce` and `workforce-es`, and no drift was found in any of the four modules.
+- **Every migration set that builds a table now has a call site — LANDED, one set per
   pull request:** `credentials` (**PR #497**), `scheduler` (**PR #499**), `identity` (**PR #501**),
   `bookings` (**PR #502**), `venue-service` (**PR #504**), `media` (**PR #505**) and
-  `fiscal-verifactu` (**PR #507**); none found drift. `fiscal-none` needs none — its `drizzle/`
-  holds an empty journal and no `.sql` file, so its set builds nothing. Each call site states the
-  factory's blind spots that reach its own set.
+  `fiscal-verifactu` (**PR #507**); none found drift. `fiscal-none` needs none — its set builds
+  nothing.
 - **Comments and a test name in several packages give a `tenants` foreign key their sets no
-  longer build — DONE (2026-09-23, PR #516).** No set's SQL references
-  `tenants` (`` grep -ln 'REFERENCES `tenants`' packages/*/drizzle/*.sql `` matches no file), so each
-  site now says what an experiment showed. Two experiments, both undone afterwards. First,
-  `useVenueDb` was made to apply its sets in REVERSE, then with core REMOVED, and the whole suite of
-  `scheduler`, `identity`, `credentials` and `workforce-es` run each way: reversed, all four stayed
-  green (90, 278, 138 and 33 tests, a log confirming each set ran before core); without core they
-  failed `no such table: tenants` from `seedTenant` (all four), `no such table: locations` from
-  identity's `seedTill`, and `no such table: change_log` from the drain every `withTransaction`
-  runs (`packages/db/src/tenancy.ts`) — while scheduler's and credentials' own
-  `migrations.test.ts` stayed green without core. Second, `applyMigrations` over the real manifest
-  with core moved: every set migrated cleanly with core AFTER it except `media`, refused `no such
-  table: main.products`, because `media/drizzle/0001_image_references.sql` creates triggers ON
-  core's `products`. So (2026-09-24: #581 moved scheduler's to one line in
-  `packages/scheduler/src/schema/schema-conformance.test.ts`, "No prerequisites"): `scheduler` and
-  `identity`'s `migrations.ts` say the set migrates before
-  core; `credentials`' says the same, plus that the code needs core present (`credentialProvisioned`
-  reads `tenants`, the drain reads `change_log`); the two `migrations.test.ts` suites no longer
-  list core; the manifest test is now "puts core first; media, which creates triggers on core's
-  `products`, will not migrate without it"; the two `workforce-es` suites name the setup's seeds and
-  `convenio_config`'s `locations` key; and the two demo scripts say only that the filter keeps
-  manifest order. No production order changed. The same reason, or "ordering is the runtime's job
-  and nothing enforces it" beside a list, was then corrected in more places, rechecked the same
-  day: `applyMigrations` applied `workforce` ahead of identity and core, and `workforce-es`,
-  `payments` and `fiscal-verifactu` ahead of core, all cleanly, while `media` in the same run was
-  refused. So those four `migrations.ts` now say their set migrates before or after core (2026-09-24:
-  workforce's no longer does; #555 pruned that sentence), with
-  `payments` and `fiscal-verifactu` naming the core table their code reads; `workforce`'s
-  `migrations.test.ts` names the seeds its cases need core for (without core it fails `no such
-  table: tenants`, then `locations`), and `fiscal-none`'s says its case passes without core; the
-  `schema-conformance.test.ts` comments of `workforce`, `payments`, `catalogue` and `bookings` say
-  their prerequisites are the database the set's keys resolve in, not something the migration
-  needs (each suite passes with an empty list — except, by #603's review, `catalogue`'s, which
-  fails `no such table: main.products` without core; not re-run here); the worked example in
-  `docs/developers/testing-guide.md` now points at workforce's conformance call site; and
-  `packages/migrations/src/apply.ts`'s loop comment says sets apply in the order the caller passes,
-  which boot derives from each module's declared `requires` (`orderedMigrationSets`), and gives
-  media's triggers on core's `products` as the reason core must come first.
+  longer build — DONE (PR #516).** No set's SQL references `tenants`, so each site now says what an
+  experiment showed about migration order; `packages/migrations/src/apply.ts`'s loop comment says
+  sets apply in the order the caller passes, which boot derives from each module's declared
+  `requires` (`orderedMigrationSets`), and gives media's triggers on core's `products` as the
+  reason core must come first.
 
 - **Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run — OPEN
   (2026-09-23).** A mutation run changes one line of a source file at a time and reruns the tests,
@@ -4348,12 +3293,9 @@ image constraints under *Detail → Box image*.
   `mutation.yml` run (`CLAUDE.md` §2). **Next action:** read the job durations from the next weekly
   run, and add a `HEAVY_FILES` entry if that file's job is the long one.
 
-- **The spawn-timeout guard reads `scripts/` alone — SUPERSEDED 2026-09-22.** It was extended to
-  `packages/` and `apps/` on 2026-09-18, and that half is gone again: it went with the
-  real-PostgreSQL harness, which owned every long wait those two roots declared. Checked here
-  before writing this — `grep -rnE "timeout: *[0-9_]+" packages apps --include="*.test.ts"` answers
-  nowhere at all, where the same pattern under `scripts/` still finds waits — so the half had
-  nothing left to judge. **The rule holds under both roots and nothing checks it there**, which is
+- **The spawn-timeout guard reads `scripts/` alone — SUPERSEDED.** Its `packages/` and `apps/`
+  half went with the real-PostgreSQL harness, which owned every long wait those two roots declared.
+  **The rule holds under both roots and nothing checks it there**, which is
   stated in `CLAUDE.md` §4 and carried with its measurement in
   [testing-guide.md](developers/testing-guide.md). No work here: re-extending the scan is worth
   doing only if suites under those roots start declaring long waits again.
@@ -4363,32 +3305,22 @@ image constraints under *Detail → Box image*.
   outlast a bound that passes this check. Only reading catches that shape; if it recurs, the answer
   is probably a runtime check rather than a text reader.
 
-- **Reuse the stub executables in the root guard suites — LANDED (2026-09-18).** The follow-up from
-  #407: `scripts/waitron-sh.test.mjs` and `scripts/main-tag-guard.test.mjs` now build their stub bins
-  once per file and vary each case through environment variables, keeping every assertion, and `run()`
-  in waitron-sh reports a killed child.
+- **Reuse the stub executables in the root guard suites — LANDED.** The follow-up from #407:
+  `scripts/waitron-sh.test.mjs` and `scripts/main-tag-guard.test.mjs` build their stub bins once per
+  file and vary each case through environment variables.
 
-- **Fast local pre-push checks — LANDED #338 (2026-09-12).** The hook keeps sign-offs, the locked
-  install, formatting, lint, the root guards and scoped typechecks, and runs no package tests; CI owns
-  the package suites and their coverage thresholds. **The consequence to watch:** CI's `changes` job is
+- **Fast local pre-push checks — LANDED #338.** The hook runs no package tests; CI owns the package
+  suites and their coverage thresholds. **The consequence to watch:** CI's `changes` job is
   now the only thing that runs a package's tests, so a package a branch touched that CI did not select
   has been tested by nothing — read that job's `code`, `scope` and `packages` outputs before calling a
   branch green.
 
-- **A merge could get no CI run at all, and nothing was red — LANDED #384 (2026-09-16).** Every run
-  for a ref shared one concurrency group and GitHub keeps only ONE run pending per group, so the
-  `docs(backlog)` commit that follows every merge could evict the merge's own run. Each push now runs
-  in a group of its own, and — since two `main` runs can now overlap and a registry tag is
-  last-write-wins — the publish job asks `scripts/main-tag-guard.sh` before moving `:main`. **What is
-  still open:**
-  - **The publish path has now executed this code, once, and worked** (2026-09-16). #385's merge
-    (`6e4c3af3`) was the first code merge after #384 landed: run 35109454675's publish job took the
-    registry read and the comparison in 1.3s, answered `move`, published
-    `ghcr.io/clintongormley/waitron:sha-6e4c3af,…:main`, and the live `:main` reads back
-    `WAITRON_BUILD_ID=6e4c3af3…`. So the wiring is proven for the `move` answer. **What no run has
-    exercised yet is `hold`** — an older run publishing after a newer one — which needs two merges
-    close enough together to overlap and is not worth forcing; the script's own `hold` path was run
-    against the live registry before landing (PR #384's comment has the output).
+- **A merge could get no CI run at all, and nothing was red — LANDED #384.** Each push now runs in
+  a concurrency group of its own, and the publish job asks `scripts/main-tag-guard.sh` before moving
+  `:main`. **What is still open:**
+  - **The publish path has now executed this code, once, and worked** (#385's merge, for the `move`
+    answer). **What no run has exercised yet is `hold`** — an older run publishing after a newer
+    one — which needs two merges close enough together to overlap and is not worth forcing.
   - **Two states stop publishing until a person intervenes:** a `:main` carrying no
     `WAITRON_BUILD_ID`, and one built from a commit this repository's history does not contain (an
     image built outside CI, or a rewritten history). Both wedge every later publish identically; the
@@ -4409,13 +3341,10 @@ image constraints under *Detail → Box image*.
   (15 tests) and in a full dashboard coverage run (1,682 tests) with no code change. The original log
   and screenshot were kept; the cause is unexplained, so retain them again on the next sighting
   rather than re-running to green.
-- **A seventh incident, with a cause rather than a hypothesis — FIXED on #469 (2026-09-20).**
-  `test-light-b` timed out in `packages/catalogue/src/extras.concurrency.test.ts` (named
-  `extras.pg.test.ts` at the time) because the suite's `until` helper polled with a 5s bound inside
-  a 30s test timeout; the sibling
-  `packages/catalogue/src/product-modifiers.concurrency.test.ts` had already raised the same bound to 15s and
-  this twin was left behind. Raised to match; it reproduced on no local run, so the fix rests on the
-  identified mechanism and the sibling's receipt, not on a reproduction.
+- **A seventh incident, with a cause rather than a hypothesis — FIXED on #469.**
+  `packages/catalogue/src/extras.concurrency.test.ts`'s `until` helper polled with a 5s bound inside
+  a 30s test timeout; raised to 15s to match its sibling
+  `packages/catalogue/src/product-modifiers.concurrency.test.ts`.
 - **A sixth, seen once (2026-09-20) on #469, a branch that touches no browser package at all.**
   `test-dashboard` failed `apps/dashboard/src/widgets/variant-form.test.ts` → "saves on Enter and
   cancels on Escape from a focused field", at `expect(cancel).toHaveBeenCalledTimes(1)`; the Enter half
@@ -4427,24 +3356,19 @@ image constraints under *Detail → Box image*.
   is cheap to close by awaiting the component's `updateComplete` between the two key presses and
   checking focus is still in the field.
 - **A fifth: `test-dashboard`'s browser a11y suite failed on a stray `:hover` state left over from a
-  prior test in the same shared browser page — CONFIRMED and FIXED the same day in #350 (2026-09-13).**
-  axe captured a `wt-button` mid-hover (foreground `#fefefe`, background `#3f83ed`) because the cursor
-  belonged to the shared PAGE and outlived the test that moved it; `test-helpers.ts` now parks the
-  cursor off-page before every test via a `parkPointer` command (guard
+  prior test in the same shared browser page — CONFIRMED and FIXED the same day in #350.**
+  `test-helpers.ts` now parks the cursor off-page before every test via a `parkPointer` command (guard
   `apps/dashboard/src/widgets/pointer-reset.test.ts`). **Two pieces are still open.** The
   `dashboard-app.a11y.test.ts` heading-order sighting is a different rule with no colour evidence, so
   nothing here explains it — treat it as still unexplained. And `packages/ui` and `apps/till` have the
   same harness with no reset, with `packages/ui/src/components/wt-button.test.ts` ending a test
   hovering a button, so the same flake is waiting there.
-- **A sixth: a CI shard exits 1 with every one of its tests passing (2026-09-18, PR #414,
+- **A sixth: a CI shard exits 1 with every one of its tests passing (PR #414,
   `test-server (3)`, job 105632564989) — the exit-1 path CLOSED by the Vitest 4.1.11 upgrade
-  (#437), measured 2026-09-25 and the trap deleted from `CLAUDE.md` §2 by #626; why the call went unanswered still open.** The shard printed
+  (#437) and the trap deleted from `CLAUDE.md` §2 by #626; why the call went unanswered still open.** The shard printed
   `Tests 1313 passed (1313)` and one unhandled error: vitest's worker-to-main reporting call
   (`onTaskUpdate`) had timed out on birpc's 60-second default under vitest 3.2.7, failing the shard
-  on its own and taking the aggregate `ci` job with it. **On Vitest 4.1.11 that timeout is gone,
-  measured 2026-09-25**: a reporter withholding its answer for 75 seconds left the run waiting and
-  passing, while the same probe failed at 60 seconds on 3.2.7 and on a 4.1.11 copy edited back to a
-  60-second timeout. **What is still unexplained is why one worker's `onTaskUpdate` went
+  on its own. On Vitest 4.1.11 that timeout is gone. **What is still unexplained is why one worker's `onTaskUpdate` went
   unanswered:** the main process never went more than 22 seconds without printing (its longest gap,
   during startup) and the shard is not the heavy one, so starvation is a weaker suspect than it
   looks. On 4.1.11 an answer that never came would leave the shard waiting until the job's
@@ -4460,10 +3384,6 @@ image constraints under *Detail → Box image*.
   the grant, with no trigger backing it, and TRUNCATE is wider still — no table grants it and only ten
   carry a trigger blocking it. The per-table matrix is read from
   `packages/fiscal-verifactu/src/privileges.expected.ts`, which goes when the grants do.
-  The `ENABLE ALWAYS` immutability trigger ten of those tables carried is gone with
-  PostgreSQL; the refusal is installed at runtime from the `ledger` classification instead
-  (`packages/store/src/append-only.ts`), so a newly classified ledger table is protected
-  without a migration remembering to do it.
 
   **What #430's review left behind, none of it taken there.** The allowance list is a JSON file
   rather than the annotated TypeScript constant every sibling guard uses, because the plan named a
@@ -4490,18 +3410,6 @@ image constraints under *Detail → Box image*.
   target-choice framing wherever it presented a decision no code makes, and kept every sentence of the
   shape "under PGlite this was X, here it is Y", every dated measurement, and every comment where
   PGlite was the reference ORACLE that proved a SQLite expression equivalent.
-
-  **Two things about it are worth carrying.** First, this entry's own description of the job was stale
-  in both directions when T2 picked it up: the GRANT and grant-matrix clauses it told the next reader
-  to fix had already been deleted by #490, so a literal reading found nothing; and it sized the job at
-  "around a dozen suites" when the sweep ran to roughly a hundred files across `apps/server` and every
-  package. Second, the sweep's value was not the framing — it was the five or six comments that
-  turned out to be false claims in the present tense, each found only because someone was reading the
-  line anyway. The best of them: a comment asserting that a `useVenueDb` database carries no
-  append-only trigger unless the suite installs one (it installs them itself, and the suite's own
-  statements are `create trigger if not exists`, so both answers look alike until you no-op the loop
-  AND empty the declared list); and two comments claiming PostgreSQL folds a UUID's spelling on cast,
-  where the folding is application code.
 
 - **Comments naming a PostgreSQL SQLSTATE as today's behaviour — OPEN (split out of the sweep above
   by T2, 2026-09-23).** `grep -rn "22P02\|22003\|23505\|23503\|42703\|42P01" apps/server/src`
@@ -4532,31 +3440,10 @@ image constraints under *Detail → Box image*.
   `grep -rln 'const pg = useVenueDb\|pg\.db' --include='*.test.ts' packages apps` for the current
   set rather than trusting a number written here.
 
-- **Two fiscal-package comments that need a probe, not a reword — DONE by #562 (2026-09-24).**
+- **Two fiscal-package comments that need a probe, not a reword — DONE by #562.**
   #562 deleted the stale "out of scope" and shared-database prose from `chain.test.ts` and
-  `drain.test.ts` (`useVenueDb`'s `resetPerTest` defaults to true,
-  `packages/db/src/testing/venue-db.ts`) and the `VerifactuBackend.drain` description; a grep of
-  `write-path.e2e.test.ts` for the reseed wording finds none. The original entry follows.
-  `packages/fiscal-verifactu/src/chain.test.ts`'s header says a previous test's committed rows are
-  simply out of scope rather than something to clean up, and that nothing there could truncate
-  `registros_facturacion` anyway because the append-only trigger blocks it. Both look stale against
-  `packages/db/src/testing/venue-db.ts`, where `resetPerTest` DEFAULTS to true and the reset drops
-  every trigger, deletes every migrated table and recreates the triggers — but discriminating the two
-  readings needs a run, which T2 did not do. (T2's own summary called its fiscal diff comments-only.
-  That was wrong, and the run-it review seat caught it: the package also changes executable code, in
-  `drain.ts` and in its manifest. Do not trust a list of the pieces — take it from the diff, with
-  `git diff <base> -- packages/fiscal-verifactu/ | grep -E "^[+-]" | grep -vE "^[+-]\s*(\*|//|/\*)"`.
-  What T2 did in `drain.ts` was take out a call to a row-locking helper in `@waitron/db` and put a
-  plain `select` in its place; the helper had already been reduced to exactly that select, so the
-  statement the drainer sends is unchanged. Nothing there touches what `RUNNER.md` H2 protects, and
-  that was checked rather than assumed — listing every write statement in the file with
-  `grep -nEo "(insert into|update|delete from) +[a-z_]+" packages/fiscal-verifactu/src/drain.ts`,
-  none of them names `registros_facturacion`, which appears only in joins, one subquery and prose,
-  so the drainer computes no huella, allocates no invoice number and writes no chain.) The same
-  reseed prose survives in `drain.test.ts` and `write-path.e2e.test.ts`. Separately,
-  `drain.test.ts` describes a `VerifactuBackend.drain` method; the class has no such method, and the
-  drain pass reaches it through the fiscal slot. **Next action:** one probe for the reset question,
-  then correct all three headers together.
+  `drain.test.ts` and the `VerifactuBackend.drain` description; a grep of
+  `write-path.e2e.test.ts` for the reseed wording finds none.
 
 - **`bench/pglite-throughput` starts a container `pnpm reap` cannot see — OPEN (T2, 2026-09-23).**
   `bench/pglite-throughput/src/bench.ts` starts a real `postgres:18-alpine` through Testcontainers and
@@ -4570,20 +3457,15 @@ image constraints under *Detail → Box image*.
   entry above), so the two decisions belong together.
 
 - **`replication-arc`'s isolation was reverted** (vitest `projects` are incompatible with `--shard`)
-  — CLOSED 2026-09-19: `apps/server/src/replication-arc.e2e.test.ts` was deleted with the PostgreSQL
-  failover machinery, so this cannot recur in that file. The deletion changes nothing about vitest
-  itself — `projects` and `--shard` are as incompatible as they were.
+  — CLOSED: `apps/server/src/replication-arc.e2e.test.ts` was deleted with the PostgreSQL failover
+  machinery; `projects` and `--shard` are as incompatible as they were.
 - **Job-sharding levers:** `--shard` splits by FILE COUNT; bump `shard: [1..N]` and the denominator
   together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
-  dominates. (`mutation-verifactu` used to be named here as the next critical-path candidate; that
-  job was removed when `@waitron/verifactu` was extracted to its own repository.)
-- **Dependency loop removed — LANDED #348 (2026-09-13).** `pnpm install` no longer warns about cyclic
-  workspace dependencies; `scripts/workspace-cycles.test.ts` fails if a loop returns. One review point
-  remains:
+  dominates.
+- **Dependency loop removed — LANDED #348.** `scripts/workspace-cycles.test.ts` fails if a loop
+  returns. One review point remains:
   - The loop guard reports the whole group of packages in a loop, not a path through it, so a failure
     does not say which link to cut. Optional: print one cycle path alongside the group.
-- **A hung real-PG suite leaks its cluster containers** and `pnpm reap` only removes labelled ones
-  older than two hours — inspect creation times and ownership, remove only your own.
 - **Nothing notices if the outstanding-sales query stops linking its settlement check to the sale**
   (found 2026-09-14 while removing the tenant filters; the gap predates that branch). A sale is
   excluded by `not exists (select 1 from sale_settlements ss where ss.sale_id = s.id)`
@@ -4644,25 +3526,10 @@ does when its tables change under it (re-pick the first, or close) and fix it te
 may make one or both of those branches reachable, or show they can go.
 
 **The till reports a failed list refresh after a SUCCESSFUL write as a failed write — DONE
-(2026-09-25, PR #641; found by the retroactive Codex review of #621, whose
-comment fixes landed as #632).** The park, cash-sale, card-sale and place handlers in
-`apps/till/src/till-app.ts` now hand the list refresh behind a successful write to
-`#refreshAfterWrite`, so its failure never reaches the write's own error (`held.park_error`,
-`sale.unconfirmed`, `place.error`). It shows what succeeded, that the list could not refresh, a
-countdown and a Try now button, and retries after 5 s, 10 s, then every 30 s until the newest
-refresh of that list succeeds, the operator signs out, or the till re-boots. The owner's request of
-2026-09-25 also said "or leaves the screen"; the retry deliberately keeps running when the operator
-moves between tabs, because the held list and the kitchen queue are shown on the counter the
-operator comes back to. Every refresh of the held list and the kitchen queue now carries a request
-number, and only the newest answer for a list may show its rows or start, change or clear its
-retry, so a refresh answering after a sign-out, a re-boot or a newer refresh neither shows its rows
-nor touches the retry. That holds for the older callers too (login, retrieve, discard, station
-advance and collect, and a zone change; a switch to a prepay zone now empties the queue the same
-way), which before installed whatever answer arrived last.
-The card-sale path (`#onCollectCard`) had the same shape and is included. Tests: the "a failed list
-refresh after a successful write" block in `apps/till/src/till-app.test.ts`, and its a11y case
-in `till-app.a11y.test.ts`. The listStaff test title that #632 recorded as too wide now says "on
-the first login".
+(PR #641; comment fixes from the #621 review landed as #632).** The park, cash-sale, card-sale and
+place handlers in `apps/till/src/till-app.ts` hand the refresh behind a successful write to
+`#refreshAfterWrite`, which shows what succeeded, that the list could not refresh, and retries; only
+the newest refresh of a list may show its rows or change its retry.
 
 **Five till handlers still leave a failed list refresh unhandled, and one a11y file may not render
 its screen — OPEN (found 2026-09-25, review of PR #641).**
@@ -4743,18 +3610,10 @@ reading unless marked run:
   receipt each, or leave them as defensive code by decision.
 
 **What the till shows the NEXT operator when the previous one's request answers late — CLOSED, no
-change (owner decision 2026-09-23; found 2026-09-23, till coverage, PR #536).** The till coverage branch
-fixed the case where a late answer reopened a logged-out till (it now stays on the lock screen).
-The same late answer can also arrive after a DIFFERENT operator has logged in: `#showTicket` and `#onOpenTable` in
-`apps/till/src/till-app.ts` then push the previous operator's ticket or table over the new session.
-Reproduced 2026-09-23 in the till coverage branch's review on a till, with the sale and the
-table-open answers held back across a logout and a second operator's login: both appeared over the
-new session. The owner's answer: the ticket belongs to the TILL, not to the operator who started
-it, so a late result shown on that device after a change of operator is right — on a handheld passed
-from one waiter to another too. The case is unlikely, because whoever takes a payment is usually
-standing there waiting for it. What matters is that no payment is lost, and none is: the payment
-belongs to the table, so the next operator opens the table and sees what is paid and what remains.
-The fix in #536 (a logged-out till stays locked) stands.
+change (owner decision 2026-09-23; PR #536).** The ticket belongs to the TILL, not to the operator
+who started it, so a late result shown on that device after a change of operator is right; the
+payment belongs to the table, so no payment is lost. The fix in #536 (a logged-out till stays
+locked) stands.
 
 **Till code that no test can reach, and small till defects — OPEN (found 2026-09-23, till
 coverage, PR #536).** Left uncovered rather than deleted, each by reading its callers (none was
@@ -4825,22 +3684,10 @@ drop the entry on close, test-first (a live client after the reset is paired wit
 narrow or extend that older test.
 
 **On SQLite a read taken while a write transaction is open could see uncommitted rows — CLOSED
-(found 2026-09-21, task F1; fixed 2026-09-23 by PR #493).** The flip opened ONE connection per database file,
-following its own plan rather than the slice-1 spec's §3.3 "small set of connections for reading",
-so a read issued while the write lock held a transaction open ran on the writer's own connection and
-returned that transaction's rows — including a row a rollback then removed. A second connection to
-the same file, which is what node-postgres's pool used to hand a reader, returned committed rows
-only, so this was a behaviour change rather than something SQLite forces.
-
-`packages/store` now opens two connections per file: the single writer, and a reader opened
-`readOnly: true` beside it. A statement goes to the reader only while one of the store's own
-transaction bodies is running and the caller's asynchronous context is outside it; everywhere else
-the writer is used, so migrations, archives and writes outside a transaction are unchanged. The rule
-is in `packages/store/src/connections.ts`, its measurements in `docs/developers/conventions-data.md`
-(since #568 pruned them from the source), and the cases in
-`packages/store/src/index.test.ts` pin it — though not every one of them does: with the routing
-replaced by `return write;` the case `serves a read routed to the reader on a file with no tables in
-it` still passes, so it is a smoke test rather than a control, and it says so at its own site.
+(task F1; fixed by PR #493).** `packages/store` now opens two connections per file, the single
+writer and a `readOnly: true` reader; a statement goes to the reader only while one of the store's
+own transaction bodies is running and the caller is outside it, so such a read sees committed rows
+only. The rule is in `packages/store/src/connections.ts`.
 
 **Three shapes the read connection does not cover — OPEN (stated 2026-09-23, task N3, PR #493).** A
 transaction opened by RUNNING `begin` as an ordinary statement is not one the store is told about —
@@ -4865,13 +3712,6 @@ a body happened to be running, and none of those suites runs one. **Next action:
 that holds; a temporary table, an attachment or a connection pragma issued from OUTSIDE a running
 body has to be put on the writer deliberately, and a guard for that does not exist.
 
-Two things the review wave found by RUNNING, both fixed on the same branch rather than recorded: the
-window used to close when a transaction's BODY settled rather than when the transaction finished, so
-a handler registered on the body's own promise read the writer's still-uncommitted rows; and the
-asynchronous context used to carry a plain "inside a body" mark, which never expires, so a callback
-detached inside one transaction and settling during a LATER one was read as being inside that later
-one and saw its uncommitted rows.
-
 Two more things #493's review left behind rather than fixed. The routing cases are a weaker set than
 their name suggests: with the routing replaced by a plain return of the write connection, some of
 them pass whichever connection serves the read, and each of those says so at its own site — which is
@@ -4894,15 +3734,10 @@ comment #609 deleted as partly false, so that is untested; the label filter, the
 no scan at all. **Next action:** move the non-search path back into SQL; how far to push the search
 path is a separate decision.
 
-**`sale_voids` has no index on `voided_at` — DONE (2026-09-26, lane A's A33, #663; found 2026-09-24 by #605).**
-Core migration `0011_sale_voids_voided_at_idx` adds `sale_voids_voided_at_idx`, declared in
-`packages/db/src/schema/sale-voids.ts`. Measured on the real core schema (node v26.7.0, an empty
-migrated venue, no `ANALYZE` statistics): before, the void count scanned `sales` (one node) or
-`sale_voids` (whole venue), and the reversal half of the daily VAT summary, the period VAT summary
-and top sellers scanned `sales`, `sale_voids` or `sale_lines`; with the index all four, for one node
-and for the whole venue, print `SEARCH sv USING INDEX sale_voids_voided_at_idx (voided_at>? AND
-voided_at<?)`. The void count's plan is pinned by `packages/reporting/src/counts.test.ts`; the other
-three were read once, not pinned. Plans over real row counts were not measured.
+**`sale_voids` has no index on `voided_at` — DONE (lane A's A33, #663; found by #605).** Core
+migration `0011_sale_voids_voided_at_idx` adds `sale_voids_voided_at_idx`, declared in
+`packages/db/src/schema/sale-voids.ts`; the void count's plan is pinned by
+`packages/reporting/src/counts.test.ts`.
 
 **Cash handed back for a voided cash sale is recorded nowhere — OPEN (found 2026-09-24 by #605).**
 A void writes no payment or refund row, so if staff give a customer cash back, the void's day shows
@@ -5038,13 +3873,9 @@ the row reads back `tampered`. One detail for whoever writes the comparison — 
 trigger with `IF NOT EXISTS` removed and `CREATE TRIGGER` upper-cased, so the stored text is not
 byte-identical to the string the installer sent.
 
-**The verifactu extraction's compliance-doc references — DONE (2026-09-21).** The compliance
-provenance doc now reads `@waitron/verifactu` and notes the extraction. The library's own
-follow-ups now live in the verifactu repo's own backlog (`docs/backlog.md` there), not here — the
-differential-test spike against `inoguerols/verifactu`, a convenience facade, a documented
-QR-image recipe, and porting NIF/NIE/CIF check-digit validation into `validate()`. They were
-deferred by the extraction spec §2.8–2.11
-(`docs/superpowers/specs/2026-09-21-verifactu-extraction-design.md`).
+**The verifactu extraction's compliance-doc references — DONE.** The compliance provenance doc
+now reads `@waitron/verifactu`; the library's own follow-ups live in the verifactu repo's own
+backlog (`docs/backlog.md` there), not here.
 
 **Waitron carries two QR encoders; consolidate on `qrcode-generator` — Small.** `apps/server` imports
 `qrcode` (in `qr-matrix.ts`, `print-job-preview.ts`, `discovery-api.ts`) while `apps/till` uses
@@ -5059,27 +3890,16 @@ segment API; `qrcode-generator` has a `'Byte'` mode, but this path must produce 
 still-scannable QR — these are fiscal receipt QRs AEAT's own app must verify — so it needs a
 render→decode check and a real scan, not just a green typecheck.
 
-**A blank amount posted at the purchase-invoice routes was stored as a zero — FIXED #485
-(2026-09-21).** Every amount on both the POST and the PATCH — the header's `total` and
-`deductibleProportion`, and each line's `rate`/`base`/`tax` — now goes through `decimal()`, and
-`shared.invalid_decimal` is a 400 in the route's `STATUS` map. The same pass confirmed the
-catalogue write routes never had this hole: their boundary screens are typeof-only too, but the
-ops behind them refuse a malformed literal.
+**A blank amount posted at the purchase-invoice routes was stored as a zero — FIXED #485.** Every
+amount on both the POST and the PATCH now goes through `decimal()`, and `shared.invalid_decimal`
+is a 400.
 
 **A negative gross total is accepted and stored on the purchase-invoice routes — NOT A DEFECT, the
-behaviour is intended (owner ruling 2026-09-21; found 2026-09-21, task N1).** A negative gross total
-is a supplier credit note — a corrective adjustment for a return, a cancellation, an overpayment, a
-retroactive rebate or goods that arrived damaged or never arrived — so accepting and storing one is
-correct and there is no `negative_total` refusal to add. Whether a credit note should eventually be
-its own document type rather than a negative-total purchase invoice is a separate design question
-and is not queued. The measurement that raised it is kept below, because it is the receipt for what
-the routes do today. Measured through the real route in `apps/server`'s PGlite harness: a POST to
-`/management-api/purchase-invoices` carrying `total: "-121.00"` answered **201**, and the list
-route read the row back with `total` `-121.00`. `validateProportion` and `validateLines` in
-`packages/purchasing/src/operations.ts` check the deductible proportion 0–100 and, per line, base ≥
-0, tax ≥ 0 and rate 0–100 — neither looks at the header `total` — and
-`packages/db/src/schema/purchase-invoices.ts` carries check constraints for `deductible_proportion`
-and the line `rate` and none for `total`. The dashboard form's `inRange(this.total, 0, Infinity)`
+behaviour is intended (owner ruling 2026-09-21; task N1).** A negative gross total is a supplier
+credit note, so accepting and storing one is correct and there is no `negative_total` refusal to
+add. Whether a credit note should eventually be its own document type rather than a negative-total
+purchase invoice is a separate design question and is not queued.
+The dashboard form's `inRange(this.total, 0, Infinity)`
 (`apps/dashboard/src/widgets/purchase-form.ts`) is the only thing refusing one, so a direct POST
 walks past it. **One consequence the ruling creates, unqueued:** that form check refuses the very
 document the ruling calls legitimate, so an operator cannot enter a supplier credit note through the
@@ -5209,7 +4029,7 @@ branch found, checked, and consciously did not take.
   qualifies; this is the backlog's pointer to it.
 
 **Left behind by the dependency refresh (#432, 2026-09-19).** Nineteen dependencies moved to their
-latest minor or patch release; two loose ends came with it.
+latest minor or patch release; one loose end came with it.
 
 - **Five manifests had their declared floor raised, and nobody has said whether that is the house
   style.** `hono` was declared `^4.6.0` and `^4.7.0`, `pg` `^8.13.0`, `playwright` `^1.49.0`,
@@ -5218,13 +4038,6 @@ latest minor or patch release; two loose ends came with it.
   raised them so that every package declares one identical range, which is now the shape of all
   nineteen. No commit or doc explains why those floors were low, so this was a judgement, not a
   rule being followed. If low floors were deliberate, the revert is one line per manifest.
-- **Half of one `pg` receipt was not re-established at 8.23.0.** Four comments — in
-  `packages/provisioning` (`README.md`, `src/cli.ts`, `src/errors.ts`, `src/cli.test.ts`) — record a
-  measurement taken inside a `postgres:18-alpine` container, where a connection string of
-  `/var/run/postgresql` connected over the cluster's Unix socket. The parsing half was re-run on
-  8.23.0 and is unchanged; the container was not started, so those four still name `pg@8.22.0` and
-  say only that it is the version the measurement was taken on. Re-running it needs the container,
-  because the socket cannot be bind-mounted out of Docker Desktop's VM on macOS (`CLAUDE.md` §4).
 
 **Left behind by the esbuild upgrade (#439, 2026-09-19).** The four packages that build bundles
 moved from esbuild 0.25.12 to 0.28.2. Two things it could not take with it:
@@ -5246,21 +4059,14 @@ moved from esbuild 0.25.12 to 0.28.2. Two things it could not take with it:
   class to account for. What replaced it there is below.
 
 **Left behind by the Node types upgrade (#441, 2026-09-19).** Thirty-eight manifests moved from
-`@types/node` `^24.0.0` to `^26.0.0`, matching the Node 26 the `.nvmrc` pins, and
-`packages/tunnel` — which imports `node:net` in six files and declared no Node types at all — got a
-declaration of its own. Two things it leaves open:
+`@types/node` `^24.0.0` to `^26.0.0`, matching the Node 26 the `.nvmrc` pins. Two things it leaves
+open:
 
 - **`apps/dashboard` now type-checks against two `@types/node` majors at once.** `@types/qrcode` is
   a declared devDependency there and in `apps/server`; its `index.d.ts` opens with a reference to
   the Node types, its own range is `"*"`, and the lockfile leaves it on **24.13.3** while everything
-  else moved to 26.6.2. Measured with `tsc --noEmit --explainFiles` in `apps/dashboard`: 141 file
-  mentions of 24.13.3 beside 384 of 26.6.2, where the same command on the pre-merge `main` showed
-  350 of 24.13.3 alone. Nothing complains because `skipLibCheck` is on (`tsconfig.base.json:15`);
-  with `--skipLibCheck false` that program reports a duplicate `NonSharedBuffer` identifier. **Both
-  numbers were taken on TypeScript 5.9.3 and both were re-run on 7.0.2 on 2026-09-20**, which is the
-  compiler `apps/dashboard` uses now: the counts moved to 146 and 542, and `--skipLibCheck false`
-  still names `NonSharedBuffer` at `buffer.buffer.d.ts(459,14)` in both copies. The problem is
-  unchanged; only the file counts are.
+  else moved to 26.6.2. Nothing complains because `skipLibCheck` is on (`tsconfig.base.json:15`);
+  with `--skipLibCheck false` that program reports a duplicate `NonSharedBuffer` identifier.
   `pnpm update --recursive --depth Infinity "@types/node"` does not collapse it — tried and
   reverted, it rewrote our own declarations to `"^26.6.2"` and left the transitive copy alone. The
   fix is a pnpm resolution override, which is a policy decision rather than a version bump, so it
@@ -5298,15 +4104,7 @@ declaration of its own. Two things it leaves open:
 `packages/ui` moved from vite `^6.0.0` to `^8.0.0` (installed 8.3.0). Vite 8 swaps the bundler and
 the transformer: Rolldown and Oxc in place of Rollup and esbuild. What replaced the byte-comparison
 method above, since a bundler replacement makes it meaningless: build both, then run the SHIPPED
-bundles and compare what they produce. Concretely — `till-ticket-view` was instantiated out of each
-production bundle in real Chromium with the fixture from
-`apps/till/src/screens/till-ticket-view.test.ts`, and the Veri*Factu QR SVG came out identical at
-28231 bytes with the receipt text matching character for character; and `manifest.webmanifest`,
-emitted by the only custom Rollup-hook surface in the repo (`webManifest()` in
-`apps/till/vite.config.ts`, `generateBundle` + `this.emitFile`), came out identical at 434 bytes.
-(2026-09-20: that QR byte count was measured on qrcode-generator 1.5.2. The till has since moved to
-2.0.4, which draws identical bytes — see the entry below — so the number still holds.)
-Five things it leaves open:
+bundles and compare what they produce. Five things it leaves open:
 
 - **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI.**
   `bundle-smoke` builds `@waitron/credentials` and `@waitron/server`, which are esbuild bundles. The
@@ -5397,19 +4195,9 @@ U+0020 — a difference invisible in any report. If exact XML semantics are ever
 bump.
 
 **Left behind by the till QR library upgrade (qrcode-generator 1 -> 2, 2026-09-20).** `apps/till`
-moved from `^1.4.4` (installed 1.5.2) to `^2.0.4`. Two majors of version number, but the drawing
-code did not change: diffing the two published CommonJS builds gives one hunk, a canvas `fillRect`
-in `renderTo2dContext` whose row and column arguments were the wrong way round, and
-`apps/till/src/qr.ts` calls `createSvgTag` and never reaches it. What version 2 adds is an
-`exports` map and an ESM build of the same code. Nine payload classes rendered through all three
-builds — version 1, version 2's CommonJS, version 2's ESM — gave byte-identical SVG for every one,
-with two controls (error-correction level M against L, cell size 4 against 5) confirming the
-comparison could see a difference. Three things it leaves open:
+moved from `^1.4.4` (installed 1.5.2) to `^2.0.4`. The drawing code did not change; what version 2
+adds is an `exports` map and an ESM build of the same code. Two things it leaves open:
 
-- **The byte-count receipt in the vite 8 entry above crosses this major.** That entry records the
-  Veri*Factu QR SVG coming out of both production bundles "identical at 28231 bytes", measured on
-  qrcode-generator 1.5.2. The number still holds only because the drawn bytes did not move, which
-  this upgrade establishes and that entry has no way to state. Read the two together.
 - **The pin protects the screen path; the printed path has a stronger check of its own.** `qrSvg`
   has one product call site, `apps/till/src/screens/till-ticket-view.ts`, the ticket the till shows
   on screen. The PRINTED receipt's QR comes from a different library (`qrcode`, via
@@ -5603,9 +4391,8 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   for the business day it computes itself (`currentBusinessDay`, `apps/server/src/report-api.ts`).
   So the two screens disagree for those few hours every night. `today()`'s own comment flags the UTC choice. **Next action:** seed the range from the venue's business day, the same value
   Overview renders, rather than from a UTC date.
-- **An imported configuration no longer carries "already offered a passkey"** (fixed 2026-09-14). A
-  configuration transfer strips `passkey_offered_at` on export and refuses a bundle that still
-  carries it, alongside the other person columns the transfer already leaves behind.
+- **An imported configuration no longer carries "already offered a passkey"**: a configuration
+  transfer strips `passkey_offered_at` on export and refuses a bundle that still carries it.
 - **The login screen's automatic passkey attempt can show "Something went wrong, try again" on load**
   (seen 2026-09-14 while taking screenshots for the dashboard alerts branch; the same happens on
   `main`, so it is not that branch's bug). Playwright's headless Chromium 149 refuses the attempt
@@ -5751,10 +4538,8 @@ P8).** Read this section as a list of requirements the replacement must meet, no
 on code that exists. The membership, promotion and rejoin arc (#197–#272) and the two-node WireGuard
 fixture (#275) are still in the tree. What remains, largest first:
 
-- **Status, alarms and the operator surface for replication.** The PostgreSQL version of this — numbers
-  and alarms off `pg_stat_subscription` / `pg_replication_slots.wal_status`, the SKIP runbook, the
-  post-drain disable route, orphaned-slot reclamation — went with the machinery. The REQUIREMENT
-  stands: an operator needs to see whether the standby is keeping up, and to be alarmed when it is not.
+- **Status, alarms and the operator surface for replication.** The REQUIREMENT stands: an operator
+  needs to see whether the standby is keeping up, and to be alarmed when it is not.
 - **Fiscal-certificate distribution — landed #279, reverted #281; rebuild on the asynchronous adopt.**
   Open design question: how the dormant certificate is protected when the seal must happen after the
   initial COPY ([design](superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md),
@@ -5780,21 +4565,13 @@ uncommitted diff is wanted.
 
 ### Cloud integration and SQLite work
 
-**Shared account controls (2026-09-23):** `@waitron/ui-core` now owns the seven account
-controls, tokens and common helpers inside this repository. Existing `@waitron/ui`
-imports re-export the same implementations. The standalone tarball fixture checks
-browser behaviour, accessibility and declarations without workspace source aliases;
-CI covers both packages and the weekly mutation matrix retains both. See the
-[extraction design](superpowers/specs/2026-09-23-shared-ui-extraction-design.md).
-Cloud has published private `@waitron-io/ui-core@0.1.0` from Waitron commit
-`0a93f4d3557b669661ac8f589aad866e2cd9653f`; its installed-package Chromium and
-declaration checks pass locally. See the [release receipt and setup](https://github.com/waitron-io/waitron-cloud/blob/main/docs/shared-ui-release.md).
-Cloud owns the release workflow and account screens. Its English/Spanish account portal
-is implemented, and the connection screens now use its real account and pairing APIs
-(see Cloud connection integration above).
+**Shared account controls:** `@waitron/ui-core` owns the seven account controls, tokens and common
+helpers inside this repository, and existing `@waitron/ui` imports re-export them (see the
+[extraction design](superpowers/specs/2026-09-23-shared-ui-extraction-design.md)). Cloud has
+published private `@waitron-io/ui-core@0.1.0` (see the [release receipt and setup](https://github.com/waitron-io/waitron-cloud/blob/main/docs/shared-ui-release.md))
+and owns the release workflow and account screens.
 Read the first weekly mutation results for both UI packages after the split; this
 branch preserves the 90% gates but does not measure their new full mutation scores.
-
 
 Cloud product and infrastructure work moved to the
 [Waitron Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md)
@@ -5822,8 +4599,8 @@ failover-loop prototype.
 **That prototype gate is DONE — all ten tasks landed (#392, #395, #406, #411, #415, #417, #422,
 #425), and slice 1, the storage swap, is COMPLETE as of 2026-09-23**
 ([spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md),
-[plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md)). Read the gate's own product,
-[the results note](research/2026-09-16-sqlite-failover-prototype.md), rather than re-deriving any of
+[plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md)). Read
+[the results note](research/2026-09-16-sqlite-failover-prototype.md) rather than re-deriving any of
 it: the failover loop holds everywhere except **S2**, the recorded negative result — a handed-over
 batch can re-file a sale the receiver already filed, which costs one wasted AEAT call (error 3000,
 already read as filed) rather than a record filed twice. The fence-before-ship rule that produced is
@@ -5853,33 +4630,16 @@ a venue key** stored in `venue.db` only in locked form (slice-2 spec §3.3) — 
   a stale conditional write. The same check is the first assertion of
   `apps/server/src/stream-loop.e2e.test.ts`, run against versitygw 1.8.0 whenever CI runs
   `apps/server`'s tests. Waitron Cloud's production store still needs its own run.
-- **The restart reset is built (2026-09-23), and so is its precondition (#566).** `resetInFlightClaims`
-  (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising
-  `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it before a
-  boot's first filing pass, and again only if that attempt failed — so a node that restarts files
-  an inherited "being filed right now" sale on its first pass once the reset succeeds, with no
-  five-minute wait; a failed reset is retried no later than `WAITRON_SKIP_RETRY_MS` after it failed.
-  It runs only where the drain does: on the singleton primary, with submission
-  switched on. It assumes ONE server process per venue folder — a second process filing from the
-  same database would have its claims undone — and slice 2's Task 3a (#566) now refuses a second
-  process `provisioning.database_in_use`; see the slice-2 entry below.
-- **`apps/server/src/restore-fiscal-e2e.test.ts`'s header gives a reason that no longer holds — DONE
-  (2026-09-24, #589 deleted the claim and its line pointers; found by review of PR #520).** It says `useVenueDb` is not used because it "never
-  reaches the trigger installer". Traced, not run: `useVenueDb` applies each set through
-  `applyMigrationSet` (`packages/db/src/testing/venue-db.ts:227`), which calls
-  `installAppendOnlyTriggers` (`:117`). The header also cites `venue-db.ts:169` and
-  `migrate.ts:37-40`. Whether the suite still has another reason to migrate through the product's own
-  `applyMigrations` is the open question; restate that reason, or delete the claim.
-- **A suite header in `apps/server` says its suite is RED, and it passes — DONE (2026-09-25, #629
-  deleted the paragraph).** `apps/server/src/awaiting-fiscal-cert.test.ts` ("This suite is RED") —
-  run 2026-09-23, 1 of 1 passed. (#624 deleted `boot.promote.test.ts`'s matching "One case below is
-  RED".)
-- **Bounding the offline write-ahead log — ANSWERED in slice 2 (#590).** The box alerts first
-  (`backup.stream_behind`, after fifteen minutes). At a 256 MiB limit it stops Litestream, folds
-  the side file back with a checkpoint that does not wait on a busy database
-  (`checkpointTruncate`, `packages/store/src/index.ts`) and raises `backup.stream_paused`, and it
-  restarts Litestream when the bucket answers (slice-2 spec §4.5). The measurements behind it are in
-  the [results note, Slice 2 measurements](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
+- **The restart reset is built, and so is its precondition (#566).** `resetInFlightClaims` returns
+  every `enviando` row to `pendiente` before a boot's first filing pass, on the singleton primary;
+  it assumes ONE server process per venue folder, which #566 enforces.
+- **`apps/server/src/restore-fiscal-e2e.test.ts`'s header gives a reason that no longer holds — DONE**
+  (#589 deleted the claim and its line pointers).
+- **A suite header in `apps/server` says its suite is RED, and it passes — DONE** (#629 for
+  `awaiting-fiscal-cert.test.ts`, #624 for `boot.promote.test.ts`).
+- **Bounding the offline write-ahead log — ANSWERED in slice 2 (#590).** The box alerts after fifteen
+  minutes (`backup.stream_behind`); at a 256 MiB limit it stops Litestream, folds the side file back
+  and raises `backup.stream_paused` (slice-2 spec §4.5).
 - **The store pointer and a new generation are exercised for a rebuild, not for a promotion.**
   Slice 2's loop test (`apps/server/src/stream-loop.e2e.test.ts`) streams one box, rebuilds another
   from the pointer `current.json` names, and has it open its own generation and move the pointer. A
@@ -5902,48 +4662,33 @@ Task 3b, the restart reset (#513); Task 4, the five measurements Litestream's be
 tasks read" in [the results note](research/2026-09-16-sqlite-failover-prototype.md#slice-2-measurements).
 Task 0, shrink every uploaded photo, landed as #543; what it does and what it leaves
 open are under the image library in Track A.
-Task 1a, each machine's own rows keyed by its node id (a new `node_roles` table takes a node's mode,
-singleton role and break-glass verifier off `deployment`; `mirror_config` and `join_requests` gain
-`node_id`), landed as #548. A dev venue
-holding `mirror_config` or `join_requests` rows fails its migration; `wa-wt reset demo <name>`
-rebuilds it. Left by #548: deny's delete is the one join-request node filter no test fails
-without (the `requirePending` read before it already refuses another node's row, as its doc
-comment says); identity's comments that still place its tables in different files are Task 1b's
-to rewrite (done by #554, bar one in `authorize.test.ts` that #559 removed); and the run-it review did not reach three claims within its
+
+Task 1a, each machine's own rows keyed by its node id (`node_roles`, and `node_id` on `mirror_config`
+and `join_requests`), landed as #548; identity's comments that still placed its tables in different
+files were rewritten by #554 and #559. Left by #548: deny's delete is the one join-request node filter
+no test fails without (the `requirePending` read before it already refuses another node's row, as
+its doc comment says); and the run-it review did not reach three claims within its
 budget — holders torn by a concurrent promotion, credential sealing, and scheduler takeover.
-Task 1b, session cookies stored only as hashes (the till's and the dashboard's cookie carry a
-random token, and `sessions` and `management_sessions` keep only its SHA-256 in a new `token_hash`
-column; identity's logins and sign-in ceremonies are reclassified `state`), landed as #554. Every seeded dev venue holds a session row
-(provisioning's `seed-device-profiles` step opens a management session and never ends it,
-`packages/provisioning/src/venue-apply.ts`), so each fails its migration until
-`wa-wt reset demo <name>` rebuilds it, and every existing login signs in again.
+
+Task 1b, session cookies stored only as hashes (`sessions` and `management_sessions` keep only the
+token's SHA-256 in `token_hash`), landed as #554, which also gave the mirror viewer's ambient
+`admin` session (`apps/server/src/mirror-session.ts`) a random-token cookie stored only as a hash.
 Left by #554's review, not fixed there (items 1 and 2): (1) with the cookie now hashed, nothing
 fails when the UUID shape screens in `requireSession` and the till logout route are deleted —
 measured 2026-09-24, the three malformed-cookie cases in `apps/server/src/till-api.test.ts` still
 pass, because a non-UUID value hashes to no row; the screens now only save a lookup. (2) Test
 titles still promising "not a 500" from PostgreSQL's `22P02` remain in
 `till-api.courses.test.ts`, `till-api.receipt.test.ts` and `till-api.reprint.test.ts` (#613
-removed the comments). (3) Fixed
-by #554: the mirror viewer's ambient `admin` session (`apps/server/src/mirror-session.ts`)
-used its fixed, public row id as its cookie, so a copy of the database, or a node served without
-the mirror's middleware, accepted that public value as an admin login. Its cookie is now a random
-token, minted afresh each time the viewer is seeded and stored only as a hash, and every trading
-boot whose mode is not `mirror` ends the viewer's session (`endMirrorViewer`), so a browser that
-kept the cookie is refused after a promoted mirror restarts or a mirror's database is booted as a
-primary; a later mirror boot revives it. `apps/server/src/mirror-session.test.ts` has a gated route
-without the middleware refusing the row id, and `apps/server/src/boot.mirror.test.ts` a primary boot
-refusing a kept cookie.
+removed the comments).
 Also left open: now that both ends are `state`, the keys #426 dropped could be declared again —
 `sessions` to `persons` and `tills`, and `management_sessions`, `totp_enrollments` and
 `google_oidc_states` to `persons` (`sessions` and `management_sessions` are rebuilt by
 `packages/identity/drizzle/0003_session_token_hash_required.sql` anyway). Doing so would change
 what deleting a person does.
-Task 2a, a recovery key that does not need an archive destination (`loadRecoveryKey` reads the
-key alone, `writeRecoveryKey` sets it in `backup.env` keeping the other settings, `rotate` changes
-the key of a box that holds a key and has no destination loaded, and `apply` reuses a key the box already holds,
-refusing a different one with `backup.recovery_key_exists`; every status answer carries
-`recoveryKeySet`; apply and rotate take turns, so a concurrent pair cannot put the old key
-back), landed as #557. Until Task 8b the Backups screen's setup form
+
+Task 2a, a recovery key that does not need an archive destination (`apply` reuses a key the box
+already holds, refusing a different one with `backup.recovery_key_exists`; every status answer
+carries `recoveryKeySet`), landed as #557. Until Task 8b the Backups screen's setup form
 (`apps/dashboard/src/screens/backup-screen.ts`, shown on a writable box whose backups are not
 enabled) sent a freshly made key unless the operator pasted one, so on a box that holds a key while
 backups are off — for instance one whose venue failed to open, which clears the running config while
@@ -5951,29 +4696,15 @@ backups are off — for instance one whose venue failed to open, which clears th
 `recoveryKeySet` and make and send no key when the screen's last status read says the box holds one. That does not rescue the
 failed-venue box: an apply there that reuses the held key takes the path a pasted held key took
 before — it writes, reloads, the venue fails to open again, and the route answers
-`backup.effective_mismatch` (read from the route, not run, for Task 8b). A held key shorter than
-the 12-character minimum also took that reuse path and was refused with
-`backup.recovery_key_too_short`, so such a box could never turn archives on from the dashboard; fixed,
-for a box whose backup settings its environment does not own, in #649: the status now says `recoveryKeyTooShort`,
-the form then makes and sends a new key with a note that it replaces the short one, and `apply`
-writes it in the short key's place (a key long enough to use is still never replaced there). The
-bucket copy panel's own refusal for a too-short key (`stream.error.recovery_key_too_short`) now
-names the "Turn on backups" button above it when the dashboard can change the backup settings;
-when the box's environment owns them (`managedByEnvironment`, where that button is hidden) it says
-instead that a longer key has to be set there (`stream.error.recovery_key_too_short_managed`); and
-until the Backups screen's first status read succeeds it names neither
-(`stream.error.recovery_key_too_short_unknown`); in English and Spanish (2026-09-26, lane A's A35,
+`backup.effective_mismatch` (read from the route, not run, for Task 8b). A held key shorter than the
+12-character minimum is replaced from the dashboard, for a box whose backup settings its environment
+does not own (`recoveryKeyTooShort`, #649); the bucket copy panel's refusal for a too-short key
+names the "Turn on backups" button, or the environment when it owns the settings (lane A's A35,
 #666). The refusal code is unchanged and the message does
-not link or scroll to the button. Since lane A's A49 (2026-09-26, #684) the screen asks for a key from its
-status watcher on any status read rather than only the first: at most once, and only while the
-screen has made none and the first load's own conditions hold (primary, settings not owned by the
-environment, no usable held key). So a first status read that fails and a later one that succeeds
-now gets a key, and a refresh never replaces a key the screen made. The watcher shares a pending key
-request with Apply and Rotate, and a failed status read's alert clears when a later one succeeds;
-the owner ruled that CLAUDE.md §3's observer rule protects the shown key, and it now says so.
-Starting Apply, Rotate or Save settings clears that alert too, and a later failed status read
-raises it again (lane A's A54, #690, and A59, #701, 2026-09-26, the owner's choices); Show old key, Edit
-and Cancel edit are not saves and leave it, as A54's report proposed and the owner's answer kept.
+not link or scroll to the button. The screen asks for a key from its status watcher on any status
+read, at most once and only while the screen has made none (lane A's A49, #684); starting Apply,
+Rotate or Save settings clears a failed status read's alert, while Show old key, Edit and Cancel
+edit leave it (lane A's A54, #690, and A59, #701, the owner's choices).
 Left open: the panel picks its message from `managedByEnvironment` alone, so with
 a key hand-edited too short in `backup.env` it can name a button that does not help: with archives
 on it names a button that is not shown (the status reads the running settings' still-long key, and
@@ -5991,74 +4722,49 @@ Also left by #557's review, the owner's call: `rotate` with a destination loaded
 `backup.env` from the running settings rather than keeping the file's other lines, so a
 destination added to the file by hand and not yet loaded is dropped; keeping the file's lines
 instead would change that behaviour.
-Task 2b, the box's own state files locked with the recovery key in the venue database (a new
-core table `node_sealed_state`, one row per node, `local`, kept off the dashboard's change feed;
-`apps/server/src/sealed-state.ts` packs everything the archive carries except the database copy
-and encrypts it exactly as the archive is; the backup sweep and the row build their entries through
-`apps/server/src/archive-entries.ts`), landed as #560. The row is rewritten at every start, after
-`backupSupervisor.reload()`, and straight after every `backup.env` write the backup routes make,
-refused requests included. Left open by #560, both since decided by the owner: (1) a failed refresh
-was only logged (`backup.sealed_state_failed`); Task 7 now raises it as a dashboard alert too;
-(2) every node writes its own row at every start, standby and mirror nodes included, while the
-backup job runs only on the primary — kept by design (owner, 2026-09-24). Nothing outside the backup routes
+
+Task 2b, the box's own state files locked with the recovery key in the venue database (core table
+`node_sealed_state`, one row per node, `local`), landed as #560; a failed refresh raises
+`backup.sealed_state_failed` as a dashboard alert (Task 7). Every node writes its own row at every
+start, standby and mirror nodes included, while the backup job runs only on the primary — kept by
+design (owner, 2026-09-24). Nothing outside the backup routes
 or the bucket-copy settings' Save (which writes a recovery key into `backup.env` when the box holds none)
-rewrites a sealed file while the server keeps running (#560's per-task review traced each writer:
-promotion rewrites `trading.env` and then restarts; `modules.json`, `secrets.env` and the TLS files
-are written in setup or by the command line, before a restart, and Task 9a's first start rewrites
-the TLS leaf during a start, before that start's refresh); Task 8a calls the one
+rewrites a sealed file while the server keeps running; Task 8a calls the one
 `sealedState.refresh()` boot builds, and Task 9a calls none: boot's own refresh seals its new leaf.
-Task 3a, one process per venue folder (opening a venue folder holds `venue.lock`, a SQLite
-`begin immediate` the operating system releases when the process dies; a second process is refused
-`provisioning.database_in_use`, while opens inside one process share it; restore and
-`waitron-rejoin` take it before changing any file; break-glass, `waitron-credentials`, two dev
-scripts and the Cloud backup fixture's capture open without it), landed as #566. The question it
-left open was decided by the owner on 2026-09-24 and done in #573: a start the lock refused stopped
-counting toward the recovery page (`apps/server/src/node-entry.ts` put the count back), and
-the container's entrypoint now refuses any argument (`server.entry_arguments_refused`) instead of
-booting a second server when `docker compose run app <command>` is given no `--entrypoint`. #573's
-review left three findings, each reproduced by its Codex seat with a real second process. The owner
-decided the first two on 2026-09-24, and #608 did them:
-(1) a venue folder held by a STUCK process restart-looped the box and never reached the recovery
-page. Every holder now keeps `venue.holder.json` beside `venue.lock` with a heartbeat. A refused
-start counts, as `provisioning.database_holder_stalled`, when that heartbeat is 30 s old or more
-or the file is missing, and the recovery page names the holder's kind. A holder whose main thread has not run
-for 120 s is killed by its own watchdog thread, which first records the main thread's stack when it can read it (in a test it could not, while that thread
-was inside one long synchronous database statement) ([conventions-data.md](developers/conventions-data.md), "One process per venue folder").
-(2) `recovery.json` had no lock of its own, so a refused start could put back a count the running
-server had cleared, or erase a failure another start recorded. Every change to it now holds
-`recovery.lock`, and a clear count in the file stops a refused start's undo taking off a failure
-another start counted after a clear. Still open from (2): the level is read before that lock, so the pre-boot count
+
+Task 3a, one process per venue folder (`venue.lock`; a second process is refused
+`provisioning.database_in_use`), landed as #566; #573 stopped a refused start counting toward the
+recovery page and made the container's entrypoint refuse any argument
+(`server.entry_arguments_refused`); #608 sends a folder held by a stuck process to the recovery page
+(`provisioning.database_holder_stalled`, with a watchdog that kills a holder stalled for 120 s) and
+puts every change to `recovery.json` under `recovery.lock`
+([conventions-data.md](developers/conventions-data.md), "One process per venue folder").
+Still open from #608's `recovery.lock` change: the level is read before that lock, so the pre-boot count
 another start writes can still push a server restarting at that moment onto the page (older than
-#573). Still open, the owner's call: (3) only an unwrapped `provisioning.database_in_use` is
+#573). Still open from #573's review, the owner's call: (3) only an unwrapped `provisioning.database_in_use` is
 recognised — a wrapped one, or the store's raw `VenueInUseError`, would still count (no path wraps
 them today). Left by #608, no behaviour change decided: the watchdog appends its line to
 `waitron.log` without creating the log folder, so on a machine with no such folder that line is
 lost (the JSON report and stderr still carry it; a box's `logs` volume always exists); only a
-store's `close()` waits for the watchdog thread to end, not a bare `release()`. The recovery page,
-English-only apart from the stalled-holder row when #608 landed, is now written in English and
-translated into Spanish, one language per page chosen from the browser's `Accept-Language`
-(#650); its Spanish has not been read by a native speaker. Also
+store's `close()` waits for the watchdog thread to end, not a bare `release()`. The recovery page is
+in English and Spanish, chosen from the browser's `Accept-Language` (#650); its Spanish has not been
+read by a native speaker. Also
 left by #566's review, no behaviour change: the migrator's lock and
 the venue lock use one technique in two copies, and the test helper that holds the lock from another
 process is copied into several test files.
+
 Task 5, the new package `@waitron/stream` (the S3 bucket client, the signed pointer
 `current.json` naming the live generation, generation claiming and pruning, and `probeBucket`, the
-check behind the settings screen's Test button), landed as #569. Task 6 makes the server call it at boot, through
-`StreamHost`; Tasks 8a, 9b and 10 add the other callers. Where it departs from the plan's code is recorded in a dated note in the plan's
-Task 5. #569's review left pruning sending one delete request per file; on the owner's call
-(2026-09-24, landed as #594) the bucket interface now has a batch delete, and the S3
-store sends S3's multi-object delete, 1000 keys a request, falling back to one request per file only
-when the store answers the batch 501. Which real providers lack the multi-object delete, and what
+check behind the settings screen's Test button), landed as #569; pruning sends S3's multi-object
+delete, falling back to one request per file only on a 501 (#594), and a listed file outside the
+folder asked for is `backup.stream_name_invalid` with `field: "listedKey"` (#576). Which real providers lack the multi-object delete, and what
 each answers, is not established; a provider that refuses it with any other status fails the day's
 prune, which is logged as `stream.prune_failed`. `probeBucket` (`packages/stream/src/probe.ts`),
 which the supervisor runs before opening a generation, again while streaming (at most every ten
 minutes after a failed bucket read or while a bucket problem is flagged, otherwise once a day), and
 which the bucket-copy panel's Test and Save both run, deletes one object at a time, so neither can reveal such a provider. Open: having the bucket check
-delete its test object through `deleteMany` would reveal one. The other
-choice #569 left, one code for a listed file outside the folder asked for, is taken: the S3 store
-now reports it as `backup.stream_name_invalid` with `field: "listedKey"`, the code and field
-pruning's own check uses (owner, 2026-09-24; landed as #576). Its value is the key as the bucket
-named it, so it is the first `backup.stream_*` parameter a bucket supplies: the screens that word
+delete its test object through `deleteMany` would reveal one. The `listedKey` value is the key as
+the bucket named it, so it is the first `backup.stream_*` parameter a bucket supplies: the screens that word
 these codes (Tasks 7 and 8b) must not put it in front of anyone as trusted text. Also left: `@waitron/store` is missing from the
 English-only guard's `GENERIC_PACKAGES` (`packages/db/src/english-only.ts`), so it is never scanned
 — I believe this predates #569 (the package dates from #489); and nothing in the package has been
@@ -6078,24 +4784,18 @@ decoding an uploaded bundle), `validateArtifact` (`apps/server/src/restore.ts`) 
 (`apps/server/src/sealed-state.ts:32`); and the recovery bundle's `encryptBundle` and
 `decryptBundle` (`apps/server/src/recovery-bundle.ts`). Task 2b moved the backup
 sweep's encryption and `sealNodeState` to `encryptArtifactAsync`.
+
 Task 6, the Litestream supervisor (`@waitron/stream`'s `StreamSupervisor`, the server's
 `StreamHost` started at boot on the primary, the store's `checkpointTruncate`, Litestream 0.5.17
-pinned in the box image and in `pnpm setup:litestream`), LANDED as #590 on 2026-09-24. The owner decided on 2026-09-24 that the same generation
-continues after a pause, after measurement 1 was repeated at the 256 MiB side-file limit (results
-note §1b: the restore after the restart held every sale, and Litestream uploaded a full copy of the
-database at level 0). Left for later tasks: `/health` must treat the supervisor's
-`supervisor_failed` stop as a problem, not as streaming switched off (done by Task 7); the settings route
-must reload the stream only after its save commits, and refuse a bucket name holding capitals or
-`_` (both done by Task 8a; the screen's wording by Task 8b). Left open by #590's review, the owner's call (the PR description has the
+pinned in the box image and in `pnpm setup:litestream`), LANDED as #590; the same generation
+continues after a pause (owner, 2026-09-24), and the bundled libraries' notices ship in
+`/app/third-party/litestream/NOTICES.txt` (#599). Left open by #590's review, the owner's call (the PR description has the
 detail): (1) no S3 call has a request timeout, so a pointer write that never gets an answer holds up the
 supervisor's retry until the server stops or reloads — Litestream stays stopped meanwhile, so the side
 file is not at risk (closed by A44 for a bucket that takes the connection and never replies: the
-entry "the stream's other bucket calls are bounded", below); (2)
-`StreamHost.reload()` can leave the old supervisor's pointer write in flight,
-landing after the new supervisor read the pointer, so the box takes its own write for another box's
-and refuses itself — closed on Task 8a's branch: a supervisor retries its pointer write when the
-refusal was caused by one of this process's own earlier pointers, matched byte for byte, the last 16
-kept. Still open: a pointer write from a process that has since died, landing after the restart,
+entry "the stream's other bucket calls are bounded", below); (2) a supervisor retries its pointer
+write when the refusal was caused by one of this process's own earlier pointers (closed on Task 8a's
+branch). Still open: a pointer write from a process that has since died, landing after the restart,
 can still make the box refuse itself, because a restarted process starts with an empty record, and
 so does a `current.json` deleted after the supervisor read it, on a bucket that answers a conditional
 write to a missing object with 412 (SeaweedFS; the in-memory test store); in both cases the owner's alert
@@ -6108,24 +4808,16 @@ reaching `refused`;
 requires that the node has not been cut off from acting as primary (`cloudPrimary`) — should a
 cut-off primary stream?; (4) the server's 8-second shutdown stops the stream last, after the Cloud
 snapshot loop, so on a large database Litestream may not finish its last upload (it is still told to
-stop and does not outlive the server). Item (5), the notices of the libraries the binary bundles, is
-DONE by #599: they ship in `/app/third-party/litestream/NOTICES.txt`, generated by
-`scripts/litestream-notices.mjs` (owner, 2026-09-24: notices land in the same change as the code).
+stop and does not outlive the server).
 Also left: `pnpm setup:litestream` skips the download when the installed
 binary already reports the pinned version, so the checksum protects fresh downloads only; and the
 bench rig keeps its own Litestream download script (its version is pinned beside the root one by
-`scripts/litestream-pin.test.ts`). `scripts/setup-litestream.mjs` is measured by the root project's coverage
-table through `scripts/setup-litestream.test.mjs`, which injects the download and the platform; the
-full box image was not built locally, only its `litestream` stage.
-Task 7, how current the bucket copy is and the alerts about it, landed as #619 (2026-09-25).
-It added two alert codes, `backup.stream_stopped` and `backup.stream_settings_unusable`. The store reports each commit that changed rows
-and the side file; the supervisor reads the newest file in the bucket about once a minute and
-reports how long the oldest change not yet there has waited. `/health`, the box status and the
-backup status show the bucket copy, and `/health` never fails because of it. The dashboard gains
-alerts for a copy that is behind by fifteen minutes, paused, stopped by another box, refused by its
-bucket, unable to use its settings, or stopped by itself, and for a failed refresh of the sealed
-state row; the `backup.disabled` alert now fires only when there is neither a scheduled backup nor a
-bucket copy that is on and current. Left open:
+`scripts/litestream-pin.test.ts`).
+
+Task 7, how current the bucket copy is and the alerts about it, landed as #619: `/health`, the box
+status and the backup status show the bucket copy, and `/health` never fails because of it; the
+dashboard alerts on a copy that is behind, paused, stopped or refused, or whose settings are
+unusable (`backup.stream_stopped` and `backup.stream_settings_unusable` are new). Left open:
 - A bucket read given up after five minutes is not cancelled, because the bucket client's list
   takes no way to stop it. Since A44 the store gives a request up when it has had no reply 30
   seconds after it started, so what the deadline can still leave running is a listing whose answer
@@ -6141,110 +4833,48 @@ bucket copy that is on and current. Left open:
   listener registered when it began) is not counted, so the lag reads low for it.
 - Whether Litestream uploads anything while the side file is unchanged is not measured; Task 10's
   loop test (#652) does not measure it either.
-- The alerts send the owner to the Backups page for the bucket's settings, which Task 8b added; the
-  status gained a third shape, a copy set up but not started, which Task 8b's panel shows as "Not
-  running".
 - Of the four places boot hands the copy's state to, three are held by the compiler, which refuses
   a boot call that leaves the key out, and `/health` by a boot test. A boot test also pins the
   sealed-state alert's registration.
-Task 8a, the server side of the bucket-copy settings, landed as #627. Routes under
+
+Task 8a, the server side of the bucket-copy settings, landed as #627: routes under
 `/api/backup/stream`, behind the manager login, read the settings, test a bucket, save and switch
-the copy on, switch it off, and hand out the recovery kit: one string holding the bucket's details,
-the venue id, the recovery key and the public key that signs the pointer
-(`packages/stream/src/kit.ts`). Save sets a recovery key when the box holds none (refused with
-`backup.managed_by_environment` when a `WAITRON_BACKUP_*` variable is set, as `apply` and `rotate`
-are), refreshes the sealed-state row, stores the settings, and reloads the copy only after that commits; Saves and
-switch-offs take turns with each other and with the backup routes' `apply` and `rotate`, which also
-set the recovery key. Before contacting the bucket, Test and Save run the check Litestream's
-configuration runs, refusing with `backup.stream_config_unsafe` naming the field (for the bucket
-name, the fix is lowercase letters, digits, dots and hyphens only), and refuse a prefix of a single
-`-`, which the vault would store as no prefix. The routes and the kit's decoder read the bucket settings through
-one reader (`packages/stream/src/bucket-config.ts`), and the kit is sent with `Cache-Control: no-store`.
-The kit is read in its turn too, since a retroactive Codex review of #627 found that a Save and a
-rotation landing between the kit's reads could pair the old bucket with the new key.
+the copy on, switch it off, and hand out the recovery kit (`packages/stream/src/kit.ts`).
 That startup hands both route groups the one queue is held by a boot test (`apps/server/src/boot.test.ts`,
-"gives the archive routes and the bucket-copy routes one queue"; 2026-09-26, lane A's A36,
+"gives the archive routes and the bucket-copy routes one queue"; lane A's A36,
 #667), weaker than the rule: it holds one rotation in its turn and sees a
 kit read wait behind it, so it fails if either group is given a queue of its own or if the rotation
 or the kit read stops taking its turn, but it does not check the other routes.
 Left open: the pointer write left open under
 Task 6, item (2), one from a process that has since died, landing after the restart.
-Task 8b, the Backups screen's bucket-copy panel and the archive setup reusing a held recovery key
-(#628). The panel (`apps/dashboard/src/screens/stream-settings-panel.ts`) takes the bucket's
-settings with Test and Save, turns the copy off after a second, confirming tap, shows the copy's
-state, how many minutes of changes wait and the last confirmed copy, and the recovery kit with a copy
-button and a download; when a settings read of a set-up copy shows a different recovery key, it
-fetches the kit again and tells the owner to keep the old one for seven days. A refusal
-naming a bucket setting is shown beside that field; a failed Test names the failed check in words,
-and a check with no sentence of its own falls back to the refusal's own wording rather than the
-reason's text. The archive setup form no longer makes or sends a key when the box already holds one.
-The design system gained a `--wt-font-family-mono` token, which the Backups screen's key display,
-the panel's kit, the diagnostics screen's log lines and the setup app's break-glass secret read;
-`apps/dashboard/src/screens/printers-screen.ts` already asked for it with a `monospace` fallback,
-and now gets it. A retroactive Codex review of #628 found faults in the panel, fixed since: an
-earlier kit fetch could answer after a later one and put the old kit back; a failed kit fetch after
-a successful Save left the previous bucket's kit on screen with no way to ask again; Test could say
-it passed for settings edited while it ran; and a bucket changed in another tab under the same key
-left the old kit showing. For that last one the panel now takes the kit away when any bucket field a
-settings read carries (endpoint, region, bucket, prefix, access key id) changes. Review of those
-fixes found one more, also fixed, that was in the panel before them: when the recovery key changed
-again, or changed back, while the automatic kit fetch for the first change was still running, that
-fetch's kit went on screen under the "download the new kit" banner, and a second change's own fetch
-was skipped. Left open: the Backups screen's own card width is still a `34rem` literal, which the
+
+Task 8b, the Backups screen's bucket-copy panel (`apps/dashboard/src/screens/stream-settings-panel.ts`)
+and the archive setup reusing a held recovery key, landed as #628; it also added the
+`--wt-font-family-mono` token. Left open: the Backups screen's own card width is still a `34rem` literal, which the
 no-hardcoded-chrome rule forbids in a view and no guard reads; and a change of the secret access key
 alone, made in another tab, still leaves the old kit showing, because a settings read does not carry
 the secret.
+
 Task 9a, the first start after a restore (#630). Every restore that takes on the archive's
-identity (`skipSecrets` unset) leaves `rebuild-first-start.json` in the state folder, written under the
-venue lock before anything is placed and removed if the restore throws. At the next trading start
-the box signs a new certificate for this machine's addresses with the authority it brought back,
-then the membership document one term above both the restored document and the term the bucket's
-pointer names (read for at most 15 seconds, only when the marker is there), naming this machine's
-advertised origin; the marker goes last (`apps/server/src/rebuild-first-start.ts`). A box with bucket
+identity (`skipSecrets` unset) leaves `rebuild-first-start.json` in the state folder. At the next
+trading start the box signs a new certificate for this machine's addresses with the authority it
+brought back, then the membership document one term above both the restored document and the term
+the bucket's pointer names (read for at most 15 seconds, only when the marker is there); the marker
+goes last (`apps/server/src/rebuild-first-start.ts`). A box with bucket
 settings whose pointer it cannot read in that time fails the first start rather than sign a term the
-pointer may be above; no settings, or a bucket holding no pointer, signs one above the restored
-document. A first start that fails lets the box sell but holds the bucket copy, a reload after a
-settings save included, and raises `restore.first_start_failed`. It runs after the returned-box reconciliation with the
-cloud peer, not straight after the key ring as the plan placed it: with the call moved there, the
-fenced-restore case in `apps/server/src/boot.reconcile.test.ts` failed with the box accepting sales,
-because the moved term made the peer's fencing document read as not newer. That ordering covers
-only a peer that answers during the same start (see the first item below). A mirror or a fenced
-node re-issues and signs nothing; the marker stays and the copy is held. An adoption-pending box
+pointer may be above. A first start that fails lets the box sell but holds the bucket copy, a reload after a
+settings save included, and raises `restore.first_start_failed`. It runs after the returned-box
+reconciliation with the cloud peer, which covers only a peer that answers during the same start (see
+below). A mirror or a fenced node re-issues and signs nothing; the marker stays and the copy is held. An adoption-pending box
 returns from boot before the first start, so it neither runs nor defers it: it keeps serving the old
 certificate and the marker stays. The new certificate and key are written under working names and
-renamed into place only when both are written, so a failed write keeps the old matching pair and
-a failed rename of the key puts the old certificate back unless that rename fails too; a
+renamed into place only when both are written; a
 crash between the two renames leaves a mismatched pair, which the next start replaces before the
 listener reads it, because the marker is still there — unless that start defers the first start
-(fenced, mirror or adoption-pending), when the listener refuses the pair. The next membership
-document carries this node's stored endorsement, so a peer that trusts only the endorser (the
-primary that adopted this node) accepts it when the stored endorsement is valid for this node's
-key. Every signer carries the signing node's stored endorsement, because the shared signing
-function `mintNextMembershipDocument` (`apps/server/src/membership-mint.ts`) reads it itself and no
-caller passes one (#655; before, each caller had to pass it; #643 fixed the three that needed it and did
-not):
-this first start, both promotions (`apps/server/src/promote.ts`), `retireSelf`
-(`apps/server/src/retire.ts`), the chart append in `apps/server/src/mirror-bundle-api.ts`, which
-signs as `designated.nodeId`, and the term-0 seed (`apps/server/src/membership-seed.ts`). The seed
-signs for a primary set up fresh, and the only product code that writes a node's stored endorsement
-is adopt's `insertReservedNodeTx` (`packages/db/src/reserved-identity.ts`), onto a standby's own row,
-so the seed's document carries none. The case "carries the signer's stored endorsement without the caller
-passing it" (`apps/server/src/membership-mint.test.ts`) holds the shared function to it. The cases
-"carries this node's stored endorsement, so a peer trusting only the endorser accepts the eviction"
-(`apps/server/src/retire.test.ts`), "… accepts the new term"
-(`apps/server/src/promote.test.ts`, local secondary) and "carries the primary's stored endorsement,
-so a peer trusting only the endorser accepts the appended chart"
-(`apps/server/src/mirror-bundle-api.test.ts`) each check that the stored document carries the
-endorsement and verifies both against the endorser's key alone and against the signer's own key
-held directly. A node row holding no endorsement still signs `endorsements: []`; one case each for
-retire, both promotions and the chart append asserts it, as do the mint case "carries no endorsement
-when the signer's row holds none" (`apps/server/src/membership-mint.test.ts`) and the term-0 seed
-case "seeds a signed term-0 document naming this node serving-primary"
-(`apps/server/src/membership-seed.test.ts`, on a node row that holds none), and no first-start case
-does. The chart
-append reads the endorsement again on each retry round: "signs a retried chart write with the
-endorsement stored when that round reads, not the first round's"
-(`apps/server/src/mirror-bundle-api.test.ts`). Left open:
+(fenced, mirror or adoption-pending), when the listener refuses the pair. Every membership signer
+carries the signing node's stored endorsement, because `mintNextMembershipDocument`
+(`apps/server/src/membership-mint.ts`) reads it itself (#643, #655); a node row holding no
+endorsement still signs `endorsements: []`, and no first-start case asserts it. Left open:
 - Two comments claim more than the code keeps: `retireSelf`'s header (`apps/server/src/retire.ts`)
   says a signing failure "leaves the node exactly as it was", and `promoteMirrorToPrimary`'s
   (`apps/server/src/promote.ts`) says a failure before the commit "leaves the mirror as it was". #655's
@@ -6274,20 +4904,8 @@ endorsement stored when that round reads, not the first round's"
   should clear it is the owner's call.
 - A sell-only local secondary that is not fenced runs the first start and signs the next term.
 - A restored membership row is now checked before the start that finishes the restore signs over
-  it (#678, closing part of what A38, #669, left open).
-  `completeRebuild` first runs `assertRestoredMembershipValid`
-  (`apps/server/src/rebuild-first-start.ts`): a held document that fails `verifyMembershipDocument`
-  against the `nodes` keys of the same database throws `restore.membership_invalid { reason }`
-  before the leaf is re-issued, the bucket is asked or anything is signed, and `runFirstStart`
-  throws it on instead of selling, so the start fails, and once starts have failed repeatedly the
-  recovery page shows fixed English and Spanish text for it. A database holding no document still
-  passes and signs term 0. Cases in `apps/server/src/rebuild-first-start.test.ts` (a node added
-  after signing, for each marker source, and a document signed by a key the copy does not hold:
-  refused, stored row and leaf byte-for-byte unchanged, marker kept) and
-  `apps/server/src/boot.test.ts` ("refuses to start after a … restore whose membership document no
-  longer matches its signature", for `archive` and `stream`; it writes the marker directly, because
-  both restores write the same file through `writeValidated`, `apps/server/src/restore.ts`). Each
-  failed on the old code, and again with the check's call deleted. Left open:
+  it (#678, closing part of what A38, #669, left open): `completeRebuild` runs
+  `assertRestoredMembershipValid` (`apps/server/src/rebuild-first-start.ts`). Left open:
   - The check trusts the keys the restored copy holds. A copy whose `nodes.public_key` for this
     node was rewritten, with its document re-signed by the matching key, passes, and the next term
     is signed over the added node: the case "passes a document re-signed with a key the copy's own
@@ -6306,61 +4924,26 @@ endorsement stored when that round reads, not the first round's"
     run). The owner's decision on this, 2026-09-26, is under the failover residuals ("a standby
     checks a promotion against the primary's key"; it covers promotion, `retireSelf` and the
     standby chart append, and a restored mirror's own start is not covered by it).
-  - **Closed for a restore by A53 (#688), 2026-09-26,
-    on the owner's A45 answer ("move the check earlier").** When a restore's marker is present,
-    boot now runs `assertRestoredMembershipReadable` (`apps/server/src/rebuild-first-start.ts`)
-    before its first read of the held row, ahead of the peer reconciliation: stored text that is not
-    JSON, a stored JSON null, or a document not shaped as one (`isMembershipDocument`,
-    `@waitron/membership`, including its limits such as the maximum number of machines), throws
-    `restore.membership_invalid { reason: "malformed" }`, and the recovery page's wording now says
-    the list "is damaged or does not carry a valid signature" (EN and ES). It runs on a fenced or
-    mirror restored box too, neither of which checks the signature; a box still finishing an
-    adoption returns before it. Cases: `apps/server/src/boot.test.ts` ("refuses a restore whose membership document
-    holds …", unreadable JSON with and without a configured peer, and a machine list that is not a
-    list; each failed on the old code with a `SyntaxError` or `TypeError`, the peer case also when
-    the call was moved after the reconciliation; a stored JSON null; a fenced restored box whose
-    document carries an extra key; and a mirror restored box), the `assertRestoredMembershipReadable`
-    cases in `apps/server/src/rebuild-first-start.test.ts` (a stored null, a number and a string
-    among them), and a node-entry case showing the page's new wording for the recorded code. No
-    test drives a real refused start all the way to the rendered page. Still open: on a start with NO restore marker,
+  - **Closed for a restore by A53 (#688), on the owner's A45 answer ("move the check earlier").**
+    When a restore's marker is present, boot runs `assertRestoredMembershipReadable` before its
+    first read of the held row, and a malformed document throws
+    `restore.membership_invalid { reason: "malformed" }`. No test drives a real refused start all
+    the way to the rendered page. Still open: on a start with NO restore marker,
     text that is not JSON or a machine list that is not a list fails the same way with the generic
     text; a stored JSON null reads as no document, and a document breaking only a shape limit is
     read and used unchecked. From reading its writers, nothing this program writes produces one.
-    What the Codex seat measured before A53:
-    a held document whose `body.nodes` is not a list, or whose stored JSON cannot be read, fails
-    before the check. Boot reads the held row at the peer reconciliation (when a peer is
-    configured) and just after it, where it asks `isFenced` about it (`readNodeMembership` and
-    `isFenced` in `apps/server/src/boot.ts`; the lines just after the reconciliation predate this
-    branch, `git blame` e82588f349 and ce7d1aafa8), on every trading start that is not finishing an
-    adoption, not only after a restore, and such a document throws there. The start still
+    The start still
     fails and nothing is signed, but once starts have failed repeatedly the recovery page shows the
-    generic text (code `unknown`), not `restore.membership_invalid`. Measured by the Codex review
-    seat, by changing the `apps/server/src/boot.test.ts` fixtures to those two values: the cases
-    failed with `Cannot read properties of null (reading 'find')` and a `SyntaxError`, each
-    classified `unknown`. Whether to give it a curated code is open.
+    generic text (code `unknown`), not `restore.membership_invalid`. Whether to give it a curated
+    code is open.
 - A mirror that deferred its first start and is then promoted without a restart
   (`promoteMirrorToPrimary`, `apps/server/src/promote.ts`) keeps the bucket copy held, reading off
   with the reason `first_start_pending` and raising no alert, until the box next starts; that start
   runs the first start, because the marker is still there. From reading, not a run.
 
-Task 9b, restore from the bucket (#642). `waitron-restore restore --from-bucket <kit-file>
---confirm-venue <tax id> [--confirm-old-box-gone]` reads the bucket the recovery kit names, checks
-the pointer against the kit's signing key and venue, refuses when the live generation changed in the
-last ten minutes on the bucket's own clock (or when that clock cannot be measured) unless the old
-box is confirmed gone, downloads the generation with `litestream restore` into a scratch folder made
-fresh for each run, `<stateDir>/stream-restore-XXXXXX/` (abandoned after 2 minutes without progress,
-6 hours at most), runs SQLite's `integrity_check`, the newer-software check and the locked secrets
-row's unlock, and then asks for the copy's tax id before placing it through the archive path's own
-`writeValidated`, which leaves the first-start marker (`apps/server/src/restore-stream.ts`). Every
-bucket call the command makes through the object store gives up after 60 seconds
-(`apps/server/src/bounded-store.ts`), without cancelling the request. A command-line archive restore
-whose database holds bucket settings runs the same old-box check first, reading those settings from
-a scratch copy in its own `<stateDir>/archive-source-check-XXXXXX/`; since Task 9c the setup
-wizard's archive restore and the Cloud recovery restore run it too. The staged restore request
-now carries either an archive or a bucket copy (`apps/server/src/restore-request.ts`); the command
-line places the copy itself, and the setup wizard's rebuild stages a bucket request (Task 9c). The
-wipe and the archive placement also remove Litestream's own `.venue.db-litestream/` folder. Left
-open:
+Task 9b, restore from the bucket (#642): `waitron-restore restore --from-bucket <kit-file>
+--confirm-venue <tax id> [--confirm-old-box-gone]` rebuilds a box from the bucket the recovery kit
+names (`apps/server/src/restore-stream.ts`). Left open:
 - A copy over 2 GiB cannot be restored: `restoreFromStream` reads the downloaded file whole, and
   Node refuses a file that size (`ERR_FS_FILE_TOO_LARGE`, measured on Node v26.7.0 during this
   task's review). Archive creation has the same limit (`apps/server/src/backup-sweep.ts`). The
@@ -6379,11 +4962,7 @@ open:
   but no dedicated error code names that case.
 - An interrupted bucket rebuild or archive check leaves its scratch folder, a full copy of the
   venue database, under the state folder; the next run makes a new one and does not remove it.
-- Fixed in #647: the placement step no longer loses both databases. `restoreDatabase`
-  (`apps/server/src/restore.ts`) moves the old `venue.db` and its side files into a folder beside
-  them and deletes nothing that is database content until the new file is in place; a failure puts
-  them back and says `restore.placement_failed`, naming the folder when one could not go back.
-  Still open:
+- Fixed in #647: the placement step no longer loses both databases. Still open:
   - A setup-wizard restore whose placement fails is not retried and is not reported on the setup
     screen, nor normally on the recovery page. The restore is placed on the next start by
     `runStagedRestore` (`apps/server/src/restore-request.ts`), which deletes the staged request on
@@ -6396,13 +4975,9 @@ open:
     recovery page. One option is to keep
     the staged request on `restore.placement_failed`, so repeated failed starts end on the recovery
     page. **Owner decision 2026-09-25: leave it as it is.**
-  - Fixed by A31 (#660): a `.venue.db-replaced-` folder left in the
-    venue folder is removed by the box's next start (`clearReplacedDatabases`,
-    `apps/server/src/restore.ts`, called from `runEntry`, `apps/server/src/node-entry.ts`), which
-    holds the venue folder from the clearing until the server's own store holds it. A folder still
-    holding files with no `venue.db` beside it is kept, and the start refused with
-    `restore.database_set_aside`. Only the container's entry clears them: a server started any other
-    way (the dev stack) does not.
+  - Fixed by A31 (#660): a `.venue.db-replaced-` folder left in the venue folder is removed by the
+    box's next start (`clearReplacedDatabases`, `apps/server/src/restore.ts`). Only the container's
+    entry clears them: a server started any other way (the dev stack) does not.
 - The bucket client's own time limit is on idle time only (A44, 2026-09-26): `createS3ObjectStore`
   (`packages/stream`) gives a request up when it has had no reply 30 seconds after it started
   (`BUCKET_IDLE_MS`), three attempts in all, and bounds no call's total time; it does not reach the
@@ -6432,21 +5007,10 @@ open:
   Cloud restore's download of its snapshot from Waitron Cloud's storage is not one of these calls:
   it has its own limit (`downloadArchive`, `apps/server/src/cloud-recovery.ts`).
 
-Task 9c, "Restore from my bucket" in the setup wizard (#646). A third card on the wizard's "Join or
-recover an existing restaurant" screen takes the recovery kit (pasted or read from a file) and the
-environment, and posts them to `POST /setup-api/restore-bucket`, which checks the bucket and
-stages the rebuild through `stageStreamRestore` (`apps/server/src/restore-request.ts`) for the
-entrypoint to place after the restart. The old-server question ("the old server is switched off for good") and "This is my
-business" (the copy's legal name, tax id and location) are asked on the screen and sent back with
-the same kit; an answer given for one kit, backup file or Cloud snapshot is dropped when the owner changes it. The
-archive restore asks the same old-server question (header `x-waitron-old-box-gone: 1`) when its
-database holds bucket settings, and so does the Cloud recovery restore (`oldBoxGone` in its request
-body). A copy with an empty tax id is never confirmed, on the wizard or the
-command line (`confirmsVenue`, `apps/server/src/restore-stream.ts`). Every object-store call the
-setup restores make gives up after 60 seconds (`boundObjectStore`); the Litestream download has
-its own stall and ceiling limits. The archive and Cloud recovery routes
-now release the setup lock when their staging is refused; before, a refused restore held it until
-the process restarted. Left open:
+Task 9c, "Restore from my bucket" in the setup wizard (#646): a third card on the wizard's "Join or
+recover an existing restaurant" screen takes the recovery kit and stages the rebuild through
+`POST /setup-api/restore-bucket`; the archive and Cloud recovery restores ask the same old-server
+question. Left open:
 - The bucket route answers a wrong key (`recovery.passphrase_invalid`) and a damaged copy
   (`backup.artifact_invalid`, `backup.archive_invalid`) with different codes; the wizard shows one
   sentence for all three, as the command line does. Whoever holds the kit already holds the key.
@@ -6463,29 +5027,18 @@ the process restarted. Left open:
   and then draws a new Cloud screen, which starts unticked.
 
 Task 10, the loop test against a real S3-compatible server and the documentation sweep
-(#652). `apps/server/src/stream-loop.e2e.test.ts` runs the whole slice with the real pinned
-Litestream against versitygw 1.8.0, run as a plain child process
-(`apps/server/src/testing/s3-test-server.ts`, installed by `scripts/setup-s3-test-server.mjs`
-against a pinned SHA-256): box A streams and dies, box B is rebuilt from the recovery kit, sells
-under a fresh installation number, streams into its own generation and moves the pointer, and a
-restore of that generation equals B's database; ten sales timed while the S3 server is frozen must
-keep their normal time. Since lane A's A48 (#682), CI runs it and the pause test in `test-server-stream`,
+(#652): `apps/server/src/stream-loop.e2e.test.ts` runs the whole slice with the real pinned
+Litestream against versitygw. Since lane A's A48 (#682), CI runs it and the pause test in `test-server-stream`,
 the only job that installs both binaries, and `scripts/ci-workflow.test.mjs` checks that, reading
 `ci.yml` as text, so a comment naming the commands, or a step an `if:` switches off, also satisfies
-it. The sweep brought `CLAUDE.md`, the developer guides,
-`deploy/README.md`, `apps/server/README.md`, the topology design and the prototype results note in
-line with what slice 2 built. Left open:
+it. Left open:
 - Locally the test is skipped without its binaries, and Vitest's default reporter shows that only as
   `1 skipped`; the reason shows under `--reporter=verbose`
   ([testing-guide.md](developers/testing-guide.md), "The stream loop test skips locally without its
   two binaries, and a skip reads as a pass").
-- **DONE (2026-09-26, lane A's A34, #665): a change to
-  `scripts/setup-litestream.mjs` or `scripts/setup-s3-test-server.mjs` alone now selects
-  `@waitron/server` and so its `test-server` shards.** (Since A48, #682, also `test-server-stream`,
-  which now runs both installers.) Both are in
-  `ROOT_SCOPE_CONSUMERS` against `apps/server`, and `scripts/root-scope-consumers.test.mjs`
-  accepts a script run in the ci.yml job that tests a member
-  ([ci-and-gates.md](developers/ci-and-gates.md)). Left open, found by A34:
+- **DONE (lane A's A34, #665): a change to `scripts/setup-litestream.mjs` or
+  `scripts/setup-s3-test-server.mjs` alone now selects `@waitron/server` and so its `test-server`
+  shards.** Left open, found by A34:
   `scripts/changed-packages.mjs runnable` runs before the tests in the jobs of nine packages
   (dashboard, setup, till, bookings, fiscal-verifactu, media, payments-stripe, payments-sumup,
   venue-service), in the two-filter ui/ui-core job, and in `test-light-a` and `test-light-b`, fed
@@ -6495,61 +5048,17 @@ line with what slice 2 built. Left open:
 - Linux is covered by one CI run only: #652's first (2026-09-25, run 36173603563), where each
   `test-server` shard's install step took about two seconds by GitHub's whole-second step
   timestamps, and the loop test passed in 15,989 ms with no test skipped in the merged report.
-- **DONE (2026-09-26, lane A's A37, #668): the pause runs end to end.**
-  `apps/server/src/stream-pause.e2e.test.ts` freezes the bucket and has three concurrent sellers on one till
-  session sell through the server's own sale route while the side file passes a 16 MiB limit
-  (`startServer`'s third argument, a test seam), the real supervisor stops the real Litestream, the server folds the file back in its
-  own write queue and the pause holds; every sale beats the bound, and once the bucket is let run the
-  stream resumes into the same generation, which a restore shows holds a sale made during the pause
-  ([testing-guide.md](developers/testing-guide.md), "The stream pause test"). Left open: whether a
+- **DONE (lane A's A37, #668): the pause runs end to end** in
+  `apps/server/src/stream-pause.e2e.test.ts` ([testing-guide.md](developers/testing-guide.md), "The
+  stream pause test"). Left open: whether a
   sale's write waited behind the fold-back, rather than landing before it, is not observed, and the
   fold-back of a 256 MiB file is still timed only by the bench rig (results note, 1b), not through
   the supervisor.
-- **DONE (2026-09-26, A37, #668): the pause's bucket question is bounded.** Reproduced first: the S3 client
-  sets no request timeout, and a listing sent to a server that accepts and never replies was still
-  pending after 20,000 ms (`@smithy/node-http-handler` 4.12.1; true then, since A44 the store gives
-  such a call up: the entry "the stream's other bucket calls are bounded", below); a supervisor
-  case whose first question during the pause never settles failed with nothing left asleep. Each
-  question (`#bucketAnswers`, `packages/stream/src/supervisor.ts`) now gives up after
-  `READ_DEADLINE_MS` and the pause asks again. A server frozen with `SIGSTOP` answers after
-  `SIGCONT` anyway: the pause test read `streaming` 253 ms after it.
-- **DONE (2026-09-26, lane A's A44, #676): the stream's other bucket calls are bounded for a bucket that
-  takes the connection and never replies.** `createS3ObjectStore` now sets the handler's
-  `socketTimeout` to `BUCKET_IDLE_MS`, 30 seconds (`packages/stream/src/s3-store.ts`). What the
-  handler's options do was measured first, with `@smithy/node-http-handler` 4.12.1 and the S3 client
-  against local `node:net` and `node:http` servers: `requestTimeout` alone only printed a warning
-  and the listing was still pending at 4,000 ms; with `throwOnRequestTimeout` it failed at 1,009 ms,
-  stopped counting at the headers (a body trickled in ten pieces 300 ms apart was answered in 2,739
-  ms under a 1,000 ms limit), and cut off an 8 MiB upload the server read slowly at 1,016 ms.
-  `socketTimeout` counts time with nothing sent or received: at 1,000 ms a silent server failed the
-  call at 1,012 ms, and the same trickled body was answered in 2,739 ms. It counts this box's own
-  reads and writes, so an upload is idle once its last bytes are handed to the system: the 8 MiB
-  upload, read with a 40 ms pause after each chunk, failed at 5,278 ms, and read with 10 or 20 ms
-  pauses it was answered. Two more limits of it, both measured: from 6,000 ms up the handler sets it
-  three seconds into the request, so at 7,000 ms a body that stalled after headers arriving at once
-  was still pending at 15,000 ms; below 6,000 ms it waits for the connection, so at 2,000 ms a
-  connection to an address that never answered (10.255.255.1) was still pending at 15,000 ms, where
-  at 7,000 ms it failed at 7,009 ms. Read, not run: this client writes only small objects (the
-  check's, the pointer, the generation marker, and a one-byte object in
-  `apps/server/src/restore-stream.ts`), and its largest bodies are listing pages and multi-object
-  deletes of up to 1,000 keys; Litestream's uploads are not made through it (`litestream.ts` only
-  writes its configuration and `litestream-process.ts` only starts the binary; neither imports the
-  S3 client). The client makes three attempts (a silent server took three connections), and with the
-  store's default a listing to a silent server failed after 90,116 ms, and to 10.255.255.1 after
-  90,170 ms. Tests, each red before the change (a call that never ended, and the supervisor cases
-  waiting in vain for the log line): all five store operations against a silent server, with a
-  test-only 100 ms limit; the settings check (`probeBucket`) thrown as unreachable; each opening
-  step — the check, the pointer read, the claim — logged as `stream.open_failed` and retried after
-  `OPEN_RETRY_MS`, then opened once the bucket answered; the pointer write logged as
-  `stream.pointer_write_failed` and written again into the same generation; a prune's listing and
-  its delete logged as `stream.prune_failed`, and the next day's prune ran; and the store's client
-  built with `{ socketTimeout: 30_000 }`. An answer trickled in twelve pieces 50 ms apart, headers
-  included, is answered under a 400 ms limit. Each silent-server case fails with the setting
-  removed, the default case with the default dropped, and the trickled answer with `requestTimeout`
-  and `throwOnRequestTimeout` in its place. The 50-socket concern: with a warmed client, a server
-  that left the next 60 requests unanswered and answered the one after, the last was answered after
-  1,027 ms with a 1,000 ms limit; with no limit it was still waiting at 8,000 ms, the server having
-  taken 50 connections besides the warm-up's. Left open: an answer whose headers arrive within three
+- **DONE (A37, #668): the pause's bucket question is bounded.** Each question (`#bucketAnswers`,
+  `packages/stream/src/supervisor.ts`) now gives up after `READ_DEADLINE_MS` and the pause asks again.
+- **DONE (lane A's A44, #676): the stream's other bucket calls are bounded for a bucket that
+  takes the connection and never replies.** `createS3ObjectStore` sets the handler's
+  `socketTimeout` to `BUCKET_IDLE_MS`, 30 seconds (`packages/stream/src/s3-store.ts`). Left open: an answer whose headers arrive within three
   seconds and whose body then stalls is not bounded (measured above); the deadline on the pause and
   the freshness read still cannot cancel a listing whose answer keeps arriving; the idle limit is
   per request, not per call, so a listing of many pages, or a bucket answering each request just
@@ -6561,28 +5070,17 @@ line with what slice 2 built. Left open:
   fill of the side file to 16 MiB took 82 s and 895 sales on CI (run for head `464d9eca7`) against
   its 180 s allowance, about 13 KB a sale, where a local run wrote about 79 KB a sale; why the
   growth per sale differs so much was not tested (Litestream's own checkpoints reusing the file is
-  the guess), so if the test turns unreliable on CI that margin is where to look. It also took 133.8
-  s of the `test-server (3)` shard; **DONE for the shard time by lane A's A48 (#682, 2026-09-26,
-  #682):** the loop and pause tests run in `test-server-stream`, a job of their own beside the
-  three `test-server` shards, which pass `--exclude` for both files
-  ([ci-and-gates.md](developers/ci-and-gates.md), "The stream loop and pause tests run in a job of
-  their own"). On PR #682's run the new job took 103 s, the slowest shard 170 s against 242 s on
-  the last `main` run before it, and the merged coverage was unchanged. The growth-per-sale
+  the guess), so if the test turns unreliable on CI that margin is where to look. **DONE for the
+  shard time by lane A's A48 (#682):** the loop and pause tests run in `test-server-stream`, a job
+  of their own ([ci-and-gates.md](developers/ci-and-gates.md), "The stream loop and pause tests run
+  in a job of their own"). The growth-per-sale
   question stays open, with one more reading: on its own runner the fill took 283 sales and 16.9 s
   for 11,766,720 bytes, about 41.6 KB a sale, where the shard before the change took 745 sales and
   78.1 s (one run each). (2) DONE by A44 for the deadline: a question given up at it logs
-  `stream.pause_check_failed` with `errorCode: "timeout"`, as the freshness read's deadline logs
-  `stream.freshness_unreadable`; the pause case fails with the line removed, and a case stopped
-  during the wait fails once the line no longer checks for a stop. Since A44 a bucket that never
-  replies ends each question as a refusal after about 90 seconds, before the deadline. **DONE by
-  lane A's A51 (#686, 2026-09-26):** a refused question is logged once per pause, `stream.pause_check_failed`
-  with the refusal's code, and a refusal arriving after the deadline or a stop is not
-  ([testing-guide.md](developers/testing-guide.md), "A bucket question the pause is waiting on").
-  **DONE by lane A's A57 (#697, 2026-09-26):** that line, and the supervisor's other lines for a bucket
-  request that failed (`stream.open_failed`, `stream.list_failed`, `stream.pointer_write_failed`,
-  `stream.freshness_unreadable`, `stream.prune_failed`), also carry the bucket's HTTP `status` when
-  the bucket answered, and nothing more when it did not; a deadline's `errorCode: "timeout"` line is
-  unchanged, since no answer arrived to have a status. A 2xx `status` means the bucket answered the
+  `stream.pause_check_failed` with `errorCode: "timeout"`. **DONE by lane A's A51 (#686):** a
+  refused question is logged once per pause with the refusal's code. **DONE by lane A's A57
+  (#697):** that line, and the supervisor's other lines for a bucket request that failed, also
+  carry the bucket's HTTP `status` when the bucket answered. A 2xx `status` means the bucket answered the
   request and the failure was found inside the answer — a file a batch delete refused (the
   `requestFailed` call in `packages/stream/src/s3-store.ts` that passes the answer's own status), an
   answer the store turned down as unusable (its `answerRefused` calls), or an answer the SDK could
@@ -6591,24 +5089,10 @@ line with what slice 2 built. Left open:
   probe not kept, was rejected with status 200 and `name` `Error`; not pinned by a test. Its line
   carried `errorName` `other` until A62 (2026-09-26) put `Error` on the list, and by reading
   `loggableErrorName` it carries `Error` since).
-  **DONE by lane A's A60 (#703, 2026-09-26):** the line also carries `errorName`,
-  the bucket's error name when it is on the fixed list in `packages/stream/src/bucket-error-names.ts`
-  (the S3 API Reference's list of error codes, one name from the PutObject page, and the names
-  `s3-store.ts` gives an answer it refused) and `other` when it is not, so a 200 line now names a
-  listed error found inside the answer. Not covered by A60, and **DONE by lane B's A62
-  (#707, 2026-09-26):** the error itself now carries the vetted name —
-  `requestFailed` in `packages/stream/src/s3-store.ts` stores what `loggableErrorName` answers, so
-  `backup.stream_request_failed`'s `name` from the S3 store is a listed name or `other`. Shown by
-  `s3-store.test.ts` (an unlisted, a secret-looking and a markup-bearing name, on a refused
-  request and inside a batch delete's answer, each read `other`; `AccessDenied` is kept) and by a
-  `boot.test.ts` case that sends the setup wizard's `POST /setup-api/restore-bucket` to a local
-  HTTP bucket answering 403 with each of those names: none of the three reached the 502 body, the
-  server's stdout or its log file, and `AccessDenied` reached all three. Each case expecting
-  `other` failed with the `loggableErrorName` call removed. The fixed names the client gives a
-  failure carrying no bucket error code (`Error`, `TimeoutError`) are on the list, so the existing
-  cases expecting them still read them; `boundObjectStore`'s own
-  `TimedOut` (`apps/server/src/bounded-store.ts`) never passes through the store and is
-  unchanged. No start
+  **DONE by lane A's A60 (#703):** the line also carries `errorName`, the bucket's error name when
+  it is on the fixed list in `packages/stream/src/bucket-error-names.ts` and `other` when it is
+  not. **DONE by lane B's A62 (#707):** `backup.stream_request_failed`'s `name` from the S3 store
+  is a listed name or `other`. No start
   was found that fails with that code, by reading: the boot-time bucket calls (`runFirstStart`,
   `StreamHost.start`) catch it and log the code alone, and a staged stream restore writes bytes
   downloaded before staging. One case was run: `boot.test.ts`'s "keeps selling when a restore's
@@ -6649,56 +5133,29 @@ SPAs' beside the Litestream one, and the print-agent's in the print-agent image.
 #421–#470, plus the rule and guard #473); the change log replacing `LISTEN`/`NOTIFY` (P3 — #477);
 the one-statement job-claim helpers (P4a — #481; P4b — #483); money to whole cents (P5 — #475);
 quantity and rate scales (P6 — #479); constraint-target refusals (P10 — #482); and the two-file
-foreign-key split (P7 — #426). The mechanism, the measurements and the review lessons for each live in
-the PR threads and in `CLAUDE.md`, [conventions-data.md](developers/conventions-data.md) and
-[testing-guide.md](developers/testing-guide.md).
+foreign-key split (P7 — #426).
 
-**Task F1, the flip itself, LANDED as #489 on 2026-09-23** (main `aabdde6a`). A venue is a directory
-of two SQLite files opened through `node:sqlite`; there is no database server, no roles, no grants,
-no connection string and no container. What the flip cost, what it could not carry and what it
-deliberately deferred are in that pull request and in its commits.
+**Task F1, the flip itself, LANDED as #489**: a venue is a directory of two SQLite files opened
+through `node:sqlite`; there is no database server, no roles, no grants, no connection string and
+no container.
 
-**Task T1, the role-assumption sweep, LANDED as #490 on 2026-09-23** (main `fcc2d432`). `asAppUser`
-and its 796 call sites are gone, and so is the prose that described them. **Task T2, dropping
-PostgreSQL from the dependencies and the dev stack, LANDED as #492 on 2026-09-23** (main
-`fc8753a6`). It takes the cluster out of the box and out of the dev stack,
-the client packages out of every manifest that did not import them, the two unread Docker switches out
-of both workflows, the PostgreSQL schema differ off disk, the two identity-function claim helpers out
-of `@waitron/db`, and the target-choice framing out of the comments. **Task T3, revisiting the coverage bars, LANDED as #494 on
-2026-09-23** (main `5093bbfe`) — the last task in the slice-1 plan, and with it slice 1 is done.
+**Task T1, the role-assumption sweep, LANDED as #490**: `asAppUser` and its call sites are gone.
+**Task T2, dropping PostgreSQL from the dependencies and the dev stack, LANDED as #492**: the
+cluster is out of the box and the dev stack. **Task T3, revisiting the coverage bars, LANDED as
+#494** — the last task in the slice-1 plan, and with it slice 1 is done.
 
-**What T3 measured, and why no bar moved.** The whole workspace was run — 46 members green at their
-current bars, 1,065 test files and 13,784 tests, plus the root project's 54 files and 3,255 tests —
-and the answer is that **the storage switch did not shrink the workspace**: non-test source under
-`packages/*/src` and `apps/*/src` went 8,323 KB at `320f1dc08`, the commit before the flip, to
-8,359 KB on the tree this change merges into, so a bar that was meaningful in September still is. Four packages shrank by more than a tenth, and
-`packages/provisioning` is the large one — by a third, when `waitron-provision instance` went with
-the per-tenant PostgreSQL cluster. It cleared the floor then by 7.7 points on statements (it
-has since been promoted to the high bar), and the other three (`recipes`, `purchasing`,
-`workforce-es`) were at 100% on all four metrics. The numbers, the two traps that were checked rather than assumed, and
-the one source file that turns out to be measured by no coverage table at all are in
+**What T3 measured, and why no bar moved.** The storage switch did not shrink the workspace, so a
+bar that was meaningful in September still is; the numbers are in
 [ci-and-gates.md](developers/ci-and-gates.md) → *What the storage switch did to the bars*.
 
 **The two coverage questions T3 left open are ANSWERED (owner, 2026-09-23): every package goes to
-the high bar, `98/98/98/95`.** T3 had asked whether to promote the packages that already cleared it,
-and whether to raise the floor's functions minimum of 85, which no package came within six points
-of. The owner chose the whole bar over raising only the functions minimum to 95 or to 90, which
-retires the 2026-09-05 split by consequence. The first promotion is done, and the rest of the work
-is tracked in **B9. CI and test infra** → *Every package to the high coverage bar*.
+the high bar, `98/98/98/95`**, which retires the 2026-09-05 split by consequence. The rest of the
+work is tracked in **B9. CI and test infra** → *Every package to the high coverage bar*.
 
 **What T2's review wave found, and it is the reason the run-it seat keeps its seat — OPEN as a
-lesson, nothing left to fix.** `is_production` in `deploy/waitron.sh` **failed OPEN**. It read the
-box's settings as `[ -e f ] && cat f || echo __ABSENT__`, so a `cat` that FAILED fell into the `||`,
-printed the sentinel meaning "no such file" and exited 0 — and the caller wiped a production box with
-no `--force-production`. The shape predates T2; T2 made it REACHABLE by moving the read out of a root
-container into one running as an ordinary user. Reproduced against real Docker in both directions.
-Two shapes worth carrying: **(1) the guard suite could not have caught it at all**, because its docker
-stub answers a `trading.env` command from a variable and never executes the shell text — the defect
-lived in a string no test ran, and the fix's tests now extract the one-liner from the shipped script
-and run it under a real `sh`; **(2) the FIRST fix was itself incomplete** — it closed the file case
-and left the same hole one level up, because `[ -e "$d/trading.env" ]` cannot tell a missing file from
-a directory it may not look inside. The scoped re-read caught that, which is `CLAUDE.md` §1's
-"the correction is a new claim" paying for itself twice on one branch.
+lesson, nothing left to fix.** `is_production` in `deploy/waitron.sh` **failed OPEN**, and the
+caller wiped a production box with no `--force-production`; the fix's tests now extract the
+one-liner from the shipped script and run it under a real `sh`.
 
 Two things from T2 worth reading before T3 or anything near the box:
 
@@ -6718,25 +5175,10 @@ Two things from T2 worth reading before T3 or anything near the box:
   install `up` and the reset's `down` and `up`; the retired `waitron_db` VOLUME is left on disk
   deliberately, and `deploy/README.md` says so and how to remove it.
 
-The reusable lesson, because it cost four passes: **the selection key kept turning out to be wider
-than the problem.** Sweeping by the IDENTIFIER `asAppUser` found 140 files. A further 44 cited the
-deleted FILE without ever naming the function — invisible to the first key. A further 152 described
-the mechanism in plain English ("runs as the app role", "`app_user` holds SELECT on `nodes`") and
-named neither — invisible to both, and found independently by two reviewers in the same wave. Then
-the re-read of that third sweep found ten more, three of them shapes worth carrying: a sweep can
-falsify a document in the same commit that rewraps it; shortening a file breaks every pointer INTO
-it; and a correction must not decrement a count where it should drop it.
-
 **What #490 found and deliberately did not fix**, so T2 and whoever follows do not rediscover it:
 
-- **Stale PGlite prose — DONE by T2**, and it was roughly a hundred files rather than the dozen this
-  line guessed at. `scripts/schema-equivalence.{sh,md}` went with it: deleted, not swept, because the
-  script's whole subject was dumping and diffing a PostgreSQL schema.
-- **The four helpers named after PostgreSQL — DONE (2026-09-23, PR #524).**
-  Renamed, with no behaviour change: `isPgError` is `isRefusal`, `pgErrorCode` is
-  `driverErrorCode`, `pgErrorMessage` is `engineErrorMessage`, and `storeF3AsAppUser` in
-  `packages/fiscal-verifactu/src/canje-path.e2e.test.ts` is `storeF3`. Historical plans and specs
-  under `docs/superpowers/` keep the old names, as written.
+- **Stale PGlite prose — DONE by T2** (#492).
+- **The four helpers named after PostgreSQL — DONE (PR #524).**
 - **Comments still describe a `DrizzleQueryError` wrapper that this engine does not produce**
   (found 2026-09-23 in PR #524's review). Several say drizzle wraps every failed query in
   a `DrizzleQueryError` whose own `.code` is undefined. On `node:sqlite` only `db.run` wraps (as
@@ -6757,146 +5199,50 @@ it; and a correction must not decrement a count where it should drop it.
   `CHECK constraint failed: …`, with no SQL and no parameter.) The thrown text
   in `packages/db/src/testing/errors.ts`'s `engineErrorMessage` names the old wrapper on purpose
   and is pinned verbatim by its test.
-- **The discarded `cfg` parameters — DONE (2026-09-23, PR #516).**
-  `asApp` in `apps/server/src/join-requests.test.ts` and `withVenueAuth` in
-  `apps/server/src/management-api.ts` no longer take one. Every route still calls
-  `requireVenueCfg`, because each verb it runs takes `cfg` itself. Other `void cfg` lines remain in
+- **The discarded `cfg` parameters — DONE (PR #516).** Other `void cfg` lines remain in
   `apps/server/src` (`git grep -n 'void cfg;' apps/server/src`), unchanged. Some are `asApp` test
   helpers of the same shape as the one fixed; the rest are other test helpers and production
   functions (`apps/server/src/working-order.ts` holds several) that take `cfg` and discard it.
-- **Three dangling pointers — DONE (2026-09-23, PR #516), with one
-  left on purpose.** `apps/server/src/testing/global-setup.ts` was no longer cited anywhere under
-  `apps`, `packages` or `scripts`; the four `git show origin/main:…/testing/global-setup.ts`
-  pointers of the same kind (in `packages/core`, `packages/scheduler`, `packages/credentials`), and
-  credentials' pointer to its deleted `0001_credentials_baseline_sql.sql`, now read
-  `git show aabdde6a8^:…`, and each resolves. `nodes.ts` now cites `apps/server/src/node-identity.ts`.
-  `0001_db_baseline_sql.sql` was cited in five TypeScript files and one migration: the three `packages/db/src/schema` files
-  that told the story of the barrel lost that paragraph, `nodes.ts` points at the `deployment`
-  schema instead, and `apps/server/src/till-sale.ts` lost the sentence with it, which was also
-  false — `working_orders_enforce_transition` ACCEPTS a later stamp-only update on a settled order
-  (`scripts/behavioural-triggers.test.ts`, "accepts the kitchen-handover stamp on a settled
-  order"). LEFT: `packages/db/drizzle/0001_behavioural_triggers.sql` still points at
+- **Three dangling pointers — DONE (PR #516), with one left on purpose.** LEFT:
+  `packages/db/drizzle/0001_behavioural_triggers.sql` still points at
   `origin/main` for the originals, because editing a shipped migration, even a comment, changes its
   hash (measured with drizzle's `readMigrationFiles`: `fba827e45a74…` became `518ac94a3346…`), and
   the boot path's ahead check reports a database hash the image does not ship
   (`packages/provisioning/src/schema-ahead.ts`), so an already-migrated box would read as ahead —
-  traced, not run.
-  Every other `git show origin/main:<path>` pointer under `apps`, `packages`, `scripts` and
-  `docs/developers` (outside `drizzle/`) whose path no longer exists on `origin/main` now reads
-  `aabdde6a8^:<path>`, the parent of the commit that deleted it, and each resolves. The pointers in
-  `packages/bookings/src/bookings-cas.test.ts` and `packages/media/src/images.test.ts` name files
-  that still exist but no longer hold the deleted cases, so they were repointed to `aabdde6a8^:` as
-  well (2026-09-24: #574 moved bookings' pointer into its commit message, and #609 deleted
-  media's). Also left: the
+  traced, not run. Also left: the
   pointers in shipped `drizzle/` SQL, such as `packages/media/drizzle/0001_image_references.sql`
   and `packages/db/drizzle/0001_behavioural_triggers.sql`, for the hash reason above.
 - **`packages/scheduler/src/migrations.ts` and `packages/identity/src/migrations.ts`'s core-first
-  claim — DONE (2026-09-23, PR #516).** Neither set needs core to have
-  run first; both now say so, with the experiment in the `tenants` foreign key entry above
-  (2026-09-24: scheduler's now says it in its `schema-conformance.test.ts`, #581).
-- **The grep receipt in `apps/server/src/promote-endpoint-e2e.test.ts` — DONE (2026-09-23, PR
-  #516).** #492 had already reworded "no matches" to "only these three
-  comment lines", and that held when run: `grep -rn WAITRON_ADMIN_DATABASE_URL apps packages
-  scripts deploy .github` printed the block's own three lines. The block is now only the gap it
+  claim — DONE (PR #516).**
+- **The grep receipt in `apps/server/src/promote-endpoint-e2e.test.ts` — DONE (PR #516).** The
+  block is now only the gap it
   leaves — nothing shows a refused promote write fails closed, and no test asserts
-  `promotion.failed` — so the same grep prints nothing and exits 1. The history around it, and the
-  "Step 1 was red" story below it, went too.
+  `promotion.failed` — so the same grep prints nothing and exits 1.
 
 What the preparation tasks left, with F1's own answers where it found them:
 
 - **How the drain crosses the two database files, given `change_log`'s `local` classification —
-  SETTLED by slice-2 spec §2: every table stays in `venue.db`.** The triggers writing it sit on `venue.db` tables,
-  and the thing to check first was checked: SQLite REFUSES a trigger
-  body that writes another attached database, both ways round. Measured on Node v26.7.0 against
-  `node:sqlite`, 2026-09-22, with `node.db` attached to the venue connection: a qualified
-  `insert into node.change_log …` inside a trigger is refused at CREATE with `qualified table names
-  are not allowed on INSERT, UPDATE, and DELETE statements within triggers`, and the same statement
-  written unqualified is refused with `no such table: main.change_log`, because an unqualified name
-  inside a trigger resolves to the trigger's OWN database. Nothing is broken today, also measured:
-  `applyMigrations` puts every set on the venue handle, so after a real migrate `venue.db` holds 121
-  tables including `change_log` and `node.db` holds none. If a later slice moves `local` tables into
-  `node.db` (spec §2 reserves it for slice 5), that slice decides this again — either `change_log`
-  is reclassified to the file its writers live on, or the triggers stop writing it directly and
-  something above them does (P3). Settled by the slice-2
-  spec §2: every table stays in `venue.db`, so `change_log` and the triggers writing it share a
-  file.
+  SETTLED by slice-2 spec §2: every table stays in `venue.db`.** SQLite refuses a trigger body that
+  writes another attached database, so if a later slice moves `local` tables into `node.db` (spec
+  §2 reserves it for slice 5), that slice decides this again — either `change_log` is reclassified
+  to the file its writers live on, or the triggers stop writing it directly and something above
+  them does (P3).
 - **The three claim helpers were stripped, and two of them had become identity functions — CLOSED by
-  T2.** `claimLock` and `claimLockedRows` are deleted and each is inlined into its one caller;
-  `claimRows` stays, because it builds a real `update … returning`. What the deletion turned up is the
-  part worth carrying: payments' suite did NOT catch the claim stamping a column no state guard reads
-  (mutate `settled_at` and all 413 tests passed), so T2 added the missing case — and the draft comment
-  claiming the write queue serialises two forward passes was false, because that caller opens a bare
-  `db.transaction`, which is drizzle's own `begin` and never enters the queue.
+  T2.**
 - **`packages/printing` reported an out-of-range `character_table` as a `transport_fields` problem —
-  FIXED by #489 (the SQLite switch); nothing left to build.** `translatePrinterWriteError`
-  (`packages/printing/src/printers.ts`) now translates only the refusal that names
-  `printers_transport_fields_ck`, through `checkFailed`, so a `printers_character_table_ck` refusal
-  propagates unchanged. An operator never reaches it: the only product caller of `createPrinter` and
-  `updatePrinter`, `apps/server/src/print-api.ts`, screens the value first with `optionalByte`,
-  which refuses anything outside 0..255 as `management.request_invalid` with `field:
-  "characterTable"`. Both halves measured 2026-09-23 by deletion, each restored: matching every
-  CHECK refusal by its message instead failed two cases in `packages/printing/src/printers.test.ts`
-  with `printer.invalid_config`; dropping `optionalByte`'s upper bound turned the `characterTable:
-  256` PATCH case in `apps/server/src/print-api.test.ts` from 400 into 500.
-- **No guard holds a MODULE migration set to its declared schema — LANDED as PR #491, 2026-09-23,
-  for the four named here.** `catalogue`, `payments`, `workforce` and `workforce-es` each have a
-  `src/schema/schema-conformance.test.ts` now, calling the shared suite factory
-  `@waitron/db/testing/schema-conformance.js`, and the core set calls the same factory. None of the
-  four turned out to have any drift. Every other set that builds a table has had one since; see
-  **B9. CI and test infra** above.
+  FIXED by #489 (the SQLite switch); nothing left to build.**
+- **No guard holds a MODULE migration set to its declared schema — LANDED as PR #491** for
+  `catalogue`, `payments`, `workforce` and `workforce-es`; see **B9. CI and test infra** above.
 - **Two coverage gaps under a 5-second default bound — CLOSED (#482 and #509).**
-  `scripts/changed-packages.test.mjs` runs under the root project's 30-second default since #482,
-  which reaches that file (what thirty seconds does not buy is stated beside it in
-  `vitest.config.ts`); the fiscal chain's refused-then-successful retry has a case in
-  `packages/fiscal-verifactu/src/chain.test.ts`.
 - **The working-time chain's retry has the same untested middle — CLOSED (#564).**
-  `packages/workforce/src/chain.test.ts` has the refused-then-successful case.
-- **Stale `vitest.config.ts` comments — DONE (2026-09-23, branch `chore/vitest-config-comments`).**
-  The entry asked for each package to be checked "read not run"; it was the other way round — run,
-  not read — and this supersedes it. Most of the named claims had gone before this branch: "every
-  test here boots a WASM PostgreSQL" in #467, "nowhere else in the repo" and the 2026-08-20
-  single-fork receipt in #489, and `fiscal` and `fiscal-none` mentioned PGlite only as history,
-  which is now cut. What was left was corrected against runs. Each of the five packages' timeout
-  comments now says the value is margin, because each package passed `vitest run --testTimeout=2000
-  --hookTimeout=2000` with `useVenueDb`'s default setup budget temporarily cut to 2s, on an
-  18-core Mac with one package running at a time. No value changed. The review also dropped the
-  `venue-db.ts` line pointers from sibling configs and test files, several of which were stale, and
-  a "(CLAUDE.md §4)" pointer that named no rule about worker pins.
-  - `purchasing`: 19 tests, slowest 6ms, database setup 14ms.
-  - `fiscal-none`: 13 tests, slowest 2ms, setup 14ms; coverage at one and three workers wrote
-    identical summaries, so its one-worker pin is recorded as a precaution, not a need.
-  - `fiscal`: 186 tests, slowest 2ms, setup 5ms in the one file that opens a database.
-  - `db`: 577 tests, slowest 74ms, slowest setup 83ms; 20.3s at one worker, 6.4s at four, 5.9s at
-    eight; coverage covered and total counts the same per file at one and at four workers; the
-    48-line history of the `english-only.ts` exclusion is cut to a pointer at f8d6097d0.
-    (2026-09-24: #589 deleted that pointer too.)
-  - `identity`: 278 tests, slowest 185ms, slowest setup 49ms; `test:coverage` gave the same covered
-    and total counts per file at one worker (22.3s) and with `--maxWorkers=6` (6.2s), so its
-    one-worker pin is recorded as a precaution, not a need. Its comment's `venue-db.ts:176`, `:183`
-    and `:174` line pointers were stale (the hooks are now at 221–241) and are gone.
+- **Stale `vitest.config.ts` comments — DONE (branch `chore/vitest-config-comments`).**
   - Follow-up: every other `maxWorkers: 1` config whose comment gives the coverage reason, apart
     from `payments`, which carries its own measurement, still says the pin is needed without having
-    measured it; the same one-worker-against-several coverage comparison would settle each. The
-    claim that the pre-push hook runs a whole-workspace `pnpm -r test:coverage` is gone from every
-    config (`packages/diagnostics/vitest.config.ts`'s last, by #600); the hook has run no package
-    tests since #338.
-- **Dead code and doc sweeps owed to the rollout's final sweep** — **DONE** (2026-09-23). The unused
-  `seedTenantWithSumUpKey` was deleted by PR #516; the file's real-SumUp case seals no credential and
-  passes, because the seat reads its credential only on first use, and that case's name and the file
-  header had said otherwise and now do not. The twelve plans with a `usePgliteDb` sketch already carried a dated `useVenueDb`
-  pointer, added by #473. The rest got dated notes: the credential-vault plan's `hookTimeout`
-  claim, the slice-1 spec's four unannotated "211" mentions, and what became of
-  `membership-adopt.test.ts` in the membership slice-3 plan (#202 created it, #280 deleted it).
+    measured it; the same one-worker-against-several coverage comparison would settle each.
+- **Dead code and doc sweeps owed to the rollout's final sweep** — **DONE** (PR #516 and dated notes).
 - **Deferred cleanups, each with its reason in its PR**
-  - P7's three (#426) — **DONE** (2026-09-23, PR #533). A new root
-    guard, `scripts/migrations-match-schema.test.ts`, regenerates every migration set into a copy
-    with `drizzle-kit generate` and fails if anything changes, so a schema edit that was never
-    generated is now caught; it compares the TypeScript with the snapshot only, so a key added by
-    hand-written SQL is still seen by nothing. The migration-set readers two root guards each
-    carried a copy of now live once in `packages/sync-enrolment/src/testing/migration-sets.ts`,
-    in the same package as `tablesCreatedBy` but outside what its `index.ts` exports, and
-    `classification-complete` reads its SQL through them. `two-file-foreign-keys` builds its
-    table-to-class map once. Left, found while doing it: `no-tenant-column`'s SQL check still
+  - P7's three (#426) — **DONE** (PR #533): `scripts/migrations-match-schema.test.ts` fails when a
+    schema edit was never generated. Left, found while doing it: `no-tenant-column`'s SQL check still
     passed with one set's SQL dropped, because it checks for an absence and the remaining files
     clear its floor of eight. `module-graph-honesty`, `schema-constraints` and
     `packages/db/src/classification.test.ts` still read a set's SQL their own way — the top of the
@@ -6906,83 +5252,27 @@ What the preparation tasks left, with F1's own answers where it found them:
     2026-09-23), and drizzle's migrator applies only `<folder>/<tag>.sql` for each journal entry.
     `journal-monotonic` parses `_journal.json` itself rather than sharing `headSnapshot`'s reader.
   - P5's three (#475) — **one DONE, one moot, one still declined, for a restated reason**
-    (2026-09-23, PR #531). **Done:** the two-call write conversion
-    `decimalToCents(decimal(x))` is now one helper, `stringToCents`, and the same shape for the
-    other two scales, `stringToThousandths` and `stringToBasisPoints` (the pattern had spread to
-    them since #475), at 50 sites outside `packages/shared`. Only the converters' own tests keep
-    the two calls, because they test the converter. The seven sites in the fiscal record builders
-    — `record-sale.ts`, `record-correction.ts`, `record-substitution.ts` and `sale-line-rows.ts`,
-    which only those three use — were held back from #531 for the owner's review and are **DONE**
-    (2026-09-23, PR #535, on the owner's "Just do the swap without
-    me"): each helper is `decimalToX(decimal(value))` and nothing more, and the golden huella test
-    in `packages/fiscal-verifactu/src/write-path.e2e.test.ts` and `inmutabilidad` passed unedited.
-    #475 declined it because a helper taking a plain string "would hide that
-    validation and invite passing something unchecked"; that does not hold — a helper calling
-    `decimal()` inside refused all six malformed strings tried (`abc`, `1e3`, `+1.00`, `01.00`,
-    the empty string and a leading space) with `shared.invalid_decimal`, the same as the two
-    calls. **Moot:** renaming the new container test to drop its `.pg.` marker — that file,
-    `packages/core/src/list-outstanding-sales.pg.test.ts`, became
-    `list-outstanding-sales.wide-amount.test.ts` in #489, and no `.pg.` file is left in the tree
-    (`git ls-files | grep -c '\.pg\.'` prints 0). **Still declined, reason restated:** writing
-    `moneyNum` in `packages/workforce-es/src/convenio.ts` as `cents / 100`. The value is the same —
-    measured over 6,000,007 counts (every one from −2,000,000 to 2,000,000, two million random
-    ones across the whole twelve-digit range, and the extremes), `cents / 100` equalled
-    `Number(centsToDecimal(cents))` every time, while a control, `cents * 0.01`, differed on 129
-    of the counts 0 to 999. What it would change is where the money scale lives: the conversion
+    (PR #531). **Done:** the two-call write conversion is now one helper per scale
+    (`stringToCents`, `stringToThousandths`, `stringToBasisPoints`), the fiscal record builders
+    included (PR #535). **Moot:** no `.pg.` file is left in the tree. **Still declined, reason
+    restated:** writing `moneyNum` in `packages/workforce-es/src/convenio.ts` as `cents / 100`. The
+    value is the same. What it would change is where the money scale lives: the conversion
     from a count of cents belongs to `packages/shared/src/cents.ts` (CLAUDE.md §3's money rule),
     and a `/ 100` puts a second copy of the scale outside the files
-    `packages/shared/src/conventions.test.ts` checks.
-    **Found in #531's review — DONE 2026-09-24 (PR #583):** `decimalToCents` now
-    checks the bound on the amount rounded to cents, so `"999999999999.995"` is refused with
-    `shared.decimal_overflow`. The receipt that found it: `decimalToCents` checked the twelve-digit
-    bound BEFORE it rounded to two places (`toScale(assertMoney(value), …)`), so a twelve-digit
-    amount with a third decimal place could round past the bound and was accepted:
-    `stringToCents("999999999999.995")` returned 100000000000000 (thirteen integer digits) where
-    `"1000000000000"` is refused with `shared.decimal_overflow`, measured 2026-09-23. The quantity
-    and rate converters check after rounding (`stringToThousandths("999999999.9995")` is refused).
-    Held back from #531 because `decimalToCents` also serves the fiscal record builders; the owner
-    decided it on 2026-09-24.
-  - P6's three (#479) — **two DONE, one declined with its reason re-measured** (2026-09-23,
-    PR #529). `cents.ts` now uses `scales.ts`'s literal renderer and raw-text
-    pattern instead of copies; its raw reader keeps the number type's bound rather than the money
-    digit bound, because most raw reads are totals, which can be wider than one amount — pinned in
-    `cents.test.ts` and shown failing when the digit bound is put in. `updatePurchaseInvoice` now
-    writes an absent field the way create does, as `undefined`, which drizzle's `set` leaves out
-    (`mapUpdateSet` in drizzle-orm 0.45.2 filters `undefined`); a case pins that an omitted total
-    and proportion stay as stored, shown failing when the total is written as null. **Declined:**
-    one constant for the `10000` literals. Four sit in check constraints, and measured with
-    drizzle-orm's `SQLiteSyncDialect`, a JavaScript number interpolated into a check renders as
-    `"rate" <= ?`, its value held apart as a parameter; drizzle-kit 0.31.10 builds a check's text
-    from `sqlToQuery(check.value).sql` alone (read in its bundled source, not run), so the
-    migration would say `?`. Only `sql.raw(String(n))` renders the number, and a constant that
-    works only through `sql.raw` is a trap for the next tidy-up, so the literals stay.
-    **DONE 2026-09-24 (PR #583, owner decision):** `rawThousandthsToDecimal` now
-    reads a total past nine integer digits: its only width limit is what a JavaScript number holds
-    exactly, refused with `shared.invalid_thousandths` (like `rawCentsToDecimal`); one quantity is
-    still bounded at nine. Found 2026-09-23 in #529's review: the quantity raw reader refused any
-    value past nine integer digits, although `packages/reporting/src/top-sellers.ts` passes it a `sum(...)` of
-    quantities. That is the
-    opposite choice to money's raw reader, which deliberately admits a total wider than any one
-    amount.
-    **DONE 2026-09-24 (PR #583)** — the same edge as the #531 entry above, fixed
-    there. The receipt (same review): `decimalToCents` checked the money bound BEFORE rounding to
-    cents, so `decimalToCents("999999999999.995")` returned `100000000000000`, an amount with thirteen integer
-    digits that `assertMoney` refused (measured 2026-09-23 on #529's branch). `main` then checked in
-    the same order (`toScale(assertMoney(value), MONEY_SCALE)`), so it predated #529.
-    **DONE 2026-09-26 (lane A's A32, **PR #662**, main `fd5511324`):** `assertMoney` is
-    deleted, with its export from `packages/shared/src/index.ts` and its tests. After #583 it had no
-    product caller, and it checked the digits BEFORE rounding, the order #583 removed from
-    `decimalToCents`. The money bound is `decimalToCents`'s, pinned in
-    `packages/shared/src/cents.test.ts`.
+    `packages/shared/src/conventions.test.ts` checks. **Found in #531's review — DONE (PR #583):**
+    `decimalToCents` checks the bound on the amount rounded to cents, so `"999999999999.995"` is
+    refused with `shared.decimal_overflow`.
+  - P6's three (#479) — **two DONE, one declined with its reason re-measured** (PR #529).
+    **Declined:** one constant for the `10000` literals. Four sit in check constraints, and only
+    `sql.raw(String(n))` renders the number there; a constant that works only through `sql.raw` is
+    a trap for the next tidy-up, so the literals stay. **DONE (PR #583, owner decision):**
+    `rawThousandthsToDecimal` reads a total past nine integer digits; one quantity is still bounded
+    at nine. **DONE (lane A's A32, PR #662):** `assertMoney` is deleted; the money bound is
+    `decimalToCents`'s.
   - P4a's hand-written holder/waiter contention scaffold and its slow lock-clause negative control —
-    **no longer applicable**: both lived in `packages/db/src/job-claim.pg.test.ts`, a real-PostgreSQL
-    contention suite, and the file that was to share the scaffold, `packages/db/src/testing/lifecycle.ts`,
-    went with it; #489 deleted both, so there is nothing left to share or bound (receipt:
-    `git show aabdde6a8 --summary` prints `delete mode` for both).
-  - The P10 shared refusal helper — **DONE** (2026-09-23, PR #527): `refusalError` in
-    `packages/db/src/testing/refusals.ts`, whose suite provokes each refusal for real and holds the
-    crafted one equal to it. Eight test files build their engine-shaped refusals with it; the fakes
-    the engine could never produce stay hand-written on purpose. A few other suites still build
+    **no longer applicable**: #489 deleted the PostgreSQL suite both lived in.
+  - The P10 shared refusal helper — **DONE** (PR #527): `refusalError` in
+    `packages/db/src/testing/refusals.ts`. A few other suites still build
     engine-shaped refusals by hand, among them `packages/provisioning/src/cli.test.ts` and
     `packages/scheduler/src/store.concurrency.test.ts`; converting them was not part of P10.
 
@@ -6993,8 +5283,7 @@ What the preparation tasks left, with F1's own answers where it found them:
 Each track is its own worktree so sessions do not edit the same files. Rules, each already paid for:
 
 - **Concurrency follows measured headroom, never a count** (CLAUDE.md §2). Before a heavy run check
-  free memory and the heaviest processes, then scale to what is free. Real-PG suites racing on Docker
-  ports show as `EADDRINUSE` and pass on retry — a flake, not a reason to serialise.
+  free memory and the heaviest processes, then scale to what is free.
 - **Whoever lands second rebases — only on a code-file overlap or a GitHub conflict.** A PR that is
   merely `BEHIND` lands as is with `gh pr merge --squash --admin` (CLAUDE.md §6). Module-owned
   migrations are regenerated on rebase per CLAUDE.md §3's recipe.
@@ -7134,10 +5423,8 @@ The 2026-09-12 owner walkthrough's five findings all closed with #334 (the reaso
 thread); live A2 work is under *A2* in Track A. What is worth carrying forward, because it constrains
 the next change to the wizard:
 
-- **Detection must PROMOTE the match, not pre-open it in a full list.** #334 first detected the
-  operator's system but kept all three certificate-export guides in one list with the match merely
-  pre-opened, which read on a Mac as "a list of every combo". The matched guide is now lifted out with
-  the rest behind one closed disclosure.
+- **Detection must PROMOTE the match, not pre-open it in a full list.** The matched guide is now
+  lifted out with the rest behind one closed disclosure.
 - **The demo tax ID is generated and must never reach Prepare or Live.** It is a company checksum shape
   (`packages/country-es/src/spain.ts`), safe only because a demo box files nothing.
 - **"Till name" is the till row, not the filing identity.** The node/SIF is created and named after the
@@ -7153,8 +5440,7 @@ the next change to the wizard:
 
 ### Roles the admin can edit (A7)
 
-A person's role is one of four values (`personRole` in `packages/identity/src/schema/persons.ts`;
-written as a PostgreSQL enum at `:21` when this section was drafted).
+A person's role is one of four values (`personRole` in `packages/identity/src/schema/persons.ts`).
 The seam is already right: no call site gates on a role string — every one asks for a PERMISSION and
 one map turns a role into its set (`packages/identity/src/permissions.ts`) — and a session reads the
 role from the database on each request, so an edited role takes effect at once. Roles and their
@@ -7217,21 +5503,9 @@ is GitHub issues; for now a bundle only needs to be copy-pastable.
     never on the unauthenticated recovery page — with an optional description of what they were
     doing, and a setting to send them automatically. The owner's aim: the more bugs reported, the
     better.
-  - **Where the freeze reports are (#608).** One JSON file per
-    process the watchdog kills, named `holder-frozen-<killedAt>-<pid>.json` (the time with `:` and `.`
-    turned into `-`), in `<logDir>/crash-reports/`. On a box that is `/var/lib/waitron/logs/crash-reports/`
-    on the persistent `logs` volume (`deploy/compose.yml`), outside the venue database, so a restore
-    does not drop it. The keys, and nothing else:
-    - `code`: always `provisioning.database_holder_frozen`;
-    - `stack`: the main thread's frames as `{ function, file, line, column }`, or `null` when they
-      could not be read within 2 s, as happened with a synchronous SQLite statement;
-    - `kind`, `pid`, `host`, which is the container id under Docker;
-    - `lockedAt`, `lastTickAt`, `killedAt`;
-    - `version`: the build's own version, which on a box is `WAITRON_BUILD_ID`.
-
-    The server, restore and rejoin write them, and the provisioning command does when
-    `WAITRON_LOG_DIR` or `WAITRON_STATE_DIR` is set. The development scripts set
-    no folder, so they write none. Nothing reads or deletes them yet.
+  - **Where the freeze reports are (#608).** One JSON file per process the watchdog kills, in
+    `<logDir>/crash-reports/` — on a box `/var/lib/waitron/logs/crash-reports/` on the persistent
+    `logs` volume, outside the venue database. Nothing reads or deletes them yet.
 
 ### KDS operations — low priority (A9)
 
@@ -7269,25 +5543,7 @@ today); generalise archive entry routing off declared source ids when a second n
   user-installed root is trusted for every name on Android, while desktop Chrome and iOS/Safari honour
   the constraint. The service-worker/PWA/WebAuthn-blocked-until-trusted behaviour and an iOS device
   are still to measure.
-- **The box image carries the WireGuard link.** It also still carries the PostgreSQL replication
-  cluster settings (`wal_level=logical`, `track_commit_timestamp=on`, `max_slot_wal_keep_size`) in
-  `deploy/compose.yml`; nothing reads them since 2026-09-19 and they are removed with the storage
-  switch rather than on their own. The `waitron_repl` bootstrap and its `pg_hba` entry went with the
-  machinery. **Dropping the three is not the free tidy-up it looks like.** A cluster that still holds
-  a logical replication slot REFUSES to start once `wal_level` falls below logical:
-  `FATAL: logical replication slot "leftover" exists, but "wal_level" < "logical"`, measured on
-  2026-09-19 on a throwaway `postgres:18-alpine` volume — slot created, container recreated on the
-  same volume without the flags, exit code 1. The control in the other direction, on the same volume:
-  drop the slot, restart without the flags, and it comes up clean, reports `replica` / `off`, and its
-  publication is still there. A box that ever had a standby adopted against it holds such a slot — the
-  deleted `CREATE SUBSCRIPTION` passed no `create_slot` option
-  (`git show dbe5dff4:packages/sync/src/subscriptions.ts`, line 47), and replaying that statement
-  shape on PostgreSQL 18 the same day left a `pgoutput` slot on the publisher's database — and
-  `deploy/waitron.sh` rewrites the installed `compose.yml` from the ref on every install
-  (`deploy/waitron.sh`, "wrote compose.yml from ${ref}"), so the change would reach that box as an
-  unbootable database. The development cluster was checked the same day and holds no slots at all, so
-  a dev restart is safe. Whoever removes these decides first whether any real box has been through an
-  adopt cycle, and if so drops the leftover slot (`pg_drop_replication_slot`) before the upgrade.
+- **The box image carries the WireGuard link.**
 - **Identity on a standby:** `persons` and `webauthn_credentials` are `state`, so a standby can
   authenticate the venue's people on failover; re-establishment is PIN-re-prompt v1.
 - Later kiosk options, none built: Chromium `--kiosk` in the box image and Fully Kiosk resale for
@@ -7302,13 +5558,8 @@ today); generalise archive entry routing off declared source ids when a second n
 
 ### Replication, membership & failover — residuals (Afterwards)
 
-**Mechanism as built on PostgreSQL (since #280, DELETED 2026-09-19 — see the note below):** every
-module classifies its tables `ledger` / `state` / `local`; the table owner creates the
-`_ledger`/`_state` publications; a standby subscribes over the box↔cloud link; promotion and return
-run on `pg_replication_slots` with the fence-LSN drain watermark; settings are primary-wins by
-construction. A standby holds its full dormant identity from JOIN and promotion never mints a chain.
-
-**2026-09-19 — that code is no longer in the tree (slice 1, task P8).** `packages/sync` and the request
+**2026-09-19 — the PostgreSQL replication code (#280) is no longer in the tree (slice 1, task
+P8).** `packages/sync` and the request
 paths built on publications, subscriptions and the fence-LSN watermark were deleted, because slices 3
 and 4 rebuild failover on a different mechanism
 ([the topology design](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md)) and none of
@@ -7321,7 +5572,8 @@ canonicalisation, verification, trust), node enrolment and its rate limiting
 (`apps/server/src/node-enrol-api.ts`, `enrol-rate-limit.ts`), node retirement, and the
 `ledger` / `state` / `local` classification — which no longer chooses a database file: every table
 is in `venue.db` (slice-2 spec §2). Read the residuals below as requirements for what failover is
-rebuilt INTO, not as descriptions of code that exists today.
+rebuilt INTO, not as descriptions of code that exists today. A standby holds its full dormant
+identity from JOIN and promotion never mints a chain.
 
 **Owner decision 2026-09-24 — a cut-off primary keeps streaming, into its own copy.** Raised by #590
 (slice 2 Task 6), whose `StreamHost` streams on any node whose role is primary, while the Cloud
@@ -7367,8 +5619,7 @@ that slice 3 has to restore:
   bring the venue's rows went with the subscription. `runFinishAdoption` now tries to establish the
   reserved identity on every boot instead of polling for a copy to finish — and that attempt cannot
   succeed, because the standby's own `nodes` row references a `locations` row the mirror does not have
-  and nothing supplies. Measured on a migrated but empty database: SQLSTATE 23503 on
-  `nodes_location_id_locations_id_fk`, rolled back, latch kept. **Operator-visible consequence:** a box
+  and nothing supplies. **Operator-visible consequence:** a box
   that adopts stays in adoption-pending boot for good — `/api/box/status` keeps answering
   `adoption: pending`, no mirror session or node-scoped read path is ever mounted, and each boot logs
   `adoption.establish_failed`. The full account is in
@@ -7468,16 +5719,13 @@ scoped.
 ## Reference
 
 **Adding a database test to a new package.** Give the suite `useVenueDb` and the migration sets it
-needs; it makes its own temporary venue directory. There is no shared container, no template
-database and no clone-per-test seam any more — the storage switch deleted that whole harness
-(`ProbeRole`, `cloneTemplate`, `useTemplateDb`, `harness.ts`, `two-node.ts`; the rollout plan
-`docs/superpowers/plans/2026-08-19-shared-test-container.md` is history, not a recipe). What survives
-it: a worker limit is still a per-package call, and the reason that is left is the
+needs; it makes its own temporary venue directory. A worker limit is still a per-package call, and
+the reason that is left is the
 `@vitest/coverage-v8` cross-fork branch-merge artifact, which needs `maxWorkers: 1` where a small
 package runs under `pnpm -r` oversubscription — the worked reasoning, once in `packages/payments`'
 config, is in #558's first commit message (2026-09-24).
 `packages/db` keeps `maxWorkers: 4`, which CI's `test-heavy` shards inherit because they pass no
-worker count of their own; at one and at four workers its coverage counts were the same (2026-09-23).
+worker count of their own.
 Either way a new package that copies one of those configs must hold `98/98/98/95` (CLAUDE.md §2) —
 anything else and `scripts/coverage-thresholds.test.ts` fails it in the ungated `lint` job.
 
