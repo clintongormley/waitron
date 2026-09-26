@@ -59,6 +59,7 @@ import "./screens/canvas-editor-screen.js";
 import "./screens/device-profiles-screen.js";
 import "./screens/diagnostics-screen.js";
 import "./screens/backup-screen.js";
+import "./screens/servers-screen.js";
 import "./screens/cloud-services-screen.js";
 import "./screens/email-screen.js";
 import "./screens/payments-screen.js";
@@ -108,6 +109,7 @@ type CoreScreen =
   | "device-profiles"
   | "diagnostics"
   | "backup"
+  | "servers"
   | "cloud"
   | "email"
   | "payments"
@@ -123,7 +125,14 @@ const DRAWER_BREAKPOINT = "(max-width: 48rem)";
 const WAITRON_LOGO_URL = new URL("../../../packages/ui/brand/waitron-lockup.svg", import.meta.url)
   .href;
 
-type NavItem = { screen: ScreenId; labelKey: StringKey; requiresManager?: boolean };
+/** `requiresPermission` hides an item from a session whose `getMe` permissions lack it; the route
+ * behind the screen still makes its own check. */
+type NavItem = {
+  screen: ScreenId;
+  labelKey: StringKey;
+  requiresManager?: boolean;
+  requiresPermission?: string;
+};
 type NavGroup = { id: NavGroupId; headerKey?: StringKey; icon?: string; items: NavItem[] };
 
 const NAV_GROUPS: NavGroup[] = [
@@ -185,6 +194,7 @@ const NAV_GROUPS: NavGroup[] = [
       { screen: "device-profiles", labelKey: "nav.device_profiles" },
       { screen: "diagnostics", labelKey: "nav.diagnostics", requiresManager: true },
       { screen: "backup", labelKey: "nav.backup", requiresManager: true },
+      { screen: "servers", labelKey: "nav.servers", requiresPermission: "mirror.create" },
       { screen: "cloud", labelKey: "nav.cloud", requiresManager: true },
       { screen: "email", labelKey: "nav.email", requiresManager: true },
     ],
@@ -1247,6 +1257,15 @@ export class DashboardApp extends LitElement {
     this.#url.write({ product: event.detail.productId }, true);
   }
 
+  #mayOpen(item: NavItem): boolean {
+    if (item.requiresManager && this.sessionRole !== "manager" && this.sessionRole !== "admin")
+      return false;
+    return (
+      item.requiresPermission === undefined ||
+      this.#sessionPermissions.includes(item.requiresPermission)
+    );
+  }
+
   /** The module permission check here matches the one `#activate` applies to the nav. */
   #permittedScreen(requested: string | null): ScreenId {
     if (this.sessionRole === "staff") return "my-schedule";
@@ -1254,11 +1273,7 @@ export class DashboardApp extends LitElement {
     const item = NAV_GROUPS.flatMap((group) => group.items).find(
       (entry) => entry.screen === requested,
     );
-    if (
-      item &&
-      (!item.requiresManager || this.sessionRole === "manager" || this.sessionRole === "admin")
-    )
-      return item.screen;
+    if (item && this.#mayOpen(item)) return item.screen;
     if (requested !== null) {
       const active = this.#activeScreens.get(requested);
       if (
@@ -1353,12 +1368,7 @@ export class DashboardApp extends LitElement {
             }
             <div id=${panelId} ?hidden=${collapsed}>
               ${group.items
-                .filter(
-                  (item) =>
-                    !item.requiresManager ||
-                    this.sessionRole === "manager" ||
-                    this.sessionRole === "admin",
-                )
+                .filter((item) => this.#mayOpen(item))
                 .map(
                   (item) =>
                     html`<button
@@ -1520,6 +1530,8 @@ export class DashboardApp extends LitElement {
         ></dashboard-cloud-services-screen>`;
       case "backup":
         return html`<dashboard-backup-screen .api=${this.api}></dashboard-backup-screen>`;
+      case "servers":
+        return html`<dashboard-servers-screen .api=${this.api}></dashboard-servers-screen>`;
       case "email":
         return html`<dashboard-email-screen .api=${this.api}></dashboard-email-screen>`;
       case "payments":

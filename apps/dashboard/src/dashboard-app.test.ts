@@ -1900,6 +1900,60 @@ describe("dashboard-app", () => {
     expect(navItem(mgr, "diagnostics")).toBeTruthy();
   });
 
+  it("shows the Servers nav, after Backups, only to a session holding the permission it needs", async () => {
+    const admin = stubApi({
+      getMe: vi
+        .fn()
+        .mockResolvedValue({ ...meResponse, role: "admin", permissions: ["mirror.create"] }),
+      listStaff: vi.fn().mockResolvedValue([]),
+    });
+    const { el: adm } = await mountWidget<DashboardApp>("dashboard-app", { api: admin });
+    await flush(adm);
+    const item = navItem(adm, "servers");
+    expect(item!.textContent!.trim()).toBe(t("nav.servers"));
+    const panel = adm.shadowRoot!.querySelector("#nav-group-panel-configuration")!;
+    const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
+    expect(order.indexOf("nav-servers")).toBe(order.indexOf("nav-backup") + 1);
+
+    // A manager holds no `mirror.create`, so the item that would only answer "not permitted" is not
+    // offered; an admin whose permissions somehow lack it is not offered it either.
+    const { el: mgr } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
+    });
+    await flush(mgr);
+    expect(navItem(mgr, "backup")).toBeTruthy();
+    expect(navItem(mgr, "servers")).toBeNull();
+    const { el: bare } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, role: "admin", permissions: [] }),
+        listStaff: vi.fn().mockResolvedValue([]),
+      }),
+    });
+    await flush(bare);
+    expect(navItem(bare, "servers")).toBeNull();
+  });
+
+  it.each([
+    ["admin", ["mirror.create"], "dashboard-servers-screen", "/manage/servers"],
+    ["manager", ["booking.manage"], "dashboard-overview-screen", "/manage/overview"],
+  ])(
+    "opens /manage/servers for the %s role only when the session holds the permission",
+    async (role, permissions, tag, path) => {
+      history.replaceState(null, "", "/manage/servers");
+      const api = stubApi({
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions }),
+        listServers: vi.fn().mockResolvedValue({ term: 0, nodes: [] }),
+        liveData: new LiveData(),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      const face = el.shadowRoot!.querySelector<HTMLElement & { api?: DashboardApi }>(tag);
+      expect(face).not.toBeNull();
+      if (tag === "dashboard-servers-screen") expect(face!.api).toBe(api);
+      expect(location.pathname).toBe(path);
+    },
+  );
+
   it("clicking a nav item switches the screen and marks it aria-current=page", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),

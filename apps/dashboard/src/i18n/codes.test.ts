@@ -285,3 +285,20 @@ it("has a sentence of its own for each refusal of a stuck card payment's check",
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
   }
 });
+
+it("has a sentence in both languages for each refusal of a server's removal", () => {
+  const GENERIC_EN = codeMessage("test.unmapped_code", "en");
+  const GENERIC_ES = codeMessage("test.unmapped_code", "es");
+  for (const code of [
+    "membership.node_not_found",
+    "membership.not_primary",
+    "membership.node_is_primary",
+    "membership.node_has_served",
+    "membership.standby_joined",
+    "membership.write_contended",
+  ]) {
+    expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
+    expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
+    expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
+  }
+});

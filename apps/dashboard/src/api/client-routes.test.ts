@@ -584,4 +584,42 @@ describe("DashboardApi routes", () => {
       ["/management-api/catalogues/c1/publish", "POST", { expectedHash: "stale" }],
     ]);
   });
+
+  it("reads the venue's servers and removes one by its id, passing a refusal's code through", async () => {
+    const listing = {
+      term: 2,
+      nodes: [
+        {
+          nodeId: "22222222-2222-4222-8222-222222222222",
+          contactUrl: "https://standby.venue.example",
+          standing: "serving-secondary",
+          isSelf: false,
+          removable: true,
+        },
+      ],
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(listing))
+      .mockResolvedValueOnce(jsonResponse({ removed: true, term: 3 }))
+      .mockResolvedValueOnce(refusal("membership.standby_joined", 409));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.listServers()).resolves.toEqual(listing);
+    await expect(api.removeServer("22222222-2222-4222-8222-222222222222")).resolves.toEqual({
+      removed: true,
+      term: 3,
+    });
+    await expect(api.removeServer("a/b")).rejects.toMatchObject({
+      code: "membership.standby_joined",
+      status: 409,
+    });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/servers", "GET", undefined],
+      ["/management-api/servers/22222222-2222-4222-8222-222222222222/remove", "POST", undefined],
+      // An id is a path segment, so a slash in one cannot reach a different route.
+      ["/management-api/servers/a%2Fb/remove", "POST", undefined],
+    ]);
+  });
 });

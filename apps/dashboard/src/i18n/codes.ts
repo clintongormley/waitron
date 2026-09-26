@@ -771,6 +771,30 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The card provider could not say what happened to this payment; the order stays locked. Try again in a minute.",
     es: "El proveedor de pagos no pudo confirmar qué pasó con este cobro; el pedido sigue bloqueado. Vuelve a intentarlo en un minuto.",
   },
+  "membership.node_not_found": {
+    en: "That server is not on this venue's list of servers. Refresh the list.",
+    es: "Ese servidor no está en la lista de servidores del local. Actualiza la lista.",
+  },
+  "membership.not_primary": {
+    en: "Only the primary server can remove a server. Open this page on the primary server.",
+    es: "Solo el servidor principal puede retirar un servidor. Abre esta página en el servidor principal.",
+  },
+  "membership.node_is_primary": {
+    en: "The primary server cannot be removed.",
+    es: "El servidor principal no se puede retirar.",
+  },
+  "membership.node_has_served": {
+    en: "This server has worked as the primary before, so it cannot be removed.",
+    es: "Este servidor ya ha funcionado como principal, así que no se puede retirar.",
+  },
+  "membership.standby_joined": {
+    en: "This standby finished joining, so it cannot be removed.",
+    es: "Este servidor en espera terminó de unirse, así que no se puede retirar.",
+  },
+  "membership.write_contended": {
+    en: "The list of servers was being changed at the same moment. Try again.",
+    es: "La lista de servidores se estaba cambiando en ese mismo momento. Vuelve a intentarlo.",
+  },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",
     es: "Este aviso ya no existe. Actualiza la lista.",

@@ -155,6 +155,8 @@ export const QUERY_DEPENDENCIES = {
   getProfile: ["persons", "webauthn_credentials"],
   getGoogleConfig: ["google_config"],
   getEmailInbox: ["email_inbox"],
+  // `removable` reads whether the machine has a `nodes` row here, so a new row moves it too.
+  listServers: ["node_membership", "nodes"],
   getBackupStatus: ["backup_status"],
   getStreamSettings: ["backup_status"],
   listAlerts: ["incidents"],

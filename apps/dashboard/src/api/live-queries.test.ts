@@ -27,6 +27,8 @@ it.each([
   ["listHandledAlerts", [], "persons"],
   ["listStuckPayments", [], "payments"],
   ["listStuckPayments", [], "working_orders"],
+  ["listServers", [], "node_membership"],
+  ["listServers", [], "nodes"],
 ] as const)(
   "refreshes %s when its contributing %s query changes through %s",
   async (name, args, type) => {
