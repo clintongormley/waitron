@@ -609,8 +609,8 @@ ordered attachment list per product. Landed across #412, #436, #445, #449, #452,
   it would also settle the item above. **Next action:** the owner decides keep or drop; if drop, it is a menus-plan
   change, coordinated with lane C.
 
-**Extras and Options editors — owner review fixes (2026-09-26), queued as campaign lane A items
-A64–A67.** The owner's review of the Modifiers screen: Active/Inactive in place of "In use", a Used
+**Extras and Options editors — owner review fixes (2026-09-26), campaign lane A items A64–A67 —
+DONE (A67 on `feat/options-editor-rows`, its pull request to follow).** The owner's review of the Modifiers screen: Active/Inactive in place of "In use", a Used
 by column, an options popup that lists products only, collapsed name sections, steppers for choices
 and quantities, baseline-aligned rows, a bin icon, the product's unit beside each price, a wider
 standard modal everywhere, visible drag feedback, option rows as text with their own editor, and an
@@ -667,8 +667,27 @@ its part done here when it lands.
   half portion" / "Media ración grande". An earlier measurement, not repeated, read 234px (English)
   and 271px (Spanish) before the A66 rework. Open point for the owner: clearing the Minimum
   choices box saves 0, as it did before A66 (the save format's own default); the plan's Review Focus
-  item 3 reads as if a cleared minimum should be refused instead. Still to come: A67, the Options
-  editor.
+  item 3 reads as if a cleared minimum should be refused instead.
+- **A67 (the Options editor, and always a default) — DONE on `feat/options-editor-rows`, pull
+  request to follow.** The server now keeps a default whenever an options list has an available
+  option: `parseOptionListInput` gives every option without an id one of its own and, where the
+  body names no default or names one that is switched off, stores the first available option
+  instead (a list with nothing available, possible only while it is inactive, keeps none). A row
+  copied in by configuration transfer is not re-parsed, so, as the spec's D8 records, a stored
+  empty default is still possible. In the dashboard's Options list editor the list's
+  customer-facing and kitchen names fold into a closed section, as in the Extras editor; each
+  option is a row of text (its name, an "Unavailable" tag when it is switched off, the Default dot,
+  and a menu with Edit and Delete); Edit and "Add option" (was "Add label") open the option in its
+  own window stacked over the list, and saving it changes the draft only. "Clear default" is gone:
+  the form shows the default the server will store, moving it to the first available option when
+  the default is deleted or switched off, and doing the same when a list is opened with no default.
+  A refusal naming one option's field shows under its row, in the summary, and beside the field
+  when that option is opened; Escape closes only the option window and focus returns to the row's
+  menu. The option wording now says "option" rather than "label" in both languages. Looked at in
+  both themes, English and Spanish, at 1280px and 390px (read back from the page as 1280 and 390):
+  no sideways scroll at 390px, of the page or the options table. The option window is the standard
+  modal at the same size as the list's, so it covers the list entirely; only the darker backdrop
+  shows that it is stacked.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
