@@ -2584,8 +2584,9 @@ image constraints under *Detail → Box image*.
     **Done (2026-09-26, lane A's A63) for A61's two other open notes** (a removed entry still took a
     `MAX_NODES` place; a removed node still held the primary's endorsement of its key): an admin
     (`mirror.create`) on the serving primary can clear a removed machine from the Servers screen
-    (`POST /management-api/servers/:nodeId/clear`, `apps/server/src/membership-removal.ts`), which
-    moves its id into the chart's new signed `revoked` list (outside `MAX_NODES`, capped by
+    (`POST /management-api/servers/:nodeId/clear`, routed in
+    `apps/server/src/membership-removal-api.ts`, decided in `apps/server/src/membership-removal.ts`),
+    which moves its id into the chart's new signed `revoked` list (outside `MAX_NODES`, capped by
     `MAX_REVOKED`) and writes an append-only `membership_clearances` row. The primary refuses a join
     to a full chart (`mirror.membership_full`), minting refuses a chart over either cap
     (`membership.chart_too_large`), and a receiver refuses a chart signed by a machine its own held
@@ -5642,10 +5643,16 @@ that slice 3 has to restore:
   mint refuses it (`membership.chart_too_large`) and the primary refuses the join
   (`mirror.membership_full`). An admin can clear a REMOVED (`evicted`) machine to free its place,
   from the Servers screen. What stays open: only an `evicted` entry can be cleared, and A61's
-  Remove takes only a standby that never finished joining. So the old entry of a standby that
-  finished joining (a wiped-and-re-adopted box's previous id, for one) keeps its place and nothing
-  frees it, and a `sell-only` former primary keeps its place until that box retires itself
-  (`apps/server/src/retire.ts` marks it `evicted`). Re-admission must retire, not add.
+  Remove refuses a standby only when the primary's own database holds a `nodes` row for it
+  (`judgeRemoval`, `apps/server/src/membership-removal.ts`). The only writers of a `nodes` row
+  found are provisioning (`packages/provisioning/src/venue-apply.ts`, the row of the box being set
+  up) and `insertReservedNodeTx`, which a standby runs on its OWN database
+  (`apps/server/src/reserved-identity.ts`). So today a remote standby's old entry (a
+  wiped-and-re-adopted box's previous id, for one) reads as never-joined even if it finished, and
+  can be removed and then cleared. Once adoption can finish (`finish-adoption.ts`) and that check
+  can see a finished standby, nothing will free such an entry. A `sell-only` former primary keeps
+  its place until that box retires itself (`apps/server/src/retire.ts` marks it `evicted`).
+  Re-admission must retire, not add.
 - **Chart hygiene:** a post-setup change to `WAITRON_ADVERTISED_ORIGIN` is never re-published, and a
   node that promotes while absent from the chart appends itself address-less, which `routableServers`
   drops.

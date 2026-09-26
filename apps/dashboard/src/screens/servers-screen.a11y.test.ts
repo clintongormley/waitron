@@ -1,4 +1,4 @@
-import { afterEach, describe, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./servers-screen.js";
 import type { ServersScreen } from "./servers-screen.js";
@@ -78,6 +78,12 @@ async function openClear(el: ServersScreen): Promise<void> {
   rowMenu(el, REMOVED).shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
   rowMenu(el, REMOVED).querySelector<HTMLElement>(`[data-test="clear-${REMOVED}"]`)!.click();
   await flush(el);
+  // axe passes a closed dialog, so the scan below proves nothing unless the dialog is open.
+  const dialog = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+    "wt-dialog[data-test=clear-dialog]",
+  )!;
+  expect(dialog.open).toBe(true);
+  expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true);
 }
 
 afterEach(cleanupWidgets);
