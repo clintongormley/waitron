@@ -6,8 +6,8 @@ listed in §11 with a recommended default for each, and copied to the lane's que
 
 **What this is.** The owner decided on 2026-09-26 that a table's bill is invoiced when it is fully
 paid, and that several payments can be taken against it first
-([service spec §14.1](2026-09-20-service-ordering-and-billing-design.md#141-decisions-owner-2026-09-26),
-decision 3). Today the software cannot do that: every bill is paid in one go at the moment its
+([service spec §6](2026-09-20-service-ordering-and-billing-design.md#6-take-contributions-without-consuming-somebody-elses-tip)).
+Today the software cannot do that: every bill is paid in one go at the moment its
 invoice is issued. This document decides how money taken before the invoice is recorded, how each
 payment is split between the bill, change and tip, what several devices may do at once, how a card
 payment interrupted by a crash is recovered, and which transaction issues the invoice. The
@@ -110,6 +110,7 @@ they key into `working_orders` (the commit states this, CLAUDE.md §3).
 | `id` | |
 | `working_order_id` | the bill; key to `working_orders`, `restrict` |
 | `submission_id` | client-made; unique together with `working_order_id` (§5.1) |
+| `fingerprint` | SHA-256 of the canonical request body (§5.1) |
 | `kind` | `items` (pays named lines), `contribution` (an amount towards the bill), `share` (an equal share, §3.4) |
 | `share_of` | for `share`: how many people the outstanding was divided among; null otherwise |
 | `method` | `cash` or `card` (a subset of the tender methods, `sales.ts:41`) |
@@ -156,7 +157,7 @@ A line's **paid quantity** is the sum of its `bill_payment_lines.quantity` over 
 ### 2.3 `bill_payment_refunds` — money given back before the invoice
 
 `bill_payment_id`, `submission_id` (unique together with `bill_payment_id`, so a retried refund
-gives money back once, §5.1), `applied_amount`, `tip_amount`, `reason`, `authorized_by`,
+gives money back once, §5.1), `fingerprint` (§5.1), `applied_amount`, `tip_amount`, `reason`, `authorized_by`,
 `created_at`. **Append-only.** For a card, the provider refund it made is recorded where refunds
 already are (`payment_refunds`, `packages/payments/src/schema/payment-refunds.ts`), through the
 `payments` row. A payment's **net applied** is `applied − sum(applied_amount)` and its **net tip** is
@@ -368,8 +369,20 @@ open and visible on the table. Open point §11.8.
 
 ### 5.1 Retries
 
-Every payment and refund request carries a client-made `submission_id` (plan D8). A repeat on the
-same bill finds the first row and returns its result, writing nothing:
+Every payment and refund request carries a client-made `submission_id` (plan D8). The row it
+creates also records the request's `fingerprint`: SHA-256 of the canonical JSON of the request
+body, keys sorted, with the `submission_id` left out (amended 2026-09-26 after the plan's second
+review). A repeat with the same id on the same bill:
+
+- with a different fingerprint, or naming a refund where the first was a payment (or the reverse),
+  is refused with `submission.id_reused`, writing nothing — returning the first result would tell
+  the device an action happened that it never asked for;
+- with the same fingerprint, finds the first row and returns its result, writing nothing.
+
+Payments and refunds live in two tables, and refund ids are unique only per payment, so the id space
+is made the BILL by a lookup: in the same transaction, a new request's id is looked up among ALL of
+that bill's payments and ALL of its refunds (across every payment). A hit on a different kind, or on
+a refund of a different payment, is `submission.id_reused`. A repeated payment returns:
 
 - `received`: the first allocation and the bill's current balance;
 - `pending`: "in progress", and no second `collect` is started;
@@ -609,7 +622,7 @@ asks whether money may be held against a bill before its invoice, whether the sp
 contribution is correct, and what to do when the invoice was printed first.
 
 - **Built regardless:** everything above. **Held until Q27 answers:** printing the invoice before
-  any payment, and correcting it when the table then splits (spec §14.1 decision 3).
+  any payment, and correcting it when the table then splits (service spec §6).
 - **If Q27(a) sets a maximum delay** between the first payment and the invoice, Task 14's rows
   already hold `received_at`; the change is an alert for a bill holding money longer than the limit.
 - **If Q27 says "issue the invoice at the first payment":** the tables of §2 stay. What changes is

@@ -25,12 +25,23 @@ lane C's menus work is landing now.
 routes, Lit web components (till, dashboard, venue-service dashboard), Vitest (`useVenueDb` real
 SQLite databases; real Chromium for the front-ends).
 
-**Spec:** `docs/superpowers/specs/2026-09-20-service-ordering-and-billing-design.md`. **Read §14
-first**: the owner's decisions of 2026-09-26 (§14.1), the review's findings (§14.2), and the table
-of what the menus work has superseded (§14.3). §14 wins over §1–§13. Then read the menus spec's
+**Spec:** `docs/superpowers/specs/2026-09-20-service-ordering-and-billing-design.md`, Revision 2.
+**Read its §14 first**: the owner's decisions of 2026-09-26, what the menus work now governs, and
+the rules the owner accepted or changed that day. Then the whole spec. Then read the menus spec's
 §10.3 and §11 (`2026-09-20-menus-categories-and-home-layouts-design.md`) and the menus plan's D10
 and D22 (`docs/superpowers/plans/2026-09-25-menus-categories-home-layouts.md`), because every task
 here builds on them.
+
+**Revision 2, 2026-09-26**, after a second outside review and the owner's answers the same day:
+- items are credited to the draft's owner at submission (D5), and a person's sales for adjustment
+  rates are what is credited to them (D21);
+- weighed items take discounts to the nearest cent (D4, D15), and a discount larger than what it
+  applies to is refused;
+- a visit-wide revision beside each bill's (D19);
+- retry ids bound to the request they were made for (D8), in the payment design too;
+- joined tables as explicit visit membership (D2);
+- the transition trigger's narrow exception for handover before payment (Task 16);
+- an adjustment snapshots its reason and policy (D20).
 
 **Revision 1, 2026-09-26.** Written from two read-only audits of `main` at `17dd4b147`, plus lane
 C's unlanded order-edits branch (`feat/menus-order-edits` at `1996d4ce7`). Every "today" fact below
@@ -134,7 +145,8 @@ depend on.
   always zero; an integrated card carries a tip when the venue allows tips.
 - **Product ordering.** `products.sold_alone` is stored and shown in the dashboard's product list,
   but nothing on the order path or in the published menu document reads it.
-- **What lane C's order-edits branch adds** (M7b; re-read it on `main` once it lands):
+- **What lane C's M7b added** (landed on `main` as `77d9059b4`, #696, on 2026-09-26, after this
+  plan's first revision was written; re-read it before depending on it):
   - core columns `working_orders.revision`, `working_orders.payment_attempt_at`,
     `working_order_lines.sent_at`, `working_order_lines.extra_list_id` and `ticket_items.quantity`;
   - `service_settings` and `kitchen_notices` in `packages/venue-service`;
@@ -159,10 +171,21 @@ names it so the owner can overturn it at review.
   - **Why the visit and not the tab:** splitting bills must not fragment the kitchen's view (spec,
     opening section). A line split onto another bill of the SAME visit keeps its `group_id`,
     whole or part, held or fired.
-  - **Moving work to ANOTHER visit** (a transfer to another table's tab, an unjoin):
-    - a line in a HELD group is refused with the existing `tab.split_held_line` (grep its current
-      meaning after M7b, and reuse it only if it still means "held kitchen work");
+  - **Moving work to ANOTHER visit** (`transferLines` to another table's tab, `unjoinTable` with
+    items):
+    - a line in a HELD group is refused with a new code, `group.held_leaves_visit`;
     - a line in a FIRED group moves with `group_id` cleared, and M7b's MOVED slip tells the kitchen.
+  - **This reverses two landed rules, by the owner's acceptance of "a group belongs to the visit"
+    (spec §3), and Task 3 names both as retired in its PR:** on `main`, `splitOffCheck` refuses a
+    held line (`refuseHeld: true`, `tab.split_held_line`; its comment: "A check is paid, never
+    sent, so held work moved onto it would never fire") and
+    `transferLines` allows one (`refuseHeld: false`), with held detected as "a ticket item whose
+    `fired_at` is null" (`carveOffLines`, `apps/server/src/working-order.ts`). Under groups a held
+    line has NO ticket, so that detection cannot see it. Task 3 replaces it with
+    `order_groups.state = 'held'`: a split onto a check of the same visit is allowed (the group,
+    not the check, is what fires), and a transfer out of the visit is refused. `tab.split_held_line`
+    stays registered (codes are never renamed) and is no longer thrown; its server test, the till's
+    handling of it (`apps/till/src/till-app.ts`) and the till's test for that are retired.
   - **No unique index on `position`.** A reorder rewrites several rows one at a time, and a unique
     index there breaks midway although the final state satisfies it (CLAUDE.md §3). Lists order by
     `position`, then `created_at`. Say so at the column.
@@ -177,18 +200,66 @@ names it so the owner can overturn it at review.
     says so today), so it is tested on screens (Tasks 4 and 5), never at the route.
   - The pass's ready and away steps move from course to group.
   - A counter order (no visit) has no groups, and it fires as today.
-- **D2. A visit record (owner, 2026-09-26).** New core table `visits`:
-  - `table_id` (nullable, for a later counter visit) and `guest_count` (nullable);
-  - `state` (`open | needs_clearing | closed`), `opened_at`, `opened_by`, `closed_at`,
-    `closed_by`;
-  - `bill_requested_at` (Task 10).
+- **D2. A visit record (owner, 2026-09-26), with explicit table membership.** New core tables:
+  - `visits`: `guest_count` (nullable), `state` (`open | needs_clearing | closed`), `opened_at`,
+    `opened_by`, `closed_at`, `closed_by`, `merged_into_visit_id` (nullable), `bill_requested_at`
+    (Task 10) and `revision` (D19).
+  - `visit_tables`: `visit_id`, `table_id`, `joined_at`, `left_at` (null while the table belongs to
+    the visit). A partial unique index on `table_id` where `left_at` is null allows at most ONE
+    active membership per physical table, so a table joined to a party is protected exactly as the
+    first table seated is. (Revision 1 of this plan put a single `table_id` on `visits`; the plan
+    review of 2026-09-26 found that it would not stop a secondary, joined table being seated
+    twice, because joining already exists: several `dining_tables` rows pointing at one tab.)
+  - `working_orders.visit_id` (nullable, keyed; counter orders have none). **It must be added to
+    the column list of `working_orders_enforce_transition`**, which lane C's
+    `0015_settled_order_freeze_new_columns.sql` (on the order-edits branch) says every new
+    `working_orders` column joins. Adding a nullable keyed column generates a plain
+    `ALTER TABLE … ADD` (measured by the plan review, 2026-09-26).
 
-  `working_orders.visit_id` is nullable (counter orders have none). Seating opens a visit and its
-  tab in one transaction. `splitOffCheck`, `transferLines` into a new tab, and a round added after
-  the visit's tab settled all put the new order on the same visit. The table's service status
-  comes off when the visit closes, not when a tab settles. A table may have at most one open visit
-  (a partial unique index on `table_id` where `state` is not `closed`). Adding a nullable column
-  with a key generates a plain `ALTER TABLE … ADD` (measured by the plan review, 2026-09-26).
+  How each existing path treats membership:
+  - **seat:** one transaction creates the visit, its first membership and its tab;
+  - **join** (`joinTable`): adds a membership for the joined table to the party's visit;
+  - **move the party** (`moveTab`): closes the old memberships and opens the destination's;
+  - **merge tabs** (`mergeTabs`): on `main` it moves every line from the source tab into the
+    target tab, abandons the source tab, and either frees the source's tables (`freeSourceTable:
+    true`) or points them at the target tab (`false`). With visits, the source visit S is absorbed
+    into the target visit T:
+    - S's tables: with `freeSourceTable` their memberships close; without it they move to T
+      (closed under S, opened under T);
+    - S's other OPEN bills (split checks) move to T (`visit_id` = T); every bill of S that is not
+      open (placed, settled or abandoned) stays on S, because the transition trigger lets only an
+      open order change (Global Constraints);
+    - S's groups (Task 3 onwards) move to T, appended after T's last position in their own order,
+      held and fired alike: a merge is two parties becoming one, not held work leaving its party;
+    - S's open drafts (Task 7 onwards) move to T, and where one person has an open draft on both,
+      S's lines are appended to that person's draft on T and S's draft is discarded, recorded in
+      its history;
+    - S closes, with `merged_into_visit_id` = T (a column on `visits`); its `service_commands`
+      stay scoped to S, so a replay still returns its recorded result, and a new command on S is
+      `visit.not_open`;
+    - **the bills S keeps still belong to T's party (owner, 2026-09-26; spec §1 "Merged parties").**
+      A visit's FAMILY is the visit plus every visit whose `merged_into_visit_id` chain reaches it
+      (a recursive query; chains are acyclic, because only an open visit can absorb another and the
+      absorbed one closes). Everything that reads "the visit's bills" reads the family's: the bill
+      list and its receipts (`readVisitBills`), the outstanding balance and "paid" state on the
+      floor (`listTablesWithState`), Finish's outstanding check, Task 10's bill-requested signal,
+      and Tasks 14 and 17. A placed bill on S (invoiced, awaiting payment) is outstanding until paid,
+      and paying it works as for any placed bill: the payment path reads the bill, not its visit's
+      state;
+    - the merge takes both visits' expected revisions (`expectedVisitRevision` for T and
+      `expectedSourceVisitRevision` for S) and bumps both;
+  - **unjoin with items** (`unjoinTable`): closes that table's membership, and creates exactly one
+    new visit and membership for it, holding the new tab;
+  - **unjoin without items:** closes that table's membership, freeing it;
+  - **paying a bill** changes no membership, and the table stays occupied;
+  - **"pay, then order dessert":** a new tab on the same visit; every member table still resolves
+    to the visit;
+  - **Finish table:** closes the visit and every active membership, freeing every table;
+  - **Needs clearing:** the visit's memberships stay active until Mark cleared, so no member table
+    can be seated.
+
+  `dining_tables.tab_id` stays as today's pointer to the open tab, kept in step by these paths. The
+  table's service status comes off when the visit closes, not when a tab settles.
 - **D3. A bill's invoice is issued when the bill is fully paid (owner, 2026-09-26).** Several
   payments may be taken against one bill before its invoice exists. After a general contribution,
   lines can still be split to another bill, which is paid and invoiced on its own; the original
@@ -198,24 +269,37 @@ names it so the owner can overturn it at review.
   - A comp sets the line's price to zero and keeps the list price in a new column,
     `working_order_lines.list_unit_price_gross`, so the receipt shows the original price and
     €0.00. The receipt text is presentation; nothing new enters the fiscal fingerprint.
-  - **Issuance rebuilds a filed line from `unit_price_gross × quantity`** (the comment above
-    `workingOrderLines` in `packages/db/src/schema/orders.ts`). So a reduced line must still be a
-    whole number of cents per unit:
-    - an adjustment to PART of a line (1 of Steak ×2) first splits that part into its own row;
-    - a reduced line total that does not divide into whole-cent units is split into at most two
-      rows. For Croquetas ×3 at €3.33 with 10% off, the total is €9.99 − €1.00 = €8.99. It becomes
-      2 × €3.00 and 1 × €2.99; the extra cent goes to the first rows;
-    - the reduction on a line is rounded to whole cents, half up, before any split;
-    - a WEIGHED line (a quantity that is not a whole number) cannot take a line discount, and it
-      is left out of D15's spreading. A line discount asked for on one is refused with
-      `adjustment.action_not_allowed`.
-  - Every order write in this plan (groups, adjustments, drafts, served) bumps
-    `working_orders.revision` and honours `order.payment_in_flight`, through the helpers M7b
-    landed, never a second copy of them.
-- **D5. A draft belongs to the signed-in operator, on one VISIT.** The till's PIN lock screen
-  already identifies the operator. A person has at most one open draft per visit. It is the visit,
-  not the tab, so a draft survives "pay, then order dessert" opening a new tab (D2). The counter basket stays
-  device-owned and out of scope (the spec's per-waiter drafts are table service).
+  - **A filed line's amount is its whole-cent unit price × quantity, rounded to the cent**
+    (`priceRows` in `packages/catalogue/src/pricing.ts`: `toScale(grossUnit × quantity, 2)`). So:
+    - **Discrete lines** (a whole-number quantity): an adjustment to PART of a line (1 of Steak ×2)
+      first splits that part into its own row. A reduced line total that does not divide into
+      whole-cent units is split into at most two rows; the extra cent goes to the first rows. For
+      Croquetas ×3 at €3.33 with 10% off, the total €9.99 − €1.00 = €8.99 becomes 2 × €3.00 and
+      1 × €2.99. The reduction is rounded to whole cents, half up, before any split.
+    - **Weighed lines (owner, 2026-09-26: allowed, nearest cent):** the new unit price is the
+      whole-cent price `p` whose `round(p × quantity)` comes nearest the target total; on a tie, the
+      higher total (the smaller discount). Several prices can give the same total at a small
+      weight, so among them the HIGHEST price is used (the smallest cut to the per-kilo price).
+      Up to 1 kg every whole-cent total is reachable, so it is exact. Above that the achieved total
+      can miss the target by up to ⌊⌈weight in kg⌉ ÷ 2⌋ cents: 1 cent above 1 kg up to 3 kg, 2 cents
+      above 3 kg up to 5 kg, 5 cents at 10 kg, 12 cents at 25 kg (brute-forced over whole-cent prices
+      by the plan's third review and re-run by the planning session, 2026-09-26; "half the weight",
+      the second revision's wording, is wrong at weights that are not whole kilos, e.g. 1.2 kg
+      misses by 1 cent). The adjustment records the reduction ACTUALLY achieved; the till shows it before
+      confirming; policy limits (D6) are checked against it.
+    - A comp (price zero) is always exact.
+    - A discount larger than the line or bill it applies to is refused with
+      `adjustment.exceeds_amount`, never silently reduced.
+- **D5. A draft belongs to the signed-in operator, on one VISIT, and its items are credited to its
+  owner at submission (owner, 2026-09-26).** The till's PIN lock screen already identifies the
+  operator. A person has at most one open draft per visit. It is the visit, not the tab, so a draft
+  survives "pay, then order dessert" opening a new tab (D2). Only the owner can submit, so a takeover
+  moves the credit for everything in the draft. Submission writes the owner onto each new line as
+  `working_order_lines.credited_to` (nullable, a person id). Work added outside a draft is credited
+  to the person who made it: the till's Change action (a line it creates), and a counter order's
+  lines, credited to the operator who creates the order. A split or transfer keeps `credited_to`.
+  Draft lines carry no author of their own; the history records each takeover (`order_drafts`
+  events, Task 7). The counter basket stays device-owned.
 - **D6. Adjustment limits are cumulative.**
   - A reason's `max_amount` limits the sum of that reason's reductions on one BILL, percentage
     discounts included (converted to their cent amount).
@@ -228,16 +312,30 @@ names it so the owner can overturn it at review.
     `approver_role`. Roles compare on `ROLE_LADDER` (`packages/identity/src/permissions.ts`), for
     which Task 1 exports a `roleAtLeast(role, floor)` helper. `authorize` checks a PERMISSION, not a
     role, so it is not the approval check here. The approver is verified by PIN with the
-    identity package's existing PIN check. The refusals reuse the shipped codes:
-    `authorization.not_permitted` (approval missing or approver too junior) and `pin.invalid`.
+    identity package's existing PIN check. A wrong PIN reuses `pin.invalid`. Approval missing, or an
+    approver below the reason's `approver_role`, is a new code `adjustment.approval_required` with
+    `{ approverRole }`: the shipped `authorization.not_permitted` carries `{ permission }`, and a
+    role-based refusal has no permission to name (the plan's second review).
 - **D7. Vocabulary.** "Held" means submitted but not released to the kitchen. The counter's
   parked basket keeps its code name "park" (`parkOrder`), and no new till string calls it held.
-- **D8. Every command that changes groups, drafts or payments carries a client-made
-  `submission_id`.** That covers submit, join, fire, reorder, move, draft submit and payment. For
-  groups the id is recorded on the `order_group_events` row the command writes
-  (`submission_id`, unique per visit where not null). A repeat finds that row and returns the
-  first result, writing nothing. Task 0 decides the payment equivalent.
-- **D9. A draft is priced like an unsaved basket** (plan decision; spec §14.3's last paragraph). It
+- **D8. Every command that changes groups, drafts, service, adjustments, handover or payments
+  carries a client-made `submission_id`, bound to the full command it was made for.** That covers
+  group submit, join, fire, reorder and move; the pass's ready and away; draft submit; served,
+  unserved and snooze; adjustments; handover; and every payment and refund (Task 0's design keeps
+  its own per-bill rows). The server records one row per command in `service_commands` (a core
+  table, Task 2), scoped to the VISIT for visit-wide commands and to the BILL (working order) for
+  bill-local ones — a counter order has no visit, so its handover and adjustments use the bill
+  scope. Columns: `scope_kind` (`visit | bill`), `scope_id`, `submission_id` (unique per scope),
+  `kind`, `fingerprint`, `result` JSON, `created_at`.
+  - The `fingerprint` is SHA-256 of the canonical JSON (keys sorted) of the command's FULL
+    arguments: the path ids (`groupId`, the target group, the bill id) and the body, with exactly
+    these keys removed: `submissionId`, `expectedVisitRevision`, `draftRevision`,
+    `expectedRevision`. So a retry that re-read a revision still matches, and firing a different
+    group with a reused id does not.
+  - A repeat with the same id: same kind and fingerprint returns the recorded result and writes
+    nothing; a different kind or fingerprint is refused `submission.id_reused` and writes nothing.
+  - The replay check runs BEFORE any revision check, in every task.
+- **D9. A draft is priced like an unsaved basket** (spec §2, "Prices in a draft"). It
   follows the live published menu until it is submitted, and staff confirm any price change the
   till shows (menus D9). Its prices lock at submission, when its lines become saved-order lines.
 - **D10. Line merging (spec §2).** Within one draft group, two lines merge (quantities add) when
@@ -283,13 +381,22 @@ names it so the owner can overturn it at review.
   (Burger ×3, the default) or `separate` (three entries). It is independent of billing and draft
   grouping.
 - **D15. Spreading a whole-bill discount.**
-  - Each line's share is `discount × line gross ÷ bill gross`, in whole cents, rounded down.
+  - Each line's share is `discount × line gross ÷ bill gross`, in whole cents, rounded down; weighed
+    lines are included.
   - The cents left over go one at a time to the lines with the largest remainders; a tie goes to
     the line added earlier.
-  - The shares sum exactly to the discount.
-  - A line never goes below zero.
-  - Weighed lines take no share (D4).
-  - Each share is then applied under D4, splitting a line where its units need it.
+  - Each share is then applied under D4. A discrete line takes its share exactly. A weighed line
+    takes the nearest it can, and the difference moves to the discrete lines, one cent at a time,
+    largest gross first:
+    - a weighed line that took LESS than its share leaves cents to ADD to discrete lines' shares,
+      each capped so its line never goes below zero;
+    - a weighed line that took MORE than its share leaves cents to TAKE BACK from discrete lines'
+      shares, only from shares above zero, so no line's price ever rises.
+    - What cannot be placed that way is left unplaced, and the bill records the total actually
+      achieved, which the till shows before confirming. So a bill discount is exact only when the
+      discrete lines have room (spec §7); it can miss when there are none (a bill of only weighed
+      lines) or when they cannot move (a comped €0.00 line cannot take a cent or give one back).
+  - A line never goes below zero, and a discount larger than the bill is `adjustment.exceeds_amount`.
 - **D16. Equal shares (spec §6).** For an outstanding amount of `C` cents across `n` people, each
   share is `floor(C ÷ n)`, and the first `C mod n` shares get one cent more. So €100.01 across 3 is
   €33.34, €33.34, €33.33.
@@ -302,11 +409,73 @@ names it so the owner can overturn it at review.
   `clearing_workflow`, `kitchen_ticket_grouping`, `print_held_work` and
   `release_reminder_minutes`.
 - **D18. Serving is recorded on a settled bill too.** A visit can pay a bill before its food is
-  served, and today `working_order_lines_require_open_parent_update` refuses any update of a line
-  whose order is not open. Task 9 lets the served columns (`served_quantity`, `served_at`) change on
-  a settled order, by widening that trigger's exemption the way lane C's
-  `0013_settled_order_freeze_new_columns.sql` names its columns. Serving is an operational fact, not
-  billing, and the trigger's comment says so.
+  served, and today `working_order_lines_require_open_parent_update`
+  (`packages/db/drizzle/0001_behavioural_triggers.sql`) refuses ANY update of a line whose order is
+  not open; it has no exemption at all. Task 9 creates the first: an update of a line on a
+  non-open order is allowed when `served_quantity` or `served_at` CHANGES and every other column is
+  unchanged (an update changing no served column stays refused, as the `0015` exception requires
+  `collected_at` to go from empty to set), listed column by column the way `0015_settled_order_freeze_new_columns.sql`
+  lists `working_orders`'s. Serving is an operational fact, not billing, and the trigger's comment
+  says so. **From Task 9 on, every new `working_order_lines` column joins that list** (Global
+  Constraints): Task 9 lists every column that exists when it lands (`group_id` and `credited_to`
+  from Task 3 among them, and Task 11's `list_unit_price_gross` if Task 11 landed first); a column
+  added after Task 9 joins the list in its own task.
+- **D19. Revisions: one for the visit, one per bill.** Plan Revision 1 asked every write to bump
+  `working_orders.revision`, but a group belongs to a VISIT and can hold lines on several bills, so
+  one bill's revision cannot version it.
+  - `visits.revision` versions the visit's tables, bills, groups and service state. These take
+    `expectedVisitRevision`, compare it and bump it in the same transaction (a mismatch is
+    `visit.out_of_date`, and nothing is written):
+    - group submit, join, fire, reorder and move, and the pass's ready and away (Tasks 3, 5);
+    - served, unserved and snooze (Task 9);
+    - draft submission (Task 7);
+    - Finish and Mark cleared (Task 2);
+    - **every route that moves lines or tables between bills or visits**: the tab routes `move`,
+      `join`, `merge`, `transfer`, `split` and `unjoin`, which on `main` take no revision at all
+      (`till-api.ts`, the tab routes). Of their functions, `moveTab`, `joinTable` and an unjoin
+      without items bump nothing today; the others bump each bill's. Task 2 adds the parameter to
+      all six routes and the till's calls, bumps the visit in each, and adds a stale-case test
+      each. A transfer or merge between two visits takes both visits' expected revisions
+      (`expectedVisitRevision` for the destination, `expectedSourceVisitRevision` for the source)
+      and bumps both.
+  - Paths that remove or replace a line INSIDE a group bump the visit too, and apply "an emptied
+    held group becomes `removed`": M7b's `voidTabLine` and `applyLineEdits` (reached from
+    `updateHeldOrder` and `updateOrderLine`), and Task 11's cancel and split rows. They do not take
+    a visit revision of their own: a bill edit is a bill-local action, and it bumps the visit so
+    any visit-wide command prepared before it is refused. Their bill revision: `updateHeldOrder`
+    and `updateOrderLine` check M7b's (`requireEditableOrder`); `voidTabLine` checks none on `main`
+    (neither does its route), and Task 11's cancel, which replaces it for staff, brings the bill
+    revision check.
+  - `working_orders.revision` (M7b) keeps versioning a bill's own commercial content. An adjustment
+    takes `expectedRevision` for its bill, and a line edit keeps M7b's check.
+  - A draft keeps its own `revision` for saves and takeovers. Submitting checks the draft's AND the
+    visit's.
+  - Replays are D8's job, not the revision's. A retried "serve 2" carries its `submission_id` and
+    serves nothing more.
+- **D20. An adjustment keeps the reason as it was.** The adjustment row snapshots, besides
+  `reason_id` (kept for grouping against the configured reason):
+  - `reason_name`, the displayed name in the operator's language at the time;
+  - `policy_snapshot`, JSON of the evaluated policy: the action allowed, `max_percent`,
+    `max_amount`, `apply_role`, `approver_role` and `note_required`, as they were.
+
+  Renaming a reason or changing its limits never rewrites history. Reports group by `reason_id` and
+  display each row's snapshot.
+- **D21. Whose sales an adjustment rate is measured against (owner, 2026-09-26).** A person's sales
+  are the lines `credited_to` them (D5), each at its value BEFORE any adjustment:
+  - `working_order_lines.list_unit_price_gross` is set on EVERY line the first time any adjustment
+    touches it (comp, discount or a split row carved by one), to the unit price it had then, and
+    never changed afterwards; a line's pre-adjustment value is `list_unit_price_gross × quantity`
+    when it is set, else its current `unit_price_gross × quantity`, rounded exactly as the pricing
+    code rounds a line total (`toScale`, half away from zero: 2.5 kg at €12.99 is €32.48, not
+    €32.475);
+  - a whole-line cancel deletes the line (a partial cancel reduces its quantity), so each adjustment row snapshots the line's `credited_to`,
+    quantity and pre-adjustment unit price (Task 11), and a cancelled line counts through that
+    snapshot's `nominal_value`;
+  - cancelled and comped lines stay in the denominator.
+
+  The adjustment itself counts against its ACTUAL actor (`requested_by`, spec §7), who need not be
+  the person credited with the line. `sales.operator_id`, the operator who issued the invoice, plays
+  no part.
 
 ---
 
@@ -322,7 +491,7 @@ Every task's requirements implicitly include this section.
 - **Step 0 of every task: re-map.** Read the files the task names on the `main` it starts from.
   Write down, in the task's ledger (`docs/handoffs/`), each "today" fact this plan states that no
   longer holds, and what replaced it. Follow the landed code. If the difference changes an owner
-  decision (D1–D4, or spec §14.1), stop, write the question in the lane's `questions.md` with a
+  decision (D1–D5 or D21, or any rule the spec marks **Owner, 2026-09-26**), stop, write the question in the lane's `questions.md` with a
   recommended default, and mark the task `blocked`.
 - **Worktree, never `main`.** Each task is its own branch and worktree, created with
   `python3 ~/workspace/tools/worktree.py new waitron feat/service-<slug>`, where the slug is in
@@ -346,9 +515,16 @@ Every task's requirements implicitly include this section.
     recreates the trigger.
   - READ every generated SQL file. An unexpected table rebuild is a STOP (CLAUDE.md §3: a rebuild
     deletes cascading children's rows).
-  - New core tables (`visits`, `order_groups`, `order_group_events`, `order_drafts`,
-    `order_draft_lines`) go in the core set because they key into `working_orders` and
+  - New core tables (`visits`, `visit_tables`, `service_commands`, `order_groups`,
+    `order_group_events`, `order_drafts`, `order_draft_lines`, `order_draft_events`) go in the core set because they key into `working_orders` and
     `dining_tables`; say so in the commit (CLAUDE.md §3).
+  - **Every column added to `working_order_lines` after Task 9 joins the unchanged-column list of
+    `working_order_lines_require_open_parent_update`'s served exception (D18).**
+  - **Every column added to `working_orders` joins the column list of
+    `working_orders_enforce_transition`** (a custom migration that drops and recreates it), as
+    lane C's `0015_settled_order_freeze_new_columns.sql` states and does for its own two columns.
+    Otherwise a settled order's new column is writable, and a later task's narrow exception
+    (Task 16) is written against the wrong list.
   - Classify each new table. `order_group_events` and the adjustments module's `adjustments` are
     declared with `appendOnly()`. **An append-only row may not hold a declared key to a row that
     product code deletes**, because the delete is then refused, or its cascade is refused by the
@@ -368,11 +544,14 @@ Every task's requirements implicitly include this section.
   - Measure the upgrade on a seeded scratch venue, and state it in the PR and the backlog.
 - **Error codes name the domain concept and are never renamed** (CLAUDE.md §3). This plan's new
   codes (grep the registries first and reuse any sibling):
-  - `visit.bill_outstanding`, `visit.not_open`
-  - `group.not_held`, `group.not_found`
-  - `draft.taken_over`, `draft.already_submitted`, `draft.not_found`
+  - `visit.bill_outstanding`, `visit.not_open`, `visit.out_of_date` (the sibling of M7b's
+    `working_order.out_of_date`, D19)
+  - `submission.id_reused` (D8)
+  - `group.not_held`, `group.not_found`, `group.held_leaves_visit`
+  - `draft.taken_over`, `draft.already_submitted`, `draft.not_found`, `draft.out_of_date`
   - `adjustment.action_not_allowed`, `adjustment.over_limit`, `adjustment.note_required`,
-    `adjustment.reason_inactive`, `adjustment_reason.name_taken` (the sibling of
+    `adjustment.reason_inactive`, `adjustment.exceeds_amount` (D4), `adjustment.approval_required`
+    (D6), `adjustment_reason.name_taken` (the sibling of
     `course.name_taken` and `station.name_taken`)
   - `product.not_sold_separately`, in `packages/catalogue/src/errors.ts`
 
@@ -380,7 +559,6 @@ Every task's requirements implicitly include this section.
   - seating an occupied table: `table.occupied` or `tab.already_open` (`apps/server/src/errors.ts`;
     read which one `openTab` throws today);
   - a stale revision: M7b's `working_order.out_of_date`;
-  - approval missing or too junior: `authorization.not_permitted`;
   - a wrong approver PIN: `pin.invalid`.
 
   Every file that throws a code imports its registry. Each code gets its HTTP status and English
@@ -407,6 +585,12 @@ Every task's requirements implicitly include this section.
     the PR (CLAUDE.md §4).
 - **Strings:** every till string goes in both `en` and `es` of `apps/till/src/i18n/strings.ts`,
   and every dashboard string in `apps/dashboard/src/i18n/strings.ts` (or the module's own strings).
+- **Screens and the D8/D19 contract** (Tasks 4, 5, 8, 9, 11, 15). A screen makes a fresh
+  `submission_id` for each person's action and reuses it only for an automatic retry of that same
+  request after a lost reply. It sends the revision it last read (the visit's, the draft's or the
+  bill's). On `visit.out_of_date`, `draft.out_of_date` or `working_order.out_of_date` it reloads,
+  says what changed, and lets the person act again; it never resends the old request with a new
+  revision on its own. Each screen task has a browser test for the reload.
 - **Write boundaries, not only disabled buttons** (spec §12 item 13). Every refusal a screen shows
   is also refused by the server, and a test drives the server directly.
 - **"Races" are two orders of events, tested one after the other.** This engine takes one write
@@ -434,16 +618,23 @@ test by default. Each has its test in the named task.
      (Task 7).
    - Fire then move a line into the group: `group.not_held`. Move then fire: the line is fired with
      a ticket (Task 3).
-2. **A retried request after the server committed but the reply was lost.** Resubmitting the same
-   draft, groups or payment with the same `submission_id` creates no second group, kitchen ticket
-   or tender (Tasks 3, 7, 14).
-3. **A table with one bill paid and a split bill outstanding.** It never reads as fully paid, and
+2. **A retried request after the server committed but the reply was lost, and an id reused for a
+   different request.** Resubmitting the same draft, groups, served change or payment with the same
+   `submission_id` and body creates no second group, kitchen ticket, served quantity or tender. The
+   same id with a changed body or another command is `submission.id_reused` and writes nothing
+   (Tasks 3, 7, 9, 14).
+3. **A stale screen.** A device acting on a visit another device has changed since it last read —
+   a line split onto another bill, a group reordered — is refused `visit.out_of_date` and writes
+   nothing; no stale action omits, duplicates, moves, serves or fires work (Tasks 3, 9, 11).
+4. **A table with one bill paid and a split bill outstanding, and joined tables.** It never reads as fully paid, and
    Finish table is refused `visit.bill_outstanding` (Task 2). After Finish, the next party's tab
-   shows none of the old visit's bills (Task 2).
-4. **Rounding cents.** A €5.00 bill discount over lines of €3.33, €3.33 and €3.34 at two VAT
+   shows none of the old visit's bills (Task 2). With Tables 4 and 5 joined, neither can be
+   seated again, and Finish frees both (Task 2).
+5. **Rounding cents.** A €5.00 bill discount over lines of €3.33, €3.33 and €3.34 at two VAT
    rates, and €100.01 split three ways, each sum exactly, and a rerun gives the same allocation
-   (Tasks 11, 14).
-5. **A paper-only station and a failed printer.** A station with no kitchen screen never shows
+   (Tasks 11, 14). A bill discount the weighed lines cannot meet and the other lines cannot absorb
+   records and shows the amount actually taken off, never the amount asked (Task 11).
+6. **A paper-only station and a failed printer.** A station with no kitchen screen never shows
    Ready; "fired 20 minutes ago" is all it claims. A failed print job shows a printing problem on
    the table and the station, never refuses the next order, and never marks the order missing
    (Tasks 5, 9).
@@ -482,8 +673,8 @@ for, which Task 14 implements. Branch, `commit -s`, fast-forward `main`, push di
      - The €25 steak with €15 left: two offered choices.
      - Earlier tips are never consumed.
      - An item already paid for cannot be charged again.
-  3. **Moving lines to another bill after a contribution** (the owner's example in spec §14.1
-     decision 3):
+  3. **Moving lines to another bill after a contribution** (the owner's example in spec §6,
+     "Split whole items into bills"):
      - The contribution stays on the original bill.
      - A line already covered by an item-specific payment cannot move.
      - What is refused when the move would leave the original bill owing less than it has
@@ -593,70 +784,144 @@ It is independent of lane C's files, so it can start now.
 
 ## Task 2: A visit per seated party — slug `visits`
 
-Spec §1 (seating and related bills), §8 (Finish table, Needs clearing), §6 ("all related bills
-remain visible"); D2.
+Spec terms, §1 (seating, related bills, joined tables), §8 (Finish table, Needs clearing), §6
+("all related bills remain visible"); D2, D19.
 
 **Files:**
-- Create: `packages/db/src/schema/visits.ts` (D2's columns; `visit_state` via the house `enumType`
-  and `enumCheck`; the partial unique index on `table_id`). Add `working_orders.visit_id` (nullable,
-  keyed to `visits`) in `orders.ts`. Add `service_settings.clearing_workflow` (flag, default off;
-  D17) in `packages/venue-service/src/schema/settings.ts`, with its own venue-service migration. One generated core migration, plus a custom migration that replaces
-  `working_orders_clear_table_status` with a trigger on `visits` that clears the table's
-  `status_id` when a visit leaves `open`.
-- Create: `apps/server/src/visits.ts` with `seatTable`, `finishTable`, `markCleared` and
-  `readVisitBills`, plus its test.
+- Create: `packages/db/src/schema/visits.ts` with `visits` and `visit_tables` (D2's columns;
+  `visit_state` via the house `enumType` and `enumCheck` — new tables, so a CHECK costs no rebuild;
+  the partial unique index on `visit_tables.table_id` where `left_at` is null), and
+  `service_commands` (D8's columns; unique on (`scope_kind`, `scope_id`, `submission_id`)), which
+  Tasks 3, 5, 7, 9, 11 and 16 write through the helper this task adds.
+- Modify: `packages/db/src/schema/orders.ts` (`working_orders.visit_id`, nullable, keyed to
+  `visits`). One generated core migration, plus custom migrations that:
+  - add `visit_id` to the column list of `working_orders_enforce_transition` (Global Constraints),
+    written against the trigger as lane C left it;
+  - replace `working_orders_clear_table_status` with a trigger on `visits` that clears the status
+    of every member table when a visit leaves `open`.
+- Modify: `service_settings.clearing_workflow` (flag, default off; D17) in
+  `packages/venue-service/src/schema/settings.ts`, with its own venue-service migration.
+- Create: `apps/server/src/visits.ts` with `seatTable`, `finishTable`, `markCleared`,
+  `readVisitBills`, `visitForTable`, and the D8/D19 helpers `checkAndBumpVisit` and
+  `runServiceCommand`, plus its test.
 - Modify:
-  - `apps/server/src/working-order.ts`: `splitOffCheck` and `transferLines` into a new tab carry
-    `visit_id`. `addTabRound` on a table whose visit is open but whose tab has settled opens a new
-    tab on the same visit and repoints `dining_tables.tab_id`. `listTablesWithState` reads
-    occupancy from the visit and returns its bills. `openTab` stays as the internal step
-    `seatTable` calls.
+  - `apps/server/src/working-order.ts`:
+    - `joinTable`, `moveTab`, `mergeTabs` and `unjoinTable` maintain memberships as D2 lists;
+    - `splitOffCheck`'s new check carries the source tab's `visit_id` (`transferLines` moves lines
+      between two existing tabs and creates none; `unjoinTable` creates the new visit's tab);
+    - `joinTable` and `moveTab` refuse a destination table with an active membership — a table
+      needing clearing, or one joined to another visit — with `table.occupied` (reused), before the
+      unique index can fail with a raw engine error;
+    - the six tab routes that move lines or tables (`move`, `join`, `merge`, `transfer`, `split`,
+      `unjoin`) take `expectedVisitRevision` (D19), and the till's calls send it;
+    - `addTabRound` on a visit whose tab has settled opens a new tab on the same visit and repoints
+      `dining_tables.tab_id` for every member table;
+    - `listTablesWithState` reads occupancy from active memberships and returns the visit's bills;
+    - `openTab` stays as the internal step `seatTable` calls.
   - `apps/server/src/till-api.ts` and `device-api.ts` (routes, and their device twins),
     `apps/server/src/errors.ts`, `apps/server/src/live-resources.ts`.
   - The till: `apps/till/src/screens/till-floor-screen.ts` (the seat dialog with an optional guest
-    count; the Needs clearing state with Mark cleared); `till-table-order-screen.ts` (the visit's
-    bills with paid and outstanding amounts, the table's total outstanding, settled bills and
-    their receipts, and Finish table); `apps/till/src/api/client.ts`; the i18n strings and codes.
-  - `apps/server/scripts/demo-seed/` (open tables get visits).
+    count; the Needs clearing state with Mark cleared, on every member table);
+    `till-table-order-screen.ts` (the visit's bills with paid and outstanding amounts, the table's
+    total outstanding, settled bills and their receipts, and Finish table);
+    `apps/till/src/api/client.ts`; the i18n strings and codes.
+  - `apps/server/scripts/demo-seed/` (open tables get visits and memberships).
 
 **Interfaces:**
 - Produces:
   ```ts
-  export async function seatTable(tx, cfg, args: { tableId: string; guestCount: number | null; operatorId: string }): Promise<{ visitId: string; tabId: string }>; // the reused occupied-table code
-  export async function finishTable(tx, cfg, args: { visitId: string; operatorId: string }): Promise<{ state: "closed" | "needs_clearing" }>; // visit.bill_outstanding, visit.not_open
-  export async function markCleared(tx, cfg, visitId: string): Promise<void>; // visit.not_open when not needs_clearing
-  export interface VisitBill { workingOrderId: string; label: string | null; status: "open" | "placed" | "settled" | "abandoned"; total: string; outstanding: string }
-  export async function readVisitBills(tx, visitId: string): Promise<VisitBill[]>;
-  // wire: POST /api/tables/:id/seat { guestCount }, POST /api/visits/:id/finish, POST /api/visits/:id/cleared, GET /api/visits/:id/bills
-  // TableState gains visit: { id, guestCount, state, outstanding: string, billCount: number } | null
+  export async function seatTable(tx, cfg, args: { tableId: string; guestCount: number | null; operatorId: string }): Promise<{ visitId: string; tabId: string; revision: number }>; // the reused occupied-table code
+  export async function finishTable(tx, cfg, args: { visitId: string; expectedVisitRevision: number; operatorId: string }): Promise<{ state: "closed" | "needs_clearing" }>; // visit.bill_outstanding, visit.not_open, visit.out_of_date
+  export async function markCleared(tx, cfg, args: { visitId: string; expectedVisitRevision: number }): Promise<void>; // visit.not_open when not needs_clearing, visit.out_of_date
+  export async function visitFamily(tx, visitId: string): Promise<string[]>; // the visit and every visit merged into it, directly or through a chain (D2)
+  export interface VisitBill { workingOrderId: string; visitId: string; label: string | null; status: "open" | "placed" | "settled" | "abandoned"; total: string; outstanding: string; receiptAvailable: boolean }
+  export async function readVisitBills(tx, visitId: string): Promise<VisitBill[]>; // the whole family's bills; outstanding = open and placed bills' unpaid amounts
+  export async function visitForTable(tx, tableId: string): Promise<{ visitId: string; revision: number } | null>; // the active membership's visit
+  export async function checkAndBumpVisit(tx, visitId: string, expectedVisitRevision: number): Promise<number>; // D19; visit.out_of_date; returns the new revision
+  export type CommandScope = { kind: "visit"; visitId: string } | { kind: "bill"; workingOrderId: string };
+  export async function runServiceCommand<R>(tx, scope: CommandScope, submissionId: string, kind: string, args: Record<string, unknown>, run: () => Promise<R>): Promise<R>; // D8: args = path ids + body; fingerprints them minus the four excluded keys; replays the recorded result on the same kind and fingerprint, refuses submission.id_reused otherwise, records the result on first run
+  // wire: POST /api/tables/:id/seat { guestCount }, POST /api/visits/:id/finish { expectedVisitRevision }, POST /api/visits/:id/cleared { expectedVisitRevision }, GET /api/visits/:id/bills
+  // TableState gains visit: { id, revision, guestCount, state, outstanding: string, billCount: number, tableIds: string[] } | null
   ```
 
-- [ ] **Step 0: Re-map** (Global Constraints), especially `splitOffCheck`, `transferLines`,
-  `moveTab`, `unjoinTable` and table merging after M7b. List every path that creates a tab or
-  moves a tab between tables; each must keep or set `visit_id`.
+- [ ] **Step 0: Re-map** (Global Constraints) `splitOffCheck`, `transferLines`, `moveTab`,
+  `joinTable`, `unjoinTable` and `mergeTabs` after M7b, and the transition trigger's current column
+  list. List every path that creates a tab or changes which tables a tab covers; each must keep
+  memberships as D2 says. Confirm what `mergeTabs` merges (two parties into one, or something else)
+  before applying D2's merge rule; if it is not "two parties become one", stop and ask.
 - [ ] **Step 1: Write the failing tests:**
-  - **Seating:** `seatTable` on free Mesa 4 with guest count 3 opens a visit and a tab; the table
-    reads occupied with `guestCount 3`. Seating Mesa 4 again is refused with the reused
-    occupied-table code (Global Constraints), and exactly one visit exists. A direct insert of a
-    second open visit for Mesa 4 fails the partial unique index.
+  - **Seating:** `seatTable` on free Mesa 4 with guest count 3 opens a visit, one membership and a
+    tab; the table reads occupied with `guestCount 3`. Seating Mesa 4 again is refused with the
+    reused occupied-table code, and exactly one visit exists. A direct insert of a second active
+    membership for Mesa 4 fails the partial unique index.
   - **Related bills:** Mesa 4's tab holds Burger €12.00, Wine €30.00 and Water €2.00. Split the Wine
-    to a check. The check carries the visit. `readVisitBills` lists both bills. The table's
-    outstanding is €44.00. Pay the tab (€14.00): the table still reads occupied, outstanding €30.00,
-    and never "paid".
+    to a check. The check carries the visit. `readVisitBills` lists both bills. The outstanding is
+    €44.00. Pay the tab (€14.00): the table still reads occupied, outstanding €30.00, and never
+    "paid".
   - **Pay, then order dessert:** with the tab settled and the check paid, the visit is still open.
     Adding a round with a Flan opens a new tab on the same visit, `dining_tables.tab_id` points at
     it, and the earlier sale is untouched (its `sale_lines` compare equal before and after).
   - **Finish:** Finish with the €30.00 check open is `visit.bill_outstanding`, and nothing changes.
-    Once everything is paid, Finish closes the visit, frees the table and clears its service
-    status. An empty open tab on the visit is abandoned by Finish, not counted as outstanding.
+    Once everything is paid, Finish closes the visit and its memberships, frees the table and
+    clears its service status. An empty open tab on the visit is abandoned by Finish, not counted as
+    outstanding. Finish with a stale `expectedVisitRevision` is `visit.out_of_date`.
   - **Needs clearing:** with `clearing_workflow` on, Finish leaves the table `needs_clearing`, and
-    seating it is refused with the reused occupied-table code until `markCleared`. With it off (the default), Finish
-    frees the table at once.
-  - **The next party** (Review Focus 3): after Finish, seating Mesa 4 opens a new visit whose bills
+    seating it is refused with the reused occupied-table code until `markCleared`. With it off (the
+    default), Finish frees the table at once.
+  - **The next party (Review Focus 4):** after Finish, seating Mesa 4 opens a new visit whose bills
     list is empty.
-  - **Moves:** moving the party to Mesa 7 (`moveTab`) keeps the visit and moves `table_id`. A join
-    keeps one visit, and an unjoin gives the detached table a new visit. Mirror whatever M7b left
-    the transfer paths doing.
+  - **Joined tables (Review Focus 4), Mesa 4 and Mesa 5:**
+    - seat Mesa 4, join Mesa 5: one visit, two active memberships, and `visitForTable` gives the
+      same visit for both;
+    - seating Mesa 5 directly is refused, and no second visit exists;
+    - paying the original tab leaves both occupied;
+    - ordering dessert after payment opens a new bill on the same visit, and both tables still
+      resolve to it;
+    - Finish frees both; with clearing on, both stay `needs_clearing` until Mark cleared frees both;
+    - after Finish, the next party at EITHER table sees no earlier bill;
+    - from a fresh join, unjoining Mesa 5 with two items moved creates exactly one new visit for
+      Mesa 5 with those items, and Mesa 4's visit keeps the rest;
+    - moving the party from Mesa 4 + 5 to Mesa 7 closes both memberships and opens Mesa 7's, on
+      the same visit.
+  - **Settled orders stay frozen:** on a settled order, an update that sets `collected_at` AND
+    changes `visit_id` is refused by `working_orders_enforce_transition`. (An update changing only
+    `visit_id` is refused whether or not the column joined the list, because the settled exception
+    also needs `collected_at` to be set, so it proves nothing; the plan review measured both with
+    sqlite3.)
+  - **Stale moves (D19):** for each of `move`, `join`, `merge`, `transfer`, `split` and `unjoin`, a
+    call carrying a visit revision another device has since bumped is `visit.out_of_date`, and
+    nothing moves.
+  - **Needs clearing and joined tables are occupied:** joining, or moving a party onto, a table that
+    is `needs_clearing` or joined to another visit is `table.occupied`.
+  - **Unjoin without items:** unjoining Mesa 5 with no items closes its membership and frees it,
+    and seating it then opens a fresh visit.
+  - **Merged parties keep their bills (D2, spec §12 item 9):** Mesa 6 (visit S) has a settled €20.00
+    bill and, in an invoice-first venue, a placed (invoiced, unpaid) €15.00 bill. S merges into Mesa
+    4 (visit T, with an open €30.00 tab):
+    - `readVisitBills(T)` lists all three, the €20.00 one with its receipt reachable, and
+      `visitId` = S on the two S kept;
+    - T's outstanding is €45.00 (€30.00 + €15.00), and the floor never shows Mesa 4 as paid while
+      the €15.00 is unpaid;
+    - after the €30.00 tab is paid, Finish on T is `visit.bill_outstanding` because of S's €15.00;
+      collecting the €15.00 from T's screen succeeds, and Finish then closes T;
+    - **a chain:** before Finish, T merges into Mesa 8 (visit U). `readVisitBills(U)` lists U's own
+      bills, T's kept bills and S's two; U's outstanding includes the €15.00; Finish on U is refused
+      until it is paid; after Finish, a new party at Mesa 4, Mesa 6 or Mesa 8 sees none of these
+      bills;
+    - control: with the family query replaced by the visit alone, the listing, the outstanding and
+      the Finish refusal each fail.
+  - **Merge (D2):** Mesa 4 (visit T) and Mesa 6 (visit S, with a settled bill and an open split
+    check) are merged, S into T:
+    - with `freeSourceTable`, Mesa 6 is free and T keeps Mesa 4; without it, both tables resolve to
+      T;
+    - S's open check now belongs to T, and S's settled bill stays on S;
+    - S is closed with `merged_into_visit_id` = T, and a new command on S is `visit.not_open`;
+    - a merge with a stale revision for EITHER visit is `visit.out_of_date`, and nothing moves.
+  - **D8 helper:** `runServiceCommand` with a new id runs once and records the result. The same id,
+    kind and args return the recorded result without running. The same id with another body, with
+    another path id (another `groupId`), or with another kind is `submission.id_reused` and runs
+    nothing. Args differing only in `expectedVisitRevision`, `draftRevision` or `expectedRevision`
+    count as the same. The same id in a different scope (another visit, or a bill) is independent.
   - **Retired behaviour:** the tests that a settled tab frees its table, and the trigger test for
     `working_orders_clear_table_status`, change. Name them in the PR.
   - **The till (real Chromium):** tap a free table, get the seat dialog, enter 3, see the tab. The
@@ -674,7 +939,7 @@ remain visible"); D2.
 ## Task 3: Groups replace courses — the server — slug `groups`
 
 Spec §3 (the four draft actions, later additions, editable held groups) and §12 items 3 and 4; D1,
-D4's last bullet, D8. The kitchen and pass screens are Task 5 and the till is Task 4; this task's
+D8, D19. The kitchen and pass screens are Task 5 and the till is Task 4; this task's
 tests drive the routes.
 
 **Files:**
@@ -683,9 +948,31 @@ tests drive the routes.
     at the column);
   - `order_group_events` (`appendOnly()`): `id`, `visit_id`, `group_id` (keyed; groups are never
     deleted), `kind` (`submitted | joined | fired | reordered | lines_moved | removed`),
-    `submission_id` (nullable; unique per `visit_id` where not null, D8), `actor_id`, `detail`
-    JSON, `created_at`;
-  - `working_order_lines.group_id` (nullable, keyed to `order_groups`), in `orders.ts`.
+    `actor_id`, `detail` JSON, `created_at`. Replays are recorded in Task 2's `service_commands`
+    (D8), not here;
+  - `working_order_lines.group_id` (nullable, keyed to `order_groups`), and
+    `working_order_lines.credited_to` (nullable person id, D5), in `orders.ts`. Every path on
+    `main` that inserts a line sets both (Step 0 lists them; at `946b10be1` they are
+    `createOpenOrder`, `addTabRound`, `carveOffLines` and `applyLineEdits`):
+    - `submitGroups` (which replaces `addTabRound` for tabs): the group it creates, and
+      `credited_to` = its operator (Task 7 passes the draft's owner, who is the submitter);
+    - `createOpenOrder`: used by counter orders AND by `openTab` when a tab is opened with lines
+      (`POST /api/tables/:id/tab` with `lines`). Under visits, `seatTable` opens a tab with NO lines,
+      and the tab-with-lines route is retired in favour of seat-then-`submitGroups`, so every tab
+      line gets a group; a counter order's lines get no group and `credited_to` = the operator who
+      creates the order (D5 says the same);
+    - `carveOffLines` (splits and transfers): a split row copies both from the source line; a
+      WHOLE line moves in place through `moveOrderLines` and keeps both; either way a transfer to
+      another visit clears `group_id` on the line that lands there (D1);
+    - `applyLineEdits` (reached from `updateHeldOrder` and `updateOrderLine`, including M7c's Change
+      action) changes an edited line IN PLACE under the same id, so it keeps its group and credit.
+      The rows it inserts are of three kinds: an added extras CHILD line, which inherits its
+      parent dish's group and credit; the new line for extra quantity when a FIRED line is raised,
+      credited to the editing operator and placed in a new fired group (Fire now, the spec's
+      default for later additions); and a brand-new dish added by an edit, credited to the editing
+      operator and placed in a new fired group — or, on an order with no groups (a counter
+      order), in none;
+    - Task 11's split rows inherit both (Task 11).
 
   One generated core migration. The plan review measured that adding the keyed column generates a
   plain `ALTER TABLE … ADD`; READ the SQL anyway.
@@ -698,8 +985,15 @@ tests drive the routes.
       it per course;
     - **firing refuses a group holding an unsent line whose product became unavailable**
       (`product.unavailable`, as M7b's send check does; menus §11.3), and nothing is fired;
-    - M7b's rules for editing sent work (menus §10.3), its kitchen notices, its revision bump and
-      its `order.payment_in_flight` refusal apply to every group write;
+    - M7b's rules for editing sent work (menus §10.3), its kitchen notices and its
+      `order.payment_in_flight` refusal apply to every group write, and every group write goes
+      through Task 2's `runServiceCommand` and `checkAndBumpVisit` (D8, D19);
+    - a split or transfer that changes a group's membership bumps the visit's revision as well as
+      each bill's;
+    - `voidTabLine` and `applyLineEdits` bump the visit's revision and mark a held group they empty
+      as `removed` (D19);
+    - `carveOffLines`' held test (`refuseHeld`, a ticket item with no `fired_at`) is replaced by
+      D1's group rule, and both landed uses change as D1 states;
     - `splitOffCheck` and `transferLines` follow D1: within the visit, `group_id` is kept; to
       another visit, a held-group line is refused and a fired-group line moves with `group_id`
       cleared.
@@ -717,17 +1011,19 @@ tests drive the routes.
   export type GroupRelease = "fire" | "hold";
   export interface SubmitGroupsInput {
     submissionId: string;
+    expectedVisitRevision: number;
     groups: { lines: RoundLine[]; release: GroupRelease }[];   // RoundLine is today's round-line wire type
     joinGroupId?: string;                                       // a later addition into an existing HELD group; then groups.length must be 1 and release "hold"
     operatorId: string;
   }
   export interface OrderGroup { id: string; position: number; state: "held" | "fired"; firedAt: string | null; remindAt: string | null; lineIds: string[]; summary: string } // summary e.g. "2 × Steak, 1 × Fish"; removed groups are never returned
   export async function submitGroups(tx, cfg, visitId: string, input: SubmitGroupsInput): Promise<OrderGroup[]>; // lines go on the visit's open tab; group.not_held, group.not_found
-  export async function fireGroup(tx, cfg, visitId: string, groupId: string, args: { submissionId: string; operatorId: string }): Promise<void>; // group.not_held, product.unavailable
-  export async function reorderHeldGroups(tx, cfg, visitId: string, heldGroupIds: string[], args: { submissionId: string; operatorId: string }): Promise<void>; // exactly the held groups; fired positions never change
-  export async function moveLinesToGroup(tx, cfg, visitId: string, moves: { lineId: string; quantity: string }[], target: { groupId: string } | "new", args: { submissionId: string; operatorId: string }): Promise<void>; // only between held groups; an emptied group becomes `removed`
-  export async function listOrderGroups(tx, visitId: string): Promise<OrderGroup[]>;
-  // Every mutating call with a submissionId already recorded on this visit returns the first result and writes nothing (D8).
+  export interface VisitCommandArgs { submissionId: string; expectedVisitRevision: number; operatorId: string }
+  export async function fireGroup(tx, cfg, visitId: string, groupId: string, args: VisitCommandArgs): Promise<{ revision: number }>; // group.not_held, product.unavailable
+  export async function reorderHeldGroups(tx, cfg, visitId: string, heldGroupIds: string[], args: VisitCommandArgs): Promise<{ revision: number }>; // exactly the held groups; fired positions never change
+  export async function moveLinesToGroup(tx, cfg, visitId: string, moves: { lineId: string; quantity: string }[], target: { groupId: string } | "new", args: VisitCommandArgs): Promise<{ revision: number }>; // only between held groups; an emptied group becomes `removed`
+  export async function listOrderGroups(tx, visitId: string): Promise<{ revision: number; groups: OrderGroup[] }>;
+  // Every mutating call: D8 replay or submission.id_reused first, then visit.out_of_date (D19), then the command.
   // wire: POST /api/visits/:id/groups, POST /api/visits/:id/groups/:gid/fire, PUT /api/visits/:id/groups/order, POST /api/visits/:id/groups/move, GET /api/visits/:id/groups
   ```
 
@@ -762,8 +1058,8 @@ tests drive the routes.
     - move the Fish out of a group that holds only it: that group reads `removed`, is absent from
       `listOrderGroups`, and its events are still readable;
     - split Steak ×2 in a held group into two rows (reuse the line-carving logic M7b left);
-    - each change writes one `order_group_events` row naming the operator and bumps the order's
-      `revision`;
+    - each change writes one `order_group_events` row naming the operator and bumps the VISIT's
+      `revision` (D19);
     - a held group's lines stay freely editable, since they are not sent (menus §10.3).
   - **Firing:**
     - `fireGroup` on the warm starters stamps `sent_at`, creates tickets and prints at fire, as
@@ -775,10 +1071,25 @@ tests drive the routes.
       removed, it fires.
   - **Retries (Review Focus 2), one per command, each writing nothing the second time:**
     - `submitGroups` twice with one `submissionId` returns the same groups and creates no second
-      ticket or line;
+      ticket or line, even though the second call carries the now-stale revision;
     - a `joinGroupId` submission repeated adds its Steak once;
     - `fireGroup` repeated with its `submissionId` prints once;
     - `moveLinesToGroup` repeated moves once.
+  - **An id reused for a different request (D8), each refused `submission.id_reused` with nothing
+    written:**
+    - the same `submissionId` with the Steak's quantity changed from 1 to 2;
+    - the same `submissionId` on `moveLinesToGroup` naming another target group;
+    - an id first used by `submitGroups`, then sent with `fireGroup`;
+    - an id first used by `fireGroup` on the mains, then sent with `fireGroup` on the desserts (the
+      group id is in the path, and the fingerprint covers it).
+  - **Stale screens (Review Focus 3, D19):**
+    - a group whose lines sit on two bills of the visit (split one line onto a check): `fireGroup`
+      fires both lines, one ticket each, and the group reads fired on both bills;
+    - device A reads the visit (revision n); device B splits a held-group line onto a check
+      (revision n+1); device A's `fireGroup` with n is `visit.out_of_date`, and nothing fires;
+      after re-reading, it fires every line including the split one;
+    - a reorder and a move sent with a revision another device has since bumped are each
+      `visit.out_of_date`, and nothing moves.
   - **Two orders of events (Review Focus 1)**, as sequential calls (Global Constraints):
     - fire the mains, THEN move a Steak into it: the move is `group.not_held`, and the Steak stays
       where it was;
@@ -786,15 +1097,23 @@ tests drive the routes.
   - **Splits and moves (D1):**
     - split a held-group line onto a check of the same visit: the new row keeps `group_id`, and
       firing the group fires it too, on the check;
-    - transfer a held-group line to another table's tab: refused (the reused code), and nothing
+    - transfer a held-group line to another table's tab: `group.held_leaves_visit`, and nothing
       moves;
     - transfer a fired-group line there: it moves, its `group_id` is null, and M7b's MOVED slip
       prints.
+  - **Credit (D5):** lines created by `submitGroups` for operator Alex have `credited_to` = Alex; a
+    split of one onto a check keeps Alex; a counter sale's lines are credited to its operator.
   - **During a card payment:** with `payment_attempt_at` set on the tab (M7b's D22 test setup), a
     submit and a move into a held group are each `order.payment_in_flight`.
   - **A counter order** places and fires as today, with no groups.
-  - **Retired behaviour:** `till-api.courses.test.ts` and the course-firing cases. Name them in the
-    PR.
+  - **Edits inside groups (D19):** voiding the only line of a held group marks it `removed` and
+    bumps the visit; a Change-action edit that raises a FIRED line's quantity creates a new fired
+    group for the extra, credited to the editor; the same edit on a HELD line changes it in place,
+    in its group; adding an extra (Bacon) to Alex's held Burger while Mia edits creates a child
+    line in the Burger's group credited to Alex, not Mia.
+  - **Retired behaviour:** `till-api.courses.test.ts` and the course-firing cases; the
+    `tab.split_held_line` refusal of a split onto a check and its test; and the transfer of a held
+    line to another table, which `main` allows. Name each in the PR.
 
   Run them: they FAIL.
 - [ ] **Step 2: Implement.** Step 3: run the focused tests plus `apps/server` `test:coverage`, and
@@ -882,6 +1201,14 @@ Spec §4 (kitchen output, reprint, print problems); D1's pass; D14.
     or undelivered print job for an order shows "Printing problem" on that table and station, with
     Reprint, and never blocks ordering.
 
+**Interfaces:**
+- Produces:
+  ```ts
+  export async function bumpGroupReady(tx, cfg, visitId: string, groupId: string, args: VisitCommandArgs): Promise<{ revision: number }>; // replaces bumpCourseReady
+  export async function markGroupAway(tx, cfg, visitId: string, groupId: string, args: VisitCommandArgs): Promise<{ revision: number }>; // replaces markCourseAway
+  // D8 replay first, then visit.out_of_date (D19); the kitchen and expo screens send the visit revision they read
+  ```
+
 - [ ] **Step 0: Re-map** the kitchen print path as #689 and M7b left it (kitchen notices, MOVED slips).
 - [ ] **Step 1: Write the failing tests:**
   - **Reprint:** reprinting Mesa 4's tickets prints each with a REPRINT header. No new
@@ -892,13 +1219,15 @@ Spec §4 (kitchen output, reprint, print problems); D1's pass; D14.
   - **Pass by group:** in the spec's example, the expo screen shows groups 1 and 2 and the held
     groups as "held, not released". Bump ready and away act per group, as today's course versions
     did.
+  - **Pass retries:** "away" resent with its `submissionId` after a lost reply is recorded once;
+    an away sent with a stale visit revision is `visit.out_of_date`.
   - **Who may release (D1):** with `fire_control = expo`, the expo screen offers Fire on the first
     held group and the station screen does not. With `kitchen`, the station screen offers it. With
     `waiter`, neither does. Mirror today's course-era screens exactly.
-  - **Paper-only station (Review Focus 5):** a station with no kitchen screen enrolled never
+  - **Paper-only station (Review Focus 6):** a station with no kitchen screen enrolled never
     reports `ready`. The table screen shows "Fired 20 minutes ago" for its items, taken from
     `fired_at`, never "Ready".
-  - **Print failure (Review Focus 5):** a print job failing for Mesa 4's fired group shows
+  - **Print failure (Review Focus 6):** a print job failing for Mesa 4's fired group shows
     "Printing problem" on Mesa 4's table screen and on the station. A new round on Mesa 4 is still
     accepted, and the order is never shown as missing. After a successful reprint the problem
     clears.
@@ -947,33 +1276,39 @@ explicit FIRE.
 ## Task 7: Per-operator drafts on the server — slug `drafts`
 
 Spec §2 (separate drafts, takeover, one submission), §10 (unavailable lines in a draft), §12 items
-1, 2 and 13; D5, D8, D9, D10.
+1, 2 and 13; D5, D8, D9, D10, D19.
 
 **Files:**
 - Create in `packages/db/src/schema/`:
   - `order_drafts`: `id`, `visit_id`, `owner_id`, `revision`, `state`
-    (`open | submitted | discarded`), `submission_id`, `menu_version_id` (the version the till
-    priced against, M7's rule), `created_at` and `updated_at`. A partial unique index on
-    (`visit_id`, `owner_id`) where `state = 'open'`.
+    (`open | submitted | discarded`), `menu_version_id` (the version the till priced against, M7's
+    rule), `created_at` and `updated_at`. A partial unique index on (`visit_id`, `owner_id`) where
+    `state = 'open'`. Its submission is replayed through Task 2's `service_commands` (D8).
   - `order_draft_lines`: `id`, `draft_id`, `position`, `product_id`, `variant`, `options` (JSON
-    values), `extras` (JSON of product and list), `note`, `quantity`, `course_id`, `no_merge`,
-    `added_by`.
+    values), `extras` (JSON of product and list), `note`, `quantity`, `course_id`, `no_merge`. No
+    author column: credit goes to the draft's owner at submission (D5).
+  - `order_draft_events` (`appendOnly()`): `draft_id`, `kind` (`created | taken_over | submitted |
+    discarded`), `from_person`, `to_person`, `created_at` — the history of who owned the draft.
 
-  One generated core migration.
+  One generated core migration. (`working_order_lines.credited_to` arrives in Task 3.)
 - Create: `apps/server/src/order-drafts.ts` with `readDrafts`, `saveDraft`, `takeOverDraft`,
   `submitDraft` and `normaliseDraftLines` (D10), plus its test.
 - Modify: `till-api.ts` and `device-api.ts` (routes), `errors.ts`, `live-resources.ts`, and
   `listTablesWithState` (`unsentDrafts: { ownerName: string; lineCount: number }[]` per table).
+- Modify: `submitDraft` sets `credited_to` on the lines it creates to the draft's owner (D5), and
+  `mergeTabs` moves drafts as D2 states.
 
 **Interfaces:**
 - Produces:
   ```ts
-  export interface DraftLine { id: string; productId: string; variant: string | null; options: OptionSelection[]; extras: { productId: string; listId: string }[]; note: string | null; quantity: string; courseId: string | null; noMerge: boolean; addedBy: string; unavailable: boolean }
+  export interface DraftLine { id: string; productId: string; variant: string | null; options: OptionSelection[]; extras: { productId: string; listId: string }[]; note: string | null; quantity: string; courseId: string | null; noMerge: boolean; unavailable: boolean }
   export interface Draft { id: string; visitId: string; ownerId: string; ownerName: string; revision: number; lines: DraftLine[] }
   export async function readDrafts(tx, visitId: string): Promise<Draft[]>; // every open draft on the visit, others' included, read-only to non-owners
-  export async function saveDraft(tx, cfg, visitId: string, operatorId: string, lines: Omit<DraftLine, "id" | "addedBy" | "unavailable">[], revision: number): Promise<Draft>; // draft.taken_over; a stale revision is M7b's working_order.out_of_date
-  export async function takeOverDraft(tx, cfg, draftId: string, operatorId: string, revision: number): Promise<Draft>;
-  export async function submitDraft(tx, cfg, draftId: string, operatorId: string, input: Omit<SubmitGroupsInput, "operatorId" | "groups"> & { groups: { lineIds: string[]; release: GroupRelease }[]; revision: number; menuVersionId: string }): Promise<OrderGroup[]>; // draft.already_submitted (unless the same submissionId: then the first result), product.unavailable, and M7's menu.version_changed
+  export async function saveDraft(tx, cfg, visitId: string, operatorId: string, lines: Omit<DraftLine, "id" | "unavailable">[], revision: number): Promise<Draft>; // draft.taken_over; a stale draft revision is draft.out_of_date
+  export async function takeOverDraft(tx, cfg, draftId: string, operatorId: string, revision: number): Promise<Draft>; // draft.out_of_date, draft.already_submitted
+  export async function submitDraft(tx, cfg, draftId: string, operatorId: string, input: { submissionId: string; draftRevision: number; expectedVisitRevision: number; menuVersionId: string; groups: { lineIds: string[]; release: GroupRelease }[]; joinGroupId?: string }): Promise<OrderGroup[]>;
+  // order of checks: D8 replay or submission.id_reused; draft.taken_over / draft.already_submitted; draft.out_of_date; visit.out_of_date; M7's menu.version_changed; product.unavailable
+  // new lines get credited_to = the draft's owner, who is the submitter
   export function normaliseDraftLines(lines: DraftLine[]): DraftLine[]; // D10, pure
   ```
 
@@ -991,9 +1326,14 @@ Spec §2 (separate drafts, takeover, one submission), §10 (unavailable lines in
   - **Separate drafts (§12 item 1):** Alex and Sam each save a draft on Mesa 4. `readDrafts` returns
     both with owner names. Sam's save onto Alex's draft is `draft.taken_over`. The table state
     shows "Alex has an unsent order: 2 items".
-  - **Takeover:** Sam takes over Alex's draft (revision 3). The draft's owner is Sam. Alex's next
-    save or submit is `draft.taken_over`. Each line keeps `added_by` = Alex. The groups Sam submits
-    record `submitted_by` = Sam.
+  - **Takeover and credit (D5, spec §2):**
+    - Alex adds Beer ×1; Sam takes over (revision 3); Sam adds another Beer. The draft shows
+      Beer ×2 and its owner is Sam. Alex's next save or submit is `draft.taken_over`.
+    - `order_draft_events` records `taken_over` from Alex to Sam.
+    - Sam submits: both Beers' lines have `credited_to` = Sam, and the groups record
+      `submitted_by` = Sam. There is no per-line author anywhere to disagree with it.
+    - A line Mia adds through the Change action is credited to Mia; a split of Sam's line onto a
+      check keeps Sam.
   - **One submission, in both orders (Review Focus 1):**
     - Sam takes over, THEN Alex submits: `draft.taken_over`, nothing written;
     - Alex submits, THEN Sam takes over: `draft.already_submitted`, and the draft stays Alex's
@@ -1001,9 +1341,19 @@ Spec §2 (separate drafts, takeover, one submission), §10 (unavailable lines in
     - two submits of one draft with different `submissionId`s give one success and one
       `draft.already_submitted`;
     - the same `submissionId` twice returns the first result, with no second group or ticket
-      (Review Focus 2).
+      (Review Focus 2);
+    - the same `submissionId` with a different selection of lines is `submission.id_reused`, and
+      the draft is unchanged.
+  - **Two revisions (D19):** a submit with the current draft revision but a visit revision another
+    device has since bumped (it fired a group) is `visit.out_of_date`; a submit with a stale draft
+    revision (the owner saved again on another device) is `draft.out_of_date`. Neither writes
+    anything.
   - **Partial submission:** submitting the drinks only leaves the other lines in the open draft, in
     their positions.
+  - **Merging visits (D2):** when visit S merges into T, S's open drafts move to T; where Alex has
+    an open draft on both, S's lines are appended to Alex's draft on T, S's draft is `discarded`,
+    and `order_draft_events` records it. Nothing is lost and no person ends with two open drafts on
+    T.
   - **Unavailable (§10):** a draft line whose product became unavailable reads `unavailable: true`.
     Submitting it is `product.unavailable`, and nothing is written. Submitting only the unaffected
     lines succeeds, and the unavailable line stays in the draft. When availability returns, the
@@ -1057,15 +1407,17 @@ Spec §2 (the ordering home, last-added bar, the handheld Review screen, takeove
 
 ## Task 9: Current orders, served, and release reminders — slug `served-and-reminders`
 
-Spec §4 (Current orders, Served, no Collected state, reminders and snooze); §12 item 5; D11, D18.
+Spec §4 (Current orders, Served, no Collected state, reminders and snooze); §12 item 5; D8, D11,
+D18, D19.
 
 **Files:**
 - Modify:
   - `packages/db/src/schema/orders.ts` (`working_order_lines.served_quantity`, whose default is
     zero; `served_at` is set when the line is fully served), one core migration;
-  - a custom core migration widening `working_order_lines_require_open_parent_update` so that
-    `served_quantity` and `served_at` may change on a settled order (D18), read against lane C's
-    `0013_settled_order_freeze_new_columns.sql` and whatever M7b left;
+  - a custom core migration giving `working_order_lines_require_open_parent_update` its first
+    exception (D18): on a non-open order, an update may change only `served_quantity` and
+    `served_at`, with every other column of the line listed as unchanged, including Task 3's
+    `group_id` and `credited_to`;
   - `service_settings.release_reminder_minutes` (default 10, nullable; D17), one venue-service
     migration;
   - `apps/server/src/working-order.ts` (`markServed` and `unmarkServed` by line and quantity, and
@@ -1080,11 +1432,12 @@ Spec §4 (Current orders, Served, no Collected state, reminders and snooze); §1
 **Interfaces:**
 - Produces:
   ```ts
-  export async function markServed(tx, cfg, visitId: string, items: { lineId: string; quantity: string }[], operatorId: string): Promise<void>;
-  export async function unmarkServed(tx, cfg, visitId: string, items: { lineId: string; quantity: string }[], operatorId: string): Promise<void>;
-  export async function markGroupServed(tx, cfg, visitId: string, groupId: string, operatorId: string): Promise<void>;
+  export async function markServed(tx, cfg, visitId: string, items: { lineId: string; quantity: string }[], args: VisitCommandArgs): Promise<{ revision: number }>; // quantity served BY this command; never more than is unserved
+  export async function unmarkServed(tx, cfg, visitId: string, items: { lineId: string; quantity: string }[], args: VisitCommandArgs): Promise<{ revision: number }>;
+  export async function markGroupServed(tx, cfg, visitId: string, groupId: string, args: VisitCommandArgs): Promise<{ revision: number }>;
+  // VisitCommandArgs (Task 3): submissionId, expectedVisitRevision, operatorId. D8 replay first, then visit.out_of_date.
   export function releaseReminder(groups: OrderGroup[], lines: { groupId: string | null; quantity: string; servedQuantity: string; servedAt: string | null }[], minutes: number | null, now: Date): { groupId: string; dueAt: string | null } | null; // pure; D11; reads OrderGroup.remindAt
-  export async function snoozeReminder(tx, cfg, visitId: string, groupId: string, minutes: number): Promise<void>;
+  export async function snoozeReminder(tx, cfg, visitId: string, groupId: string, minutes: number, args: VisitCommandArgs): Promise<{ revision: number }>;
   ```
 
 - [ ] **Step 1: Write the failing tests:**
@@ -1095,9 +1448,19 @@ Spec §4 (Current orders, Served, no Collected state, reminders and snooze); §1
     - `markGroupServed` serves every line in the group, including lines split onto another bill
       of the visit;
     - a paper-only station's items go straight from fired to served, with no ready step required.
+  - **Retries and stale screens (Review Focus 2 and 3):**
+    - "serve 2 of Croquetas ×4" sent twice with one `submissionId` (the first reply lost) leaves
+      2 served, not 4;
+    - the same `submissionId` with quantity 3 is `submission.id_reused`, and nothing changes;
+    - device A reads the visit; device B moves a line into the group; A's `markGroupServed` with
+      the old revision is `visit.out_of_date`, and nothing is served; after re-reading it serves
+      every line, the moved one included;
+    - serving more than is unserved is refused (reuse the served-state code Step 0 finds).
   - **Served on a settled bill (D18):** a bill of the visit is paid while its Flan is unserved;
-    marking the Flan served succeeds, and its filed sale is unchanged. A change to any OTHER column
-    of that line is still refused by the trigger (control).
+    marking the Flan served succeeds, and its filed sale is unchanged. An update that sets
+    `served_at` AND changes `group_id` (or `credited_to`, or the price) in the same statement is
+    refused by the trigger, which proves those columns are on the list (an update of `group_id`
+    alone would be refused either way).
   - **Reminder (D11):** with the interval at 10 minutes, groups 1–2 fired and group 3 held:
     - group 1 fully served at 20:00 and group 2 at 20:05 makes group 3 due at 20:15;
     - with group 2 not fully served there is no timer (`dueAt` null), and the table shows the held
@@ -1124,8 +1487,8 @@ Spec §1 (the floor and counter landing views; signals that coexist; the station
 
 **Files:**
 - Modify:
-  - `visits.bill_requested_at` (a "Bill requested" action; cleared when the visit's bills are all
-    paid), one migration;
+  - `visits.bill_requested_at` (a "Bill requested" action; cleared when every bill of the visit's
+    FAMILY is paid, D2), one migration;
   - `listTablesWithState` returns a list of signals per table, not one status;
   - `apps/till/src/screens/till-floor-screen.ts` (the signals as coexisting chips);
   - `widgets/held-orders.ts` (the counter's tab list, showing the same signals, and tabs without a
@@ -1174,7 +1537,7 @@ Spec §1 (the floor and counter landing views; signals that coexist; the station
 
 ## Task 11: Cancellations, comps and discounts — slug `adjustments`
 
-Spec §7 (reasons, approval, the history); D4, D6, D15; §14.3's row on cancelling preparation
+Spec §7 (reasons, approval, the history); D4, D6, D15, D19, D20; spec §7 on cancelling preparation
 versus the charge. **It changes what an invoice charges; it lands on the automated fiscal gates
 (Global Constraints).**
 
@@ -1185,8 +1548,12 @@ versus the charge. **It changes what an invoice charges; it lands on the automat
       re-checks with a grep for deletes of `working_orders`);
     - `line_id` (a PLAIN id with no key, nullable for a bill-level discount; the column says a void
       deletes the line, and that an append-only row may not hold a key to it);
-    - a line snapshot (name, quantity, unit price);
-    - `reason_id`, `action`, `quantity`, `before_amount`, `after_amount`, `reduction`,
+    - a line snapshot: name, quantity, the pre-adjustment unit price (D21), and the line's
+      `credited_to` (D5), so a cancelled line can still be counted in the right person's sales;
+    - `reason_id` (kept for grouping), `reason_name` and `policy_snapshot` (D20: the name and the
+      evaluated policy as they were);
+    - `action`, `quantity`, `before_amount`, `after_amount`, `reduction` (the amount actually
+      achieved, D4),
       `nominal_value` (the list value of what was cancelled, which reports keep apart from the
       reduction);
     - `requested_by`, `approved_by` (nullable), `note`;
@@ -1198,14 +1565,19 @@ versus the charge. **It changes what an invoice charges; it lands on the automat
   `apps/server/src/adjustments-apply.ts`, which calls the module's evaluator and recorder and the
   order functions.
 - Modify:
-  - `packages/db/src/schema/orders.ts` (`working_order_lines.list_unit_price_gross`, D4; a plain
-    `ADD COLUMN`);
+  - `packages/db/src/schema/orders.ts` (`working_order_lines.list_unit_price_gross`, D4 and D21; a
+    plain `ADD COLUMN`), set on every line the first time any adjustment touches it; if Task 9 has
+    landed, a custom migration adds it to Task 9's unchanged-column list (D18); if not, Task 9 lists
+    it with every other column;
   - `apps/server/src/working-order.ts`:
     - a void takes a reason and records an adjustment;
     - a comp sets the price to zero and keeps the list price;
     - a line discount lowers the locked price by D4;
     - a bill discount spreads by D15;
-    - each path splits a line where D4 requires it;
+    - each path splits a line where D4 requires it, and every split row inherits the source line's
+      `group_id`, `credited_to` and `list_unit_price_gross`;
+    - a cancel or a split that leaves a held group empty marks it `removed`, and each of these bumps
+      the visit's revision (D19);
   - the receipt layout (a comped line prints its list price and €0.00);
   - the routes;
   - the till's table screen: Cancel, Comp and Discount actions with a reason picker, a note, and
@@ -1215,9 +1587,10 @@ versus the charge. **It changes what an invoice charges; it lands on the automat
 - Consumes: `evaluateAdjustment` and `roleAtLeast` (Task 1).
 - Produces:
   ```ts
-  export function spreadBillDiscount(lines: { lineId: string; addedOrder: number; gross: Decimal; weighed: boolean }[], discount: Decimal): Map<string, Decimal>; // D15, pure; weighed lines take no share
-  export async function applyAdjustment(tx, cfg, args: { orderId: string; lineId: string | null; reasonId: string; action: AdjustmentAction; quantity?: string; percentBp?: number; amount?: Decimal; note: string | null; operatorId: string; approver?: { personId: string; pin: string } }): Promise<{ adjustmentIds: string[] }>;
-  // refusals: adjustment.* (Task 1), authorization.not_permitted, pin.invalid, working_order.out_of_date, order.payment_in_flight
+  export function spreadBillDiscount(lines: { lineId: string; addedOrder: number; gross: Decimal; quantity: string; weighed: boolean; grossUnit: Decimal }[], discount: Decimal): Map<string, { newGrossUnit: Decimal; reduction: Decimal }>; // D15 then D4, pure; adjustment.exceeds_amount
+  export function nearestWeighedUnitPrice(grossUnit: Decimal, quantity: string, targetGross: Decimal): Decimal; // D4, pure: the whole-cent unit price whose rounded line total is nearest the target; a tie takes the higher total; among prices giving that total, the highest
+  export async function applyAdjustment(tx, cfg, args: { orderId: string; submissionId: string; expectedRevision: number; lineId: string | null; reasonId: string; action: AdjustmentAction; quantity?: string; percentBp?: number; amount?: Decimal; note: string | null; operatorId: string; approver?: { personId: string; pin: string } }): Promise<{ adjustmentIds: string[]; revision: number }>;
+  // runs through runServiceCommand with the bill scope (D8); refusals: submission.id_reused, adjustment.* (Task 1, plus adjustment.exceeds_amount and adjustment.approval_required), pin.invalid, working_order.out_of_date (expectedRevision, D19), order.payment_in_flight
   ```
 
 - [ ] **Step 0: Re-map** `voidTabLine`, M7b's kitchen notices and editing rules, M7v's per-line VAT,
@@ -1237,9 +1610,47 @@ versus the charge. **It changes what an invoice charges; it lands on the automat
     €3.00.
   - **Whole cents per unit (D4):** 10% off Croquetas ×3 at €3.33 (€9.99). The reduction is €1.00
     and the line becomes 2 × €3.00 and 1 × €2.99 (€8.99). The filed sale's lines, rebuilt from
-    unit price × quantity, sum to €8.99. A line discount on a weighed line (0.333 kg) is
-    `adjustment.action_not_allowed`.
-  - **Bill discount (Review Focus 4):** €5.00 across line 1 €3.33 (10% VAT), line 2 €3.33 (10%)
+    unit price × quantity, sum to €8.99.
+  - **Weighed lines (D4):**
+    - 10% off 0.333 kg of ham at €24.00/kg (line €7.99): the reduction €0.80 (0.799 half up) makes
+      the target €7.19. €21.58, €21.59 and €21.60/kg all give €7.19; the new unit price is €21.60,
+      the highest (€21.61 gives €7.20), exact;
+    - 10% off 2.5 kg of fish at €12.99/kg (line €32.48; 2.5 × 12.99 = 32.475 rounds half up): the
+      reduction is €3.25 and the target €29.23. €11.69/kg gives €29.23 (29.225 rounds up), exact;
+    - on the same 2.5 kg, a target of €29.21 (a €3.27 discount) is reached by no whole-cent price:
+      €11.68/kg gives €29.20 and €11.69/kg gives €29.23, so the nearest, €29.20, is used, and the
+      adjustment records €3.28 achieved;
+    - a target of €29.24 (€3.24 asked) ties between €29.23 and €29.25; the tie rule takes the
+      higher total, €29.25 at €11.70/kg, and records €3.23 achieved;
+    - `nearestWeighedUnitPrice` is tested directly over a table of weights and targets, including
+      a tie.
+  - **Too large (D4):** a €40.00 discount on a €30.00 line, and a €150.00 bill discount on a
+    €120.00 bill, are each `adjustment.exceeds_amount`, and nothing changes.
+  - **Bill discount with a weighed line (D15):** €5.00 across a €10.00 discrete line and 2.5 kg of
+    fish at €12.99/kg (€32.48), a bill of €42.48:
+    - the shares round down to €1.17 and €3.82 (€4.99), and the leftover cent goes to the larger
+      remainder, the discrete line: €1.18 and €3.82;
+    - the fish's target, €28.66, is reached by no whole-cent price: €11.46/kg gives €28.65 and
+      €11.47/kg gives €28.68, so €28.65 is used and the fish takes €3.83, one cent MORE than its
+      share;
+    - that cent is taken back from the discrete line's share, which becomes €1.17;
+    - the bill drops by exactly €5.00 (€1.17 + €3.83);
+    - on a bill of only weighed lines, the till shows and the adjustment records the total
+      actually achieved;
+    - a discrete line whose share is €0.00 never takes a cent back (its price never rises).
+  - **When the other lines have room, and when they do not (spec §7, §12 item 10):**
+    - 2.5 kg of fish at €12.99/kg (€32.48) and bread €2.50, €3.27 off: the shares are €3.04 and
+      €0.23; the fish's target €29.44 is reached by no price (€11.77/kg gives €29.43, €11.78/kg
+      gives €29.45), the tie takes the higher total, €29.45, so the fish takes €3.03, one cent
+      short; the bread has room and takes €0.24; the bill drops by exactly €3.27;
+    - the same fish beside a comped water (€0.00), €3.24 off: all €3.24 falls on the fish, whose
+      target €29.24 ties and takes €29.25, so it takes €3.23; the water has no room to take the
+      missing cent, and the adjustment records €3.23, which the till showed before confirming;
+    - the same bill, €3.27 off: the fish's target €29.21 is nearest €29.20, so it takes €3.28; the
+      water's share is €0.00, so it cannot give the cent back, and the adjustment records €3.28;
+    - control: a spreading that forced exactness would push the water to −€0.01 or +€0.01, which
+      both the no-negative rule and the "price never rises" rule refuse.
+  - **Bill discount (Review Focus 5):** €5.00 across line 1 €3.33 (10% VAT), line 2 €3.33 (10%)
     and line 3 €3.34 (21%), each quantity 1.
     - D15 gives €1.66, €1.66 and €1.67 rounded down (€4.99).
     - The leftover cent goes to the largest remainder; lines 1 and 2 tie at €0.005 each, so it
@@ -1250,11 +1661,23 @@ versus the charge. **It changes what an invoice charges; it lands on the automat
     - A second run gives the same shares.
   - **Approval (D6):**
     - a staff member's comp under "Complaint" (`apply_role supervisor`) with no approver is
-      `authorization.not_permitted`, and nothing changes;
+      `adjustment.approval_required` naming `manager` (the reason's `approver_role`), and nothing
+      changes;
     - with a manager's id and PIN it applies, the adjustment records `requested_by` = the waiter
       and `approved_by` = the manager, and the waiter's session is still valid;
-    - a staff member as approver is `authorization.not_permitted`;
+    - a staff member as approver is `adjustment.approval_required`;
     - a wrong PIN is `pin.invalid`.
+  - **Retries (D8):** an adjustment resent with its `submissionId` after a lost reply applies once;
+    the same id with another amount is `submission.id_reused`.
+  - **Split rows and groups (D19):** comping 1 of Steak ×2 in a held group leaves both rows in the
+    group, both credited to the original line's person, and bumps the visit's revision; cancelling
+    the only line of a held group marks the group `removed`.
+  - **The reason as it was (D20):** apply a comp under "Complaint" (limit €30.00). Rename the reason
+    to "Guest recovery" and raise its limit to €50.00. The first adjustment's drill-down still shows
+    "Complaint" and the €30.00 policy it was approved under. A new adjustment shows "Guest
+    recovery" and €50.00. Both group under the same `reason_id`.
+  - **A stale bill (D19):** device A reads the bill (revision n); device B adds a round to it; A's
+    discount with n is `working_order.out_of_date`, and nothing changes.
   - **Cumulative limits (D6):** three €12.00 comps under a €30.00 cap: the third is
     `adjustment.over_limit`. Two 30% discounts on one line under a 50% limit: the second is
     `adjustment.over_limit`.
@@ -1265,7 +1688,7 @@ versus the charge. **It changes what an invoice charges; it lands on the automat
       line row is gone the snapshot still reads "Steak, 1, €25.00";
     - cancelling a line already comped records reduction €0.00 and nominal value €25.00, so the
       reduction is never counted twice.
-  - **Order rules:** each adjustment bumps the order's `revision`. With `payment_attempt_at` set,
+  - **Order rules:** each adjustment bumps the bill's `revision`. With `payment_attempt_at` set,
     it is `order.payment_in_flight`.
   - **After payment:** an adjustment on a settled bill is refused. The spec says an issued invoice
     is corrected, not edited: grep for the code the correction path uses and reuse it.
@@ -1291,26 +1714,44 @@ Spec §7 "Make adjustments reviewable".
   - the actions before firing, after firing and after serving, separated;
   - requester and approver shown apart;
   - guest actions in their own row (always empty until guest ordering exists);
-  - the rate (reductions ÷ that person's sales value);
+  - the rate: reductions ÷ that person's credited sales at pre-adjustment prices (D21);
   - the nominal value of cancelled items apart from the financial reduction;
   - drill-down to each adjustment.
 
-- [ ] **Step 1: Write the failing tests.** The fixture day (the values are chosen so that a report
-  mixing up nominal value and reduction gives a different number):
-  - Alex, sales €800.00:
-    - comps a €12.00 Burger (approved by Mia);
-    - then cancels that comped Burger (nominal €12.00, reduction €0.00);
-    - cancels a fired €25.00 Steak (nominal €25.00, reduction €25.00).
-  - Sam, sales €200.00: a €3.00 discount.
+- [ ] **Step 1: Write the failing tests.**
+  - **Whose sales (D21, spec §7).** One visit:
+    - Alex submits his own draft: Burger €12.00 and Steak €25.00 (credited to Alex);
+    - Sam drafts Wine €30.00; Mia takes over Sam's draft and submits it (credited to Mia, D5);
+    - Jo takes the final payment, so the invoice's operator is Jo;
+    - Alex comps his own Burger (€12.00).
 
-  Expected:
-  - Alex's row: 3 actions, total reduction €37.00 (comp €12.00 + cancellations €25.00), rate
-    4.6%, and one approved by Mia.
-  - Alex's cancellations: nominal €37.00 shown apart from their reduction of €25.00.
-  - Sam's row: rate 1.5%.
-  - The comped-then-cancelled Burger's €12.00 is counted once, under the comp.
-  - A kitchen cancellation never appears as a voided invoice.
-  - The drill-down lists Alex's three rows with reason, note and times.
+    Expected: Alex's sales are €37.00, with the comped Burger still counted at €12.00; Mia's are
+    €30.00; Sam's and Jo's are €0.00. Alex's rate is €12.00 ÷ €37.00 = 32.4%. Controls: moving the
+    credit to the invoice operator would give Jo €67.00 and Alex nothing, and dropping comped lines
+    from the denominator would give Alex €25.00 and a rate of 48.0%. The test asserts the expected
+    figures, so either wrong reading fails.
+  - **Credit versus actor (D21)**, extending the "Whose sales" fixture above (Mia credited with the
+    €30.00 Wine), with Alex's Burger comp left out: Mia cancels Alex's fired Steak (€25.00). Alex's sales still
+    include the Steak at €25.00, read from the adjustment's snapshot after the line is gone; the
+    €25.00 reduction counts against Mia, the actor. Mia's own credited sales that day are her
+    €30.00 of Wine, so her rate is €25.00 ÷ €30.00 = 83.3%. A report that used `requested_by` as the
+    credit would move the Steak out of Alex's sales and fail.
+  - **The fixture day** (the values are chosen so that a report mixing up nominal value and
+    reduction gives a different number):
+    - Alex, credited sales €800.00 (before adjustments):
+      - comps a €12.00 Burger (approved by Mia);
+      - then cancels that comped Burger (nominal €12.00, reduction €0.00);
+      - cancels a fired €25.00 Steak (nominal €25.00, reduction €25.00).
+    - Sam, credited sales €200.00: a €3.00 discount.
+
+    Expected:
+    - Alex's row: 3 actions, total reduction €37.00 (comp €12.00 + cancellations €25.00), rate
+      4.6%, and one approved by Mia.
+    - Alex's cancellations: nominal €37.00 shown apart from their reduction of €25.00.
+    - Sam's row: rate 1.5%.
+    - The comped-then-cancelled Burger's €12.00 is counted once, under the comp.
+    - A kitchen cancellation never appears as a voided invoice.
+    - The drill-down lists Alex's three rows with reason (as snapshotted, D20), note and times.
   - Browser: the table, the drill-down, and axe in both themes.
 
   Run them: they FAIL.
@@ -1379,11 +1820,11 @@ design. The tests below are the minimum it must contain whatever the design deci
   - **The steak (§12 item 8):** after €105.00 of contributions on €120.00, a €25.00 steak is chosen
     and €15.00 remains. The payment preview offers exactly two choices: pay €25.00 with a €10.00
     tip, or pay €15.00 using €10.00 of the earlier contribution. Earlier tips are never consumed.
-  - **Equal shares (D16, Review Focus 4):** €100.01 across 3 gives €33.34, €33.34 and €33.33, and
+  - **Equal shares (D16, Review Focus 5):** €100.01 across 3 gives €33.34, €33.34 and €33.33, and
     the three payments settle the bill exactly.
   - **Item already paid:** an item-specific payment for the Steak, then a second item-specific
     payment naming the Steak, is refused (code from the design).
-  - **Split after a contribution (the owner's example, spec §14.1 decision 3):**
+  - **Split after a contribution (the owner's example, spec §6):**
     - €120.00 with €50.00 contributed;
     - move two lines (€30.00) to a new bill, pay €30.00, and its invoice is issued at once;
     - the original bill now owes €40.00 with the €50.00 still applied;
@@ -1399,8 +1840,12 @@ design. The tests below are the minimum it must contain whatever the design deci
   - **A reduction after contributions:** a €60.00 bill with €50.00 contributed takes a €20.00 comp.
     The €10.00 received beyond the new €40.00 is handled as the design decided, and it is never
     recorded as a tip.
-  - **Concurrency:** whatever the design decides for two devices, tested with the concurrency
-    harness, with the refusal code asserted.
+  - **Several devices:** whatever the design decides (its §5.2), each race tested in BOTH orders as
+    sequential calls (Global Constraints; there is no general concurrency harness), with the
+    refusal code asserted.
+  - **An id reused for a different request (D8):** a payment `submission_id` resent with a changed
+    amount, with other lines named, or on a refund instead of a payment is `submission.id_reused`,
+    and nothing is written.
 
   Run them: they FAIL.
 - [ ] **Step 2: Implement.** Step 3: run `apps/server`, `packages/core`, `packages/payments*` and
@@ -1433,28 +1878,60 @@ Spec §6 on screen; the approved design's screen section.
 ## Task 16: Counter service — paid and not yet handed over — slug `counter-handover`
 
 Spec §5 (counter): Pay is the primary action; Send without payment is a venue option; paid but
-unfulfilled tabs stay listed until handed over; payment and handover in either order.
+unfulfilled orders stay listed until handed over; payment and handover in either order.
+
+**Why a trigger changes.** Today `markCollected` refuses any order that is not `settled`
+(`working_order.not_settled`), and `working_orders_enforce_transition` lets a `placed` order become
+only `settled` or `abandoned`, so stamping `collected_at` on a placed order is refused twice: by the
+code and by the database (read in both places on `main` at `72e7e65fb`).
 
 **Files:**
+- Create: a custom core migration that drops and recreates `working_orders_enforce_transition`,
+  written against the column list as it stands after lane C's
+  `0015_settled_order_freeze_new_columns.sql` and Task 2's `visit_id`. It adds ONE narrow exception
+  beside the existing settled one: `old.status = 'placed' AND new.status = 'placed'` with
+  `old.collected_at IS NULL AND new.collected_at IS NOT NULL`, and every other listed column
+  unchanged (`IS old.…`). The settled exception stays as it is.
 - Modify:
-  - `apps/server/src/working-order.ts` (`markCollected` accepts a placed order in a venue using
-    Send without payment, so handover before payment is recorded, and the order stays on the list
-    until paid);
-  - the counter's tab list (paid-not-handed-over and handed-over-not-paid signals, from Task 10's
-    signals);
+  - `apps/server/src/working-order.ts`: `markCollected` takes a `submissionId` and runs through
+    `runServiceCommand` with the bill scope (D8), and accepts a `placed` order that has fired work
+    in a venue using Send without payment, as well as a settled one; payment of a placed order that
+    is already collected settles it without firing anything again;
+  - the transition trigger's tests (`scripts/behavioural-triggers.test.ts` and the db package's
+    schema tests that pin the trigger);
+  - the counter's order list (paid-not-handed-over and handed-over-not-paid signals, from Task 10);
   - the till's counter screen (Pay primary; Send without payment only when the venue enables it,
-    reusing the existing `ticket_then_pay` or `invoice_first` flows; re-map which setting governs).
+    reusing the existing `ticket_then_pay` or `invoice_first` flows; Step 0 reads which setting
+    governs).
 
+- [ ] **Step 0: Re-map** `markCollected`, `placeOrder`, `collectOrder`, `sendToPrep` and the
+  transition trigger as lane C left them. List the trigger's current column list verbatim in the
+  ledger.
 - [ ] **Step 1: Write the failing tests:**
-  - Prepay: a paid order stays listed as "Paid, not handed over" until handover, and handover
-    removes it.
-  - Paying already-sent work never fires it again (the ticket count is unchanged).
-  - Send without payment: handover first, then payment. Both recorded, listed until both are done.
-  - Completed orders stay reachable in history.
-  - Browser: the counter list and axe.
+  - **Handover before payment:** a placed, fired order in a Send-without-payment venue is handed
+    over: its status stays `placed` and only `collected_at` changed (compare the whole row before
+    and after).
+  - **The trigger is narrow:** a direct update of a placed order that sets `collected_at` AND
+    changes `label` in the same statement is refused by the trigger; so is one that changes
+    `collected_at` from one timestamp to another. A settled order's handover still works as today.
+  - **Retries (D8):** a handover resent with its `submissionId` after a lost reply returns the
+    first result (bill scope, since a counter order has no visit), not
+    `working_order.already_collected`; a NEW handover request on a collected order is.
+  - **Refusals:** a second handover is `working_order.already_collected`; handing over an OPEN order
+    is refused with `working_order.not_settled` or the code Step 0 finds for it; a placed order
+    with no fired work is `ticket.not_fired`.
+  - **Pay later:** paying the handed-over order settles it and issues its invoice exactly once, and
+    the kitchen ticket count is unchanged (no second fire).
+  - **Both orders of events:** payment then handover, and handover then payment, each end with the
+    same recorded facts: `settled`, one sale, `collected_at` set, the same tickets.
+  - **Prepay:** a paid order stays listed as "Paid, not handed over" until handover, which removes
+    it. Paying already-sent work never fires it again.
+  - **History:** completed orders stay reachable.
+  - **Browser:** the counter list and axe.
 
   Run them: they FAIL.
-- [ ] **Step 2: Implement.** Step 3: run the tests. LOOK. Commit, then `/finish-branch`.
+- [ ] **Step 2: Implement.** Step 3: run the tests, including the root trigger guard. LOOK. Commit,
+  then `/finish-branch`.
 
 ---
 
@@ -1507,9 +1984,15 @@ the task's own PR wherever the task makes it stale. **The last task to land** al
     task's direct route tests, and Review Focus 1 and 2), 14 (every screen task). Item 12 is
     inventory, which is out of scope.
 - **Interfaces used across tasks:**
-  - `OrderGroup` (with `remindAt`), `GroupRelease` and `SubmitGroupsInput` come from Task 3; Tasks
-    4, 7 and 9 use them. Group functions take a `visitId` and line ids, and every quantity is a
-    string.
+  - `checkAndBumpVisit`, `runServiceCommand` and `service_commands` come from Task 2; Tasks 3, 5, 7,
+    9, 11 and 16 write through them.
+  - `OrderGroup` (with `remindAt`), `GroupRelease`, `SubmitGroupsInput` and `VisitCommandArgs`
+    come from Task 3; Tasks 4, 5, 7 and 9 use them. Group functions take a `visitId` and line ids,
+    and every quantity is a string.
+  - `working_order_lines.credited_to` comes from Task 3; Task 7 sets it from the draft's owner and
+    Task 12 reads it.
+  - `applyAdjustment` takes the bill's `expectedRevision` (Task 11); served and group commands take
+    `expectedVisitRevision` (Tasks 3, 9).
   - `seatTable` and `VisitBill` come from Task 2; Tasks 10, 14 and 17 use them.
   - `evaluateAdjustment`, `AdjustmentAction` and `roleAtLeast` come from Task 1; Task 11 uses
     them, keyed by line id.

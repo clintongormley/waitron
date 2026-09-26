@@ -2233,7 +2233,8 @@ address that answers is then asked for its paper sizes on port 631.
 ### A4. Till, displays and devices
 
 - **Service, ordering and billing: planned and queued on lane B (2026-09-26).**
-  [Design](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) (§14 records the
+  [Design](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) (Revision 2, awaiting
+  the owner's review, with lane B paused until it is approved; §14 records the
   owner's decisions of 2026-09-26, what a review against the code found missing, and what the menus
   work superseded); [plan](superpowers/plans/2026-09-26-service-ordering-and-billing.md), eighteen
   tasks. Two start now: the payment and billing design (Task 0), and adjustment reasons and policies

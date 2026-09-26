@@ -9,7 +9,7 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-Last revised **2026-09-26** — Q27 (money taken against a bill before its invoice exists, then a split) and Q28 (a table leaves without paying: is the invoice still owed?) added beside Q21 and Q15, from the service design's §14. Earlier the same day, Q26 updated: the rule it asks about is now built, and the question
+Last revised **2026-09-26** — Q29 (how a discount or comp appears on a simplified invoice) added. Earlier the same day, Q27 (money taken against a bill before its invoice exists, then a split) and Q28 (a table leaves without paying: is the invoice still owed?) added beside Q21 and Q15, from the service design's §14. Earlier the same day, Q26 updated: the rule it asks about is now built, and the question
 stays open. Before that, **2026-09-25** — Q26 (a VAT change while an order is open: we apply the rate in force
 when the invoice is issued — is that right?) added beside Q25, and later the same day reworded from
 "at payment" to "when the invoice is issued", naming the invoice-first case. Before that, **2026-09-24** — Q25 (a void made on a later day: which VAT period the annulment lands
@@ -611,7 +611,7 @@ cents, the cash never matches the invoice exactly.
 
 **Why it matters.** The owner decided on 2026-09-26 that a table's bill is invoiced when it is
 fully paid, and that paying must be flexible
-([service design §14.1](../superpowers/specs/2026-09-20-service-ordering-and-billing-design.md#141-decisions-owner-2026-09-26),
+([service design §6](../superpowers/specs/2026-09-20-service-ordering-and-billing-design.md#6-take-contributions-without-consuming-somebody-elses-tip),
 decision 3). The case that needs an answer:
 
 - A table's bill is €120. One guest hands over €50 "towards the bill". No invoice exists yet.
@@ -666,6 +666,48 @@ answered.
 > **(b)** Si se cobra más tarde (en todo o en parte), ¿basta con registrar el cobro contra esa
 > factura? Si no se cobra nunca, ¿el único cauce para recuperar el IVA es la modificación de la base
 > imponible por créditos incobrables (artículo 80.Cuatro de la Ley del IVA)?
+
+---
+
+### Q29. How a discount or comp appears on a simplified invoice (added 2026-09-26)
+
+**Why it matters.** Q15 (closed) settled that a reduction agreed before the invoice is issued is a
+*descuento* and stays out of the taxable base. It did not settle how the reduction is SHOWN. The
+owner decided on 2026-09-26
+([service design §7](../superpowers/specs/2026-09-20-service-ordering-and-billing-design.md#7-resolve-complaints-without-erasing-what-happened))
+that:
+
+- a discount lowers the line's own price, so the invoice shows the reduced price and no separate
+  discount line;
+- a whole-bill discount is shared across the lines in proportion, so each VAT rate's taxable amount
+  drops by its lines' share;
+- a comp (an item given free) appears as its own line at €0.00, beside its original price;
+- an item sold by weight takes a discount by lowering its per-kilo price to a whole cent, so on a
+  heavy item the discount actually applied can differ from the one agreed by a few cents (up to
+  1 cent up to 3 kg, 2 cents up to 5 kg, 5 cents at 10 kg). A whole-bill discount can miss in the
+  same way when the bill's other items cannot absorb the difference (for example, when the only
+  other item is one given free). The invoice shows what was actually charged, and staff see it
+  before confirming.
+
+> **(a)** En una factura simplificada, ¿es correcto reflejar un descuento concedido antes de la
+> expedición reduciendo directamente el precio unitario de la línea afectada, sin una línea de
+> descuento separada? ¿O debe figurar el descuento de forma expresa?
+>
+> **(b)** Cuando el descuento se aplica al total de la cuenta, ¿es correcto repartirlo entre las
+> líneas en proporción a su importe, de modo que la base imponible de cada tipo de IVA se reduzca en
+> la parte correspondiente?
+>
+> **(c)** Una consumición invitada por el establecimiento, ¿puede figurar en la factura como línea con
+> importe cero (indicando el precio habitual a título informativo), o debe omitirse? ¿Tiene alguna
+> consecuencia en el IVA (por ejemplo, como autoconsumo) que el establecimiento entregue esa
+> consumición sin contraprestación?
+>
+> **(d)** En productos vendidos al peso, si el descuento acordado se aplica redondeando el precio por
+> kilo al céntimo, de modo que el importe descontado puede diferir en algunos céntimos del acordado
+> (hasta 2 céntimos en una pieza de 3 a 5 kg, 5 céntimos en una de 10 kg) — también en un descuento
+> sobre el total de la cuenta, cuando las demás líneas no pueden absorber esa diferencia —, ¿basta
+> con que la factura refleje el importe efectivamente cobrado, que el personal confirma antes de
+> aplicarlo?
 
 ---
 
