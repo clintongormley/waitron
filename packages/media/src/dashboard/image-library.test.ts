@@ -152,7 +152,8 @@ it.each(["menu_publications", "menu_version_images"])(
   },
 );
 
-// The library's reads name neither, so a change to one alone leaves the library as it is.
+// The library's live read (listImages, listLabels) names neither; only the delete dialog's one-off
+// getImage does, and it is not refreshed live.
 it.each(["menu_versions", "catalogues"])(
   "does not refresh the library when %s changes",
   async (type) => {
