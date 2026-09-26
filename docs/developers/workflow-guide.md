@@ -87,8 +87,7 @@ HTTP listeners do not advertise the appliance's `waitron.local` name. On 2026-09
 while the dashboard reported refused connections. After the laptop server stopped, the same probe
 returned only the box. `apps/server/src/mdns.test.ts` covers the advertisement guard, and
 `apps/server/src/boot.test.ts` checks a development HTTP listener still serves requests without
-logging `mdns.responding`. Full probe record:
-[printer setup incident](../superpowers/specs/2026-09-16-printer-setup-refinements.md).
+logging `mdns.responding`. The guard landed in #380.
 
 **The dev stack from a worktree is started with `wa-wt demo <worktree-name>` or
 `wa-wt onboarding <worktree-name>`** (`~/workspace/tools`),
@@ -253,5 +252,7 @@ repository carries no Codex file: the seat script passes the model, the effort, 
 (`CLAUDE.md` exceeds Codex's default and would be silently truncated), the sandbox's network switch
 (the Docker socket and DNS are closed by default; measured 2026-09-05) and the fallback that makes
 Codex read `CLAUDE.md` when there is no `AGENTS.md` (measured 2026-09-06, with a control). The
-seat-by-seat probe that informed the Codex seat is
-`docs/superpowers/specs/2026-09-05-model-seats-experiment.md`.
+probe that informed the Codex seat (2026-09-05, #242) planted three defects in one file and gave
+Fable, Opus and `gpt-6-astra` the same run-it brief: all three found every planted defect and
+refused the merge, and Astra took 14 minutes to their 5.5 but was billed to the ChatGPT plan, not
+to Claude.

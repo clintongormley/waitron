@@ -226,8 +226,8 @@ D6, D9, D10, D11, D14 and D21, Task 1 Step 4, and Tasks 3, 6, 7, 8 and 9.
 ## Task 3 wipes existing venues; every migrating task measures
 
 Task 3 rebuilds `menu_items` and drops the old `menu_sections`, which other rows point at. The variants plan measured the
-same kind of rebuild in the same tree (`docs/superpowers/plans/2026-09-23-variants-as-products.md`,
-"Task 1 cannot upgrade an existing venue"): a drizzle rebuild runs with foreign keys ON inside the
+same kind of rebuild in the same tree (#511 and #532; the measurements are in
+`docs/developers/conventions-data.md`): a drizzle rebuild runs with foreign keys ON inside the
 migrator's transaction. That empties cascading children silently, and it fails outright on a child
 with no delete rule that holds rows. A media trigger naming the rebuilt table also aborts the rename.
 

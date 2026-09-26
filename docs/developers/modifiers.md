@@ -330,9 +330,9 @@ Six things it is worth knowing about that payload:
   except the names, which are always the variant's own. The two declaration fields take the names
   a CHILD LINE uses on the kitchen and expo screens — `addAllergens` and `suitableFor`, the field
   names `readQueueSubItems` (`apps/server/src/working-order.ts`) hands those screens — because a
-  pick is what becomes such a line. That kitchen read takes the product's RAW columns until Task 5
-  of `docs/superpowers/plans/2026-09-23-variants-as-products.md`, so an extra that is a variant
-  inheriting its parent's declarations shows none there. Shown beside the dish's own, never folded
+  pick is what becomes such a line. That kitchen read took the product's RAW columns until #537
+  (variants Task 5), so before it an extra that is a variant inheriting its parent's declarations
+  showed none there. Shown beside the dish's own, never folded
   into them (spec §3.4).
 
 ## On the filed sale

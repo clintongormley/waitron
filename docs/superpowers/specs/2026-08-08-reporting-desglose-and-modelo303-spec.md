@@ -258,8 +258,7 @@ harness for the cases PGlite cannot show (`useRealPostgres` + `startRealPostgres
 > included. The seam forwards unchanged — its whole body is `return usePgliteDb(options)`
 > (`packages/db/src/testing/venue-db.ts`) — so the target, the options and the per-test reset this
 > paragraph chose are all the same; the rename exists so the coming SQLite switch replaces one body
-> rather than every call site (plan task P2 step 5,
-> `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`).
+> rather than every call site (plan task P2 step 5, #421).
 >
 > The rest of the paragraph is stale for reasons this rollout did not cause and has not repaired,
 > named so nobody follows it, and the first of them is stated three times rather than once: besides

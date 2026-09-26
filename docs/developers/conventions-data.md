@@ -65,7 +65,7 @@ declaring home per word: a fiscal term goes in `FISCAL_VOCABULARY` (`packages/fi
 labour term in `WORKFORCE_ES_VOCABULARY` (`packages/workforce-es`), never the base list — the suite
 fails on a clash. `apps/*`
 is out of scope by a recorded decision, so Spanish IDENTIFIERS in app UI code are caught only by
-review. Design: `docs/superpowers/specs/2026-09-05-module-sp3b-vocabulary-design.md`.
+review. Designed and built in #240.
 
 **Module and package boundaries**
 
@@ -81,8 +81,7 @@ entry carrying its deferral reason — shrink that list in `fiscal-none`, never 
 per-node seed runs INSIDE `applyVenue`'s one transaction: a seed that throws rolls the venue back.
 Cost of the old shape: the generic venue runner, the node runner, the standby reservation and
 establishment, and the till's backend construction imported the Spanish regime directly, and
-`fiscal-none` could not land. Design:
-`docs/superpowers/specs/2026-09-05-module-sp3c-gated-provisioning-design.md`. On the browser side
+`fiscal-none` could not land. Designed and built in #245. On the browser side
 `@waitron/dashboard-modules` is the composition list's twin — the one place that names every
 UI-bearing module (guarded by `module-seams` + `dashboard-browser-purity`), so `apps/dashboard`
 mounts modules without naming one, exactly as generic provisioning does not.
@@ -114,8 +113,8 @@ pnpm links a `bin` while it INSTALLS and skips one whose target is missing, and 
 at install time, so a `bin` under `dist/` is never linked by the install that reads it. Every CLI is
 run by path anyway (`node /app/bin-restore.js` in the image). Cost: repeated `Failed to create bin`
 warnings on every install, in every worktree and in the image build, plus an AEAT runbook whose
-`pnpm --filter … exec waitron-credentials` steps could never have run; the measurements are in that
-runbook's dated note (`docs/superpowers/plans/2026-07-28-first-aeat-submission.md`, Task 3). Guards:
+`pnpm --filter … exec waitron-credentials` steps could never have run; the measurement, taken both
+ways, is in #326's commit message. Guards:
 `scripts/manifest-commands.test.ts` (a declared `bin` target must be tracked by git; a
 `waitron.commands` target must be the outfile of an `<entry>=<outfile>` pair its own package's
 `build` script hands to `scripts/bundle-node.mjs`, which is a text match) and
@@ -162,8 +161,7 @@ vocabulary…) and is named only by `@waitron/composition`; generic code never l
 of the other shape: a whole regime wired straight into `apps/server`, the till backend and the venue
 runners, so `fiscal-none` could not be added until SP-3 pulled it back behind the slot — after which
 the no-op regime was a package with an empty runtime duty and `apps/server` imported no regime at all
-(`fiscal-none`, this branch; design `docs/superpowers/specs/2026-09-06-module-fiscal-none-design.md`,
-SP-3).
+(`fiscal-none`, designed and built in #262).
 
 ## A country pack is a browser-safe preset over modules, not a module
 
@@ -171,8 +169,8 @@ Generic contracts live in `@waitron/country`; each country owns its validation a
 separate package; and `@waitron/country-packs` is the only package that names every installed
 country implementation. Packs name module and fiscal contribution ids as strings and never carry an
 external-provider credential. Setup derives geography-dependent values in the browser and repeats the
-derivation at the server boundary. Guarded by `scripts/module-seams.test.ts`; design:
-`docs/superpowers/specs/2026-09-09-country-packs-and-address-entry-design.md`.
+derivation at the server boundary. Guarded by `scripts/module-seams.test.ts`; designed and built in
+#292.
 
 ## `packages/db/src/schema/columns.ts` is the only file that names the engine's column and table types
 
@@ -182,7 +180,7 @@ calls `integer(…)`, `text(…)` or `sqliteTable(…)` straight from `drizzle-o
 where the vocabulary itself imports from now. That import line is also what the guard derives its
 forbidden set from, so the list moves when the vocabulary's does. Task F1 is what the rule bought:
 the switch replaced the bodies in that one file rather than every column declaration in the tree
-(`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`, task P1).
+(the vocabulary landed in #390, the switch in #489).
 
 What it cost: fourteen pull requests, #393 through #414, most of them one package at a time. Each
 conversion proved "no schema change" the same way — generate that package's migrations into a copy
@@ -358,8 +356,7 @@ makes the distinction for us any more.
 
 ## A money column holds a count of whole cents, and the conversion happens at the row
 
-Landed 2026-09-20 as task P5 of the SQLite storage swap
-(`docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md`). EVERY column declared through
+Landed 2026-09-20 as task P5 of the SQLite storage swap (#475). EVERY column declared through
 `money()` stopped being `numeric(12, 2)` and became an integer counting cents: the storage engine
 the vocabulary exists to switch to has no exact decimal type, and a float cannot hold a cent
 exactly. The property is the rule, not a number — the set grows, and a number written here would be
@@ -480,19 +477,10 @@ true when written; they were not rewritten.
 
 The documents corrected in place are named here rather than described as a class, because the
 class was not swept: `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`'s
-conventions block, `docs/superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md` and
+conventions block and
 `docs/superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md` where they tell a future
 session what a money column is or what a package contains, and this file plus `CLAUDE.md` §3,
 which carry the rule.
-
-**Other dated plans still state the retired type, including ones that instruct.** Two that a
-reader will meet: `docs/superpowers/plans/2026-08-30-ordering-modifiers.md:24` still opens its
-conventions block with "Money is GROSS (VAT-inclusive) `numeric(12,2)`", and
-`docs/superpowers/plans/2026-08-29-dashboard-sales-takings.md` — around sixty of its steps still
-unchecked — states `line_total numeric(12,2)` at line 130 and
-`sum(sl.line_total)::numeric(12, 2)::text as total` at line 189. They were left as the records
-they are. The rule for the class is stated once, here and in `CLAUDE.md` §3, rather than by
-editing each plan; a session picking one of those up reads this section first.
 
 ## A quantity counts whole thousandths and a rate whole basis points, and neither is the money scale
 
@@ -821,12 +809,11 @@ that sequence on a parent holding one row and a child holding one row that point
 with no `ON DELETE` action, and separately one with `ON DELETE RESTRICT`, failed the drop itself with
 `FOREIGN KEY constraint failed`. The control, the same sequence outside a transaction, kept the
 child row in all three cases and raised nothing. Two rebuilds in
-the variants plan hit it. Task 1's rebuild of `products` (core's
-`packages/db/drizzle/0003_variant_inherited_nullable.sql`) cascade-deleted `product_categories` on a
-venue without the media triggers (the plan,
-`docs/superpowers/plans/2026-09-23-variants-as-products.md`, the section "Task 1 cannot upgrade an
-existing venue"). Task 4's rebuild of `menu_items`
-(`packages/catalogue/drizzle/0003_menu_price_nullable.sql`), measured 2026-09-23 through
+the variants-as-products work hit it. Task 1's rebuild of `products` (core's
+`packages/db/drizzle/0003_variant_inherited_nullable.sql`, #511) cascade-deleted `product_categories`
+on a venue without the media triggers (measured 2026-09-23 by a review of #511's plan, through
+`applyMigrations` on a scratch copy of `packages/db`). Task 4's rebuild of `menu_items`
+(`packages/catalogue/drizzle/0003_menu_price_nullable.sql`, #532), measured 2026-09-23 through
 `applyMigrations`, emptied `menu_item_extra_lists`, `menu_item_extra_items` and
 `menu_item_variant_overrides` while reporting success, and failed with
 `FOREIGN KEY constraint failed` when a `working_line_contexts` row named the offer. A paid order
@@ -1349,8 +1336,7 @@ still undetected. The `instance` command
 headed this list until 2026-09-22 and no longer exists. Cost: without the check, an ahead database
 re-migrates CLEANLY — drizzle applies nothing and throws nothing (measured with a control,
 2026-09-10) — so the mismatch showed up only as an unclassified driver error in whatever query first
-touched the changed schema. Pointer:
-`docs/superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md` §4.2/§4.5/§9.
+touched the changed schema. Designed and built in #310.
 
 ## A configuration route checks the tenant returned by `authorizeManager`, as well as scoping its queries
 

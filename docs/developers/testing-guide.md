@@ -170,8 +170,9 @@ and mutates it. What that cost, with the figures, is in [ci-and-gates.md](ci-and
 Save `docker inspect`'s `HostConfig.PortBindings` and `NetworkSettings.Ports` before removing the
 failed test fixture. Measured on a PostgreSQL container in September 2026: the reader-adoption gate
 found a healthy container with a requested TCP binding but an empty published-port list, and a
-focused rerun passed without explaining the first failure. Receipt:
-`docs/superpowers/plans/2026-09-12-card-reader-adoption-and-status.md`. Nothing under `packages/`
+focused rerun passed without explaining the first failure. During #329's full gate `docker inspect`
+showed `HostConfig.PortBindings["5432/tcp"] = [{ HostIp: "", HostPort: "0" }]` beside
+`NetworkSettings.Ports["5432/tcp"] = []`. Nothing under `packages/`
 or `apps/` starts a container now, so the live subject is under `bench/`:
 `bench/sqlite-failover/src/store.ts:76` publishes a port with `withExposedPorts(9000)` and reads it
 back with `getMappedPort(9000)`, which is the same shape the failure above took. The rule was
@@ -183,8 +184,11 @@ briefly pruned from `CLAUDE.md` §4 on 2026-09-23 on the ground that no PACKAGE 
 Four inspected `test-light-a` hangs left only Bookings' browser files unfinished while Sync and
 every database file completed; two jobs ran for about six hours. A Vitest test timer does not
 bound a browser whose event loop has stopped. Preserve the job log and use an outer process/job
-deadline, not a retry as proof of repair. Evidence and limits:
-`docs/superpowers/specs/2026-09-09-test-load-design.md`.
+deadline, not a retry as proof of repair. Evidence and limits (#291): the four job logs were read
+on 2026-09-09; [Vitest issue 10791](https://github.com/vitest-dev/vitest/issues/10791) says
+"testTimeout and retry are enforced inside the tester iframe's own JS", and `@vitest/browser` 3.2.7
+called `orchestrator.createTesters()` with no deadline in `BrowserPool.runNextTest`. That is a
+possible mechanism, not a diagnosis of those runs, and the hang was not reproduced locally.
 
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 
@@ -198,8 +202,8 @@ project limit peaked at 4. Configs here depend on the project value winning — 
 
 This section came from Vitest 3, where moving `maxForks: 4`
 inside fiscal-verifactu's project in #286 started 17 workers on the local host, observed during a
-Sync migration stall. fiscal-verifactu has since dropped its projects. The test-load design records
-the live process and database probes.
+Sync migration stall; `ps -axo pid,ppid,etime,pcpu,command` counted them, and #291 moved the limit
+back to the outer config. fiscal-verifactu has since dropped its projects.
 
 `scripts/fiscal-test-budget.test.ts` pins these configs and no others: fiscal-verifactu's outer
 limit of 4, and `packages/media/vitest.config.ts`, which still has projects, keeping its limit of 2
@@ -670,8 +674,8 @@ Nothing guards either of these.
 
 Preloading that library before the old module mocks reproduces `startRegistration is not a spy` and
 `mockClear is not a function`; the credential stubs pass with the same preload. Do not rely on a
-module mock replacing an already-loaded browser ES module. Evidence and limits:
-`docs/superpowers/specs/2026-09-10-ci-test-failures.md`.
+module mock replacing an already-loaded browser ES module. Evidence and limits: #303's commit
+message.
 
 ## Browser recovery tests read the native control inside a shared component.
 
@@ -885,17 +889,16 @@ positive that SKIPS a needed grant. No equivalent example has been found in the 
 
 ## Concurrent coverage runs must not share a package's report directory
 
-Two local coverage runs can select the same package through expanded dependencies. In A2,
+Two local coverage runs can select the same package through expanded dependencies. In A2 (#334),
 when the hook still ran package coverage,
 two overlapping fiscal-verifactu runs ended with `ENOENT` writing `coverage/.tmp/coverage-41.json`;
 Vitest cleans that shared directory. Inspect the resolved selection first, or give an intentional
-second run its own `--coverage.reportsDirectory`. Receipt:
-`docs/superpowers/plans/2026-09-12-setup-wizard-a2.md`.
+second run its own `--coverage.reportsDirectory`. Receipt: #334.
 
 **And put that second directory outside the package**, which the advice above did not say and
-which is the more expensive half. The receipt it cites already worked that way —
-`docs/superpowers/plans/2026-09-12-setup-wizard-a2.md` records that "the follow-up used a separate
-`/tmp` report directory" — so the stronger remedy was the practice before it was the rule. A
+which is the more expensive half. The receipt it cites already worked that way — A2's follow-up run
+used a separate `/tmp` report directory — so the stronger remedy was the practice before it was the
+rule. A
 directory left inside the package was measured as source by the next PACKAGE run. Every reading in
 this section was taken on Vitest 3.2.7, where the only two entries in the default coverage excludes
 that would have caught such a directory were `coverage/**` and `**/[.]**`. That list is gone —

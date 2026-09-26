@@ -170,8 +170,8 @@ explicit action; navigation, refresh, logout and session expiry never open one. 
 status or passkey enrolment to choose the public screen. Save the authenticated email and successful
 method only with Remember selected, never in tab storage. The change-account icon clears the saved
 shortcut and current attempt. Recovery uses one public entry for pending-account setup and
-active-account reset, with the same acknowledgement for every address. Owner decision:
-`docs/superpowers/specs/2026-09-11-login-flow-refinements-design.md`.
+active-account reset, with the same acknowledgement for every address. Owner decision, built in
+#317.
 
 **UI primitives in `packages/ui`**
 
@@ -261,8 +261,8 @@ the rule; the dropdowns a text scan found still binding `.value` alone over mapp
 Discovery matches disabled records as well as active ones; the dashboard offers disabled matches as
 Add again and reactivates their existing id, preserving history and routing. Only active matches
 disappear from the add list. Cost: deleting a USB printer left it in the registered table and hid it
-from discovery, blocking re-add. The table now defaults to Active with Disabled/All filters. Pointer:
-`docs/superpowers/specs/2026-09-11-printer-followups.md`.
+from discovery, blocking re-add. The table now defaults to Active with Disabled/All filters. Built in
+#321.
 
 ## Native centring starts inside the configured paper width
 
@@ -294,8 +294,7 @@ read-only plus `device_cgroup_rules: ["c 180:* rwm"]` (the usblp major) and `gro
 `lp` group's write bit); `:ro` still permits writing an existing device node but refuses `mknod`.
 The cgroup rule ADDS major 180 to Docker's default device whitelist (null, zero, full, random,
 tty, …); a class that is neither a Docker default nor 180 (e.g. hidraw) is what gets denied. Pinned
-by `scripts/deploy-image-env.test.ts`; spec
-`docs/superpowers/specs/2026-09-10-print-agent-box-wiring-design.md` §5.
+by `scripts/deploy-image-env.test.ts`; built in #308.
 
 **The recovery page**
 
@@ -322,8 +321,7 @@ file's lines carry caught errors' own words and `AppError` params, and `redactSe
 password in a URL. So the convention that params never carry a secret (stated in the header of
 `apps/server/src/errors.ts`) is what keeps a page anyone on the venue's LAN can open safe; a new code
 carrying a credential in its params, or a logged message carrying one in any other form, puts it on
-that page. Pointer: `docs/superpowers/specs/2026-09-10-boot-failure-diagnosability-design.md` §5 and
-its 2026-09-26 pointer; `apps/server/src/recovery-surface.ts`.
+that page. Built in #310 and extended in #695; `apps/server/src/recovery-surface.ts`.
 
 ## Printed documents take the printer's own layout settings
 
@@ -335,9 +333,14 @@ QR is a raster image, its dot size chosen per receipt by `chooseQrDots` for the 
 at most 40mm, reaching 30mm where the grid and paper allow it, including its blank border when checking the paper width —
 never the printer's own built-in QR command, which cannot be sized this way. A test reads a payload's
 printed text with `printedLines` (`apps/server/src/testing/decode-ticket.ts`), which fails the test
-on an unsupported byte instead of silently stopping partway and hiding the rest of the ticket. Design:
-`docs/superpowers/specs/2026-09-14-printer-paper-resolution-and-character-set-design.md`, updated by
-`docs/superpowers/specs/2026-09-26-printer-calibration-wizard.md`.
+on an unsupported byte instead of silently stopping partway and hiding the rest of the ticket. Built
+in #367; the QR size rule and the calibration wizard in #689.
+
+The character-table finder initialises the printer (`ESC @`, then `FS .`) before every candidate
+line, not once per page (`formatCharacterTableTest`, `apps/server/src/character-table-test.ts`).
+On the owner's NETUM NT-806 on 2026-09-26, table 6 printed its sample correctly until table 2 had
+been selected; selecting table 6 again then kept printing table-2 glyphs, and initialising first
+restored it (#689).
 
 ## Resolve live content and receipt snapshots separately
 

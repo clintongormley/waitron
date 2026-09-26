@@ -589,8 +589,7 @@ ordered attachment list per product. Landed across #412, #436, #445, #449, #452,
   and a route is built for it.
 
 **Branch 2, variants as products — LANDED** (spec
-`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §4, §15;
-[the plan](superpowers/plans/2026-09-23-variants-as-products.md)). A variant is now a `products` row
+`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §4, §15). A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
 Task 7 #545, Task 8 #551, and Task 9 #556. How the model works now is in
@@ -1616,7 +1615,6 @@ each printer, and the print-agent list its own remembered Active/Revoked/All fil
 owner's NT-806 the finder matched at W-11 and 8-14, and PC858/table 14 printed Spanish text and euro
 amounts correctly. Why these table numbers differ from the supplied manual remains unknown; do not
 use them as defaults for other printers.
-[Current design and physical evidence](superpowers/specs/2026-09-26-printer-calibration-wizard.md).
 
 **Calibration and status follow-up — LANDED #699:** four calibration steps separate the
 cash-drawer question from the receipt test, finder codes use `nn-W`/`nn-8`, and clicking a printer
@@ -2072,9 +2070,7 @@ ongoing overhaul listed at the top of Track A.
   one, nor opened and tapped a real demo box to settle it outside the code.
 - **"the fiscal record is built from `total` + `vat_breakdown`" is a false-narrow enumeration, and it
   reproduces itself** (found by the review wave on the doneness removal, 2026-09-20; corrected on that
-  branch). Left standing deliberately are two dated plan/spec records, but
-  `docs/superpowers/plans/2026-08-30-ordering-modifiers.md:155` is the plan line that AUTHORED the
-  `sales.ts` comment, so following it again would reproduce the defect. Two compliance-track documents
+  branch). Two compliance-track documents
   carry the same shape about tips (`docs/compliance/asesor-questions.md:465`,
   `docs/compliance/verifactu-findings.md:678`); their tip claim is TRUE and the legal track is kept
   separate. **Next action:** whoever next works the compliance track widens those two sentences.
@@ -3569,8 +3565,8 @@ reading unless marked run:
   `packages/payments-stripe/src/dashboard/stripe-add-reader.ts`,
   `packages/payments-sumup/src/dashboard/sumup-connect-form.ts`,
   `packages/payments-sumup/src/dashboard/sumup-add-reader.ts`) call their own packages' clients.
-  #610 removed the stale comments on the two methods. Left in place because lane B's variants plan
-  (`docs/superpowers/plans/2026-09-23-variants-as-products.md`) will change that file.
+  #610 removed the stale comments on the two methods. Left in place because lane B's variants work
+  (#511 to #556) was then due to change that file.
 - `wt-dialog` re-sends the native dialog's `close` event as `wt-close`
   (`packages/ui/src/components/wt-dialog.ts`), and the native event arrives a task after the dialog
   closes — the same mechanism the Task 11 entry "Dismissing a nested form fires TWO cancels, and
@@ -4091,7 +4087,7 @@ bundles and compare what they produce. Five things it leaves open:
   pull request `image` is gated on `deploy/` having changed (`.github/workflows/ci.yml`, the `image`
   job's `if`). So `image` DOES build the SPAs on a pull request that touches `deploy/`, and on every
   main push; what it never does is OPEN one, so a bundle that builds and renders nothing passes
-  there too. `docs/superpowers/plans/2026-08-27-onboarding-slice2c-setup-wizard.md` (R6) recorded
+  there too. The plan behind #146 (its item R6) recorded
   this gap when `apps/setup` was written and called a cross-front-end build-smoke "a separate later
   cleanup". It then survived a whole bundler replacement, which is what earns it a line in
   `CLAUDE.md` §2 and a receipt in `docs/developers/ci-and-gates.md`.
@@ -4577,8 +4573,7 @@ failover-loop prototype.
 
 **That prototype gate is DONE — all ten tasks landed (#392, #395, #406, #411, #415, #417, #422,
 #425), and slice 1, the storage swap, is COMPLETE as of 2026-09-23**
-([spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md),
-[plan](superpowers/plans/2026-09-16-sqlite-slice1-storage-swap.md)). Read
+([spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md)). Read
 [the results note](research/2026-09-16-sqlite-failover-prototype.md) rather than re-deriving any of
 it: the failover loop holds everywhere except **S2**, the recorded negative result — a handed-over
 batch can re-file a sale the receiver already filed, which costs one wasted AEAT call (error 3000,

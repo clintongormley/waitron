@@ -52,8 +52,7 @@ own header — so all three SPAs are built daily against the default branch. Wid
 part a reader is most likely to assume away: every one of those paths only BUILDS them. Nothing
 opens one, so a bundle that compiles and then renders nothing passes everywhere.
 
-This was first recorded on 2026-08-27 in
-`docs/superpowers/plans/2026-08-27-onboarding-slice2c-setup-wizard.md` (R6), which called a
+This was first recorded on 2026-08-27, in the plan behind #146 (its item R6), which called a
 cross-front-end build-smoke "a separate later cleanup". It was still uncleaned when the vite 6 → 8
 upgrade replaced the bundler underneath all three apps (Rolldown and Oxc for Rollup and esbuild),
 which is the change it would most have been wanted for; that upgrade's build evidence had to be
@@ -963,5 +962,4 @@ passes it.
 A shell sequence separated by newlines reports only its last command's status. Use `&&` for dependent
 validation steps, or capture each status separately. Cost: the A3 review-fix command ran a successful
 build after a failed server typecheck and reported success; the pre-push hook correctly refused the
-test's incomplete response type. Receipt:
-`docs/superpowers/plans/2026-09-12-printer-address-probe.md`.
+test's incomplete response type. Receipt: #335.
