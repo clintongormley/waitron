@@ -605,8 +605,9 @@ is weakened knowingly: the records the stream holds are, once submitted, already
    > **Pointer, 2026-09-26.** A restored copy whose membership document fails its signature check
    > now refuses the start (`restore.membership_invalid`, branch `fix/verify-restored-membership`),
    > so "never blocked" here and in the Provenance table's "Cold restore mints a fresh chain, never
-   > blocked" row no longer holds for that copy. See `docs/backlog.md`'s Task 9a entry. So does one
-   > whose document cannot be read or is not shaped as a list of machines (A53, 2026-09-26).
+   > blocked" row no longer holds for that copy. The same holds for a copy whose document cannot be
+   > read or is not shaped as a list of machines (A53, 2026-09-26). See `docs/backlog.md`'s Task 9a
+   > entry.
 
 3. **Point-in-time** (an operator mistake) — restore to a **side** file and inspect. **Never over a
    live ledger**: rolling the ledger back would re-issue invoice numbers. Going back for real is a cold

@@ -63,9 +63,8 @@ export async function assertRestoredMembershipValid(db: Database): Promise<void>
 /**
  * Throws `restore.membership_invalid` with the reason `malformed` when a restore's marker is present
  * and the held membership row's stored text is not JSON, or is not shaped as a document (the JSON
- * value `null` included). Boot runs it before its first read of the document, which on such a copy
- * would throw an error carrying no code, or read a stored `null` as no document at all. Passes when
- * the row or the table is absent, and does nothing when no restore left its marker.
+ * value `null` included). Boot runs it before its first read of the document. Passes when the row or
+ * the table is absent, and does nothing when no restore left its marker.
  */
 export async function assertRestoredMembershipReadable(
   stateDir: string,

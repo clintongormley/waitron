@@ -1126,7 +1126,8 @@ async function bootServer(
   // A mirror or a fenced node defers it: nothing is re-issued or signed, and the bucket copy is
   // held. A failure does not keep the box shut: it sells, does not stream, and raises
   // restore.first_start_failed until a later start finishes. The exception is a restored
-  // membership document that fails its check (`restore.membership_invalid`): that fails the start.
+  // membership document that fails its signature check (`restore.membership_invalid`): that fails
+  // the start.
   const firstStart = fencedOrMirror
     ? await deferFirstStart(config.stateDir, log)
     : await runFirstStart({

@@ -6011,7 +6011,8 @@ endorsement stored when that round reads, not the first round's"
     primary signed with its real key, written there, verified as `untrusted_signer`. Nothing writes
     a document on a mirror today, so its held document is null (from reading the writers, not a
     run). The owner's decision on this, 2026-09-26, is under the failover residuals ("a standby
-    checks a promotion against the primary's key").
+    checks a promotion against the primary's key"; it covers promotion, `retireSelf` and the
+    standby chart append, and a restored mirror's own start is not covered by it).
   - **Closed for a restore by A53 (`fix/restore-membership-damaged-document-message`), 2026-09-26,
     on the owner's A45 answer ("move the check earlier").** When a restore's marker is present,
     boot now runs `assertRestoredMembershipReadable` (`apps/server/src/rebuild-first-start.ts`)
@@ -6024,9 +6025,14 @@ endorsement stored when that round reads, not the first round's"
     adoption returns before it. Cases: `apps/server/src/boot.test.ts` ("refuses a restore whose membership document
     holds …", unreadable JSON with and without a configured peer, and a machine list that is not a
     list; each failed on the old code with a `SyntaxError` or `TypeError`, the peer case also when
-    the call was moved after the reconciliation) and the `assertRestoredMembershipReadable` cases in
-    `apps/server/src/rebuild-first-start.test.ts`. Still open: on a start with NO restore marker,
-    such a row fails the same way with the generic text; from reading its writers, nothing this program writes produces one.
+    the call was moved after the reconciliation; a stored JSON null; a fenced restored box whose
+    document carries an extra key; and a mirror restored box), the `assertRestoredMembershipReadable`
+    cases in `apps/server/src/rebuild-first-start.test.ts` (a stored null, a number and a string
+    among them), and a node-entry case showing the page's new wording for the recorded code. No
+    test drives a real refused start all the way to the rendered page. Still open: on a start with NO restore marker,
+    text that is not JSON or a machine list that is not a list fails the same way with the generic
+    text; a stored JSON null reads as no document, and a document breaking only a shape limit is
+    read and used unchecked. From reading its writers, nothing this program writes produces one.
     What the Codex seat measured before A53:
     a held document whose `body.nodes` is not a list, or whose stored JSON cannot be read, fails
     before the check. Boot reads the held row at the peer reconciliation (when a peer is

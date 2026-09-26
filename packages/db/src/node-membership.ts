@@ -23,9 +23,6 @@ import { nodeMembership } from "./schema/node-membership.js";
  * the standby chart append among them: `apps/server/src/promote.ts`, `apps/server/src/retire.ts`,
  * `apps/server/src/mirror-bundle-api.ts`). A raw SQL write or a database file edited outside the
  * program is read as is.
- *
- * The table's existence is read off `sqlite_master` rather than discovered by running the select and
- * catching the refusal; the reason is on `deploymentTableExists` in `./deployment.js`.
  */
 export async function readNodeMembership(
   db: Database | Transaction,
@@ -38,6 +35,9 @@ export async function readNodeMembership(
  * The held row's parsed document, with nothing checking its shape, or `null` when the table or the
  * row is absent (told apart no more than by `readNodeMembership`). Unlike that reader, a present row
  * whose document is the JSON value `null` reads as `{ document: null }`.
+ *
+ * The table's existence is read off `sqlite_master` rather than discovered by running the select and
+ * catching the refusal; the reason is on `deploymentTableExists` in `./deployment.js`.
  */
 export async function readNodeMembershipRow(
   db: Database | Transaction,

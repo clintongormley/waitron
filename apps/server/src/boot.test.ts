@@ -1233,7 +1233,8 @@ describe("startServer, against a migrated venue directory", () => {
 
   // Damage rather than a wrong signature: the stored text is not JSON, or it is JSON that is not a
   // document. With a peer configured, the held document is also read before the peer is asked. The
-  // fenced case would otherwise come up read-only and put off its restore's checks, as a mirror does.
+  // fenced case would otherwise come up read-only and put off its restore's signature check, as a
+  // mirror does.
   it.each([
     { damage: "unreadable JSON", document: "{not json", withPeer: false, asMirror: false },
     { damage: "unreadable JSON", document: "{not json", withPeer: true, asMirror: false },
