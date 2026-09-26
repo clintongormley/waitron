@@ -592,6 +592,10 @@ asks for confirmation; after it, the sale files €2.50 + €2.50. It never file
   - a split or transfer copies the mark to the new row, and copies the line's course, note and
     served state with it; a partial split of a line the kitchen has STARTED is refused, because the
     split-off row would have no kitchen work of its own to guard it;
+    **(2026-09-26, the owner's answer, overturning the refusal:** the split-off part gets its own
+    kitchen ticket row, copied from the original, and the original's quantity drops by the part
+    moved; a started line may be split, while edits of it stay refused; the split tells the kitchen
+    nothing.)
   - a line with no preparation route under a held course is marked sent when that course fires,
     not before;
   - "sent" governs payment; whether a line can be SENT reads the kitchen state, so a recalled line

@@ -370,6 +370,11 @@ finds, none of them puts a photo on a menu's own list: in `packages/catalogue/sr
 inserts create library sections and the update refuses any other, and none of the writes outside
 that file sets an image. So when Task 3 lets a menu's list carry a photo, link it to the menu editor or
 narrow the link to library sections.
+**A paper kitchen hears of no table change.** Moving sent work to another table (a line transfer,
+whole or part; unjoining a table; moving a tab; merging tabs) re-points its ticket, which a kitchen
+screen follows at its next load, but prints nothing, so a printed slip keeps naming the old table.
+Build a printed MOVED slip for every such path (owner question, 2026-09-26, recorded in lane C's
+questions).
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
 shared look, and the rules for it live in [design-system.md](developers/design-system.md). That

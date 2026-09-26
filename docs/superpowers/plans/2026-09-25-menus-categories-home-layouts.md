@@ -417,6 +417,10 @@ D12, D13 and D22 are the ones most worth the owner's eye.**
       has no ticket row of its own, so it would read as freely editable while the cook has the
       work. `carveOffLines` reads the source's ticket state before splitting; a whole-line move
       keeps the row and its ticket and is unaffected.
+    - **Overturned 2026-09-26 (the owner's answer to the split question):** the moved part gets its
+      own ticket row, copied from the original, and the original's quantity drops by the part
+      moved; a started line may be split, while edits of it stay refused; the split tells the
+      kitchen nothing.
     - **With the venue setting off** (owner, 2026-09-25: the setting is for a paper-only kitchen,
       which never reports "started", so a recall slip cannot be trusted either), a line that was
       ever sent to a station (`sent_at` set AND a ticket row exists) is refused `ticket.already_fired`
@@ -773,6 +777,10 @@ test. Each has its test in the named task.
    - A bottled beer with a `no_preparation` route sent in a round, then marked unavailable, pays.
    - A partial split of a Burger the cook has started is refused; a whole-line move of it keeps
      its ticket. A recalled Burger whose product went unavailable cannot be sent again.
+   - **Restated 2026-09-26 (the owner's answer):** the kitchen shows the two Burgers, one on each
+     check; the split moves a ticket row of its own with the Burger, takes it off the original's
+     quantity, and tells the kitchen nothing. A started Burger may now be split; editing it stays
+     refused.
    - (Task 7b.)
 7. **Every correction reaches the kitchen screen, printer or not.**
    - A station with no printer: a recall, a void of a started item and a change to a queued line
@@ -1671,6 +1679,10 @@ call, and its tests drive them directly.
     product goes unavailable. The refusal of a partial split of a dish with extras stays, and a
     partial split of a `preparing` line is refused `ticket.already_started` while a whole-line move
     of it succeeds and keeps its ticket.
+    **Overturned 2026-09-26 (the owner's answer):** the split row gets its own ticket row, copied
+    from the original, at the quantity moved, and the source's ticket drops by that quantity; a
+    partial split of a `preparing` or `ready` line succeeds, edits of either row stay refused
+    `ticket.already_started`, and the split writes no notice and no print job.
   - **Kitchen, sent and not started:**
     - a fired tab line (`state = 'queued'`) changed to "no onions" through
       `PUT /api/working-orders/:id/lines/:lineNo` gets a RECALLED notice AND slip for the old ticket
