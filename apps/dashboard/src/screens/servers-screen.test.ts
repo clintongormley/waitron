@@ -24,6 +24,7 @@ const listing: ServerListing = {
       standing: "serving-primary",
       isSelf: true,
       removable: false,
+      canClear: false,
     },
     {
       nodeId: STANDBY,
@@ -31,6 +32,7 @@ const listing: ServerListing = {
       standing: "serving-secondary",
       isSelf: false,
       removable: true,
+      canClear: false,
     },
     {
       nodeId: FORMER,
@@ -38,6 +40,7 @@ const listing: ServerListing = {
       standing: "sell-only",
       isSelf: false,
       removable: false,
+      canClear: false,
     },
     {
       nodeId: REMOVED,
@@ -45,6 +48,7 @@ const listing: ServerListing = {
       standing: "evicted",
       isSelf: false,
       removable: false,
+      canClear: true,
     },
   ],
 };
@@ -52,7 +56,7 @@ const listing: ServerListing = {
 const afterRemoval: ServerListing = {
   term: 4,
   nodes: listing.nodes.map((n) =>
-    n.nodeId === STANDBY ? { ...n, standing: "evicted", removable: false } : n,
+    n.nodeId === STANDBY ? { ...n, standing: "evicted", removable: false, canClear: true } : n,
   ),
 };
 
@@ -157,10 +161,9 @@ describe("servers screen list", () => {
   it("offers Remove, in a row menu, only on the rows the server says can be removed", async () => {
     const el = await mount();
     expect(rowMenu(el, STANDBY)!.querySelector(`[data-test="remove-${STANDBY}"]`)).not.toBeNull();
-    for (const other of [SELF, FORMER, REMOVED]) {
-      expect(rowMenu(el, other)).toBeNull();
-      expect(inTable(el, `remove-${other}`)).toBeNull();
-    }
+    for (const other of [SELF, FORMER]) expect(rowMenu(el, other)).toBeNull();
+    // The removed row keeps a menu, because the server marks it clearable.
+    for (const other of [SELF, FORMER, REMOVED]) expect(inTable(el, `remove-${other}`)).toBeNull();
   });
 
   it("names the address in the row menu's accessible name", async () => {
@@ -283,6 +286,7 @@ describe("servers screen list", () => {
           standing: "serving-secondary",
           isSelf: false,
           removable: true,
+          canClear: false,
         },
       ],
     };
@@ -303,6 +307,7 @@ describe("servers screen list", () => {
         ...n,
         isSelf: n.nodeId === STANDBY,
         removable: false,
+        canClear: false,
       })),
     };
     const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(onStandby) }));
@@ -314,7 +319,7 @@ describe("servers screen list", () => {
   it("says the same when no listed machine is this server", async () => {
     const notListed: ServerListing = {
       term: 3,
-      nodes: listing.nodes.map((n) => ({ ...n, isSelf: false, removable: false })),
+      nodes: listing.nodes.map((n) => ({ ...n, isSelf: false, removable: false, canClear: false })),
     };
     const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(notListed) }));
     expect(el.shadowRoot!.querySelector("[data-test=not-primary]")).not.toBeNull();
@@ -364,7 +369,7 @@ describe("servers screen removal", () => {
     expect(dialog(el).open).toBe(false);
     expect(inTable(el, `role-${STANDBY}`)!.textContent!.trim()).toBe(t("servers.standing.removed"));
     expect(inTable(el, `remove-${STANDBY}`)).toBeNull();
-    expect(rowMenu(el, STANDBY)).toBeNull();
+    expect(rowMenu(el, STANDBY)!.querySelector(`[data-test="clear-${STANDBY}"]`)).not.toBeNull();
   });
 
   it("returns focus to the row's menu when the confirmation is cancelled or dismissed", async () => {
@@ -389,7 +394,7 @@ describe("servers screen removal", () => {
     }
   });
 
-  it("moves focus to the screen's heading after a removal, because the row's menu is gone", async () => {
+  it("moves focus to the screen's heading after a removal, because the Remove item it came from is gone", async () => {
     const api = stubApi();
     const el = await mount(api);
     // Real clicks, because a click is what moves focus onto the Remove item the popover then hides.
@@ -404,7 +409,7 @@ describe("servers screen removal", () => {
     await vi.waitFor(async () => {
       await flush(el);
       expect(dialog(el).open).toBe(false);
-      expect(rowMenu(el, STANDBY)).toBeNull();
+      expect(inTable(el, `remove-${STANDBY}`)).toBeNull();
       expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("h1"));
     });
   });
@@ -609,10 +614,14 @@ describe("servers screen clearing", () => {
 
   it("says in both languages that clearing frees the place and the machine stays shut out", () => {
     expect(en["servers.clear_explanation"]).toContain("frees the place");
-    expect(en["servers.clear_explanation"]).toContain("stays shut out for good");
+    expect(en["servers.clear_explanation"]).toContain(
+      "It stays shut out: if it tries to come back under its old identity",
+    );
     expect(en["servers.clear_explanation"]).toContain("join from scratch");
     expect(es["servers.clear_explanation"]).toContain("libera el sitio");
-    expect(es["servers.clear_explanation"]).toContain("sigue excluida para siempre");
+    expect(es["servers.clear_explanation"]).toContain(
+      "La máquina sigue excluida: si intenta volver con su identidad anterior",
+    );
     expect(es["servers.clear_explanation"]).toContain("unirse de nuevo desde el principio");
   });
 

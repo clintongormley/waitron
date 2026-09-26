@@ -137,7 +137,7 @@ export class ServersScreen extends LitElement {
   @state() private actionErrorKey: string | null = null;
   @state() private busy = false;
   /** A menu item's popover closes on the click, so the dialog has nothing visible to hand focus
-   * back to; the row menu's trigger takes it instead, or the heading once that menu is gone. */
+   * back to; the row menu's trigger takes it instead, or the heading after a Remove or Clear. */
   #focusTarget: HTMLElement | null = null;
 
   override connectedCallback(): void {
@@ -189,8 +189,8 @@ export class ServersScreen extends LitElement {
     } finally {
       this.busy = false;
     }
-    // A removed row loses its menu, a cleared one leaves the list, and the refresh below may land
-    // after the dialog has closed.
+    // Focus goes to the heading: the row's menu changes (a removed row's offers Clear, a cleared row
+    // leaves the list) and the refresh below may land after the dialog has closed.
     this.#focusTarget = null;
     this.target = null;
     try {

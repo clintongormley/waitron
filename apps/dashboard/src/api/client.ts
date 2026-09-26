@@ -992,8 +992,7 @@ export interface ServerRow {
   standing: "serving-primary" | "serving-secondary" | "sell-only" | "evicted";
   isSelf: boolean;
   removable: boolean;
-  /** Optional in this type only; the server sends it on every row. Absent reads as false. */
-  canClear?: boolean;
+  canClear: boolean;
 }
 
 /** `term` is null, and `nodes` empty, when this server holds no chart. */

@@ -856,7 +856,7 @@ export const en = {
   "servers.clear": "Clear from list",
   "servers.clear_title": "Clear this removed machine from the list?",
   "servers.clear_explanation":
-    "Clearing frees the place it takes on the list of servers. It stays shut out for good: if it tries to come back under its old identity, the primary refuses it, so to use that machine again it has to join from scratch. This cannot be undone.",
+    "Clearing frees the place it takes on the list of servers. It stays shut out: if it tries to come back under its old identity, the primary refuses it, so to use that machine again it has to join from scratch. This cannot be undone.",
   "backup.title": "Backups",
   "backup.configuration.title": "Move your preparation to production",
   "backup.configuration.explanation":
@@ -2591,7 +2591,7 @@ export const es: Record<StringKey, string> = {
   "servers.clear": "Quitar de la lista",
   "servers.clear_title": "¿Quitar esta máquina retirada de la lista?",
   "servers.clear_explanation":
-    "Quitarla libera el sitio que ocupa en la lista de servidores. La máquina sigue excluida para siempre: si intenta volver con su identidad anterior, el servidor principal la rechaza, así que para volver a usarla tiene que unirse de nuevo desde el principio. No se puede deshacer.",
+    "Quitarla libera el sitio que ocupa en la lista de servidores. La máquina sigue excluida: si intenta volver con su identidad anterior, el servidor principal la rechaza, así que para volver a usarla tiene que unirse de nuevo desde el principio. No se puede deshacer.",
   "backup.title": "Copias de seguridad",
   "backup.configuration.title": "Lleva tu preparación a producción",
   "backup.configuration.explanation":

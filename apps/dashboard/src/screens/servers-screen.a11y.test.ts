@@ -15,6 +15,7 @@ const listing: ServerListing = {
       standing: "serving-primary",
       isSelf: true,
       removable: false,
+      canClear: false,
     },
     {
       nodeId: STANDBY,
@@ -22,6 +23,7 @@ const listing: ServerListing = {
       standing: "serving-secondary",
       isSelf: false,
       removable: true,
+      canClear: false,
     },
     {
       nodeId: "33333333-3333-4333-8333-333333333333",
@@ -29,6 +31,7 @@ const listing: ServerListing = {
       standing: "sell-only",
       isSelf: false,
       removable: false,
+      canClear: false,
     },
     {
       nodeId: "44444444-4444-4444-8444-444444444444",
@@ -36,6 +39,7 @@ const listing: ServerListing = {
       standing: "evicted",
       isSelf: false,
       removable: false,
+      canClear: true,
     },
   ],
 };
@@ -148,6 +152,7 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
           standing: "serving-secondary",
           isSelf: false,
           removable: true,
+          canClear: false,
         },
       ],
     };
