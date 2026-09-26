@@ -24,6 +24,7 @@ const listing: ServerListing = {
       standing: "serving-primary",
       isSelf: true,
       removable: false,
+      canClear: false,
     },
     {
       nodeId: STANDBY,
@@ -31,6 +32,7 @@ const listing: ServerListing = {
       standing: "serving-secondary",
       isSelf: false,
       removable: true,
+      canClear: false,
     },
     {
       nodeId: FORMER,
@@ -38,6 +40,7 @@ const listing: ServerListing = {
       standing: "sell-only",
       isSelf: false,
       removable: false,
+      canClear: false,
     },
     {
       nodeId: REMOVED,
@@ -45,6 +48,7 @@ const listing: ServerListing = {
       standing: "evicted",
       isSelf: false,
       removable: false,
+      canClear: true,
     },
   ],
 };
@@ -52,7 +56,7 @@ const listing: ServerListing = {
 const afterRemoval: ServerListing = {
   term: 4,
   nodes: listing.nodes.map((n) =>
-    n.nodeId === STANDBY ? { ...n, standing: "evicted", removable: false } : n,
+    n.nodeId === STANDBY ? { ...n, standing: "evicted", removable: false, canClear: true } : n,
   ),
 };
 
@@ -157,10 +161,9 @@ describe("servers screen list", () => {
   it("offers Remove, in a row menu, only on the rows the server says can be removed", async () => {
     const el = await mount();
     expect(rowMenu(el, STANDBY)!.querySelector(`[data-test="remove-${STANDBY}"]`)).not.toBeNull();
-    for (const other of [SELF, FORMER, REMOVED]) {
-      expect(rowMenu(el, other)).toBeNull();
-      expect(inTable(el, `remove-${other}`)).toBeNull();
-    }
+    for (const other of [SELF, FORMER]) expect(rowMenu(el, other)).toBeNull();
+    // The removed row keeps a menu, because the server marks it clearable.
+    for (const other of [SELF, FORMER, REMOVED]) expect(inTable(el, `remove-${other}`)).toBeNull();
   });
 
   it("names the address in the row menu's accessible name", async () => {
@@ -283,6 +286,7 @@ describe("servers screen list", () => {
           standing: "serving-secondary",
           isSelf: false,
           removable: true,
+          canClear: false,
         },
       ],
     };
@@ -303,6 +307,7 @@ describe("servers screen list", () => {
         ...n,
         isSelf: n.nodeId === STANDBY,
         removable: false,
+        canClear: false,
       })),
     };
     const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(onStandby) }));
@@ -314,7 +319,7 @@ describe("servers screen list", () => {
   it("says the same when no listed machine is this server", async () => {
     const notListed: ServerListing = {
       term: 3,
-      nodes: listing.nodes.map((n) => ({ ...n, isSelf: false, removable: false })),
+      nodes: listing.nodes.map((n) => ({ ...n, isSelf: false, removable: false, canClear: false })),
     };
     const el = await mount(stubApi({ listServers: vi.fn().mockResolvedValue(notListed) }));
     expect(el.shadowRoot!.querySelector("[data-test=not-primary]")).not.toBeNull();
@@ -364,7 +369,7 @@ describe("servers screen removal", () => {
     expect(dialog(el).open).toBe(false);
     expect(inTable(el, `role-${STANDBY}`)!.textContent!.trim()).toBe(t("servers.standing.removed"));
     expect(inTable(el, `remove-${STANDBY}`)).toBeNull();
-    expect(rowMenu(el, STANDBY)).toBeNull();
+    expect(rowMenu(el, STANDBY)!.querySelector(`[data-test="clear-${STANDBY}"]`)).not.toBeNull();
   });
 
   it("returns focus to the row's menu when the confirmation is cancelled or dismissed", async () => {
@@ -389,7 +394,7 @@ describe("servers screen removal", () => {
     }
   });
 
-  it("moves focus to the screen's heading after a removal, because the row's menu is gone", async () => {
+  it("moves focus to the screen's heading after a removal, even when the refresh lands after the dialog closes", async () => {
     const api = stubApi();
     const el = await mount(api);
     // Real clicks, because a click is what moves focus onto the Remove item the popover then hides.
@@ -404,7 +409,7 @@ describe("servers screen removal", () => {
     await vi.waitFor(async () => {
       await flush(el);
       expect(dialog(el).open).toBe(false);
-      expect(rowMenu(el, STANDBY)).toBeNull();
+      expect(inTable(el, `remove-${STANDBY}`)).toBeNull();
       expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("h1"));
     });
   });
@@ -526,5 +531,217 @@ describe("servers screen removal", () => {
     await flush(el);
     await openRemove(el);
     expect(dialog(el).querySelector("[role=alert]")).toBeNull();
+  });
+});
+
+describe("servers screen clearing", () => {
+  // The server marks `canClear` only on a removed row, and only while this server is the primary.
+  const clearable: ServerListing = {
+    term: 4,
+    nodes: listing.nodes.map((n) => ({ ...n, canClear: n.nodeId === REMOVED })),
+  };
+  const afterClearing: ServerListing = {
+    term: 5,
+    nodes: clearable.nodes.filter((n) => n.nodeId !== REMOVED),
+  };
+
+  function clearApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): DashboardApi {
+    return stubApi({
+      listServers: vi.fn().mockResolvedValue(clearable),
+      clearServer: vi.fn().mockResolvedValue({ cleared: true, term: 5 }),
+      ...overrides,
+    });
+  }
+
+  function clearDialog(el: ServersScreen): HTMLElementTagNameMap["wt-dialog"] {
+    return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+      "wt-dialog[data-test=clear-dialog]",
+    )!;
+  }
+
+  async function openClear(el: ServersScreen, nodeId = REMOVED): Promise<void> {
+    menuTrigger(el, nodeId).click();
+    rowMenu(el, nodeId)!.querySelector<HTMLElement>(`[data-test="clear-${nodeId}"]`)!.click();
+    await flush(el);
+  }
+
+  async function confirmClear(el: ServersScreen): Promise<void> {
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-clear]")!.click();
+    await flush(el);
+    await flush(el);
+  }
+
+  it("offers Clear, in a row menu, only on the rows the server marks clearable", async () => {
+    const el = await mount(clearApi());
+    expect(rowMenu(el, REMOVED)!.querySelector(`[data-test="clear-${REMOVED}"]`)).not.toBeNull();
+    expect(rowMenu(el, REMOVED)!.querySelector(`[data-test="remove-${REMOVED}"]`)).toBeNull();
+    for (const other of [SELF, STANDBY, FORMER]) expect(inTable(el, `clear-${other}`)).toBeNull();
+    expect(rowMenu(el, STANDBY)!.querySelector(`[data-test="remove-${STANDBY}"]`)).not.toBeNull();
+  });
+
+  it("offers no Clear on a removed row the server does not mark clearable", async () => {
+    const notClearable: ServerListing = {
+      term: 4,
+      nodes: clearable.nodes.map((n) => ({ ...n, canClear: false })),
+    };
+    const el = await mount(clearApi({ listServers: vi.fn().mockResolvedValue(notClearable) }));
+    expect(inTable(el, `role-${REMOVED}`)!.textContent!.trim()).toBe(t("servers.standing.removed"));
+    expect(rowMenu(el, REMOVED)).toBeNull();
+    expect(inTable(el, `clear-${REMOVED}`)).toBeNull();
+  });
+
+  it("opens a confirmation naming the machine, and Clear posts that machine's id then refreshes", async () => {
+    const api = clearApi();
+    const el = await mount(api);
+    await openClear(el);
+    expect(clearDialog(el).open).toBe(true);
+    expect(dialog(el).open).toBe(false);
+    expect(clearDialog(el).getAttribute("heading")).toBe(t("servers.clear_title"));
+    const body = clearDialog(el).textContent!.replace(/\s+/g, " ");
+    expect(body).toContain(t("servers.no_address"));
+    expect(body).toContain(`${t("servers.machine")} 44444444`);
+    expect(body).toContain(t("servers.clear_explanation"));
+    expect(api.clearServer).not.toHaveBeenCalled();
+
+    vi.mocked(api.listServers).mockResolvedValue(afterClearing);
+    await confirmClear(el);
+    expect(api.clearServer).toHaveBeenCalledExactlyOnceWith(REMOVED);
+    expect(api.removeServer).not.toHaveBeenCalled();
+    expect(api.listServers).toHaveBeenCalledTimes(2);
+    expect(clearDialog(el).open).toBe(false);
+    expect(inTable(el, `role-${REMOVED}`)).toBeNull();
+  });
+
+  it("says in both languages that clearing frees the place and this primary refuses the machine's return", () => {
+    expect(en["servers.clear_explanation"]).toContain("frees the place");
+    expect(en["servers.clear_explanation"]).toContain(
+      "If it tries to come back under its old identity, this primary refuses it",
+    );
+    expect(en["servers.clear_explanation"]).toContain("join from scratch");
+    expect(es["servers.clear_explanation"]).toContain("libera el sitio");
+    expect(es["servers.clear_explanation"]).toContain(
+      "Si intenta volver con su identidad anterior, este servidor principal la rechaza",
+    );
+    expect(es["servers.clear_explanation"]).toContain("unirse de nuevo desde el principio");
+  });
+
+  it.each(["en", "es-ES"] as const)(
+    "words the menu item and the confirm button with the same verb, unlike Remove's, in %s",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mount(clearApi());
+      const item = rowMenu(el, REMOVED)!.querySelector(`[data-test="clear-${REMOVED}"]`)!;
+      await openClear(el);
+      const confirm = el.shadowRoot!.querySelector("[data-test=confirm-clear]")!;
+      expect(item.textContent!.trim()).toBe(t("servers.clear"));
+      expect(confirm.textContent!.trim()).toBe(t("servers.clear"));
+      expect(t("servers.clear")).not.toBe(t("servers.remove"));
+    },
+  );
+
+  it.each([
+    "membership.node_not_found",
+    "membership.not_primary",
+    "membership.node_is_primary",
+    "membership.node_not_removed",
+    "membership.chart_too_large",
+    "membership.revoked_duplicate",
+    "membership.revoked_node_listed",
+    "membership.write_contended",
+  ])("shows the refusal %s in its own words inside the confirmation", async (code) => {
+    const api = clearApi({ clearServer: vi.fn().mockRejectedValue({ code, status: 409 }) });
+    const el = await mount(api);
+    await openClear(el);
+    await confirmClear(el);
+    expect(clearDialog(el).open).toBe(true);
+    const alert = clearDialog(el).querySelector("[role=alert]");
+    expect(alert!.textContent!.trim()).toBe(codeMessage(code));
+    expect(codeMessage(code)).not.toBe(codeMessage("server.internal"));
+    expect(dialog(el).querySelector("[role=alert]")).toBeNull();
+    // A refused write is not a load failure: the list stays as it was.
+    expect(tableRoot(el).querySelector("[role=alert]")).toBeNull();
+    expect(api.listServers).toHaveBeenCalledTimes(1);
+  });
+
+  it("a clearing that succeeded but whose refresh failed closes the confirmation and reports a load failure", async () => {
+    const api = clearApi();
+    const el = await mount(api);
+    await openClear(el);
+    vi.mocked(api.listServers).mockRejectedValue({ code: "connection.failed" });
+    await confirmClear(el);
+    expect(api.clearServer).toHaveBeenCalledOnce();
+    expect(clearDialog(el).open).toBe(false);
+    expect(clearDialog(el).querySelector("[role=alert]")).toBeNull();
+    const alert = tableRoot(el).querySelector("[role=alert]");
+    expect(alert!.textContent!.trim()).toBe(codeMessage("connection.failed"));
+  });
+
+  it("Cancel closes the confirmation without posting anything, and focus returns to the row's menu", async () => {
+    const api = clearApi();
+    const el = await mount(api);
+    await userEvent.click(menuTrigger(el, REMOVED));
+    await userEvent.click(inTable(el, `clear-${REMOVED}`)!);
+    await flush(el);
+    expect(clearDialog(el).open).toBe(true);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-clear]")!.click();
+    await flush(el);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(clearDialog(el).open).toBe(false);
+    expect(api.clearServer).not.toHaveBeenCalled();
+    expect(rowMenu(el, REMOVED)!.shadowRoot!.activeElement).toBe(menuTrigger(el, REMOVED));
+  });
+
+  it("moves focus to the screen's heading after clearing, because the row is gone", async () => {
+    const api = clearApi();
+    const el = await mount(api);
+    await userEvent.click(menuTrigger(el, REMOVED));
+    await userEvent.click(inTable(el, `clear-${REMOVED}`)!);
+    await flush(el);
+    vi.mocked(api.listServers).mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(afterClearing), 200)),
+    );
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-clear]")!);
+    await vi.waitFor(async () => {
+      await flush(el);
+      expect(clearDialog(el).open).toBe(false);
+      expect(inTable(el, `role-${REMOVED}`)).toBeNull();
+      expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("h1"));
+    });
+  });
+
+  it("a second press while the clearing is in flight posts once", async () => {
+    let finish!: (value: { cleared: boolean; term: number }) => void;
+    const api = clearApi({
+      clearServer: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      ),
+    });
+    const el = await mount(api);
+    await openClear(el);
+    const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-clear]")!;
+    confirm.click();
+    confirm.click();
+    await flush(el);
+    expect(api.clearServer).toHaveBeenCalledOnce();
+    finish({ cleared: true, term: 5 });
+    await flush(el);
+  });
+
+  it("does not carry a refused removal's message into the clear confirmation", async () => {
+    const api = clearApi({
+      removeServer: vi.fn().mockRejectedValue({ code: "membership.standby_joined" }),
+    });
+    const el = await mount(api);
+    await openRemove(el);
+    await confirmRemove(el);
+    expect(dialog(el).querySelector("[role=alert]")).not.toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-remove]")!.click();
+    await flush(el);
+    await openClear(el);
+    expect(clearDialog(el).open).toBe(true);
+    expect(clearDialog(el).querySelector("[role=alert]")).toBeNull();
   });
 });

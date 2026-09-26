@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { AppError } from "@waitron/shared";
 import { buildNextMembershipDocument } from "./build.js";
 import { generateNodeKeyPair } from "./crypto.js";
-import { verifyMembershipDocument } from "./verify.js";
+import { MAX_NODES, MAX_REVOKED, verifyMembershipDocument } from "./verify.js";
 import type { MembershipNode, SignedMembershipDocument } from "./types.js";
 
 const signer = generateNodeKeyPair();
@@ -67,5 +68,107 @@ describe("buildNextMembershipDocument", () => {
       endorsements,
     });
     expect(doc.endorsements).toEqual(endorsements);
+  });
+});
+
+describe("buildNextMembershipDocument and the revoked list", () => {
+  const standby: MembershipNode = {
+    nodeId: "standby",
+    contactUrl: "https://s",
+    standing: "evicted",
+  };
+  const heldWith = (revoked?: readonly string[]) =>
+    buildNextMembershipDocument({
+      heldDocument: null,
+      nodes: [self],
+      signerNodeId: nodeId,
+      signerPrivateKey: signer.privateKey,
+      ...(revoked === undefined ? {} : { revoked }),
+    });
+  const next = (held: SignedMembershipDocument, extra: { revoked?: readonly string[] } = {}) =>
+    buildNextMembershipDocument({
+      heldDocument: held,
+      nodes: [self],
+      signerNodeId: nodeId,
+      signerPrivateKey: signer.privateKey,
+      ...extra,
+    });
+  const trust = { [nodeId]: signer.publicKey };
+  const codeOf = (fn: () => unknown) => {
+    try {
+      fn();
+    } catch (e) {
+      return e instanceof AppError ? { code: e.code, params: e.params } : e;
+    }
+    return "did not throw";
+  };
+
+  it("carries the held chart's revoked list into the next chart, signed and verifiable", () => {
+    const doc = next(heldWith(["gone"]));
+    expect(doc.body.revoked).toEqual(["gone"]);
+    expect(verifyMembershipDocument(doc, trust).valid).toBe(true);
+  });
+
+  it("uses the revoked list it is given in place of the held one", () => {
+    expect(next(heldWith(["gone"]), { revoked: ["gone", "also-gone"] }).body.revoked).toEqual([
+      "gone",
+      "also-gone",
+    ]);
+  });
+
+  it("omits the key altogether when the revoked list is empty, so the body keeps two keys", () => {
+    expect(Object.keys(next(heldWith(["gone"]), { revoked: [] }).body).sort()).toEqual([
+      "nodes",
+      "term",
+    ]);
+    expect(Object.keys(heldWith().body).sort()).toEqual(["nodes", "term"]);
+  });
+
+  it("refuses an id listed both in nodes and in revoked", () => {
+    expect(
+      codeOf(() =>
+        buildNextMembershipDocument({
+          heldDocument: heldWith(["standby"]),
+          nodes: [self, standby],
+          signerNodeId: nodeId,
+          signerPrivateKey: signer.privateKey,
+        }),
+      ),
+    ).toEqual({ code: "membership.revoked_node_listed", params: { nodeId: "standby" } });
+  });
+
+  it("refuses a revoked list naming one id twice", () => {
+    expect(codeOf(() => heldWith(["gone", "gone"]))).toEqual({
+      code: "membership.revoked_duplicate",
+      params: { nodeId: "gone" },
+    });
+  });
+
+  it("refuses more than MAX_NODES nodes, and signs exactly MAX_NODES", () => {
+    const nodes = (count: number): MembershipNode[] =>
+      Array.from({ length: count }, (_, i) =>
+        i === 0 ? self : { nodeId: `n${i}`, contactUrl: "", standing: "serving-secondary" },
+      );
+    const build = (count: number) =>
+      buildNextMembershipDocument({
+        heldDocument: null,
+        nodes: nodes(count),
+        signerNodeId: nodeId,
+        signerPrivateKey: signer.privateKey,
+      });
+    expect(codeOf(() => build(MAX_NODES + 1))).toEqual({
+      code: "membership.chart_too_large",
+      params: { list: "nodes", count: MAX_NODES + 1, limit: MAX_NODES },
+    });
+    expect(verifyMembershipDocument(build(MAX_NODES), trust).valid).toBe(true);
+  });
+
+  it("refuses more than MAX_REVOKED revoked ids, and signs exactly MAX_REVOKED", () => {
+    const ids = (count: number) => Array.from({ length: count }, (_, i) => `gone-${i}`);
+    expect(codeOf(() => heldWith(ids(MAX_REVOKED + 1)))).toEqual({
+      code: "membership.chart_too_large",
+      params: { list: "revoked", count: MAX_REVOKED + 1, limit: MAX_REVOKED },
+    });
+    expect(verifyMembershipDocument(heldWith(ids(MAX_REVOKED)), trust).valid).toBe(true);
   });
 });

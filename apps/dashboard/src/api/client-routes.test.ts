@@ -622,4 +622,26 @@ describe("DashboardApi routes", () => {
       ["/management-api/servers/a%2Fb/remove", "POST", undefined],
     ]);
   });
+
+  it("clears a removed server by its id, passing a refusal's code through", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ cleared: true, term: 5 }))
+      .mockResolvedValueOnce(refusal("membership.node_not_removed", 409));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.clearServer("44444444-4444-4444-8444-444444444444")).resolves.toEqual({
+      cleared: true,
+      term: 5,
+    });
+    await expect(api.clearServer("a/b")).rejects.toMatchObject({
+      code: "membership.node_not_removed",
+      status: 409,
+    });
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/servers/44444444-4444-4444-8444-444444444444/clear", "POST", undefined],
+      ["/management-api/servers/a%2Fb/clear", "POST", undefined],
+    ]);
+  });
 });

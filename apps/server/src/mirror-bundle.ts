@@ -12,6 +12,7 @@ import {
 } from "@waitron/db";
 import {
   endorseKey,
+  MAX_NODES,
   standingOf,
   type Endorsement,
   type SignedMembershipDocument,
@@ -77,8 +78,26 @@ export function refuseRemovedStandby(
   }
 }
 
-// Throws `mirror.not_provisioned` when the database carries no deployment stamp, and
-// `mirror.standby_removed` when the held chart lists the standby as `evicted`.
+/**
+ * A standby the held chart does not list would be its (MAX_NODES + 1)th machine, which no receiver
+ * verifies. A listed one adds nothing, so it is served.
+ */
+export function refuseFullChart(
+  held: SignedMembershipDocument | null,
+  standbyNodeId: string,
+): void {
+  if (
+    held !== null &&
+    held.body.nodes.length >= MAX_NODES &&
+    !held.body.nodes.some((n) => n.nodeId === standbyNodeId)
+  ) {
+    throw new AppError("mirror.membership_full", { limit: MAX_NODES });
+  }
+}
+
+// Throws `mirror.not_provisioned` when the database carries no deployment stamp,
+// `mirror.standby_removed` when the held chart lists the standby as `evicted` or has cleared it, and
+// `mirror.membership_full` when it has no place left for the standby.
 export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBundle> {
   const { tenant, primaryNode } = await withTransaction(deps.appDb, async (tx) => {
     // Safe: every provisioned database holds the taxpayer row and the designated node's row.
@@ -108,7 +127,9 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   const [reserved, primaryPrivateKey, boxCaPem] = await Promise.all([
     withTransaction(deps.appDb, async (tx) => {
       // In the reservation's own transaction, so a removal commits wholly before or after it.
-      refuseRemovedStandby(await readNodeMembership(tx), deps.standby.nodeId);
+      const held = await readNodeMembership(tx);
+      refuseRemovedStandby(held, deps.standby.nodeId);
+      refuseFullChart(held, deps.standby.nodeId);
       const primary = {
         locationId: brandLocationId(deps.designated.locationId),
         nodeId: brandNodeId(deps.designated.nodeId),

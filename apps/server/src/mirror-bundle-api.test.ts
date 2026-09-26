@@ -21,6 +21,7 @@ import {
   canonicalize,
   endorseKey,
   generateNodeKeyPair,
+  MAX_NODES,
   verifyBytes,
   verifyMembershipDocument,
   type MembershipNode,
@@ -32,7 +33,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
-import { removeUnjoinedStandby } from "./membership-removal.js";
+import { clearRemovedMachine, removeUnjoinedStandby } from "./membership-removal.js";
 
 // Pause points for the cases that land a removal part-way through a request. Each runs once and
 // clears itself; unset, the wrapped function behaves as the real one.
@@ -727,6 +728,211 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     });
     expect(fresh.status).toBe(200);
     expect(await installationCounter()).not.toEqual(counterBefore);
+  });
+
+  it("refuses a standby id the held chart has cleared (revoked) with 409 mirror.standby_removed, before reserving anything", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const clearedId = crypto.randomUUID();
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+    await writeNodeMembership(
+      db,
+      signedMembershipDoc(seedTerm, {
+        signerNodeId: designated.nodeId,
+        nodes: [
+          {
+            nodeId: designated.nodeId,
+            contactUrl: "https://box.deli.test",
+            standing: "serving-primary",
+          },
+        ],
+        revoked: [clearedId],
+      }),
+    );
+    const chartBefore = await readNodeMembership(db);
+    const counterBefore = await installationCounter();
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+      standbyNodeId: clearedId,
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: { code: "mirror.standby_removed", params: {} } });
+    expect(await installationCounter()).toEqual(counterBefore);
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+  });
+
+  it("refuses 409 membership.revoked_duplicate when the held chart's revoked list names a machine twice, so no chart can be minted", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+    await writeNodeMembership(
+      db,
+      signedMembershipDoc(seedTerm, {
+        signerNodeId: designated.nodeId,
+        nodes: [
+          {
+            nodeId: designated.nodeId,
+            contactUrl: "https://box.deli.test",
+            standing: "serving-primary",
+          },
+        ],
+        revoked: ["gone", "gone"],
+      }),
+    );
+    const chartBefore = await readNodeMembership(db);
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "membership.revoked_duplicate", params: { nodeId: "gone" } },
+    });
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+  });
+
+  describe("a held chart already listing MAX_NODES machines", () => {
+    /** This primary and MAX_NODES - 1 others, the first of them `evicted`; returns their ids. */
+    async function holdFullChart(
+      designated: AdoptResult,
+    ): Promise<{ term: number; ids: string[] }> {
+      const term = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+      const others: MembershipNode[] = Array.from({ length: MAX_NODES - 1 }, (_, i) => ({
+        nodeId: crypto.randomUUID(),
+        contactUrl: `https://standby-${i}.deli.test`,
+        standing: i === 0 ? "evicted" : "serving-secondary",
+      }));
+      await writeNodeMembership(
+        db,
+        signedMembershipDoc(term, {
+          signerNodeId: designated.nodeId,
+          nodes: [
+            {
+              nodeId: designated.nodeId,
+              contactUrl: "https://box.deli.test",
+              standing: "serving-primary",
+            },
+            ...others,
+          ],
+        }),
+      );
+      return { term, ids: others.map((n) => n.nodeId) };
+    }
+
+    it("refuses a new standby with 409 mirror.membership_full, before reserving anything", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      await holdFullChart(designated);
+      const chartBefore = await readNodeMembership(db);
+      const counterBefore = await installationCounter();
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "mirror.membership_full", params: { limit: MAX_NODES } },
+      });
+      expect(await installationCounter()).toEqual(counterBefore);
+      expect(await readNodeMembership(db)).toEqual(chartBefore);
+    });
+
+    it("takes the new standby once an admin clears the removed machine, and still refuses the cleared id", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      const { ids } = await holdFullChart(designated);
+      const removed = ids[0]!;
+      const newcomer = validStandby();
+      const refused = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...newcomer,
+      });
+      expect(refused.status).toBe(409);
+
+      const clearance = await clearRemovedMachine(
+        { db, ring: RING, nodeId: designated.nodeId, log: () => {} },
+        { targetNodeId: removed, personId: adminPersonId },
+      );
+      expect(clearance.cleared).toBe(true);
+
+      const joined = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...newcomer,
+      });
+      expect(joined.status).toBe(200);
+      const after = (await readNodeMembership(db))!;
+      expect(after.body.nodes).toHaveLength(MAX_NODES);
+      expect(after.body.nodes.map((n) => n.nodeId)).toContain(newcomer.standbyNodeId);
+      expect(after.body.revoked).toEqual([removed]);
+
+      const returning = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+        standbyNodeId: removed,
+      });
+      expect(returning.status).toBe(409);
+      expect(await returning.json()).toEqual({
+        error: { code: "mirror.standby_removed", params: {} },
+      });
+    });
+
+    it("still serves a standby the full chart already lists, which adds no machine", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      const { ids } = await holdFullChart(designated);
+      const listed = ids[1]!;
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+        standbyNodeId: listed,
+      });
+
+      expect(res.status).toBe(200);
+      const after = (await readNodeMembership(db))!;
+      expect(after.body.nodes).toHaveLength(MAX_NODES);
+      expect(after.body.nodes.find((n) => n.nodeId === listed)?.contactUrl).toBe(
+        "https://cloud.deli.test",
+      );
+    });
+
+    it("refuses 409 mirror.membership_full when the chart fills between a chart round's read and its write", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      await holdChartWithStandby(designated, crypto.randomUUID());
+      let filledTerm = -1;
+      pause.beforeChartMint = async () => {
+        filledTerm = (await holdFullChart(designated)).term;
+      };
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(pause.beforeChartMint).toBeUndefined();
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "mirror.membership_full", params: { limit: MAX_NODES } },
+      });
+      // The request wrote no later chart over the full one.
+      expect((await readNodeMembership(db))?.body.term).toBe(filledTerm);
+    });
   });
 
   describe("a removal of the same standby landing part-way through the request", () => {

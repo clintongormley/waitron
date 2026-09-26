@@ -5,7 +5,8 @@ import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
-import { listServers, removeUnjoinedStandby } from "./membership-removal.js";
+import { clearRemovedMachine, listServers, removeUnjoinedStandby } from "./membership-removal.js";
+import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 
 export interface MembershipRemovalApiDeps {
@@ -24,6 +25,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "membership.node_is_primary": 409,
   "membership.node_has_served": 409,
   "membership.standby_joined": 409,
+  "membership.node_not_removed": 409,
+  ...CHART_MINT_REFUSALS,
   "membership.write_contended": 503,
 };
 
@@ -33,6 +36,7 @@ export function mountMembershipRemovalApi(
   log: Logger,
 ): void {
   const run = createErrorBoundary(STATUS, "membership.removal_failed");
+  const runClear = createErrorBoundary(STATUS, "membership.clearance_failed");
 
   // Admin-only, the same permission that hands a standby its bundle.
   const authorize = (sessionId: string): Promise<string> =>
@@ -60,6 +64,17 @@ export function mountMembershipRemovalApi(
       const result = await removeUnjoinedStandby(
         { db: deps.db, ring: deps.ring, nodeId: deps.nodeId, log },
         { targetNodeId, personId },
+      );
+      return c.json(result);
+    }),
+  );
+
+  app.post("/management-api/servers/:nodeId/clear", (c) =>
+    runClear(c, log, async () => {
+      const personId = await authorize(requireManagementSession(c));
+      const result = await clearRemovedMachine(
+        { db: deps.db, ring: deps.ring, nodeId: deps.nodeId, log },
+        { targetNodeId: c.req.param("nodeId"), personId },
       );
       return c.json(result);
     }),

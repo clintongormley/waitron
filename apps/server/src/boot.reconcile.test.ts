@@ -77,6 +77,7 @@ let proceedsVenueDir: string;
 let supersededDb: Database;
 let proceedsDb: Database;
 const openStores: VenueDatabase[] = [];
+const venueDirs: string[] = [];
 
 async function seed(db: Database): Promise<void> {
   // `onConflictDoNothing` is untargeted: nothing here reads the result.
@@ -162,6 +163,7 @@ function peerFencingChart(term: number) {
 /** Migrated here, not by boot, because the identity rows have to exist before boot reads them. */
 async function migratedVenue(): Promise<[string, Database]> {
   const directory = await mkdtemp(join(tmpdir(), "waitron-reconcile-venue-"));
+  venueDirs.push(directory);
   await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
   const store = await openVenueDatabase(directory);
   openStores.push(store);
@@ -189,9 +191,7 @@ beforeAll(async () => {
 afterAll(async () => {
   while (openStores.length > 0) await openStores.pop()?.close();
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
-  for (const directory of [supersededVenueDir, proceedsVenueDir]) {
-    if (directory !== undefined) await rm(directory, { recursive: true, force: true });
-  }
+  for (const directory of venueDirs) await rm(directory, { recursive: true, force: true });
   rmSync(STATE_ROOT, { recursive: true, force: true });
 });
 
@@ -332,6 +332,85 @@ describe("returned-box membership reconciliation at boot", () => {
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
+
+  // The box judges the peer's chart against the chart it held BEFORE it, never the incoming one. In
+  // production boot's peer fetch sends no credential and the peer's route refuses it, so this path
+  // accepts nothing today; the stand-in peer here ignores the credential.
+  describe("a peer chart signed by a machine this box's held chart has removed", () => {
+    async function bootWithHeldPeerStanding(
+      peerStanding: "evicted" | "serving-secondary",
+    ): Promise<{ db: Database; acceptingSales: unknown; lines: string[] }> {
+      const [venueDir, db] = await migratedVenue();
+      await seed(db);
+      await stampDeployment(db, "preproduction");
+      await writeNodeMembership(
+        db,
+        signedMembershipDoc(1, {
+          signerNodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+          nodes: [
+            {
+              nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+              contactUrl: "https://box",
+              standing: "serving-primary",
+            },
+            { nodeId: PEER_NODE, contactUrl: "https://cloud", standing: peerStanding },
+          ],
+        }),
+      );
+      const peer = await startPeer(peerFencingChart(2));
+      await writeMirrorConfig(db, TILL_ENV.WAITRON_TILL_NODE_ID, {
+        relayUrl: peer.url,
+        boxHostname: "box.local",
+        boxCaPem: BOX_CA_PEM,
+        originNodeId: PEER_NODE,
+      });
+      const port = await freePort();
+      const lines: string[] = [];
+      const original = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
+        lines.push(...String(chunk).split("\n").filter(Boolean));
+        return (original as (...args: unknown[]) => boolean)(chunk, ...rest);
+      }) as typeof process.stdout.write;
+      let server: Awaited<ReturnType<typeof startServer>> | undefined;
+      try {
+        server = await startServer({
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: venueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        });
+        const node = await fetch(`http://127.0.0.1:${port}/api/node`);
+        expect(node.status).toBe(200);
+        const { acceptingSales } = (await node.json()) as { acceptingSales: unknown };
+        return { db, acceptingSales, lines };
+      } finally {
+        process.stdout.write = original;
+        await server?.close();
+        await peer.stop();
+      }
+    }
+
+    it("is not persisted, the box keeps selling, and the refusal is logged at warn with its reason", async () => {
+      const { db, acceptingSales, lines } = await bootWithHeldPeerStanding("evicted");
+
+      expect(acceptingSales).toBe(true);
+      expect((await readNodeMembership(db))?.body.term).toBe(1);
+      expect(await readSingletonRole(db, TILL_ENV.WAITRON_TILL_NODE_ID)).toBe("primary");
+      const refused = lines
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .filter((entry) => entry["event"] === "node.membership_refused_on_boot");
+      expect(refused).toEqual([
+        expect.objectContaining({ level: "warn", failure: "signer_removed" }),
+      ]);
+    }, 60_000);
+
+    it("control: the same chart IS persisted when the held chart lists its signer in good standing", async () => {
+      const { db, acceptingSales } = await bootWithHeldPeerStanding("serving-secondary");
+
+      expect(acceptingSales).toBe(false);
+      expect((await readNodeMembership(db))?.body.term).toBe(2);
+    }, 60_000);
+  });
 
   it("an UNREACHABLE peer leaves the returned box PRIMARY — it proceeds and accepts sales (prove-by-deletion)", async () => {
     await seedHeldChart(proceedsDb, 1);

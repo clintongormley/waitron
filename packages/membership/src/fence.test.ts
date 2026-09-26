@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isFencedStanding, routableServers, servingPrimaryNodeId, standingOf } from "./fence.js";
+import {
+  fencedOutNodeIds,
+  isFencedStanding,
+  routableServers,
+  servingPrimaryNodeId,
+  standingOf,
+} from "./fence.js";
 import type { MembershipNode, NodeStanding, SignedMembershipDocument } from "./types.js";
 
 const doc = (nodes: readonly MembershipNode[]): SignedMembershipDocument => ({
@@ -82,5 +88,51 @@ describe("routableServers", () => {
     expect(
       routableServers(doc([at("blank", "serving-secondary", ""), at("here", "serving-primary")])),
     ).toEqual([{ nodeId: "here", url: "https://here", standing: "serving-primary" }]);
+  });
+});
+
+describe("a revoked id", () => {
+  const cleared = (nodes: readonly MembershipNode[], revoked: readonly string[]) => ({
+    ...doc(nodes),
+    body: { term: 1, nodes, revoked },
+  });
+
+  it("answers evicted from standingOf, though nodes no longer lists it", () => {
+    expect(standingOf(cleared([node("n1", "serving-primary")], ["gone"]), "gone")).toBe("evicted");
+  });
+
+  it("leaves an id in neither list unknown", () => {
+    expect(
+      standingOf(cleared([node("n1", "serving-primary")], ["gone"]), "stranger"),
+    ).toBeUndefined();
+  });
+});
+
+describe("fencedOutNodeIds", () => {
+  it("names every evicted node and every revoked id, and no other", () => {
+    const held = {
+      ...doc([]),
+      body: {
+        term: 3,
+        nodes: [
+          node("primary", "serving-primary"),
+          node("standby", "serving-secondary"),
+          node("retired", "sell-only"),
+          node("removed", "evicted"),
+        ],
+        revoked: ["cleared-1", "cleared-2"],
+      },
+    };
+    expect([...fencedOutNodeIds(held)].sort()).toEqual(["cleared-1", "cleared-2", "removed"]);
+  });
+
+  it("names only the evicted nodes of a chart without a revoked list", () => {
+    expect([
+      ...fencedOutNodeIds(doc([node("p", "serving-primary"), node("x", "evicted")])),
+    ]).toEqual(["x"]);
+  });
+
+  it("names nobody when nothing is held", () => {
+    expect(fencedOutNodeIds(null).size).toBe(0);
   });
 });

@@ -164,6 +164,23 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: false });
   });
 
+  it("run's chart-minting refusals map to 409", async () => {
+    const refusals = [
+      new AppError("membership.chart_too_large", { list: "nodes", count: 9, limit: 8 }),
+      new AppError("membership.revoked_duplicate", { nodeId: "x" }),
+      new AppError("membership.revoked_node_listed", { nodeId: "x" }),
+    ];
+    for (const refusal of refusals) {
+      const { app } = appWith(
+        vi.fn(async (): Promise<PromoteRunResult> => {
+          throw refusal;
+        }),
+      );
+      const res = await post(app, { oldNodeNeutralised: true, breakGlass: GOOD_SECRET });
+      expect([res.status, (await res.json()).error.code]).toEqual([409, refusal.code]);
+    }
+  });
+
   it("run's promotion.node_fenced maps to 409", async () => {
     const run = vi.fn(async (): Promise<PromoteRunResult> => {
       throw new AppError("promotion.node_fenced", { standing: "sell-only" });

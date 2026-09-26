@@ -12,6 +12,7 @@
       "sale_substitutions",
       "daily_closes",
       "membership_removals",
+      "membership_clearances",
       "order_amendments"
     ]
   },

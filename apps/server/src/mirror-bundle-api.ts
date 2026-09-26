@@ -14,8 +14,12 @@ import { withMember } from "@waitron/membership";
 import { authorizeManager, endManagementSession, loginManagerById } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
-import { assembleMirrorBundle, refuseRemovedStandby } from "./mirror-bundle.js";
-import { MAX_CHART_WRITE_ROUNDS, mintNextMembershipDocument } from "./membership-mint.js";
+import { assembleMirrorBundle, refuseFullChart, refuseRemovedStandby } from "./mirror-bundle.js";
+import {
+  CHART_MINT_REFUSALS,
+  MAX_CHART_WRITE_ROUNDS,
+  mintNextMembershipDocument,
+} from "./membership-mint.js";
 import { isBareOrigin } from "./config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
@@ -45,6 +49,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.no_relay": 400,
   "mirror.standby_invalid": 400,
   "mirror.standby_removed": 409,
+  "mirror.membership_full": 409,
+  ...CHART_MINT_REFUSALS,
   "membership.write_contended": 503,
 };
 
@@ -136,6 +142,7 @@ async function appendStandbyToChart(
   for (let round = 1; round <= MAX_CHART_WRITE_ROUNDS; round += 1) {
     const held = await readNodeMembership(deps.appDb);
     refuseRemovedStandby(held, standbyNodeId);
+    refuseFullChart(held, standbyNodeId);
     const document = await mintNextMembershipDocument(
       { db: deps.appDb, ring: deps.ring },
       {

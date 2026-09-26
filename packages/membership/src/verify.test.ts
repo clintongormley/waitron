@@ -210,3 +210,71 @@ describe("verifyMembershipDocument structural validation", () => {
     });
   });
 });
+
+describe("verifyMembershipDocument with a revoked list", () => {
+  const a = generateNodeKeyPair();
+  const trust: TrustSet = { A: a.publicKey };
+  const withRevoked = (revoked: unknown) =>
+    ({ ...sampleBody(1), revoked }) as unknown as ReturnType<typeof sampleBody>;
+
+  it("accepts a signed chart carrying a revoked list", () => {
+    const r = verifyMembershipDocument(
+      signDoc(withRevoked(["gone-1", "gone-2"]), "A", a.privateKey),
+      trust,
+    );
+    expect(r.valid).toBe(true);
+  });
+
+  it("passes a chart carrying exactly MAX_REVOKED (256) revoked ids through the length gate", () => {
+    const revoked = Array.from({ length: 256 }, (_, i) => `gone-${i}`);
+    const r = verifyMembershipDocument(signDoc(withRevoked(revoked), "A", a.privateKey), trust);
+    expect(r.valid).toBe(true);
+  });
+
+  const malformed: ReadonlyArray<readonly [string, unknown]> = [
+    ["an empty revoked list", []],
+    ["revoked not an array", "gone"],
+    ["a non-string revoked id", ["gone", 7]],
+    ["a duplicated revoked id", ["gone", "gone"]],
+    ["a revoked id also listed in nodes", ["A"]],
+    ["more than MAX_REVOKED (256) revoked ids", Array.from({ length: 257 }, (_, i) => `g${i}`)],
+  ];
+
+  it.each(malformed)("refuses %s as malformed", (_label, revoked) => {
+    // Honestly signed, so only the shape check can refuse it.
+    const doc = signDoc(withRevoked(revoked), "A", a.privateKey);
+    expect(verifyMembershipDocument(doc, trust)).toEqual({ valid: false, reason: "malformed" });
+  });
+
+  it("refuses a body carrying a third key that is not revoked, as malformed", () => {
+    const body = { ...sampleBody(1), extra: ["gone"] } as unknown as ReturnType<typeof sampleBody>;
+    expect(verifyMembershipDocument(signDoc(body, "A", a.privateKey), trust)).toEqual({
+      valid: false,
+      reason: "malformed",
+    });
+  });
+
+  it("refuses a body carrying revoked AND another extra key, as malformed", () => {
+    const body = { ...sampleBody(1), revoked: ["gone"], extra: 1 } as unknown as ReturnType<
+      typeof sampleBody
+    >;
+    expect(verifyMembershipDocument(signDoc(body, "A", a.privateKey), trust)).toEqual({
+      valid: false,
+      reason: "malformed",
+    });
+  });
+});
+
+describe("verifyMembershipDocument with the receiver's held chart", () => {
+  it("refuses a chart whose signer the held chart lists evicted, even a trust anchor", () => {
+    const a = generateNodeKeyPair();
+    const held = signDoc(
+      { term: 1, nodes: [{ nodeId: "A", contactUrl: "https://a", standing: "evicted" }] },
+      "A",
+      a.privateKey,
+    );
+    expect(
+      verifyMembershipDocument(signDoc(sampleBody(2), "A", a.privateKey), { A: a.publicKey }, held),
+    ).toEqual({ valid: false, reason: "signer_removed" });
+  });
+});

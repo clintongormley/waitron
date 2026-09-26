@@ -1,3 +1,5 @@
+import type { MembershipDocumentBody } from "./types.js";
+
 export type CanonicalValue =
   | string
   | number
@@ -19,4 +21,9 @@ export function canonicalize(value: CanonicalValue): string {
     .map((k) => `${JSON.stringify(k)}:${canonicalize(obj[k])}`)
     .join(",");
   return `{${body}}`;
+}
+
+/** Signs the WHOLE body, so no field added later can pass verification unsigned. */
+export function bodyMessage(body: MembershipDocumentBody): string {
+  return canonicalize(body as unknown as CanonicalValue);
 }

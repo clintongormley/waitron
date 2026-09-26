@@ -14,6 +14,7 @@ import type { FenceAttestation } from "./promote.js";
 import { verifyBreakGlass } from "./break-glass.js";
 import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
+import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 
 /**
@@ -43,6 +44,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "promotion.fence_not_attested": 400,
   "promotion.node_fenced": 409,
   "promotion.membership_superseded": 409,
+  ...CHART_MINT_REFUSALS,
 };
 
 export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = () => {}): void {

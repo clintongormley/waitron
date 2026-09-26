@@ -6,14 +6,16 @@ import { verifyMembershipDocument } from "./verify.js";
  * than the one held. The asymmetry — this can only ever raise the held term (accept a demotion or
  * eviction), never grant authority — is what §5 of
  * `docs/superpowers/specs/2026-09-02-membership-and-rejoin-wire-protocol-design.md` relies on.
- * `currentTerm === null` means nothing is held yet.
+ * `currentTerm === null` means nothing is held yet. `held` is the receiver's own held chart, for
+ * `verifyMembershipDocument`.
  */
 export function acceptMembershipDocument(
   incoming: SignedMembershipDocument,
   currentTerm: number | null,
   trustSet: TrustSet,
+  held: SignedMembershipDocument | null = null,
 ): AcceptResult {
-  const verified = verifyMembershipDocument(incoming, trustSet);
+  const verified = verifyMembershipDocument(incoming, trustSet, held);
   if (!verified.valid) return { accepted: false, reason: "invalid", failure: verified.reason };
   if (currentTerm !== null && verified.term <= currentTerm)
     return { accepted: false, reason: "not_newer" };

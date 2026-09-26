@@ -10,6 +10,14 @@ export interface MembershipNode {
 export interface MembershipDocumentBody {
   readonly term: number;
   readonly nodes: readonly MembershipNode[];
+  /**
+   * Node ids cleared out of `nodes`; `standingOf` answers each as `evicted`. Omitted when
+   * empty, so a chart that has cleared nobody keeps the two-key body. It shuts out an ID, not a
+   * key: the joining machine sends its own node id (`standbyNodeId`,
+   * `apps/server/src/mirror-bundle-api.ts`), so an admin can still admit the same key again under
+   * a fresh id.
+   */
+  readonly revoked?: readonly string[];
 }
 
 /** A member key vouched for by an already-trusted node, chaining back to setup. */
@@ -37,7 +45,7 @@ export interface NodeKeyPair {
 export type TrustSet = Readonly<Record<string, string>>;
 
 export type VerifyFailure =
-  "malformed" | "untrusted_signer" | "bad_signature" | "endorsement_invalid";
+  "malformed" | "untrusted_signer" | "bad_signature" | "endorsement_invalid" | "signer_removed";
 
 export type VerifyResult =
   | {
