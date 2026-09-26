@@ -514,6 +514,12 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       expect(trust.status).toBe(200);
       expect(await trust.text()).toContain("to this Waitron server");
       expect((await fetch(`${base}/setup-api/discovery`)).status).toBe(404);
+      const reset = await fetch(`${base}/setup-api/reset-incomplete-adopt`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ personId: "p", password: "x" }),
+      });
+      expect(reset.status).toBe(404);
 
       // No ambient viewer: the dashboard read primes no cookie.
       const dash = await fetch(`${base}/management-api/catalogues`);

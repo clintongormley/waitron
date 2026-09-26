@@ -17,12 +17,14 @@ import "./screens/venue-screen.js";
 import "./screens/cert-screen.js";
 import "./screens/review-screen.js";
 import "./screens/provisioning-screen.js";
+import "./screens/reset-screen.js";
 import "./screens/done-screen.js";
 import type {
   AdoptBody,
   ApiError,
   ConfigurationPreview,
   ProvisionBody,
+  ResetCredential,
   SetupApi,
   CloudRecoveryView,
   VenueDefaults,
@@ -33,6 +35,7 @@ import type {
   RestoreRequestDetail,
 } from "./events.js";
 import type { RestoredVenue } from "./screens/restore-bucket-screen.js";
+import type { ResetScreenOutcome } from "./screens/reset-screen.js";
 import { SERVER_FIELDS } from "./server-fields.js";
 
 /** The wizard's screens, shown one at a time from in-memory state, never a URL route. */
@@ -52,6 +55,7 @@ export type Screen =
   | "cert"
   | "review"
   | "provisioning"
+  | "reset"
   | "done";
 
 /**
@@ -114,12 +118,14 @@ const VENUE_ERROR_MESSAGES: Record<string, string> = {
   "fiscal.regime_not_implemented": "That fiscal territory isn't supported yet.",
 };
 
+const NOT_READY_MESSAGE = "The server isn't ready yet. Wait a moment, then try again.";
+
 const ADOPT_ERROR_MESSAGES: Record<string, string> = {
   "mirror.bundle_fetch_failed":
     "Couldn't reach the primary server or the login was refused. Check the address and login, then try again.",
   "setup.request_invalid":
     "The server rejected the details. Check the address and login, then try again.",
-  "setup.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
+  "setup.not_ready": NOT_READY_MESSAGE,
 };
 
 const OPERATION_CONFLICT_MESSAGE =
@@ -127,7 +133,22 @@ const OPERATION_CONFLICT_MESSAGE =
 const ALREADY_STAMPED_MESSAGE =
   "A previous setup attempt left this server partly set up, for a different environment. Contact support to reset this server, then start setup again.";
 const ADOPT_INCOMPLETE_MESSAGE =
-  "A previous attempt to join this server to a restaurant stopped partway and left it partly set up. It cannot be finished from here. Contact support to reset this server, then start setup again.";
+  "A previous attempt to join this server to a restaurant stopped partway and left it partly set up. It cannot be finished. You can reset this server with the admin person ID and password you used to connect it, then start setup again.";
+
+const RESET_ERROR_MESSAGES: Record<string, string> = {
+  "setup.request_invalid":
+    "The server rejected the details. Check the admin person ID and password, then try again.",
+  "setup.not_ready": NOT_READY_MESSAGE,
+};
+
+const RESET_GENERIC_ERROR = "The server could not be reset. Check the connection and try again.";
+
+function describeThrottle(params: Record<string, unknown> | undefined): string {
+  const seconds = params?.retryAfterSeconds;
+  if (typeof seconds !== "number") return "Too many attempts. Wait a few minutes, then try again.";
+  return `Too many attempts. Wait ${seconds} ${seconds === 1 ? "second" : "seconds"}, then try again.`;
+}
+
 const KIT_DAMAGED =
   "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Upload the kit file as it was saved, or paste the whole kit.";
 const KEY_DOES_NOT_OPEN =
@@ -165,7 +186,7 @@ const BUCKET_ERROR_MESSAGES: Record<string, string> = {
   "restore.schema_too_new": NEWER_SOFTWARE,
   "setup.already_provisioning":
     "Setup is already in progress on this server. Wait for it to finish, then reload this page.",
-  "setup.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
+  "setup.not_ready": NOT_READY_MESSAGE,
   "setup.operation_conflict": OPERATION_CONFLICT_MESSAGE,
   "setup.request_invalid":
     "The server rejected the details. Check the kit and the environment, then try again.",
@@ -339,6 +360,14 @@ export class SetupApp extends LitElement {
   /** Set only on a terminal failure, which also clears {@link SetupApp.provisionCanRetry}. */
   @state() private provisionReloadLabel?: string;
 
+  /** Set only for an adopt that stopped partway, the one state the reset screen can clear. */
+  @state() private provisionCanReset = false;
+
+  @state() private resetBusy = false;
+  @state() private resetCredentialsRejected = false;
+  @state() private resetError?: string;
+  @state() private resetOutcome?: ResetScreenOutcome;
+
   override firstUpdated(): void {
     void this.#boot();
     void this.#loadVenueDefaults();
@@ -443,6 +472,8 @@ export class SetupApp extends LitElement {
     this.cloudLiveSince = undefined;
     this.cloudLiveUnknown = false;
     this.configurationError = undefined;
+    this.resetCredentialsRejected = false;
+    this.resetError = undefined;
     this.screen = event.detail.screen;
   }
 
@@ -466,9 +497,7 @@ export class SetupApp extends LitElement {
     this.reviewError = undefined;
     this.venueError = undefined;
     this.venueInvalidField = undefined;
-    this.provisionMessage = undefined;
-    this.provisionCanRetry = false;
-    this.provisionReloadLabel = undefined;
+    this.#clearProvisionOutcome();
     this.screen = "provisioning";
     try {
       await this.api.provision(assembleBody(this.draft));
@@ -545,7 +574,7 @@ export class SetupApp extends LitElement {
         this.provisionReloadLabel = "Reload";
         return;
       case "setup.not_ready":
-        this.provisionMessage = "The server isn't ready yet. Wait a moment, then try again.";
+        this.provisionMessage = NOT_READY_MESSAGE;
         this.provisionCanRetry = true;
         return;
       default:
@@ -564,9 +593,7 @@ export class SetupApp extends LitElement {
   async #onAdoptRequested(event: CustomEvent<{ body: AdoptBody }>): Promise<void> {
     event.stopPropagation();
     this.connectError = undefined;
-    this.provisionMessage = undefined;
-    this.provisionCanRetry = false;
-    this.provisionReloadLabel = undefined;
+    this.#clearProvisionOutcome();
     this.screen = "provisioning";
     try {
       const outcome = await this.api.adopt(event.detail.body);
@@ -583,9 +610,7 @@ export class SetupApp extends LitElement {
   async #onRestoreRequested(event: CustomEvent<{ request: RestoreRequestDetail }>): Promise<void> {
     event.stopPropagation();
     this.restoreError = undefined;
-    this.provisionMessage = undefined;
-    this.provisionCanRetry = false;
-    this.provisionReloadLabel = undefined;
+    this.#clearProvisionOutcome();
     this.screen = "provisioning";
     const request = event.detail.request;
     // The server answered the old-server question for the file it was sent, not for another.
@@ -641,9 +666,7 @@ export class SetupApp extends LitElement {
       this.bucketVenue = undefined;
     }
     this.bucketRestoreError = undefined;
-    this.provisionMessage = undefined;
-    this.provisionCanRetry = false;
-    this.provisionReloadLabel = undefined;
+    this.#clearProvisionOutcome();
     this.screen = "provisioning";
     try {
       await this.api.restoreFromBucket(request);
@@ -782,8 +805,9 @@ export class SetupApp extends LitElement {
 
   /**
    * The terminal refusals offer a bare "Reload": only a box still in setup mode answers an adopt, and
-   * reloading one reopens this wizard. `setup.already_provisioned` is thrown only by the provision
-   * path today and is mapped here for parity. Any other code the server answered (the error carries
+   * reloading one reopens this wizard. An adopt that stopped partway offers the reset screen
+   * instead. `setup.already_provisioned` is thrown only by the provision path today and is mapped
+   * here for parity. Any other code the server answered (the error carries
    * an HTTP `status`) reads the saved setup first, and an adopt saved past "started" and short of
    * "complete" gets the stopped-partway message. Otherwise `setup.operation_conflict` is terminal
    * too, and everything else routes back to the connect form, the mirror path's retry surface.
@@ -809,9 +833,7 @@ export class SetupApp extends LitElement {
         this.provisionReloadLabel = "Reload";
         return;
       case "setup.adopt_incomplete":
-        this.provisionMessage = ADOPT_INCOMPLETE_MESSAGE;
-        this.provisionCanRetry = false;
-        this.provisionReloadLabel = "Reload";
+        this.#offerReset();
         return;
     }
     // The server matches a resend by its exact body, and a one-time code changes it, so an adopt
@@ -820,9 +842,7 @@ export class SetupApp extends LitElement {
     const stoppedPartway = error.status !== undefined && (await this.#savedAdoptStoppedPartway());
     if (!this.isConnected) return;
     if (stoppedPartway) {
-      this.provisionMessage = ADOPT_INCOMPLETE_MESSAGE;
-      this.provisionCanRetry = false;
-      this.provisionReloadLabel = "Reload";
+      this.#offerReset();
     } else if (code === "setup.operation_conflict") {
       this.provisionMessage = OPERATION_CONFLICT_MESSAGE;
       this.provisionCanRetry = false;
@@ -830,6 +850,72 @@ export class SetupApp extends LitElement {
     } else {
       this.connectError = ADOPT_ERROR_MESSAGES[code] ?? ADOPT_GENERIC_ERROR;
       this.screen = "connect";
+    }
+  }
+
+  /** Every flag the provisioning screen reads, so no answer outlives the request it answered. */
+  #clearProvisionOutcome(): void {
+    this.provisionMessage = undefined;
+    this.provisionCanRetry = false;
+    this.provisionReloadLabel = undefined;
+    this.provisionCanReset = false;
+  }
+
+  #offerReset(): void {
+    this.provisionMessage = ADOPT_INCOMPLETE_MESSAGE;
+    this.provisionCanRetry = false;
+    this.provisionReloadLabel = undefined;
+    this.provisionCanReset = true;
+  }
+
+  /** Like the adopt body, the login goes straight to the API and is never kept. */
+  async #onResetRequested(event: CustomEvent<{ credential: ResetCredential }>): Promise<void> {
+    event.stopPropagation();
+    if (this.resetBusy) return;
+    this.resetBusy = true;
+    this.resetCredentialsRejected = false;
+    this.resetError = undefined;
+    try {
+      await this.api.resetIncompleteAdopt(event.detail.credential);
+      if (!this.isConnected) return;
+      this.resetOutcome = {
+        kind: "resetting",
+        message:
+          "The server is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: contact support.",
+      };
+    } catch (error) {
+      if (!this.isConnected) return;
+      const { code, params } = (error ?? {}) as ApiError;
+      switch (code) {
+        case "password.invalid":
+          this.resetCredentialsRejected = true;
+          break;
+        case "password.throttled":
+          this.resetError = describeThrottle(params);
+          break;
+        case "setup.reset_unavailable":
+          this.resetOutcome = {
+            kind: "refused",
+            message:
+              "There is no half-finished join to reset on this server. Reload to start setup again.",
+          };
+          break;
+        case "setup.already_provisioning":
+          this.resetOutcome = {
+            kind: "refused",
+            message: "Setup is already in progress on this server.",
+          };
+          break;
+        case "setup.operation_conflict":
+          this.resetOutcome = { kind: "refused", message: OPERATION_CONFLICT_MESSAGE };
+          break;
+        default:
+          this.resetError =
+            (typeof code === "string" ? RESET_ERROR_MESSAGES[code] : undefined) ??
+            RESET_GENERIC_ERROR;
+      }
+    } finally {
+      if (this.isConnected) this.resetBusy = false;
     }
   }
 
@@ -869,6 +955,8 @@ export class SetupApp extends LitElement {
       @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
         void this.#onConfigurationRequested(e)}
       @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
+      @reset-requested=${(e: CustomEvent<{ credential: ResetCredential }>) =>
+        void this.#onResetRequested(e)}
     >
       ${this.#renderScreen()}
     </wt-modal>`;
@@ -969,7 +1057,16 @@ export class SetupApp extends LitElement {
           .message=${this.provisionMessage}
           .canRetry=${this.provisionCanRetry}
           .reloadLabel=${this.provisionReloadLabel}
+          .canReset=${this.provisionCanReset}
         ></setup-provisioning-screen>`;
+      case "reset":
+        return html`<setup-reset-screen
+          data-test="screen-reset"
+          .busy=${this.resetBusy}
+          .credentialsRejected=${this.resetCredentialsRejected}
+          .errorMessage=${this.resetError}
+          .outcome=${this.resetOutcome}
+        ></setup-reset-screen>`;
       case "done":
         return html`<setup-done-screen
           data-test="screen-done"

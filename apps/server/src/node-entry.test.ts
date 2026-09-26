@@ -911,6 +911,41 @@ describe("runEntry", () => {
     ]);
   });
 
+  it("runs a staged reset after a staged restore and before the folder is held for the start", async () => {
+    const order: string[] = [];
+    await runEntry(
+      deps({
+        runStagedRestore: vi.fn(() => {
+          order.push("runStagedRestore");
+          return Promise.resolve(false);
+        }),
+        runStagedReset: vi.fn(({ stateDir, venueDir }) => {
+          order.push(`runStagedReset:${stateDir}:${venueDir}`);
+          return Promise.resolve(false);
+        }),
+        lockVenue: vi.fn(() => {
+          order.push("lockVenue");
+          return Promise.resolve({ release: () => {} });
+        }),
+        assertNotAhead: vi.fn(() => {
+          order.push("assertNotAhead");
+          return Promise.resolve();
+        }),
+        startServer: vi.fn<StartServer>(() => {
+          order.push("startServer");
+          return Promise.resolve({ close: () => Promise.resolve() });
+        }),
+      }),
+    );
+    expect(order).toEqual([
+      "runStagedRestore",
+      "runStagedReset:/state:/venue",
+      "lockVenue",
+      "assertNotAhead",
+      "startServer",
+    ]);
+  });
+
   // A venue directory under a regular file cannot be created, so the real default fails the boot;
   // a no-op default would resolve with `startServer` called.
   it("defaults the ahead check to the real one, not to a no-op", async () => {

@@ -7,14 +7,13 @@ const VENUE_FILES = ["venue.db", "node.db"] as const;
 const SIDECARS = ["", "-wal", "-shm"] as const;
 
 /**
- * Discard this node's whole local database, for rejoin. The caller re-migrates the directory
- * afterwards.
+ * Discard this node's whole local database. The caller holds the venue lock.
  *
  * `migrations.lock` and `venue.lock` are deliberately left where they are: they carry no data, and
  * unlinking a held lock file lets another opener take a new one beside the holder. Measured with a
  * control: while one connection holds `begin immediate` on `migrations.lock`, a second opener of
  * the same path is refused `database is locked` (errcode 5), and a second opener after the path is
- * unlinked acquires it at once. The wipe runs under the venue lock (`rejoin-command.ts`).
+ * unlinked acquires it at once.
  *
  * Each removal is `force`, so a box that never migrated, or a half-wiped one being re-run, succeeds.
  */

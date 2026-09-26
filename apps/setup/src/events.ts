@@ -1,5 +1,5 @@
 import type { DeepPartial, Screen } from "./setup-app.js";
-import type { AdoptBody, ProvisionBody } from "./api/client.js";
+import type { AdoptBody, ProvisionBody, ResetCredential } from "./api/client.js";
 
 /** Typed dispatchers for the events the wizard screens emit up to the shell. */
 
@@ -33,6 +33,13 @@ export function dispatchProvisionRequested(el: EventTarget): void {
 export function dispatchAdoptRequested(el: EventTarget, body: AdoptBody): void {
   el.dispatchEvent(
     new CustomEvent("adopt-requested", { detail: { body }, bubbles: true, composed: true }),
+  );
+}
+
+/** Carries the login itself, for the same reason as `adopt-requested`: the shell does not keep it. */
+export function dispatchResetRequested(el: EventTarget, credential: ResetCredential): void {
+  el.dispatchEvent(
+    new CustomEvent("reset-requested", { detail: { credential }, bubbles: true, composed: true }),
   );
 }
 

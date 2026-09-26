@@ -127,6 +127,7 @@ import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { createMailpitClient } from "./mailpit-client.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { stageRestoreRequest, stageStreamRestore } from "./restore-request.js";
+import { stageResetRequest } from "./reset-request.js";
 import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { boundObjectStore } from "./bounded-store.js";
 import { RESTORE_STAGING_DIR, validateArtifact } from "./restore.js";
@@ -814,6 +815,7 @@ async function bootServer(
               openStore: openBoundedBucket,
             });
           }),
+        stageReset: (operationId) => stageResetRequest(config.stateDir, operationId),
         stageBucketRestore: async ({ kit, environment, oldBoxGone, venueConfirmed }) =>
           stageStreamRestore({
             kit: parseRecoveryKit(kit),

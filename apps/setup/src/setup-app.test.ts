@@ -40,6 +40,7 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
     restoreFromCloud: vi.fn(),
     stageConfiguration: vi.fn(),
     runFiscalTest: vi.fn().mockResolvedValue({ status: "accepted" }),
+    resetIncompleteAdopt: vi.fn().mockResolvedValue({ resetStaged: true, restarting: true }),
     ...overrides,
   } as unknown as SetupApi;
 }
@@ -200,6 +201,22 @@ function readState(el: SetupApp, keys: string[]): Record<string, unknown> {
 async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<string | null> {
   const host = await screenHost(el, screen);
   return host.shadowRoot!.querySelector<HTMLElement>(sel)?.textContent?.trim() ?? null;
+}
+
+/** The stopped-partway message offers the reset in place of support, and nothing else. */
+async function expectAdoptIncompleteWithReset(el: SetupApp): Promise<void> {
+  expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).toBeNull();
+  const text = (await screenText(el, "provisioning", "[data-test=error]"))!.replace(/\s+/g, " ");
+  expect(text).toContain("partly set up");
+  expect(text).toContain("stopped partway");
+  expect(text).toContain("admin person ID and password you used to connect");
+  expect(text).not.toContain("Contact support");
+  const host = await screenHost(el, "provisioning");
+  expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+  expect(host.shadowRoot!.querySelector("[data-test=reload]")).toBeNull();
+  expect(host.shadowRoot!.querySelector("[data-test=reset]")?.textContent?.trim()).toBe(
+    "Reset this server",
+  );
 }
 
 describe("setup-app", () => {
@@ -1029,6 +1046,7 @@ describe("setup-app", () => {
     expect(text).not.toContain("already set up");
     const host = await screenHost(el, "provisioning");
     expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=reset]")).toBeNull();
     expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent?.trim()).toBe(
       "Reload",
     );
@@ -1304,29 +1322,32 @@ describe("setup-app", () => {
     expect(reload?.textContent).not.toContain("dashboard");
   });
 
-  it.each([
-    ["deployment.already_stamped", "for a different environment"],
-    ["setup.adopt_incomplete", "stopped partway"],
-  ])(
-    "maps %s on adopt to a partly-set-up message that sends the operator to support, with a bare reload and NO retry",
-    async (code, detail) => {
-      const adopt = vi.fn().mockRejectedValue({ code, params: {} });
-      const el = await mountSetupApp(stubApi({ adopt }));
-      adoptRequest(el);
-      await flush(el);
-      expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).toBeNull();
-      const text = await screenText(el, "provisioning", "[data-test=error]");
-      expect(text).toContain("partly set up");
-      expect(text).toContain(detail);
-      expect(text).toContain("Contact support");
-      expect(text).not.toContain("already set up");
-      const host = await screenHost(el, "provisioning");
-      expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
-      expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent?.trim()).toBe(
-        "Reload",
-      );
-    },
-  );
+  it("maps deployment.already_stamped on adopt to a partly-set-up message that sends the operator to support, with a bare reload, NO retry and NO reset", async () => {
+    const adopt = vi.fn().mockRejectedValue({ code: "deployment.already_stamped", params: {} });
+    const el = await mountSetupApp(stubApi({ adopt }));
+    adoptRequest(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).toBeNull();
+    const text = await screenText(el, "provisioning", "[data-test=error]");
+    expect(text).toContain("partly set up");
+    expect(text).toContain("for a different environment");
+    expect(text).toContain("Contact support");
+    expect(text).not.toContain("already set up");
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=reset]")).toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent?.trim()).toBe(
+      "Reload",
+    );
+  });
+
+  it("maps setup.adopt_incomplete on adopt to a stopped-partway message that offers the reset, with NO retry", async () => {
+    const adopt = vi.fn().mockRejectedValue({ code: "setup.adopt_incomplete", params: {} });
+    const el = await mountSetupApp(stubApi({ adopt }));
+    adoptRequest(el);
+    await flush(el);
+    await expectAdoptIncompleteWithReset(el);
+  });
 
   it("maps setup.operation_conflict on adopt to the terminal saved-setup message with a reload (no retry)", async () => {
     const adopt = vi
@@ -1339,6 +1360,7 @@ describe("setup-app", () => {
     expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("saved setup");
     const host = await screenHost(el, "provisioning");
     expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=reset]")).toBeNull();
     expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent?.trim()).toBe(
       "Reload",
     );
@@ -1381,21 +1403,17 @@ describe("setup-app", () => {
     ] as const;
 
     async function expectAdoptIncomplete(el: SetupApp): Promise<void> {
-      expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).toBeNull();
-      const text = await screenText(el, "provisioning", "[data-test=error]");
-      expect(text).toContain("stopped partway");
-      expect(text).toContain("Contact support");
-      expect(text).not.toContain("saved setup");
-      const host = await screenHost(el, "provisioning");
-      expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
-      expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent?.trim()).toBe(
-        "Reload",
+      await expectAdoptIncompleteWithReset(el);
+      expect(await screenText(el, "provisioning", "[data-test=error]")).not.toContain(
+        "saved setup",
       );
     }
 
     async function expectConflictMessageOrConnectForm(el: SetupApp, code: string): Promise<void> {
       if (code === "setup.operation_conflict") {
         expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("saved setup");
+        const host = await screenHost(el, "provisioning");
+        expect(host.shadowRoot!.querySelector("[data-test=reset]")).toBeNull();
       } else {
         expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
         expect(await screenText(el, "connect", "[data-test=server-error]")).toContain(
@@ -1478,6 +1496,360 @@ describe("setup-app", () => {
       await flush(el);
       expect(getStatus).toHaveBeenCalledTimes(bootReads);
       expect(await screenText(el, "provisioning", "[data-test=error]")).toContain(fragment);
+    });
+  });
+});
+
+describe("resetting a join that stopped partway", () => {
+  const LOGIN = { personId: "op-1", password: "  correct horse  " };
+
+  async function offerReset(api: SetupApi): Promise<SetupApp> {
+    const el = await mountSetupApp(api);
+    adoptRequest(el);
+    await flush(el);
+    return el;
+  }
+
+  async function openReset(el: SetupApp): Promise<HTMLElement> {
+    const host = await screenHost(el, "provisioning");
+    host.shadowRoot!.querySelector<HTMLElement>("[data-test=reset]")!.click();
+    await el.updateComplete;
+    return screenHost(el, "reset");
+  }
+
+  async function submitReset(el: SetupApp, login = LOGIN): Promise<void> {
+    const screen = await screenHost(el, "reset");
+    for (const [field, value] of Object.entries(login)) {
+      screen
+        .shadowRoot!.querySelector(`[data-test=${field}]`)!
+        .dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+        );
+    }
+    await (screen as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=reset]")!.click();
+    await flush(el);
+  }
+
+  const incomplete = () =>
+    vi.fn().mockRejectedValue({ code: "setup.adopt_incomplete", params: {}, status: 409 });
+
+  it.each([
+    ["the refusal names it", incomplete(), undefined],
+    [
+      "the saved setup shows it",
+      vi.fn().mockRejectedValue({ code: "server.internal", params: {}, status: 500 }),
+      vi.fn().mockResolvedValue({
+        provisioned: false,
+        environment: "preproduction",
+        needs: ["venue"],
+        operation: {
+          id: "op-1",
+          kind: "adopt",
+          phase: "membership_seeded",
+          updatedAt: "2026-09-26T10:00:00.000Z",
+        },
+      } satisfies SetupStatus),
+    ],
+  ])(
+    "offers the reset screen when %s, and Back returns to the message",
+    async (_label, adopt, getStatus) => {
+      const el = await offerReset(
+        stubApi(getStatus === undefined ? { adopt } : { adopt, getStatus }),
+      );
+      await expectAdoptIncompleteWithReset(el);
+      const screen = await openReset(el);
+      expect(screen.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Reset this server");
+      screen.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
+      await el.updateComplete;
+      await expectAdoptIncompleteWithReset(el);
+    },
+  );
+
+  it.each([
+    ["setup.operation_conflict", 409],
+    ["deployment.already_stamped", 409],
+    ["server.internal", 500],
+  ])("does not offer the reset after a provision refused with %s", async (code, status) => {
+    const provision = vi.fn().mockRejectedValue({ code, params: {}, status });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=error]")).not.toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=reset]")).toBeNull();
+  });
+
+  it("does not offer the reset after an adopt that stopped partway is followed by a fresh adopt refused otherwise", async () => {
+    const adopt = incomplete();
+    const el = await offerReset(stubApi({ adopt }));
+    adopt.mockRejectedValue({ code: "setup.already_provisioning", params: {}, status: 409 });
+    adoptRequest(el);
+    await flush(el);
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=error]")!.textContent).toContain(
+      "already in progress",
+    );
+    expect(host.shadowRoot!.querySelector("[data-test=reset]")).toBeNull();
+  });
+
+  it("offers Try again, not the reset, when a provision fails after an adopt that stopped partway", async () => {
+    const provision = vi
+      .fn()
+      .mockRejectedValue({ code: "server.internal", params: {}, status: 500 });
+    const el = await offerReset(stubApi({ adopt: incomplete(), provision }));
+    await expectAdoptIncompleteWithReset(el);
+    provisionRequest(el);
+    await flush(el);
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=error]")!.textContent).toContain(
+      "Provisioning failed",
+    );
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).not.toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=reset]")).toBeNull();
+  });
+
+  it.each([
+    [
+      "a backup file",
+      (el: SetupApp) =>
+        restoreRequest(el, {
+          artifact: new File(["encrypted"], "waitron.backup"),
+          recoveryKey: "k",
+          environment: "production",
+        }),
+    ],
+    ["the bucket", (el: SetupApp) => bucketRequest(el)],
+  ])(
+    "drops the reset offer when a restore from %s starts after an adopt that stopped partway",
+    async (_label, request) => {
+      const pending = deferred();
+      const el = await offerReset(
+        stubApi({
+          adopt: incomplete(),
+          restore: vi.fn().mockReturnValue(pending.promise),
+          restoreFromBucket: vi.fn().mockReturnValue(pending.promise),
+        }),
+      );
+      await expectAdoptIncompleteWithReset(el);
+      request(el);
+      await flush(el);
+      expect(readState(el, ["provisionMessage", "provisionCanReset"])).toEqual({
+        provisionMessage: undefined,
+        provisionCanReset: false,
+      });
+      pending.resolve({ restoreStaged: true, restarting: true });
+      await flush(el);
+    },
+  );
+
+  it("posts the typed person ID and password to the reset route", async () => {
+    const resetIncompleteAdopt = vi.fn().mockResolvedValue({ resetStaged: true, restarting: true });
+    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    await openReset(el);
+    await submitReset(el);
+    expect(resetIncompleteAdopt).toHaveBeenCalledExactlyOnceWith({
+      personId: "op-1",
+      password: "  correct horse  ",
+    });
+  });
+
+  it("keeps reset-requested inside the wizard", async () => {
+    const el = await offerReset(stubApi({ adopt: incomplete() }));
+    const escaped: Event[] = [];
+    el.parentElement!.addEventListener("reset-requested", (e) => escaped.push(e));
+    await openReset(el);
+    await submitReset(el);
+    expect(escaped).toEqual([]);
+  });
+
+  it("keeps an empty form from posting", async () => {
+    const resetIncompleteAdopt = vi.fn();
+    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    await openReset(el);
+    await submitReset(el, { personId: "", password: "" });
+    expect(resetIncompleteAdopt).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-test=screen-reset]")).not.toBeNull();
+  });
+
+  it("shows Resetting… and sends one request while the reset is in flight", async () => {
+    const pending = deferred();
+    const resetIncompleteAdopt = vi.fn().mockReturnValue(pending.promise);
+    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    const screen = await openReset(el);
+    await submitReset(el);
+    await (screen as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    const button = screen.shadowRoot!.querySelector<HTMLElement>("[data-test=reset]")!;
+    expect(button.hasAttribute("disabled")).toBe(true);
+    expect(button.textContent!.trim()).toBe("Resetting…");
+    screen.dispatchEvent(
+      new CustomEvent("reset-requested", {
+        detail: { credential: LOGIN },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(resetIncompleteAdopt).toHaveBeenCalledTimes(1);
+    pending.resolve({ resetStaged: true, restarting: true });
+    await flush(el);
+  });
+
+  it("tells the operator to wait and reload once the reset is staged", async () => {
+    const el = await offerReset(stubApi({ adopt: incomplete() }));
+    await openReset(el);
+    await submitReset(el);
+    expect((await screenText(el, "reset", "[data-test=outcome]"))?.replace(/\s+/g, " ")).toBe(
+      "The server is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: contact support.",
+    );
+    expect(await screenText(el, "reset", "[data-test=reload]")).toBe("Reload");
+  });
+
+  it.each([
+    [
+      "setup.reset_unavailable",
+      "There is no half-finished join to reset on this server. Reload to start setup again.",
+    ],
+    ["setup.already_provisioning", "Setup is already in progress on this server."],
+    [
+      "setup.operation_conflict",
+      "This server has saved setup work for a different request. Resume the original setup or contact support.",
+    ],
+  ])("ends at a Reload for %s", async (code, message) => {
+    const resetIncompleteAdopt = vi.fn().mockRejectedValue({ code, params: {}, status: 409 });
+    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    await openReset(el);
+    await submitReset(el);
+    const screen = await screenHost(el, "reset");
+    const outcome = screen.shadowRoot!.querySelector("[data-test=outcome]")!;
+    expect(outcome.getAttribute("role")).toBe("alert");
+    expect(outcome.textContent!.replace(/\s+/g, " ").trim()).toBe(message);
+    expect(await screenText(el, "reset", "[data-test=reload]")).toBe("Reload");
+    expect(screen.shadowRoot!.querySelector("[data-test=personId]")).toBeNull();
+  });
+
+  it("marks the fields and names the refused login when the password is refused", async () => {
+    const resetIncompleteAdopt = vi
+      .fn()
+      .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
+    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    await openReset(el);
+    await submitReset(el);
+    const screen = await screenHost(el, "reset");
+    expect(screen.shadowRoot!.querySelector("[data-test=personId]")!.hasAttribute("invalid")).toBe(
+      true,
+    );
+    expect(screen.shadowRoot!.querySelector("[data-test=password]")!.hasAttribute("invalid")).toBe(
+      true,
+    );
+    const summary = screen.shadowRoot!.querySelector("wt-form-error-summary") as unknown as {
+      errors: string[];
+    };
+    expect(summary.errors).toEqual([
+      "That person ID and password are not the admin login used to connect this server. Check them and try again.",
+    ]);
+  });
+
+  it.each([
+    [{ retryAfterSeconds: 30 }, "Too many attempts. Wait 30 seconds, then try again."],
+    [{ retryAfterSeconds: 1 }, "Too many attempts. Wait 1 second, then try again."],
+    [{}, "Too many attempts. Wait a few minutes, then try again."],
+    [{ retryAfterSeconds: "30" }, "Too many attempts. Wait a few minutes, then try again."],
+  ])("asks the operator to wait when attempts are throttled (%o)", async (params, message) => {
+    const resetIncompleteAdopt = vi
+      .fn()
+      .mockRejectedValue({ code: "password.throttled", params, status: 429 });
+    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    await openReset(el);
+    await submitReset(el);
+    expect(await screenText(el, "reset", "[data-test=server-error]")).toBe(message);
+  });
+
+  it.each([
+    [
+      "setup.request_invalid",
+      400,
+      "The server rejected the details. Check the admin person ID and password, then try again.",
+    ],
+    ["setup.not_ready", 503, "The server isn't ready yet. Wait a moment, then try again."],
+  ])("keeps the form with its own message for %s", async (code, status, message) => {
+    const resetIncompleteAdopt = vi.fn().mockRejectedValue({ code, params: {}, status });
+    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    await openReset(el);
+    await submitReset(el);
+    expect(await screenText(el, "reset", "[data-test=server-error]")).toBe(message);
+    const screen = await screenHost(el, "reset");
+    expect(screen.shadowRoot!.querySelector("[data-test=personId]")).not.toBeNull();
+    expect(screen.shadowRoot!.querySelector("[data-test=reset]")!.hasAttribute("disabled")).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    ["server.internal", { code: "server.internal", params: {}, status: 500 }],
+    ["a dropped connection", new TypeError("Failed to fetch")],
+    ["a rejection carrying nothing", undefined],
+  ])("keeps the form with a general message for %s", async (_label, error) => {
+    const resetIncompleteAdopt = vi.fn().mockRejectedValue(error);
+    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    await openReset(el);
+    await submitReset(el);
+    expect(await screenText(el, "reset", "[data-test=server-error]")).toBe(
+      "The server could not be reset. Check the connection and try again.",
+    );
+    const screen = await screenHost(el, "reset");
+    expect(screen.shadowRoot!.querySelector("[data-test=reset]")!.hasAttribute("disabled")).toBe(
+      false,
+    );
+  });
+
+  it("clears the last refusal when a new reset starts and when the operator steps away", async () => {
+    const pending = deferred();
+    const resetIncompleteAdopt = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "password.invalid", params: {}, status: 401 })
+      .mockRejectedValueOnce({ code: "server.internal", params: {}, status: 500 })
+      .mockReturnValueOnce(pending.promise);
+    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    await openReset(el);
+    await submitReset(el);
+    await submitReset(el);
+    let screen = await screenHost(el, "reset");
+    expect(screen.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
+    expect(screen.shadowRoot!.querySelector("[data-test=server-error]")).not.toBeNull();
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
+    await el.updateComplete;
+    screen = await openReset(el);
+    expect(screen.shadowRoot!.querySelector("[data-test=server-error]")).toBeNull();
+    await submitReset(el);
+    expect(screen.shadowRoot!.querySelector("[data-test=server-error]")).toBeNull();
+    pending.resolve({ resetStaged: true, restarting: true });
+    await flush(el);
+  });
+
+  it.each([
+    ["a staged reset", (d: ReturnType<typeof deferred>) => d.resolve({ resetStaged: true })],
+    [
+      "a refused reset",
+      (d: ReturnType<typeof deferred>) =>
+        d.reject({ code: "password.invalid", params: {}, status: 401 }),
+    ],
+  ])("writes nothing for %s that answers after the element is detached", async (_label, settle) => {
+    const pending = deferred();
+    const resetIncompleteAdopt = vi.fn().mockReturnValue(pending.promise);
+    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    await openReset(el);
+    await submitReset(el);
+    el.remove();
+    settle(pending);
+    await flush(el);
+    expect(
+      readState(el, ["resetOutcome", "resetCredentialsRejected", "resetError", "resetBusy"]),
+    ).toEqual({
+      resetOutcome: undefined,
+      resetCredentialsRejected: false,
+      resetError: undefined,
+      resetBusy: true,
     });
   });
 });

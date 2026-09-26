@@ -93,6 +93,17 @@ export interface AdoptOutcome {
   restarting: true;
 }
 
+/** The admin login used on the connect screen for the join that stopped partway. */
+export interface ResetCredential {
+  personId: string;
+  password: string;
+}
+
+export interface ResetOutcome {
+  resetStaged: true;
+  restarting: true;
+}
+
 export interface RestoreOutcome {
   restoreStaged: true;
   restarting: true;
@@ -189,6 +200,10 @@ export class SetupApi {
 
   adopt(body: AdoptBody): Promise<AdoptOutcome> {
     return this.#request<AdoptOutcome>("/setup-api/adopt", "POST", body);
+  }
+
+  resetIncompleteAdopt(credential: ResetCredential): Promise<ResetOutcome> {
+    return this.#request<ResetOutcome>("/setup-api/reset-incomplete-adopt", "POST", credential);
   }
 
   startCloudRecovery(): Promise<CloudRecoveryView> {
