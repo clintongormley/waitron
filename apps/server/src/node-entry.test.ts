@@ -1,7 +1,20 @@
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readlink,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { generateKeyPairSync } from "node:crypto";
+import { get as httpsGet } from "node:https";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { sql, type SQL } from "drizzle-orm";
@@ -18,6 +31,7 @@ import {
   type RecoveryState,
 } from "./recovery-state.js";
 import { recoveryApp } from "./recovery-surface.js";
+import { ensureBoxSecrets, tightenTlsDir } from "./box-secrets.js";
 import { assertNotAhead, recoveryTlsFiles, runEntry, serveRecovery } from "./node-entry.js";
 
 type StartServer = (env: NodeJS.ProcessEnv) => Promise<{ close: () => Promise<void> }>;
@@ -1947,4 +1961,150 @@ describe("serveRecovery", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+});
+
+describe("serveRecovery and the box's tls folder", () => {
+  const app = (logDir: string) =>
+    recoveryApp({ state: FRESH, logDir, onRetry: () => Promise.resolve() });
+
+  async function mintedStateDir(prefix: string): Promise<string> {
+    const stateDir = await mkdtemp(join(tmpdir(), prefix));
+    await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
+    return stateDir;
+  }
+
+  function closeServer(server: Awaited<ReturnType<typeof serveRecovery>>): Promise<void> {
+    return new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+
+  function portOf(server: Awaited<ReturnType<typeof serveRecovery>>): number {
+    const address = server.address();
+    return typeof address === "object" && address !== null ? address.port : 0;
+  }
+
+  /** The recovery page's status over HTTPS, trusting only `ca`. */
+  function pageStatusOver(port: number, ca: Buffer): Promise<number | undefined> {
+    return new Promise((resolve, reject) => {
+      httpsGet({ host: "127.0.0.1", port, path: "/", ca, servername: "localhost" }, (res) => {
+        res.resume();
+        resolve(res.statusCode);
+      }).on("error", reject);
+    });
+  }
+
+  const tightenFailures = (log: ReturnType<typeof vi.fn>) =>
+    log.mock.calls.filter(([, event]) => event === "tls.tighten_failed");
+
+  it("makes a group- and world-readable tls folder owner-only before it binds, and serves over it", async () => {
+    const stateDir = await mintedStateDir("wt-recovery-tls-mode-");
+    await chmod(join(stateDir, "tls"), 0o755);
+    const log = vi.fn();
+    let tightened!: () => void;
+    const tightening = new Promise<void>((resolve) => (tightened = resolve));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const serving = serveRecovery(app(stateDir), {
+      stateDir,
+      port: 0,
+      log,
+      tightenTls: async (dir) => {
+        await tightenTlsDir(dir);
+        tightened();
+        await gate;
+      },
+    });
+    const listened = () => log.mock.calls.some(([, event]) => event === "recovery.listening");
+    try {
+      expect(
+        await Promise.race([tightening.then(() => "tightened"), serving.then(() => "bound")]),
+      ).toBe("tightened");
+      expect((await stat(join(stateDir, "tls"))).mode & 0o777).toBe(0o700);
+      expect(listened()).toBe(false);
+    } finally {
+      release();
+    }
+    const server = await serving;
+    try {
+      expect(listened()).toBe(true);
+      const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+      expect(await pageStatusOver(portOf(server), ca)).toBe(200);
+      expect(tightenFailures(log)).toEqual([]);
+    } finally {
+      await closeServer(server);
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("tightens the tls folder through the real tightenTlsDir when no tightenTls is given", async () => {
+    const stateDir = await mintedStateDir("wt-recovery-tls-default-");
+    await chmod(join(stateDir, "tls"), 0o755);
+    const server = await serveRecovery(app(stateDir), { stateDir, port: 0, log: vi.fn() });
+    try {
+      expect((await stat(join(stateDir, "tls"))).mode & 0o777).toBe(0o700);
+    } finally {
+      await closeServer(server);
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves a linked tls folder, and the folder it points to, as it found them, and still serves over it", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-recovery-tls-link-"));
+    const elsewhere = await mintedStateDir("wt-recovery-tls-elsewhere-");
+    await chmod(join(elsewhere, "tls"), 0o755);
+    await symlink(join(elsewhere, "tls"), join(stateDir, "tls"));
+    const log = vi.fn();
+    const server = await serveRecovery(app(stateDir), { stateDir, port: 0, log });
+    try {
+      const ca = await readFile(join(elsewhere, "tls", "ca.crt"));
+      expect(await pageStatusOver(portOf(server), ca)).toBe(200);
+      expect((await lstat(join(stateDir, "tls"))).isSymbolicLink()).toBe(true);
+      expect((await stat(join(elsewhere, "tls"))).mode & 0o777).toBe(0o755);
+      expect(tightenFailures(log)).toEqual([]);
+    } finally {
+      await closeServer(server);
+      await rm(stateDir, { recursive: true, force: true });
+      await rm(elsewhere, { recursive: true, force: true });
+    }
+  });
+
+  it("creates no tls folder on a box that has none, and logs no failure for it", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-recovery-tls-none-"));
+    const log = vi.fn();
+    const server = await serveRecovery(app(stateDir), { stateDir, port: 0, log });
+    try {
+      expect(existsSync(join(stateDir, "tls"))).toBe(false);
+      expect(tightenFailures(log)).toEqual([]);
+    } finally {
+      await closeServer(server);
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["rejects", (refusal: Error) => () => Promise.reject(refusal)],
+    [
+      "throws before it returns",
+      (refusal: Error) => () => {
+        throw refusal;
+      },
+    ],
+  ])(
+    "logs a failure to tighten it and still serves the page, when the call %s",
+    async (_, refuse) => {
+      const stateDir = await mintedStateDir("wt-recovery-tls-refused-");
+      const tightenTls = refuse(
+        Object.assign(new Error(`EPERM: operation not permitted, ${stateDir}`), { code: "EPERM" }),
+      );
+      const log = vi.fn();
+      const server = await serveRecovery(app(stateDir), { stateDir, port: 0, log, tightenTls });
+      try {
+        const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+        expect(await pageStatusOver(portOf(server), ca)).toBe(200);
+        expect(tightenFailures(log)).toEqual([["warn", "tls.tighten_failed", { errno: "EPERM" }]]);
+      } finally {
+        await closeServer(server);
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    },
+  );
 });

@@ -51,7 +51,8 @@ import {
 import { BOOT_INCOMPLETE, HOLDER_STALLED, recoveryApp } from "./recovery-surface.js";
 import { installShutdownHandlers } from "./run-server.js";
 import { buildServeOptions, type TlsFiles } from "./tls.js";
-import { mintedBoxLeaf } from "./box-secrets.js";
+import { mintedBoxLeaf, tightenTlsDir } from "./box-secrets.js";
+import { errnoOf } from "./errno.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
 import { runStagedReset, type StagedResetDeps } from "./reset-request.js";
@@ -84,6 +85,8 @@ export interface RecoveryServeOptions {
     config: LandingListenerConfig,
     log: Logger,
   ) => { close(): Promise<void> } | undefined;
+  /** Defaults to the real `tightenTlsDir`. */
+  tightenTls?: (stateDir: string) => Promise<void>;
 }
 
 /**
@@ -95,10 +98,17 @@ export interface RecoveryServeOptions {
  * Resolves once the socket is bound and rejects if the bind fails; the caller lets that escape, so
  * the process exits non-zero rather than leaving a page-less container up.
  */
-export function serveRecovery(
+export async function serveRecovery(
   app: Hono,
   opts: RecoveryServeOptions,
 ): Promise<ReturnType<typeof serve>> {
+  // Logged rather than thrown, as at a trading start: a certificate folder left readable is no
+  // reason to take the recovery page down.
+  try {
+    await (opts.tightenTls ?? tightenTlsDir)(opts.stateDir);
+  } catch (error: unknown) {
+    opts.log("warn", "tls.tighten_failed", { errno: errnoOf(error) });
+  }
   return new Promise((resolve, reject) => {
     const tls = recoveryTlsFiles(opts.stateDir);
     const surface = new Hono();
