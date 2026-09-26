@@ -15,7 +15,7 @@ export interface RotatingFileSinkOptions {
  * no-op: logging never throws into a request path.
  *
  * Every line goes through `redactSecrets` FIRST, because the unauthenticated recovery page serves this
- * file's tail (`recovery-surface.ts` → `tailLog`) and any module may log a caught error's own words.
+ * file's tail (`recovery-surface.ts` → `readLog`) and any module may log a caught error's own words.
  * The mask belongs to the FILE, not to the call sites, so a new module is covered without knowing the
  * page exists.
  */
