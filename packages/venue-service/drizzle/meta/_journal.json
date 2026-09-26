@@ -8,6 +8,13 @@
       "when": 1790008017000,
       "tag": "0000_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790413994704,
+      "tag": "0001_service_settings_kitchen_notices",
+      "breakpoints": true
     }
   ]
 }

@@ -13,6 +13,8 @@ export const VENUE_SERVICE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("department_hours", "state", STATE),
   classify("order_service_contexts", "state", STATE),
   classify("working_line_contexts", "state", STATE),
+  classify("service_settings", "state", STATE),
+  classify("kitchen_notices", "state", STATE),
 ];
 
 export const VENUE_SERVICE_CHANGE_SOURCES: readonly ChangeSource[] =

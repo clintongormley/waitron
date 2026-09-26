@@ -27,4 +27,10 @@ describe("VENUE_SERVICE", () => {
       "device_zone_defaults",
     );
   });
+
+  it("transfers the service settings, and never the kitchen notices, which are operational rows", () => {
+    const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+    expect(names).toContain("service_settings");
+    expect(names).not.toContain("kitchen_notices");
+  });
 });

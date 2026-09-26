@@ -73,6 +73,8 @@ export const workingOrders = table(
     deliveryTableId: id("delivery_table_id").references((): AnySQLiteColumn => diningTables.id),
     /* v8 ignore stop */
     collectedAt: tsString("collected_at"),
+    revision: count("revision").notNull().default(0),
+    paymentAttemptAt: tsString("payment_attempt_at"),
   },
   (t) => [
     index("working_orders_tenant_status_idx").on(t.status),
@@ -154,6 +156,11 @@ export const workingOrderLines = table(
     // The dish line an extras pick belongs to; a top-level line leaves it NULL.
     parentLineId: id("parent_line_id"),
     note: label("note"),
+    sentAt: tsString("sent_at"),
+    // On a child extras line, the list the pick was taken from. No key: a list can be deleted while
+    // an order that took from it is open, and `validateExtraSelections` is what established that
+    // the list existed.
+    extraListId: id("extra_list_id"),
   },
   (t) => [
     foreignKey({

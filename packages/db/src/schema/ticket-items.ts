@@ -1,5 +1,15 @@
 import { check, index, unique } from "drizzle-orm/sqlite-core";
-import { enumCheck, enumType, id, label, newId, nowIso, table, tsString } from "./columns.js";
+import {
+  enumCheck,
+  enumType,
+  id,
+  label,
+  newId,
+  nowIso,
+  quantity,
+  table,
+  tsString,
+} from "./columns.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { nodes } from "./nodes.js";
@@ -51,6 +61,9 @@ export const ticketItems = table(
     firedAt: tsString("fired_at"),
     awayAt: tsString("away_at"),
     note: label("note"),
+    // The quantity fired. Null where an insert does not state it, as every row written before this
+    // column does.
+    quantity: quantity("quantity"),
   },
   (t) => [
     // One ticket item per line — also the guard that makes a concurrent double-fire collide rather

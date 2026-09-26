@@ -311,6 +311,40 @@ describe("working_orders", () => {
     expect(withNode.nodeId).toBe(node);
   });
 
+  it("opens an order at revision 0 with no card payment in flight", async () => {
+    const id = await openOrder(db);
+    const [row] = await db
+      .select({
+        revision: workingOrders.revision,
+        paymentAttemptAt: workingOrders.paymentAttemptAt,
+      })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id));
+    expect(row).toEqual({ revision: 0, paymentAttemptAt: null });
+    // The default is the database's, not drizzle's: a row written by raw SQL gets it too.
+    const meta = await rows<{ name: string; notnull: number; dflt_value: string | null }>(
+      db,
+      sql`select name, "notnull", dflt_value from pragma_table_info('working_orders')
+           where name in ('revision', 'payment_attempt_at') order by name`,
+    );
+    expect(meta).toEqual([
+      { name: "payment_attempt_at", notnull: 0, dflt_value: null },
+      { name: "revision", notnull: 1, dflt_value: "0" },
+    ]);
+    await db
+      .update(workingOrders)
+      .set({ revision: 1, paymentAttemptAt: AT })
+      .where(eq(workingOrders.id, id));
+    const [changed] = await db
+      .select({
+        revision: workingOrders.revision,
+        paymentAttemptAt: workingOrders.paymentAttemptAt,
+      })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id));
+    expect(changed).toEqual({ revision: 1, paymentAttemptAt: AT });
+  });
+
   it("rejects a node_id that does not exist with a foreign-key violation", async () => {
     const error = await captureError(() =>
       db.insert(workingOrders).values({
@@ -433,7 +467,7 @@ describe("working_order_lines", () => {
     expect(line.descriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
   });
 
-  it("carries only product_id as a catalogue-shaped identifier", async () => {
+  it("carries only product_id and extra_list_id as catalogue-shaped identifiers", async () => {
     // Reads column NAMES only, so a catalogue reference under an unrelated name passes.
     const cols = await rows<{ name: string }>(
       db,
@@ -441,9 +475,32 @@ describe("working_order_lines", () => {
     );
     const references = cols
       .map((c) => c.name)
-      .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant|category)_id$/i.test(n))
+      .filter((n) => /(product|item|catalogue|catalog|menu|sku|variant|category|list)_id$/i.test(n))
       .sort();
-    expect(references).toEqual(["product_id"]);
+    expect(references).toEqual(["extra_list_id", "product_id"]);
+  });
+
+  it("records when a line was sent and the extras list a pick came from, both unset at first", async () => {
+    const id = await openOrder(db);
+    const [line] = await db
+      .insert(workingOrderLines)
+      .values({ ...LINE, productId: productA, workingOrderId: id })
+      .returning({
+        sentAt: workingOrderLines.sentAt,
+        extraListId: workingOrderLines.extraListId,
+      });
+    expect(line).toEqual({ sentAt: null, extraListId: null });
+    // A list id that names no list is stored: the column has no key (see its declaration).
+    const listId = randomUUID();
+    await db
+      .update(workingOrderLines)
+      .set({ sentAt: AT, extraListId: listId })
+      .where(eq(workingOrderLines.workingOrderId, id));
+    const [changed] = await db
+      .select({ sentAt: workingOrderLines.sentAt, extraListId: workingOrderLines.extraListId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    expect(changed).toEqual({ sentAt: AT, extraListId: listId });
   });
 
   it("carries a nullable note column (KDS-only, NON-FISCAL — spec §2/§3)", async () => {

@@ -6,6 +6,7 @@ import {
   businessDayClause,
   businessDayOf,
   businessDayRangeWindow,
+  businessDayStart,
   currentBusinessDay,
   validateBusinessDay,
   validateCutover,
@@ -82,6 +83,30 @@ describe("businessDayRangeWindow", () => {
       expect(rows[0]!.range).toBe(rows[0]!.eq);
       expect(rows[0]!.range).toBe(expected ? 1 : 0);
     }
+  });
+});
+
+describe("businessDayStart", () => {
+  it.each([
+    // 05:30 local (CET, UTC+1), before a 06:00 cutover: the day began yesterday at 06:00 local.
+    ["2026-03-01T04:30:00.000Z", "2026-02-28T05:00:00.000Z"],
+    // 12:00 local (CEST, UTC+2): the day began this morning at 06:00 local.
+    ["2026-08-04T10:00:00.000Z", "2026-08-04T04:00:00.000Z"],
+    // The cutover itself begins a day.
+    ["2026-08-04T04:00:00.000Z", "2026-08-04T04:00:00.000Z"],
+  ])("puts %s in the business day that began at %s", (instant, expected) => {
+    expect(
+      businessDayStart(new Date(instant), { timeZone: "Europe/Madrid", dayCutover: "06:00" }),
+    ).toBe(expected);
+  });
+
+  it("validates the clock before computing (caller precondition, plain Error)", () => {
+    expect(() =>
+      businessDayStart(new Date(), { timeZone: "Mars/Olympus", dayCutover: "06:00" }),
+    ).toThrow(/time zone/i);
+    expect(() =>
+      businessDayStart(new Date(), { timeZone: "Europe/Madrid", dayCutover: "6:00" }),
+    ).toThrow(/cutover/i);
   });
 });
 

@@ -187,6 +187,19 @@ export function currentBusinessDay(input: { timeZone: string; dayCutover: string
 }
 
 /**
+ * The instant the business day holding `instant` began, as the canonical ISO-8601 string this
+ * engine's timestamp columns hold, so a caller can compare a column against it.
+ */
+export function businessDayStart(
+  instant: Date,
+  input: { timeZone: string; dayCutover: string },
+): string {
+  validateTimeZone(input.timeZone);
+  validateCutover(input.dayCutover);
+  return businessDayBoundary(businessDayOf(instant, input), 0, input);
+}
+
+/**
  * The window of ONE business day ({@link windowBetween}), for a report that applies it to several
  * columns: its boundaries are computed once, here, not once per column.
  */

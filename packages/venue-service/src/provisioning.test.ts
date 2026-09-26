@@ -29,7 +29,9 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const node = { locationId, nodeId };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
-    await expect(runSeed()).resolves.toBe("default department and counter zone ready");
+    await expect(runSeed()).resolves.toBe(
+      "default department, counter zone and service settings ready",
+    );
     const menus = await db
       .insert(catalogues)
       .values([{ name: "Provisioned" }, { name: "Authored" }])
@@ -56,5 +58,24 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     expect(policies.rows).toEqual([
       { service_mode: "invoice_first", default_menu_id: menus[1]!.id },
     ]);
+  });
+
+  it("seeds the service settings row with changes to sent items allowed, and keeps a later choice", async () => {
+    await seedTenant(db);
+    const [location] = await db
+      .insert(locations)
+      .values({ name: "Venue", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
+      .returning({ id: locations.id });
+    const locationId = brandLocationId(location!.id);
+    const node = { locationId, nodeId: await seedNode(db, locationId) };
+    const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
+    const settings = async () =>
+      (await db.execute(sql`select id, edit_sent_lines from service_settings`)).rows;
+
+    await runSeed();
+    expect(await settings()).toEqual([{ id: 1, edit_sent_lines: 1 }]);
+    await db.execute(sql`update service_settings set edit_sent_lines = 0`);
+    await runSeed();
+    expect(await settings()).toEqual([{ id: 1, edit_sent_lines: 0 }]);
   });
 });

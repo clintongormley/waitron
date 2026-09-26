@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { Transaction } from "../client.js";
@@ -185,6 +185,42 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       tx.select({ note: ticketItems.note }).from(ticketItems).where(eq(ticketItems.id, id)),
     );
     expect(row!.note).toBe("sin sal");
+  });
+
+  it("records the quantity fired, and leaves it unset where an insert does not state it", async () => {
+    const meta = suite.db
+      .all<{ name: string; type: string; notnull: number; dflt_value: string | null }>(
+        sql`select name, type, "notnull", dflt_value from pragma_table_info('ticket_items')
+             where name = 'quantity'`,
+      )
+      .map((c) => ({ ...c }));
+    expect(meta).toEqual([{ name: "quantity", type: "INTEGER", notnull: 0, dflt_value: null }]);
+    const unstated = await seedOrderLine(TILL_A1, nodeA, productA);
+    const unstatedId = await seedTicket(nodeA, unstated.orderId, unstated.lineId, stationA);
+    const stated = await seedOrderLine(TILL_A1, nodeA, productA);
+    const [statedRow] = await inTx((tx) =>
+      tx
+        .insert(ticketItems)
+        .values({
+          nodeId: nodeA,
+          workingOrderId: stated.orderId,
+          workingOrderLineId: stated.lineId,
+          stationId: stationA,
+          // Two units, in whole thousandths.
+          quantity: 2000,
+        })
+        .returning({ id: ticketItems.id }),
+    );
+    const read = await inTx((tx) =>
+      tx
+        .select({ id: ticketItems.id, quantity: ticketItems.quantity })
+        .from(ticketItems)
+        .where(inArray(ticketItems.id, [unstatedId, statedRow!.id])),
+    );
+    expect(Object.fromEntries(read.map((row) => [row.id, row.quantity]))).toEqual({
+      [unstatedId]: null,
+      [statedRow!.id]: 2000,
+    });
   });
 
   it("rejects a second ticket item for the same line (the per-line UNIQUE — the concurrent-fire guard)", async () => {

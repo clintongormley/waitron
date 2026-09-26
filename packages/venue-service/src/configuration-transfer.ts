@@ -6,5 +6,6 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "zone_menus" },
     { name: "preparation_routes", locationColumns: ["location_id"] },
     { name: "department_hours" },
+    { name: "service_settings" },
   ],
 } as const;

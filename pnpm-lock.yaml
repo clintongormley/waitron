@@ -1790,6 +1790,9 @@ importers:
       '@waitron/module':
         specifier: workspace:*
         version: link:../module
+      '@waitron/reporting':
+        specifier: workspace:*
+        version: link:../reporting
       '@waitron/server-kit':
         specifier: workspace:*
         version: link:../server-kit

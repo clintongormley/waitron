@@ -259,6 +259,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "course.not_found": 404,
   "station.no_default": 409,
   "station.not_found": 404,
+  "kitchen_notice.not_found": 404,
   "service_zone.not_found": 404,
   "service_zone.default_missing": 409,
   "service_zone.offer_not_allowed": 400,
