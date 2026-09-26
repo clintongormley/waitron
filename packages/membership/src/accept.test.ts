@@ -262,4 +262,49 @@ describe("acceptMembershipDocument with the receiver's held chart", () => {
     };
     expect(acceptMembershipDocument(doc, 6, trust, held).accepted).toBe(true);
   });
+
+  // P, the removed setup primary and an anchor, vouched for N's key when N joined; N signs the held
+  // chart with that key and carries P's endorsement of it.
+  const promoted = generateNodeKeyPair();
+  const signedAsN = (
+    term: number,
+    key: string,
+    endorsements: SignedMembershipDocument["endorsements"],
+  ) => {
+    const body: MembershipDocumentBody = {
+      term,
+      nodes: [{ nodeId: "N", contactUrl: "https://n", standing: "serving-primary" }],
+      revoked: ["P"],
+    };
+    return {
+      body,
+      signerNodeId: "N",
+      signature: signDocumentBody(body, key),
+      endorsements,
+    } satisfies SignedMembershipDocument;
+  };
+  const vouchedByP = (key: string) => endorseKey("N", key, "P", primary.privateKey);
+
+  it("does not let a removed ANCHOR vouch a new key for the node that signed the held chart", () => {
+    const held = signedAsN(6, promoted.privateKey, [vouchedByP(promoted.publicKey)]);
+    const forged = generateNodeKeyPair();
+    const doc = signedAsN(7, forged.privateKey, [vouchedByP(forged.publicKey)]);
+    expect(acceptMembershipDocument(doc, 6, trust, held)).toEqual(refused("endorsement_invalid"));
+  });
+
+  it("binds the held chart's signer to the key its signature verifies under, not to a planted endorsement", () => {
+    // Endorsements sit outside the signed body, so a relayed copy of the held chart can carry one
+    // for another key, validly signed by P.
+    const planted = generateNodeKeyPair();
+    const held = signedAsN(6, promoted.privateKey, [
+      vouchedByP(planted.publicKey),
+      vouchedByP(promoted.publicKey),
+    ]);
+    const genuine = signedAsN(7, promoted.privateKey, [vouchedByP(promoted.publicKey)]);
+    expect(acceptMembershipDocument(genuine, 6, trust, held).accepted).toBe(true);
+    const impostor = signedAsN(7, planted.privateKey, [vouchedByP(planted.publicKey)]);
+    expect(acceptMembershipDocument(impostor, 6, trust, held)).toEqual(
+      refused("endorsement_invalid"),
+    );
+  });
 });

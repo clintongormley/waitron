@@ -1,5 +1,4 @@
-import { canonicalize } from "./canonicalize.js";
-import type { CanonicalValue } from "./canonicalize.js";
+import { bodyMessage } from "./canonicalize.js";
 import { signBytes, verifyBytes } from "./crypto.js";
 import { resolveSignerKey } from "./endorsement.js";
 import { fencedOutNodeIds } from "./fence.js";
@@ -34,11 +33,6 @@ export function signDocumentBody(body: MembershipDocumentBody, signerPrivateKey:
   // against whichever key it selects, so it is authenticated transitively. Folding it in would
   // change the wire format.
   return signBytes(bodyMessage(body), signerPrivateKey);
-}
-
-/** Signs the WHOLE body, so no field added later can pass verification unsigned. */
-function bodyMessage(body: MembershipDocumentBody): string {
-  return canonicalize(body as unknown as CanonicalValue);
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
