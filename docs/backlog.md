@@ -5790,8 +5790,13 @@ line with what slice 2 built. Left open:
 - **DONE (2026-09-26, lane A's A34, branch `fix/installer-scripts-select-server`): a change to
   `scripts/setup-litestream.mjs` or `scripts/setup-s3-test-server.mjs` alone now selects
   `@waitron/server` and so its `test-server` shards.** Both are in `ROOT_SCOPE_CONSUMERS` against
-  `apps/server`, and `scripts/root-scope-consumers.test.mjs` accepts a script a ci.yml job runs
-  before testing a member ([ci-and-gates.md](developers/ci-and-gates.md)).
+  `apps/server`, and `scripts/root-scope-consumers.test.mjs` accepts a script run in the ci.yml job
+  that tests a member ([ci-and-gates.md](developers/ci-and-gates.md)). Left open, found by A34:
+  `scripts/changed-packages.mjs runnable` runs before the tests in the jobs of nine packages
+  (dashboard, setup, till, bookings, fiscal-verifactu, media, payments-stripe, payments-sumup,
+  venue-service) and in the two-filter ui/ui-core job, fed from a pipe, so the guard does not count
+  it and it is not listed; a change to it alone runs none of those jobs. Listing it would send every
+  change to it through all of them — the owner's call.
 - Linux is covered by one CI run only: #652's first (2026-09-25, run 36173603563), where each
   `test-server` shard's install step took about two seconds by GitHub's whole-second step
   timestamps, and the loop test passed in 15,989 ms with no test skipped in the merged report.
