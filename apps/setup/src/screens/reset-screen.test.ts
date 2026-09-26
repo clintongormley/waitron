@@ -213,6 +213,7 @@ describe("setup-reset-screen", () => {
     const events = collect(host);
     const gotos: unknown[] = [];
     host.addEventListener("setup-goto", (e) => gotos.push((e as CustomEvent).detail));
+    expect(q(el, "[data-test=back]")!.getAttribute("variant")).toBe("ghost");
     q(el, "[data-test=back]")!.click();
     expect(gotos).toEqual([{ screen: "provisioning" }]);
     expect(events).toEqual([]);

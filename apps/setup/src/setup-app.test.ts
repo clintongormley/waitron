@@ -1593,6 +1593,56 @@ describe("resetting a join that stopped partway", () => {
     expect(host.shadowRoot!.querySelector("[data-test=reset]")).toBeNull();
   });
 
+  it("offers Try again, not the reset, when a provision fails after an adopt that stopped partway", async () => {
+    const provision = vi
+      .fn()
+      .mockRejectedValue({ code: "server.internal", params: {}, status: 500 });
+    const el = await offerReset(stubApi({ adopt: incomplete(), provision }));
+    await expectAdoptIncompleteWithReset(el);
+    provisionRequest(el);
+    await flush(el);
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=error]")!.textContent).toContain(
+      "Provisioning failed",
+    );
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).not.toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=reset]")).toBeNull();
+  });
+
+  it.each([
+    [
+      "a backup file",
+      (el: SetupApp) =>
+        restoreRequest(el, {
+          artifact: new File(["encrypted"], "waitron.backup"),
+          recoveryKey: "k",
+          environment: "production",
+        }),
+    ],
+    ["the bucket", (el: SetupApp) => bucketRequest(el)],
+  ])(
+    "drops the reset offer when a restore from %s starts after an adopt that stopped partway",
+    async (_label, request) => {
+      const pending = deferred();
+      const el = await offerReset(
+        stubApi({
+          adopt: incomplete(),
+          restore: vi.fn().mockReturnValue(pending.promise),
+          restoreFromBucket: vi.fn().mockReturnValue(pending.promise),
+        }),
+      );
+      await expectAdoptIncompleteWithReset(el);
+      request(el);
+      await flush(el);
+      expect(readState(el, ["provisionMessage", "provisionCanReset"])).toEqual({
+        provisionMessage: undefined,
+        provisionCanReset: false,
+      });
+      pending.resolve({ restoreStaged: true, restarting: true });
+      await flush(el);
+    },
+  );
+
   it("posts the typed person ID and password to the reset route", async () => {
     const resetIncompleteAdopt = vi.fn().mockResolvedValue({ resetStaged: true, restarting: true });
     const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
@@ -1650,7 +1700,7 @@ describe("resetting a join that stopped partway", () => {
     await openReset(el);
     await submitReset(el);
     expect((await screenText(el, "reset", "[data-test=outcome]"))?.replace(/\s+/g, " ")).toBe(
-      "The server is resetting and will restart. Wait a minute, then reload this page to start setup again.",
+      "The server is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: contact support.",
     );
     expect(await screenText(el, "reset", "[data-test=reload]")).toBe("Reload");
   });
@@ -1661,6 +1711,10 @@ describe("resetting a join that stopped partway", () => {
       "There is no half-finished join to reset on this server. Reload to start setup again.",
     ],
     ["setup.already_provisioning", "Setup is already in progress on this server."],
+    [
+      "setup.operation_conflict",
+      "This server has saved setup work for a different request. Resume the original setup or contact support.",
+    ],
   ])("ends at a Reload for %s", async (code, message) => {
     const resetIncompleteAdopt = vi.fn().mockRejectedValue({ code, params: {}, status: 409 });
     const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
@@ -1714,9 +1768,24 @@ describe("resetting a join that stopped partway", () => {
   it.each([
     [
       "setup.request_invalid",
-      { code: "setup.request_invalid", params: { field: "personId" }, status: 400 },
+      400,
+      "The server rejected the details. Check the admin person ID and password, then try again.",
     ],
-    ["setup.not_ready", { code: "setup.not_ready", params: {}, status: 503 }],
+    ["setup.not_ready", 503, "The server isn't ready yet. Wait a moment, then try again."],
+  ])("keeps the form with its own message for %s", async (code, status, message) => {
+    const resetIncompleteAdopt = vi.fn().mockRejectedValue({ code, params: {}, status });
+    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    await openReset(el);
+    await submitReset(el);
+    expect(await screenText(el, "reset", "[data-test=server-error]")).toBe(message);
+    const screen = await screenHost(el, "reset");
+    expect(screen.shadowRoot!.querySelector("[data-test=personId]")).not.toBeNull();
+    expect(screen.shadowRoot!.querySelector("[data-test=reset]")!.hasAttribute("disabled")).toBe(
+      false,
+    );
+  });
+
+  it.each([
     ["server.internal", { code: "server.internal", params: {}, status: 500 }],
     ["a dropped connection", new TypeError("Failed to fetch")],
     ["a rejection carrying nothing", undefined],

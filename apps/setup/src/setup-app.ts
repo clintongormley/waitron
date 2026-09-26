@@ -35,7 +35,7 @@ import type {
   RestoreRequestDetail,
 } from "./events.js";
 import type { RestoredVenue } from "./screens/restore-bucket-screen.js";
-import type { ResetOutcome } from "./screens/reset-screen.js";
+import type { ResetScreenOutcome } from "./screens/reset-screen.js";
 import { SERVER_FIELDS } from "./server-fields.js";
 
 /** The wizard's screens, shown one at a time from in-memory state, never a URL route. */
@@ -118,12 +118,14 @@ const VENUE_ERROR_MESSAGES: Record<string, string> = {
   "fiscal.regime_not_implemented": "That fiscal territory isn't supported yet.",
 };
 
+const NOT_READY_MESSAGE = "The server isn't ready yet. Wait a moment, then try again.";
+
 const ADOPT_ERROR_MESSAGES: Record<string, string> = {
   "mirror.bundle_fetch_failed":
     "Couldn't reach the primary server or the login was refused. Check the address and login, then try again.",
   "setup.request_invalid":
     "The server rejected the details. Check the address and login, then try again.",
-  "setup.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
+  "setup.not_ready": NOT_READY_MESSAGE,
 };
 
 const OPERATION_CONFLICT_MESSAGE =
@@ -132,6 +134,12 @@ const ALREADY_STAMPED_MESSAGE =
   "A previous setup attempt left this server partly set up, for a different environment. Contact support to reset this server, then start setup again.";
 const ADOPT_INCOMPLETE_MESSAGE =
   "A previous attempt to join this server to a restaurant stopped partway and left it partly set up. It cannot be finished. You can reset this server with the admin person ID and password you used to connect it, then start setup again.";
+
+const RESET_ERROR_MESSAGES: Record<string, string> = {
+  "setup.request_invalid":
+    "The server rejected the details. Check the admin person ID and password, then try again.",
+  "setup.not_ready": NOT_READY_MESSAGE,
+};
 
 const RESET_GENERIC_ERROR = "The server could not be reset. Check the connection and try again.";
 
@@ -178,7 +186,7 @@ const BUCKET_ERROR_MESSAGES: Record<string, string> = {
   "restore.schema_too_new": NEWER_SOFTWARE,
   "setup.already_provisioning":
     "Setup is already in progress on this server. Wait for it to finish, then reload this page.",
-  "setup.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
+  "setup.not_ready": NOT_READY_MESSAGE,
   "setup.operation_conflict": OPERATION_CONFLICT_MESSAGE,
   "setup.request_invalid":
     "The server rejected the details. Check the kit and the environment, then try again.",
@@ -358,7 +366,7 @@ export class SetupApp extends LitElement {
   @state() private resetBusy = false;
   @state() private resetCredentialsRejected = false;
   @state() private resetError?: string;
-  @state() private resetOutcome?: ResetOutcome;
+  @state() private resetOutcome?: ResetScreenOutcome;
 
   override firstUpdated(): void {
     void this.#boot();
@@ -489,9 +497,7 @@ export class SetupApp extends LitElement {
     this.reviewError = undefined;
     this.venueError = undefined;
     this.venueInvalidField = undefined;
-    this.provisionMessage = undefined;
-    this.provisionCanRetry = false;
-    this.provisionReloadLabel = undefined;
+    this.#clearProvisionOutcome();
     this.screen = "provisioning";
     try {
       await this.api.provision(assembleBody(this.draft));
@@ -568,7 +574,7 @@ export class SetupApp extends LitElement {
         this.provisionReloadLabel = "Reload";
         return;
       case "setup.not_ready":
-        this.provisionMessage = "The server isn't ready yet. Wait a moment, then try again.";
+        this.provisionMessage = NOT_READY_MESSAGE;
         this.provisionCanRetry = true;
         return;
       default:
@@ -587,10 +593,7 @@ export class SetupApp extends LitElement {
   async #onAdoptRequested(event: CustomEvent<{ body: AdoptBody }>): Promise<void> {
     event.stopPropagation();
     this.connectError = undefined;
-    this.provisionMessage = undefined;
-    this.provisionCanRetry = false;
-    this.provisionReloadLabel = undefined;
-    this.provisionCanReset = false;
+    this.#clearProvisionOutcome();
     this.screen = "provisioning";
     try {
       const outcome = await this.api.adopt(event.detail.body);
@@ -607,9 +610,7 @@ export class SetupApp extends LitElement {
   async #onRestoreRequested(event: CustomEvent<{ request: RestoreRequestDetail }>): Promise<void> {
     event.stopPropagation();
     this.restoreError = undefined;
-    this.provisionMessage = undefined;
-    this.provisionCanRetry = false;
-    this.provisionReloadLabel = undefined;
+    this.#clearProvisionOutcome();
     this.screen = "provisioning";
     const request = event.detail.request;
     // The server answered the old-server question for the file it was sent, not for another.
@@ -665,9 +666,7 @@ export class SetupApp extends LitElement {
       this.bucketVenue = undefined;
     }
     this.bucketRestoreError = undefined;
-    this.provisionMessage = undefined;
-    this.provisionCanRetry = false;
-    this.provisionReloadLabel = undefined;
+    this.#clearProvisionOutcome();
     this.screen = "provisioning";
     try {
       await this.api.restoreFromBucket(request);
@@ -854,6 +853,14 @@ export class SetupApp extends LitElement {
     }
   }
 
+  /** Every flag the provisioning screen reads, so no answer outlives the request it answered. */
+  #clearProvisionOutcome(): void {
+    this.provisionMessage = undefined;
+    this.provisionCanRetry = false;
+    this.provisionReloadLabel = undefined;
+    this.provisionCanReset = false;
+  }
+
   #offerReset(): void {
     this.provisionMessage = ADOPT_INCOMPLETE_MESSAGE;
     this.provisionCanRetry = false;
@@ -874,7 +881,7 @@ export class SetupApp extends LitElement {
       this.resetOutcome = {
         kind: "resetting",
         message:
-          "The server is resetting and will restart. Wait a minute, then reload this page to start setup again.",
+          "The server is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: contact support.",
       };
     } catch (error) {
       if (!this.isConnected) return;
@@ -899,8 +906,13 @@ export class SetupApp extends LitElement {
             message: "Setup is already in progress on this server.",
           };
           break;
+        case "setup.operation_conflict":
+          this.resetOutcome = { kind: "refused", message: OPERATION_CONFLICT_MESSAGE };
+          break;
         default:
-          this.resetError = RESET_GENERIC_ERROR;
+          this.resetError =
+            (typeof code === "string" ? RESET_ERROR_MESSAGES[code] : undefined) ??
+            RESET_GENERIC_ERROR;
       }
     } finally {
       if (this.isConnected) this.resetBusy = false;

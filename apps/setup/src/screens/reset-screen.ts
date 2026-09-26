@@ -26,7 +26,7 @@ const CHECK: Record<ResetField, string> = {
 const REJECTED =
   "That person ID and password are not the admin login used to connect this server. Check them and try again.";
 
-export interface ResetOutcome {
+export interface ResetScreenOutcome {
   kind: "resetting" | "refused";
   message: string;
 }
@@ -59,7 +59,7 @@ export class SetupResetScreen extends LitElement {
   @property() errorMessage?: string;
 
   /** Set once the reset is staged or cannot run; the form is replaced by it. */
-  @property({ attribute: false }) outcome?: ResetOutcome;
+  @property({ attribute: false }) outcome?: ResetScreenOutcome;
 
   @property({ attribute: false }) reload: () => void = location.reload.bind(location);
 
@@ -170,7 +170,7 @@ export class SetupResetScreen extends LitElement {
       ${this.#field("Admin password", "password")} ${this.#alert()}
       <wt-form-actions>
         <wt-button
-          variant="secondary"
+          variant="ghost"
           slot="cancel"
           data-test="back"
           @click=${() => dispatchSetupGoto(this, "provisioning")}
