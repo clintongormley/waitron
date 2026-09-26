@@ -1523,7 +1523,10 @@ What the order path (the plan's Task 7) left behind:
   uses. A STAFF-name rename between the two sends therefore does not match: the till asks the
   operator to choose again, and the re-answered line takes the replacement path described here. A
   customer- or kitchen-name rename still re-sends and still lands on that path, at the server's own
-  by-value comparison.
+  by-value comparison. **Superseded by menus plan Task 7b (branch `feat/menus-order-edits`):** an
+  edit no longer re-prices or re-issues a line; a renamed answer is frozen onto the same row at its
+  stored price, because an answer carries no price (plan D10). Pinned by "keeps the price of a held
+  line whose options list was renamed between the two sends, freezing the new name".
 - **Two different signals say whether a dish is sold by weight, and they disagree — MEASURED.** The
   order path refuses an extras pick on a dish that is not priced `each`
   (`extras.unsupported_product`; the legacy payload's `options.`-prefixed twin is retired in
@@ -3448,7 +3451,10 @@ image constraints under *Detail → Box image*.
     "(pre-merge review)", "(I1)" and "skipped a tenant" in `health.test.ts`, "the new guard" in
     `config.test.ts`.
   - Found by #623 (`apps/server` part b: working-order, tabs, tables), not fixable in a
-    comments-only change. **Editing a held order that has already sent lines to the kitchen deletes
+    comments-only change. (The first finding is fixed by menus plan Task 7b on
+    `feat/menus-order-edits`: an edit that changes or removes a sent line recalls or voids it with a
+    kitchen notice and slip, and changed or new work is sent; the "editing a line the kitchen has and
+    has not started" cases in `apps/server/src/tabs.test.ts`.) **Editing a held order that has already sent lines to the kitchen deletes
     their ticket items and never re-sends the new lines.** `PUT /api/working-orders/:id` checks only
     that the order is open; any edit that is not a pure quantity change takes `updateHeldOrder`'s
     replacement path (`apps/server/src/working-order.ts`), which deletes every line and inserts new
