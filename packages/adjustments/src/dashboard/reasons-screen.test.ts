@@ -327,7 +327,7 @@ describe("reordering", () => {
   it("reloads the list after a refused reorder, so a retry works from the current order", async () => {
     const api = fakeApi({
       reorderReasons: vi.fn().mockRejectedValue({
-        code: "management.request_invalid",
+        code: "adjustment_reason.invalid",
         params: { field: "ids" },
       }),
     });
@@ -570,15 +570,20 @@ describe("the editor", () => {
   });
 
   it.each([
-    ["names", "Check the names in each language."],
-    ["applyRole", "Choose who may apply this reason."],
-    ["noteRequired", "Choose whether staff must write a note."],
-  ])("puts a refusal of %s beside it", async (fieldName, message) => {
+    ["management.request_invalid", "names", "Check the names in each language."],
+    ["management.request_invalid", "applyRole", "Choose who may apply this reason."],
+    ["management.request_invalid", "noteRequired", "Choose whether staff must write a note."],
+    ["adjustment_reason.invalid", "name", "Enter a name."],
+    ["adjustment_reason.invalid", "names", "Check the names in each language."],
+    [
+      "adjustment_reason.invalid",
+      "approverRole",
+      "The approving role must be the same as, or above, the role that applies it.",
+    ],
+  ])("puts the %s refusal of %s beside it", async (code, fieldName, message) => {
     const el = await mount(
       fakeApi({
-        updateReason: vi
-          .fn()
-          .mockRejectedValue({ code: "management.request_invalid", params: { field: fieldName } }),
+        updateReason: vi.fn().mockRejectedValue({ code, params: { field: fieldName } }),
       }),
     );
     await press(el, "edit-c");

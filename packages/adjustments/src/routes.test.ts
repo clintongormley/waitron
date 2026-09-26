@@ -246,6 +246,43 @@ describe("adjustment reason management routes", () => {
     expect(await reasonCount()).toBe(0);
   });
 
+  it.each<[string, Record<string, unknown>, unknown]>([
+    [
+      "a name key that is not a language",
+      { names: { en: "Complaint", "not a language": "Queja" } },
+      { code: "adjustment_reason.invalid", params: { field: "names" } },
+    ],
+    [
+      "a blank name",
+      { name: "   " },
+      { code: "adjustment_reason.invalid", params: { field: "name" } },
+    ],
+    [
+      "an approver below the applying role",
+      { applyRole: "manager", approverRole: "supervisor" },
+      { code: "adjustment_reason.invalid", params: { field: "approverRole" } },
+    ],
+  ])("answers %s with 400, writing nothing", async (_case, overrides, error) => {
+    const fx = await fixture();
+    const response = await send(fx.app, "POST", REASONS, fx.cookie.manager, {
+      ...COMPLAINT,
+      ...overrides,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error });
+    expect(await reasonCount()).toBe(0);
+  });
+
+  it("answers a reorder that leaves out an active reason with 400", async () => {
+    const fx = await fixture();
+    await send(fx.app, "POST", REASONS, fx.cookie.manager, COMPLAINT);
+    const response = await send(fx.app, "PUT", ORDER, fx.cookie.manager, { ids: [] });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "adjustment_reason.invalid", params: { field: "ids" } },
+    });
+  });
+
   it("refuses a reorder body that is not a list of ids", async () => {
     const fx = await fixture();
     for (const body of [{}, { ids: "x" }, { ids: ["not-a-uuid"] }]) {

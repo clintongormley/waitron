@@ -42,7 +42,8 @@ type Field =
   | "applyRole"
   | "approverRole"
   | "noteRequired";
-/** The body field a `management.request_invalid` names, onto the editor field that holds it. */
+/** The field a `management.request_invalid` or `adjustment_reason.invalid` names, onto the editor
+ * field that holds it. */
 const SERVER_FIELDS: Record<string, Field> = {
   name: "name",
   names: "names",
@@ -89,16 +90,37 @@ function amount(text: string): string | null | undefined {
   return match[2] === undefined ? whole : `${whole}.${match[2]}`;
 }
 
+/** One per locale, built on first use: the list formats every row on every render. */
+function perLocale<T>(make: (locale: string) => T): (locale: string) => T {
+  const made = new Map<string, T>();
+  return (locale) => {
+    let value = made.get(locale);
+    if (value === undefined) {
+      value = make(locale);
+      made.set(locale, value);
+    }
+    return value;
+  };
+}
+
+const decimalMark = perLocale(
+  (locale) =>
+    new Intl.NumberFormat(locale).formatToParts(1.5).find((part) => part.type === "decimal")!.value,
+);
+const percentFormat = perLocale(
+  (locale) => new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }),
+);
+const languageNames = perLocale(
+  (locale) => new Intl.DisplayNames([locale], { type: "language", fallback: "code" }),
+);
+
 /** A decimal string written with the dashboard language's decimal mark, as the list shows it. */
 function localDecimal(value: string): string {
-  const mark = new Intl.NumberFormat(currentLocale())
-    .formatToParts(1.5)
-    .find((part) => part.type === "decimal")!.value;
-  return value.replace(".", mark);
+  return value.replace(".", decimalMark(currentLocale()));
 }
 
 function languageName(code: string): string {
-  return new Intl.DisplayNames([currentLocale()], { type: "language", fallback: "code" }).of(code)!;
+  return languageNames(currentLocale()).of(code)!;
 }
 
 @customElement("dashboard-adjustment-reasons-screen")
@@ -199,6 +221,9 @@ export class AdjustmentReasonsScreen extends LitElement {
   @state() private busy = false;
   #loaded = false;
   #opener?: HTMLElement;
+  /** The active reasons' ids in list order, and each one's place in it, kept in step with `reasons`. */
+  #activeIds: readonly string[] = [];
+  #activeIndex = new Map<string, number>();
   readonly #queries = new QueryController(
     this,
     () => this.api.liveData,
@@ -243,13 +268,16 @@ export class AdjustmentReasonsScreen extends LitElement {
     }
   }
 
-  #active(): string[] {
-    return this.reasons!.filter((reason) => reason.active).map((reason) => reason.id);
+  protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
+    if (changed.has("reasons")) {
+      this.#activeIds = this.reasons!.filter((reason) => reason.active).map((reason) => reason.id);
+      this.#activeIndex = new Map(this.#activeIds.map((id, index) => [id, index]));
+    }
   }
 
   async #move(reason: AdjustmentReason, step: -1 | 1): Promise<void> {
     if (this.busy) return;
-    const ids = this.#active();
+    const ids = [...this.#activeIds];
     const from = ids.indexOf(reason.id);
     [ids[from], ids[from + step]] = [ids[from + step]!, ids[from]!];
     this.busy = true;
@@ -350,7 +378,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     const code = codeOf(error);
     const field = (error as { params?: { field?: unknown } }).params?.field;
     if (
-      code === "management.request_invalid" &&
+      (code === "management.request_invalid" || code === "adjustment_reason.invalid") &&
       typeof field === "string" &&
       Object.hasOwn(SERVER_FIELDS, field)
     ) {
@@ -417,9 +445,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     const locale = currentLocale();
     const parts: string[] = [];
     if (reason.maxPercentBp !== null) {
-      const percent = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(
-        reason.maxPercentBp / 100,
-      );
+      const percent = percentFormat(locale).format(reason.maxPercentBp / 100);
       parts.push(tf("adjustments.limit_percent", { percent }));
     }
     if (reason.maxAmount !== null) {
@@ -441,8 +467,7 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   #moveButtons(reason: AdjustmentReason) {
     if (!reason.active) return nothing;
-    const ids = this.#active();
-    const index = ids.indexOf(reason.id);
+    const index = this.#activeIndex.get(reason.id)!;
     const button = (direction: "up" | "down", step: -1 | 1, disabled: boolean) => {
       const label = t(direction === "up" ? "adjustments.move_up" : "adjustments.move_down");
       return html`<wt-button
@@ -455,7 +480,7 @@ export class AdjustmentReasonsScreen extends LitElement {
         >${label}</wt-button
       >`;
     };
-    return html`${button("up", -1, index === 0)}${button("down", 1, index === ids.length - 1)}`;
+    return html`${button("up", -1, index === 0)}${button("down", 1, index === this.#activeIds.length - 1)}`;
   }
 
   #rowMenu(reason: AdjustmentReason) {

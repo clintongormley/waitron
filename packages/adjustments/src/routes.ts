@@ -1,17 +1,18 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { withTransaction, type Transaction } from "@waitron/db";
-import { authorizeManager, type PersonRoleValue } from "@waitron/identity";
+import { authorizeManager, personRole } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import {
   createErrorBoundary,
   readJsonBody,
+  requireBodyUuid,
   requireEnum,
   requireManagementSession,
   requireString,
   requireUuidParam,
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
-import { AppError, decimal, isUuid } from "@waitron/shared";
+import { AppError, decimal } from "@waitron/shared";
 import {
   createAdjustmentReason,
   deactivateAdjustmentReason,
@@ -21,7 +22,7 @@ import {
   type AdjustmentReasonInput,
 } from "./operations.js";
 import { ADJUSTMENTS_PERMISSIONS } from "./permissions.js";
-import type { AdjustmentAction } from "./policy.js";
+import { ADJUSTMENT_ACTIONS, type AdjustmentAction } from "./policy.js";
 import "./errors.js";
 
 const [{ permission: MANAGE_ADJUSTMENTS }] = ADJUSTMENTS_PERMISSIONS;
@@ -32,18 +33,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
+  "adjustment_reason.invalid": 400,
   "adjustment_reason.not_found": 404,
   "adjustment_reason.name_taken": 409,
 };
-const run = createErrorBoundary(STATUS, "adjustments.failed");
+const run = createErrorBoundary(STATUS, "adjustment.failed");
 
-const ACTIONS: readonly AdjustmentAction[] = [
-  "cancel",
-  "comp",
-  "discount_percent",
-  "discount_amount",
-];
-const ROLES: readonly PersonRoleValue[] = ["staff", "supervisor", "manager", "admin"];
 /** Whole cents at most: a third decimal place would be rounded away at the row. */
 const AMOUNT = /^(?:0|[1-9]\d{0,8})(?:\.\d{1,2})?$/;
 
@@ -60,7 +55,7 @@ function requireNames(value: unknown): Record<string, string> {
 
 function requireActions(value: unknown): AdjustmentAction[] {
   if (!Array.isArray(value)) throw invalid("actions");
-  return value.map((action) => requireEnum(action, "actions", ACTIONS));
+  return value.map((action) => requireEnum(action, "actions", ADJUSTMENT_ACTIONS));
 }
 
 function requireMaxPercent(value: unknown): number | null {
@@ -88,17 +83,15 @@ function requireReasonInput(body: Record<string, unknown>): AdjustmentReasonInpu
     actions: requireActions(body.actions),
     maxPercentBp: requireMaxPercent(body.maxPercentBp),
     maxAmount: requireMaxAmount(body.maxAmount),
-    applyRole: requireEnum(body.applyRole, "applyRole", ROLES),
-    approverRole: requireEnum(body.approverRole, "approverRole", ROLES),
+    applyRole: requireEnum(body.applyRole, "applyRole", personRole.enumValues),
+    approverRole: requireEnum(body.approverRole, "approverRole", personRole.enumValues),
     noteRequired: requireFlag(body.noteRequired, "noteRequired"),
   };
 }
 
 function requireIds(value: unknown): string[] {
-  if (!Array.isArray(value) || value.some((id) => typeof id !== "string" || !isUuid(id))) {
-    throw invalid("ids");
-  }
-  return value as string[];
+  if (!Array.isArray(value)) throw invalid("ids");
+  return value.map((id) => requireBodyUuid(id, "ids"));
 }
 
 export const ADJUSTMENTS_ROUTES: ModuleRoutes = {

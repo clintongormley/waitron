@@ -1,7 +1,14 @@
 import { roleAtLeast, type PersonRoleValue } from "@waitron/identity";
 import { addDecimal, compareDecimal, decimal, type Decimal } from "@waitron/shared";
 
-export type AdjustmentAction = "cancel" | "comp" | "discount_percent" | "discount_amount";
+export const ADJUSTMENT_ACTIONS = [
+  "cancel",
+  "comp",
+  "discount_percent",
+  "discount_amount",
+] as const;
+
+export type AdjustmentAction = (typeof ADJUSTMENT_ACTIONS)[number];
 
 export interface AdjustmentReason {
   id: string;

@@ -5,6 +5,7 @@ import {
   AppError,
   centsToDecimal,
   compareDecimal,
+  contentLanguageCode,
   decimal,
   decimalToCents,
   type Decimal,
@@ -12,8 +13,6 @@ import {
 import type { AdjustmentAction, AdjustmentReason } from "./policy.js";
 import { adjustmentReasons } from "./schema/reasons.js";
 import "./errors.js";
-// The registry of `management.request_invalid`, which this file throws.
-import "@waitron/server-kit";
 
 /** Everything an owner edits on a reason; `active` and `position` have operations of their own. */
 export interface AdjustmentReasonInput {
@@ -28,6 +27,13 @@ export interface AdjustmentReasonInput {
 }
 
 type ReasonRow = typeof adjustmentReasons.$inferSelect;
+
+/** The order staff see reasons in: by position, then name. */
+const STAFF_ORDER = [
+  asc(adjustmentReasons.position),
+  asc(adjustmentReasons.name),
+  asc(adjustmentReasons.id),
+];
 
 function toReason(row: ReasonRow): AdjustmentReason {
   return {
@@ -46,7 +52,24 @@ function toReason(row: ReasonRow): AdjustmentReason {
 }
 
 function invalid(field: string): AppError {
-  return new AppError("management.request_invalid", { field });
+  return new AppError("adjustment_reason.invalid", { field });
+}
+
+/**
+ * Each key must be a language; a blank text is no name in that language, so it is left out. A bad
+ * key is reported against `names`, because `contentLanguageCode`'s own refusal names no field.
+ */
+function nonBlankNames(names: Record<string, string>): Record<string, string> {
+  const kept: Record<string, string> = {};
+  for (const [language, text] of Object.entries(names)) {
+    try {
+      contentLanguageCode(language);
+    } catch {
+      throw invalid("names");
+    }
+    if (text.trim() !== "") kept[language] = text;
+  }
+  return kept;
 }
 
 /** The row values for `input`, refused field by field where the policy would be meaningless. */
@@ -72,7 +95,7 @@ function reasonValues(input: AdjustmentReasonInput) {
   if (!roleAtLeast(input.approverRole, input.applyRole)) throw invalid("approverRole");
   return {
     name,
-    names: input.names,
+    names: nonBlankNames(input.names),
     actions: input.actions,
     maxPercent: percent,
     maxAmount: amount === null ? null : decimalToCents(amount),
@@ -103,7 +126,7 @@ async function findReason(tx: Transaction, reasonId: string): Promise<ReasonRow>
   return row;
 }
 
-/** Reasons in the order staff see them: by position, then name. Active ones only unless asked. */
+/** Reasons in the order staff see them. Active ones only unless asked. */
 export async function listAdjustmentReasons(
   tx: Transaction,
   opts: { includeInactive?: boolean } = {},
@@ -112,11 +135,7 @@ export async function listAdjustmentReasons(
     .select()
     .from(adjustmentReasons)
     .where(opts.includeInactive === true ? undefined : eq(adjustmentReasons.active, true))
-    .orderBy(
-      asc(adjustmentReasons.position),
-      asc(adjustmentReasons.name),
-      asc(adjustmentReasons.id),
-    );
+    .orderBy(...STAFF_ORDER);
   return rows.map(toReason);
 }
 
@@ -157,11 +176,12 @@ export async function updateAdjustmentReason(
 
 /** Kept, never deleted, so anything naming the reason by id can still read it. */
 export async function deactivateAdjustmentReason(tx: Transaction, reasonId: string): Promise<void> {
-  await findReason(tx, reasonId);
-  await tx
+  const [row] = await tx
     .update(adjustmentReasons)
     .set({ active: false })
-    .where(eq(adjustmentReasons.id, reasonId));
+    .where(eq(adjustmentReasons.id, reasonId))
+    .returning({ id: adjustmentReasons.id });
+  if (row === undefined) throw new AppError("adjustment_reason.not_found", { reasonId });
 }
 
 /**
@@ -173,17 +193,23 @@ export async function reorderAdjustmentReasons(
   tx: Transaction,
   ids: readonly string[],
 ): Promise<void> {
-  const inactive: string[] = [];
-  const active = new Set<string>();
-  for (const reason of await listAdjustmentReasons(tx, { includeInactive: true })) {
-    if (reason.active) active.add(reason.id);
-    else inactive.push(reason.id);
-  }
+  const rows = await tx
+    .select({
+      id: adjustmentReasons.id,
+      active: adjustmentReasons.active,
+      position: adjustmentReasons.position,
+    })
+    .from(adjustmentReasons)
+    .orderBy(...STAFF_ORDER);
+  const current = new Map(rows.map((row) => [row.id, row.position]));
+  const active = new Set(rows.filter((row) => row.active).map((row) => row.id));
+  const inactive = rows.filter((row) => !row.active).map((row) => row.id);
   const unknown = ids.find((reasonId) => !active.has(reasonId));
   if (unknown !== undefined)
     throw new AppError("adjustment_reason.not_found", { reasonId: unknown });
   if (new Set(ids).size !== ids.length || ids.length !== active.size) throw invalid("ids");
   for (const [position, reasonId] of [...ids, ...inactive].entries()) {
+    if (current.get(reasonId) === position) continue;
     await tx.update(adjustmentReasons).set({ position }).where(eq(adjustmentReasons.id, reasonId));
   }
 }

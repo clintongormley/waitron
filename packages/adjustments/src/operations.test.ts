@@ -170,11 +170,11 @@ describe("adjustment reason operations", () => {
     await inTx((tx) => deactivateAdjustmentReason(tx, gone.id));
 
     await expect(inTx((tx) => reorderAdjustmentReasons(tx, [a.id]))).rejects.toMatchObject({
-      code: "management.request_invalid",
+      code: "adjustment_reason.invalid",
       params: { field: "ids" },
     });
     await expect(inTx((tx) => reorderAdjustmentReasons(tx, [a.id, a.id]))).rejects.toMatchObject({
-      code: "management.request_invalid",
+      code: "adjustment_reason.invalid",
       params: { field: "ids" },
     });
     await expect(
@@ -230,10 +230,33 @@ describe("adjustment reason operations", () => {
   ])("refuses a reason whose %s is out of bounds (%o)", async (field, overrides) => {
     await expect(
       inTx((tx) => createAdjustmentReason(tx, complaint(overrides))),
-    ).rejects.toMatchObject({ code: "management.request_invalid", params: { field } });
+    ).rejects.toMatchObject({ code: "adjustment_reason.invalid", params: { field } });
     const reason = await inTx((tx) => createAdjustmentReason(tx, complaint({ name: "Valid" })));
     await expect(
       inTx((tx) => updateAdjustmentReason(tx, reason.id, complaint(overrides))),
-    ).rejects.toMatchObject({ code: "management.request_invalid", params: { field } });
+    ).rejects.toMatchObject({ code: "adjustment_reason.invalid", params: { field } });
+  });
+
+  it("refuses a name keyed by something that is not a language, on create and on update", async () => {
+    const names = { en: "Complaint", "not a language": "Queja" };
+    await expect(
+      inTx((tx) => createAdjustmentReason(tx, complaint({ names }))),
+    ).rejects.toMatchObject({ code: "adjustment_reason.invalid", params: { field: "names" } });
+    const reason = await inTx((tx) => createAdjustmentReason(tx, complaint()));
+    await expect(
+      inTx((tx) => updateAdjustmentReason(tx, reason.id, complaint({ names }))),
+    ).rejects.toMatchObject({ code: "adjustment_reason.invalid", params: { field: "names" } });
+    expect(await inTx((tx) => listAdjustmentReasons(tx))).toEqual([reason]);
+  });
+
+  it("stores no name in a language left blank", async () => {
+    const created = await inTx((tx) =>
+      createAdjustmentReason(tx, complaint({ names: { en: "Complaint", es: "   ", ca: "" } })),
+    );
+    expect(created.names).toEqual({ en: "Complaint" });
+    const updated = await inTx((tx) =>
+      updateAdjustmentReason(tx, created.id, complaint({ names: { en: " ", es: "Queja" } })),
+    );
+    expect(updated.names).toEqual({ es: "Queja" });
   });
 });
