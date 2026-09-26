@@ -5378,7 +5378,7 @@ when the box's environment owns them (`managedByEnvironment`, where that button 
 instead that a longer key has to be set there (`stream.error.recovery_key_too_short_managed`); and
 until the Backups screen's first status read succeeds it names neither
 (`stream.error.recovery_key_too_short_unknown`); in English and Spanish (2026-09-26, lane A's A35,
-branch `fix/bucket-panel-short-key-wording`). The refusal code is unchanged and the message does
+#666). The refusal code is unchanged and the message does
 not link or scroll to the button. Left open, two cases. First, the panel picks its message from
 `managedByEnvironment` alone, so with a key hand-edited too short in `backup.env` it can name a
 button that does not help: with archives on it names a button that is not shown (the status reads
