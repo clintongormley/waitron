@@ -5941,6 +5941,66 @@ describe("what a held-order edit preserves and what it replaces", () => {
     ).toEqual([300]);
   });
 
+  it("keeps an extra's list and stored price on a quantity-only edit when two lists offer it", async () => {
+    // Spec §11.7 example 7, as far as a quantity-only edit reaches it: Extra cheese on "Toppings"
+    // at 1.00 and on "Premium toppings" at 1.50, and the line took it from Premium toppings.
+    const { cfg, cafeId, catalogueId } = await setupVenue();
+    const seeded = await withTransaction(db, async (tx) => {
+      const toppings = await addExtraList(tx, catalogueId, cafeId, "Queso", { price: "1.00" });
+      const premium = await catalogue.createExtraList(
+        tx,
+        {
+          name: "Premium toppings list staff",
+          customerName: { [CONTENT_LANGUAGE]: "Premium toppings list customer" },
+          kitchenName: "Premium toppings list kitchen",
+          minPicks: 0,
+          maxPicks: null,
+          active: true,
+          items: [
+            { productId: toppings.productId, maxQuantity: 1, preselected: false, price: "1.50" },
+          ],
+        },
+        LOCALE,
+      );
+      await attachModifierList(tx, cafeId, { kind: "extras", id: premium.id });
+      return { cheeseId: toppings.productId, premiumListId: premium.id };
+    });
+    const extras = [
+      { listId: seeded.premiumListId, picks: [{ productId: seeded.cheeseId, quantity: 1 }] },
+    ];
+    const id = randomUUID();
+    await parkProducts(cfg, { id, lines: [{ productId: cafeId, quantity: "1", extras }] });
+    const before = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(before.map((line) => [line.extraListId, line.unitPriceGross])).toEqual([
+      [null, 150],
+      [seeded.premiumListId, 150],
+    ]);
+
+    // Premium toppings' cheese rises to 1.80 underneath the edit.
+    await db.execute(sql`
+      update extra_list_items set price = 180 where list_id = ${seeded.premiumListId}`);
+    await updateProducts(cfg, id, {
+      lines: [{ workingOrderLineId: before[0]!.id, productId: cafeId, quantity: "2", extras }],
+    });
+
+    const after = await db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    // Both rows keep their ids, the cheese its list and the 1.50 it was sold at, for two dishes.
+    expect(
+      after.map((line) => [line.id, line.extraListId, line.unitPriceGross, line.lineTotal]),
+    ).toEqual([
+      [before[0]!.id, null, 150, 300],
+      [before[1]!.id, seeded.premiumListId, 150, 300],
+    ]);
+  });
+
   it("replaces the line when the answer itself changed, re-pricing it from today's offer", async () => {
     const { cfg, zoneId, cafeId, premiumCafeOfferId } = await setupVenue();
     const punto = await withTransaction(db, async (tx) => {

@@ -29,6 +29,8 @@ export interface ExtraChild {
   kitchenName: string | null;
   /** GROSS, already resolved. */
   price: string;
+  /** The list the pick was taken from, stored on the child line as `extra_list_id`. */
+  listId: string;
   /** The extra PRODUCT's own class, never the dish's. */
   vatClass: VatClass;
   /**
@@ -87,6 +89,7 @@ export function buildLineExtras(
           descriptions: product.descriptions,
           kitchenName: product.kitchenName,
           price: item.price,
+          listId: list.id,
           vatClass: product.vatClass,
           quantity: pick.quantity,
         };
@@ -103,10 +106,6 @@ export function buildLineExtras(
  * Greedy is exact only because every caller's `matches` is equality of a derived KEY: two entries
  * that could take the same candidate match the same set, so no early choice strands a later entry.
  * A merely overlapping predicate would need a real bipartite matching.
- *
- * Exact is not correct: two candidates sharing a key but differing in something the key omits pair
- * either way, and only one is right — the caller must rule that out first, as
- * {@link matchExtraChildren} does by refusing a product more than one active list offers.
  */
 function pairOff<Entry, Candidate>(
   entries: readonly Entry[],
@@ -139,30 +138,20 @@ export function sameOptionSelections(
 
 /**
  * Pair each rebuilt pick with the stored child line that froze it, or `null` when the edit is not
- * quantity-only. Neither side's ORDER is part of the pairing. `dishQuantity` is the STORED dish
- * count, since a child's stored quantity is `dishQuantity × picksPerDish`.
- *
- * A picked product that more than one ACTIVE list offers refuses the pairing: a child line does not
- * record which list it came off, so a pick moved between two lists at two prices would keep the
- * wrong price. Not a complete guard — it counts the offers as they are NOW. Receipt and the open
- * gap: docs/developers/modifiers.md.
+ * quantity-only. A pick and a child match on their list, product and quantity; neither side's ORDER
+ * is part of the pairing. `dishQuantity` is the STORED dish count, since a child's stored quantity is
+ * `dishQuantity × picksPerDish`. A child that records no list matches no pick.
  */
-export function matchExtraChildren<Child extends { productId: string | null; quantity: string }>(
-  offered: readonly ResolvedExtraList[],
+export function matchExtraChildren<
+  Child extends { productId: string | null; extraListId: string | null; quantity: string },
+>(
   picks: readonly ExtraChild[],
   children: readonly Child[],
   dishQuantity: string,
 ): { pick: ExtraChild; child: Child }[] | null {
-  const offerCounts = new Map<string, number>();
-  for (const list of offered) {
-    if (!list.active) continue;
-    for (const item of list.items) {
-      offerCounts.set(item.productId, (offerCounts.get(item.productId) ?? 0) + 1);
-    }
-  }
-  if (picks.some((pick) => (offerCounts.get(pick.productId) ?? 0) > 1)) return null;
   const dish = decimal(dishQuantity);
   const wanted = picks.map((pick) => ({
+    listId: pick.listId,
     productId: pick.productId,
     quantity: multiplyDecimal(dish, decimal(String(pick.quantity))),
   }));
@@ -170,6 +159,7 @@ export function matchExtraChildren<Child extends { productId: string | null; qua
     wanted,
     children,
     (want, child) =>
+      child.extraListId === want.listId &&
       child.productId === want.productId &&
       compareDecimal(want.quantity, decimal(child.quantity)) === 0,
   );

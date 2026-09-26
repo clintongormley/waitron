@@ -175,6 +175,8 @@ describe("buildLineExtras", () => {
         descriptions: { en: "Wine diner", es: "Vino cliente" },
         kitchenName: "Wine kitchen",
         price: "4.50",
+        // The list the pick was taken from, so a stored child can be matched to its own list.
+        listId: "list-drinks",
         // The wine's own 21% class, not the 10% of the dish this is an extra on.
         vatClass: "general",
         // The picks per dish as sent — this function never multiplies by the dish count.
@@ -385,6 +387,13 @@ describe("sameOptionSelections", () => {
 });
 
 describe("matchExtraChildren", () => {
+  // The wine on a second list at another price, for the cases where two lists offer one product.
+  const premiumDrinks: ResolvedExtraList = {
+    ...drinks,
+    id: "list-drinks-premium",
+    items: [{ ...drinks.items[0]!, id: "item-wine-premium", price: "9.00" }],
+  };
+
   it("pairs each pick with its own stored child whichever order the two sides are in", () => {
     const { extraChildren } = freeze(
       { extras: [drinks, breads] },
@@ -398,11 +407,21 @@ describe("matchExtraChildren", () => {
     // The stored rows are in the order the lists were offered BEFORE the reorder — breads first —
     // while `extraChildren` now comes back drinks first.
     const children = [
-      { productId: "product-sourdough", quantity: "6.000", unitPriceGross: "1.50" },
-      { productId: "product-wine", quantity: "3.000", unitPriceGross: "4.50" },
+      {
+        productId: "product-sourdough",
+        extraListId: breads.id,
+        quantity: "6.000",
+        unitPriceGross: "1.50",
+      },
+      {
+        productId: "product-wine",
+        extraListId: drinks.id,
+        quantity: "3.000",
+        unitPriceGross: "4.50",
+      },
     ];
 
-    const paired = matchExtraChildren([drinks, breads], extraChildren, children, "3");
+    const paired = matchExtraChildren(extraChildren, children, "3");
 
     expect(paired?.map(({ pick, child }) => [pick.productId, child.unitPriceGross])).toEqual([
       ["product-wine", "4.50"],
@@ -418,17 +437,15 @@ describe("matchExtraChildren", () => {
 
     expect(
       matchExtraChildren(
-        [breads],
         extraChildren,
-        [{ productId: "product-sourdough", quantity: "6.000" }],
+        [{ productId: "product-sourdough", extraListId: breads.id, quantity: "6.000" }],
         "3",
       ),
     ).not.toBeNull();
     expect(
       matchExtraChildren(
-        [breads],
         extraChildren,
-        [{ productId: "product-sourdough", quantity: "4.000" }],
+        [{ productId: "product-sourdough", extraListId: breads.id, quantity: "4.000" }],
         "3",
       ),
     ).toBeNull();
@@ -442,23 +459,14 @@ describe("matchExtraChildren", () => {
 
     expect(
       matchExtraChildren(
-        [breads],
         extraChildren,
-        [{ productId: "product-sourdough", quantity: "1.000" }],
+        [{ productId: "product-sourdough", extraListId: breads.id, quantity: "1.000" }],
         "1",
       ),
     ).toBeNull();
   });
 
-  it("refuses a pairing when two picks name the same product, whichever list offered it", () => {
-    // The same wine on two lists at two prices. Nothing on a stored child says which list it came
-    // from, so a pairing that knows only the product and the quantity can hand the row sold at 9.00
-    // the pick that was made off the 4.50 one — which is a different bill, not a reordering.
-    const premiumDrinks: ResolvedExtraList = {
-      ...drinks,
-      id: "list-drinks-premium",
-      items: [{ ...drinks.items[0]!, id: "item-wine-premium", price: "9.00" }],
-    };
+  it("pairs two picks of one product with the child taken from each one's own list", () => {
     const { extraChildren } = freeze(
       { extras: [drinks, premiumDrinks] },
       {
@@ -471,11 +479,58 @@ describe("matchExtraChildren", () => {
 
     expect(
       matchExtraChildren(
-        [drinks, premiumDrinks],
         extraChildren,
         [
-          { productId: "product-wine", quantity: "1.000", unitPriceGross: "4.50" },
-          { productId: "product-wine", quantity: "2.000", unitPriceGross: "9.00" },
+          {
+            productId: "product-wine",
+            extraListId: premiumDrinks.id,
+            quantity: "1.000",
+            unitPriceGross: "9.00",
+          },
+          {
+            productId: "product-wine",
+            extraListId: drinks.id,
+            quantity: "2.000",
+            unitPriceGross: "4.50",
+          },
+        ],
+        "1",
+      )?.map(({ pick, child }) => [pick.listId, child.unitPriceGross]),
+    ).toEqual([
+      [drinks.id, "4.50"],
+      [premiumDrinks.id, "9.00"],
+    ]);
+  });
+
+  it("refuses a pairing when two picks of one product swapped counts between their lists", () => {
+    // The stored rows say one off each list at the OTHER count: a pairing on product and quantity
+    // alone would hand the 4.50 pick the row sold at 9.00, which is a different bill.
+    const { extraChildren } = freeze(
+      { extras: [drinks, premiumDrinks] },
+      {
+        extras: [
+          { listId: drinks.id, picks: [{ productId: "product-wine", quantity: 2 }] },
+          { listId: premiumDrinks.id, picks: [{ productId: "product-wine", quantity: 1 }] },
+        ],
+      },
+    );
+
+    expect(
+      matchExtraChildren(
+        extraChildren,
+        [
+          {
+            productId: "product-wine",
+            extraListId: drinks.id,
+            quantity: "1.000",
+            unitPriceGross: "4.50",
+          },
+          {
+            productId: "product-wine",
+            extraListId: premiumDrinks.id,
+            quantity: "2.000",
+            unitPriceGross: "9.00",
+          },
         ],
         "1",
       ),
@@ -492,11 +547,10 @@ describe("matchExtraChildren", () => {
     // so dropping a pick has to take the replacement path instead.
     expect(
       matchExtraChildren(
-        [breads],
         extraChildren,
         [
-          { productId: "product-sourdough", quantity: "1.000" },
-          { productId: "product-rye", quantity: "1.000" },
+          { productId: "product-sourdough", extraListId: breads.id, quantity: "1.000" },
+          { productId: "product-rye", extraListId: breads.id, quantity: "1.000" },
         ],
         "1",
       ),
@@ -521,22 +575,39 @@ describe("matchExtraChildren", () => {
 
     expect(
       matchExtraChildren(
-        [breads],
         extraChildren,
-        [{ productId: "product-sourdough", quantity: "1.000" }],
+        [{ productId: "product-sourdough", extraListId: breads.id, quantity: "1.000" }],
         "1",
       ),
     ).toBeNull();
   });
 
-  it("refuses a pairing when two of the dish's lists offer the picked product", () => {
-    // ONE pick, so nothing here is ambiguous on the picks side — the ambiguity is in the OFFER, and
-    // a pick that moved from one of these lists to the other looks exactly like this one.
-    const premiumDrinks: ResolvedExtraList = {
-      ...drinks,
-      id: "list-drinks-premium",
-      items: [{ ...drinks.items[0]!, id: "item-wine-premium", price: "9.00" }],
-    };
+  it("pairs a pick with the child from its own list when two of the dish's lists offer the product", () => {
+    const { extraChildren } = freeze(
+      { extras: [drinks, premiumDrinks] },
+      {
+        extras: [{ listId: premiumDrinks.id, picks: [{ productId: "product-wine", quantity: 1 }] }],
+      },
+    );
+
+    expect(
+      matchExtraChildren(
+        extraChildren,
+        [
+          {
+            productId: "product-wine",
+            extraListId: premiumDrinks.id,
+            quantity: "1.000",
+            unitPriceGross: "9.00",
+          },
+        ],
+        "1",
+      )?.map(({ pick, child }) => [pick.listId, child.unitPriceGross]),
+    ).toEqual([[premiumDrinks.id, "9.00"]]);
+  });
+
+  it("refuses a pairing when the pick names a different list from the one the stored child came off", () => {
+    // The same product and count, moved from one list to the other: a new pick, not a kept one.
     const { extraChildren } = freeze(
       { extras: [drinks, premiumDrinks] },
       { extras: [{ listId: drinks.id, picks: [{ productId: "product-wine", quantity: 1 }] }] },
@@ -544,30 +615,44 @@ describe("matchExtraChildren", () => {
 
     expect(
       matchExtraChildren(
-        [drinks, premiumDrinks],
         extraChildren,
-        [{ productId: "product-wine", quantity: "1.000", unitPriceGross: "4.50" }],
+        [
+          {
+            productId: "product-wine",
+            extraListId: premiumDrinks.id,
+            quantity: "1.000",
+            unitPriceGross: "9.00",
+          },
+        ],
         "1",
       ),
     ).toBeNull();
-    // The same pick against the same stored child pairs when only ONE list offers the wine.
+  });
+
+  it("refuses a pairing with a stored child that records no list", () => {
+    const { extraChildren } = freeze(
+      { extras: [drinks] },
+      { extras: [{ listId: drinks.id, picks: [{ productId: "product-wine", quantity: 1 }] }] },
+    );
+
     expect(
       matchExtraChildren(
-        [drinks],
         extraChildren,
-        [{ productId: "product-wine", quantity: "1.000", unitPriceGross: "4.50" }],
+        [
+          {
+            productId: "product-wine",
+            extraListId: null,
+            quantity: "1.000",
+            unitPriceGross: "4.50",
+          },
+        ],
         "1",
       ),
-    ).not.toBeNull();
+    ).toBeNull();
   });
 
-  it("pairs when the only other list offering the picked product is inactive", () => {
-    const retiredDrinks: ResolvedExtraList = {
-      ...drinks,
-      id: "list-drinks-retired",
-      active: false,
-      items: [{ ...drinks.items[0]!, id: "item-wine-retired", price: "9.00" }],
-    };
+  it("pairs a pick whose list no longer offers the product", () => {
+    // The stored child names the list; what that list offers today is not part of the pairing.
     const { extraChildren } = freeze(
       { extras: [drinks] },
       { extras: [{ listId: drinks.id, picks: [{ productId: "product-wine", quantity: 1 }] }] },
@@ -575,25 +660,15 @@ describe("matchExtraChildren", () => {
 
     expect(
       matchExtraChildren(
-        [drinks, retiredDrinks],
         extraChildren,
-        [{ productId: "product-wine", quantity: "1.000", unitPriceGross: "4.50" }],
-        "1",
-      )?.map(({ pick, child }) => [pick.productId, child.unitPriceGross]),
-    ).toEqual([["product-wine", "4.50"]]);
-  });
-
-  it("pairs a pick whose product no list offers any more", () => {
-    const { extraChildren } = freeze(
-      { extras: [drinks] },
-      { extras: [{ listId: drinks.id, picks: [{ productId: "product-wine", quantity: 1 }] }] },
-    );
-
-    expect(
-      matchExtraChildren(
-        [breads],
-        extraChildren,
-        [{ productId: "product-wine", quantity: "1.000", unitPriceGross: "4.50" }],
+        [
+          {
+            productId: "product-wine",
+            extraListId: drinks.id,
+            quantity: "1.000",
+            unitPriceGross: "4.50",
+          },
+        ],
         "1",
       )?.map(({ pick, child }) => [pick.productId, child.unitPriceGross]),
     ).toEqual([["product-wine", "4.50"]]);

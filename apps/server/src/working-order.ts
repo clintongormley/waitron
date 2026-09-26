@@ -285,7 +285,7 @@ async function priceOrderLines(
         courseId: string | null;
         note: string | null;
       }
-    | { kind: "child"; productId: string; menuItemId: string };
+    | { kind: "child"; productId: string; menuItemId: string; extraListId: string };
   const items: BasketItemWithOptions[] = [];
   const lineMeta: LineMeta[] = [];
   for (const line of lines) {
@@ -372,6 +372,7 @@ async function priceOrderLines(
         kind: "child",
         productId: child.productId,
         menuItemId: line.menuItemId,
+        extraListId: child.listId,
       });
     }
   }
@@ -444,6 +445,7 @@ async function priceOrderLines(
       category: line.category ?? null,
       courseId: meta.kind === "parent" ? meta.courseId : null,
       note: meta.kind === "parent" ? meta.note : null,
+      extraListId: meta.kind === "child" ? meta.extraListId : null,
       // From the priced row, never the request: only it holds the re-keyed customer text.
       variantName: line.variantName ?? null,
       variantDescriptions: line.variantDescriptions ?? null,
@@ -2396,6 +2398,7 @@ export async function updateHeldOrder(
         unitPriceGross: workingOrderLines.unitPriceGross,
         quantity: workingOrderLines.quantity,
         note: workingOrderLines.note,
+        extraListId: workingOrderLines.extraListId,
       })
       .from(workingOrderLines)
       .leftJoin(products, eq(products.id, workingOrderLines.productId))
@@ -2492,11 +2495,9 @@ export async function updateHeldOrder(
         // Compared by VALUES and never by either side's order: both sides are built in the OFFERED
         // order, and that order is a stored position several columns hold and a save re-numbers, so
         // a line parked before a reorder keeps the old one. `docs/developers/modifiers.md` names
-        // those columns; `matchExtraChildren` (modifier-selection.ts) carries what else the extras
-        // side has to refuse, and what its refusal does not cover.
+        // those columns.
         if (!sameOptionSelections(frozen.optionSnapshots, stored.optionSnapshots)) return null;
         const paired = matchExtraChildren(
-          modifiers.extrasByHolder.get(menuItemId) ?? [],
           frozen.extraChildren,
           childrenByParent.get(stored.id) ?? [],
           stored.quantity,

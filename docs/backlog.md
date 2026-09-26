@@ -1211,24 +1211,11 @@ re-priced every line. The review also found a dish offering one product on two l
 the wrong list's price; `matchExtraChildren` now refuses to pair a stored extras child whenever the
 picked product is offered by more than one of the dish's active lists.
 
-- **That refusal is not a complete guard, and the residue is worth knowing before anyone relies on
-  it.** It counts the offers as they are NOW, while the ambiguity is a property of the offers the
-  stored child was written against. The escape is one specific edit: the list the STORED CHILD came
-  off is deactivated, or loses the product (`PATCH /management-api/modifiers/extras/:id`), between
-  the park and the edit, so the count comes back to one, the re-sent pick names the surviving list,
-  and the line is preserved at the old row's price. Traced through the code, not run. The other
-  direction is closed by something else: a pick naming a list that no longer offers the product is
-  refused outright by `validateExtraSelections`, and the line takes the replacement path. There are
-  two ways to close the escape and neither is free — pair on the child's frozen price as well as its
-  product and quantity, which gives up the deliberate price lock that "keeps extras rows and
-  customisation on a quantity-only edit" pins; or let the child line carry the list it came off,
-  which is what spec §3.5 rules out when it says an open order's child points at the product and not
-  the list. Keeping the price lock AND closing the escape needs the second. **Also not examined:**
-  the refusal sits on the held-order edit path, which is where the wrong price was measured being
-  written; whether any other path can pair a stored child with the wrong list's price was not looked
-  at. **Next action:** an owner decision on whether an OPEN-ORDER extras child may carry its list
-  id. It is not Task 9's — that one writes the FILED sale line, which holds no catalogue key
-  (decision 11).
+- **Superseded by menus plan Task 7b (branch `feat/menus-order-edits`):** a stored extras child now
+  records its list (`working_order_lines.extra_list_id`) and `matchExtraChildren` pairs on list,
+  product and quantity, so the refusal and the escape it left are gone. The till's
+  `apps/till/src/state/held-extras.ts` still guesses a stored child's list; reading `listId` there is
+  Task 7b's till part.
 
 Task 9 has landed as **#469**: the filed sale line carries a dish's frozen answers in
 `sale_lines.option_snapshots` (core migration 0041), written by both filing routes, and the customer
