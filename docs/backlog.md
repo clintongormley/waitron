@@ -346,8 +346,11 @@ when a check merges back into the tab it was split from" in `apps/server/src/spl
 **Decided (owner, 2026-09-26):** a check gets no Void. The till pays a check straight after
 "Create bill", so a dish being cancelled is voided on the TAB first; a change of mind in between is
 covered by merging the check back. Since menus M7b3 the originating till does that merge itself when
-the waiter leaves the check unpaid (Back to floor, another screen tab, or another table); after a
-reload or on another device the check stays in the counter's Held orders, where it can be paid.
+the waiter leaves the check unpaid (Back to floor, another screen tab, or another table). After a
+reload, on another device, after logging out, after a server switch, while the check is being
+paid, or when the server refuses the merge, the check stays in the counter's Held orders, where it
+can be paid; when the merge gets no answer the till says it cannot tell which of the two places the
+check is in.
 The durable link between a check and its table is lane B's visits (service plan,
 `docs/superpowers/plans/2026-09-26-service-ordering-and-billing.md`), not a new column.
 
