@@ -39,4 +39,16 @@ describe.each(["light", "dark"] as const)("till-product-grid a11y (%s theme)", (
     );
     await expectNoA11yViolations(host);
   });
+
+  it("a grid with a greyed, unavailable tile has no violations", async () => {
+    const { host } = await mountWidget<TillProductGrid>(
+      "till-product-grid",
+      {
+        products: [cafe, { ...cafe, id: "burger", name: "Burger", available: false }, jamon],
+        store: new WorkingOrderStore(),
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });

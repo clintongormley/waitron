@@ -828,7 +828,7 @@ export class TillApp extends LitElement {
     let offerLoadFailed = false;
     try {
       const { menus, offers, zones, context } = await this.api.listDefaultZoneOffers();
-      this.products = offers.map(menuOfferToTillProduct);
+      this.products = offers.map((offer) => menuOfferToTillProduct(offer));
       this.menus = menus;
       this.counterServiceZones = zones ?? [];
       this.counterServiceZoneId = context.zoneId;
@@ -1099,7 +1099,7 @@ export class TillApp extends LitElement {
     try {
       const { menus, offers, defaultMenuId, context } = await this.api.listZoneOffers(zoneId);
       if (request !== this.#counterOfferRequest || this.#store.lines.length > 0) return;
-      this.products = offers.map(menuOfferToTillProduct);
+      this.products = offers.map((offer) => menuOfferToTillProduct(offer));
       this.menus = menus;
       this.counterServiceZoneId = context.zoneId;
       this.api.setServiceZone(context.zoneId);
@@ -1738,7 +1738,7 @@ export class TillApp extends LitElement {
       try {
         const { menus, offers, defaultMenuId } = await this.api.listZoneOffers(table.zoneId);
         if (offerRequest !== this.#tableOfferRequest) return;
-        this.tableProducts = offers.map(menuOfferToTillProduct);
+        this.tableProducts = offers.map((offer) => menuOfferToTillProduct(offer));
         this.tableMenus = menus;
         this.tableSelectedCatalogueId = defaultMenuId ?? this.#defaultCatalogueId(menus);
       } catch {

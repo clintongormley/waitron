@@ -12,8 +12,9 @@ import type { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale } from "../i18n/t.js";
 
 /** A product with variants is sold only as one of them, so one whose variants are all unavailable
- * here has nothing to sell and gets no tile. */
+ * here has nothing to sell. It keeps its tile, greyed, so the tiles around it do not move (D12). */
 function hasSomethingToSell(product: TillProduct): boolean {
+  if (product.available === false) return false;
   const variants = product.variants ?? [];
   return variants.length === 0 || variants.some((variant) => variant.available);
 }
@@ -68,6 +69,7 @@ export class TillProductGrid extends LitElement {
   }
 
   #pick(product: TillProduct): void {
+    if (!hasSomethingToSell(product)) return;
     const unit = productUnit(product);
     if (unit.hardwareUnit !== null || unit.precision > 0) {
       this.store.emit("product-selected", product);
@@ -89,9 +91,13 @@ export class TillProductGrid extends LitElement {
       this.columns === undefined ? nothing : `grid-template-columns: repeat(${this.columns}, 1fr);`;
     return html`
       <div class="grid" style=${gridStyle}>
-        ${this.products.filter(hasSomethingToSell).map(
+        ${this.products.map(
           (product) => html`
-            <wt-button class="tile" @click=${() => this.#pick(product)}>
+            <wt-button
+              class="tile"
+              ?disabled=${!hasSomethingToSell(product)}
+              @click=${() => this.#pick(product)}
+            >
               <span class="name">${productName(product)}</span>
               <span class="price">${this.#priceLabel(product)}</span>
             </wt-button>

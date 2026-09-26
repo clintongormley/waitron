@@ -434,6 +434,41 @@ describe("WorkingOrderStore", () => {
     expect(s.dirty).toBe(false);
   });
 
+  describe("a basket refreshed against a new menu version", () => {
+    it("adoptLines replaces the named lines, re-prices the total, marks dirty and notifies", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "2");
+      s.addProduct(jamon, "0.500");
+      s.markPersisted();
+      let notified = 0;
+      s.subscribe(() => notified++);
+      s.adoptLines(new Map([[0, { product: { ...cafe, unitPrice: "1.20" }, quantity: "2" }]]));
+      expect(s.lines[0]!.product.unitPrice).toBe("1.20");
+      expect(s.lines[1]!.product).toBe(jamon);
+      expect(s.total).toBe("7.40");
+      expect(s.dirty).toBe(true);
+      expect(notified).toBe(1);
+    });
+
+    it("setBlocked marks and clears lines, notifying only when a mark changed, never marking dirty", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "1");
+      s.addProduct(jamon, "0.500");
+      s.markPersisted();
+      let notified = 0;
+      s.subscribe(() => notified++);
+      s.setBlocked([undefined, "unavailable"]);
+      expect(s.lines.map((line) => line.blocked)).toEqual([undefined, "unavailable"]);
+      expect(notified).toBe(1);
+      s.setBlocked([undefined, "unavailable"]);
+      expect(notified).toBe(1);
+      s.setBlocked([undefined, undefined]);
+      expect(s.lines[1]).not.toHaveProperty("blocked");
+      expect(notified).toBe(2);
+      expect(s.dirty).toBe(false);
+    });
+  });
+
   describe("extras picked on a basket line", () => {
     // A +0.50 gross pick.
     const oatMilk: SelectedExtra = {

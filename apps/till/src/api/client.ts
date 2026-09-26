@@ -12,8 +12,8 @@ import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
  * browser bundle. The cost is that a mismatch with the server is not a compile break.
  *
  * The OFFER and MENU shapes are the exception: `TillMenuOffer`, `TillMenu` and `OfferedModifier` are
- * `import type` aliases from catalogue's type-only leaf `@waitron/catalogue/src/menu-types.js`, which
- * pulls in no runtime, so removing or retyping a field the till reads is a compile break here.
+ * `import type` aliases from catalogue's type-only leaves `@waitron/catalogue/src/menu-types.js` and
+ * `menu-document-types.js`, which pull in no runtime, so removing or retyping a field the till reads is a compile break here.
  * `TillProduct` stays LOCAL: it is the till's own display model, built by
  * {@link menuOfferToTillProduct} from an offer and by `getHeldOrder` from a retrieved line.
  */
@@ -26,11 +26,8 @@ import type {
   StationThresholds,
   TimingBand,
 } from "@waitron/shared";
-import type {
-  AccessibleCatalogue,
-  MenuOffer,
-  OfferedModifier,
-} from "@waitron/catalogue/src/menu-types.js";
+import type { AccessibleCatalogue, OfferedModifier } from "@waitron/catalogue/src/menu-types.js";
+import type { LiveOffer } from "@waitron/catalogue/src/menu-document-types.js";
 
 /** Re-exported, never re-declared, so a widget imports the offered-list shapes where it imports every
  * other wire type. */
@@ -228,6 +225,10 @@ export interface TillProduct {
   productId?: string;
   /** The selling identity whose menu, price and offered modifiers were selected. */
   menuItemId?: string;
+  /** The published menu version this product was offered from; absent on a retrieved held line. */
+  menuVersionId?: string;
+  /** False when it cannot be sold now; absent on a retrieved held line. */
+  available?: boolean;
   variantId?: string;
   /** The selected variant's staff-facing name; a line naming a variant is shown under it alone. */
   variantName?: string;
@@ -341,8 +342,13 @@ export interface ProductCatalogue {
   products: TillProduct[];
 }
 
-/** A product's selling identity on one menu — the `offers[]` of `GET /api/service-zones/:zoneId/offers`. */
-export type TillMenuOffer = MenuOffer;
+/** A product's selling identity on one menu — the `offers[]` of `GET /api/service-zones/:zoneId/offers`:
+ * the menu's published version, each offer, variant, extras item and option label marked with whether
+ * it can be sold now. */
+export type TillMenuOffer = LiveOffer;
+
+/** A menu in a zone-offers body, with the published version its offers come from. */
+export type TillZoneMenu = TillMenu & { versionId: string };
 
 export interface ZoneOfferCatalogue {
   context: {
@@ -351,7 +357,7 @@ export interface ZoneOfferCatalogue {
     serviceMode: "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
   };
   defaultMenuId: string | null;
-  menus: TillMenu[];
+  menus: TillZoneMenu[];
   offers: TillMenuOffer[];
   zones?: ServiceZoneSummary[];
 }
@@ -364,12 +370,41 @@ export interface ServiceZoneSummary {
   serviceMode: "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
 }
 
-/** Adapt a menu offer to the till's display model while keeping product and selling ids distinct. */
-export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
+/** What a zone's live menus hold that cannot be sold now — `GET /api/menu-state`'s `unavailable`. */
+export interface MenuUnavailable {
+  /** Every product or variant that is Inactive or Unavailable, extras items' products included. */
+  products: string[];
+  optionLabels: string[];
+  /** Every extras item an offer has switched off, in the list it is switched off in. */
+  extraItems: { menuItemId: string; extraListId: string; productId: string }[];
+}
+
+/** `GET /api/menu-state?zoneId=` — each live menu's published version, and what cannot be sold now. */
+export interface MenuState {
+  menus: { menuId: string; versionId: string }[];
+  unavailable: MenuUnavailable;
+}
+
+/** The offered lists as the picker asks them: only the extras items and option labels sellable now. */
+function sellableModifiers(entries: TillMenuOffer["offeredModifiers"]): OfferedModifier[] {
+  return entries.map((entry) =>
+    entry.kind === "extras"
+      ? { ...entry, items: entry.items.filter((item) => item.available) }
+      : { ...entry, labels: entry.labels.filter((label) => label.available) },
+  );
+}
+
+/**
+ * Adapt a menu offer to the till's display model while keeping product and selling ids distinct.
+ * `menuVersionId` is the published version of the offer's menu, which each line added from it sends.
+ */
+export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: string): TillProduct {
   return {
     id: offer.productId,
     productId: offer.productId,
     menuItemId: offer.id,
+    ...(menuVersionId === undefined ? {} : { menuVersionId }),
+    available: offer.available,
     name: offer.name,
     customerName: offer.customerName,
     kitchenName: offer.kitchenName,
@@ -399,7 +434,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer): TillProduct {
         available: variant.available,
       };
     }),
-    offeredModifiers: offer.offeredModifiers,
+    offeredModifiers: sellableModifiers(offer.offeredModifiers),
     dietaryDeclarations: offer.dietaryDeclarations,
     diet: offer.diet,
     dietDerivation: offer.dietDerivation,
@@ -424,6 +459,9 @@ export interface SaleLine {
   workingOrderLineId?: string;
   menuItemId?: string;
   variantId?: string;
+  /** The menu version an unsaved line was priced against. The server refuses the request
+   * `menu.version_changed` when it is not the live one; absent means the live one. */
+  menuVersionId?: string;
   quantity: string;
   extras?: ExtraSelection[];
   options?: OptionSelection[];
@@ -1178,6 +1216,15 @@ export class TillApi {
     return this.#request<ZoneOfferCatalogue>(
       `/api/service-zones/${encodeURIComponent(zoneId)}/offers`,
       "GET",
+    );
+  }
+
+  menuState(zoneId: string, options: ReadOptions = {}): Promise<MenuState> {
+    return this.#request<MenuState>(
+      `/api/menu-state?zoneId=${encodeURIComponent(zoneId)}`,
+      "GET",
+      undefined,
+      options.signal,
     );
   }
 

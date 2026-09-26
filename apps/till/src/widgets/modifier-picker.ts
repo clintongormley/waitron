@@ -5,16 +5,15 @@ import { baseStyles } from "@waitron/ui";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
-import { lineGross } from "../state/order-line.js";
+import { lineGross, productAsVariant } from "../state/order-line.js";
 import { productName } from "./product-name.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { LineSelection, OrderLine, SelectedExtra } from "../state/working-order.js";
-import {
-  sellingValuesOf,
-  type OfferedExtraItem,
-  type OfferedExtrasList,
-  type OfferedOptionsList,
-  type TillProduct,
+import type {
+  OfferedExtraItem,
+  OfferedExtrasList,
+  OfferedOptionsList,
+  TillProduct,
 } from "../api/client.js";
 
 export interface ModifierConfirmDetail extends LineSelection {
@@ -215,24 +214,10 @@ export class TillModifierPicker extends LitElement {
     return this.#variants.find((variant) => variant.id === this.variantId && variant.available);
   }
 
-  /**
-   * The product as chosen: sold under the variant's price and selling values, with the variant's
-   * three names carried ALONGSIDE the product's, never folded into them. Each surface resolves the
-   * name it shows (`product-presentation.ts`), so the basket can render the staff name while a
-   * receipt renders the customer one.
-   */
+  /** The product as chosen: the dish itself, or the chosen variant of it. */
   get #selectedProduct(): TillProduct {
     const variant = this.#chosenVariant;
-    if (variant === undefined) return this.product;
-    return {
-      ...this.product,
-      ...sellingValuesOf(variant),
-      unitPrice: variant.unitPrice,
-      variantId: variant.id,
-      variantName: variant.name,
-      variantCustomerName: variant.customerName ?? null,
-      variantKitchenName: variant.kitchenName ?? null,
-    };
+    return variant === undefined ? this.product : productAsVariant(this.product, variant);
   }
 
   #countOf(listId: string, productId: string): number {

@@ -14,6 +14,7 @@ import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.
 import { sumDecimals } from "@waitron/shared";
 import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
+import type { BlockReason } from "./menu-refresh.js";
 import type { HeldExtra, TillProduct } from "../api/client.js";
 import { productUnit, toPresentation } from "../widgets/product-name.js";
 
@@ -64,6 +65,8 @@ export interface OrderLine {
   notOfferedExtras?: NotOfferedExtra[];
   /** A retrieved line whose offer is not in the till's live list. Display only. */
   notOffered?: true;
+  /** What stops this unsaved line being paid as it stands; never sent. */
+  blocked?: BlockReason;
   /**
    * One entry per answered list; ABSENT when none. On a RETRIEVED line the ids are re-derived from the
    * frozen wording (`deriveOptionSelections`), so a list whose wording nothing matches is missing here.
@@ -289,6 +292,27 @@ export class WorkingOrderStore {
     this.#invalidatePricing();
     this.#markDirty();
     this.emit("changed");
+  }
+
+  /** Replaces each line named by its index, as a basket refresh re-priced it. */
+  adoptLines(adopted: ReadonlyMap<number, OrderLine>): void {
+    for (const [index, line] of adopted) if (index < this.#lines.length) this.#lines[index] = line;
+    this.#invalidatePricing();
+    this.#markDirty();
+    this.emit("changed");
+  }
+
+  /** One entry per line. Display only, so the lines stay as clean as they were. */
+  setBlocked(reasons: readonly (BlockReason | undefined)[]): void {
+    let changed = false;
+    this.#lines.forEach((line, index) => {
+      const reason = reasons[index];
+      if (line.blocked === reason) return;
+      changed = true;
+      if (reason === undefined) delete line.blocked;
+      else line.blocked = reason;
+    });
+    if (changed) this.emit("changed");
   }
 
   /** Mints a FRESH {@link id}: a cleared basket is a new working order, so its next park or pay does

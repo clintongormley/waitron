@@ -146,7 +146,9 @@ function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): 
   return {
     context: { zoneId: floorZone.id, departmentId: "department-default", serviceMode: "prepay" },
     defaultMenuId,
-    menus: catalogue.menus,
+    // No `versionId`: a line added from these offers asserts no version, so the wire bodies the
+    // suites pin are the ones a till sends against the live version.
+    menus: catalogue.menus as ZoneOfferCatalogue["menus"],
     offers: catalogue.products.map((product, index): ZoneOfferCatalogue["offers"][number] => ({
       id: product.menuItemId ?? `menu-item-${product.id}-${index}`,
       menuId: product.catalogueId ?? "menu-fixture",
@@ -154,6 +156,9 @@ function zoneOffers(catalogue: ProductCatalogue, defaultMenuId: string | null): 
       grossPrice: product.unitPrice,
       unitPrice: product.unitPrice,
       active: true,
+      available: true,
+      image: null,
+      description: null,
       menuName: product.catalogueName ?? "Menu",
       placements: [[]],
       name: product.name,

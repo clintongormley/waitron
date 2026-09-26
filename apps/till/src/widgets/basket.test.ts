@@ -595,6 +595,26 @@ describe("till-basket", () => {
     expect(names[1]!.textContent).toContain(tag);
   });
 
+  it("marks each line a menu change blocks, in words for why, and leaves the others unmarked", async () => {
+    setLocale("en-GB");
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    store.addProduct({ ...cafe, id: "burger", name: "Burger" }, "1");
+    store.addProduct({ ...cafe, id: "wine", name: "Wine" }, "1");
+    store.addProduct({ ...cafe, id: "soup", name: "Soup" }, "1");
+    store.setBlocked([undefined, "unavailable", "removed", "extra_unavailable"]);
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    const names = [...el.shadowRoot!.querySelectorAll(".line > .name")].map((name) =>
+      (name.textContent ?? "").replace(/\s+/g, " ").trim(),
+    );
+    expect(names).toEqual([
+      "Café",
+      "Burger Sold out",
+      "Wine No longer on the menu",
+      "Soup An extra or choice has changed",
+    ]);
+  });
+
   // ── As-served diet & contains badges (dietary-classification) ────────────────────────────────
 
   it("shows a vegan badge for a plant-only reviewed dish", async () => {

@@ -188,6 +188,12 @@ describe("order-line pricing", () => {
       ).toEqual({ menuItemId: "mi-cafe", variantId: "v-large" });
     });
 
+    it("sends the menu version the line was priced against, as an assertion of what staff saw", () => {
+      expect(
+        toWireProductIdentity({ id: "cafe", menuItemId: "mi-cafe", menuVersionId: "version-2" }),
+      ).toEqual({ menuItemId: "mi-cafe", menuVersionId: "version-2" });
+    });
+
     it("refuses a product with no menu item, naming the product", () => {
       expect(() => toWireProductIdentity({ id: "cafe" })).toThrow(/cafe/);
     });
