@@ -490,8 +490,8 @@ export async function listMenuOffersWithTopLevel(
 interface OfferOptions {
   includeUnavailable?: boolean;
   includeSwitchedOff?: boolean;
-  /** Every extras item and option label, whatever its availability: what a published document
-   * holds. */
+  /** Every option label, and every extras item whose product is Active, whatever its availability:
+   * what a published document holds. */
   includeEveryModifierItem?: boolean;
   /** The graph the caller has already loaded for this operation. */
   graph?: SectionGraph;

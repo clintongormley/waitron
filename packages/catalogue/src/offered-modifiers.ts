@@ -118,7 +118,8 @@ type OfferedExtraItemFacts = Omit<OfferedExtraItem, "price" | "maxQuantity" | "p
 const activeVariant = alias(products, "active_variant");
 
 /** One query for every product any offered list names, and none at all when no list names one.
- * With `includeEveryModifierItem`, an Inactive or Unavailable product is read too. */
+ * With `includeEveryModifierItem`, an Unavailable product is read too, but never an Inactive one:
+ * availability must not change a published document, and deleting a product must. */
 async function readExtraProducts(
   tx: Transaction,
   productIds: string[],
@@ -140,7 +141,7 @@ async function readExtraProducts(
     .where(
       and(
         inArray(products.id, productIds),
-        includeEveryModifierItem ? undefined : eq(products.active, true),
+        eq(products.active, true),
         includeEveryModifierItem ? undefined : eq(products.available, true),
         notExists(
           tx
@@ -186,9 +187,9 @@ type WalkedList =
  * Active variant (spec §15.1). The order path refuses a pick of the last three on its own read.
  *
  * With `includeEveryModifierItem`, what a published document holds: every label, and an extras
- * item whether or not its product is Active and Available and whether or not the offer withdraws
- * it; an item whose product has an Active variant is still left out. A default label is then kept
- * while it names any label of its list.
+ * item whether or not its product is Available and whether or not the offer withdraws it; an item
+ * whose product is Inactive, or has an Active variant, is still left out. A default label is then
+ * kept while it names any label of its list.
  */
 export async function readOfferedModifiers(
   tx: Transaction,

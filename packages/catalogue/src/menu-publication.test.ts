@@ -21,7 +21,13 @@ import * as operations from "./operations.js";
 import * as sectionGraph from "./section-graph.js";
 import { menuDocumentHash } from "./menu-document.js";
 import { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
-import { createCatalogue, createProduct, updateMenuItem, updateProduct } from "./operations.js";
+import {
+  createCatalogue,
+  createProduct,
+  deactivateProduct,
+  updateMenuItem,
+  updateProduct,
+} from "./operations.js";
 import { addMember, createSection, moveMember, removeMember, updateSection } from "./sections.js";
 import { menuDetails } from "./schema/menu.js";
 import { menuPublications, menuVersionImages, menuVersions } from "./schema/publication.js";
@@ -137,6 +143,15 @@ describe("publishMenu", () => {
     expect(isRefusal(removeImage, TRIGGER_ABORT)).toBe(true);
     expect(engineErrorMessage(removeImage)).toBe("menu_version_images is append-only");
     expect(await versionRows()).toEqual(rows);
+  });
+
+  it("counts the photo of a product used only as an extra among the version's images", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => updateProduct(tx, f.extraLemon, { image: "lemon.jpg" }));
+    await publish(f.lunch);
+    expect(
+      (await fx.db.select().from(menuVersionImages)).map((image) => image.filename).sort(),
+    ).toEqual(["large.jpg", "lemon.jpg", "lemonade.jpg"]);
   });
 
   it("writes nothing when the menu already matches its live version", async () => {
@@ -300,6 +315,44 @@ describe("menuStatus", () => {
     it("flags neither for Lemonade made unavailable", async () => {
       const f = await published();
       await app((tx) => updateProduct(tx, f.lemonade, { available: false }));
+      expect(await states(f)).toEqual({ lunch: "current", dinner: "current" });
+    });
+
+    it("flags both for a new photo on Extra lemon, used only as an extra, naming the shared product", async () => {
+      const f = await published();
+      await app((tx) => updateProduct(tx, f.extraLemon, { image: "lemon.jpg" }));
+      expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
+      expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
+        {
+          kind: "product_changed",
+          productId: f.extraLemon,
+          name: "Extra lemon",
+          fields: ["image"],
+          source: "shared_product",
+          alsoOn: ["Dinner Menu"],
+        },
+      ]);
+    });
+
+    it("flags both for Extra lemon deleted, naming each dish's extras as changed", async () => {
+      const f = await published();
+      await app((tx) => deactivateProduct(tx, f.extraLemon));
+      expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
+      expect((await app((tx) => previewMenu(tx, f.dinner))).changes).toEqual([
+        {
+          kind: "product_changed",
+          productId: f.lemonade,
+          name: "Lemonade",
+          fields: ["extras"],
+          source: "shared_product",
+          alsoOn: ["Lunch Menu"],
+        },
+      ]);
+    });
+
+    it("flags neither for Extra lemon made unavailable", async () => {
+      const f = await published();
+      await app((tx) => updateProduct(tx, f.extraLemon, { available: false }));
       expect(await states(f)).toEqual({ lunch: "current", dinner: "current" });
     });
   });
@@ -574,6 +627,17 @@ describe("previewMenu", () => {
     const changed = await app((tx) => previewMenu(tx, f.lunch));
     expect(changed.status).toEqual({ ...current.status, state: "changed" });
     expect(changed.hash).not.toBe(hash);
+  });
+
+  it("carries the whole document the publish would make live", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    await app((tx) => updateProduct(tx, f.soup, { name: "Broth" }));
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    const { document } = await app((tx) => menuDocument.buildMenuDocument(tx, f.lunch));
+    expect(preview.document).toEqual(document);
+    expect(menuDocumentHash(preview.document)).toBe(preview.hash);
+    expect(Object.values(preview.document.offers).map((offer) => offer.name)).toContain("Broth");
   });
 
   it("names a reorder of Lunch's top level as this menu's change", async () => {
