@@ -359,8 +359,9 @@ reload, on another device, after logging out, after a server switch, while the c
 paid, or when the server refuses the merge, the check stays in the counter's Held orders, where it
 can be paid; when the merge gets no answer the till says it cannot tell which of the two places the
 check is in.
-The durable link between a check and its table is lane B's visits (service plan,
-`docs/superpowers/plans/2026-09-26-service-ordering-and-billing.md`), not a new column.
+The durable link between a check and its table is lane B's visits, landed as #715: a split check
+carries its party's visit, the till's table screen lists it among the party's bills, and Finish
+table is refused while it is unpaid.
 
 **Ongoing — the dashboard UI overhaul, screen by screen.** Every screen is being brought onto one
 shared look, and the rules for it live in [design-system.md](developers/design-system.md). That
@@ -1796,6 +1797,19 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the reasons screen repeats the role list in `apps/dashboard/src/widgets/person-edit.ts` and the
     placeholder-filling helper in `apps/dashboard/src/widgets/menu-preview.ts`; sharing them means moving both into `@waitron/dashboard-kit`. **Next
     action:** do that move if a third module screen needs them.
+  - **Task 2 landed as #715** (2026-09-27): a visit per seated party. Core tables `visits`,
+    `visit_tables` (one active membership per table) and `service_commands`, and
+    `working_orders.visit_id` (core migrations `0018`–`0020`); the venue setting
+    `clearing_workflow` (off by default, and no dashboard control sets it yet). Paying a bill no
+    longer frees the table: the party keeps it, with every related bill listed on the till's table
+    screen, until Finish table, which is refused `visit.bill_outstanding` while any bill of the
+    party, or of a party merged into it, is unpaid. `runServiceCommand` (retried commands answered
+    once) and `service_commands` have no product caller yet; Tasks 3 onwards use them. Upgrade:
+    before the rebase renumbered them, the implementer applied the new migrations to a seeded venue
+    migrated on `main` and reported no row lost and no table rebuilt; the regenerated `0018` is
+    byte-identical to what was measured. Left open: `service_commands` rows are never pruned; a
+    line void does not move the party's revision yet (Task 3 builds that with groups); the four
+    items directly below.
   - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Measured
     on Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`): a real
     Escape pressed with Vitest's `userEvent` during a save closed the editor, although the screen's
@@ -1825,7 +1839,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     on each form tried only with a hand-built event or not at all, and move the ones that close to
     `dismissible`.
   - **Every other task waits for lane C's menus tasks that change the same order and till code**
-    (M7v, M9; M7b landed as #696, M7b2 as #702, M7c as #710). Building beside them would collide on
+    (M7v, M9; M7b landed as #696, M7b2 as #702, M7c as #710, M7b3 as #713). Building beside them would collide on
     `apps/server/src/working-order.ts`, the till and the core migrations.
   - **Task 17** (unpaid departure) also waits for asesor Q28.
   - **Asesor questions to send:**
