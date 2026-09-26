@@ -422,17 +422,17 @@ describe("curated operator text", () => {
   });
 
   // Fixed strings, not the table: a page rendering another row would pass a comparison with it.
-  it("names a restored copy whose list of machines fails its signature check, in both languages", async () => {
+  it("names a restored copy whose list of machines is damaged or fails its signature check, in both languages", async () => {
     const english = await pageFor("restore.membership_invalid");
     expect(english).toContain(
-      "The list of machines in the restored copy does not carry a valid signature, so it may have been changed after it was saved.",
+      "The list of machines in the restored copy is damaged or does not carry a valid signature, so it may have been changed after it was saved.",
     );
     expect(english).toContain(
       "The box will not start from this copy. Ask whoever installed this box to look at it before anything else.",
     );
     const spanish = await pageFor("restore.membership_invalid", undefined, SPANISH);
     expect(spanish).toContain(
-      "La lista de equipos de la copia restaurada no tiene una firma válida, así que puede haberse cambiado después de guardarse.",
+      "La lista de equipos de la copia restaurada está dañada o no tiene una firma válida, así que puede haberse cambiado después de guardarse.",
     );
     expect(spanish).toContain(
       "El equipo no arrancará con esta copia. Antes de nada, pide a quien instaló este equipo que lo revise.",

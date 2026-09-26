@@ -253,11 +253,12 @@ command against it treat that entrypoint differently:
   such a folder holding files and no `venue.db` beside it deletes nothing and refuses to start with
   `restore.database_set_aside`, naming the folder in its output: move everything in it back into
   the venue folder, or run the restore again. After a restore, the box also refuses to start with
-  `restore.membership_invalid` when the restored copy's list of machines does not pass its
-  signature check against the node keys in that same copy, unless it comes up fenced, as a mirror,
-  or still waiting to finish an adoption, which do not run the check. The copy is left unchanged,
-  so restarting reads it again: run the restore again from an older archive, or from the bucket if
-  the refused copy came from an archive.
+  `restore.membership_invalid` when the restored copy's list of machines is damaged (cannot be
+  read, or is not shaped as a list of machines), or does not pass its signature check against the
+  node keys in that same copy. A box that comes up fenced or as a mirror runs only the first of
+  those checks, and one still waiting to finish an adoption runs neither. The copy is left
+  unchanged, so restarting reads it again: run the restore again from an older archive, or from the
+  bucket if the refused copy came from an archive.
 
   Restore and rejoin are refused while another process, usually the running server, is using the
   venue folder (`provisioning.database_in_use`): rejoin before it reads or wipes anything, restore
@@ -294,8 +295,9 @@ box restored from a backup brings them back and, at its first trading start, rep
 one naming its own addresses, signed by the same CA, so devices that trusted the old box need no new
 trust step. A restored box that comes up fenced, as a mirror, or still waiting to finish an
 adoption leaves the leaf as it is; if the replacement fails, the dashboard raises an alert and the
-next start tries again. A restored copy whose list of machines fails its signature check stops the
-start before the leaf is replaced (`restore.membership_invalid`, described under
+next start tries again. A restored copy whose list of machines is damaged (cannot be read, or is
+not shaped as a list of machines) or fails its signature check stops the start before the leaf is
+replaced (`restore.membership_invalid`, described under
 [The operator CLIs](#the-operator-clis--two-different-invocation-forms)).
 
 **`WAITRON_BOX_ADDRESSES`** is a comma-separated list of IPv4 literals that REPLACES interface

@@ -300,13 +300,13 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     // No retry: the refusal leaves the copy unchanged, so the next start reads it again.
     "en-GB": {
       title:
-        "The list of machines in the restored copy does not carry a valid signature, so it may have been changed after it was saved.",
+        "The list of machines in the restored copy is damaged or does not carry a valid signature, so it may have been changed after it was saved.",
       action:
         "The box will not start from this copy. Ask whoever installed this box to look at it before anything else.",
     },
     "es-ES": {
       title:
-        "La lista de equipos de la copia restaurada no tiene una firma válida, así que puede haberse cambiado después de guardarse.",
+        "La lista de equipos de la copia restaurada está dañada o no tiene una firma válida, así que puede haberse cambiado después de guardarse.",
       action:
         "El equipo no arrancará con esta copia. Antes de nada, pide a quien instaló este equipo que lo revise.",
     },

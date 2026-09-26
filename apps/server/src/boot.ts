@@ -170,7 +170,12 @@ import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets, mintedBoxLeaf, tightenTlsDir } from "./box-secrets.js";
 import { resolveTradingTls } from "./trading-tls.js";
-import { deferFirstStart, readBucketPointerTerm, runFirstStart } from "./rebuild-first-start.js";
+import {
+  assertRestoredMembershipReadable,
+  deferFirstStart,
+  readBucketPointerTerm,
+  runFirstStart,
+} from "./rebuild-first-start.js";
 import { buildLandingApp } from "./landing-app.js";
 import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
@@ -1059,6 +1064,7 @@ async function bootServer(
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
   // separate reads could straddle a concurrent promotion and yield an impossible `(mirror, primary)`.
   const initialAxes = await readDeploymentAxes(db, config.till.nodeId);
+  await assertRestoredMembershipReadable(config.stateDir, db);
   // A returned box that died before it was fenced would otherwise boot with a stale chart and SELL
   // while the promoted cloud is also primary — two nodes filing under one NIF (CLAUDE.md §5). So a
   // non-mirror node with a configured cloud peer best-effort fetches the peer's signed chart and
@@ -1120,7 +1126,8 @@ async function bootServer(
   // A mirror or a fenced node defers it: nothing is re-issued or signed, and the bucket copy is
   // held. A failure does not keep the box shut: it sells, does not stream, and raises
   // restore.first_start_failed until a later start finishes. The exception is a restored
-  // membership document that fails its check (`restore.membership_invalid`): that fails the start.
+  // membership document that fails its signature check (`restore.membership_invalid`): that fails
+  // the start.
   const firstStart = fencedOrMirror
     ? await deferFirstStart(config.stateDir, log)
     : await runFirstStart({

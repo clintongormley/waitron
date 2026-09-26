@@ -20,7 +20,7 @@ export { generateNodeKeyPair, signBytes, verifyBytes } from "./crypto.js";
 // which only verify.ts's MAX_ENDORSEMENTS bounds.
 export { endorseKey } from "./endorsement.js";
 
-export { signDocumentBody, verifyMembershipDocument } from "./verify.js";
+export { isMembershipDocument, signDocumentBody, verifyMembershipDocument } from "./verify.js";
 
 export { buildNextMembershipDocument } from "./build.js";
 

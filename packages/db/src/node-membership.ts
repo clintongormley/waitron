@@ -6,7 +6,8 @@ import { nodeMembership } from "./schema/node-membership.js";
 
 /**
  * The held membership document, or `null` when the table or the row is absent. Callers must not
- * tell those two apart: both mean nothing has recorded who is currently in charge.
+ * tell those two apart: both mean nothing has recorded who is currently in charge. A row holding the
+ * JSON value `null` also reads as `null`; `readNodeMembershipRow` below tells that row from none.
  *
  * Not verified here. A peer's document is stored only after `acceptMembershipDocument`
  * (@waitron/membership) passes it; every other write is one this node minted and signed itself
@@ -14,19 +15,33 @@ import { nodeMembership } from "./schema/node-membership.js";
  * A restore (archive or bucket) puts back the copy's row as it was; the start that finishes the
  * restore checks it against the copy's own node keys before signing over it, and refuses the start
  * when it fails (`assertRestoredMembershipValid`, `apps/server/src/rebuild-first-start.ts`). That
- * check trusts the keys the same copy holds. Only the start that finishes a restore checks the row;
- * a start that puts that off (a mirror, a fenced node, or one still finishing an adoption) does
- * not, and no other code that signs over the held row checks it first (promotion, `retireSelf` and
+ * check trusts the keys the same copy holds. Only the start that finishes a restore checks the row's
+ * signature; a start that puts that off (a mirror, a fenced node, or one still finishing an
+ * adoption) checks at most that it can be read and is shaped as a document
+ * (`assertRestoredMembershipReadable`, same file), and no other code that signs over the held row
+ * checks it first (promotion, `retireSelf` and
  * the standby chart append among them: `apps/server/src/promote.ts`, `apps/server/src/retire.ts`,
  * `apps/server/src/mirror-bundle-api.ts`). A raw SQL write or a database file edited outside the
  * program is read as is.
- *
- * The table's existence is read off `sqlite_master` rather than discovered by running the select and
- * catching the refusal; the reason is on `deploymentTableExists` in `./deployment.js`.
  */
 export async function readNodeMembership(
   db: Database | Transaction,
 ): Promise<SignedMembershipDocument | null> {
+  const row = await readNodeMembershipRow(db);
+  return (row?.document ?? null) as SignedMembershipDocument | null;
+}
+
+/**
+ * The held row's parsed document, with nothing checking its shape, or `null` when the table or the
+ * row is absent (told apart no more than by `readNodeMembership`). Unlike that reader, a present row
+ * whose document is the JSON value `null` reads as `{ document: null }`.
+ *
+ * The table's existence is read off `sqlite_master` rather than discovered by running the select and
+ * catching the refusal; the reason is on `deploymentTableExists` in `./deployment.js`.
+ */
+export async function readNodeMembershipRow(
+  db: Database | Transaction,
+): Promise<{ document: unknown } | null> {
   const present = await db.execute<{ name: string }>(
     sql`select name from sqlite_master where type = 'table' and name = ${"node_membership"}`,
   );
@@ -38,7 +53,7 @@ export async function readNodeMembership(
     .select({ document: nodeMembership.document })
     .from(nodeMembership)
     .where(eq(nodeMembership.id, 1));
-  return row?.document ?? null;
+  return row === undefined ? null : { document: row.document };
 }
 
 /**

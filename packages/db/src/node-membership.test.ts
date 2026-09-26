@@ -5,6 +5,7 @@ import {
   persistNodeMembershipIfNewer,
   persistNodeMembershipIfNewerTx,
   readNodeMembership,
+  readNodeMembershipRow,
   writeNodeMembership,
   writeNodeMembershipTx,
 } from "./node-membership.js";
@@ -31,6 +32,7 @@ describe("before any migration set has run", () => {
 
   it("reads null when the table itself is absent", async () => {
     expect(await readNodeMembership(bare.db)).toBeNull();
+    expect(await readNodeMembershipRow(bare.db)).toBeNull();
   });
 });
 
@@ -39,6 +41,23 @@ describe("node_membership accessors", () => {
 
   it("reads null before any write (a node that has never adopted a document)", async () => {
     expect(await readNodeMembership(pg.db)).toBeNull();
+  });
+
+  it("reads no row, as null, before any write", async () => {
+    expect(await readNodeMembershipRow(pg.db)).toBeNull();
+  });
+
+  it("reads a row holding the JSON value null as a present row, where readNodeMembership reads null", async () => {
+    await writeNodeMembership(pg.db, doc(3));
+    await pg.db.execute(sql`update node_membership set document = ${"null"} where id = 1`);
+    expect(await readNodeMembershipRow(pg.db)).toEqual({ document: null });
+    expect(await readNodeMembership(pg.db)).toBeNull();
+  });
+
+  it("reads a present row's whole document", async () => {
+    const d = doc(4);
+    await writeNodeMembership(pg.db, d);
+    expect(await readNodeMembershipRow(pg.db)).toEqual({ document: d });
   });
 
   it("upserts the singleton and reads back the whole document", async () => {
