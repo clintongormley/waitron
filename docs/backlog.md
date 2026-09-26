@@ -379,7 +379,6 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    [operator guidance](products.md)). One question is left hanging over it: the existing zero-rate class
    is shown as **No tax (0%)**, and asesor Q20 asks whether any intended case legally needs N1 or N2
    instead — to be answered before the first live filing, not before more building. See the
-   [checkpoint](superpowers/plans/2026-09-13-product-editor-checkpoint.md),
    [spec and plan](superpowers/specs/2026-09-12-product-editor-design.md) and
    [shared design](superpowers/specs/2026-09-12-products-overhaul-design.md).
 3. **Printing** — `printers-screen.ts` with its agent tabs, and `printing-rules-screen.ts`. #319,
@@ -469,7 +468,6 @@ What it leaves open:
 **Product categories — LANDED #340 (2026-09-13).** Categories get their own page at
 `/manage/categories` with translation, a picture, a parent, and a delete that previews what will
 change and then proceeds rather than refusing; labels on past orders stay readable.
-[Design](superpowers/specs/2026-09-12-product-categories-design.md),
 [API and integration guide](developers/product-categories.md). _2026-09-25: the several-categories
 membership is gone. Sales classification Task 1 gives each product one main reporting category in a
 strict tree, plus any number of flat labels, and drops `product_categories`; the guide above is
@@ -505,15 +503,11 @@ What it left open:
 **Categories screen rebuilt — LANDED #353 (2026-09-14).** `/manage/categories` became a table
 switchable between a tree and a flat list with a name filter, a per-category colour swatch and a
 per-category products window with bulk add; what it left open is recorded in the #340 list above.
-[Design](superpowers/specs/2026-09-13-categories-screen-design.md),
-[plan](superpowers/plans/2026-09-13-categories-screen.md).
 
 **Category management reworked — LANDED #362 (2026-09-14).** The category screens share one layout
 with searchable `wt-combobox` pickers, and the shared `wt-data-table` gained opt-in search,
 per-column filters, a starting sort, filtered-tree parent rows and a remembered per-tab view. What it
 left open is recorded in the #340 and A7 lists.
-[Design](superpowers/specs/2026-09-14-category-overhaul-design.md),
-[plan](superpowers/plans/2026-09-14-category-overhaul.md).
 
 **Category colour and membership layout — LANDED #383 (2026-09-16).** The colour picker lays its
 twenty-four swatches out as hue columns so no hue splits across a line break.
@@ -521,7 +515,6 @@ twenty-four swatches out as hue columns so no hue splits across a line break.
 **Product modifiers — LANDED #341 (2026-09-13); replaced by Extras and Options below.** What the
 customer chose is stored on the order line as a fact, so a held order, a fiscal invoice, the kitchen
 ticket and the receipt all show the same answers even after the modifier is later edited.
-[Design](superpowers/specs/2026-09-12-product-modifiers-design.md),
 [integration contract](developers/modifiers.md).
 
 What it left open:
@@ -1008,14 +1001,6 @@ What option lists left open, none of it taken in #436 or #445:
   `parseOptionListInput`, which is the only door today, but nothing in the database enforces it: a
   path that writes `option_labels.available` directly, or flips `option_lists.active` with a plain
   update, could still leave a list nobody can answer.
-- **Three plans still assert error codes by matching the error's message with a regular expression**,
-  the shape #436 corrected in its own plan — a regex over the message cannot tell an `AppError` from
-  a plain `Error` whose text happens to contain those words, and checks nothing about the error's
-  params. They are `2026-08-31-modifier-allergen-association.md` (three places) with weaker twins in
-  `2026-07-26-server-host.md`, `2026-08-28-sync-cloud-mirror-c2a-mirror-server.md` and
-  `2026-09-14-dashboard-alerts-events.md`. Left for whoever works those files. Note that both styles
-  are in the tree, so a grep does not hand anyone the convention:
-  `packages/catalogue/src/dietary.test.ts` asserts `/diet.invalid_origin/` by regex.
 What extras lists left open, and what #449 found on the way:
 
 - **The seven string-parsing helpers are copied between the two contracts.**
@@ -1241,20 +1226,17 @@ What the per-menu publication (#452, the plan's Task 5) left behind:
 **Product selling units — LANDED #342.** A product is sold by the each, or by weight or volume, with
 0 to 3 decimal places on its quantity and a price per that unit; units have their own dashboard page,
 and a unit's name and precision are frozen onto sold lines.
-[Design](superpowers/specs/2026-09-12-product-units-design.md),
-[plan](superpowers/plans/2026-09-12-product-units.md).
+[Design](superpowers/specs/2026-09-12-product-units-design.md).
 
 **Update — unit abbreviations and screen rebuild.** Every unit has a short translatable
 abbreviation (`kg`, `ml`), which is what prints on sold lines, receipts, kitchen tickets and the till;
 the frozen `unit_name` column is presentation only and does not enter the fiscal hash.
-[Design](superpowers/specs/2026-09-14-units-screen-and-abbreviation-design.md),
-[plan](superpowers/plans/2026-09-14-units-screen-and-abbreviation.md).
+[Design](superpowers/specs/2026-09-14-units-screen-and-abbreviation-design.md).
 
 **Update — a product's unit is optional, and a unit lists its products — LANDED #375.** A product no
 longer needs a unit (Each stores nothing), and the units screen can bulk-reassign a unit's products to
 Each so the unit can be emptied and deleted.
-[Design](superpowers/specs/2026-09-15-optional-product-unit-design.md),
-[plan](superpowers/plans/2026-09-15-optional-product-unit.md). Left open (small,
+[Design](superpowers/specs/2026-09-15-optional-product-unit-design.md). Left open (small,
 unowned): `createProduct` and `updateProduct` still duplicate the legacy-`pricingUnit` fallback, so a
 shared helper would keep the two from drifting; and the synthetic `EACH_UNIT` id lives as a literal in
 both `packages/catalogue/src/units.ts` and the till's `product-name.ts` with nothing pinning them equal.
@@ -1265,15 +1247,6 @@ dropdown.
 
 What it left open:
 
-- **Units still has no written contract, but the reason to write one has passed.** Categories and
-  Modifiers each left a `docs/developers/` document for the Products build to compose against; Units
-  left none, and `docs/superpowers/plans/2026-09-12-product-units.md` is still the plan as written
-  rather than as carried out — it was last edited by the Categories merge. Products has since
-  integrated Units anyway (#345), so the consumer this document existed to serve no longer needs it.
-  Operators get what they need from [the products guide](products.md). **What is actually left:** no
-  dedicated page describes units the way `modifiers.md` describes modifiers. Worth writing if a second
-  consumer appears or an operator asks; not worth writing on a schedule. The shapes, if somebody does,
-  are in `packages/catalogue/src/units.ts` and `unit-validation.ts`.
 - **The old `pricing_unit` column survives on products as a compatibility field, and it is derived,
   not chosen.** Nothing in production code branches on it any more — the till now decides whether to
   ask for a quantity from the unit's own precision and scale mapping — but the column and its
@@ -1360,7 +1333,6 @@ and arrow-key reordering, each choice's detail opening in its own window.
 **Modifier nutrition redesign (pass 1) — LANDED #377.** Each modifier choice carries its own
 nutrition information and the app no longer combines a dish with its extras; the yes/no type was
 dropped and dietary suitability became a positive `suitableFor` list.
-[Design](superpowers/specs/2026-09-15-modifier-nutrition-redesign-design.md),
 [developer guide](developers/modifiers.md).
 
 What it left open:
@@ -2516,8 +2488,7 @@ image constraints under *Detail → Box image*.
     condition by construction", the claim #637 removed from `health.ts` (a duty can go stale between
     passes: Codex got a 503 with no log line), and #637's review read its list of 503 causes (near
     line 404) as naming one that answers 200 — read, not run. The degraded-pass spec and plan
-    (`docs/superpowers/specs/2026-07-27-degraded-pass-design.md`,
-    `docs/superpowers/plans/2026-07-27-degraded-pass.md`) and
+    (`docs/superpowers/specs/2026-07-27-degraded-pass-design.md`) and
     `docs/superpowers/specs/2026-07-26-server-host-design.md` repeat that claim and want a dated
     pointer. Test titles: `apps/server/src/spa-api.test.ts`'s two cache cases say hashed versus
     non-hashed where the rule is the `/assets/` prefix, and `boot.mirror.test.ts`'s opt-in case
@@ -4093,12 +4064,6 @@ open:
   `tsc`. This upgrade did not exercise that: the type gained one optional key (`websocket`) and was
   otherwise identical across the two versions. The comment now says so rather than implying the
   promise has been tried.
-- **A sentence attributed to `CLAUDE.md` §3 that is not in it survives in one historical doc.**
-  `spa-api.ts` quoted "the defence is explicit, never implicit" as a rule from §3; it is not there
-  (`grep -c` in `CLAUDE.md` returns 0) and the branch removed the quotation. The same phrase is in
-  `docs/superpowers/specs/2026-08-08-catalogue-management-ui-design.md`, which records what was
-  believed when it was written and is left alone. Worth knowing for the next sweep: it is wrapped
-  across two lines there, so a one-line `git grep` misses it.
 
 **Left behind by the vite 8 upgrade (#450, 2026-09-19).** `apps/dashboard`, `apps/setup`, `apps/till` and
 `packages/ui` moved from vite `^6.0.0` to `^8.0.0` (installed 8.3.0). Vite 8 swaps the bundler and
