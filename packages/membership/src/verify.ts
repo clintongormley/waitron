@@ -20,8 +20,8 @@ const STANDINGS: readonly NodeStanding[] = [
   "evicted",
 ];
 
-// Both caps bound what an adversarial document can make us do (Ed25519 verifications, memory);
-// neither is a topology rule.
+// Every cap bounds what an adversarial document can make us do (Ed25519 verifications, memory).
+// MAX_NODES is exported because it is also the most machines one chart can list.
 const MAX_ENDORSEMENTS = 8;
 
 export const MAX_NODES = 8;
@@ -109,10 +109,9 @@ export function verifyMembershipDocument(
   held: SignedMembershipDocument | null = null,
 ): VerifyResult {
   if (!isMembershipDocument(doc)) return { valid: false, reason: "malformed" };
-  if (fencedOutNodeIds(held).has(doc.signerNodeId)) {
-    return { valid: false, reason: "signer_removed" };
-  }
-  const signerKey = resolveSignerKey(doc.signerNodeId, doc.endorsements, trustSet, held);
+  const removed = fencedOutNodeIds(held);
+  if (removed.has(doc.signerNodeId)) return { valid: false, reason: "signer_removed" };
+  const signerKey = resolveSignerKey(doc.signerNodeId, doc.endorsements, trustSet, held, removed);
   if (signerKey === null) {
     return {
       valid: false,

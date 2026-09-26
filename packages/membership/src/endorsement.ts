@@ -34,20 +34,22 @@ export function endorseKey(
  * into trust, so unless it is a trust ANCHOR its key neither signs nor vouches. An anchor is
  * trusted without any endorsement and stays so — a promoted primary's key is vouched for by the
  * primary it joined under, which may since have been removed — so a removed anchor's endorsement is
- * honoured only for an id the held chart lists in good standing. Left open: a removed anchor can
- * still vouch a key of its own making for such an id, when that id is not an anchor itself; and a
- * held chart older than the removal does not know of it.
+ * honoured only for an id the held chart lists in good standing, and a key admitted on its word may
+ * not vouch further. Left open: a removed anchor can vouch a key of its own making for a node in
+ * good standing that is not an anchor, and then sign as that node; and a held chart older than the
+ * removal does not know of it.
  */
 export function resolveSignerKey(
   signerNodeId: string,
   endorsements: readonly Endorsement[],
   trustSet: TrustSet,
   held: SignedMembershipDocument | null = null,
+  removed: ReadonlySet<string> = fencedOutNodeIds(held),
 ): string | null {
-  const removed = fencedOutNodeIds(held);
   const inGoodStanding = new Set(
     held?.body.nodes.filter((n) => n.standing !== "evicted").map((n) => n.nodeId),
   );
+  const admittedByRemoved = new Set<string>();
   const trusted = new Map<string, string>(Object.entries(trustSet));
   let changed = true;
   while (changed) {
@@ -55,12 +57,15 @@ export function resolveSignerKey(
     for (const e of endorsements) {
       if (trusted.has(e.nodeId)) continue;
       if (removed.has(e.nodeId)) continue;
-      if (removed.has(e.endorsedBy) && !inGoodStanding.has(e.nodeId)) continue;
+      if (admittedByRemoved.has(e.endorsedBy)) continue;
+      const byRemoved = removed.has(e.endorsedBy);
+      if (byRemoved && !inGoodStanding.has(e.nodeId)) continue;
       const endorserKey = trusted.get(e.endorsedBy);
       if (endorserKey === undefined) continue;
       if (!verifyBytes(endorsementMessage(e.nodeId, e.publicKey), e.signature, endorserKey))
         continue;
       trusted.set(e.nodeId, e.publicKey);
+      if (byRemoved) admittedByRemoved.add(e.nodeId);
       changed = true;
     }
   }

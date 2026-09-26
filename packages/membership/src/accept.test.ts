@@ -169,6 +169,41 @@ describe("acceptMembershipDocument with the receiver's held chart", () => {
     );
   });
 
+  it("does not let a removed ANCHOR get a fresh key trusted through a key it vouched for", () => {
+    // R vouches a forged key for S (in good standing), then that forged key vouches for F.
+    const anchoredTrust: TrustSet = { P: primary.publicKey, R: removed.publicKey };
+    const held = signDoc(
+      {
+        term: 1,
+        nodes: [
+          { nodeId: "P", contactUrl: "https://p", standing: "serving-primary" },
+          { nodeId: "R", contactUrl: "https://r", standing: "evicted" },
+          { nodeId: "S", contactUrl: "https://s", standing: "serving-secondary" },
+        ],
+      },
+      "P",
+      primary.privateKey,
+    );
+    const forgedS = generateNodeKeyPair();
+    const f = generateNodeKeyPair();
+    const body: MembershipDocumentBody = {
+      term: 2,
+      nodes: [{ nodeId: "F", contactUrl: "https://f", standing: "serving-primary" }],
+    };
+    const doc: SignedMembershipDocument = {
+      body,
+      signerNodeId: "F",
+      signature: signDocumentBody(body, f.privateKey),
+      endorsements: [
+        endorseKey("S", forgedS.publicKey, "R", removed.privateKey),
+        endorseKey("F", f.publicKey, "S", forgedS.privateKey),
+      ],
+    };
+    expect(acceptMembershipDocument(doc, 1, anchoredTrust, held)).toEqual(
+      refused("endorsement_invalid"),
+    );
+  });
+
   it("accepts a retirement chart, signed by the node it evicts while the held chart lists it sell-only", () => {
     const retiring = generateNodeKeyPair();
     const held = signDoc(
