@@ -99,6 +99,8 @@ Each was put to the owner on 2026-09-26; the answer is recorded with it.
   themselves from `listExtraLists` / `listOptionLists`, in one grouped query per call — never one
   request per row — so the live-query dependency lists in `apps/dashboard/src/api/live-queries.ts`
   gain the tables the counts read (`product_modifiers`, and `menu_item_extra_lists` for extras).
+  _(2026-09-26: the shipped wording counts menu items, not menus: "3 products · 1 menu item", in
+  Spanish "1 elemento del menú". See the A65 entry in [the backlog](../../backlog.md).)_
 - The name is plain text. The **count** is the button that opens the popup, and looks like a link.
   The kebab keeps Edit and Delete.
 - The popup is titled **Used by {list name}**. Options: products only, no Type column (D3). Extras:

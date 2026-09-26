@@ -193,7 +193,7 @@ export const en = {
   "options.clear_default": "Clear default",
   "options.name_required": "Enter a name.",
   "options.label_name_required": "Enter a name for this label.",
-  "options.labels_required": "Add or enable a label, or take this list out of use.",
+  "options.labels_required": "Add or enable a label, or make this list inactive.",
 
   // The three names mean the same three things as in the options block above. A blank price is
   // not zero: the item charges the product's own.
@@ -228,7 +228,7 @@ export const en = {
   "extras.name_required": "Enter a name.",
   "extras.picks_invalid": "Enter a whole number within the allowed limit.",
   "extras.max_picks_too_low": "Raise the maximum to at least the minimum, or lower the minimum.",
-  "extras.items_required": "Add a product, or take this list out of use.",
+  "extras.items_required": "Add a product, or make this list inactive.",
   "extras.quantity_invalid": "Enter a whole number of at least 1, within the allowed limit.",
   "extras.price_invalid":
     "Enter a price with up to two decimal places, or leave it blank to charge the product's own.",
@@ -1900,11 +1900,11 @@ export const es: Record<StringKey, string> = {
   "modifiers.delete_named": "Eliminar {name}",
   "modifiers.delete_warning_intro": "Esta acción no se puede deshacer.",
   "modifiers.delete_warning_products": "{count} producto(s) perderán esta lista.",
-  "modifiers.delete_warning_menus": "{count} elemento(s) de menú perderán esta lista.",
+  "modifiers.delete_warning_menus": "{count} elemento(s) del menú perderán esta lista.",
   "modifiers.delete_preview_error":
     "No se pudo cargar la vista previa de eliminación. Inténtalo de nuevo.",
   "modifiers.affected_products": "Productos afectados",
-  "modifiers.affected_menus": "Elementos de menú afectados",
+  "modifiers.affected_menus": "Elementos del menú afectados",
   // Ver el bloque en `en` para qué significa cada uno de los tres nombres.
   "options.title": "Opciones",
   "options.add": "Añadir lista de opciones",
@@ -1930,7 +1930,7 @@ export const es: Record<StringKey, string> = {
   "options.clear_default": "Quitar predeterminada",
   "options.name_required": "Introduce un nombre.",
   "options.label_name_required": "Introduce un nombre para esta etiqueta.",
-  "options.labels_required": "Añade o habilita una etiqueta, o retira esta lista del uso.",
+  "options.labels_required": "Añade o habilita una etiqueta, o desactiva esta lista.",
 
   // Ver el bloque en `en` para qué significa cada uno de los tres nombres y el precio en blanco.
   "extras.title": "Extras",
@@ -1964,7 +1964,7 @@ export const es: Record<StringKey, string> = {
   "extras.name_required": "Introduce un nombre.",
   "extras.picks_invalid": "Introduce un número entero dentro del límite permitido.",
   "extras.max_picks_too_low": "Sube el máximo hasta el mínimo, o baja el mínimo.",
-  "extras.items_required": "Añade un producto, o retira esta lista del uso.",
+  "extras.items_required": "Añade un producto, o desactiva esta lista.",
   "extras.quantity_invalid":
     "Introduce un número entero de al menos 1, dentro del límite permitido.",
   "extras.price_invalid":

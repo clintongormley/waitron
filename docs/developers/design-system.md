@@ -286,10 +286,14 @@ the element is in the page, correct in every attribute, and completely unstyled.
 on the markup and write `wt-data-table::part(swatch)` in your screen instead — that crosses exactly
 the one boundary involved. A nested primitive (`wt-button`, `wt-lozenge`) is unaffected, because it
 carries its own styles wherever it is mounted. Reaching *inside* such a primitive is one boundary
-further than `::part()` can select: set the token it reads on the host instead — the categories
-screen's muted ancestor row points `--wt-color-text` at `--wt-color-text-muted` through
+further than `::part()` can select on its own: set the token it reads on the host instead — the
+categories screen's muted ancestor row points `--wt-color-text` at `--wt-color-text-muted` through
 `wt-data-table::part(name-muted)`, and the button's own ghost-variant rule picks it up by
-inheritance. Cost: the categories screen's colour swatches, thumbnail boxes and ancestor-row muting
+inheritance. For a property whose token is a shared scale value it would be wrong to redefine
+(its padding or weight), or one it reads no token for (an underline), put
+`exportparts="button: <name>"` on the `wt-button` and style `wt-data-table::part(<name>)`, as
+`apps/dashboard/src/screens/modifiers-screen.ts` does for its Used by count. Cost: the categories
+screen's colour swatches, thumbnail boxes and ancestor-row muting
 never rendered at all in the browser, through a full review and a green suite — DOM-presence tests
 cannot see it, so assert a computed width or colour when you add a styled cell.
 

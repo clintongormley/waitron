@@ -13,7 +13,7 @@ import {
   sectionMembers,
 } from "@waitron/catalogue";
 import type { MenuPreview, MenuStatus } from "@waitron/catalogue";
-import type { ExtraList, OptionList } from "@waitron/catalogue";
+import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/catalogue";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -2912,13 +2912,20 @@ describe("mountCatalogueApi — option lists", () => {
   it("GET /management-api/modifiers/options lists them", async () => {
     const app = mountApp();
     const list = await createListVia(app, { ...doneness(), name: "Lista listada" });
+    const productId = await createNamedProductVia(app, `Filete ${crypto.randomUUID()}`);
+    const attached = await send(app, "PATCH", `/management-api/products/${productId}`, {
+      body: { modifiers: [{ kind: "options", id: list.id }] },
+    });
+    expect(attached.status).toBe(204);
     const res = await send(app, "GET", "/management-api/modifiers/options");
     expect(res.status).toBe(200);
-    const { optionLists } = (await res.json()) as { optionLists: OptionList[] };
-    expect(optionLists.find((row) => row.id === list.id)).toMatchObject({
+    const { optionLists } = (await res.json()) as { optionLists: OptionListRow[] };
+    const row = optionLists.find((entry) => entry.id === list.id)!;
+    expect(row).toMatchObject({
       name: "Lista listada",
       labels: [{ name: "Poco hecho" }, { name: "Al punto" }],
     });
+    expect(row.usage).toEqual({ products: 1 });
   });
 
   it("GET /management-api/modifiers/options/:id reads one back", async () => {
@@ -3120,14 +3127,21 @@ describe("mountCatalogueApi — extras lists", () => {
     const app = mountApp();
     const [alioli] = await twoProducts(app);
     const list = await createListVia(app, { ...sauces([alioli]), name: "Lista listada" });
+    const productId = await createNamedProductVia(app, `Patatas ${crypto.randomUUID()}`);
+    const attached = await send(app, "PATCH", `/management-api/products/${productId}`, {
+      body: { modifiers: [{ kind: "extras", id: list.id }] },
+    });
+    expect(attached.status).toBe(204);
     const res = await send(app, "GET", "/management-api/modifiers/extras");
     expect(res.status).toBe(200);
-    const { extraLists } = (await res.json()) as { extraLists: ExtraList[] };
-    expect(extraLists.find((row) => row.id === list.id)).toMatchObject({
+    const { extraLists } = (await res.json()) as { extraLists: ExtraListRow[] };
+    const row = extraLists.find((entry) => entry.id === list.id)!;
+    expect(row).toMatchObject({
       name: "Lista listada",
       kitchenName: "SALSA",
       items: [{ productId: alioli, price: "0.50" }],
     });
+    expect(row.usage).toEqual({ products: 1, menus: 0 });
   });
 
   it("GET /management-api/modifiers/extras/:id reads one back", async () => {

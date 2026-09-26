@@ -465,11 +465,12 @@ export async function setMenuItemExtraLists(
 export type { ExtraListDependants } from "./modifier-list-types.js";
 
 /**
- * What deleting this list would touch — the preview a delete confirmation reads: the products that
- * carry it and the menu offers that publish it, each detached by the delete rather than blocking it.
- * No order is consulted: an order's child line records the list's id with no foreign key into it,
- * so the delete does not touch it. A menu publication has no name of its own, so it is identified by
- * the menu item's id, its product's staff name and its menu's name.
+ * What deleting this list would touch — read by the dashboard's Used by popup and its delete
+ * confirmation: the products that carry it and the menu offers that publish it, each detached by
+ * the delete rather than blocking it. No order is consulted: an order's child line records the
+ * list's id with no foreign key into it, so the delete does not touch it. A menu publication has no
+ * name of its own, so it is identified by the menu item's id, its product's staff name and its
+ * menu's name.
  */
 export async function extraListDependants(
   tx: Transaction,

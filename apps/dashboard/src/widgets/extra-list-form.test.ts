@@ -312,7 +312,7 @@ it("refuses a pick bound that is not a whole number within the allowed limit", a
   );
 });
 
-it("refuses an in-use list with no products, and saves the same list once it is out of use", async () => {
+it("refuses an active list with no products, and saves the same list once it is inactive", async () => {
   const { el, host } = await mount();
   const submitted = record(host);
 

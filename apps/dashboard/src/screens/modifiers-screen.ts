@@ -79,9 +79,8 @@ export class ModifiersScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      /* The count opens the Used by popup, so it reads as a link: underlined, in the text colour
-         (the primary accent fails contrast at this size, as backup-screen.ts records), at the body
-         weight, and with no inline padding so it lines up with the column's other text. The count's
+      /* The count opens the Used by popup, so it reads as a link: underlined, at the body weight,
+         and with no inline padding so it lines up with the column's other text. The count's
          wt-button exports its inner button as this part: its own part is one boundary deeper than
          the screen's styles reach. */
       wt-data-table::part(used-by) {
@@ -370,7 +369,7 @@ export class ModifiersScreen extends LitElement {
     return html`<wt-button
       variant="ghost"
       align="start"
-      data-test=${`used-by-${list.id}`}
+      data-test=${`used-by-${kind === "extras" ? "extra" : "option"}-${list.id}`}
       aria-label=${`${this.#usedByHeading(list)}: ${counts.join(" · ")}`}
       exportparts="button: used-by"
       @click=${() => this.#openModal("view", kind, list)}

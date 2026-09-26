@@ -457,10 +457,10 @@ describe("in English", () => {
     expect(await usedByText(el, "option-lists", "Size")).toBe("Not used");
     // Nothing to list, so nothing to open.
     expect(
-      table(el, "extra-lists").shadowRoot.querySelector('[data-test="used-by-e4"]'),
+      table(el, "extra-lists").shadowRoot.querySelector('[data-test="used-by-extra-e4"]'),
     ).toBeNull();
     expect(
-      table(el, "option-lists").shadowRoot.querySelector('[data-test="used-by-o3"]'),
+      table(el, "option-lists").shadowRoot.querySelector('[data-test="used-by-option-o3"]'),
     ).toBeNull();
   });
 
@@ -488,7 +488,7 @@ describe("in English", () => {
     const name = extras.columns.find((column) => column.key === "name")!;
     expect((name as unknown as { cell: (row: unknown) => unknown }).cell(extraList)).toBe("Breads");
     expect(extras.shadowRoot.querySelector('[data-test="open-extra-e1"]')).toBeNull();
-    const count = extras.shadowRoot.querySelector<HTMLElement>('[data-test="used-by-e1"]')!;
+    const count = extras.shadowRoot.querySelector<HTMLElement>('[data-test="used-by-extra-e1"]')!;
     expect(count.localName).toBe("wt-button");
     expect(count.getAttribute("variant")).toBe("ghost");
     expect(count.textContent!.trim()).toBe("2 products · 1 menu item");
@@ -509,10 +509,10 @@ describe("in English", () => {
     );
     const extras = table(el, "extra-lists");
     await vi.waitFor(() =>
-      expect(extras.shadowRoot.querySelector('[data-test="used-by-e2"]')).not.toBeNull(),
+      expect(extras.shadowRoot.querySelector('[data-test="used-by-extra-e2"]')).not.toBeNull(),
     );
     const named = (id: string) => {
-      const count = extras.shadowRoot.querySelector(`[data-test="used-by-${id}"]`)!;
+      const count = extras.shadowRoot.querySelector(`[data-test="used-by-extra-${id}"]`)!;
       return {
         name: count.shadowRoot!.querySelector("button")!.getAttribute("aria-label"),
         text: count.textContent!.trim(),
@@ -533,10 +533,10 @@ describe("in English", () => {
     const el = await mount();
     const extras = table(el, "extra-lists");
     await vi.waitFor(() =>
-      expect(extras.shadowRoot.querySelector('[data-test="used-by-e1"]')).not.toBeNull(),
+      expect(extras.shadowRoot.querySelector('[data-test="used-by-extra-e1"]')).not.toBeNull(),
     );
     const button = extras.shadowRoot
-      .querySelector('[data-test="used-by-e1"]')!
+      .querySelector('[data-test="used-by-extra-e1"]')!
       .shadowRoot!.querySelector("button")!;
     const style = getComputedStyle(button);
     expect(style.textDecorationLine).toBe("underline");
@@ -557,7 +557,7 @@ describe("in English", () => {
         }),
       }),
     );
-    await clickInTable(el, "extra-lists", "used-by-e1");
+    await clickInTable(el, "extra-lists", "used-by-extra-e1");
     const usage = table(el, "list-usage");
     await vi.waitFor(() => expect(usage.shadowRoot.textContent).toContain("Lunch"));
     const shown = (found: Table, part: string) =>
@@ -581,7 +581,7 @@ describe("in English", () => {
       expect(shown(extras, "used-by-count")).toEqual(["block", "block"]);
       // A button centres its text; the stacked counts line up with the column instead.
       const button = extras.shadowRoot
-        .querySelector('[data-test="used-by-e1"]')!
+        .querySelector('[data-test="used-by-extra-e1"]')!
         .shadowRoot!.querySelector("button")!;
       expect(getComputedStyle(button).textAlign).toBe("start");
       expect(shown(extras, "used-by-separator")).toEqual(["none"]);
@@ -646,9 +646,11 @@ it("counts in Spanish, with the singular forms", async () => {
   expect(await usedByText(el, "extra-lists", "Dips")).toBe("Sin usar");
   // "Usado en Breads" would read as used inside the list; the popup asks where the list is used.
   expect(t("modifiers.used_by")).toBe("Usado en");
-  await clickInTable(el, "extra-lists", "used-by-e1");
+  await clickInTable(el, "extra-lists", "used-by-extra-e1");
   expect(detailModal(el).heading).toBe("Dónde se usa Breads");
-  const count = table(el, "extra-lists").shadowRoot.querySelector('[data-test="used-by-e1"]')!;
+  const count = table(el, "extra-lists").shadowRoot.querySelector(
+    '[data-test="used-by-extra-e1"]',
+  )!;
   expect(count.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe(
     "Dónde se usa Breads: 2 productos · 1 elemento del menú",
   );
@@ -890,7 +892,7 @@ it("opens a Used by modal listing the products and menu items that carry the lis
     }),
   });
   const el = await mount(client);
-  await clickInTable(el, "extra-lists", "used-by-e1");
+  await clickInTable(el, "extra-lists", "used-by-extra-e1");
   const modal = detailModal(el);
   expect(modal.open).toBe(true);
   expect(modal.heading).toBe(t("modifiers.used_by_named").replace("{name}", "Breads"));
@@ -919,7 +921,7 @@ it("filters an extras list's Used by table by item type", async () => {
     }),
   });
   const el = await mount(client);
-  await clickInTable(el, "extra-lists", "used-by-e1");
+  await clickInTable(el, "extra-lists", "used-by-extra-e1");
   const usage = table(el, "list-usage");
   await vi.waitFor(() => expect(usage.shadowRoot.textContent).toContain("Hamburguesa"));
   const filter = usage.shadowRoot.querySelector<HTMLSelectElement>('[name="type-filter"]')!;
@@ -940,7 +942,7 @@ it("lists only products in an options list's Used by table, with no Type column"
   });
   const el = await mount(client);
   await selectTab(el, "options");
-  await clickInTable(el, "option-lists", "used-by-o1");
+  await clickInTable(el, "option-lists", "used-by-option-o1");
   const modal = detailModal(el);
   const heading = t("modifiers.used_by_named").replace("{name}", "Doneness");
   expect(modal.heading).toBe(heading);
@@ -966,7 +968,7 @@ it("shows a spinner then Close in the detail modal, and closes it", async () => 
       .mockReturnValue(new Promise<ExtraListDependants>((r) => (resolve = r))),
   });
   const el = await mount(client);
-  await clickInTable(el, "extra-lists", "used-by-e1");
+  await clickInTable(el, "extra-lists", "used-by-extra-e1");
   const modal = detailModal(el);
   expect(modal.querySelector("wt-spinner")).not.toBeNull();
   resolve({ products: [], menus: [] });
@@ -981,7 +983,7 @@ it("says the detail modal's read failed rather than showing an empty list", asyn
     getExtraListDependants: vi.fn().mockRejectedValue(new Error("offline")),
   });
   const el = await mount(client);
-  await clickInTable(el, "extra-lists", "used-by-e1");
+  await clickInTable(el, "extra-lists", "used-by-extra-e1");
   const modal = detailModal(el);
   await vi.waitFor(() => expect(modal.querySelector('[data-test="usage-error"]')).not.toBeNull());
   expect(modal.querySelector('[data-test="usage-error"]')!.textContent).toContain(
@@ -992,7 +994,7 @@ it("says the detail modal's read failed rather than showing an empty list", asyn
 
 it("dismisses the detail modal when it closes itself", async () => {
   const el = await mount();
-  await clickInTable(el, "extra-lists", "used-by-e1");
+  await clickInTable(el, "extra-lists", "used-by-extra-e1");
   const modal = detailModal(el);
   expect(modal.open).toBe(true);
   modal.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
@@ -1261,8 +1263,8 @@ it("ignores a stale detail read from an earlier open of the same list", async ()
       ),
   });
   const el = await mount(client);
-  await clickInTable(el, "extra-lists", "used-by-e1");
-  await clickInTable(el, "extra-lists", "used-by-e1");
+  await clickInTable(el, "extra-lists", "used-by-extra-e1");
+  await clickInTable(el, "extra-lists", "used-by-extra-e1");
   const modal = detailModal(el);
   rejectSecond(new Error("offline"));
   await vi.waitFor(() => expect(modal.querySelector('[data-test="usage-error"]')).not.toBeNull());
@@ -1311,7 +1313,7 @@ it("finds a detail-modal row by its name and by the type it shows", async () => 
     }),
   });
   const el = await mount(client);
-  await clickInTable(el, "extra-lists", "used-by-e1");
+  await clickInTable(el, "extra-lists", "used-by-extra-e1");
   const usage = table(el, "list-usage");
   await vi.waitFor(() => expect(usage.shadowRoot.textContent).toContain("Hamburguesa"));
 
@@ -1526,7 +1528,7 @@ it("opens no editor from the detail modal when a refresh has removed the list", 
   const liveData = new LiveData();
   const client = api({ background, liveData });
   const el = await mount(client);
-  await clickInTable(el, "extra-lists", "used-by-e1");
+  await clickInTable(el, "extra-lists", "used-by-extra-e1");
   const modal = detailModal(el);
   expect(modal.open).toBe(true);
   liveData.invalidate([{ type: "extra_lists", id: "e1" }]);
@@ -1540,7 +1542,7 @@ it("opens no editor from the detail modal when a refresh has removed the list", 
 
 it("opens one editor when Edit is pressed twice before the modal closes", async () => {
   const el = await mount();
-  await clickInTable(el, "extra-lists", "used-by-e1");
+  await clickInTable(el, "extra-lists", "used-by-extra-e1");
   const edit = el.shadowRoot!.querySelector<HTMLElement>('[data-test="detail-edit"]')!;
   edit.click();
   edit.click();

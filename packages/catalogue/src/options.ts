@@ -254,11 +254,11 @@ export async function deleteOptionList(tx: Transaction, optionListId: string): P
 export type { OptionListDependants } from "./modifier-list-types.js";
 
 /**
- * What deleting this list would touch — the preview a delete confirmation reads: the products that
- * carry it, alphabetical by staff name with the id breaking a tie. They are detached by the delete
- * rather than blocking it: the `product_modifiers` key cascades, and an order line carries the chosen
- * names as text and points at nothing here. No table attaches an options list to a menu offer, so a
- * menu is never a dependant.
+ * What deleting this list would touch — read by the dashboard's Used by popup and its delete
+ * confirmation: the products that carry it, alphabetical by staff name with the id breaking a tie.
+ * They are detached by the delete rather than blocking it: the `product_modifiers` key cascades,
+ * and an order line carries the chosen names as text and points at nothing here. No table attaches
+ * an options list to a menu offer, so a menu is never a dependant.
  *
  * ``grep -rn 'REFERENCES `option_l' --include='*.sql' packages apps`` prints two keys, both into
  * `option_lists`: `option_labels`' and `product_modifiers`'. No foreign key references `option_labels`.

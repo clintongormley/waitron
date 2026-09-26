@@ -21,7 +21,8 @@ staff `name`, translated `customerName`, plain `kitchenName` — follow the prod
 which surface reads which is in [products.md](products.md).
 
 The wire shapes are declared once, in `packages/catalogue/src/modifier-list-types.ts`: `OptionList`,
-`OptionLabel`, `ExtraList`, `ExtraListItem`, their `…Input` twins and the two `…Dependants` shapes.
+`OptionLabel`, `ExtraList`, `ExtraListItem`, their `…Input` twins, the two `…Row` shapes
+(`OptionListRow`, `ExtraListRow`) and the two `…Dependants` shapes.
 That file is types only and imports nothing, so a browser client can import the same copy the server
 answers with. `scripts/dashboard-browser-purity.test.ts` is what keeps it that way, and it reads the
 file as TEXT, so an `import type` line would pass it — that the file imports nothing at all is true
@@ -35,12 +36,12 @@ same six with one path segment different. They are mounted by one helper, `mount
 
 | Route | Answers |
 | --- | --- |
-| `GET /management-api/modifiers/{options,extras}` | `{ optionLists: OptionList[] }` / `{ extraLists: ExtraList[] }` |
+| `GET /management-api/modifiers/{options,extras}` | `{ optionLists: OptionListRow[] }` / `{ extraLists: ExtraListRow[] }`: each list with a `usage` object: `products`, the number of products carrying it, and for extras `menus`, the number of menu entries publishing it |
 | `POST /management-api/modifiers/{options,extras}` | the created list under `optionList` / `extraList`, 201 |
 | `GET /management-api/modifiers/{options,extras}/:id` | the list under `optionList` / `extraList` |
 | `PATCH /management-api/modifiers/{options,extras}/:id` | the updated list, same key. The body is the COMPLETE list, not a patch of changed fields |
 | `DELETE /management-api/modifiers/{options,extras}/:id` | `{ ok: true }` |
-| `GET /management-api/modifiers/{options,extras}/:id/dependants` | `{ dependants }` — the products carrying the list and the menus publishing it, for a delete confirmation to show |
+| `GET /management-api/modifiers/{options,extras}/:id/dependants` | `{ dependants }` for the Used by popup and the delete confirmation: for options, `products` alone, the products carrying the list; for extras, those `products` plus `menus`, the menu entries publishing it, each with its `menuName` |
 
 An id that is not a uuid is refused with `shared.invalid_id`, whose `kind` says which id was meant
 (`OptionListId`, `ExtraListId`). A body fault is `options.invalid` or `extras.invalid` naming the

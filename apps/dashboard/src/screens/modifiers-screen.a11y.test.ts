@@ -107,8 +107,8 @@ describe.each(["light", "dark"] as const)("modifiers screen (%s)", (theme) => {
   });
 
   it.each([
-    ["extras", "extra-lists", "used-by-e1"],
-    ["options", "option-lists", "used-by-o1"],
+    ["extras", "extra-lists", "used-by-extra-e1"],
+    ["options", "option-lists", "used-by-option-o1"],
   ] as const)("accessible %s detail modal", async (tab, testId, control) => {
     const { el, host } = await mountWidget<ModifiersScreen>(
       "dashboard-modifiers-screen",

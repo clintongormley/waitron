@@ -643,11 +643,11 @@ its part done here when it lands.
   list's popup lists products only, with no Type column, and its delete warning never mentions menu
   items. The list reads now refresh when `product_modifiers` (both) or `menu_item_extra_lists`
   (extras) change, which also refreshes the catalogue screen's copies of the two lists. Where the
-  screen is 480px wide or less (a phone), the two counts, and a popup row's menu, each take a line
-  of their own. Measured at 390px, the tables still scroll sideways inside their own box, further
-  than before by the new column: Extras 511px of content in 388px (439px before) in English, 610px
-  (463px) in Spanish; Options 457px (402px) and 479px (405px). The page itself does not scroll
-  sideways.
+  screen is 30rem wide or less (480px at the default text size; a phone), the two counts, and a
+  popup row's menu, each take a line of their own. Measured at 390px, the tables still scroll
+  sideways inside their own box, further than before by the new column: Extras 511px of content in
+  388px (439px before) in English, 610px (463px) in Spanish; Options 457px (402px) and 479px
+  (405px). The page itself does not scroll sideways.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
@@ -4439,20 +4439,22 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
 **Dashboard, till and setup:**
 
 - **One word for "switched off, kept for the record" across the dashboard — Small** (owner,
-  2026-09-23). The same idea has four labels today, found by grepping the English strings
+  2026-09-23). The same idea has several labels today, found by grepping the English strings
   (`apps/dashboard/src/i18n/strings.ts`, `packages/venue-service/src/dashboard/strings.ts`):
-  products and venues say **Active / Inactive** (`product.inactive_badge`, `venue.inactive`);
-  printers, card readers and staff say **Disabled** with a **Disable** action
+  products, venues, extras lists and options lists say **Active / Inactive**
+  (`product.inactive_badge`, `venue.inactive`, and since A65 `extras.inactive` and
+  `options.inactive`); printers, card readers and staff say **Disabled** with a **Disable** action
   (`printers.status_inactive`, `printers.status_revoked`, `payments.reader_disabled`,
-  `person.mark_inactive`); extras and options say **In use / Not in use** (`extras.not_in_use`,
-  `options.not_in_use`); and a generic `action.deactivate` ("Deactivate") exists beside
+  `person.mark_inactive`); a menu entry on the menu prices table says **Switched off**
+  (`menu_prices.switched_off`); and a generic `action.deactivate` ("Deactivate") exists beside
   `action.disable`. Branch 2 of the one-product model settles products on **Active / Inactive**,
   kept separate from **Available** (sold out for now). **Next action:** pick the one
   pair, and the one action verb, for every screen whose record is switched off rather than deleted —
   deciding first whether a revoked printer or a disabled login is really the same state as an
   inactive product — then change the English and Spanish strings together and record the rule in
   `docs/developers/design-system.md`. String keys are not renamed on the way (only their text), so no
-  test or code that names a key moves.
+  test or code that names a key moves. A65 did rename two: it replaced `extras.not_in_use` and
+  `options.not_in_use` with `extras.inactive` and `options.inactive`.
 
 - **The Waitron wordmark is invisible on the dashboard banner in the dark theme** (seen 2026-09-14
   on the dashboard alerts branch; confirmed 2026-09-16 during #378's run-it
