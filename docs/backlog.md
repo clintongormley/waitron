@@ -241,12 +241,12 @@ top-level list (a menu-owned `sections` row, pointed at by `menu_details`); `men
 dropped and `menu_items` rebuilt to hang off the menu; an offer carries every section path that
 reaches it (`placements`); the menu's own price, switch, variant prices and extras for a product
 reset when the menu stops reaching it. New routes: `GET /management-api/catalogues/:id/structure`
-and `POST /management-api/catalogues/:id/items`. Left by #659, none blocking: the 390 px offers
-table on Venue operations → Menus scrolls sideways (that tab goes in Task 5); the Menus tab fails to
-load for a menu with no `menu_details` row (every menu created now gets one); the image library
+and `POST /management-api/catalogues/:id/items`. Left by #659, none blocking: the image library
 links a menu-owned section's photo to the sections screen, though nothing puts a photo on one yet;
 `DELETE /management-api/catalogues/:id/items/:itemId` (`deactivateMenuItem`) still switches a
-product off but the dashboard no longer calls it, since `PATCH` now carries `active`; and
+product off but the dashboard no longer calls it, since `PATCH` now carries `active` (and since menus
+Task 5 nothing calls `GET …/catalogues/:id/offers` or `POST …/catalogues/:id/items` either: all
+three routes and their tests stay until someone removes them); and
 `sections_owner_menu_fk` still has no delete rule (Task 1's note stands) — nothing deletes a menu
 today, so it bites only when something does. A product reached through a section offers no extras
 list; that was already so before #659 (checked at `002b79f69`).
@@ -269,7 +269,23 @@ change's message sits under the menu's heading, above the tabs, so it shows whil
 on a phone the tree sits between it and the list it names; if someone else exactly undoes a move
 while it is still saving, the move's answer is shown over their change until the menu is next read
 (stated in a comment at the site); and no accessibility test covers that message while it shows.
-Next in the lane: menus Task 5 (menu prices, and the old Menus tab goes). The owner lifted the wait: the dependency upgrades are
+**Menus Task 5 (menu prices, and the old Menus tab goes), on `feat/menus-menu-prices`:** a menu's
+Prices tab (`/manage/menus/menu/<id>/view/prices`) lists each product the menu reaches once, with
+where it appears, its main category, its own price, this menu's price and the price that results,
+filtered by search, section, main category and "overridden only"; its settings window sets or clears
+this menu's price ("Use product price"), switches the product on or off for this menu, and sets each
+variant's price and whether it is offered here. The read is `GET /management-api/catalogues/:id/prices`
+(`menuPrices`, `packages/catalogue/src/operations.ts`). Venue operations loses its Menus tab; its
+Zones tab still assigns menus to zones, and an old `…/venue-operations/view/menus` address opens the
+Status tab. `wt-data-table` filters may now match a list of values per row, and `wt-input` gains an
+optional always-shown `hint` line its input is described by. No migration. Left, none blocking:
+removing a product's last placement on the Structure tab clears its menu price and variant settings
+with no warning, where the old tab asked first (the spec's "starts fresh" needs none; the owner may
+want one back); a product sold only as its variants shows the product's own price on this menu as
+its resulting price, marked "Sold as its variants"; the main-category filter offers every category,
+not only those on the menu; and the product editor's help lines are still paragraphs beside their
+inputs rather than `wt-input`'s `hint`, so they are not linked to their inputs.
+Next in the lane: menus Task 6 (publishing). The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
