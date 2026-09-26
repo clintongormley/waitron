@@ -115,6 +115,7 @@ const APP_FORBIDDEN = [
   "@waitron/composition",
   "@waitron/module",
   "@waitron/bookings",
+  "@waitron/adjustments",
   "@waitron/payments-sumup",
   "@waitron/payments-stripe",
 ];

@@ -123,6 +123,7 @@ jobs:
       media: ${{ steps.gates.outputs.media }}
       payments_stripe: ${{ steps.gates.outputs.payments_stripe }}
       payments_sumup: ${{ steps.gates.outputs.payments_sumup }}
+      adjustments: ${{ steps.gates.outputs.adjustments }}
       light_a: ${{ steps.gates.outputs.light_a }}
       light_b: ${{ steps.gates.outputs.light_b }}
       shared: ${{ steps.gates.outputs.shared }}
@@ -1183,6 +1184,46 @@ jobs:
             | node scripts/changed-packages.mjs runnable test:coverage
           pnpm --filter "@waitron/venue-service" test:coverage
 
+  # Adjustments combines database-backed policy tests with a Chromium dashboard project.
+  # Its own runner installs Chromium and keeps browser execution out of the light package bins.
+  test-adjustments:
+    timeout-minutes: 15
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/adjustments exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - run: pnpm --filter @waitron/adjustments exec playwright install chromium
+
+      - name: Run the adjustments shard
+        run: |
+          set -euo pipefail
+          pnpm --filter "@waitron/adjustments" ls --depth -1 --json \
+            | node scripts/changed-packages.mjs runnable test:coverage
+          pnpm --filter "@waitron/adjustments" test:coverage
+
   # Bookings owns both a browser project and a database project. Its own runner keeps
   # Chromium out of the database bins and gives failures a package-specific job result.
   test-bookings:
@@ -1413,6 +1454,7 @@ jobs:
           set -- "$@" --filter "!@waitron/media"
           set -- "$@" --filter "!@waitron/payments-stripe"
           set -- "$@" --filter "!@waitron/payments-sumup"
+          set -- "$@" --filter "!@waitron/adjustments"
           # LIGHT_B_PACKAGES — the other bin, subtracted so what remains is bin A.
           set -- "$@" --filter "!@waitron/country-gb"
           set -- "$@" --filter "!@waitron/country-packs"
@@ -1486,6 +1528,7 @@ jobs:
           set -- "$@" --filter "!@waitron/media"
           set -- "$@" --filter "!@waitron/payments-stripe"
           set -- "$@" --filter "!@waitron/payments-sumup"
+          set -- "$@" --filter "!@waitron/adjustments"
           # LIGHT_A_PACKAGES — the other bin, subtracted so what remains is bin B.
           set -- "$@" --filter "!@waitron/country"
           set -- "$@" --filter "!@waitron/country-es"
@@ -1505,7 +1548,6 @@ jobs:
           set -- "$@" --filter "!@waitron/dashboard-modules"
           set -- "$@" --filter "!@waitron/store"
           set -- "$@" --filter "!@waitron/stream"
-          set -- "$@" --filter "!@waitron/adjustments"
 
           pnpm "$@" ls --depth -1 --json \
             | node scripts/changed-packages.mjs runnable test:coverage
@@ -1584,6 +1626,7 @@ jobs:
       - test-media
       - test-payments-stripe
       - test-payments-sumup
+      - test-adjustments
       - test-light-a
       - test-light-b
       - mutation-shared

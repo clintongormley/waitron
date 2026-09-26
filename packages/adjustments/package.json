@@ -5,7 +5,8 @@
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./dashboard": "./src/dashboard/index.ts"
   },
   "scripts": {
     "test": "vitest run",
@@ -17,19 +18,24 @@
     "db:generate:custom": "drizzle-kit generate --custom"
   },
   "dependencies": {
+    "@waitron/dashboard-kit": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/identity": "workspace:*",
     "@waitron/module": "workspace:*",
     "@waitron/server-kit": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/sync-enrolment": "workspace:*",
+    "@waitron/ui": "workspace:*",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.13.8"
+    "hono": "^4.13.8",
+    "lit": "^3.2.0"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",
+    "@vitest/browser-playwright": "^4.1.11",
     "@vitest/coverage-v8": "^4.1.11",
     "drizzle-kit": "^0.31.10",
+    "playwright": "^1.63.0",
     "typescript": "^7.0.0",
     "vitest": "^4.1.11"
   }

@@ -421,7 +421,7 @@ job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-serv
 (`apps/server`) as three-way file shards each with a `-merge` job that enforces the thresholds on
 the merged blob (#216) — `apps/server`'s two stream tests run in `test-server-stream` instead, whose
 blob joins the same merge — plus `test-fiscal-verifactu`, dedicated mixed database/browser jobs (`test-bookings`, `test-media`, `test-venue-service`,
-`test-payments-stripe`, `test-payments-sumup`),
+`test-payments-stripe`, `test-payments-sumup`, `test-adjustments`),
 the browser shards (`test-ui`, `test-till`, `test-dashboard`, `test-setup`) and
 `test-light-a` / `test-light-b` for everything else (bins in `scripts/changed-scope.mjs`). Vitest
 `--shard` splits by FILE COUNT, so shard imbalance is the real limit, and `N` must never exceed a

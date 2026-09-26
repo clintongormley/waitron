@@ -1,0 +1,680 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
+import { setLocale } from "@waitron/dashboard-kit";
+import { applyTokens, setContentLanguages } from "@waitron/ui";
+import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
+import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
+import "./reasons-screen.js";
+
+const hosts: HTMLElement[] = [];
+beforeEach(() => {
+  setLocale("en");
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
+});
+afterEach(() => {
+  setLocale("en");
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  for (const host of hosts.splice(0)) host.remove();
+});
+
+const entryError: AdjustmentReason = {
+  id: "e",
+  name: "Entry error",
+  names: { en: "Keyed by mistake", es: "Error al marcar" },
+  actions: ["cancel"],
+  maxPercentBp: null,
+  maxAmount: null,
+  applyRole: "staff",
+  approverRole: "supervisor",
+  noteRequired: false,
+  active: true,
+  position: 0,
+};
+const complaint: AdjustmentReason = {
+  id: "c",
+  name: "Complaint",
+  names: { en: "Guest complaint", es: "Queja" },
+  actions: ["comp", "discount_percent"],
+  maxPercentBp: 5000,
+  maxAmount: "30.00",
+  applyRole: "supervisor",
+  approverRole: "manager",
+  noteRequired: true,
+  active: true,
+  position: 1,
+};
+const employee: AdjustmentReason = {
+  id: "d",
+  name: "Employee discount",
+  names: {},
+  actions: ["discount_percent"],
+  maxPercentBp: 3000,
+  maxAmount: "20.00",
+  applyRole: "supervisor",
+  approverRole: "manager",
+  noteRequired: false,
+  active: true,
+  position: 2,
+};
+const retired: AdjustmentReason = {
+  id: "o",
+  name: "Old promotion",
+  names: {},
+  actions: ["discount_amount"],
+  maxPercentBp: null,
+  maxAmount: "5.00",
+  applyRole: "staff",
+  approverRole: "manager",
+  noteRequired: false,
+  active: false,
+  position: 3,
+};
+const reasons = [entryError, complaint, employee, retired];
+
+type FakeApi = {
+  [K in keyof AdjustmentsApi]: AdjustmentsApi[K] extends (...args: infer A) => infer R
+    ? ReturnType<typeof vi.fn<(...args: A) => R>>
+    : AdjustmentsApi[K];
+};
+
+function fakeApi(overrides: Partial<Record<keyof AdjustmentsApi, unknown>> = {}): FakeApi {
+  const api = {
+    liveData: undefined,
+    listReasons: vi.fn().mockResolvedValue(reasons),
+    createReason: vi.fn().mockResolvedValue({ ...complaint, id: "n" }),
+    updateReason: vi.fn().mockResolvedValue(complaint),
+    deactivateReason: vi.fn().mockResolvedValue(undefined),
+    reorderReasons: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  } as unknown as FakeApi;
+  if (!("background" in overrides)) (api as { background: unknown }).background = api;
+  return api;
+}
+
+async function settle(el: AdjustmentReasonsScreen): Promise<void> {
+  for (let i = 0; i < 3; i++) {
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  await el.updateComplete;
+}
+
+async function mount(api: FakeApi): Promise<AdjustmentReasonsScreen> {
+  const host = document.createElement("div");
+  applyTokens(host);
+  document.body.appendChild(host);
+  hosts.push(host);
+  const el = document.createElement(
+    "dashboard-adjustment-reasons-screen",
+  ) as AdjustmentReasonsScreen;
+  el.api = api as unknown as AdjustmentsApi;
+  host.appendChild(el);
+  await settle(el);
+  return el;
+}
+
+function find(el: AdjustmentReasonsScreen, selector: string): HTMLElement | null {
+  function search(root: ParentNode): HTMLElement | null {
+    const match = root.querySelector<HTMLElement>(selector);
+    if (match) return match;
+    for (const child of root.querySelectorAll("*")) {
+      if (child.shadowRoot) {
+        const found = search(child.shadowRoot);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+  return search(el.shadowRoot!);
+}
+
+function table(el: AdjustmentReasonsScreen): HTMLElement {
+  return el.shadowRoot!.querySelector<HTMLElement>('[data-test="reasons"]')!;
+}
+
+function rowKeys(el: AdjustmentReasonsScreen): string[] {
+  return [...table(el).shadowRoot!.querySelectorAll("tbody tr[data-row-key]")].map((row) =>
+    row.getAttribute("data-row-key")!,
+  );
+}
+
+function rowText(el: AdjustmentReasonsScreen, key: string): string {
+  return table(el).shadowRoot!.querySelector(`tr[data-row-key="${key}"]`)!.textContent!;
+}
+
+async function press(el: AdjustmentReasonsScreen, test: string): Promise<void> {
+  const button = find(el, `[data-test="${test}"]`);
+  expect(button, test).not.toBeNull();
+  const menu = button!.closest("wt-row-actions");
+  if (menu) menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  button!.click();
+  await settle(el);
+}
+
+function modal(el: AdjustmentReasonsScreen): HTMLElement | null {
+  return el.shadowRoot!.querySelector("wt-modal");
+}
+
+type Named = HTMLElement & { value: string; error?: string; checked?: boolean };
+function field(el: AdjustmentReasonsScreen, name: string): Named {
+  const found = el.shadowRoot!.querySelector<Named>(`[name="${name}"]`);
+  expect(found, name).not.toBeNull();
+  return found!;
+}
+
+async function type(el: AdjustmentReasonsScreen, name: string, value: string): Promise<void> {
+  const input = field(el, name).shadowRoot!.querySelector("input")!;
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await settle(el);
+}
+
+async function choose(el: AdjustmentReasonsScreen, name: string, value: string): Promise<void> {
+  const select = field(el, name) as unknown as HTMLSelectElement;
+  select.value = value;
+  select.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  await settle(el);
+}
+
+function actionBox(el: AdjustmentReasonsScreen, action: string): HTMLInputElement {
+  return el.shadowRoot!.querySelector<HTMLInputElement>(
+    `input[name="actions"][value="${action}"]`,
+  )!;
+}
+
+async function toggleAction(el: AdjustmentReasonsScreen, action: string): Promise<void> {
+  actionBox(el, action).click();
+  await settle(el);
+}
+
+function noteSwitch(el: AdjustmentReasonsScreen): HTMLInputElement {
+  return field(el, "noteRequired").shadowRoot!.querySelector("input")!;
+}
+
+/** The message shown beside a field: a `wt-input`'s own error, or the line under a group. */
+function besideField(el: AdjustmentReasonsScreen, key: string): string {
+  const input = el.shadowRoot!.querySelector<Named>(`wt-input[name="${key}"]`);
+  if (input) return input.error ?? "";
+  return el.shadowRoot!.querySelector(`[data-field-error="${key}"]`)?.textContent?.trim() ?? "";
+}
+
+/** The screen's own alert, outside any form: a list that would not load or an order not saved. */
+function alert(el: AdjustmentReasonsScreen): string {
+  return el.shadowRoot!.querySelector('[data-test="page-alert"]')?.textContent?.trim() ?? "";
+}
+
+function summary(el: AdjustmentReasonsScreen): string {
+  const summaries = [...el.shadowRoot!.querySelectorAll("wt-form-error-summary")];
+  return summaries.map((each) => each.shadowRoot!.textContent ?? "").join(" ");
+}
+
+describe("the reasons list", () => {
+  it("lists the active reasons in their order, with what each allows, its limits and roles", async () => {
+    const el = await mount(fakeApi());
+    expect(rowKeys(el)).toEqual(["e", "c", "d"]);
+    const text = rowText(el, "c");
+    expect(text).toContain("Complaint");
+    expect(text).not.toContain("Guest complaint");
+    expect(text).toContain("Give away");
+    expect(text).toContain("Percentage discount");
+    expect(text).toContain("Up to 50% off an item");
+    expect(text).toContain("Up to €30.00 off a bill");
+    expect(text).toContain("Supervisor");
+    expect(text).toContain("Manager approves");
+    expect(text).toContain("Note required");
+    expect(rowText(el, "e")).toContain("No limit");
+  });
+
+  it("shows the inactive reasons when the status filter asks for them, without reorder buttons", async () => {
+    const el = await mount(fakeApi());
+    const filter = table(el).shadowRoot!.querySelector<HTMLSelectElement>(
+      'select[data-filter="status"]',
+    )!;
+    expect(filter.value).toBe("active");
+    filter.value = "inactive";
+    filter.dispatchEvent(new Event("change"));
+    await settle(el);
+    expect(rowKeys(el)).toEqual(["o"]);
+    expect(rowText(el, "o")).toContain("Inactive");
+    expect(find(el, '[data-test="move-up-o"]')).toBeNull();
+    expect(find(el, '[data-test="deactivate-o"]')).toBeNull();
+    expect(find(el, '[data-test="edit-o"]')).not.toBeNull();
+  });
+
+  it("reads the whole list, inactive reasons included, and later reads passively", async () => {
+    const background = { listReasons: vi.fn().mockResolvedValue(reasons) };
+    const api = fakeApi({ background });
+    const el = await mount(api);
+    expect(api.listReasons).toHaveBeenCalledTimes(1);
+    await press(el, "move-down-e");
+    expect(background.listReasons).toHaveBeenCalledTimes(1);
+  });
+
+  it("says the list could not be loaded", async () => {
+    const el = await mount(fakeApi({ listReasons: vi.fn().mockRejectedValue({ code: "x" }) }));
+    expect(alert(el)).toBe("The adjustment reasons could not be loaded.");
+    expect(el.shadowRoot!.querySelector('[data-test="page-alert"]')!.getAttribute("role")).toBe(
+      "alert",
+    );
+  });
+
+  it("speaks Spanish when the dashboard does", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    expect(el.shadowRoot!.querySelector("h1")!.textContent).toContain("Motivos de ajuste");
+    const text = rowText(el, "c");
+    expect(text).toContain("Invitación");
+    expect(text).toContain("Hasta un 50% de un artículo");
+    expect(text).toContain("Hasta 30,00\u00a0€ de una cuenta");
+    expect(text).toContain("Aprueba: Encargado");
+  });
+});
+
+describe("reordering", () => {
+  it("moves a reason up or down with buttons, sending the whole active order", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "move-up-c");
+    expect(api.reorderReasons).toHaveBeenLastCalledWith(["c", "e", "d"]);
+    await press(el, "move-down-c");
+    expect(api.reorderReasons).toHaveBeenLastCalledWith(["e", "d", "c"]);
+    expect(api.listReasons).toHaveBeenCalledTimes(3);
+  });
+
+  it("offers no move beyond either end, and names the reason each button moves", async () => {
+    const el = await mount(fakeApi());
+    const firstUp = find(el, '[data-test="move-up-e"]') as HTMLElement & { disabled: boolean };
+    const lastDown = find(el, '[data-test="move-down-d"]') as HTMLElement & { disabled: boolean };
+    expect(firstUp.disabled).toBe(true);
+    expect(lastDown.disabled).toBe(true);
+    const up = find(el, '[data-test="move-up-c"]')!;
+    expect((up as HTMLElement & { disabled: boolean }).disabled).toBe(false);
+    expect(up.getAttribute("aria-label")).toBe("Move up: Complaint");
+    expect(up.textContent).toContain("Move up");
+  });
+
+  it("keeps focus on the moved reason's button, or its other button at an end", async () => {
+    const api = fakeApi({
+      listReasons: vi
+        .fn()
+        .mockResolvedValueOnce(reasons)
+        .mockResolvedValueOnce([complaint, entryError, employee, retired])
+        .mockResolvedValue([complaint, employee, entryError, retired]),
+    });
+    const el = await mount(api);
+    const focused = () => table(el).shadowRoot!.activeElement?.getAttribute("data-test");
+    await press(el, "move-down-e");
+    expect(api.reorderReasons).toHaveBeenLastCalledWith(["c", "e", "d"]);
+    expect(focused()).toBe("move-down-e");
+    await press(el, "move-down-e");
+    expect(api.reorderReasons).toHaveBeenLastCalledWith(["c", "d", "e"]);
+    expect(focused()).toBe("move-up-e");
+  });
+
+  it("sends one reorder while one is in flight", async () => {
+    let finish!: () => void;
+    const api = fakeApi({
+      reorderReasons: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
+    });
+    const el = await mount(api);
+    await press(el, "move-up-c");
+    await press(el, "move-down-c");
+    expect(api.reorderReasons).toHaveBeenCalledTimes(1);
+    finish();
+    await settle(el);
+  });
+
+  it("says when the new order could not be saved", async () => {
+    const el = await mount(
+      fakeApi({ reorderReasons: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
+    );
+    await press(el, "move-up-c");
+    expect(alert(el)).toBe("The new order could not be saved.");
+  });
+});
+
+describe("the editor", () => {
+  it("opens with every field of the reason, each with a semantic name", async () => {
+    const el = await mount(fakeApi());
+    await press(el, "edit-c");
+    expect(modal(el)!.getAttribute("heading")).toBe("Edit reason");
+    expect(field(el, "name").value).toBe("Complaint");
+    expect(field(el, "names-en").value).toBe("Guest complaint");
+    expect(field(el, "names-es").value).toBe("Queja");
+    expect(actionBox(el, "cancel").checked).toBe(false);
+    expect(actionBox(el, "comp").checked).toBe(true);
+    expect(actionBox(el, "discount_percent").checked).toBe(true);
+    expect(actionBox(el, "discount_amount").checked).toBe(false);
+    expect(field(el, "maxPercent").value).toBe("50");
+    expect(field(el, "maxAmount").value).toBe("30.00");
+    expect((field(el, "applyRole") as unknown as HTMLSelectElement).value).toBe("supervisor");
+    expect((field(el, "approverRole") as unknown as HTMLSelectElement).value).toBe("manager");
+    expect(noteSwitch(el).checked).toBe(true);
+    for (const input of modal(el)!.querySelectorAll("wt-input, select, input, wt-switch")) {
+      expect(input.getAttribute("name"), input.outerHTML).toMatch(/^[a-zA-Z]+(-[a-z]+)?$/);
+    }
+  });
+
+  it("saves every field of an edit, then closes and reloads the list", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "edit-c");
+    await type(el, "name", "Guest complaint ");
+    await type(el, "names-es", "Queja grave");
+    await toggleAction(el, "comp");
+    await toggleAction(el, "discount_amount");
+    await type(el, "maxPercent", "12,5");
+    await type(el, "maxAmount", "45,5");
+    await choose(el, "applyRole", "manager");
+    await choose(el, "approverRole", "admin");
+    noteSwitch(el).click();
+    await settle(el);
+    await press(el, "save-editor");
+    expect(api.updateReason).toHaveBeenCalledWith("c", {
+      name: "Guest complaint",
+      names: { en: "Guest complaint", es: "Queja grave" },
+      actions: ["discount_percent", "discount_amount"],
+      maxPercentBp: 1250,
+      maxAmount: "45.5",
+      applyRole: "manager",
+      approverRole: "admin",
+      noteRequired: false,
+    });
+    expect(modal(el)).toBeNull();
+    expect(api.listReasons).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps every change made before the screen redraws", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "edit-c");
+    actionBox(el, "comp").click();
+    actionBox(el, "discount_percent").click();
+    actionBox(el, "cancel").click();
+    for (const [language, text] of [
+      ["en", "Complaint about food"],
+      ["es", "Queja grave"],
+    ] as const) {
+      const input = field(el, `names-${language}`).shadowRoot!.querySelector("input")!;
+      input.value = text;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    }
+    await settle(el);
+    await press(el, "save-editor");
+    expect(api.updateReason.mock.calls[0]![1]).toMatchObject({
+      actions: ["cancel"],
+      names: { en: "Complaint about food", es: "Queja grave" },
+    });
+  });
+
+  it("creates a reason; blank limits and blank translations are sent as none", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "add-reason");
+    expect(modal(el)!.getAttribute("heading")).toBe("New reason");
+    await type(el, "name", "Birthday");
+    await toggleAction(el, "comp");
+    await press(el, "save-editor");
+    expect(api.createReason).toHaveBeenCalledWith({
+      name: "Birthday",
+      names: {},
+      actions: ["comp"],
+      maxPercentBp: null,
+      maxAmount: null,
+      applyRole: "manager",
+      approverRole: "manager",
+      noteRequired: false,
+    });
+    expect(modal(el)).toBeNull();
+  });
+
+  it("keeps a translation in a language the venue no longer offers", async () => {
+    setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "edit-c");
+    expect(el.shadowRoot!.querySelector('[name="names-es"]')).toBeNull();
+    await press(el, "save-editor");
+    expect(api.updateReason.mock.calls[0]![1].names).toEqual({
+      en: "Guest complaint",
+      es: "Queja",
+    });
+  });
+
+  it("explains an invalid submission beside each field and in one summary, keeping the values", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "add-reason");
+    await type(el, "maxPercent", "150");
+    await type(el, "maxAmount", "12.345");
+    await choose(el, "approverRole", "staff");
+    await press(el, "save-editor");
+    expect(api.createReason).not.toHaveBeenCalled();
+    const expected = {
+      name: "Enter a name.",
+      actions: "Choose at least one action.",
+      maxPercent: "Enter a percentage above 0 and up to 100, with at most two decimals.",
+      maxAmount: "Enter an amount above 0 with at most two decimals, such as 30.00.",
+      approverRole: "The approving role must be the same as, or above, the role that applies it.",
+    };
+    const text = summary(el);
+    expect(text).toContain("There is a problem with this form");
+    for (const [key, message] of Object.entries(expected)) {
+      expect(besideField(el, key), key).toBe(message);
+      expect(text).toContain(message);
+    }
+    expect(field(el, "maxPercent").value).toBe("150");
+    expect(modal(el)).not.toBeNull();
+  });
+
+  it.each([
+    ["maxPercent", "abc", "Enter a percentage above 0 and up to 100, with at most two decimals."],
+    ["maxPercent", "0", "Enter a percentage above 0 and up to 100, with at most two decimals."],
+    ["maxAmount", "abc", "Enter an amount above 0 with at most two decimals, such as 30.00."],
+    ["maxAmount", "0", "Enter an amount above 0 with at most two decimals, such as 30.00."],
+    ["maxAmount", "0,00", "Enter an amount above 0 with at most two decimals, such as 30.00."],
+  ])("refuses %s %j before sending anything", async (name, value, message) => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "edit-c");
+    await type(el, name, value);
+    await press(el, "save-editor");
+    expect(besideField(el, name)).toBe(message);
+    expect(api.updateReason).not.toHaveBeenCalled();
+  });
+
+  it("sends a whole number without decimals or leading zeros, as the route reads it", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "edit-c");
+    await type(el, "maxPercent", "7");
+    await type(el, "maxAmount", "030");
+    await press(el, "save-editor");
+    expect(api.updateReason.mock.calls[0]![1]).toMatchObject({
+      maxPercentBp: 700,
+      maxAmount: "30",
+    });
+  });
+
+  it("opens a reason with no limits with both limit fields empty", async () => {
+    const el = await mount(fakeApi());
+    await press(el, "edit-e");
+    expect(field(el, "maxPercent").value).toBe("");
+    expect(field(el, "maxAmount").value).toBe("");
+    expect((field(el, "applyRole") as unknown as HTMLSelectElement).value).toBe("staff");
+    expect((field(el, "approverRole") as unknown as HTMLSelectElement).value).toBe("supervisor");
+  });
+
+  it("sends one save while it is in flight, and Escape does not close the editor meanwhile", async () => {
+    let finish!: (value: AdjustmentReason) => void;
+    const api = fakeApi({
+      updateReason: vi.fn(() => new Promise<AdjustmentReason>((resolve) => (finish = resolve))),
+    });
+    const el = await mount(api);
+    await press(el, "edit-c");
+    await press(el, "save-editor");
+    const save = find(el, '[data-test="save-editor"]') as HTMLElement & { disabled: boolean };
+    expect(save.disabled).toBe(true);
+    save.click();
+    await settle(el);
+    const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    modal(el)!.dispatchEvent(escape);
+    expect(escape.defaultPrevented).toBe(true);
+    expect(api.updateReason).toHaveBeenCalledTimes(1);
+    finish(complaint);
+    await settle(el);
+    expect(modal(el)).toBeNull();
+  });
+
+  it("clears a field's error once the field is corrected and saved", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "add-reason");
+    await press(el, "save-editor");
+    expect(besideField(el, "name")).toBe("Enter a name.");
+    await type(el, "name", "Birthday");
+    await toggleAction(el, "cancel");
+    await press(el, "save-editor");
+    expect(api.createReason).toHaveBeenCalledTimes(1);
+  });
+
+  it("puts the server's refusal of a field beside that field and in the summary", async () => {
+    const el = await mount(
+      fakeApi({
+        updateReason: vi.fn().mockRejectedValue({
+          code: "management.request_invalid",
+          params: { field: "maxPercentBp" },
+        }),
+      }),
+    );
+    await press(el, "edit-c");
+    await press(el, "save-editor");
+    const message = "Enter a percentage above 0 and up to 100, with at most two decimals.";
+    expect(besideField(el, "maxPercent")).toBe(message);
+    expect(summary(el)).toContain(message);
+    expect(modal(el)).not.toBeNull();
+  });
+
+  it.each([
+    ["names", "Check the names in each language."],
+    ["applyRole", "Choose who may apply this reason."],
+    ["noteRequired", "Choose whether staff must write a note."],
+  ])("puts a refusal of %s beside it", async (fieldName, message) => {
+    const el = await mount(
+      fakeApi({
+        updateReason: vi
+          .fn()
+          .mockRejectedValue({ code: "management.request_invalid", params: { field: fieldName } }),
+      }),
+    );
+    await press(el, "edit-c");
+    await press(el, "save-editor");
+    expect(besideField(el, fieldName)).toBe(message);
+    expect(summary(el)).toContain(message);
+  });
+
+  it("shows a name already in use beside the name", async () => {
+    const el = await mount(
+      fakeApi({
+        createReason: vi.fn().mockRejectedValue({
+          code: "adjustment_reason.name_taken",
+          params: { name: "Complaint" },
+        }),
+      }),
+    );
+    await press(el, "add-reason");
+    await type(el, "name", "Complaint");
+    await toggleAction(el, "comp");
+    await press(el, "save-editor");
+    expect(besideField(el, "name")).toBe("Another active reason already has this name");
+    expect(summary(el)).toContain("Another active reason already has this name");
+    expect(modal(el)).not.toBeNull();
+  });
+
+  it("explains any other refusal in the summary and keeps the editor open", async () => {
+    const el = await mount(
+      fakeApi({
+        updateReason: vi
+          .fn()
+          .mockRejectedValue({ code: "adjustment_reason.not_found", params: { reasonId: "c" } }),
+      }),
+    );
+    await press(el, "edit-c");
+    await press(el, "save-editor");
+    expect(summary(el)).toContain("That reason could not be found. It may have been removed");
+    expect(modal(el)).not.toBeNull();
+  });
+
+  it("closes a saved editor when refreshing the list fails, and says the list could not load", async () => {
+    const api = fakeApi({
+      listReasons: vi.fn().mockResolvedValueOnce(reasons).mockRejectedValue({ code: "x" }),
+    });
+    const el = await mount(api);
+    await press(el, "edit-c");
+    await press(el, "save-editor");
+    expect(api.updateReason).toHaveBeenCalledTimes(1);
+    expect(modal(el)).toBeNull();
+    expect(alert(el)).toBe("The adjustment reasons could not be loaded.");
+  });
+
+  it("closes on Cancel without saving", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "edit-c");
+    await press(el, "cancel-editor");
+    expect(modal(el)).toBeNull();
+    const menu = table(el).shadowRoot!.activeElement;
+    expect(menu?.tagName).toBe("WT-ROW-ACTIONS");
+    expect(menu?.getAttribute("label")).toBe("Actions: Complaint");
+    expect(api.updateReason).not.toHaveBeenCalled();
+  });
+
+  it("closes on Escape without saving", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "edit-c");
+    field(el, "name").focus();
+    await userEvent.keyboard("{Escape}");
+    await settle(el);
+    expect(modal(el)).toBeNull();
+    expect(api.updateReason).not.toHaveBeenCalled();
+  });
+
+  it("saves when Enter is pressed in a text field", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "edit-c");
+    const input = field(el, "name").shadowRoot!.querySelector("input")!;
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+    );
+    await settle(el);
+    expect(api.updateReason).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("deactivating", () => {
+  it("says what deactivating does before it acts, then deactivates and reloads", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "deactivate-c");
+    expect(api.deactivateReason).not.toHaveBeenCalled();
+    expect(modal(el)!.textContent).toContain(
+      "Staff will no longer be offered Complaint. It stays in the list as inactive.",
+    );
+    await press(el, "confirm-deactivate");
+    expect(api.deactivateReason).toHaveBeenCalledWith("c");
+    expect(modal(el)).toBeNull();
+    expect(api.listReasons).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the confirmation open and explains a refusal", async () => {
+    const el = await mount(
+      fakeApi({ deactivateReason: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
+    );
+    await press(el, "deactivate-c");
+    await press(el, "confirm-deactivate");
+    expect(modal(el)).not.toBeNull();
+    expect(summary(el)).toContain("Something went wrong, try again");
+  });
+});

@@ -720,8 +720,8 @@ browser test** — most of these rules exist because a test passed while proving
 - **A recurrent stall needs a retained log and a snapshot of whatever it was waiting on.** Locate the
   stalled operation before assigning its cause to resource contention.
 - **On Vitest 4 a project's own `maxWorkers` wins, and the outer config's is only the fallback** —
-  so `packages/bookings`, `payments-stripe`, `payments-sumup` and `venue-service` each set
-  `maxWorkers: 1` inside a project. **A cap that must apply to every project still belongs on the
+  so `packages/bookings`, `payments-stripe`, `payments-sumup`, `venue-service` and `adjustments`
+  each set `maxWorkers: 1` inside a project. **A cap that must apply to every project still belongs on the
   outer config**, which a project setting none of its own falls back to. Guard:
   `scripts/fiscal-test-budget.test.ts`, weaker than its name — it pins the arrangement
   fiscal-verifactu and media chose, not how Vitest resolves the limit. Measurement (and the Vitest 3
@@ -734,8 +734,8 @@ browser test** — most of these rules exist because a test passed while proving
   a package can actually be outside is the third: `packages/media` and `apps/dashboard` split into
   projects too, and are unaffected because neither pins a project-level `maxWorkers: 1`.
   Measured on `packages/bookings` against the same run on Vitest 3. Guard:
-  `scripts/bookings-test-budget.test.ts` — which pins bookings alone, not the three other packages
-  with the same shape.
+  `scripts/bookings-test-budget.test.ts` — which pins bookings alone, not the other packages with
+  the same shape.
 - **A suite whose test outlasts Vitest's per-test timeout fails HEALTHY runs**, and that timeout
   defaults to 5s. It does not shorten a `spawnSync` timeout or interrupt a blocking child — the kill
   still fires — it fails the test for its duration alone. Set the bound above the longest a healthy
