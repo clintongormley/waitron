@@ -531,6 +531,7 @@ describe("a sold line naming a variant is labelled by the variant's own name", (
           courseId: workingOrderLines.courseId,
           parentLineId: workingOrderLines.parentLineId,
           note: workingOrderLines.note,
+          quantity: workingOrderLines.quantity,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, orderId));
@@ -2331,6 +2332,7 @@ async function placeOrderWith(
       courseId: workingOrderLines.courseId,
       parentLineId: workingOrderLines.parentLineId,
       note: workingOrderLines.note,
+      quantity: workingOrderLines.quantity,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))
@@ -2809,6 +2811,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
             courseId: workingOrderLines.courseId,
             parentLineId: workingOrderLines.parentLineId,
             note: workingOrderLines.note,
+            quantity: workingOrderLines.quantity,
           })
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, orderId));
@@ -6914,6 +6917,7 @@ async function fireableLines(tx: Transaction, orderId: string) {
       courseId: workingOrderLines.courseId,
       parentLineId: workingOrderLines.parentLineId,
       note: workingOrderLines.note,
+      quantity: workingOrderLines.quantity,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, orderId))

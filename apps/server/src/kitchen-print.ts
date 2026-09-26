@@ -347,6 +347,13 @@ export async function enqueueKitchenTickets(
   }
 }
 
+/**
+ * What the kitchen was asked to make: the ticket item's fired quantity. A ticket item fired before
+ * `ticket_items.quantity` existed carries none, and reads its line's current quantity instead. For a
+ * query joining `ticket_items` to its `working_order_lines` row.
+ */
+export const firedQuantity = sql<number>`coalesce(${ticketItems.quantity}, ${workingOrderLines.quantity})`;
+
 /** One correction to work a station was sent: the quantity it corrects, and whether the cook had
  *  started it. */
 export interface CorrectionItem {
@@ -503,7 +510,7 @@ export async function enqueueMovedSlips(
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       state: ticketItems.state,
-      quantity: sql<number>`coalesce(${ticketItems.quantity}, ${workingOrderLines.quantity})`,
+      quantity: firedQuantity,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))

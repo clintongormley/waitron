@@ -221,6 +221,7 @@ async function fireNewOrder(
       courseId: workingOrderLines.courseId,
       parentLineId: workingOrderLines.parentLineId,
       note: workingOrderLines.note,
+      quantity: workingOrderLines.quantity,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))
@@ -272,6 +273,7 @@ async function fireContextlessDish(
       courseId: workingOrderLines.courseId,
       parentLineId: workingOrderLines.parentLineId,
       note: workingOrderLines.note,
+      quantity: workingOrderLines.quantity,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, id))

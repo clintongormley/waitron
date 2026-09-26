@@ -40,6 +40,7 @@ import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import {
   createOpenOrder,
+  fireableLineColumns,
   fireLines,
   priceStoredOrder,
   priceStoredOrderForIssuance,
@@ -380,6 +381,7 @@ export async function payWorkingOrder(
             courseId: line.courseId ?? null,
             parentLineId: line.parentLineId ?? null,
             note: line.note ?? null,
+            quantity: line.quantity,
           })),
         );
       }
@@ -1159,13 +1161,7 @@ async function firePrepayOrder(
   }
 
   const lines = await tx
-    .select({
-      id: workingOrderLines.id,
-      productId: workingOrderLines.productId,
-      courseId: workingOrderLines.courseId,
-      parentLineId: workingOrderLines.parentLineId,
-      note: workingOrderLines.note,
-    })
+    .select(fireableLineColumns)
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, workingOrderId))
     .orderBy(workingOrderLines.lineNo);

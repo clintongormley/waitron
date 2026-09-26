@@ -234,6 +234,7 @@ async function seedFiredDelivery(
         courseId: workingOrderLines.courseId,
         parentLineId: workingOrderLines.parentLineId,
         note: workingOrderLines.note,
+        quantity: workingOrderLines.quantity,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));

@@ -562,6 +562,7 @@ describe("listTablesWithState — readyToServe (N listos, KDS-1 §3d)", () => {
           courseId: workingOrderLines.courseId,
           parentLineId: workingOrderLines.parentLineId,
           note: workingOrderLines.note,
+          quantity: workingOrderLines.quantity,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
@@ -614,6 +615,7 @@ describe("listTablesWithState — enRoute (en camino, KDS-3 §3c)", () => {
           courseId: workingOrderLines.courseId,
           parentLineId: workingOrderLines.parentLineId,
           note: workingOrderLines.note,
+          quantity: workingOrderLines.quantity,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
@@ -675,6 +677,7 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
           courseId: workingOrderLines.courseId,
           parentLineId: workingOrderLines.parentLineId,
           note: workingOrderLines.note,
+          quantity: workingOrderLines.quantity,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
@@ -718,6 +721,7 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
           courseId: workingOrderLines.courseId,
           parentLineId: workingOrderLines.parentLineId,
           note: workingOrderLines.note,
+          quantity: workingOrderLines.quantity,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
