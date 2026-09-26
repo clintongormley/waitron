@@ -246,7 +246,8 @@ and colour. `labels` holds each label, with the unique index `labels_name_uq` on
 `product_labels` joins products to labels; both cascade when a product or a label is deleted. All
 the catalogue tables are classified `state`. All but the three that hold published menus
 (`menu_versions`, `menu_publications` and `menu_version_images`) travel in the configuration
-transfer, `labels` before `product_labels`, so an imported venue's menus arrive unpublished.
+transfer, `labels` before `product_labels`. The three are left out, so an imported venue's menus
+arrive unpublished.
 
 The product-to-category membership table, `product_categories`, is gone. It was created by
 `packages/catalogue/drizzle/0000_baseline.sql` and is dropped by
