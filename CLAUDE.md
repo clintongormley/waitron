@@ -879,13 +879,13 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   checkpoint takes its turn in the write queue with no busy wait (`checkpointTruncate`,
   `packages/store/src/index.ts`), so a sale can queue behind it but never waits on the bucket. Guards,
   narrower than the rule: `apps/server/src/stream-pause.e2e.test.ts` freezes the bucket, then times
-  the sales three tills make through the server's own route against a bound while the side file
-  passes a 16 MiB limit, the server folds it back and the pause holds — it does not observe whether
-  a sale's write waited behind the fold-back rather than landing before it, nor time the fold-back
-  of a 256 MiB file; the frozen-server stage of `apps/server/src/stream-loop.e2e.test.ts` records
-  its sales through `recordOneSale`, a second store with its own write queue; both are skipped
-  locally without their binaries (§4); the bucket-copy cases in `apps/server/src/health.test.ts`
-  hold `/health`.
+  the sales of three concurrent sellers on one till session through the server's own route against
+  a bound while the side file passes a 16 MiB limit, the server folds it back and the pause holds —
+  it does not observe whether a sale's write waited behind the fold-back rather than landing
+  before it, nor time the fold-back of a 256 MiB file; the frozen-server stage of
+  `apps/server/src/stream-loop.e2e.test.ts` records its sales through `recordOneSale`, a second
+  store with its own write queue; both are skipped locally without their binaries (§4); the
+  bucket-copy cases in `apps/server/src/health.test.ts` hold `/health`.
 - **`registros_facturacion` is immutable**: it is the table declared `appendOnly()`
   (`packages/fiscal-verifactu/src/classification.ts`), so `applyMigrations` puts a `RAISE(ABORT)`
   trigger on its updates and its deletes. Do not work around them; a value written wrong there stays

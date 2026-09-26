@@ -681,7 +681,7 @@ file of its own, another bundler, or esbuild reached by path — is not flagged.
 so the other bundles the server's `build` makes, and `waitron-provision` (`dist/bin.js` in
 `packages/provisioning`), are not read by it.
 
-### `test-server`'s shards download two binaries for the stream loop test
+### `test-server`'s shards download two binaries for the stream loop and pause tests
 
 Each of the three `test-server` shards runs `node scripts/setup-litestream.mjs` and
 `node scripts/setup-s3-test-server.mjs` before its tests, because file sharding decides which shard

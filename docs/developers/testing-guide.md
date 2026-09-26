@@ -562,31 +562,33 @@ its own write queue, not the server's route and write queue. The next test reach
 **The stream pause test.** `apps/server/src/stream-pause.e2e.test.ts` needs the same two binaries
 and skips or fails without them the same way. It boots one streaming server with `startServer`'s
 third argument, a test seam, setting the side-file limit to 16 MiB; a 1 MiB limit paused the stream
-while its generation was still opening, from boot's own writes (measured 2026-09-26). Three tills
-sell at once through `/api/sales` over the box's TLS. Ten sales with the bucket up set the bound, as
-in the frozen-server stage. The bucket is frozen with `SIGSTOP`, and a listing sent to it is checked
-to be still unanswered at the bound. The tills sell until the side file passes the limit, stop, start
-again three seconds before the supervisor's next once-a-minute measurement, and sell until one of
-them sees the file folded back; ten more sales follow during the pause. Every frozen sale must beat
-the bound, the stream must read `paused`, and each till must have exactly one sale whose side-file
-readings straddle the fold-back: the size measured before it was posted at or over the limit, the
-size after its answer under it. Nothing else in the server shrinks that file: the stream host is
-`checkpointTruncate`'s only caller, and no `journal_size_limit` is set. Then the bucket is let run:
-the stream must read `streaming` on the same generation, a sale from the pause must be in a restore
-of that generation, and the server's log must hold exactly one `stream.paused`, at this limit,
-followed by `stream.resumed`.
+while its generation was still opening, from boot's own writes (measured 2026-09-26). One till
+session has three sellers posting sales at once to `/api/sales` over the box's TLS. At least ten
+sales with the bucket up set the bound, as in the frozen-server stage. The bucket is frozen with
+`SIGSTOP`, and a listing sent to it is checked to be still unanswered at the bound. The sellers post
+until the side file passes the limit, stop, start again three seconds before the supervisor's next
+once-a-minute measurement, and post until one of them sees the file folded back; at least ten more
+sales follow during the pause. Every frozen sale must beat the bound, the stream must read `paused`,
+and each seller must have exactly one sale whose side-file readings straddle the fold-back: the size
+measured before it was posted at or over the limit, the size after its answer under it. Nothing else
+in the server's own code shrinks that file: the stream host is `checkpointTruncate`'s only caller,
+and no `journal_size_limit` is set. Then the bucket is let run: the stream must read `streaming` on
+the same generation, a sale from the pause must be in a restore of that generation, and the server's
+log must hold exactly one `stream.paused`, at this limit, followed by `stream.resumed`.
 
 What it does not show: whether a straddling sale's own write waited in the write queue behind the
-fold-back rather than landing before it — in each of the two three-till runs on 2026-09-26, one of
-the three straddling sales was answered with the side file at 0 bytes, so its write had landed first
-— and how long the fold-back of a 256 MiB file takes. Measured 2026-09-26 on the owner's Mac, with
-Vitest 4.1.11: 70,586 ms in all, most of it waiting for the supervisor's measurement; the slowest
-sale 123 ms with the bucket up, 129 ms frozen before the pause, 53 to 56 ms for the three straddling
-sales and 78 ms during the pause, against a bound of 1,000 ms; streaming again 253 ms after the
-bucket was let run. Its timeout is the sum of its waits and budgets, a little over six minutes. With
-`...seams.stream` deleted from `apps/server/src/boot.ts`, so the default 256 MiB limit applied, the
-same run failed with `timed out waiting for the fold-back: the stream reads {"state":"streaming",…},
-the side file 27558712 bytes`.
+fold-back rather than landing before it — in each of two runs on 2026-09-26, one of the three
+straddling sales was answered with the side file at 0 bytes, so its write had landed first — and how
+long the fold-back of a 256 MiB file takes. The straddling-sale check does not guard the write queue
+either: with `writes.exclusive(...)` in `checkpointTruncate` (`packages/store/src/index.ts`)
+replaced by `Promise.resolve().then(...)`, the case still passed (70,258 ms, measured 2026-09-26).
+Measured 2026-09-26 on the owner's Mac, with Vitest 4.1.11: 70,586 ms in all, most of it waiting for
+the supervisor's measurement; the slowest sale 123 ms with the bucket up, 129 ms frozen before the
+pause, 53 to 56 ms for the three straddling sales and 78 ms during the pause, against a bound of
+1,000 ms; streaming again 253 ms after the bucket was let run. Its timeout is the sum of its waits
+and budgets, a little over six minutes. With `...seams.stream` deleted from
+`apps/server/src/boot.ts`, so the default 256 MiB limit applied, the same run failed with `timed out
+waiting for the fold-back: the stream reads {"state":"streaming",…}, the side file 27558712 bytes`.
 
 **A bucket question the pause is waiting on.** While paused, the supervisor asks the bucket for a
 listing and resumes once one is answered (`#bucketAnswers`, `packages/stream/src/supervisor.ts`).

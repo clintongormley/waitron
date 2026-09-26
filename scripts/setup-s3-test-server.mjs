@@ -1,9 +1,9 @@
 /**
  * `pnpm setup:s3-test-server` — install the pinned versitygw release at `.bin/versitygw`
- * under the repository root, where the stream loop test looks for it
+ * under the repository root, where the stream loop and pause tests look for it
  * (`apps/server/src/testing/s3-test-server.ts`).
  *
- * versitygw is the S3-compatible server that test runs as a plain child process; why this one is in
+ * versitygw is the S3-compatible server those tests run as a plain child process; why this one is in
  * docs/developers/testing-guide.md → "The stream loop test skips locally without its
  * two binaries, and a skip reads as a pass". The archive's SHA-256 is checked against
  * the value pinned here, copied from the release's own `checksums.txt`, before anything is unpacked.

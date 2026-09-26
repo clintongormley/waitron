@@ -5765,9 +5765,12 @@ open:
   none. The command line and the setup restores wrap it for every object-store call they make
   (`boundObjectStore`, which abandons a call but never cancels it),
   the first start's pointer read has its own 15-second race (`readBucketPointerTerm`,
-  `apps/server/src/rebuild-first-start.ts`, reported as `restore.pointer_unreadable`), and every
-  other caller's calls have no bound at all: the replication supervisor's, and the bucket check the
-  backup settings screen's Test and Save buttons run (`probeBucket`, opened in
+  `apps/server/src/rebuild-first-start.ts`, reported as `restore.pointer_unreadable`), the
+  replication supervisor's freshness read and the pause's bucket question are each abandoned after
+  `READ_DEADLINE_MS` (`packages/stream/src/supervisor.ts`) but never cancelled, and every other
+  caller's calls have no bound at all: the supervisor's other calls (the open item "the stream's
+  other bucket calls have no time bound either", below), and the bucket check the backup settings
+  screen's Test and Save buttons run (`probeBucket`, opened in
   `apps/server/src/boot.ts`, called from `apps/server/src/stream-api.ts`). A per-call abort signal or request timeout
   inside `createS3ObjectStore` would bound and cancel every caller's calls.
 - Open question: the first start's pointer read and the bucket rebuild's calls (the command line's
@@ -5844,9 +5847,9 @@ line with what slice 2 built. Left open:
   `test-server` shard's install step took about two seconds by GitHub's whole-second step
   timestamps, and the loop test passed in 15,989 ms with no test skipped in the merged report.
 - **DONE (2026-09-26, lane A's A37): the pause runs end to end.**
-  `apps/server/src/stream-pause.e2e.test.ts` freezes the bucket and has three tills sell through the
-  server's own sale route while the side file passes a 16 MiB limit (`startServer`'s third argument,
-  a test seam), the real supervisor stops the real Litestream, the server folds the file back in its
+  `apps/server/src/stream-pause.e2e.test.ts` freezes the bucket and has three concurrent sellers on one till
+  session sell through the server's own sale route while the side file passes a 16 MiB limit
+  (`startServer`'s third argument, a test seam), the real supervisor stops the real Litestream, the server folds the file back in its
   own write queue and the pause holds; every sale beats the bound, and once the bucket is let run the
   stream resumes into the same generation, which a restore shows holds a sale made during the pause
   ([testing-guide.md](developers/testing-guide.md), "The stream pause test"). Left open: whether a
@@ -5861,7 +5864,8 @@ line with what slice 2 built. Left open:
   the pause asks again. A server frozen with `SIGSTOP` answers after `SIGCONT` anyway: the pause test
   read `streaming` 253 ms after it.
 - **Open, found by A37: the stream's other bucket calls have no time bound either.** Measured: the S3
-  client sets no request timeout (above). Read in `packages/stream/src/supervisor.ts`, not run: while
+  client sets no request timeout (above; the earlier entry "The bucket client sets no time limit of its
+  own" lists the calls that are bounded). Read in `packages/stream/src/supervisor.ts`, not run: while
   opening, the probe, the pointer read, the generation claim and the pointer write are awaited with
   no deadline, so a bucket that takes the connection and never replies would leave the stream
   `opening` after the bucket is back, until a stop or a reload; a prune that never settles leaves

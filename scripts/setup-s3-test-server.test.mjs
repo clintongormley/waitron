@@ -22,9 +22,9 @@ import {
   parseVersion,
 } from "./setup-s3-test-server.mjs";
 
-// The installer for the S3-compatible server the stream loop test runs as a child process. Every
-// case runs offline: the "release" is a tarball built here, holding a shell script that prints a
-// version line the way `versitygw --version` does.
+// The installer for the S3-compatible server the stream loop and pause tests run as a child
+// process. Every case runs offline: the "release" is a tarball built here, holding a shell script
+// that prints a version line the way `versitygw --version` does.
 
 const HOST = `${process.platform}-${process.arch}`;
 const scratch = [];
@@ -227,7 +227,7 @@ describe("install", () => {
   });
 });
 
-describe("the loop test's helper", () => {
+describe("the stream tests' helper", () => {
   // A TEXT pin between two copies of one string: `apps/server` cannot import this script (it sits
   // outside that package's source tree), so the helper holds its own copy of the version and this
   // case is what fails when the two drift. It reads the line, not the value the helper computes.

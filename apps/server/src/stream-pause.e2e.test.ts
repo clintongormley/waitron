@@ -2,7 +2,8 @@
 // S3-compatible server and sales posted to the running server's own sale route:
 //   - the bucket is frozen, so every call to it hangs;
 //   - sales grow the side file past the limit, and the supervisor stops Litestream and folds the
-//     file back in the server's own write queue while three tills are selling;
+//     file back in the server's own write queue while three sales at a time post on one till
+//     session;
 //   - every sale, before, across and after the fold-back, finishes within a bound that a call
 //     waiting on the frozen bucket is shown to exceed;
 //   - once the bucket answers again the pause ends, streaming resumes into the same generation,
@@ -79,9 +80,9 @@ const DEVICE_TOKEN = "stream-pause-e2e-device-token";
  */
 const WAL_LIMIT_BYTES = 16 * 1024 * 1024;
 
-// `waitFor` enforces each POINTER, RESUME and UPLOAD wait, the helper the S3 server's start, and
-// `restoreGeneration` its RESTORE_MS ceiling; the fill and the wait for the fold-back each check a
-// deadline between sales. BOOT_MS is a budget nothing here enforces, and UNTIMED_MS covers
+// `waitFor` checks each POINTER, RESUME and UPLOAD wait's deadline between probes, the helper
+// enforces the S3 server's start, and `restoreGeneration` its RESTORE_MS ceiling; the fill and the
+// wait for the fold-back each check a deadline between sales. BOOT_MS is a budget nothing here enforces, and UNTIMED_MS covers
 // migrations, provisioning and the close. The case's timeout is the sum, because Vitest's timer
 // fails a healthy run that outlasts it (CLAUDE.md §4). The fold-back is waited for until the
 // supervisor's next side-file check after the fill, TICK_MS at most, plus FOLD_SLACK_MS for
@@ -95,11 +96,19 @@ const UPLOAD_WAIT_MS = 30_000;
 const RESTORE_MS = 30_000;
 const UNTIMED_MS = 60_000;
 const POLL_MS = 250;
-/** How long before the supervisor's side-file check the tills start again, so they are selling at it. */
+/**
+ * How long before the supervisor's side-file check the sellers start again, so they are selling
+ * at it.
+ */
 const LEAD_MS = 3_000;
-/** Tills selling at once, so sales compete for the write queue the fold-back runs in. */
-const TILLS = 3;
-/** Sales timed with the bucket up, and again during the pause, across the tills. */
+/**
+ * Sales posted at once on one till session, so sales compete for the write queue the fold-back
+ * runs in.
+ */
+const SELLERS = 3;
+/**
+ * At least this many sales timed with the bucket up, and again during the pause, across the sellers.
+ */
 const TIMED_SALES = 10;
 /** Each timed sale and the frozen-bucket control, budgeted at the bound's floor. */
 const SALE_BUDGET_MS = 1_000;
@@ -196,7 +205,6 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
     const failures: unknown[] = [];
     for (const cleanup of [
       async () => {
-        // A frozen bucket would hold the server's close on its calls.
         s3?.resume();
       },
       async () => {
@@ -475,11 +483,11 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
       };
       const slowest = (sales: TimedSale[]) => Math.max(...sales.map((sale) => sale.ms));
       /**
-       * TILLS tills selling back to back, starting from a side file measured at `walStart`, until
-       * `done` holds for one sale; each till then finishes the sale it has in flight. Answers each
-       * till's sales in order.
+       * SELLERS sellers posting back to back on one till session, starting from a side file
+       * measured at `walStart`, until `done` holds for one sale; each seller then finishes the sale
+       * it has in flight. Answers each seller's sales in order.
        */
-      const sellFromTills = async (
+      const sellAtOnce = async (
         walStart: number,
         done: (sale: TimedSale, sold: number) => boolean,
         deadline?: { at: number; what: string },
@@ -487,7 +495,7 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
         let sold = 0;
         let stop = false;
         return Promise.all(
-          Array.from({ length: TILLS }, async () => {
+          Array.from({ length: SELLERS }, async () => {
             const mine: TimedSale[] = [];
             let walBefore = walStart;
             while (!stop) {
@@ -513,7 +521,7 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
       // 5. Sales with the bucket answering set the bound: a sale that waited on the frozen bucket
       //    would hang with it, so the bound sits far below that and far above a healthy sale.
       const baseline = (
-        await sellFromTills(await fileBytes(walPath), (_, sold) => sold >= TIMED_SALES)
+        await sellAtOnce(await fileBytes(walPath), (_, sold) => sold >= TIMED_SALES)
       ).flat();
       const bound = Math.max(SALE_BUDGET_MS, 5 * slowest(baseline));
       expect(
@@ -537,7 +545,7 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
       // 7. Sales grow the side file past the limit while Litestream still runs against the frozen
       //    bucket.
       const filling = (
-        await sellFromTills(await fileBytes(walPath), (sale) => sale.walAfter >= WAL_LIMIT_BYTES, {
+        await sellAtOnce(await fileBytes(walPath), (sale) => sale.walAfter >= WAL_LIMIT_BYTES, {
           at: Date.now() + FILL_WAIT_MS,
           what: "the side file to reach the limit",
         })
@@ -545,36 +553,36 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
       expect(stream().state).toBe("streaming");
 
       // 8. The supervisor measures the side file every TICK_MS from the moment it began streaming.
-      //    The tills start again just before its next measurement and sell until one of them sees
-      //    the file folded back: the only thing in this server that shrinks it is the stream's
-      //    fold-back (`checkpointTruncate`, from `stream-host.ts`). Each till's sales tile the time
-      //    it sold, so each has exactly one sale whose two measurements straddle the fold-back.
+      //    The sellers start again just before its next measurement and sell until one of them sees
+      //    the file folded back: the only thing in the server's own code that shrinks it is the
+      //    stream's fold-back (`checkpointTruncate`, from `stream-host.ts`). Each seller's sales tile
+      //    the time it sold, so each has exactly one sale whose two measurements straddle the fold-back.
       const nextCheck =
         streamingSince + TICK_MS * Math.max(1, Math.ceil((Date.now() - streamingSince) / TICK_MS));
       await delay(Math.max(0, nextCheck - LEAD_MS - Date.now()));
       const walAtLead = await fileBytes(walPath);
       expect(
         walAtLead,
-        "the side file was folded back before the tills resumed",
+        "the side file was folded back before the sellers resumed",
       ).toBeGreaterThanOrEqual(WAL_LIMIT_BYTES);
-      const folding = await sellFromTills(walAtLead, crosses, {
+      const folding = await sellAtOnce(walAtLead, crosses, {
         at: nextCheck + FOLD_SLACK_MS,
         what: "the fold-back",
       });
-      const across = folding.map((till) => till.filter(crosses));
-      expect(across.map((sales) => sales.length)).toEqual(Array<number>(TILLS).fill(1));
+      const across = folding.map((seller) => seller.filter(crosses));
+      expect(across.map((sales) => sales.length)).toEqual(Array<number>(SELLERS).fill(1));
       expect(stream()).toMatchObject({ state: "paused", reason: "side_file_limit", generation });
 
       // 9. Sales while paused: Litestream is stopped and the supervisor is waiting on its question
       //    to the frozen bucket, which holds the pause.
       const duringPause = (
-        await sellFromTills(await fileBytes(walPath), (_, sold) => sold >= TIMED_SALES)
+        await sellAtOnce(await fileBytes(walPath), (_, sold) => sold >= TIMED_SALES)
       ).flat();
       expect(stream()).toMatchObject({ state: "paused", generation });
 
       const frozen = [...filling, ...folding.flat()];
       console.log(
-        `stream pause timings (ms), ${TILLS} tills: slowest of ${baseline.length} with the bucket up ${slowest(baseline).toFixed(0)}; ` +
+        `stream pause timings (ms), ${SELLERS} sellers on one till session: slowest of ${baseline.length} with the bucket up ${slowest(baseline).toFixed(0)}; ` +
           `slowest of ${frozen.length} frozen before the pause ${slowest(frozen).toFixed(0)}; ` +
           `the sales across the fold-back ${across
             .flat()

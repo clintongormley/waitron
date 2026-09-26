@@ -68,8 +68,9 @@ const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM
 const RECOVERY_KEY = "stream-loop-e2e-recovery-key";
 const LOCALE = "es-ES";
 
-// `waitFor` enforces each POINTER and UPLOAD wait, the helper the S3 server's start, and each
-// restore passes RESTORE_MS as `restoreGeneration`'s ceiling, which it checks every five seconds.
+// `waitFor` checks each POINTER and UPLOAD wait's deadline between probes, the helper enforces the
+// S3 server's start, and each restore passes RESTORE_MS as `restoreGeneration`'s ceiling, which it
+// checks every five seconds.
 // BOOT_MS and REBUILD_MS are budgets nothing here enforces. The case's timeout is the sum of all of
 // them plus UNTIMED_MS for migrations, provisioning and closes, because Vitest's timer fails a
 // healthy run that outlasts it (CLAUDE.md §4). An upload wait restores the generation once per poll,
