@@ -170,7 +170,12 @@ import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets, mintedBoxLeaf, tightenTlsDir } from "./box-secrets.js";
 import { resolveTradingTls } from "./trading-tls.js";
-import { deferFirstStart, readBucketPointerTerm, runFirstStart } from "./rebuild-first-start.js";
+import {
+  assertRestoredMembershipReadable,
+  deferFirstStart,
+  readBucketPointerTerm,
+  runFirstStart,
+} from "./rebuild-first-start.js";
 import { buildLandingApp } from "./landing-app.js";
 import { closeListener } from "./close-listener.js";
 import { mountBoxStatusApi } from "./box-status.js";
@@ -1065,6 +1070,7 @@ async function bootServer(
   // persists it if it verifies and is strictly newer. It runs BEFORE the held-membership read below,
   // so a persisted superseding document flows into the `fenced` demote. An unreachable peer lets
   // boot proceed as primary: the MVP's accepted window. Demote-only: it can never self-promote.
+  await assertRestoredMembershipReadable(config.stateDir, db);
   if (initialAxes.mode !== "mirror") {
     const peer = await readMirrorConfig(db, config.till.nodeId);
     if (peer !== null) {

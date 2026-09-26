@@ -8,7 +8,7 @@ import {
   readNodeMembership,
   type Database,
 } from "@waitron/db";
-import { verifyMembershipDocument } from "@waitron/membership";
+import { isMembershipDocument, verifyMembershipDocument } from "@waitron/membership";
 import { codeOf } from "@waitron/server-kit";
 import { AppError, isAppError } from "@waitron/shared";
 import {
@@ -57,6 +57,36 @@ export async function assertRestoredMembershipValid(db: Database): Promise<void>
   if (held === null) return;
   const verdict = verifyMembershipDocument(held, await readMembershipTrustSet(db));
   if (!verdict.valid) throw new AppError("restore.membership_invalid", { reason: verdict.reason });
+}
+
+/**
+ * Throws `restore.membership_invalid` with the reason `malformed` when a restore's marker is present
+ * and the held membership document's stored text is not JSON, or is not shaped as a document. Boot
+ * runs it before its first read of the document, which would otherwise fail on such a copy with an
+ * error carrying no code. Does nothing when no restore left its marker.
+ */
+export async function assertRestoredMembershipReadable(
+  stateDir: string,
+  db: Database,
+): Promise<void> {
+  try {
+    await access(join(stateDir, REBUILD_MARKER));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  let held: unknown;
+  try {
+    held = await readNodeMembership(db);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new AppError("restore.membership_invalid", { reason: "malformed" });
+    }
+    throw error;
+  }
+  if (held !== null && !isMembershipDocument(held)) {
+    throw new AppError("restore.membership_invalid", { reason: "malformed" });
+  }
 }
 
 /**

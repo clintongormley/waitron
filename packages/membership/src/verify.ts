@@ -65,7 +65,7 @@ function isEndorsement(v: unknown): v is Endorsement {
   );
 }
 
-function isDocument(v: unknown): v is SignedMembershipDocument {
+export function isMembershipDocument(v: unknown): v is SignedMembershipDocument {
   if (!isRecord(v)) return false;
   if (typeof v.signerNodeId !== "string" || typeof v.signature !== "string") return false;
   if (!Array.isArray(v.endorsements)) return false;
@@ -86,7 +86,7 @@ export function verifyMembershipDocument(
   doc: SignedMembershipDocument,
   trustSet: TrustSet,
 ): VerifyResult {
-  if (!isDocument(doc)) return { valid: false, reason: "malformed" };
+  if (!isMembershipDocument(doc)) return { valid: false, reason: "malformed" };
   const signerKey = resolveSignerKey(doc.signerNodeId, doc.endorsements, trustSet);
   if (signerKey === null) {
     return {

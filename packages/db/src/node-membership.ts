@@ -14,9 +14,11 @@ import { nodeMembership } from "./schema/node-membership.js";
  * A restore (archive or bucket) puts back the copy's row as it was; the start that finishes the
  * restore checks it against the copy's own node keys before signing over it, and refuses the start
  * when it fails (`assertRestoredMembershipValid`, `apps/server/src/rebuild-first-start.ts`). That
- * check trusts the keys the same copy holds. Only the start that finishes a restore checks the row;
- * a start that puts that off (a mirror, a fenced node, or one still finishing an adoption) does
- * not, and no other code that signs over the held row checks it first (promotion, `retireSelf` and
+ * check trusts the keys the same copy holds. Only the start that finishes a restore checks the row's
+ * signature; a start that puts that off (a mirror, a fenced node, or one still finishing an
+ * adoption) checks at most that it can be read and is shaped as a document
+ * (`assertRestoredMembershipReadable`, same file), and no other code that signs over the held row
+ * checks it first (promotion, `retireSelf` and
  * the standby chart append among them: `apps/server/src/promote.ts`, `apps/server/src/retire.ts`,
  * `apps/server/src/mirror-bundle-api.ts`). A raw SQL write or a database file edited outside the
  * program is read as is.

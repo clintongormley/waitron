@@ -6011,7 +6011,22 @@ endorsement stored when that round reads, not the first round's"
     primary signed with its real key, written there, verified as `untrusted_signer`. Nothing writes
     a document on a mirror today, so its held document is null (from reading the writers, not a
     run). Which key a mirror should check a restored document against is the owner's call.
-  - A held document whose `body.nodes` is not a list, or whose stored JSON cannot be read, fails
+  - **Closed for a restore by A53 (`fix/restore-membership-damaged-document-message`), 2026-09-26,
+    on the owner's A45 answer ("move the check earlier").** When a restore's marker is present,
+    boot now runs `assertRestoredMembershipReadable` (`apps/server/src/rebuild-first-start.ts`)
+    before its first read of the held row, ahead of the peer reconciliation: stored text that is not
+    JSON, or a document not shaped as one (`isMembershipDocument`, `@waitron/membership`), throws
+    `restore.membership_invalid { reason: "malformed" }`, and the recovery page's wording now says
+    the list "is damaged or does not carry a valid signature" (EN and ES). It runs on a fenced
+    restored box too, which defers the signature check; a box still finishing an adoption returns
+    before it. Cases: `apps/server/src/boot.test.ts` ("refuses a restore whose membership document
+    holds …", unreadable JSON with and without a configured peer, and a machine list that is not a
+    list; each failed on the old code with a `SyntaxError` or `TypeError`, the peer case also when
+    the call was moved after the reconciliation) and the `assertRestoredMembershipReadable` cases in
+    `apps/server/src/rebuild-first-start.test.ts`. Still open: on a start with NO restore marker,
+    such a row fails the same way with the generic text; from reading its writers, nothing this program writes produces one.
+    What the Codex seat measured before A53:
+    a held document whose `body.nodes` is not a list, or whose stored JSON cannot be read, fails
     before the check. Boot reads the held row at the peer reconciliation (when a peer is
     configured) and just after it, where it asks `isFenced` about it (`readNodeMembership` and
     `isFenced` in `apps/server/src/boot.ts`; the lines just after the reconciliation predate this
@@ -6978,6 +6993,16 @@ rule #590's review described — a node refuses itself once the bucket's pointer
 generation — which, if it stops a fenced node's stream the moment the promoted node claims the
 pointer, would cut off exactly the tail this decision is meant to keep. Invoices already sent to AEAT
 stay recoverable from AEAT either way.
+
+**Owner decision 2026-09-26 (A45's first point) — a standby checks a promotion against the
+primary's key, built in slice 3.** A restored membership document is checked only at the start that
+finishes a restore (#678, A53). Promotion, `retireSelf` and the standby chart append
+(`apps/server/src/promote.ts`, `apps/server/src/retire.ts`, `apps/server/src/mirror-bundle-api.ts`)
+sign over the held document without checking it, because a mirror's stored keys name only itself,
+so a document its primary genuinely signed fails the check there (measured, see Task 9a's #678
+entry). The owner chose to leave those paths unchecked now and, as part of the failover work: a
+standby stores the primary's key when it joins, and promotion, `retireSelf` and the standby chart
+append check the held document against it. Not built; until then those paths stay unchecked.
 
 Two of those keepers came through CHANGED, not untouched, and the change is a real loss of safety
 that slice 3 has to restore:

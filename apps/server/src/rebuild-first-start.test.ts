@@ -40,6 +40,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { STREAM_PURPOSE, streamSettingsPayload, type StreamSettings } from "./stream-host.js";
 import {
   REBUILD_MARKER,
+  assertRestoredMembershipReadable,
   completeRebuild,
   deferFirstStart,
   readBucketPointerTerm,
@@ -664,6 +665,73 @@ describe("runFirstStart (slice-2 spec §5.3)", () => {
     await expect(runFirstStart(deps(stateDir))).resolves.toEqual({
       mayStream: true,
       failedSince: null,
+    });
+  });
+});
+
+describe("assertRestoredMembershipReadable", () => {
+  async function storeDocumentText(text: string): Promise<void> {
+    await suite.db.execute(sql`update node_membership set document = ${text} where id = 1`);
+  }
+
+  async function notAListText(): Promise<string> {
+    const held = (await readNodeMembership(suite.db))!;
+    return JSON.stringify({
+      ...held,
+      body: { ...held.body, nodes: { first: held.body.nodes[0] } },
+    });
+  }
+
+  it("refuses a restored document whose stored text is not JSON", async () => {
+    const stateDir = await rebuiltStateDir("stream");
+    await storeDocumentText("{not json");
+    await expect(assertRestoredMembershipReadable(stateDir, suite.db)).rejects.toMatchObject({
+      code: "restore.membership_invalid",
+      params: { reason: "malformed" },
+    });
+  });
+
+  it("refuses a restored document whose list of machines is not a list", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    await storeDocumentText(await notAListText());
+    await expect(assertRestoredMembershipReadable(stateDir, suite.db)).rejects.toMatchObject({
+      code: "restore.membership_invalid",
+      params: { reason: "malformed" },
+    });
+  });
+
+  it("does not look at the document on an ordinary start", async () => {
+    const stateDir = await rebuiltStateDir(false);
+    await storeDocumentText("{not json");
+    await expect(assertRestoredMembershipReadable(stateDir, suite.db)).resolves.toBeUndefined();
+  });
+
+  it("passes a well-formed restored document, even one whose signature no longer matches", async () => {
+    const stateDir = await rebuiltStateDir("stream");
+    await tamperHeldRow();
+    await expect(assertRestoredMembershipReadable(stateDir, suite.db)).resolves.toBeUndefined();
+  });
+
+  it("passes a restored database holding no document", async () => {
+    const stateDir = await rebuiltStateDir("stream");
+    await suite.db.execute(sql`delete from node_membership`);
+    await expect(assertRestoredMembershipReadable(stateDir, suite.db)).resolves.toBeUndefined();
+  });
+
+  it("throws on, uncoded, a read that fails for another reason than unreadable text", async () => {
+    const stateDir = await rebuiltStateDir("stream");
+    const failure = new Error("disk gone");
+    const db = { execute: () => Promise.reject(failure) } as unknown as Database;
+    await expect(assertRestoredMembershipReadable(stateDir, db)).rejects.toBe(failure);
+  });
+
+  it("throws on when it cannot tell whether the marker is there", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "waitron-rebuild-"));
+    dirs.push(dir);
+    const notADirectory = join(dir, "state");
+    await writeFile(notADirectory, "");
+    await expect(assertRestoredMembershipReadable(notADirectory, suite.db)).rejects.toMatchObject({
+      code: "ENOTDIR",
     });
   });
 });

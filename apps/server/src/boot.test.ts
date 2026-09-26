@@ -42,6 +42,7 @@ import {
   readDeploymentEnvironment,
   readMembershipTrustSet,
   readNodeMembership,
+  writeMirrorConfig,
   writeNodeMembership,
   stampDeployment,
   tenants,
@@ -1218,6 +1219,91 @@ describe("startServer, against a migrated venue directory", () => {
           params: { reason: "bad_signature" },
         });
         expect(await readNodeMembership(db)).toEqual(tampered);
+        expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(leafBefore);
+        expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(true);
+      } finally {
+        await venue.store.close();
+        await rm(venue.directory, { recursive: true, force: true });
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
+
+  // Damage rather than a wrong signature: the stored text is not JSON, or its list of machines is
+  // not a list. With a peer configured, the held document is also read before the peer is asked.
+  it.each([
+    { damage: "unreadable JSON", document: "{not json", withPeer: false },
+    { damage: "unreadable JSON", document: "{not json", withPeer: true },
+    { damage: "a machine list that is not a list", document: "list", withPeer: false },
+  ])(
+    "refuses a restore whose membership document holds $damage with restore.membership_invalid (peer: $withPeer)",
+    async ({ document, withPeer }) => {
+      const venue = await freshVenue();
+      const db = venue.store.venue;
+      await seedTradingVenue(db);
+      const ring = loadKeyRing(KEY_ENV);
+      await establishNodeIdentity({ ownerDb: db, ring }, TILL_ENV.WAITRON_TILL_NODE_ID);
+      await seedTermZeroMembership(
+        { db, ring },
+        TILL_ENV.WAITRON_TILL_NODE_ID,
+        "https://old-box.example",
+      );
+      const held = (await readNodeMembership(db))!;
+      const stored =
+        document === "list"
+          ? JSON.stringify({
+              ...held,
+              body: { ...held.body, nodes: { first: held.body.nodes[0] } },
+            })
+          : document;
+      await db.execute(sql`update node_membership set document = ${stored} where id = 1`);
+      if (withPeer) {
+        await writeMirrorConfig(db, TILL_ENV.WAITRON_TILL_NODE_ID, {
+          relayUrl: `http://127.0.0.1:${await freePort()}`,
+          boxHostname: "waitron.local",
+          boxCaPem: "unused",
+          originNodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        });
+      }
+      const port = await freePort();
+      const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-first-start-damaged-"));
+      await writeFile(
+        join(stateDir, "modules.json"),
+        JSON.stringify({ modules: { "fiscal-none": false } }),
+      );
+      await ensureBoxSecrets({
+        stateDir,
+        hostnames: ["waitron.local", "localhost"],
+        now: () => new Date(),
+        listIpv4: () => ["192.168.1.10"],
+      });
+      const leafBefore = await readFile(join(stateDir, "tls", "server.crt"));
+      await writeFile(
+        join(stateDir, REBUILD_MARKER),
+        JSON.stringify({ version: 1, source: "stream" }),
+      );
+      try {
+        await expect(
+          startServer({
+            ...KEY_ENV,
+            WAITRON_STATE_DIR: stateDir,
+            WAITRON_VENUE_DIR: venue.directory,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_ENV: "preproduction",
+            WAITRON_BOX_ADDRESSES: "10.1.2.3",
+          }),
+        ).rejects.toMatchObject({
+          code: "restore.membership_invalid",
+          params: { reason: "malformed" },
+        });
+        const [row] = (
+          await db.execute<{ document: string }>(
+            sql`select document from node_membership where id = 1`,
+          )
+        ).rows;
+        expect(row?.document).toBe(stored);
         expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(leafBefore);
         expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(true);
       } finally {
