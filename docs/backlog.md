@@ -3028,7 +3028,7 @@ image constraints under *Detail → Box image*.
     `unpackBundleToDir` into an existing folder and it stayed 0755, reproduced with a control. The
     `mkdir` lines date from `f57ab02acf` (2026-08-29) and `2956302ebe` (2026-09-05), before the
     branch. Whether a restore ever unpacks into a folder another process made world-readable is
-    not checked. **Done (2026-09-26, lane A's A41):**
+    not checked. **Done (2026-09-26, lane A's A41, #673):**
     `unpackBundleToDir` now makes the destination and every folder between it and an entry 0700
     whether or not they existed, after the symlink guard has confirmed the folder is inside the
     destination; no existing folder above the destination changes, except through the symlink swap
@@ -3041,6 +3041,13 @@ image constraints under *Detail → Box image*.
     the write already put the secret outside before this change (reproduced 2026-09-26 on
     `09e0e0de3` by hooking `writeFileAtomic` to swap `tls` for a symlink: the outside folder then
     held `key`). It needs someone able to write inside the destination.
+    Also open from #673's review, read and not run: `waitron-recovery unpack` now chmods whatever
+    folder it is given, so a symlinked destination's real folder becomes 0700 (the other code that
+    tightens an existing folder, `cloud-snapshot-worker.ts`, refuses a symlink instead), and a
+    destination the user can write to but does not own, such as `/tmp`, would likely fail with a
+    raw permission error where it used to write the files. And a normal boot (`box-secrets.ts`)
+    still leaves an existing `tls/` folder's mode as it finds it, while a restore now tightens it;
+    whether the two should match is the owner's call.
     The lock-file measurement kept in `db-wipe.ts` names no engine version or platform.
   - Found by #657 (`apps/server` part f2: the node, identity and setup files), outside its files
     or not fixable in a comments-only change. A code defect its review reproduced, which predates
