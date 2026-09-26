@@ -608,7 +608,7 @@ declare module "@waitron/shared" {
     "promotion.break_glass_invalid": Record<string, never>;
     /**
      * `retireSelf` was invoked on a node that is NOT fenced (serving, absent from the chart, or with
-     * no membership document). Only a fenced node leaves for good.
+     * no membership document). Only a fenced node retires itself.
      */
     "node.retire_not_fenced": Record<string, never>;
     /**
@@ -660,9 +660,28 @@ declare module "@waitron/shared" {
      * The membership document could not be written because every read-mint-write round lost its
      * term race. The mirror-bundle adopt handshake refuses rather than force a write that would drop
      * the winner's node from the chart; transient, so the caller retries. `attempts` is the round
-     * bound, a constant of this process.
+     * bound, a constant of this process. A machine's removal (`removeUnjoinedStandby`) raises it
+     * the same way.
      */
     "membership.write_contended": { attempts: number };
+    /**
+     * An admin asked to remove a machine this node's held membership chart does not list, or no
+     * chart is held.
+     */
+    "membership.node_not_found": Record<string, never>;
+    /** Only the chart's serving primary removes a machine from it, and this node is not that. */
+    "membership.not_primary": Record<string, never>;
+    /** The machine asked to be removed is the serving primary, this node. */
+    "membership.node_is_primary": Record<string, never>;
+    /** The machine asked to be removed is a former primary (`sell-only`), so it has served. */
+    "membership.node_has_served": Record<string, never>;
+    /** The standby asked to be removed has a `nodes` row in this database, so it finished joining. */
+    "membership.standby_joined": Record<string, never>;
+    /**
+     * A mirror-bundle request named a standby node id this node's held chart lists as `evicted`. A
+     * fresh join mints a fresh id.
+     */
+    "mirror.standby_removed": Record<string, never>;
     /** The recovery-bundle download request carried no `passphrase` string (or an empty one). */
     "recovery.passphrase_required": Record<string, never>;
     /** A recovery-bundle passphrase shorter than the minimum. `min` is `MIN_PASSPHRASE_LENGTH`. */

@@ -33,6 +33,7 @@ import { orderedMigrationSets } from "../packages/module/src/module.js";
  */
 const EXPECTED = [
   "daily_closes",
+  "membership_removals",
   "menu_version_images",
   "menu_versions",
   "order_amendments",

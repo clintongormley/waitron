@@ -35,4 +35,5 @@ export * from "./deployment.js";
 export * from "./node-roles.js";
 export * from "./mirror-config.js";
 export * from "./node-membership.js";
+export * from "./membership-removals.js";
 export * from "./node-sealed-state.js";

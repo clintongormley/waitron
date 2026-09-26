@@ -983,6 +983,23 @@ export interface CloudConnectionStatus {
   };
 }
 
+/** One machine in the venue's signed membership chart (`listServers`,
+ * `apps/server/src/membership-removal.ts`). */
+export interface ServerRow {
+  nodeId: string;
+  /** `""` when the machine gave no address. */
+  contactUrl: string;
+  standing: "serving-primary" | "serving-secondary" | "sell-only" | "evicted";
+  isSelf: boolean;
+  removable: boolean;
+}
+
+/** `term` is null, and `nodes` empty, when this server holds no chart. */
+export interface ServerListing {
+  term: number | null;
+  nodes: ServerRow[];
+}
+
 /** Never carries the recovery key: the server strips it (`projectStatus`,
  * `apps/server/src/backup-api.ts`). */
 export interface BackupStatusView {
@@ -2518,6 +2535,17 @@ export class DashboardApi {
 
   getBackupStatus(): Promise<BackupStatusView> {
     return this.#request<BackupStatusView>("/api/backup/status", "GET");
+  }
+
+  // ── Servers ───────────────────────────────────────────────────────────────────────────────────
+
+  listServers(): Promise<ServerListing> {
+    return this.#request<ServerListing>("/management-api/servers", "GET");
+  }
+
+  /** `removed` is false when the machine was already removed and nothing was written. */
+  removeServer(nodeId: string): Promise<{ removed: boolean; term: number }> {
+    return this.#request(`/management-api/servers/${encodeURIComponent(nodeId)}/remove`, "POST");
   }
 
   // ── Alerts ────────────────────────────────────────────────────────────────────────────────────

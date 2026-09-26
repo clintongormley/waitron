@@ -14,8 +14,8 @@ import { withMember } from "@waitron/membership";
 import { authorizeManager, endManagementSession, loginManagerById } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
-import { assembleMirrorBundle } from "./mirror-bundle.js";
-import { mintNextMembershipDocument } from "./membership-mint.js";
+import { assembleMirrorBundle, refuseRemovedStandby } from "./mirror-bundle.js";
+import { MAX_CHART_WRITE_ROUNDS, mintNextMembershipDocument } from "./membership-mint.js";
 import { isBareOrigin } from "./config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
@@ -44,6 +44,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "mirror.no_relay": 400,
   "mirror.standby_invalid": 400,
+  "mirror.standby_removed": 409,
   "membership.write_contended": 503,
 };
 
@@ -126,9 +127,6 @@ export function mountMirrorBundleApi(
   );
 }
 
-// A round is lost only to a writer that committed a newer term.
-const MAX_CHART_WRITE_ROUNDS = 8;
-
 // A refused write means this mint was built on a stale chart: re-read and mint again, never force.
 async function appendStandbyToChart(
   deps: MirrorBundleApiDeps,
@@ -137,6 +135,7 @@ async function appendStandbyToChart(
 ): Promise<void> {
   for (let round = 1; round <= MAX_CHART_WRITE_ROUNDS; round += 1) {
     const held = await readNodeMembership(deps.appDb);
+    refuseRemovedStandby(held, standbyNodeId);
     const document = await mintNextMembershipDocument(
       { db: deps.appDb, ring: deps.ring },
       {

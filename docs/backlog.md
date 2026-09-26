@@ -2259,6 +2259,9 @@ address that answers is then asked for its paper sizes on port 631.
 - Read-back gaps: the per-till printer picker is not location-filtered; the print-mode and
   `drawer_open_policy` toggles are set-only (the latter gates cash access); the Impresoras editor
   leaves agent and transport re-binding read-only though the API accepts it.
+- **A missing font token on the Printers screen** (found 2026-09-26, A61):
+  `apps/dashboard/src/screens/printers-screen.ts` uses `--wt-font-size-xs`, a token that does not
+  exist (the Servers screen copied it; fixed there only).
 
 ### A4. Till, displays and devices
 
@@ -2760,7 +2763,8 @@ ongoing overhaul listed at the top of Track A.
   Logging*.
 - **SP-4 — the module UI surface on the TILL** (card-registry inversion, self-sourcing cards); the
   dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat and off
-  the coarse `requiresManager` gate.
+  the coarse `requiresManager` gate. A core nav item can now also name a `requiresPermission`
+  (`apps/dashboard/src/dashboard-app.ts`); Servers (`mirror.create`) is the first to use it.
 - **AEAT certificate management UI** — first-run only today; `cert-expiry.ts` monitors but there is
   no view/rotate/renew surface.
 
@@ -3456,7 +3460,11 @@ image constraints under *Detail → Box image*.
     a standby of a production primary refuses without `--force-production`. It runs on this box
     only, so it leaves what the primary recorded for the abandoned standby: the standby's place in
     the primary's membership list, and what the primary's modules reserved for it (with
-    `fiscal-verifactu` enabled, an installation number). (b) Found by reading, not measured: when
+    `fiscal-verifactu` enabled, an installation number). (2026-09-26: an admin can now remove
+    such a standby from the primary's membership list on the dashboard Servers screen, A61, which
+    marks it `evicted`; the reserved installation number stays burned — see the A56 note's open
+    item (1) below.)
+    (b) Found by reading, not measured: when
     the primary's admin uses an authenticator, the wizard's adopt most likely meets
     `setup.operation_conflict` rather than `setup.adopt_incomplete`. The setup route identifies a
     request by a SHA-256 of its raw body (`requestHash` in the adopt handler,
@@ -3512,12 +3520,27 @@ image constraints under *Detail → Box image*.
     a box stamped for production: what it guards instead is the venue data (tenant and venue rows),
     which a half-finished adopt never writes. Left open: (1) **the primary still lists the abandoned
     standby** in its signed list of machines, as a serving secondary with the contact address it
-    sent; nothing on the primary removes another node (`evictNode` in
-    `packages/membership/src/standings.ts` is reached only through a fenced node retiring itself,
-    `apps/server/src/retire.ts`), so a cleanup needs a new primary API — the owner's call. The
-    installation number the primary reserved for it is burned by design
+    sent. The installation number the primary reserved for that standby is burned by design
     (`reserveInstallationNumber`, `packages/fiscal-verifactu/src/registro-sif.ts`: "a
-    never-promoted standby simply burns it — gaps are permitted"). (2) An adopt saved before this
+    never-promoted standby simply burns it — gaps are permitted").
+    **Done for (1) (2026-09-26, lane A's A61):** before A61 nothing on the primary removed another
+    node; now the dashboard's Servers screen lets an admin
+    (`mirror.create`) on the serving primary remove a standby that never finished joining
+    (`apps/server/src/membership-removal.ts`, `POST /management-api/servers/:nodeId/remove`). The
+    node is marked `evicted` in a chart this node re-signs, not dropped: a node absent from the
+    chart counts as unfenced and could promote, while a node whose own held chart lists it
+    `evicted` is refused promotion (`assertNotFenced`, `apps/server/src/promote.ts`), and the
+    server list a node gives its tills leaves out a node its held chart lists `evicted`
+    (`routableServers`, `packages/membership/src/fence.ts`). Each removal writes an append-only
+    `membership_removals` row naming the admin, in the same transaction as the chart. A
+    `mirror-bundle` request naming a removed id is refused `mirror.standby_removed`. Still open: an
+    `evicted` entry keeps its place under `MAX_NODES` (see "The membership chart grows without
+    bound" under *Replication, membership & failover — residuals*); "never finished joining" is read as `serving-secondary` with no
+    `nodes` row in the primary's database, and a remote standby writes that row in its own
+    database, so the check cannot see a remote standby that finished — none can today
+    (`finish-adoption.ts`); and, read not run, a removed node still holds the primary's endorsement
+    of its key, and `verifyMembershipDocument` (`packages/membership/src/verify.ts`) does not check
+    the signer's standing in any held chart. (2) An adopt saved before this
     change carries no proof, so the reset refuses it (`password.invalid`). (3) The proof shows the
     login the primary accepted at join time, not that the admin is still active there, and the
     one-time code is not asked again. (4) A join that failed after writing `trading.env` boots the

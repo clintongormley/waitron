@@ -11,6 +11,7 @@
       "sale_voids",
       "sale_substitutions",
       "daily_closes",
+      "membership_removals",
       "order_amendments"
     ]
   },

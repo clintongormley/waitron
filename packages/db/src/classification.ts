@@ -30,6 +30,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
   classify("purchase_invoices", "ledger", LEDGER),
   classify("purchase_invoice_vat", "ledger", LEDGER),
+  appendOnly(
+    "membership_removals",
+    "ledger",
+    "who removed which machine from the membership chart, and at which term; an audit row is never corrected",
+  ),
 
   // state — manager configuration and live service; copied to a standby, never drained back.
   classify(
