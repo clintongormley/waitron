@@ -95,7 +95,7 @@ Before `applyMigrations` runs — before any write at all — `startServer` open
 on its own short-lived handle and compares this host's `WAITRON_ENV` against the `deployment`
 table's own stamp, throwing `deployment.environment_mismatch` (see "Running it" above) rather than
 letting a host boot against another environment's database. That probe is closed again before
-migrations start, so boot never holds two opens of one directory at once.
+migrations start.
 
 **What actually writes the stamp.** Two paths do, and both call the same programmatic
 `stampDeployment` (`@waitron/db`) rather than writing the row themselves. The browser setup wizard's

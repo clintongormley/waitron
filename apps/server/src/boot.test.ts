@@ -1561,7 +1561,7 @@ describe("startServer, against a migrated venue directory", () => {
     }
   }, 60_000);
 
-  it("setup mode: closes the app pool and rejects when startListening fails (missing operator TLS file)", async () => {
+  it("setup mode: rejects when startListening fails (missing operator TLS file)", async () => {
     // `config.tls` names files that do not exist, so `startListening` throws inside the setup branch,
     // after it opened `db`. This suite holds the shared folder itself, so the close is checked in
     // `boot.failed-start.test.ts`; only the rejection is asserted here.

@@ -1363,7 +1363,7 @@ by nothing.
 
 | Caller | Runs | Decision |
 | --- | --- | --- |
-| `apps/server/src/boot.ts` | the server | locks three times in turn: the stamp probe, the migrate, and the long-lived store, which holds it for the process's life. Between them the folder is briefly free, unless the container entry (`node-entry.ts`) started the server: its hold covers those gaps |
+| `apps/server/src/boot.ts` | the server | locks three times in turn: the stamp probe, the migrate, and the long-lived store, which holds it until the server closes or its start fails. Between them the folder is briefly free, unless the container entry (`node-entry.ts`) started the server: its hold covers those gaps |
 | `apps/server/src/backup-supervisor.ts` (`reload`) | inside the server | shares the server's hold |
 | `apps/server/src/node-entry.ts` (`clearReplacedDatabases`, `assertNotAhead`) and the staged restore it runs | the container entrypoint, the same process as the server | the staged restore locks on its own; then `runEntry` takes `lockVenueDatabase` and holds it from clearing set-aside folders (`clearReplacedDatabases`) through the ahead check until `startServer` settles or an earlier step throws. The ahead check's opens and the server's opens during its start share that hold |
 | `apps/server/src/restore.ts` (`writeValidated`) | `waitron-restore` (server stopped) and the staged restore | takes the lock before its first change and holds it to the end; its migrate and hook open share it. Refused while another process holds the folder |
@@ -1386,6 +1386,27 @@ by nothing.
 
 `deploy/waitron.sh` reads the stamp from `venue.db` with its own read-only `node:sqlite` connection,
 not through the store, so it takes no lock and is never refused.
+
+### A failed start undoes what it started, and gives the folder back
+
+The cost: a start that failed after boot's long-lived open left the venue store open, and with it
+the folder's `venue.lock`, held by a process that would never serve. Reproduced (lane A's A39,
+2026-09-26) for an unreadable pending-adoption file, an empty fiscal slot, and an unreadable
+certificate on an adoption-pending start and on a trading start. The review of that fix then found
+the tunnel and the listeners still running after a failed start. So each step `bootServer`
+(`apps/server/src/boot.ts`) starts pushes its stop onto `undoOnFailure`, and `startServer` runs
+them newest first when the body throws, then re-throws. Two deletions, run 2026-09-26 against
+`apps/server/src/boot.failed-start.test.ts`: without the tunnel's undo, the fake relay still
+counted one connection open after the start had failed (`expected 1 to be +0`); without the trading
+listener's undo, binding its port afterwards failed with `EADDRINUSE`.
+
+What that suite does not see, each run the same day: with `.reverse()` dropped, so the store closes
+FIRST, all eleven cases still pass, while the background loop's card sweep logged
+`resolve_pending.failed` with `database is not open`; removing
+`await loop` or `liveEvents.close()` from the undos still passes; and the setup, adoption-pending
+and throwing-undo cases close a listener that has not bound yet — its close reports
+`ERR_SERVER_NOT_RUNNING`, which the unwind drops — so only the trading and tunnel cases close a
+bound one.
 
 ## A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is NOT the query's isolation boundary
 

@@ -593,7 +593,13 @@ export async function startServer(
   } catch (error) {
     // Newest first, so anything that runs on the venue store stops before the store closes. An undo
     // that fails is dropped: the boot's own error is the one the supervisor has to see.
-    for (const undo of undoOnFailure.reverse()) await undo().catch(() => {});
+    for (const undo of undoOnFailure.reverse()) {
+      try {
+        await undo();
+      } catch {
+        // Dropped; see above.
+      }
+    }
     throw error;
   }
 }
@@ -660,8 +666,7 @@ async function bootServer(
   }
 
   // Before ANY write, including migrations: a host pointed at another environment's database must
-  // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself, so
-  // this function never holds two opens of one directory at once.
+  // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
   try {
     await assertDeploymentMatches(stampProbe.venue, config.environment);
@@ -670,9 +675,8 @@ async function bootServer(
   }
 
   // `applyMigrations` opens and closes its own store, so running it BEFORE the long-lived open below
-  // keeps this boot to one open of the directory at a time and leaves nothing open behind a failed
-  // migration. Setup mode migrates the FULL schema, which the wizard needs; trading mode migrates
-  // only the enabled set.
+  // keeps the two from overlapping and leaves nothing open behind a failed migration. Setup mode
+  // migrates the FULL schema, which the wizard needs; trading mode migrates only the enabled set.
   const moduleConfig = await readModuleConfig(config.stateDir);
   const setsToMigrate =
     config.till === undefined ? ALL_MODULES : enabledModules(ALL_MODULES, moduleConfig);
@@ -682,8 +686,8 @@ async function bootServer(
       migrationOptionsFor(orderedMigrationSets(setsToMigrate), config.migrationsRoot),
     ),
   );
-  // The long-lived open, and the only one for the rest of this boot. Every teardown below closes
-  // `store`.
+  // The long-lived open. On a primary with a backup configured, the backup supervisor opens its own
+  // beside it.
   const store = await openVenueDatabase(config.venueDir);
   undoOnFailure.push(() => store.close());
   const db = store.venue;
@@ -962,7 +966,7 @@ async function bootServer(
     );
     const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
     const server = startListening({ ...config, tls }, app, now, log);
-    // Started after the throwing setup steps, so a failed boot cannot leak its socket.
+    undoOnFailure.push(() => closeListener(server));
     const mdns = startMdnsResponder({
       hostname: BOX_HOSTNAME,
       devMode: config.devMode,
@@ -970,6 +974,7 @@ async function bootServer(
       getAddresses: boxAddresses,
       log,
     });
+    undoOnFailure.push(() => mdns.stop());
     return makeStartedServer(
       server,
       health,
@@ -1014,6 +1019,7 @@ async function bootServer(
     );
     undoOnFailure.push(() => finishWorker.catch(() => {}));
     const server = startTradingListener(config, app, now, log);
+    undoOnFailure.push(() => closeListener(server));
     const mdns = startMdnsResponder({
       hostname: BOX_HOSTNAME,
       devMode: config.devMode,
@@ -1021,6 +1027,7 @@ async function bootServer(
       getAddresses: boxAddresses,
       log,
     });
+    undoOnFailure.push(() => mdns.stop());
     return makeStartedServer(
       server,
       health,
@@ -1505,7 +1512,6 @@ async function bootServer(
     mayStream: () => firstStart.mayStream,
     ...seams.stream,
   });
-  // Litestream writes venue.db, so it stops before the store closes beneath it.
   undoOnFailure.push(() => streamHost.stop());
   await streamHost.start();
   health.readStream = () => streamHost.status();
@@ -1670,6 +1676,10 @@ async function bootServer(
       log,
     });
     tunnelWorker.catch((err) => log("error", "tunnel.worker_rejected", { errorCode: codeOf(err) }));
+    undoOnFailure.push(async () => {
+      tunnelController.abort();
+      await tunnelWorker?.catch(() => {});
+    });
   } else if (isSingletonPrimary) {
     log("info", "tunnel.disabled", {});
   }
@@ -1767,11 +1777,16 @@ async function bootServer(
 
   // After every mount above, so the app is complete before it binds.
   const server = startTradingListener(config, app, now, log);
+  undoOnFailure.push(() => closeListener(server));
 
   // The change feed is in-process: the transaction that wrote the change hands it over once it has
   // committed (`@waitron/db`'s `withTransaction`). Nothing connects, so nothing can drop and there
   // is no batch of changes to miss, which is why no snapshot refresh is broadcast on startup.
   const unsubscribeFromChanges = subscribeToChanges(changeSubscriber(liveEvents, log));
+  undoOnFailure.push(async () => {
+    unsubscribeFromChanges();
+    liveEvents.close();
+  });
 
   // `config.environment` is the value `assertDeploymentMatches` pinned against the database at boot.
   //
@@ -1842,8 +1857,11 @@ async function bootServer(
     log,
     onPass: (report, at) => logDegradedDuties(log, recordPass(health, report, at)),
   });
+  undoOnFailure.push(async () => {
+    controller.abort();
+    await loop;
+  });
 
-  // Started after the throwing setup steps, so a failed boot cannot leak its socket.
   const mdns = startMdnsResponder({
     hostname: BOX_HOSTNAME,
     devMode: config.devMode,
@@ -1851,6 +1869,7 @@ async function bootServer(
     getAddresses: boxAddresses,
     log,
   });
+  undoOnFailure.push(() => mdns.stop());
   const cloudController = new AbortController();
   const cloudWorker = cloudConnection
     ? runCloudWorker({
@@ -1888,6 +1907,11 @@ async function bootServer(
         }),
       })
     : undefined;
+  undoOnFailure.push(async () => {
+    cloudController.abort();
+    await cloudWorker;
+    await cloudSnapshots;
+  });
   return makeStartedServer(
     server,
     health,

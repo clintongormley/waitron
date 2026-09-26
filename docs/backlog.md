@@ -3060,10 +3060,19 @@ image constraints under *Detail → Box image*.
     for this process — reproduced for an unreadable pending-adoption file, an empty fiscal slot, and
     an unreadable certificate on an adoption-pending start and on a trading start (read after the
     backup and stream duties start). Setup mode already closed it.
-    When its body throws, `startServer` now stops the bucket copy and the backup supervisor, waits
-    for a pending adoption's worker, and closes the store — each only once boot has reached it — and the
-    per-step close-and-rethrow guards are gone (`apps/server/src/boot.failed-start.test.ts`; that the
-    adoption worker is waited for before the close is not observed by a test).
+    When its body throws, `startServer` now undoes what boot had reached, newest first — on a
+    trading start the cloud workers, mDNS, the background loop, the change feed, the listener, the
+    tunnel, the bucket copy and the backup supervisor; on an adoption-pending start mDNS, the
+    listener and the adoption worker; in setup mode mDNS and the listener — then closes the store;
+    a failing undo cannot replace the boot's error. The landing listener, started last, is not
+    undone. `apps/server/src/boot.failed-start.test.ts` holds this, weaker than it reads: no test
+    observes the ORDER (work stopping before the store closes), `liveEvents.close()`, the waits on
+    the loop and the cloud workers (the tests see the unsubscribe, `loop.stopped` and the abort
+    signals), or that the adoption worker is waited for before the close; and the setup,
+    adoption-pending and throwing-undo cases close a listener that has not bound yet (its close
+    reports `ERR_SERVER_NOT_RUNNING`, which the unwind drops), so only the trading and tunnel cases
+    close a bound one. Receipt: `docs/developers/conventions-data.md`, "A failed start undoes what
+    it started".
     Test titles #653 could not touch in `boot.test.ts` carry the history tags
     "(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
   - Found by #625 (`apps/server` part e1), outside its files or not fixable in a comments-only
