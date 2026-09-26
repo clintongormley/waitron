@@ -1,8 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
-import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  documentProduct,
+  documentSection,
+  expectNoA11yViolations,
+  menuDocument,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
-import type { DashboardApi, LibrarySection, MenuStructureNode, Product } from "../api/client.js";
+import type { MenuStructureTree } from "../widgets/menu-structure-tree.js";
+import type {
+  DashboardApi,
+  LibrarySection,
+  MenuPreview,
+  MenuStructureNode,
+  Product,
+} from "../api/client.js";
 import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
@@ -119,7 +133,11 @@ function api(state: State): DashboardApi {
         publishedAt: "2026-09-26T10:15:00.000Z",
         hash: "a".repeat(64),
       },
-    }),
+      document: menuDocument(
+        [documentSection("s-drinks", "Drinks", [documentProduct("mi-lager", "p-lager")])],
+        { "p-lager": "Lager" },
+      ),
+    } satisfies MenuPreview),
     getMenuPrices: vi.fn().mockResolvedValue([
       {
         menuItemId: "mi-lager",
@@ -253,6 +271,12 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await vi.waitFor(() => {
       if (!panel.shadowRoot!.querySelector('[data-test="changes"]')) throw new Error("preview");
     });
+    const tree = panel.shadowRoot!.querySelector<MenuStructureTree>(
+      '[data-test="document"] dashboard-menu-structure-tree',
+    )!;
+    await tree.updateComplete;
+    tree.shadowRoot!.querySelector<HTMLElement>('[aria-expanded="false"]')!.click();
+    await tree.updateComplete;
     await expectNoA11yViolations(host);
   });
 

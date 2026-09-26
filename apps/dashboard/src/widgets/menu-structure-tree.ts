@@ -9,7 +9,7 @@ import { t } from "../i18n/t.js";
 /**
  * A menu's whole structure, one nested list per section. A section can sit in several places, so
  * each place is keyed by the path of member ids from the top and opens or closes on its own. Asking
- * to edit a section leaves as `wt-structure-edit` with that path.
+ * to edit a section leaves as `wt-structure-edit` with that path; a `readonly` tree asks for none.
  */
 @customElement("dashboard-menu-structure-tree")
 export class MenuStructureTree extends LitElement {
@@ -58,7 +58,7 @@ export class MenuStructureTree extends LitElement {
         line-height: 1;
       }
       .edit,
-      .product .name {
+      .plain {
         padding-inline: var(--wt-space-2);
       }
       .name {
@@ -87,6 +87,7 @@ export class MenuStructureTree extends LitElement {
   @property({ attribute: false }) current: string[] = [];
   /** The accessible name of the whole structure, such as the menu's name. */
   @property() label = "";
+  @property({ type: Boolean }) readonly = false;
   @state() private expanded: ReadonlySet<string> = new Set();
   #productNames = new Map<string, string>();
   #sectionNames = new Map<string, string>();
@@ -129,7 +130,7 @@ export class MenuStructureTree extends LitElement {
       return html`<li data-path=${key} class="product">
         <div class="row">
           <span class="spacer"></span>
-          <span class="name" data-test="name">${name}</span>
+          <span class="name plain" data-test="name">${name}</span>
           ${kind}
         </div>
       </li>`;
@@ -151,15 +152,19 @@ export class MenuStructureTree extends LitElement {
         >
           ${open ? "▾" : "▸"}
         </button>
-        <button
-          type="button"
-          class="edit name"
-          data-test=${`edit-${key}`}
-          aria-current=${isCurrent ? "true" : nothing}
-          @click=${(event: Event) => this.#edit(event, path)}
-        >
-          <span data-test="name">${name}</span>
-        </button>
+        ${
+          this.readonly
+            ? html`<span class="name plain" data-test="name">${name}</span>`
+            : html`<button
+                type="button"
+                class="edit name"
+                data-test=${`edit-${key}`}
+                aria-current=${isCurrent ? "true" : nothing}
+                @click=${(event: Event) => this.#edit(event, path)}
+              >
+                <span data-test="name">${name}</span>
+              </button>`
+        }
         ${kind}
       </div>
       ${open && children.length > 0 ? this.#list(children, path) : nothing}

@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  documentProduct,
+  documentSection,
+  menuDocument,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type {
   CatalogueSummary,
@@ -320,7 +326,26 @@ function lunchPreview(): MenuPreview {
     ],
     warnings: [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lager" }],
     status: statuses()["menu-lunch"]!,
+    document: lunchDocument(),
   };
+}
+
+/**
+ * What publishing Lunch would make live: Burger, and Drinks holding Lemonade and Chips. It differs
+ * from Lunch's working structure, which also holds Lager and Favourites, so a view reading that
+ * structure shows names this one does not.
+ */
+function lunchDocument() {
+  return menuDocument(
+    [
+      documentProduct("mi-burger", "p-burger"),
+      documentSection("s-drinks", "Drinks", [
+        documentProduct("mi-lemonade", "p-lemonade"),
+        documentProduct("mi-chips", "p-chips"),
+      ]),
+    ],
+    { "p-burger": "Burger", "p-lemonade": "Lemonade", "p-chips": "Chips" },
+  );
 }
 
 /** Dinner's working state differs from its live version 5 by nothing a change can list. */
@@ -335,6 +360,7 @@ function dinnerPreview(): MenuPreview {
       publishedAt: "2026-09-20T18:00:00.000Z",
       hash: "d".repeat(64),
     },
+    document: menuDocument([], {}, "Dinner Menu"),
   };
 }
 
@@ -3324,6 +3350,7 @@ describe("publishing", () => {
         changes: [],
         warnings: [],
         status: { state: "current", version: 2, publishedAt: PUBLISHED_AT, hash: LUNCH_HASH },
+        document: lunchDocument(),
       }),
     });
     const el = await mount(client, PREVIEW_PATH);
@@ -3331,6 +3358,40 @@ describe("publishing", () => {
       expect(text(inPanel(el, "nothing"))).toBe("Nothing to publish: version 2 matches this menu."),
     );
     expect(inPanel(el, "publish")).toBeNull();
+    expect(text(inPanel(el, "document")?.querySelector("h2") ?? null)).toBe(
+      "The menu as it is live",
+    );
+    expect(await wholeMenu(el)).toEqual(["Burger", "Drinks", "Lemonade", "Chips"]);
+  });
+
+  /** The names the Preview tab's whole-menu view shows, with every section opened. */
+  async function wholeMenu(el: MenusScreen): Promise<string[]> {
+    const tree = inPanel(el, "document")!.querySelector<MenuStructureTree>(
+      "dashboard-menu-structure-tree",
+    )!;
+    await tree.updateComplete;
+    for (;;) {
+      const closed = tree.shadowRoot!.querySelector<HTMLElement>('[aria-expanded="false"]');
+      if (closed === null) break;
+      closed.click();
+      await tree.updateComplete;
+    }
+    return [...tree.shadowRoot!.querySelectorAll('[data-test="name"]')].map(text);
+  }
+
+  it("shows the whole menu as the publish would make it live, read-only, from the preview rather than the working structure", async () => {
+    const el = await mountPreview();
+    expect(text(inPanel(el, "document")!.querySelector("h2"))).toBe(
+      "The menu as it will be published",
+    );
+    const tree = inPanel(el, "document")!.querySelector<MenuStructureTree>(
+      "dashboard-menu-structure-tree",
+    )!;
+    expect(tree.readonly).toBe(true);
+    expect(await wholeMenu(el)).toEqual(["Burger", "Drinks", "Lemonade", "Chips"]);
+    expect(tree.shadowRoot!.textContent).not.toContain("Lager");
+    expect(tree.shadowRoot!.textContent).not.toContain("Favourites");
+    expect(tree.shadowRoot!.querySelector("[data-test^='edit-']")).toBeNull();
   });
 
   it("says the changes could not be worked out, and tries again", async () => {

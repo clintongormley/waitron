@@ -1666,6 +1666,8 @@ export const en = {
   "menu_preview.source_shared_section": "shared section",
   "menu_preview.also_on": "{source}, also on {menus}",
   "menu_preview.warnings_heading": "Warnings",
+  "menu_preview.document_heading": "The menu as it will be published",
+  "menu_preview.document_heading_live": "The menu as it is live",
   "menu_preview.warnings_note": "Warnings do not stop you publishing.",
   "menu_preview.shortcut_omitted":
     "The shortcut to {name} is left out of {layout}: it is no longer on this menu.",
@@ -3377,6 +3379,8 @@ export const es: Record<StringKey, string> = {
   "menu_preview.source_shared_section": "sección compartida",
   "menu_preview.also_on": "{source}, también en {menus}",
   "menu_preview.warnings_heading": "Avisos",
+  "menu_preview.document_heading": "El menú tal como se publicará",
+  "menu_preview.document_heading_live": "El menú tal como está publicado",
   "menu_preview.warnings_note": "Los avisos no impiden publicar.",
   "menu_preview.shortcut_omitted":
     "El acceso directo a {name} se omite en {layout}: ya no está en este menú.",

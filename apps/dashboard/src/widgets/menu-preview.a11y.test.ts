@@ -1,6 +1,13 @@
 import { afterEach, describe, it } from "vitest";
 import type { MenuPreview, MenuStatus } from "../api/client.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  documentProduct,
+  documentSection,
+  expectNoA11yViolations,
+  menuDocument,
+  mountWidget,
+} from "./test-helpers.js";
 import { MenuPreviewPanel } from "./menu-preview.js";
 
 afterEach(cleanupWidgets);
@@ -34,6 +41,13 @@ const changes: MenuPreview = {
   ],
   warnings: [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lemonade" }],
   status: live,
+  document: menuDocument(
+    [
+      documentProduct("mi-burger", "p-burger"),
+      documentSection("s-drinks", "Drinks", [documentProduct("mi-lemonade", "p-lemonade")]),
+    ],
+    { "p-burger": "Burger", "p-lemonade": "Lemonade" },
+  ),
 };
 
 const states: Record<string, Partial<MenuPreviewPanel>> = {

@@ -112,6 +112,15 @@ export async function buildMenuDocuments(
     { includeUnavailable: true, includeEveryModifierItem: true, graph: loaded },
   );
   const dishFacts = await readDishFacts(tx, [...new Set(offers.map((offer) => offer.productId))]);
+  const extraImages = await readEffectiveImages(tx, [
+    ...new Set(
+      offers.flatMap((offer) =>
+        offer.offeredModifiers.flatMap((entry) =>
+          entry.kind === "extras" ? entry.items.map((item) => item.productId) : [],
+        ),
+      ),
+    ),
+  ]);
   const sectionRows: SectionRow[] = await tx
     .select({
       id: sections.id,
@@ -134,7 +143,7 @@ export async function buildMenuDocuments(
     const onMenu = new Map(
       (offersByMenu.get(row.menuId) ?? []).map((offer) => [
         offer.productId,
-        freezeOffer(offer, dishFacts.get(offer.productId)!),
+        freezeOffer(offer, dishFacts.get(offer.productId)!, extraImages),
       ]),
     );
     const reachedSections = new Set<string>();
@@ -222,6 +231,22 @@ async function readDishFacts(
   return facts;
 }
 
+/** Each product's photo, a variant's borrowed from its parent when it has none of its own. */
+async function readEffectiveImages(
+  tx: Transaction,
+  productIds: readonly string[],
+): Promise<Map<string, string | null>> {
+  const images = new Map<string, string | null>();
+  for (const batch of batches(productIds))
+    for (const row of await tx
+      .select({ id: products.id, image: effectiveProductColumns.image })
+      .from(products)
+      .leftJoin(parentProducts, parentJoin)
+      .where(inArray(products.id, batch)))
+      images.set(row.id, row.image);
+  return images;
+}
+
 /** A copy of `value` without `keys`. */
 function without<T extends object, K extends keyof T>(value: T, keys: readonly K[]): Omit<T, K> {
   const dropped = new Set<PropertyKey>(keys);
@@ -234,6 +259,7 @@ function without<T extends object, K extends keyof T>(value: T, keys: readonly K
 function freezeOffer(
   offer: MenuOffer,
   facts: { image: string | null; description: Record<string, string> | null },
+  extraImages: ReadonlyMap<string, string | null>,
 ): FrozenOffer {
   return {
     ...without(offer, ["vatClass", "courseId", "category", "offeredModifiers", "variants"]),
@@ -245,7 +271,13 @@ function freezeOffer(
     offeredModifiers: offer.offeredModifiers.map((entry): FrozenOfferedModifier =>
       entry.kind === "options"
         ? { ...entry, labels: entry.labels.map((label) => without(label, ["available"])) }
-        : { ...entry, items: entry.items.map((item) => without(item, ["vatClass"])) },
+        : {
+            ...entry,
+            items: entry.items.map((item) => ({
+              ...without(item, ["vatClass"]),
+              image: extraImages.get(item.productId)!,
+            })),
+          },
     ),
   };
 }
@@ -283,6 +315,8 @@ export function documentImages(document: MenuDocument): string[] {
   for (const offer of Object.values(document.offers)) {
     add(offer.image);
     for (const variant of offer.variants) add(variant.image);
+    for (const entry of offer.offeredModifiers)
+      if (entry.kind === "extras") for (const item of entry.items) add(item.image);
   }
   return [...images].sort();
 }
@@ -534,6 +568,7 @@ const PRODUCT_FACTS: readonly [ProductChangeField, readonly string[]][] = [
 
 const EXTRA_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["names", ["name", "customerName", "kitchenName"]],
+  ["image", ["image"]],
   ["allergens", ["addAllergens"]],
   ["diet", ["suitableFor"]],
 ];

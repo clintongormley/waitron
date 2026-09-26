@@ -772,6 +772,79 @@ it("protects an image only a live menu version names, and releases it once anoth
   });
 });
 
+it("protects the photo of a product a live menu version offers only as an extra", async () => {
+  const {
+    addMember,
+    createCatalogue,
+    createExtraList,
+    createProduct,
+    menuItems,
+    previewMenu,
+    publishMenu,
+    readMenuStructure,
+    setMenuItemExtraLists,
+    updateProduct,
+    writeProductModifiers,
+  } = await import("@waitron/catalogue");
+  await seedTenant(suite.db);
+  const publish = async (tx: Transaction, menuId: string) =>
+    publishMenu(tx, menuId, (await previewMenu(tx, menuId)).hash, "person-1");
+  await withTransaction(suite.db, async (tx) => {
+    const { image } = await uploadImage(
+      tx,
+      { image: photo, names: { en: "Lemon" }, altText: { en: "A slice" }, labels: [] },
+      {},
+    );
+    const menu = await createCatalogue(tx, { name: "Lunch Menu" });
+    const make = (name: string, photoName: string | null) =>
+      createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: null,
+        name,
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "reduced",
+        ...(photoName === null ? {} : { image: photoName }),
+      });
+    const lemonade = await make("Lemonade", null);
+    const lemon = await make("Extra lemon", image.filename);
+    const list = await createExtraList(
+      tx,
+      { name: "Extras", minPicks: 0, maxPicks: 1, items: [{ productId: lemon.id, price: "0.40" }] },
+      "en",
+    );
+    await writeProductModifiers(tx, lemonade.id, [{ kind: "extras", id: list.id }]);
+    const { rootSectionId } = await readMenuStructure(tx, menu.id);
+    await addMember(tx, rootSectionId, { kind: "product", productId: lemonade.id });
+    const [offer] = await tx
+      .select({ id: menuItems.id })
+      .from(menuItems)
+      .where(eq(menuItems.productId, lemonade.id));
+    await setMenuItemExtraLists(tx, offer!.id, [{ listId: list.id, items: [] }]);
+    const first = await publish(tx, menu.id);
+    // The working state lets go; the live version still shows the photo.
+    await updateProduct(tx, lemon.id, { image: null });
+    const uses = [
+      {
+        kind: "menu_version" as const,
+        id: first.versionId,
+        menuId: menu.id,
+        menuName: "Lunch Menu",
+        number: 1,
+      },
+    ];
+    expect(await listImageUsages(tx, image.id)).toEqual(uses);
+    expect((await readImage(tx, image.id)).usageCount).toBe(1);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(1);
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    await publish(tx, menu.id);
+    expect(await listImageUsages(tx, image.id)).toEqual([]);
+    expect((await readImage(tx, image.id)).usageCount).toBe(0);
+    expect((await listImages(tx, {})).images[0]!.usageCount).toBe(0);
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+  });
+});
+
 describe("relevance scores and tie-breaks", () => {
   const add = async (
     tx: Transaction,

@@ -319,11 +319,16 @@ cannot be deleted or renamed (media migration `0003`). The money formatter moved
 test and `inmutabilidad` pass unedited. The migrations only add tables and triggers, and a venue main
 had migrated and demo-seeded upgraded cleanly (measured); a dev venue that applied an earlier copy of
 this branch's media `0003` lacks its insert check and needs `wa-wt reset demo <name>`. **Tills still
-sell from the working state until menus Task 7.** Left, none blocking: changing the photo of a product
-used only as an extra does not flag a menu (no screen shows an extra's photo); after a publish the
-editor's heading shows the browser's clock until the next read, because the publish answer carries no
-time; a deleted extras product stays in the frozen copy, so deleting it flags no menu (tills hide it
-at once through availability); a re-enabled product's "added" change can name its section as the
+sell from the working state until menus Task 7.** **M6c** (2026-09-26) closed two of the gaps this
+left and added the owner's second Preview view: an extras item's photo (a variant's borrowed from its
+parent) is in the frozen copy, so changing it flags every menu offering it and a live version's
+extras photos cannot be deleted; a deleted (switched-off) product leaves the frozen copy's extras
+lists, so deleting it flags its menus, shown as the dish's "extras" change; and the Preview tab shows
+the whole proposed menu below the changes, read-only in the Structure tab's tree, from the copy the
+preview answer now carries. A version published before M6c has no photo on its extras items, so each
+menu with extras shows unpublished changes until it is published again. Left, none blocking: after a
+publish the editor's heading shows the browser's clock until the next read, because the publish
+answer carries no time; a re-enabled product's "added" change can name its section as the
 source; the status and preview reads build every menu's frozen copy inside `withTransaction`, the
 venue's write lock — measured about 21 ms median for 4 menus and 300 dishes on a dev laptop, not on
 the box; at phone width the list keeps a fixed room for the row menu, and a status sort falls back to
@@ -377,7 +382,7 @@ manager, in the new append-only `payment_resolutions` table. The upgrade adds on
 was measured, and existing payment rows came through unchanged. Golden fingerprint and
 `inmutabilidad` unedited. What it leaves open is under "What M7b2 left open" in the payments
 section.
-Next in the lane (was M7b2): M6c, then 7c, 7. The owner lifted the wait: the dependency upgrades are
+Next in the lane (was M7b2): 7c, then 7 (M6c is done). The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task

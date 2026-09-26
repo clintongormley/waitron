@@ -10,7 +10,7 @@ import {
   menuDocumentHash,
   type MenuDocument,
 } from "./menu-document.js";
-import { renameCatalogue, updateMenuItem, updateProduct } from "./operations.js";
+import { deactivateProduct, renameCatalogue, updateMenuItem, updateProduct } from "./operations.js";
 import { addMember, moveMember, removeMember, updateSection } from "./sections.js";
 import { setMenuVariants, setProductVariants } from "./variants.js";
 import { setMenuItemExtraLists } from "./extras.js";
@@ -149,7 +149,7 @@ describe("buildMenuDocument", () => {
     for (const label of options.labels) expect(Object.keys(label)).not.toContain("available");
   });
 
-  it("holds every extras item and option label, available or not", async () => {
+  it("holds an extras item and an option label whatever their availability", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
       await tx.update(optionLabels).set({ available: false }).where(eq(optionLabels.id, WITH_ICE));
@@ -191,6 +191,18 @@ describe("buildMenuDocument", () => {
     expect(Object.values(document.offers).map((offer) => offer.name)).toEqual(["Lemonade"]);
     expect(JSON.stringify(document.root)).not.toContain(f.soup);
     expect(JSON.stringify(document.root)).not.toContain(f.lager);
+  });
+
+  it("leaves out an extras item whose product is deleted", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => deactivateProduct(tx, f.extraLemon));
+    const document = await build(f.lunch);
+    const offer = document.offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;
+    expect(offer.offeredModifiers[0]).toMatchObject({
+      kind: "extras",
+      id: f.extrasList,
+      items: [],
+    });
   });
 
   it("stops at a cycle a direct write left in the sections", async () => {
@@ -358,6 +370,8 @@ describe("menuDocumentHash", () => {
         ]),
     ],
     ["the extra's name", (tx, f) => updateProduct(tx, f.extraLemon, { name: "Lemon wedge" })],
+    ["the extra's image", (tx, f) => updateProduct(tx, f.extraLemon, { image: "lemon.jpg" })],
+    ["the extra's deletion", (tx, f) => deactivateProduct(tx, f.extraLemon)],
     [
       "the extra's price",
       (tx, f) =>
@@ -902,6 +916,49 @@ describe("diffMenuDocuments", () => {
         productId: f.extraLemon,
         name: "Extra lemon",
         fields: ["allergens", "diet"],
+        source: "shared_product",
+      },
+    ]);
+  });
+
+  it("names an extra's photo against the extra, a variant extra reading its parent's", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      await updateProduct(tx, f.large, { image: null });
+      await tx.insert(extraListItems).values({ listId: f.extrasList, productId: f.large, sort: 1 });
+    });
+    const live = await build(f.dinner);
+    const extras = Object.values(live.offers)
+      .find((offer) => offer.productId === f.lemonade)!
+      .offeredModifiers.find((entry) => entry.kind === "extras");
+    expect(extras?.kind === "extras" && extras.items.map((item) => item.image)).toEqual([
+      null,
+      "lemonade.jpg",
+    ]);
+    await app(async (tx) => {
+      await updateProduct(tx, f.lemonade, { image: "cloudy.jpg" });
+      await updateProduct(tx, f.extraLemon, { image: "lemon.jpg" });
+    });
+    expect(diffMenuDocuments(live, await build(f.dinner))).toEqual([
+      {
+        kind: "product_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        fields: ["image"],
+        source: "shared_product",
+      },
+      {
+        kind: "product_changed",
+        productId: f.extraLemon,
+        name: "Extra lemon",
+        fields: ["image"],
+        source: "shared_product",
+      },
+      {
+        kind: "product_changed",
+        productId: f.large,
+        name: "Large",
+        fields: ["image"],
         source: "shared_product",
       },
     ]);

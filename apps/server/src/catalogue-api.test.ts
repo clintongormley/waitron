@@ -3686,6 +3686,11 @@ describe("publishing a menu", () => {
     ]);
     expect(first.warnings).toEqual([]);
     expect(first.status).toEqual({ state: "unpublished" });
+    expect(first.document).toMatchObject({ menuId, menuName: expect.any(String) });
+    expect(first.document.root.members).toEqual([
+      { kind: "product", menuItemId: itemId, productId: expect.any(String) },
+    ]);
+    expect(first.document.offers[itemId]).toMatchObject({ name, grossPrice: "2.00" });
 
     const publish = `/management-api/catalogues/${menuId}/publish`;
     const published = await send(app, "POST", publish, { body: { expectedHash: first.hash } });
@@ -3705,6 +3710,7 @@ describe("publishing a menu", () => {
       changes: [],
       warnings: [],
       status: current,
+      document: first.document,
     });
 
     expect(

@@ -25,7 +25,7 @@ const nodes: MenuStructureNode[] = [
   },
 ];
 
-const states = ["empty", "collapsed", "expanded", "current"] as const;
+const states = ["empty", "collapsed", "expanded", "current", "read-only expanded"] as const;
 
 describe.each(["light", "dark"] as const)("menu structure tree (%s)", (theme) => {
   it.each(states)("renders %s accessibly", async (state) => {
@@ -37,10 +37,11 @@ describe.each(["light", "dark"] as const)("menu structure tree (%s)", (theme) =>
         sections,
         label: "Lunch Menu",
         current: state === "current" ? ["m-drinks", "m-beer"] : [],
+        readonly: state === "read-only expanded",
       },
       theme,
     );
-    if (state === "expanded") {
+    if (state === "expanded" || state === "read-only expanded") {
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="toggle-m-drinks"]')!.click();
       await el.updateComplete;
     }

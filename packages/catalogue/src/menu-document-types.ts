@@ -17,11 +17,14 @@ export type OverlayOfferField = "available" | "vatClass" | "courseId" | "categor
 /** `OfferedExtraItem` carries no `available`; the served offer adds it. */
 export type OverlayExtraItemField = "available" | "vatClass";
 
-export type FrozenExtraItem = Omit<OfferedExtraItem, OverlayExtraItemField>;
+/** `image` is the product's effective photo, which `OfferedExtraItem` does not carry. */
+export type FrozenExtraItem = Omit<OfferedExtraItem, OverlayExtraItemField> & {
+  image: string | null;
+};
 export type FrozenOptionLabel = Omit<OptionLabel, "available">;
 
-/** Every item and every label, available or not: availability is applied when the document is
- * served. */
+/** Every option label, and every extras item whose product is Active and has no Active variant,
+ * available or not: availability is applied when the document is served. */
 export type FrozenOfferedModifier =
   | (Omit<OfferedExtrasList, "items"> & { items: FrozenExtraItem[] })
   | (Omit<OfferedOptionsList, "labels"> & { labels: FrozenOptionLabel[] });
@@ -79,7 +82,7 @@ export interface MenuDocument {
 }
 
 /** An extras item as a served offer carries it: the frozen item with its current availability. */
-export type LiveExtraItem = OfferedExtraItem & { available: boolean };
+export type LiveExtraItem = OfferedExtraItem & { image: string | null; available: boolean };
 
 /**
  * An options list as a served offer carries it. Unlike `OfferedOptionsList`, whose labels are the
@@ -161,6 +164,8 @@ export interface MenuPreview {
   warnings: { kind: "shortcut_omitted"; layoutName: string; name: string }[];
   /** The menu's publication state, as `menuStatus` answers it. */
   status: MenuStatus;
+  /** What the publish would make live. */
+  document: MenuDocument;
 }
 
 /** The version a publish made live. */

@@ -3,8 +3,15 @@ import type { MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
-import { MenuPreviewPanel, type PublishResult } from "./menu-preview.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { MenuPreviewPanel, documentTree, type PublishResult } from "./menu-preview.js";
+import type { MenuStructureTree } from "./menu-structure-tree.js";
+import {
+  cleanupWidgets,
+  documentProduct,
+  documentSection,
+  menuDocument,
+  mountWidget,
+} from "./test-helpers.js";
 
 // The wording is asserted as a person reads it, in English unless a case says otherwise.
 beforeEach(() => setLocale("en"));
@@ -25,8 +32,17 @@ const changedStatus: MenuStatus = {
   hash: LIVE_HASH,
 };
 
+/** Burger at the top, and Drinks holding Lemonade. */
+const DOCUMENT = menuDocument(
+  [
+    documentProduct("mi-burger", "p-burger"),
+    documentSection("s-drinks", "Drinks", [documentProduct("mi-lemonade", "p-lemonade")]),
+  ],
+  { "p-burger": "Burger", "p-lemonade": "Lemonade" },
+);
+
 function preview(changes: MenuChange[], warnings: MenuPreview["warnings"] = []): MenuPreview {
-  return { hash: NEW_HASH, changes, warnings, status: changedStatus };
+  return { hash: NEW_HASH, changes, warnings, status: changedStatus, document: DOCUMENT };
 }
 
 async function mountIn(props: Partial<MenuPreviewPanel>) {
@@ -385,11 +401,13 @@ it("says while the changes are being worked out, and when they could not be, off
   const el = await mount({ preview: null });
   expect(text(q(el, '[data-test="preview-loading"]'))).toBe(t("menu_preview.loading"));
   expect(q(el, '[data-test="publish"]')).toBeNull();
+  expect(q(el, '[data-test="document"]')).toBeNull();
   el.failed = true;
   await el.updateComplete;
   expect(q(el, '[data-test="preview-loading"]')).toBeNull();
   expect(text(q(el, '[data-test="preview-error"]'))).toBe(t("menu_preview.error"));
   expect(q(el, '[data-test="publish"]')).toBeNull();
+  expect(q(el, '[data-test="document"]')).toBeNull();
   let retried = 0;
   el.addEventListener("wt-preview-retry", () => (retried += 1));
   q(el, '[data-test="preview-retry"]')!.click();
@@ -436,4 +454,139 @@ it.each(results)("reports %s", async (_name, result, status, message) => {
   const shown = q(el, '[data-test="result"]')!;
   expect(text(shown)).toBe(message());
   expect(shown.getAttribute("role")).toBe(result.kind === "published" ? "status" : "alert");
+});
+
+function documentView(el: MenuPreviewPanel): MenuStructureTree {
+  return q<MenuStructureTree>(el, '[data-test="document"] dashboard-menu-structure-tree')!;
+}
+
+/** The whole-menu view's top-level names, as the tree shows them. */
+function topNames(tree: MenuStructureTree): string[] {
+  return [
+    ...tree.shadowRoot!.querySelectorAll('ul[aria-label] > li > .row [data-test="name"]'),
+  ].map(text);
+}
+
+it("shows the whole menu the publish would make live, read-only, under its own heading", async () => {
+  const el = await mount({
+    preview: preview([{ kind: "order_changed", list: [], source: "this_menu" }]),
+  });
+  expect(text(q(el, '[data-test="document"] h2'))).toBe("The menu as it will be published");
+  const tree = documentView(el);
+  await tree.updateComplete;
+  expect(tree.readonly).toBe(true);
+  expect(tree.label).toBe("The menu as it will be published");
+  expect(topNames(tree)).toEqual(["Burger", "Drinks"]);
+  expect(tree.shadowRoot!.querySelector("[data-test^='edit-']")).toBeNull();
+  expect(tree.shadowRoot!.textContent).not.toContain("para clientes");
+  expect(tree.shadowRoot!.textContent).not.toContain("COCINA");
+});
+
+it("still shows the whole menu, as it is live, when there is nothing to publish", async () => {
+  const current: MenuStatus = {
+    state: "current",
+    version: 4,
+    publishedAt: PUBLISHED_AT,
+    hash: NEW_HASH,
+  };
+  const el = await mount({ status: current, preview: { ...preview([]), status: current } });
+  expect(text(q(el, '[data-test="document"] h2'))).toBe("The menu as it is live");
+  const tree = documentView(el);
+  await tree.updateComplete;
+  expect(tree.label).toBe("The menu as it is live");
+  expect(topNames(tree)).toEqual(["Burger", "Drinks"]);
+});
+
+it("shows a never-published menu whole, as its first publish would make it live", async () => {
+  const el = await mount({
+    status: { state: "unpublished" },
+    preview: { ...preview([]), status: { state: "unpublished" } },
+  });
+  expect(text(q(el, '[data-test="document"] h2'))).toBe("The menu as it will be published");
+  const tree = documentView(el);
+  await tree.updateComplete;
+  expect(topNames(tree)).toEqual(["Burger", "Drinks"]);
+});
+
+it("names the whole-menu view in Spanish", async () => {
+  setLocale("es-ES");
+  const el = await mount({});
+  expect(text(q(el, '[data-test="document"] h2'))).toBe("El menú tal como se publicará");
+});
+
+it("names the whole-menu view in Spanish when there is nothing to publish", async () => {
+  setLocale("es-ES");
+  const current: MenuStatus = {
+    state: "current",
+    version: 4,
+    publishedAt: PUBLISHED_AT,
+    hash: NEW_HASH,
+  };
+  const el = await mount({ status: current, preview: { ...preview([]), status: current } });
+  expect(text(q(el, '[data-test="document"] h2'))).toBe("El menú tal como está publicado");
+});
+
+it("maps a document's lists to the tree, keyed by what each member names, with each name once", () => {
+  const beer = documentSection("s-beer", "Beer", [documentProduct("mi-lager", "p-lager")]);
+  const drinks = documentSection("s-drinks", "Drinks", [
+    documentProduct("mi-lemonade", "p-lemonade"),
+    beer,
+  ]);
+  const document = menuDocument(
+    [
+      documentProduct("mi-burger", "p-burger"),
+      drinks,
+      documentSection("s-fav", "Favourites", [
+        documentProduct("mi-lemonade", "p-lemonade"),
+        drinks,
+      ]),
+    ],
+    { "p-burger": "Burger", "p-lemonade": "Lemonade", "p-lager": "Lager" },
+  );
+  const drinksNode = {
+    memberId: "s:s-drinks",
+    ref: { kind: "section", sectionId: "s-drinks" },
+    children: [
+      { memberId: "p:p-lemonade", ref: { kind: "product", productId: "p-lemonade" } },
+      {
+        memberId: "s:s-beer",
+        ref: { kind: "section", sectionId: "s-beer" },
+        children: [{ memberId: "p:p-lager", ref: { kind: "product", productId: "p-lager" } }],
+      },
+    ],
+  };
+  expect(documentTree(document)).toStrictEqual({
+    nodes: [
+      { memberId: "p:p-burger", ref: { kind: "product", productId: "p-burger" } },
+      drinksNode,
+      {
+        memberId: "s:s-fav",
+        ref: { kind: "section", sectionId: "s-fav" },
+        children: [
+          { memberId: "p:p-lemonade", ref: { kind: "product", productId: "p-lemonade" } },
+          drinksNode,
+        ],
+      },
+    ],
+    products: [
+      { id: "p-burger", name: "Burger" },
+      { id: "p-lemonade", name: "Lemonade" },
+      { id: "p-lager", name: "Lager" },
+    ],
+    sections: [
+      { id: "s-drinks", internalName: "Drinks" },
+      { id: "s-beer", internalName: "Beer" },
+      { id: "s-fav", internalName: "Favourites" },
+    ],
+  });
+});
+
+it("names a product the document offers nothing for as no longer available", async () => {
+  const document = menuDocument([documentProduct("mi-burger", "p-burger")], {
+    "p-burger": "Burger",
+  });
+  const el = await mount({ preview: { ...preview([]), document: { ...document, offers: {} } } });
+  const tree = documentView(el);
+  await tree.updateComplete;
+  expect(topNames(tree)).toEqual([t("members.missing")]);
 });

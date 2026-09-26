@@ -258,6 +258,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     changes: entries.map(({ change }) => change),
     warnings: await shortcutWarnings(tx, mine.document, mine.omittedShortcuts, sectionNames),
     status: statusOf(hash, own),
+    document: mine.document,
   };
 }
 

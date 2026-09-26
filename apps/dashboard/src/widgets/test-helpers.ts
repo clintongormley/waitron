@@ -2,6 +2,7 @@ import axe from "axe-core";
 import { commands } from "vitest/browser";
 import { beforeEach, expect } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
+import type { DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -107,4 +108,88 @@ export function formatViolations(violations: axe.Result[]): string {
 export async function expectNoA11yViolations(context: Element): Promise<void> {
   const results = await axe.run(context);
   expect(results.violations, formatViolations(results.violations)).toEqual([]);
+}
+
+export function documentProduct(menuItemId: string, productId: string): DocumentMember {
+  return { kind: "product", menuItemId, productId };
+}
+
+export function documentSection(
+  sectionId: string,
+  internalName: string,
+  members: DocumentMember[],
+): DocumentMember {
+  return {
+    kind: "section",
+    sectionId,
+    internalName,
+    names: { es: `${internalName} para clientes` },
+    image: null,
+    color: null,
+    members,
+  };
+}
+
+/**
+ * A published-menu document holding `members` at its top level, with one offer per product it
+ * holds, named `names[productId]`. The offer's customer and kitchen names read differently, so a view
+ * showing either fails rather than passing by coincidence.
+ */
+export function menuDocument(
+  members: DocumentMember[],
+  names: Record<string, string>,
+  menuName = "Lunch Menu",
+): MenuDocument {
+  const offers: Record<string, FrozenOffer> = {};
+  const walk = (list: DocumentMember[]): void => {
+    for (const member of list)
+      if (member.kind === "section") walk(member.members);
+      else offers[member.menuItemId] = frozenOffer(member, names[member.productId]!, menuName);
+  };
+  walk(members);
+  return {
+    format: 1,
+    menuId: "menu-lunch",
+    menuName,
+    root: { members },
+    offers,
+    homeLayouts: [{ id: "layout-home", name: "Home", tiles: [] }],
+    defaultHomeLayoutId: "layout-home",
+  };
+}
+
+function frozenOffer(
+  member: Extract<DocumentMember, { kind: "product" }>,
+  name: string,
+  menuName: string,
+): FrozenOffer {
+  return {
+    id: member.menuItemId,
+    menuId: "menu-lunch",
+    productId: member.productId,
+    grossPrice: null,
+    active: true,
+    unitPrice: "3.00",
+    menuName,
+    name,
+    customerName: { es: `${name} para clientes` },
+    kitchenName: `${name.toUpperCase()} COCINA`,
+    unit: {
+      id: "unit-each",
+      name: { en: "Each" },
+      precision: 0,
+      abbreviation: { en: "ea" },
+      hardwareUnit: null,
+    },
+    allergens: null,
+    diet: null,
+    dietDerivation: null,
+    dietOverride: null,
+    dietaryDeclarations: [],
+    image: null,
+    description: null,
+    variants: [],
+    placements: [],
+    offeredModifiers: [],
+  };
 }

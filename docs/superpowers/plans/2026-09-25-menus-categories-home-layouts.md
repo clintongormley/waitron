@@ -1514,6 +1514,12 @@ check on `menu_version_images` as well as the delete and rename triggers on `med
 and runs no separate status query (`#followStatus` and `#watchPreview`,
 `apps/dashboard/src/screens/menus-screen.ts`).
 
+**2026-09-26, M6c.** `previewMenu` also returns `document`, the copy a publish would write. A frozen
+extras item carries `image`, the product's photo (a variant with none of its own borrows its
+parent's). A deleted extras product is left out of that copy, so every menu offering it is flagged;
+D6's live `active` check on an extra now matters only for a version published before the product
+was deleted. The Preview tab also shows the whole menu read-only, in the Structure tab's tree.
+
 ---
 
 ## Task 7a: VAT is resolved when the invoice record is issued — slug `vat-at-issuance`
