@@ -17,7 +17,7 @@ const KIT_PROBLEM = "Upload or paste the recovery kit.";
 const ACKNOWLEDGE_PROBLEM = "Confirm that no other running server has newer data.";
 const VENUE_PROBLEM = "Confirm that this is your business.";
 
-/** The restored copy's names, from `restore.stream_venue_unconfirmed` (Reconciliation N26). */
+/** The restored copy's names, from `restore.stream_venue_unconfirmed` (#646). */
 export interface RestoredVenue {
   legalName: string;
   taxId: string;
@@ -25,7 +25,7 @@ export interface RestoredVenue {
 }
 
 /**
- * Rebuild this server from the owner's bucket (slice 2 spec §5.1). It asks for the recovery kit and
+ * Rebuild this server from the owner's bucket. It asks for the recovery kit and
  * the environment, which the restore's compatibility check compares with the copy's own. The shell
  * sets `liveSince`/`liveUnknown` and `venue` from the server's refusals, and hands back the request
  * it last sent as `request`, so answering a refusal never means pasting the kit again.

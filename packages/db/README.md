@@ -3,10 +3,8 @@
 Use this package for the venue schema and the database client. The engine is **SQLite** — Node's
 own built-in `node:sqlite`, driven by Drizzle's SQLite dialect through a small adapter
 (`@waitron/store`). There is no PostgreSQL path and no PGlite. A whole database is a directory of
-files, opened by path; there is no connection string, no server and no role. See
-`docs/superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md` for the switch, and
-`docs/superpowers/specs/2026-07-19-sales-spine-and-fiscal-layer-design.md` §3 for the schema this
-package holds.
+files, opened by path; there is no connection string, no server and no role. The switch to SQLite
+landed in #489.
 
 Each database holds one taxpayer, as the single row of `tenants` (`id` pinned to 1). No table
 carries a tenant column and no query filters by one: a read that wants "this tenant's rows" reads

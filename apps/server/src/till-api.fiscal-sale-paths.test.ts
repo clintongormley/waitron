@@ -60,7 +60,7 @@ import { createStation } from "./kitchen.js";
 
 // `POST /api/sales`, `POST /api/pay` and the `/api/working-orders` routes driven over HTTP to a
 // GENUINE chained fiscal record, including the lost-response pay retry that must replay the ticket
-// and file no second record (spec §3). Route logic that needs no real fiscal write lives in the
+// and file no second record. Route logic that needs no real fiscal write lives in the
 // hermetic `till-api.test.ts`, whose fiscal seat is an empty object.
 const LOCALE = "es-ES";
 
@@ -786,7 +786,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
 
     // 6. REPLAY: the till lost the response and re-sends the identical pay. It must REPLAY the ticket
     //    (same invoice number, same total) and file NO second chained record — the crux of park &
-    //    retrieve (spec §3): invoice numbers are never reused, so a double filing is unrepairable.
+    //    retrieve: invoice numbers are never reused, so a double filing is unrepairable.
     const replay = await app.request("/api/sales", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },

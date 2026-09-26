@@ -547,20 +547,16 @@ What it left open:
 single modifier idea was split into Extras (reusable product lists, each pick becoming its own sale
 line) and Options (reusable label lists, saved as a note on the dish line), composed through one
 ordered attachment list per product. Landed across #412, #436, #445, #449, #452, #456, #462, #465,
-#469, #471, #476, #478 and #480. Design:
-[one product model](superpowers/specs/2026-09-18-one-product-model-design.md); plan:
-[modifiers to extras and options](superpowers/plans/2026-09-18-modifiers-extras-options.md).
+#469, #471, #476, #478 and #480.
 
-**What branch 1 deliberately did NOT build, both recorded in the design rather than forgotten:**
+**What branch 1 deliberately did NOT build:**
 
 - **An options list is always required.** It asks for exactly one pick, with the default
-  preselected, which is what today's behaviour was
-  (`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §2.2). An OPTIONAL options list —
-  one a diner may leave unanswered — is a possible future change, called out in that spec's §11 and
-  not built. Today an unanswered ACTIVE list refuses the order with `options.label_required`.
+  preselected, which is what today's behaviour was. An OPTIONAL options list —
+  one a diner may leave unanswered — is a possible future change, not built. Today an unanswered ACTIVE list refuses the order with `options.label_required`.
 - **A variant offers its parent's lists and cannot override them.** The attachment list is the one
-  thing a variant does not override (§4.4); a per-variant attachment row is a possible later
-  addition, recorded in §14. Everything else about a variant — price, names, photo, VAT, category,
+  thing a variant does not override; a per-variant attachment row is a possible later
+  addition. Everything else about a variant — price, names, photo, VAT, category,
   unit, kitchen station, allergens, dietary declarations — IS editable per variant. A product-level
   preparation route cannot name a variant: `createPreparationRoute`
   (`packages/venue-service/src/operations.ts`) refuses one with `route.subject_not_found`, and a
@@ -606,8 +602,7 @@ options list that always has a default. Spec:
 [modifier editors polish](superpowers/plans/2026-09-26-modifier-editors-polish.md). Each item marks
 its part done here when it lands.
 
-**Branch 2, variants as products — LANDED** (spec
-`docs/superpowers/specs/2026-09-18-one-product-model-design.md` §4, §15). A variant is now a `products` row
+**Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
 Task 7 #545, Task 8 #551, and Task 9 #556. How the model works now is in
@@ -2515,11 +2510,9 @@ image constraints under *Detail → Box image*.
     `apps/server/README.md` (near line 496) still says an `error` line and a 503 are "the same
     condition by construction", the claim #637 removed from `health.ts` (a duty can go stale between
     passes: Codex got a 503 with no log line), and #637's review read its list of 503 causes (near
-    line 404) as naming one that answers 200 — read, not run. The degraded-pass spec and plan
-    (`docs/superpowers/specs/2026-07-27-degraded-pass-design.md`) and
-    `docs/superpowers/specs/2026-07-26-server-host-design.md` repeat that claim and want a dated
-    pointer. Test titles: `apps/server/src/spa-api.test.ts`'s two cache cases say hashed versus
-    non-hashed where the rule is the `/assets/` prefix, and `boot.mirror.test.ts`'s opt-in case
+    line 404) as naming one that answers 200 — read, not run. Test titles:
+    `apps/server/src/spa-api.test.ts`'s two cache cases say hashed versus non-hashed where the rule
+    is the `/assets/` prefix, and `boot.mirror.test.ts`'s opt-in case
     says "binds 0.0.0.0" while connecting only over loopback. `apps/server/src/rebuild-first-start.ts`
     (near line 121, lane A's file) says "The log carries the error's code only", the overclaim #637
     corrected in `health.ts` (`codeOf` logs `unknown` for a plain error carrying `code: "EIO"`).
@@ -2753,7 +2746,7 @@ image constraints under *Detail → Box image*.
     `ticket-items.ts`, `orders.ts`). Stale test titles: "lists the node's open orders" and "…not a
     raw 23505" in `working-order.test.ts`; "the 23505 backstop" (twice) and "(Task B1, …)" in
     `working-order.pay-and-dispatch.test.ts`; "an UNLOCKED read" in `tabs.test.ts`; "recordSale
-    UNCHANGED" in `tabs.filing.test.ts`; many "(till-reroute §3.6)", "(KDS-…)" and "(A1)"-style
+    UNCHANGED" in `tabs.filing.test.ts`; many "(KDS-…)" and "(A1)"-style
     plan tags.
   - Found by #622 (`apps/server` part g), outside its files or not fixable in a comments-only
     change. `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same
@@ -2788,8 +2781,7 @@ image constraints under *Detail → Box image*.
     deleted `menu-filter.ts` comment: should the `no-meat`/`no-fish` lenses also hide a dish whose
     diet is still pending review, as `vegan`/`vegetarian` do? Today they hide only dishes known to
     contain the tag. Comments inside `till-app.ts`'s template text still carry design-doc pointers
-    (`till-reroute §4.4` in a `css` rule and in `render()`, `cash-drawer-authorization §5`,
-    `device-enrolment §3.1`), and many `till-app.test.ts` titles carry plan and review labels
+    (`cash-drawer-authorization §5`, `device-enrolment §3.1`), and many `till-app.test.ts` titles carry plan and review labels
     ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)", "Task 8", "(SP-B2.1)"), as do three
     `session-activity.test.ts` titles ("(C3)").
   - Found by #620 (`apps/server` part h1), not fixable in a comments-only change.
@@ -3023,10 +3015,7 @@ image constraints under *Detail → Box image*.
     `catalogue-api.test.ts`'s comment). Also found by reading only, not run: nothing the
     review could find copies `node_membership` from the primary to a standby, so a promoting
     standby may take `nextStandings`' fallback that appends it with an empty `contactUrl`
-    (`packages/membership`), which `routableServers` then drops. The slice-2 plan
-    (`docs/superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md`) and the
-    2026-09-03 reserved-standby spec cite line numbers in `membership`, `apps/print-agent/src/config.ts`
-    and `sync-enrolment/src/classification.ts` that #600 moved; they are historical and were left.
+    (`packages/membership`), which `routableServers` then drops.
   - Found by #598 (`packages/core`), not fixable in a comments-only change. Test titles still
     carry claims the comments no longer make: `incidents.test.ts:463` says orphan raises de-dup
     "via NULLS NOT DISTINCT" (PostgreSQL wording); `record-void.test.ts:340` and
@@ -4059,9 +4048,7 @@ branch found, checked, and consciously did not take.
   abandoned because Stryker 9.6.1 kills almost nothing under it: `packages/fiscal` scored 0.00% and
   `packages/shared` 8.14% (stryker-js#6210; fix PR #6214 was open and unreleased). Stryker 10.0.0's
   release notes mention neither issue, and nothing here was run under Vitest 5, so the question is
-  untouched rather than resolved. The dated note at the top of
-  `docs/superpowers/plans/2026-09-18-vitest-5-upgrade.md` says the same thing beside the plan it
-  qualifies; this is the backlog's pointer to it.
+  untouched rather than resolved.
 
 **Left behind by the dependency refresh (#432, 2026-09-19).** Nineteen dependencies moved to their
 latest minor or patch release; one loose end came with it.
@@ -4395,8 +4382,8 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   (`printers.status_inactive`, `printers.status_revoked`, `payments.reader_disabled`,
   `person.mark_inactive`); extras and options say **In use / Not in use** (`extras.not_in_use`,
   `options.not_in_use`); and a generic `action.deactivate` ("Deactivate") exists beside
-  `action.disable`. Branch 2 of the one-product model settles products on **Active / Inactive**
-  (spec §15.6), kept separate from **Available** (sold out for now). **Next action:** pick the one
+  `action.disable`. Branch 2 of the one-product model settles products on **Active / Inactive**,
+  kept separate from **Available** (sold out for now). **Next action:** pick the one
   pair, and the one action verb, for every screen whose record is switched off rather than deleted —
   deciding first whether a revoked printer or a disabled login is really the same state as an
   inactive product — then change the English and Spanish strings together and record the rule in
@@ -4579,7 +4566,7 @@ fixture (#275) are still in the tree. What remains, largest first:
   rule: every role change is a restart, or the worker-lifecycle manager — not both.
 - **The mirror as a backup destination**, and the mirror's print agent (gated on B6's cross-box TLS).
 - **The two-node end-to-end proof over LAN and over WireGuard**, including the same-site cookie
-  browser receipt still owed from till-reroute Task 10 (needs interactive Chrome + mkcert +
+  browser receipt still owed from the till reroute, #257 (needs interactive Chrome + mkcert +
   `/etc/hosts`).
 - **Richer daily close** — one close run by the primary across all tills.
 - The residuals under *Detail → Replication*: re-admission, the membership chart filling up, chart
@@ -4626,8 +4613,7 @@ whose §11 is the build order and whose §12.2 is the one gate still standing �
 failover-loop prototype.
 
 **That prototype gate is DONE — all ten tasks landed (#392, #395, #406, #411, #415, #417, #422,
-#425), and slice 1, the storage swap, is COMPLETE as of 2026-09-23**
-([spec](superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md)). Read
+#425), and slice 1, the storage swap, is COMPLETE as of 2026-09-23**. Read
 [the results note](research/2026-09-16-sqlite-failover-prototype.md) rather than re-deriving any of
 it: the failover loop holds everywhere except **S2**, the recorded negative result — a handed-over
 batch can re-file a sale the receiver already filed, which costs one wasted AEAT call (error 3000,
@@ -4635,16 +4621,14 @@ already read as filed) rather than a record filed twice. The fence-before-ship r
 now in topology design §5.2. The tag `pre-sqlite-migration` (`c9d80c59`) marks the last commit before
 any of this code, so you can still read how something worked under PostgreSQL.
 
-**Slice 2, stream and cold restore, is COMPLETE as of 2026-09-25**
-([spec](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
-[plan](superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md); PRs, in the order the
+**Slice 2, stream and cold restore, is COMPLETE as of 2026-09-25** (PRs, in the order the
 tasks landed: #513, #540, #543, #548, #554, #557, #560, #566, #569, #590, #619, #627, #628, #630,
 #642, #646 and #652, with follow-ups #573, #576, #594, #599, #608, #643, #647, #649 and #650).
 A venue streams `venue.db` continuously to an S3-compatible bucket the owner supplies, a dead box is
 rebuilt from that bucket with one recovery kit and carries on under a fresh fiscal chain, and staff
 see how current the copy is. What each task built, and what it left open, is in the slice-2 entry
 below. **Next: slice 3, seats and promotion. Its first task is already decided: credentials move to
-a venue key** stored in `venue.db` only in locked form (slice-2 spec §3.3) — do not reopen it.
+a venue key** stored in `venue.db` only in locked form — do not reopen it.
 
 **What the gate left open (index; the receipts are in the results note):**
 
@@ -4667,7 +4651,7 @@ a venue key** stored in `venue.db` only in locked form (slice-2 spec §3.3) — 
   `awaiting-fiscal-cert.test.ts`, #624 for `boot.promote.test.ts`).
 - **Bounding the offline write-ahead log — ANSWERED in slice 2 (#590).** The box alerts after fifteen
   minutes (`backup.stream_behind`); at a 256 MiB limit it stops Litestream, folds the side file back
-  and raises `backup.stream_paused` (slice-2 spec §4.5).
+  and raises `backup.stream_paused`.
 - **The store pointer and a new generation are exercised for a rebuild, not for a promotion.**
   Slice 2's loop test (`apps/server/src/stream-loop.e2e.test.ts`) streams one box, rebuilds another
   from the pointer `current.json` names, and has it open its own generation and move the pointer. A
@@ -4680,8 +4664,7 @@ a venue key** stored in `venue.db` only in locked form (slice-2 spec §3.3) — 
   wrapper are driven by no scenario, and the runner's own `main()` is undriven** — a later task should
   pin them or delete them.
 
-**SQLite slice 2 — COMPLETE (2026-09-25)** ([spec](superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md),
-[plan](superpowers/plans/2026-09-23-sqlite-slice2-stream-and-cold-restore.md)): the venue streams
+**SQLite slice 2 — COMPLETE (2026-09-25)**: the venue streams
 its database to a bucket the owner supplies, and a dead box is rebuilt from it. Every task below has
 landed, the last one (Task 10) in #652. The items each paragraph calls open, left open, still
 open or an open question are still open after slice 2 unless a later line marks them done. Landed:
@@ -4828,7 +4811,7 @@ can still make the box refuse itself, because a restarted process starts with an
 so does a `current.json` deleted after the supervisor read it, on a bucket that answers a conditional
 write to a missing object with 412 (SeaweedFS; the in-memory test store); in both cases the owner's alert
 (`backup.stream_refused` in `apps/dashboard/src/i18n/alert-messages.ts`) still says another box is writing. On a bucket that answers that write with 404 instead (AWS, as it
-documents; versitygw, as measured — the plan's Task 10 notes), the deleted pointer surfaces as
+documents; versitygw, as measured), the deleted pointer surfaces as
 `backup.stream_request_failed` and `#movePointer` (`packages/stream/src/supervisor.ts`) logs
 `stream.pointer_write_failed` and retries every `OPEN_RETRY_MS` until the supervisor stops, never
 reaching `refused`;
@@ -5025,7 +5008,7 @@ names (`apps/server/src/restore-stream.ts`). Left open:
 - Open question: the first start's pointer read and the bucket rebuild's calls (the command line's
   `--from-bucket` and the wizard's `/setup-api/restore-bucket`) use different limits (15 seconds
   and 60 seconds) and report different codes (`restore.pointer_unreadable` and
-  `backup.stream_request_failed`). Neither the code nor the plan says why they differ. On the
+  `backup.stream_request_failed`). The code does not say why they differ. On the
   bucket rebuild, only a timed-out pointer read or newest-upload listing reaches the caller as
   `backup.stream_request_failed`. On every restore, a timed-out call in the clock check
   (`measureBucketSkew`, `apps/server/src/restore-stream.ts`) is reported as
@@ -5049,7 +5032,7 @@ question. Left open:
 - After an archive restore or a Cloud restore the final screen does not show the device steps the
   bucket rebuild's shows (`rebuilt` is set only on the bucket path, `apps/setup/src/setup-app.ts`),
   although the first start re-issues the certificate for this machine's addresses after an archive
-  restore too (spec §5.1 step 7, plan owner decision O4).
+  restore too.
 - After a refused Cloud restore the owner has to tick the Cloud screen's "old server and surviving
   peers are stopped" confirmation again: the shell shows the progress screen while the request runs
   and then draws a new Cloud screen, which starts unticked.
@@ -5250,9 +5233,9 @@ Two things from T2 worth reading before T3 or anything near the box:
 What the preparation tasks left, with F1's own answers where it found them:
 
 - **How the drain crosses the two database files, given `change_log`'s `local` classification —
-  SETTLED by slice-2 spec §2: every table stays in `venue.db`.** SQLite refuses a trigger body that
-  writes another attached database, so if a later slice moves `local` tables into `node.db` (spec
-  §2 reserves it for slice 5), that slice decides this again — either `change_log` is reclassified
+  SETTLED by slice 2 (#548): every table stays in `venue.db`.** SQLite refuses a trigger body that
+  writes another attached database, so if a later slice moves `local` tables into `node.db` (slice
+  2's design reserved it for slice 5), that slice decides this again — either `change_log` is reclassified
   to the file its writers live on, or the triggers stop writing it directly and something above
   them does (P3).
 - **The three claim helpers were stripped, and two of them had become identity functions — CLOSED by
@@ -5343,8 +5326,7 @@ conflict.
   column** (2026-09-14; the column removal LANDED #378, 2026-09-16). A tenant is one taxpayer
   (`country` + `tax_id`), held as the single row of
   `tenants` with its `id` pinned to 1, owning all of its locations. Nothing filters a query by a
-  tenant; a query that wants "this tenant's rows" reads the table. Spec:
-  [drop-tenant-id](superpowers/specs/2026-09-14-drop-tenant-id-design.md); guard
+  tenant; a query that wants "this tenant's rows" reads the table. Guard:
   `scripts/no-tenant-column.test.ts` (text-matching, and blind to test files and to the historical
   core migrations it exempts). The cloud is a dedicated instance per tenant, hosted in Spain. Density comes from many
   isolated instances per host. The only multi-tenant pieces are a small control plane and the
@@ -5544,9 +5526,7 @@ enums, but a user-definable kitchen-status list does not exist.
 
 ### Backup & restore — carry-forwards (B2)
 
-The restore hook is
-[SP-3d](superpowers/specs/2026-09-06-module-sp3d-fiscal-restore-hook-design.md); the wizard is
-[#295](superpowers/specs/2026-09-09-backup-recovery-key-wizard-design.md). Landed: the storage
+The restore hook is SP-3d (#248); the wizard is #295. Landed: the storage
 abstraction, fan-out and AES-256-GCM artifact encryption; the single encrypted archive and the module
 `backup` contribution; the restore consumer; a filing node's restore minting a fresh chain and disjoint
 series; the dashboard wizard. The image ships with backups OFF, deliberately.
@@ -5598,7 +5578,7 @@ of it depends on how PostgreSQL replicates: `packages/membership` whole (documen
 canonicalisation, verification, trust), node enrolment and its rate limiting
 (`apps/server/src/node-enrol-api.ts`, `enrol-rate-limit.ts`), node retirement, and the
 `ledger` / `state` / `local` classification — which no longer chooses a database file: every table
-is in `venue.db` (slice-2 spec §2). Read the residuals below as requirements for what failover is
+is in `venue.db` (#548). Read the residuals below as requirements for what failover is
 rebuilt INTO, not as descriptions of code that exists today. A standby holds its full dormant
 identity from JOIN and promotion never mints a chain.
 

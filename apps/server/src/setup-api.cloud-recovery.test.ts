@@ -90,7 +90,7 @@ describe("setup Cloud recovery", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(requestRestart).toHaveBeenCalledOnce();
   });
-  // Slice-2 plan N23: a snapshot whose database holds bucket settings gets the old-box check.
+  // #646: a snapshot whose database holds bucket settings gets the old-box check.
   it.each([
     [new AppError("restore.stream_source_live", { lastChangeAt: "2026-09-24T11:58:00.000Z" })],
     [new AppError("restore.stream_source_unchecked", { reason: "bucket" })],

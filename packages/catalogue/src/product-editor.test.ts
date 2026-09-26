@@ -154,7 +154,7 @@ it("reports a malformed create body before an unknown catalogue", async () => {
 });
 
 it("saves a product with exactly one variant, or none", async () => {
-  // Spec §15.1: one variant is allowed.
+  // One variant is allowed.
   const one = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, null, catalogueId, { ...input, variants: [input.variants[0]!] }, "en"),
   );

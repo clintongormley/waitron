@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 // Two jobs, both of them answers ABOUT a scope rather than derivations OF one (that is
 // changed-packages.mjs): whether a change can affect a test, build or type-check result
 // (`isInertPath` and `classify`), and which gated jobs a resolved scope gives work to (`SCOPE_GATES`
-// and `gateOutputs`). Design: docs/superpowers/specs/2026-07-31-scoped-ci-design.md.
+// and `gateOutputs`).
 //
 // The rule is an ALLOWLIST OF PATHS, never a file extension: a package-nested README can be a test
 // fixture whose bytes a test asserts against, so treating it as inert by its extension would let an
@@ -343,7 +343,7 @@ export function packagesInScope(scopedPackagesJson) {
  * lives HERE rather than in the gates, so no gate can be written without it.
  *
  * The RESOLVED SCOPE — changed packages and their dependents — is the only thing worth asking about.
- * The design spec §3.6 measured the two obvious alternatives for `@waitron/db`:
+ * The scoped-CI design (#27) measured the two obvious alternatives for `@waitron/db`:
  *
  *   - a second inclusion filter (`--filter "<scope>" --filter "@waitron/db"`) is OR-ed, not
  *     intersected, so it runs db's suite on every code change whether or not db is involved;

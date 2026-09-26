@@ -96,8 +96,7 @@ export default tseslint.config(
               except: [`${import.meta.dirname}/packages/print-agent/**`],
               message:
                 "packages/print-agent runs as a standalone process on the venue's LAN with no " +
-                "database and no repo dependencies — it talks to a Waitron server over HTTP only " +
-                "(docs/superpowers/specs/2026-09-08-print-agent-process-design.md §2.1). " +
+                "database and no repo dependencies — it talks to a Waitron server over HTTP only. " +
                 "@waitron/printing depends on this package, never the reverse; anything it needs " +
                 "belongs in packages/print-agent itself.",
             },
@@ -108,7 +107,7 @@ export default tseslint.config(
   },
 
   {
-    // The generic layer is regime-neutral (spec §2). A second fiscal backend —
+    // The generic layer is regime-neutral. A second fiscal backend —
     // TicketBAI, Italy, Portugal — brings its own tables and its own
     // vocabulary and touches none of these packages. The moment packages/db
     // imports the Veri*Factu module, "generic" becomes a comment rather than a
@@ -132,7 +131,7 @@ export default tseslint.config(
               target: ["./packages/db/**/*", "./packages/core/**/*", "./packages/fiscal/**/*"],
               from: ["./packages/fiscal-verifactu/**"],
               message:
-                "The generic layer must not depend on a fiscal module (spec §2). Only the " +
+                "The generic layer must not depend on a fiscal module. Only the " +
                 "FiscalBackend interface crosses that boundary — if this needs something " +
                 "from the Veri*Factu module, it belongs behind the interface.",
             },
@@ -149,7 +148,7 @@ export default tseslint.config(
             {
               group: ["@waitron/verifactu", "@waitron/verifactu/*"],
               message:
-                "The generic layer must not depend on the Veri*Factu regime (spec §2). Only the " +
+                "The generic layer must not depend on the Veri*Factu regime. Only the " +
                 "FiscalBackend interface crosses that boundary — if this needs something from the " +
                 "Veri*Factu module, it belongs behind the interface.",
             },
@@ -161,8 +160,7 @@ export default tseslint.config(
 
   {
     // packages/scheduler is a duty-NEUTRAL runner: duties are injected and typed structurally, so
-    // it must never import a duty's own package (docs/superpowers/specs/
-    // 2026-07-25-recurring-work-scheduler-design.md §3). Its package.json does NOT enforce that.
+    // it must never import a duty's own package. Its package.json does NOT enforce that.
     // `@waitron/payments` is a devDependency there only for the type-fit test and the AppError
     // code augmentation — but there is no build step, `main` points at TS source, and pnpm links a
     // workspace devDependency identically to a runtime one, so `import { reconcilePayments } from
@@ -195,8 +193,7 @@ export default tseslint.config(
               ],
               message:
                 "packages/scheduler is a duty-neutral runner and must not import a duty's own " +
-                "package (see docs/superpowers/specs/" +
-                "2026-07-25-recurring-work-scheduler-design.md §3). Duties are injected and " +
+                "package. Duties are injected and " +
                 "typed structurally — if the runner needs something from payments or fiscal, it " +
                 "belongs on the PeriodDuty seam, not in an import.",
             },
@@ -214,8 +211,7 @@ export default tseslint.config(
               group: ["@waitron/verifactu", "@waitron/verifactu/*"],
               message:
                 "packages/scheduler is a duty-neutral runner and must not import a duty's own " +
-                "package (see docs/superpowers/specs/" +
-                "2026-07-25-recurring-work-scheduler-design.md §3). Duties are injected and " +
+                "package. Duties are injected and " +
                 "typed structurally — if the runner needs something from the Veri*Factu duty, it " +
                 "belongs on the PeriodDuty seam, not in an import.",
             },
@@ -227,9 +223,8 @@ export default tseslint.config(
 
   {
     // packages/credentials is a leaf: `PURPOSES` in packages/credentials/src/purposes.ts holds a
-    // purpose's field names as plain string data, never a provider's own types or vocabulary (see
-    // docs/superpowers/specs/2026-07-26-tenant-credential-vault-design.md §3). Its package.json
-    // does NOT enforce that — `main` points at TS source with no build step, so
+    // purpose's field names as plain string data, never a provider's own types or vocabulary. Its
+    // package.json does NOT enforce that — `main` points at TS source with no build step, so
     // `import { reconcilePayments } from "@waitron/payments"` inside src/store.ts would typecheck,
     // lint clean and pass every test with no manifest dependency declared at all. The manifest
     // constrains nothing here; only this rule does. Brought forward from Task 7 (originally
@@ -261,8 +256,7 @@ export default tseslint.config(
               ],
               message:
                 "packages/credentials must stay a leaf with zero knowledge of any provider or " +
-                "regime package (see docs/superpowers/specs/" +
-                "2026-07-26-tenant-credential-vault-design.md §3). A purpose's field list is " +
+                "regime package. A purpose's field list is " +
                 "string DATA, never an import — if this needs something from payments or fiscal, " +
                 "it belongs behind the purpose registry, not in an import.",
             },
@@ -280,8 +274,7 @@ export default tseslint.config(
               group: ["@waitron/verifactu", "@waitron/verifactu/*"],
               message:
                 "packages/credentials must stay a leaf with zero knowledge of any provider or " +
-                "regime package (see docs/superpowers/specs/" +
-                "2026-07-26-tenant-credential-vault-design.md §3). A purpose's field list is " +
+                "regime package. A purpose's field list is " +
                 "string DATA, never an import — if this needs something from the Veri*Factu " +
                 "regime, it belongs behind the purpose registry, not in an import.",
             },

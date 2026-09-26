@@ -22,7 +22,7 @@ import type { restoreFromStream, RestoredVenue } from "./restore-stream.js";
 const RECOVERY_KEY = "s3cr3t-recovery-key-value";
 
 const COLD_RESTORE_NOTICE =
-  "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten (promotion runbook §5d)";
+  "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten";
 
 function makeArtifact(dir: string): Promise<string> {
   const artifactPath = join(dir, "backup.wrb");

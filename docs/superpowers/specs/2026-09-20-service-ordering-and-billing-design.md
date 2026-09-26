@@ -366,7 +366,7 @@ related bills is a later interaction detail.
 
 ### Fiscal questions remain explicit
 
-The [receipt design](2026-09-12-receipts-payment-slips-and-duplicates-design.md) records item-based
+The receipt design (#324) records item-based
 splitting for separate invoices and defers per-person VAT duplicates pending
 [advisor question Q19](../../compliance/asesor-questions.md#q19-several-guests-one-table--separate-facturas-or-one-factura-with-duplicados-added-2026-09-12).
 This workflow does not resolve Q19 or authorise building the deferred route. A payment

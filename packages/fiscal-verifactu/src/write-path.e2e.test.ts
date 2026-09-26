@@ -594,9 +594,8 @@ describe("till_id is inert to the huella and the chain (SP-A.2 §16.4(b))", () =
 });
 
 describe("the extras/options rework leaves the fiscal fingerprint byte-identical", () => {
-  // THE GATE for the extras/options rework (Task 9 of
-  // `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`): the same basket, filed before
-  // and after the rework, must produce the SAME `Huella`, `ImporteTotal` and `CuotaTotal` — down to
+  // THE GATE for the extras/options rework (added in #469): the same basket, filed before and after
+  // the rework, must produce the SAME `Huella`, `ImporteTotal` and `CuotaTotal` — down to
   // the byte, not merely "passes the validator". A filed record is append-only and hash-chained, so
   // a value written wrong here stays wrong (CLAUDE.md §5).
   //
@@ -623,9 +622,8 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
   // child line's `vatRate` moved from "10.00" to "21.00" and NOTHING else touched: `cuota_total`
   // came back "2.54" and the huella
   // `A445E2BA3E533EE363B05CA272293EC015AE419B4785C4946F0D3E8BD57C0AF3` — both different, so an
-  // extra's VAT rate, which is the picked product's own (spec
-  // `docs/superpowers/specs/2026-09-18-one-product-model-design.md` decision 9) and the figure this
-  // rework could have moved, is a figure this fixture can see. WHAT THAT PROBE DOES NOT COVER:
+  // extra's VAT rate, which is the picked product's own and the figure this rework could have moved,
+  // is a figure this fixture can see. WHAT THAT PROBE DOES NOT COVER:
   // `importe_total` stayed "14.41". It is `sale.total` copied verbatim (`ImporteTotal: sale.total`,
   // `./backend.ts`), an explicit field of `saleInput` rather than anything derived from the lines,
   // so the third literal is pinned against the CALLER's total and not against the basket.
@@ -701,7 +699,7 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
         .where(eq(saleLines.saleId, saleId));
       expect(filed.find((line) => line.lineNo === 1)?.optionSnapshots).toEqual([ANSWER]);
       // The extra's own child line carries no answers: a pick IS a line, never an entry in the
-      // dish's snapshot list (spec §3.4).
+      // dish's snapshot list.
       expect(filed.find((line) => line.lineNo === 2)?.optionSnapshots).toEqual([]);
 
       const { rows } = await tx.execute<{
@@ -814,7 +812,7 @@ describe("a variant line is filed at its own effective VAT rate", () => {
 
 describe("a variant's names are not part of the huella", () => {
   // The variant counterpart of verify.test.ts's "entorno is not part of the huella": the filed
-  // sale line keeps the variant's frozen names (spec §4.3), and none of them may reach the
+  // sale line keeps the variant's frozen names, and none of them may reach the
   // fingerprint. Two sales differing ONLY in the variant's three names must hash the same. Each is
   // recorded and read back inside a transaction that is then ROLLED BACK, as the parent_line_id block
   // above does, so the second re-allocates the same `A/1` against the same empty chain.

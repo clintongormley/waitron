@@ -1398,7 +1398,7 @@ This records a question; no enquiry has been sent.
 ### Q23. Backup copies of the records held outside Spain, or by us (added 2026-09-23)
 
 **Why it matters.** The
-[SQLite slice 2 design](../superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md)
+SQLite slice 2 design (finished in #652)
 streams each venue's database, fiscal records included, to an S3-compatible bucket **the owner
 supplies**, with any provider, so the copy may sit outside Spain; a dead box is rebuilt from it under a
 fresh chain. Waitron Cloud's own bucket plugs into the same setting later; the owner decision that

@@ -3,7 +3,7 @@
 Date: 2026-09-07 (revised same day after a fresh-context fiscal review — see §10 for what the review
 changed). Track B item 3 follow-up ("cert distribution to a promoted mirror" — the named dependency
 that unblocks _filing_ on a promoted cloud, `docs/backlog.md` Track B item 3 "STILL OWED").
-Supersedes the "unlock the key ring" framing of `2026-08-29-promotion-runbook-design.md` §4–5 (§9).
+Supersedes the "unlock the key ring" framing of the promotion runbook design's §4–5 (§9).
 
 Single slice (owner decision 2026-09-07: "do both in one"). Two coupled halves answer one question —
 _where does the key that opens the AEAT certificate live, on each kind of node_ — plus the operator
@@ -445,7 +445,7 @@ assume it.
 
 ## 9. What this supersedes
 
-- `2026-08-29-promotion-runbook-design.md` §4–5's "break-glass unlocks the key ring to unseal a
+- The promotion runbook design's §4–5 "break-glass unlocks the key ring to unseal a
   **replicated** certificate blob" — there was never a replicated certificate; the standby held
   nothing. This design is the first mechanism that puts a (wrapped) certificate on the standby. The
   08-29 §7 "abort promotion if the certificate cannot be unsealed" is replaced by §3.1 point 4

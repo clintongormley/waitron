@@ -63,7 +63,7 @@ export class TillLockScreen extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      /* The server status line (till-reroute §4.4) — set off below the roster, muted like the other
+      /* The server status line — set off below the roster, muted like the other
          status copy, with the "check again" control spaced off the states it follows. */
       .servers {
         margin-top: var(--wt-space-4);

@@ -229,7 +229,7 @@ describe("product variants", () => {
       expect.objectContaining({ id: variants[0]!.id, available: false }),
       expect.objectContaining({ id: variants[1]!.id, available: true }),
     ]);
-    // Removing a variant a menu overrides is allowed (spec §15.6): it becomes Inactive.
+    // Removing a variant a menu overrides is allowed: it becomes Inactive.
     await run((tx) => setProductVariants(tx, productId, [variants[1]!], "en"));
     expect(
       (await run((tx) => listProductVariants(tx, productId))).map(({ id, active }) => ({

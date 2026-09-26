@@ -2205,7 +2205,7 @@ describe("restore from my bucket", () => {
     );
   });
 
-  // Reconciliation N26: the shell hands the restored copy's names to the screen for confirmation.
+  // #646: the shell hands the restored copy's names to the screen for confirmation.
   it("returns to the bucket screen showing whose copy it is when the venue is unconfirmed", async () => {
     const screen = await refusedWith({
       code: "restore.stream_venue_unconfirmed",

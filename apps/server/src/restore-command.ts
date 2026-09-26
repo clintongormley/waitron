@@ -99,7 +99,7 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
 
   const restore = deps.restore ?? restoreFromArtifact;
   deps.out(
-    "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten (promotion runbook §5d)",
+    "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten",
   );
   try {
     await restore(restoreDeps);

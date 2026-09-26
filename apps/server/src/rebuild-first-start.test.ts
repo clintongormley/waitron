@@ -433,7 +433,7 @@ describe("completeRebuild", () => {
   });
 });
 
-describe("the term after a restore (slice-2 spec §5.1 step 7)", () => {
+describe("the term after a restore", () => {
   it("signs one term above the bucket's pointer when the restored copy is older than it", async () => {
     const stateDir = await rebuiltStateDir("archive");
     await completeRebuild(deps(stateDir, { pointerTerm: async () => 2 }));
@@ -591,7 +591,7 @@ describe("readBucketPointerTerm", () => {
   });
 });
 
-describe("runFirstStart (slice-2 spec §5.3)", () => {
+describe("runFirstStart", () => {
   it("opens for sales without streaming, logs restore.first_start_failed, and keeps the marker for the next start", async () => {
     const stateDir = await rebuiltStateDir("stream");
     const log = vi.fn();

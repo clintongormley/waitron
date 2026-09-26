@@ -1177,7 +1177,7 @@ describe("resolvePreparationRoutes", () => {
     });
   });
 
-  // Spec §15.6: the till never offers a sold-out (Unavailable) product, but readiness is a setup
+  // The till never offers a sold-out (Unavailable) product, but readiness is a setup
   // check, so a menu whose only product is sold out is not empty and that product still needs a route.
   it("sells no Unavailable product in a zone while readiness still judges its setup", async () => {
     const { cfg, zoneId, otherZoneId } = await seedRoutingVenue();

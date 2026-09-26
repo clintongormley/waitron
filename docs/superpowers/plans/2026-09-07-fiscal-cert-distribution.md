@@ -35,7 +35,7 @@
 - `packages/identity/src/permissions.ts` (add `fiscal.configure`).
 - `apps/server/src/errors.ts`, `recovery-bundle.ts`, `mirror-bundle.ts`, `adopt.ts`, `promote.ts`, `promote-api.ts`, `box-status.ts`, `box-secrets.ts`, `state-secrets.ts`, `backup-sweep.ts`/`restore.ts` (manifest key), `boot.ts` (wiring).
 - `apps/setup/src/screens/done-screen.ts` (break-glass copy).
-- `docs/superpowers/specs/2026-08-29-promotion-runbook-design.md` (dated pointers).
+- The promotion runbook design, since deleted (dated pointers).
 
 ---
 
@@ -936,7 +936,7 @@ git commit -s -m "feat(server): env-keyed node backups carry no vault key"
 
 **Files:**
 - Modify: `apps/setup/src/screens/done-screen.ts` (the break-glass secret panel)
-- Modify: `docs/superpowers/specs/2026-08-29-promotion-runbook-design.md` (dated pointers)
+- Modify: the promotion runbook design, since deleted (dated pointers)
 - Test: `apps/setup/src/screens/done-screen.test.ts` (browser-mode — check what else is testing first, CLAUDE.md §4)
 
 **Interfaces:**
@@ -957,7 +957,7 @@ Update the copy string. Keep it plain and short.
 
 - [ ] **Step 4: Dated pointers in the 08-29 spec**
 
-Add a dated banner to `2026-08-29-promotion-runbook-design.md` §4–5 (do not rewrite history): "> 2026-09-07: cert distribution is now designed and built (2026-09-07-fiscal-cert-distribution-design.md). The 'unlock the key ring to unseal a replicated cert blob' framing here is superseded — there was never a replicated blob; the standby now holds a break-glass-wrapped dormant copy. §7's 'abort promotion if the cert cannot be unsealed' is replaced by 'withhold filing, never selling'."
+Add a dated banner to the promotion runbook design's §4–5 (since deleted) (do not rewrite history): "> 2026-09-07: cert distribution is now designed and built (2026-09-07-fiscal-cert-distribution-design.md). The 'unlock the key ring to unseal a replicated cert blob' framing here is superseded — there was never a replicated blob; the standby now holds a break-glass-wrapped dormant copy. §7's 'abort promotion if the cert cannot be unsealed' is replaced by 'withhold filing, never selling'."
 
 - [ ] **Step 5: Run to green**
 
@@ -967,7 +967,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/setup/src/screens/done-screen.ts apps/setup/src/screens/done-screen.test.ts docs/superpowers/specs/2026-08-29-promotion-runbook-design.md
+git add apps/setup/src/screens/done-screen.ts apps/setup/src/screens/done-screen.test.ts
 git commit -s -m "docs+setup: reword break-glass copy for cert unlock; date the 08-29 pointers"
 ```
 

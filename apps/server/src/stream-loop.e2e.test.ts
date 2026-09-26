@@ -572,7 +572,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
         saleInGeneration(pointerB.pointer.body.generation, saleB.saleId),
       );
 
-      // 8b. Sales keep their normal time with the S3 server stopped — spec §8.2, against the real
+      // 8b. Sales keep their normal time with the S3 server stopped — against the real
       //     Litestream (Task 7's stream-host case uses a fake one and cannot show this). The server is
       //     frozen with SIGSTOP, so every bucket call hangs rather than being refused. A sale that
       //     waited on the bucket would hang with it; the bound sits far below that and far above a

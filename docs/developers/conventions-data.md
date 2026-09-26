@@ -329,8 +329,8 @@ with at most three reads; `working-order.test.ts` checks the single call and
 ## The tables `scripts/write-path-tables.json` lists are read-only to the application, and one guard is the whole of the enforcement
 
 `tenants`, `nodes`, `deployment`, `mirror_config` and `node_roles`. `node_roles` joined on
-2026-09-23, when a node's mode, singleton role and break-glass verifier left `deployment` (slice-2
-spec §2); it inherits `deployment`'s rule and is not in the frozen matrix, which the guard's
+2026-09-23, when a node's mode, singleton role and break-glass verifier left `deployment` (#548);
+it inherits `deployment`'s rule and is not in the frozen matrix, which the guard's
 `ADDED_SINCE_THE_MATRIX` records. NOTHING BUT `scripts/write-path-tables.test.ts` REFUSES THEM. The
 database used to: a request was served on a connection wearing `app_user`, which held `SELECT` and
 no write on the four, so PostgreSQL answered a write with `42501`. SQLite has no
@@ -476,11 +476,7 @@ describes the old storage.** There are dozens, nearly all dated plans and specs 
 true when written; they were not rewritten.
 
 The documents corrected in place are named here rather than described as a class, because the
-class was not swept: `docs/superpowers/plans/2026-09-18-modifiers-extras-options.md`'s
-conventions block and
-`docs/superpowers/specs/2026-09-16-sqlite-slice1-storage-swap-design.md` where they tell a future
-session what a money column is or what a package contains, and this file plus `CLAUDE.md` §3,
-which carry the rule.
+class was not swept: this file and `CLAUDE.md` §3, which carry the rule.
 
 ## A quantity counts whole thousandths and a rate whole basis points, and neither is the money scale
 
@@ -710,7 +706,7 @@ Run both after adding any table anywhere.
 ## A `local` row belongs to one node, so no foreign key may join a `local` table to a `ledger`/`state` one
 
 Every table is in `venue.db`, which a primary streams whole to the owner's bucket once one is set up
-(slice-2 spec §2, which
+(#548, which
 replaced the topology design's plan to put `local` tables in `node.db`). A `local` row means nothing to another
 node, so no venue row may depend on one, and `node.db` stays reserved for a later slice that may
 move `local` tables into it — which a key in either direction would block. Guard:
@@ -747,8 +743,8 @@ which of three ties it uses: a `node_id` column every read and write names (`nod
 `mirror_config`, `join_requests`, `node_sealed_state`), a seal only that node's key opens (`tenant_credentials`), or rows
 the transaction that wrote them deletes (`change_log`). Identity has no `local` table: slice-2
 Task 1b reclassified its logins and sign-in ceremonies `state`, with a login's cookie token stored
-only as its hash (`packages/identity/src/classification.ts`; plan
-`2026-09-23-sqlite-slice2-stream-and-cold-restore.md`, Task 1b and owner decision O1). Pinned,
+only as its hash (`packages/identity/src/classification.ts`; #554, and the owner's decision that a
+login survives a rebuild and a promotion). Pinned,
 each by deleting the node filter and watching a case fail: the `node_roles` and
 `mirror_config` readers (`packages/db/src/node-roles.test.ts`), and every node filter on
 `join_requests` in `apps/server/src/join-requests.ts` but deny's delete, which runs only after a
@@ -1192,16 +1188,15 @@ bound one.
 ## A by-id read still needs its own `eq(table.tenantId, cfg.tenantId)` — one-tenant-per-database is NOT the query's isolation boundary
 
 > **Superseded 2026-09-14.** There is no tenant column to compare against any more: the taxpayer is
-> the one row in `tenants` (`id = 1`), and nothing filters by a tenant. Spec:
-> `docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md`. The rest of this section is kept as
-> the record of why the rule existed; the probe it describes cannot be written any more, because a
-> second taxpayer row cannot be inserted. What survives it is the habit, not the clause: only the
-> seat that RAN a probe found the defect four reading passes had cleared.
+> the one row in `tenants` (`id = 1`), and nothing filters by a tenant. Built in #378. The rest of
+> this section is kept as the record of why the rule existed; the probe it describes cannot be
+> written any more, because a second taxpayer row cannot be inserted. What survives it is the habit,
+> not the clause: only the seat that RAN a probe found the defect four reading passes had cleared.
 
 Since RLS was dropped (#255) `withTenant` no longer isolates SELECTs, so every read scopes to the
 tenant itself — a by-id read as much as a list read, never trusting a globally-unique UUID or the
 deployment invariant. Cost: `getHeldOrder`/`abandonHeldOrder` keyed on the `working_orders.id` UUID
-alone, so tenant A could read AND abandon tenant B's order in a multi-tenant DB (till-reroute S3). The
+alone, so tenant A could read AND abandon tenant B's order in a multi-tenant DB (till reroute S3, #259). The
 per-task review and four quality lenses all reasoned it "safe under one-tenant-per-db"; only the
 run-it seat, which RAN a two-tenant probe as `app_user` (rolsuper=f), caught it — reading missed it,
 running caught it (§1, §4).
@@ -1305,8 +1300,7 @@ older ref after a newer one has already migrated the database can fail to boot w
 `waitron.sh`'s advice on that failure depends on the box: on one that is not stamped production,
 `waitron.sh reset` wipes the database and is the clean way back to a working box; on a production box
 the script refuses to suggest that (a reset there would destroy the fiscal chain) and says to install
-a newer ref instead (`docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md` §3 step 6,
-§4.1). It has two callers (`grep -rn assertNotAhead` before believing otherwise): boot, in
+a newer ref instead (#314). It has two callers (`grep -rn assertNotAhead` before believing otherwise): boot, in
 `apps/server/src/node-entry.ts`, and the bucket rebuild's preparation, `prepareStreamRestore` in
 `apps/server/src/restore-stream.ts`, which checks the downloaded copy before anything is placed
 (2026-09-25, slice 2 Task 9b). WHERE boot's call sits changed with the storage switch. It used to run after
@@ -1341,11 +1335,10 @@ touched the changed schema. Designed and built in #310.
 ## A configuration route checks the tenant returned by `authorizeManager`, as well as scoping its queries
 
 > **Superseded 2026-09-14.** `authorizeManager` returns `{ authorizedBy, role }` and no tenant, and
-> there is no configured tenant to compare it with — one database, one taxpayer. Spec:
-> `docs/superpowers/specs/2026-09-14-drop-tenant-id-design.md`. The two regression cases named below
-> were deleted with the column. What the route still scopes its queries by is the deployed LOCATION
-> — `apps/server/src/location-settings-api.ts` filters on `eq(locations.id, deps.cfg.locationId)` —
-> a separate boundary this change did not touch.
+> there is no configured tenant to compare it with — one database, one taxpayer. Built in #378. The
+> two regression cases named below were deleted with the column. What the route still scopes its
+> queries by is the deployed LOCATION — `apps/server/src/location-settings-api.ts` filters on
+> `eq(locations.id, deps.cfg.locationId)` — a separate boundary this change did not touch.
 
 The permission check returns the session's tenant; it does not compare it with the configured tenant.
 A2's two-tenant route probe returned 200 for the other tenant's manager until the caller compared
@@ -1418,8 +1411,8 @@ streaming, `sqlite3 venue.db "select type, name from sqlite_schema"` printed `ta
 folder held `venue.db`, `venue.db-shm` and `venue.db-wal`. After `litestream replicate -once`, the same
 query printed `table|t`, `table|_litestream_seq` and `table|_litestream_lock`, and `find` showed
 `.venue.db-litestream/ltx/0/0000000000000001-0000000000000001.ltx` beside the file. A
-`litestream restore -o restored.db` of that replica listed the same three tables. (The slice-2 plan's
-Task 10 drafter recorded the same result on 2026-09-23.)
+`litestream restore -o restored.db` of that replica listed the same three tables. (The drafter of slice 2's
+Task 10, #652, recorded the same result on 2026-09-23.)
 
 So a comparison of two venue databases leaves the two tables out, as the stream loop test's
 `tableContents` does (`apps/server/src/stream-loop.e2e.test.ts`), and a check that lists a live or

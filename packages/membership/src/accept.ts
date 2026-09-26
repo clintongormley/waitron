@@ -4,8 +4,8 @@ import { verifyMembershipDocument } from "./verify.js";
 /**
  * A document is adopted only if it is BOTH authentic (signature and trust chain) AND strictly newer
  * than the one held. The asymmetry — this can only ever raise the held term (accept a demotion or
- * eviction), never grant authority — is what §5 of
- * `docs/superpowers/specs/2026-09-02-membership-and-rejoin-wire-protocol-design.md` relies on.
+ * eviction), never grant authority — is deliberate: a signature proves who wrote a document, not
+ * that it is current, so one from a peer that missed a promotion may only take authority away.
  * `currentTerm === null` means nothing is held yet. `held` is the receiver's own held chart, for
  * `verifyMembershipDocument`.
  */

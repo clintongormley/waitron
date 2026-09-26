@@ -401,8 +401,7 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
       firstNames: asOptionalName(admin.firstNames, "admin.firstNames"),
       lastNames: asOptionalName(admin.lastNames, "admin.lastNames"),
       // The DISPLAY language, not the fiscal `location.invoiceLocales`. Never null: the till after a
-      // PIN sign-in and account emails have no browser header to fall back to. See
-      // docs/superpowers/specs/2026-09-13-onboarding-flow-corrections-design.md.
+      // PIN sign-in and account emails have no browser header to fall back to.
       locale: resolveLoginLocale(
         acceptLanguage,
         resolveInstalledCountryLocale(SUPPORTED_LOCALE_CODES, {

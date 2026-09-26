@@ -1,4 +1,4 @@
-// Measurement 2 (slice-2 spec §8.1 item 2): should SQLite's automatic fold-back be switched off?
+// Measurement 2 (#540): should SQLite's automatic fold-back be switched off?
 //
 // `packages/store` keeps SQLite's default (fold back every 1000 pages). The topology design §8.3 says
 // to switch it off once Litestream runs. Four arms, one variable at a time:

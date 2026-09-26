@@ -28,7 +28,7 @@ export interface MintOptions {
  * The CA's permitted name space: `waitron.local`, `localhost`, loopback and the three RFC1918
  * ranges. OpenSSL, the macOS system checker and Chrome 152 on macOS refused the root for an outside
  * name; Chrome on the one Android phone measured accepted one under the user-installed root
- * (docs/superpowers/specs/2026-09-08-lan-https-install-and-name-constraints-spike.md §6, §7).
+ * (2026-09-08, recorded in commits fb47efd68 and 75f17f9e3; built in #290).
  */
 const PERMITTED_DNS = ["waitron.local", "localhost"];
 const PERMITTED_IPV4_CIDRS: Array<[string, number]> = [

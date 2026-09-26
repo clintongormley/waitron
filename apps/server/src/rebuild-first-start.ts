@@ -28,7 +28,7 @@ import "./errors.js";
  * archive's identity; holds `{ version: 1, source }`. */
 export const REBUILD_MARKER = "rebuild-first-start.json";
 
-/** Which restore wrote the marker. Both get the same first start (slice-2 spec §5.1 step 7). */
+/** Which restore wrote the marker. Both get the same first start. */
 export type RebuildSource = "archive" | "stream";
 
 export interface RebuildDeps {
@@ -123,7 +123,7 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
           n.nodeId === deps.nodeId ? { ...n, contactUrl: deps.contactUrl } : n,
         );
   // Never below the bucket's pointer: the stream supervisor refuses to replace a pointer naming a
-  // higher term (slice-2 spec §5.1 step 7).
+  // higher term.
   const pointerTerm = (await deps.pointerTerm?.()) ?? null;
   const next = await mintNextMembershipDocument(
     { db: deps.db, ring: deps.ring },
@@ -158,11 +158,10 @@ export interface FirstStart {
 }
 
 /**
- * {@link completeRebuild}, for boot. A failure does not keep the box shut: it sells, does not stream
- * (its term may not have moved), and the marker stays so the next start tries again (slice-2
- * spec §5.3). The log carries the error's code only. The exception is
- * `restore.membership_invalid`, which is thrown on, so the start fails, and once starts have failed
- * repeatedly the recovery page shows it.
+ * {@link completeRebuild}, for boot. A failure does not keep the box shut: it sells, does not
+ * stream (its term may not have moved), and the marker stays so the next start tries again. The log
+ * carries the error's code only. The exception is `restore.membership_invalid`, which is thrown on,
+ * so the start fails, and once starts have failed repeatedly the recovery page shows it.
  */
 export async function runFirstStart(deps: RebuildDeps): Promise<FirstStart> {
   try {

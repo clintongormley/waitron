@@ -189,7 +189,7 @@ export const en = {
   "options.labels_required": "Add or enable a label, or take this list out of use.",
 
   // The three names mean the same three things as in the options block above. A blank price is
-  // not zero: the item charges the product's own (2026-09-18-one-product-model-design.md §9.1).
+  // not zero: the item charges the product's own.
   "extras.title": "Extras",
   "extras.add": "Add extras list",
   "extras.search": "Search extras lists",

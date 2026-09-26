@@ -28,7 +28,7 @@ import { startServer, type StartedServer } from "./boot.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
-// The till-reroute HEADLINE proof (S6, till-reroute design §6): TWO booted `apps/server` instances
+// The till-reroute HEADLINE proof (S6, #265): TWO booted `apps/server` instances
 // (two `startServer` boots, in ONE test process — not two OS processes), each on its OWN venue
 // DIRECTORY of SQLite files. One venue, two nodes: A (primary, box) and B (mirror, cloud), with the
 // SAME identity seeded directly into each directory, because nothing copies rows between the two
@@ -49,7 +49,7 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 //      flip a human's promote performs) and RESTARTED — `acceptingSales` is boot-captured, so an
 //      un-restarted B still answers false, and only the fresh boot flips it true.
 //   5. The SAME device cookie authenticates on the promoted B, the till re-logs-in, and the venue's open
-//      tab — tagged with the DEAD node's id — is inherited by the now venue-wide read (§3.6).
+//      tab — tagged with the DEAD node's id — is inherited by the now venue-wide read.
 //
 // The three distinct `/api/node` bodies this observes are pinned to
 // `apps/till/src/api/__fixtures__/node-probe.json`, the contract file the till-side
@@ -366,7 +366,7 @@ describe("till reroute — two instances, one venue", () => {
 
         // 6. The SAME device cookie authenticates on the promoted B, the till re-logs-in, and the venue's
         // open tab — tagged with the DEAD node's id — is returned by the now venue-wide read. FAILING
-        // CASE: the pre-§3.6 own-node filter would hide NODE_A's tab from B (whose own node is NODE_B).
+        // CASE: the pre-reroute own-node filter would hide NODE_A's tab from B (whose own node is NODE_B).
         expect((await get(portB, "/api/device/me", DEVICE_COOKIE_HEADER)).status).toBe(200);
         const loginB = await post(
           portB,

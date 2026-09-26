@@ -13,7 +13,7 @@ import { readProductEditor, saveProductEditor, type ProductEditorInput } from ".
 import { createUnit } from "./units.js";
 import { seedVenue, useCatalogueDb } from "../test/fixtures.js";
 
-// Spec §15.6: Active is whether the product exists for the venue, Available is "sold out for now".
+// Active is whether the product exists for the venue, Available is "sold out for now".
 // The till sells a product only when it is BOTH, and each state is written without touching the
 // other — so every case below gives the two flags different values.
 const fx = useCatalogueDb();
@@ -146,7 +146,7 @@ describe("Active and Available", () => {
     });
   });
 
-  // Spec §15.4: every Active, Available product on a menu is offered to the till, sold alone or not.
+  // Every Active, Available product on a menu is offered to the till, sold alone or not.
   it("offers an Active, Available product the till whether or not it is sold alone", async () => {
     for (const soldAlone of [true, false]) {
       await run((tx) =>

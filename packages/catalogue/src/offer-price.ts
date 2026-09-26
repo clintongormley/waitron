@@ -5,7 +5,7 @@ export const priceOrNull = (cents: number | null): Decimal | null =>
   cents === null ? null : centsToDecimal(cents);
 
 /**
- * The price a menu charges for a variant (spec §15.3): the most specific price that is set wins —
+ * The price a menu charges for a variant: the most specific price that is set wins —
  * the variant's price on this menu, the variant's own price, the parent's price on this menu, the
  * parent's own price. Zero is a price, not a blank.
  *

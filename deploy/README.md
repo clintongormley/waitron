@@ -188,7 +188,7 @@ stamp table in it, and that reads as unstamped rather than as a read that failed
 refused is a box whose venue file cannot be read at all, because nothing about it can be
 established. The only way past the refusal on a genuinely production box is deliberate: pass
 `--force-production`, and, when run at a terminal, also type the word `production` when asked.
-Full design: `docs/superpowers/specs/2026-09-11-waitron-sh-box-command-design.md` §4.
+The command was designed and built in #314.
 
 A box whose join to another server stopped partway can also be reset from the setup wizard, without
 a terminal, given the admin login the join used; the server refuses it in any other state. The box

@@ -2410,7 +2410,7 @@ describe("till-app", () => {
     expect(line.options).toBeUndefined();
   });
 
-  // A frozen answer carries six names and no ids (spec §2.3), so a retrieved line re-derives the
+  // A frozen answer carries six names and no ids, so a retrieved line re-derives the
   // `{ listId, labelId }` the wire wants by matching those names against the dish's LIVE offer —
   // the same problem `deriveExtraSelections` solves for a pick. The three names of the list and of
   // the label differ, so a match made on the wrong one of the six fails (CLAUDE.md §3).
@@ -2591,7 +2591,7 @@ describe("till-app", () => {
 
   it("shows sale.unconfirmed, basket kept, when the sale request got no answer", async () => {
     // A `recordSale` whose `fetch` rejects at the NETWORK level (a TypeError — the host never answered)
-    // is not the same as a server that refused with a `{ code }` (till-reroute §4.3): the operator must
+    // is not the same as a server that refused with a `{ code }` (#264): the operator must
     // check whether the sale went through before retrying, so the banner is `sale.unconfirmed`, not the
     // free-to-retry `sale.error`. Basket kept, still on the counter.
     const recordSale = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
@@ -2642,7 +2642,7 @@ describe("till-app", () => {
   it("walk-up pay retry: a re-tapped confirm sends the SAME store id (idempotent replay, never two ids)", async () => {
     // A lost pay response then an operator re-tap must replay against the same working-order id, not
     // mint a second one — otherwise a second POST /api/sales files a second chained fiscal record
-    // (spec §3: the client holds the id stable across retries). The first attempt rejects (response
+    // (the client holds the id stable across retries). The first attempt rejects (response
     // lost); the re-tap succeeds. Both must carry the identical store id.
     const recordSale = vi
       .fn()
@@ -5312,7 +5312,7 @@ describe("till-app", () => {
 
     it("place: the placeOrder fiscal request network-failing shows sale.unconfirmed (the request was reached)", async () => {
       // The other side: park succeeded and `placeOrder` IS called, so a network failure of THAT
-      // request is `sale.unconfirmed` — the placement / deferred invoice may have filed (§4.3).
+      // request is `sale.unconfirmed` — the placement / deferred invoice may have filed.
       const placeOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
@@ -5422,7 +5422,7 @@ describe("till-app", () => {
     it("collect-order: a NETWORK failure (no answer) shows sale.unconfirmed, basket kept", async () => {
       // Collect is a terminal fiscal-file moment (Mode T files immediate, Mode I settles the deferred
       // invoice), so a `collectOrder` whose `fetch` got no answer has the same "did it file?" ambiguity
-      // as `#onConfirmPayment` (till-reroute §4.3): `sale.unconfirmed`, not the free-to-retry
+      // as `#onConfirmPayment` (#264): `sale.unconfirmed`, not the free-to-retry
       // `sale.error`. The `{ code }` refusal path stays `sale.error` (the test above).
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
@@ -7308,7 +7308,7 @@ it.each(["station", "expo", "schedule"])(
   },
 );
 
-// The venue's servers (till-reroute §4.1). Mirrors the un-exported helpers in server-router.test.ts —
+// The venue's servers (#261). Mirrors the un-exported helpers in server-router.test.ts —
 // redefined locally rather than exported from there (they are private test fixtures).
 const BOX = "https://box.deli.test";
 const CLOUD = "https://cloud.deli.test";
@@ -7326,7 +7326,7 @@ function memoryStorage(): Pick<Storage, "getItem" | "setItem"> {
   return { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) };
 }
 
-describe("till-app follows a server move (till-reroute §4.3)", () => {
+describe("till-app follows a server move", () => {
   it("on server-changed: drops the operator, locks with server.switched, and re-boots against the new target", async () => {
     const router = new ServerRouter({
       origin: BOX,
@@ -7350,7 +7350,7 @@ describe("till-app follows a server move (till-reroute §4.3)", () => {
     // Exactly two getTill: the initial boot + the one re-boot the move triggers. A doubled subscription
     // (a handler registered in both connectedCallback and willUpdate) would re-boot twice — this pins it.
     expect(api.getTill).toHaveBeenCalledTimes(2);
-    // The working order is KEPT across the move (only the operator session is dropped, §4.3).
+    // The working order is KEPT across the move (only the operator session is dropped).
     expect(c.store.lines).toHaveLength(1);
   });
 
@@ -7368,7 +7368,7 @@ describe("till-app follows a server move (till-reroute §4.3)", () => {
     expect(setServers).toHaveBeenCalledWith(servers);
   });
 
-  it("shows the waiting-for-promotion banner in the shell while the router waits (§4.4)", async () => {
+  it("shows the waiting-for-promotion banner in the shell while the router waits", async () => {
     // On the shell surface (an operator mid-shift) the lock-screen's own status line is not visible, so
     // `till-app` surfaces `server.waiting_promotion` in its own `role="status"` banner while the router
     // reports no server is accepting sales. Two-sided: absent before a probe leaves the router waiting,

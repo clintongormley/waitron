@@ -1,7 +1,6 @@
 /**
  * What `app_user` was granted on each table, BEFORE the storage switch. Letters: S=SELECT I=INSERT
- * U=UPDATE D=DELETE T=TRUNCATE. The design it was taken from is
- * docs/superpowers/specs/2026-09-05-drop-rls-squash-and-outbox-deletion-design.md §1.
+ * U=UPDATE D=DELETE T=TRUNCATE. It was first written in #255.
  *
  * THIS IS A FROZEN RECORD, NOT A MEASUREMENT, and it is unverified data: the engine it describes is
  * gone, so there are no roles and no grants to read it back from. The suite that used to do that,

@@ -1,5 +1,5 @@
 {
-  "_comment": "The three GET /api/node bodies both the till-reroute server e2e (apps/server/src/till-reroute-e2e.test.ts) and the till-side router contract (apps/till/src/api/server-router.contract.test.ts) pin to — one file, so a wire-shape drift fails on both sides (till-reroute design §6). term/standing are null because no membership document is seeded; nodeId is the boot's WAITRON_TILL_NODE_ID.",
+  "_comment": "The three GET /api/node bodies both the till-reroute server e2e (apps/server/src/till-reroute-e2e.test.ts) and the till-side router contract (apps/till/src/api/server-router.contract.test.ts) pin to — one file, so a wire-shape drift fails on both sides. term/standing are null because no membership document is seeded; nodeId is the boot's WAITRON_TILL_NODE_ID.",
   "aPrimary": {
     "nodeId": "33333333-3333-4333-8333-333333333333",
     "term": null,

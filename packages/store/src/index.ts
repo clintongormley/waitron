@@ -134,8 +134,7 @@ async function enterWriteAheadMode(connection: DatabaseSync): Promise<void> {
  * Automatic checkpointing stays at SQLite's own default: every 1000 pages, and always PASSIVE, which
  * never invokes the busy handler (https://www.sqlite.org/pragma.html), so it never waits on
  * Litestream. With streaming off nothing else checkpoints, so switching it off would let the
- * write-ahead file grow without limit. Slice-2 spec §4.5
- * (docs/superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
+ * write-ahead file grow without limit.
  */
 async function openConnection(path: string): Promise<DatabaseSync> {
   const connection = new DatabaseSync(path);

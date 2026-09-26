@@ -516,7 +516,7 @@ async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
 /**
  * The deployment holds one tenant per database. A SECOND node under the SAME tenant + location —
  * a `cfg` differing only in `node_id`. It never sells here; it exists so reads run under it prove
- * they are venue-wide (till-reroute §3.6): a node reaches the venue's open tabs regardless of the
+ * they are venue-wide (#259): a node reaches the venue's open tabs regardless of the
  * `node_id` they carry. `filing_module`/`tax_module` are nullable and unused for a listing-only node, so left out.
  */
 async function addNode(cfg: TillConfig, name: string): Promise<TillConfig> {
@@ -1082,7 +1082,7 @@ describe("card tender (manual / datáfono)", () => {
   });
 });
 
-// The park & retrieve headline (spec §7b): a parked order is HELD BY THE NODE, not by the register
+// The park & retrieve headline: a parked order is HELD BY THE NODE, not by the register
 // that parked it, so any till on the node can list, retrieve and pay it.
 describe("cross-till end-to-end", () => {
   it("parks on till A, lists + retrieves + pays on till B (same node), and the chain across two sales verifies", async () => {
@@ -1175,7 +1175,7 @@ describe("cross-till end-to-end", () => {
     expect(report.checked).toBe(2);
   });
 
-  it("venue-wide reads: a same-tenant register on a DIFFERENT node lists an order parked on node A (till-reroute §3.6)", async () => {
+  it("venue-wide reads: a same-tenant register on a DIFFERENT node lists an order parked on node A", async () => {
     const { cfg: nodeA, cafe, zoneId } = await setupVenue();
     // A second node under the SAME tenant. Reads are venue-wide, so both nodes see the order — a
     // promoted node inherits the venue's open tabs regardless of the `node_id` they carry.
@@ -1192,7 +1192,7 @@ describe("cross-till end-to-end", () => {
     expect((await listHeldOrders({ db: suite.db }, nodeB)).map((o) => o.id)).toContain(orderId);
   });
 
-  it("venue-wide reads: the by-id family (get/update/abandon) reaches a foreign-node order (till-reroute §3.6)", async () => {
+  it("venue-wide reads: the by-id family (get/update/abandon) reaches a foreign-node order", async () => {
     const { cfg: nodeA, cafe, zoneId } = await setupVenue();
     // A second register under the SAME tenant + location, differing only in node_id. Reads are
     // venue-wide, so every by-id lookup on node B reaches node A's order — a promoted node serves
@@ -2056,7 +2056,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
   });
 
-  it("listStationQueue is VENUE-WIDE: each node sees the venue's items, regardless of node (till-reroute §3.6)", async () => {
+  it("listStationQueue is VENUE-WIDE: each node sees the venue's items, regardless of node", async () => {
     const { cfg: nodeA, cafe, zoneId } = await modeVenue("ticket_then_pay");
     // A second node under the SAME tenant + location, differing only in `node_id`. Reads are venue-wide, so BOTH nodes fire a genuine order and BOTH queues show
     // both — a measurement where each side holds two orders, not "one empty, one not" (CLAUDE.md §1).
@@ -2121,10 +2121,10 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
 // The cross-station expo/pass read. `listExpoQueue` gathers every order that is not abandoned
 // or collected and has an item not yet away (open, placed or settled) across ALL stations; unlike
 // the per-station `listStationQueue` it takes NO station arg, and it is not node-scoped either
-// (till-reroute §3.6). `working-order.test.ts` covers the join/grouping/exclusions; this case takes
+// (#259). `working-order.test.ts` covers the join/grouping/exclusions; this case takes
 // the SAME venue-wide shape the `listStationQueue` test above uses.
 describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", () => {
-  it("is VENUE-WIDE: each node's expo board shows the venue's orders, regardless of node (till-reroute §3.6)", async () => {
+  it("is VENUE-WIDE: each node's expo board shows the venue's orders, regardless of node", async () => {
     const { cfg: nodeA, cafe, zoneId } = await modeVenue("ticket_then_pay");
     // A second node under the SAME tenant + location. Reads are venue-wide, so
     // BOTH nodes fire a genuine order and BOTH expo boards show both — a measurement where each side

@@ -12,7 +12,7 @@ import "./errors.js"; // makes `node.read_only` reachable (the code is construct
  * The print and device groups are not gated here: boot does not mount them on a mirror or a fenced node
  * (its `if (!fencedOrMirror)` guard). A slice that re-mounts them there must keep that guard, not the
  * narrower `!isMirror`. Gating the whole surface at request time instead is deferred to promotion
- * Slice 3 (docs/superpowers/specs/2026-08-29-promotion-runbook-design.md §3a).
+ * Slice 3.
  */
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 

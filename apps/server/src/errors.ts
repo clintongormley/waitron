@@ -916,12 +916,11 @@ declare module "@waitron/shared" {
     /** The owner's bucket holds no `current.json` for the kit's venue: nothing to rebuild from. */
     "restore.stream_pointer_missing": Record<string, never>;
     /** `current.json` was not signed by the key the recovery kit carries (`signature`), or names a
-     * different venue (`venue_mismatch`). The key in the bucket is never the one trusted (slice-2
-     * spec §5.1). */
+     * different venue (`venue_mismatch`). The key in the bucket is never the one trusted. */
     "restore.stream_pointer_unverified": { reason: "signature" | "venue_mismatch" };
     /** The live generation received a change within the last ten minutes on the bucket's own
-     * clock, so the old box may still be selling; refused until the operator confirms it is gone
-     * (slice-2 spec §5.1). `lastChangeAt` is an ISO time on the bucket's clock. */
+     * clock, so the old box may still be selling; refused until the operator confirms it is gone.
+     * `lastChangeAt` is an ISO time on the bucket's clock. */
     "restore.stream_source_live": { lastChangeAt: string };
     /** Whether the old box is still writing could not be checked: the difference between this
      * box's clock and the bucket's could not be measured (`clock`), or — an archive whose database

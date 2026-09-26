@@ -1,5 +1,5 @@
 /**
- * Throughput spike for the PGlite standalone decision (spec §3).
+ * Throughput spike for the PGlite standalone decision.
  *
  * Simulates the §5 local-server topology: N tills issuing write-path-shaped
  * transactions against ONE database node. Reports p50/p95/p99 commit latency

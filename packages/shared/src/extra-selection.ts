@@ -3,7 +3,7 @@
  * each with how many of that product this dish takes.
  *
  * A pick names the PRODUCT, never the `extra_list_items` row, which is only the offer that made the
- * pick available (spec `docs/superpowers/specs/2026-09-18-one-product-model-design.md` §3.4).
+ * pick available.
  */
 export type ExtraSelection = {
   listId: string;

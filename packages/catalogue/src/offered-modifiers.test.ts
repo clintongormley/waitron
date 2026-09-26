@@ -385,7 +385,7 @@ describe("what a menu offer publishes", () => {
 });
 
 describe("an extra the till cannot sell", () => {
-  // Spec §15.6: an extra is sold like any product, so one that is Unavailable
+  // An extra is sold like any product, so one that is Unavailable
   // (sold out for now) or Inactive (removed) is not offered. Bacon and cheese take the two states
   // with the OTHER flag left set, so a read of the wrong column still offers one of them.
   it("leaves out an item whose product is Unavailable or Inactive, on both paths", async () => {
@@ -421,7 +421,7 @@ describe("an extra the till cannot sell", () => {
 });
 
 describe("an extra that is a parent with Active variants", () => {
-  // Spec §15.1: a product with an Active variant is never sold as itself, and the order path
+  // A product with an Active variant is never sold as itself, and the order path
   // refuses one picked as an extra, so the till is not offered it. Bacon's variant is Active but
   // Unavailable, so a read that checked Available rather than Active would still offer bacon;
   // cheese's only variant is Inactive, so cheese still sells as itself.

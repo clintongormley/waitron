@@ -39,7 +39,7 @@ import { seedVenue } from "../test/fixtures.js";
 
 /**
  * A variant row is a `products` row with a `parent_id`, and a null in any inherited field reads as
- * its parent's (spec §1.2, §15.2, §15.3). Every variant here is inserted straight into the table,
+ * its parent's. Every variant here is inserted straight into the table,
  * because `setProductVariants` writes only a variant's names, photo and price and each case needs
  * the other inherited fields set too.
  *
@@ -470,7 +470,7 @@ describe("readOfferedModifiers", () => {
 
 describe("readProductEditor", () => {
   // The editor shows a variant's OWN values, a blank field blank, and its parent's value for every
-  // inherited field beside them (spec §4.4, §9.1). Wine 125 has no unit row or category and so
+  // inherited field beside them. Wine 125 has no unit row or category and so
   // inherits both; Wine 175 has its own. Neither has labels of its own: those are the parent's.
   const parentValues = () => ({
     description: { en: "A dry white from Rueda" },
@@ -709,9 +709,9 @@ describe("dietary declarations on a variant", () => {
 });
 
 describe("INHERITED_KEYS", () => {
-  // Spec §1.2 minus the three names (§15.2), with the price (§15.3) and the photo. Pinned
-  // whole, so a key added or dropped is a decision somebody makes here rather than by accident.
-  it("inherits exactly the spec's set, and none of the names, flags or identity", () => {
+  // Every key below is read from the parent when a variant leaves it blank; the three names never are.
+  // Pinned whole, so a key added or dropped is a decision somebody makes here rather than by accident.
+  it("inherits exactly this set, and none of the names, flags or identity", () => {
     expect([...INHERITED_KEYS].sort()).toEqual(
       [
         "allergens",

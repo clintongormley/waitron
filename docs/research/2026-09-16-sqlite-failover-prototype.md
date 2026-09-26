@@ -552,15 +552,17 @@ Two design decisions this measurement hands to slice 2:
   [Slice 2 measurements §2](#slice-2-measurements). Doing that on the sale path is
   the thing risk 9 exists to forbid, so bounding that log is a design question slice 2 inherits open.
   **2026-09-25 (slice 2):** the offline side file is bounded by stopping Litestream at a 256 MiB limit
-  and then folding the file back with a checkpoint that does not wait on a busy database (slice-2 spec
-  §4.5; `StreamSupervisor`, `packages/stream/src/supervisor.ts`, #590).
+  and then folding the file back with a checkpoint that does not wait on a busy database
+  (`StreamSupervisor`, `packages/stream/src/supervisor.ts`, #590).
 - **The fence-before-ship rule removes S2's failing sequences** — an argument from the design, since
   nothing here fences a sender — so whichever slice turns promotion on owns it, together with the
   restart reset above. **2026-09-23:** the restart reset is built — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`), see `docs/backlog.md`.
 
 ## Slice 2 measurements
 
-**Date:** 2026-09-23. **For:** [slice 2 spec §8.1](../superpowers/specs/2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
+> 2026-09-26: the slice 2 design and plan this section cites by section and Task number were deleted once built (finished in #652).
+
+**Date:** 2026-09-23. **For:** slice 2 (the probes landed in #540).
 **Pins:** the table above, plus node:26-slim for measurement 5. **Reproducer:** `bench/sqlite-failover`'s
 `probe:*` scripts (the package README, "Slice 2 probes"). Every figure is one run; nothing here should
 be quoted as a single number where S4's spread already shows these move run to run.
@@ -636,8 +638,8 @@ read the new level-0 file, so whether it held the whole database or only the cha
 established. (2026-09-24: §1b below read it.) For scale, a re-run during review opened a database through the rig's `openNode`, made
 80 `sell()` calls, ran `checkpoint()` and read the file with `statSync`: the checkpoint printed
 `{"busy":0,"log":-1,"checkpointed":-1}` and the file was 81,920 bytes. `log: -1` means that database
-was not in write-ahead-log mode, so it is not exactly the probe's state. The spec's §8.1
-wording also names "Litestream exits 0 having uploaded no fresh full copy" as failing: the daemon did
+was not in write-ahead-log mode, so it is not exactly the probe's state. The slice 2 design's
+wording also named "Litestream exits 0 having uploaded no fresh full copy" as failing: the daemon did
 not exit, and no new level-9 file appeared, yet the restore was complete. The generation's `opened.json` marker
 survived, and no WARN or ERROR line was logged. `daemon-exit=0` is the exit code of the probe's own
 stop at the end (read from the probe: the field is filled after its `kill()`), not a death.
@@ -845,7 +847,7 @@ in one shot with the production `snapshot:` lines, streamed a day of 250 more sa
 stopped it, ran a final one-off upload (`syncOnce`, `restore-time.ts`), and only then restored it
 three times, each copy's counts and total image bytes checked against the source's. So the restores
 read a store the one-off upload had caught up, not one left as the daemon left it. 5,000 is the owner's upper figure
-for product images (Reconciliation O2), not a venue's count. At 171 KiB the three restores took 4,058,
+for product images, not a venue's count. At 171 KiB the three restores took 4,058,
 4,107 and 4,092 ms and the integrity check 255–259 ms, for a database plus side file of 931,881,688 bytes. At 330 KiB they
 took 7,345, **51,712** and 9,394 ms, with integrity checks of 391, 4,571 and 390 ms, for 1,752,470,152
 bytes of database and side file; nothing in the run explains the second restore's time, and it was not re-run.

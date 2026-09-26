@@ -106,7 +106,7 @@ export async function variantsOfProducts(
 
 /**
  * Which of `productIds` have at least one Active variant, Available or not, in ONE query. Such a
- * product is never sold as itself (spec §15.1), as a dish or as an extras pick: only a dish line
+ * product is never sold as itself, as a dish or as an extras pick: only a dish line
  * rung up from a menu offer can name the variant to sell.
  */
 export async function parentsWithActiveVariants(
@@ -143,8 +143,8 @@ export async function assertNotOfferedAsExtra(
 /**
  * Save a product's variants: each one in the input is written Active or Inactive as its `active`
  * says — with `active` absent, a new variant is created Active and one sent by `id` keeps its
- * current state — in the input's order; each current variant the input leaves out is made Inactive and kept
- * (spec §15.6), ordered after the ones sent. The caller owns the transaction, including product
+ * current state — in the input's order; each current variant the input leaves out is made Inactive and kept,
+ * ordered after the ones sent. The caller owns the transaction, including product
  * fields and supporting associations.
  */
 export async function setProductVariants(
@@ -385,8 +385,8 @@ export type SelectedVariant<
 > = SelectedName & SellingValues<Unit, Vat>;
 
 /**
- * The line an offer sells (spec §4.5): the chosen variant, or the offer's product itself when it
- * lists no variant (spec §15.1). Decided from the offer alone: `offer.variants` holds only Active
+ * The line an offer sells: the chosen variant, or the offer's product itself when it
+ * lists no variant. Decided from the offer alone: `offer.variants` holds only Active
  * variants, each flagged `available` when it may be sold on this menu now.
  */
 export function selectMenuVariant<Unit, Vat extends string>(

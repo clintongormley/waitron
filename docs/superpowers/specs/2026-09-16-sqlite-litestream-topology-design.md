@@ -132,7 +132,7 @@ vice versa, or the two files could not be backed up independently.
 > to it in one of three ways: a `node_id` column every read and write names, a seal only that node's
 > key opens (`tenant_credentials`), or deletion by the transaction that wrote it (`change_log`) —
 > `docs/developers/conventions-data.md`. Anything that works as a live login is stored as a hash, because
-> the bucket now holds it. [Slice-2 spec §2](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
+> the bucket now holds it. Slice 2: #548 and #554.
 
 ### 2.2 Generations
 
@@ -180,7 +180,7 @@ Retention prunes generations older than the configured window (§7).
 > with a create-only write of a marker object inside it (`claimGeneration`,
 > `packages/stream/src/generations.ts`). A slice-2 rebuild reuses the dead box's node id, and without
 > the time it could sign the same term into a folder that already exists. The pointer, not the name,
-> says which generation is live. [Slice-2 spec §4.4](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
+> says which generation is live. Slice 2: #569 and #590.
 
 ---
 
@@ -361,7 +361,7 @@ Whether box B, a fresh cloud instance, or a box taking over from the cloud:
      returns. If it then loses, it fences and ships (§5.2, §5.3). This is safe fiscally because it sold
      under its own distinct seat; the cost is in-flight service, which §5.3 covers.
 4. **Tell the tills** through the existing reroute path — the till follows the primary named by the
-   newest membership document (`2026-09-05-till-reroute-design.md`); nothing here changes how it learns
+   newest membership document (till reroute, #244 to #265); nothing here changes how it learns
    that.
 
 ### 5.2 Return, and the tail shipper
@@ -411,7 +411,7 @@ reachable it proceeds as primary (the accepted human-promotion window today). If
    primary down before the secondary is promoted, so the two never file concurrently. §5.3's split
    brain is the case where that assumption is violated — the box alive but unreachable — and it is the
    *only* case in which a receiver drains a chain while its live owner drains the same chain. (b) **The in-flight (`enviando`) row is NOT a real-system stuck row — the drain already recovers it, and the mirror does hold the state (owner question, 2026-09-17).** The real drain commits `estado = 'enviando'` BEFORE the AEAT call (`packages/fiscal-verifactu/src/drain.ts`, the T1/T2 split guarded by `RECUPERACION_ENVIANDO_MS`), so a crash leaves a committed `enviando` row — and Litestream is assumed to stream committed state, so a promoted mirror holds it — an assumption this design rests on and has not run, which plan Task 6 is where the stream is actually driven. **2026-09-18, what has now been run of that assumption, and what has not:** the prototype's S0 Part A drives it for `enviado` rows and for ONE-SHOT syncs only (`bench/sqlite-failover/src/scenarios/s0_happy_loop.ts`, plan Task 7). A box commits its `envios` rows to `enviado` with `acked = 1`, runs `litestream replicate -once`, and dies; the promoted node restores that generation and its own drain files none of the box's records — its first drain reads `[cloud-1:1]`, and every identity appears exactly once in that run's submit ledger. Part C is the negative case for this assumption: with that second one-shot sync left out, the same drain re-files `box-a:1` to `box-a:4`. (Within S0 itself the verdict is read off Parts A and B, and Part C records rather than judges.) Still NOT run: the `enviando` case this paragraph is actually about — the rig's minimal drain is synchronous and is recorded as never leaving a row `enviando` across a call (`bench/sqlite-failover/src/model.ts`), so no sync in S0 ever uploaded one — and, until 2026-09-18, the continuous `litestream replicate` daemon. **2026-09-18: the daemon has now been run under a scenario that restores from its stream** — the prototype's S3 (`bench/sqlite-failover/src/scenarios/s3_copied_replica.ts`, plan Task 8) has box-a sell under a real `replicate` daemon, stops it, and restores box-a's database from what that daemon wrote — back come the rows box-a itself wrote, field for field, out of a file `PRAGMA integrity_check` calls ok. So the daemon is no longer only the rig's `LS` foundation check's; `LS` and S3 start it, and S0 still uses one-shots only. What S3 does NOT carry is this paragraph's subject: S3 never files anything, so no `envios` row of any state has yet been streamed by a daemon. Those tables are the rig's own model of `envios`, never `packages/fiscal-verifactu`'s. That same drain resets any `enviando` older than five minutes back to `pendiente` at the top of every pass (`recoverStaleClaims`), raising `incidencia`, then re-files it with AEAT's duplicate check (error 3000) resolving the ones already filed. The prototype's Part E shows a row stuck `enviando` only because its MINIMAL drain omits `recoverStaleClaims`: a model gap, not a real-system filing hole. The unconditional reset belongs on RESTART, not specifically on promotion (owner, 2026-09-17). On boot, before a node starts filing, it has no submission of its OWN in flight — whatever process could have held one is gone — so **boot must reset EVERY `enviando` row to `pendiente` unconditionally**, with no staleness gate, and the duplicate check resolves any that were actually filed. A promotion is followed by a restart, so the boot check covers the promoted node too and nothing promotion-specific is needed. **2026-09-23: built** — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`) returns every `enviando` row to `pendiente`, raising `incidencia`, and `resetBeforeFirstDrain` (`apps/server/src/restart-reset.ts`) runs it before a boot's first filing pass, and again only if that attempt failed; its one-process-per-folder precondition is slice 2's
-(`2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md` §6). The rest of this paragraph is as
+(#566). The rest of this paragraph is as
 written on 2026-09-17. **This reset is a requirement of this design and is not built**: read on 2026-09-17, `recoverStaleClaims` (`packages/fiscal-verifactu/src/drain.ts:449`, `where estado = 'enviando' and enviado_en < cutoff`) is the only write in non-test `packages/` or `apps/` code that returns a row to `pendiente` without an answer from AEAT, apart from the backoff taken when a submission throws (`drain.ts:717`) and reconcile's `noTrace` remediation (`reconcile.ts:394`); rows leave `enviando` by the response path and by the two chain-halt sweeps as well, but none of those is a recovery, and `apps/server/src/boot.ts` writes nothing to `envios` at all. `recoverStaleClaims` already exists and runs at the top of EVERY drain pass (`packages/fiscal-verifactu/src/drain.ts`), resetting any `enviando` older than five minutes; today it is the ONLY recovery, so a crashed node waits out that gate on its first post-boot pass. The boot reset above is what would make recovery immediate after a restart, superseding that crash-recovery role; until it is built, a restarted node waits out the five-minute gate. What the five-minute rule still uniquely covers is the one case a restart does NOT — a row left `enviando` on a node that stays UP: `persistResponse` defensively skips a response line it cannot match to a claimed row, leaving that row `enviando`, and the same rule catches an abandoned `enviando` a returning node ships into an already-running primary's tail. The normal failures never reach it — a thrown `submit` is backed off to `pendiente` at once, and a response carrying per-line rejections is resolved inline.
 
    For the ledger tables the owner updates in place (`payments`, `sales`, `cadenas`, the close chain)
@@ -475,7 +475,7 @@ though no money is misfiled.
    human-readable list of its open tabs, their lines, and unfinished kitchen tickets, so staff can
    re-key or settle them on the new primary. Automatically merging two divergent live states — the
    winner may hold its own tab for the same table — is the interactive conflict merge deliberately
-   shelved (wire-protocol §7); it is named here, not gated.
+   shelved; it is named here, not gated.
 
 ---
 
@@ -515,7 +515,7 @@ in one place.
 > retention, not hourly copies and 30 days (`litestreamConfig`, `packages/stream/src/litestream.ts`).
 > Litestream's retention is set in hours only. Which older restore points survive the window is
 > measured in the [results note](../../research/2026-09-16-sqlite-failover-prototype.md)'s slice-2 section, measurement 3.
-> [Slice-2 spec §4.4](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
+> Slice 2: #590.
 
 ### 7.2 A second copy stays a user option
 
@@ -529,7 +529,7 @@ the premier, default backup; the archive is the self-host / extra-copy path.**
 
 > **Pointer, 2026-09-25 (slice 2).** `node.db` is empty: the sealed secrets live in `venue.db`, which
 > is the one database file the archive copies (`archiveTo`, `packages/store/src/archive.ts`).
-> [Slice-2 spec §2](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
+> Slice 2: #548.
 
 **The stream and the archive are two independent recovery ladders, not one that refines the other**
 (owner question, 2026-09-16). What Litestream brings up to date is a *replica* — a store holding one of
@@ -572,7 +572,6 @@ and the cloud seat is minted; the venue becomes topology 4.1 with no restart and
 > **Pointer, 2026-09-25 (slice 2).** The stream goes to S3-compatible buckets only. Litestream 0.5
 > cannot encrypt what it uploads, so a NAS folder or a USB disk would hold the venue's whole database
 > in the clear; the encrypted archive stays the way to put a copy on a USB disk.
-> [Slice-2 spec §0](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md), decision 2.
 
 ### 7.4 Superseded: ciphertext-only offsite, for the stream
 
@@ -592,7 +591,7 @@ is weakened knowingly: the records the stream holds are, once submitted, already
      node id, number and chain. This is a promotion in all but name.
    - **From an archive** (which carries `node.db`, §7.2): the fiscal module's restore hook re-registers
      under the recovered node id, minting a fresh chain and series for it (SP-3d,
-     `2026-09-06-module-sp3d-fiscal-restore-hook-design.md`).
+     #248).
 
    Exactly one path runs per restore, chosen by the artifact — never both, or one event would mint two
    installation numbers. Either way going live again is never blocked — the standing priority (memory
@@ -619,7 +618,7 @@ is weakened knowingly: the records the stream holds are, once submitted, already
 > with promotion in slice 3. It resumes the dead node's own identity from a row locked with the
 > recovery key that streams with the database, and places the copy through the archive restore's own
 > path, so the fiscal restore hook mints a fresh installation number, series and chain as it does for
-> an archive. [Slice-2 spec §3.1 and §5](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
+> an archive. Slice 2: #642 and #646.
 
 ### 7.6 The legible export the regulation requires
 
@@ -640,7 +639,7 @@ no second box.
 > oldest change not yet there has waited. It shows on `/health` (which it never fails), the box
 > status page, and the dashboard alerts `backup.stream_behind`, `backup.stream_paused`,
 > `backup.stream_refused`, `backup.stream_bucket_unusable`, `backup.stream_settings_unusable` and
-> `backup.stream_stopped` (`apps/server/src/alert-sources.ts`). [Slice-2 spec §7](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md).
+> `backup.stream_stopped` (`apps/server/src/alert-sources.ts`). Slice 2: #619.
 
 ---
 
@@ -702,7 +701,7 @@ no-tenant-column guard.
 > 1.5% in its two runs, a close comparison ([results note](../../research/2026-09-16-sqlite-failover-prototype.md), slice-2 section). A
 > one-off upload ran before each restore, so "restored completely" cannot tell the daemon kept up from
 > the upload catching up (the same note). The side file
-> is bounded instead by stopping Litestream at a size limit (slice-2 spec §4.5).
+> is bounded instead by stopping Litestream at a size limit (#590).
 
 ---
 
@@ -808,8 +807,8 @@ Several specs, not one. Each gets its own spec and plan.
 2. **Stream and cold restore.** Litestream supervisor, generations, the store, archive via
    `VACUUM INTO`, freshness on `/health`. Topologies 4.1 and 4.3 without promotion.
 
-   > **Pointer, 2026-09-25.** "Archive via `VACUUM INTO`" landed in slice 1 (slice-1 spec,
-   > decision 7), not here. Slice 2 landed as [its spec](2026-09-23-sqlite-slice2-stream-and-cold-restore-design.md): the stream to the owner's bucket,
+   > **Pointer, 2026-09-25.** "Archive via `VACUUM INTO`" landed in slice 1 (#489), not here.
+   > Slice 2 landed as designed, finished in #652: the stream to the owner's bucket,
    > the rebuild from it, freshness, and the restart reset. It streams to an owner-supplied bucket
    > only, not to Waitron Cloud, and promotes nothing.
 
@@ -903,7 +902,7 @@ later slice:
 
 Slice 1 contains no streaming, no store, no generations, no seats and no promotion (§11), so none of
 these can arise in it. Risk 9 is the clearest case: it is conditioned on `wal_autocheckpoint = 0`, and
-the slice-1 spec leaves automatic checkpointing at SQLite's default precisely because Litestream — the
+slice 1 leaves automatic checkpointing at SQLite's default precisely because Litestream — the
 thing that would do the checkpointing instead — does not arrive until slice 2.
 
 **What moving it gives up, stated so it is not discovered later.** If the topology is wrong, that is
@@ -1002,7 +1001,7 @@ From the discussion note §7, plus what the design added:
 | Litestream maturity (age, stars, forks, maintainers, latest release) | GitHub API `repos/benbjohnson/litestream` and its contributors/releases | `curl`, 2026-09-16 — corrected risk 1, which had called it "essentially one author, at 0.5" |
 | `ledger`/`state`/`local` classification; promotion/return shape; tail-clash shapes | `2026-09-05-outbox-to-native-replication-swap-design.md` §2, §4 | read |
 | Seats = reserved dormant identity at enrolment | `2026-09-03-reserved-standby-identity-and-promotion-design.md`; #208; memory `reserved-sif-seeded-at-join` | read |
-| Cold restore mints a fresh chain, never blocked | `2026-09-06-module-sp3d-fiscal-restore-hook-design.md`; memory `cold-recovery-no-hot-failover-posture` | read |
+| Cold restore mints a fresh chain, never blocked | SP-3d, #248; memory `cold-recovery-no-hot-failover-posture` | read |
 | Backup regime decisions 4 and 5; manifest and hooks | `2026-09-04-backup-restore-regime-design.md` §3 | read |
 | Product images live in the DB (`media_image_data.bytes`), so the stream carries them | `packages/media/src/images.ts:223`; `packages/media/drizzle/0000_media_baseline.sql` | read 2026-09-16 |
 | Density cost of logical replication per subscription | PostgreSQL behaviour, **not measured, and now never will be** | the measurement was retired 2026-09-16 (§12.1); it would also have tested a shared cluster, which the standing instance-per-tenant decision does not use |

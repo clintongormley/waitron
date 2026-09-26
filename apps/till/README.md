@@ -4,8 +4,7 @@ The Counter POS till — the walk-up cash-sale browser app (Lit + Vite). It is t
 server's till HTTP API (`/api/*`): the operator logs in on a lock screen, rings a basket on the
 counter screen, takes cash, and gets a filed Veri\*Factu ticket with its QR.
 
-Slice 1 (**7a — walk-up cash sale**) of the Counter POS. Design:
-[`docs/superpowers/specs/2026-08-05-counter-pos-walkup-sale-design.md`](../../docs/superpowers/specs/2026-08-05-counter-pos-walkup-sale-design.md).
+Slice 1 (**7a — walk-up cash sale**) of the Counter POS, built in #60.
 The matching HTTP surface lives in `@waitron/server` (`apps/server/src/till-api.ts`); this app never
 talks to the database directly.
 
@@ -111,9 +110,8 @@ a venue and serves the real till.
 > **7b park & retrieve** has landed on this package — the Hold/Park control, the **cross-till**
 > held-orders list, and retrieve/discard/pay of a parked order. Two "out of scope" items below are
 > lifted by 7b and no longer appear in that list: park & retrieve itself, and "one till per server"
-> (the held list is now shared across every register on a node, spec §4). 7c (prepare & collect) is
-> still out. Design:
-> [`2026-08-05-counter-pos-park-retrieve-and-card-design.md`](../../docs/superpowers/specs/2026-08-05-counter-pos-park-retrieve-and-card-design.md).
+> (the held list is now shared across every register on a node). 7c (prepare & collect) is
+> still out. Built in #61.
 
 **In scope (slice 1 / 7a):** one walk-up **cash** sale — choose products, weigh or count them, take
 cash, print the filed ticket with its Veri\*Factu QR.

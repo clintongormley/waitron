@@ -135,7 +135,7 @@ export async function refuseIfSourceLive(args: {
 }): Promise<void> {
   if (args.oldBoxGone) return;
   // Every level, not only the two the supervisor reads: compaction to higher levels and the daily
-  // full copy run on their own schedules (spec §4.4), and nothing here has established that a live
+  // full copy run on their own schedules, and nothing here has established that a live
   // generation's newest file is always at level 0 or 1.
   const newest = await newestUpload(args.store, args.venueId, args.generation);
   if (newest === null) return;

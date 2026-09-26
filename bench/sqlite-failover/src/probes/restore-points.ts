@@ -1,6 +1,6 @@
-// Measurement 3 (slice-2 spec §8.1 item 3): which restore points survive the history window.
+// Measurement 3 (#540): which restore points survive the history window.
 //
-// Slice 2 ships L1 30s, L2 5m, L3 1h, one full copy a day, 168 hours kept (spec §4.4). A week cannot
+// Slice 2 ships L1 30s, L2 5m, L3 1h, one full copy a day, 168 hours kept. A week cannot
 // be run, so this runs a COMPRESSED schedule that keeps the ORDER of every interval but not their
 // ratios, for three and a half windows, and reports which kind of file survives which boundary. The
 // step from here to "hours" is an extrapolation and is labelled as one where it is recorded.
@@ -26,7 +26,7 @@ import type { StoredObject } from "./common.ts";
 
 const PROBE = "m3-restore-points";
 const PREFIX = "venues/v1/gen-1-box-a-20260923T000000Z";
-/** Seconds. Production (spec §4.4): L1 30, L2 300, L3 3600, full copy 86400, kept 604800. */
+/** Seconds. Production: L1 30, L2 300, L3 3600, full copy 86400, kept 604800. */
 const SCHEDULE = { l1: 2, l2: 10, l3: 30, snapshot: 60, retention: 180, l0Retention: 2 };
 const GLOBAL_LINES = [
   `snapshot:`,
