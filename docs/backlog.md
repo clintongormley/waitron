@@ -2763,6 +2763,13 @@ image constraints under *Detail → Box image*.
 
 ### B5. The recovery page and degraded mode
 
+- **The failed start's reason on the recovery page — LANDED #695 (2026-09-26).** What it left:
+  a failed migration's report names the SET (`migrations.apply_failed`, `{ set }`), not the
+  migration file, though the refused statement shows in the detail; the start-up's own log writer
+  ignores `WAITRON_LOG_MAX_BYTES`/`WAITRON_LOG_MAX_FILES` (it only appends, so they do not apply);
+  the two restore errors' text quotes the "Why the last start failed" heading with nothing tying
+  the quote to the heading; and no staged restore has been run through the real migrator to see it
+  end in `migrations.apply_failed`.
 - **The recovery spec** — a degraded-but-trading mode and the module-contract field it needs.
 - **The recovery page's secret bound is a convention, not a guard.** #310 masks URL credentials on
   every log line — the connection-string shape and nothing else. A secret in any other shape still
