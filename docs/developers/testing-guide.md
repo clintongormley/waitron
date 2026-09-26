@@ -622,7 +622,14 @@ fails with the log line, the once-per-pause check, or the record shared across t
 the deadline check taken out; "logs nothing for a question during the pause that is refused while
 the run is stopping" fails with the stop check taken out; and "logs nothing for a question during
 the pause that is refused after the run was stopped" is held by both checks, failing only with both
-taken out.
+taken out. Since A57 that line, like the supervisor's other lines for a failed bucket request, also
+carries the bucket's HTTP `status` when the bucket answered the refusal (the store's case "a
+refused listing is a request failure" in `packages/stream/src/s3-store.test.ts` has a listing
+answered 403 carry `status: 403`), and only the code when no answer arrived; the cases under "a
+refusal the bucket answered is logged with its HTTP status" in
+`packages/stream/src/supervisor.test.ts` that expect a status, with the "generation housekeeping"
+case "logs a prune the bucket refuses, and streams on", each fail with their own line's status taken
+out, and that block's no-answer and not-a-number cases fail with the number check taken out.
 
 **Why versitygw 1.8.0.** Five candidates were weighed on 2026-09-23. Four were run with the same
 probe: a write "only if absent" over an existing key, a write "only if unchanged" with a stale ETag,
