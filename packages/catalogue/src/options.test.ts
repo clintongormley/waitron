@@ -5,7 +5,6 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
-import { menuItems } from "./schema/menu.js";
 import { createCatalogue, addProductToMenu, createProduct } from "./operations.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { CATALOGUE_CLASSIFICATION } from "./classification.js";
@@ -286,16 +285,45 @@ describe("option list CRUD", () => {
     expect(await run((tx) => listOptionLists(tx))).toEqual([]);
   });
 
-  it("reports no products or menus holding a list", async () => {
-    const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
-
-    expect(await run((tx) => optionListDependants(tx, created.id))).toEqual({
-      products: [],
-      menus: [],
+  it("lists each options list with how many products carry it", async () => {
+    const carried = await run((tx) => createOptionList(tx, cookedList(), "en"));
+    const idle = await run((tx) => createOptionList(tx, { ...cookedList(), name: "Idle" }, "en"));
+    await seedTenant(fx.db);
+    await run(async (tx) => {
+      const lunch = await createCatalogue(tx, { name: "Lunch" });
+      const dinner = await createCatalogue(tx, { name: "Dinner" });
+      for (const name of ["steak", "burger", "chips"]) {
+        const product = await createProduct(tx, {
+          catalogueId: lunch.id,
+          categoryId: null,
+          name,
+          unitId: null,
+          unitPrice: "12.00",
+          vatClass: "reduced",
+        });
+        if (name !== "chips")
+          await writeProductModifiers(tx, product.id, [{ kind: "options", id: carried.id }]);
+        // The steak is on two menus and the burger on one, so `count(*)` over the carrying rows
+        // joined to the menu offers of their products reads 3, not 2.
+        const menus = { steak: [lunch, dinner], burger: [lunch], chips: [] }[name]!;
+        for (const menu of menus)
+          await addProductToMenu(tx, { menuId: menu.id, productId: product.id });
+      }
     });
+
+    const rows = await run((tx) => listOptionLists(tx));
+
+    expect(rows.find((row) => row.id === carried.id)!.usage).toEqual({ products: 2 });
+    expect(rows.find((row) => row.id === idle.id)!.usage).toEqual({ products: 0 });
   });
 
-  it("names the products carrying the list, and the menu offers of those dishes", async () => {
+  it("reports no products holding a list", async () => {
+    const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
+
+    expect(await run((tx) => optionListDependants(tx, created.id))).toEqual({ products: [] });
+  });
+
+  it("names the products carrying the list, and not the menu offers of those dishes", async () => {
     const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
     await seedTenant(fx.db);
     const dishes = await run(async (tx) => {
@@ -315,8 +343,7 @@ describe("option list CRUD", () => {
         if (name !== "chips")
           await writeProductModifiers(tx, product.id, [{ kind: "options", id: created.id }]);
       }
-      // The steak and the chips are on the menu; the burger is not. So a `menus` side that listed
-      // every offer, or every carrying product, gets a different answer from the one below.
+      // The steak and the chips are on the menu; the burger is not.
       for (const name of ["steak", "chips"])
         made[`${name}Offer`] = (
           await addProductToMenu(tx, {
@@ -330,11 +357,13 @@ describe("option list CRUD", () => {
 
     const dependants = await run((tx) => optionListDependants(tx, created.id));
 
-    expect(dependants.products).toEqual([
-      { id: dishes.burger, name: "burger" },
-      { id: dishes.steak, name: "steak" },
-    ]);
-    expect(dependants.menus).toEqual([{ id: dishes.steakOffer, name: "steak" }]);
+    // An options list belongs to products alone, so the steak's menu offer is not a second entry.
+    expect(dependants).toEqual({
+      products: [
+        { id: dishes.burger, name: "burger" },
+        { id: dishes.steak, name: "steak" },
+      ],
+    });
   });
 
   it("refuses to read an id that names no list", async () => {
@@ -543,48 +572,5 @@ describe("option lists in the catalogue's configuration transfer", () => {
     const classified = new Set(CATALOGUE_CLASSIFICATION.map(({ table }) => table));
 
     expect(transferred.filter((table) => !classified.has(table))).toEqual([]);
-  });
-});
-
-describe("the menus a list's delete preview names", () => {
-  it("lists the menu offers in offer-id order, not in the products' name order", async () => {
-    const created = await run((tx) => createOptionList(tx, cookedList(), "en"));
-    await seedTenant(fx.db);
-    // Offer ids chosen against the products' alphabetical order, so the preview's own query order
-    // (by product name) and the offer-id order it promises are different answers.
-    const offerIds = {
-      alpha: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-      beta: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      gamma: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-    };
-    await run(async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Deli" });
-      for (const [name, offerId] of Object.entries(offerIds)) {
-        const product = await createProduct(tx, {
-          catalogueId: catalogue.id,
-          categoryId: null,
-          name,
-          unitId: null,
-          unitPrice: "12.00",
-          vatClass: "reduced",
-        });
-        await writeProductModifiers(tx, product.id, [{ kind: "options", id: created.id }]);
-        await tx.insert(menuItems).values({
-          id: offerId,
-          menuId: catalogue.id,
-          productId: product.id,
-          grossPrice: 1200,
-        });
-      }
-    });
-
-    const dependants = await run((tx) => optionListDependants(tx, created.id));
-
-    expect(dependants.products.map((product) => product.name)).toEqual(["alpha", "beta", "gamma"]);
-    expect(dependants.menus).toEqual([
-      { id: offerIds.beta, name: "beta" },
-      { id: offerIds.gamma, name: "gamma" },
-      { id: offerIds.alpha, name: "alpha" },
-    ]);
   });
 });

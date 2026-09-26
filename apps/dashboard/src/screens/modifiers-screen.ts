@@ -19,9 +19,13 @@ import "../widgets/extra-list-form.js";
 import type {
   DashboardApi,
   ExtraList,
+  ExtraListDependants,
   ExtraListInput,
+  ExtraListRow,
   OptionList,
+  OptionListDependants,
   OptionListInput,
+  OptionListRow,
   Product,
 } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -33,14 +37,16 @@ type Kind = "extras" | "options";
 
 type Modal = "view" | "delete";
 
-type ModifierList = ExtraList | OptionList;
+type ModifierList = ExtraListRow | OptionListRow;
 
-type Dependant = { id: string; name: string };
+/** `menuName` is set on an extras list's menu row, whose `name` is the dish's. */
+type Dependant = { id: string; name: string; menuName?: string };
 type UsageDependant = Dependant & { type: "product" | "menu" };
 
 /**
  * No order count: options never touch an order, and an extras-list delete leaves an open order's
- * child lines alone: each records the list's id with no foreign key into it.
+ * child lines alone: each records the list's id with no foreign key into it. An options list has no
+ * menu side, so its `menus` is always empty.
  */
 type ListDependants = { products: Dependant[]; menus: Dependant[] };
 
@@ -57,6 +63,7 @@ export class ModifiersScreen extends LitElement {
     css`
       :host {
         display: block;
+        container-type: inline-size;
       }
       h1 {
         margin: 0 0 var(--wt-space-4);
@@ -71,6 +78,32 @@ export class ModifiersScreen extends LitElement {
       }
       .error {
         color: var(--wt-color-danger);
+      }
+      /* The count opens the Used by popup, so it reads as a link: underlined, at the body weight,
+         and with no inline padding so it lines up with the column's other text. The count's
+         wt-button exports its inner button as this part: its own part is one boundary deeper than
+         the screen's styles reach. */
+      wt-data-table::part(used-by) {
+        padding-inline: 0;
+        text-align: start;
+        font-weight: var(--wt-font-weight-normal);
+        text-decoration: underline;
+      }
+      /* A table never narrows a column below its content, so on a phone each count and a menu row's
+         menu take a line of their own rather than widening what scrolls sideways. A container query
+         cannot read a token; 30rem is the width menus-screen.ts calls narrow. */
+      @container (max-width: 30rem) {
+        wt-data-table::part(used-by-count),
+        wt-data-table::part(usage-menu) {
+          display: block;
+        }
+        wt-data-table::part(usage-menu) {
+          color: var(--wt-color-text-muted);
+        }
+        wt-data-table::part(used-by-separator),
+        wt-data-table::part(usage-separator) {
+          display: none;
+        }
       }
     `,
   ];
@@ -88,8 +121,8 @@ export class ModifiersScreen extends LitElement {
     },
     dashboardPath,
   );
-  @state() private extraLists: ExtraList[] = [];
-  @state() private optionLists: OptionList[] = [];
+  @state() private extraLists: ExtraListRow[] = [];
+  @state() private optionLists: OptionListRow[] = [];
   @state() private products: Product[] = [];
   @state() private locales: ContentLanguages | null = null;
   @state() private loading = true;
@@ -175,10 +208,13 @@ export class ModifiersScreen extends LitElement {
     this.fieldErrors = {};
     this.editing = { kind, value };
   }
-  #dependantsOf(kind: Kind, id: string): Promise<ListDependants> {
+  #dependantsOf(kind: Kind, id: string): Promise<ExtraListDependants | OptionListDependants> {
     return kind === "extras"
       ? this.api.getExtraListDependants(id)
       : this.api.getOptionListDependants(id);
+  }
+  #shown(rows: ExtraListDependants | OptionListDependants): ListDependants {
+    return { products: rows.products, menus: "menus" in rows ? rows.menus : [] };
   }
   /** How far each modal has been reopened. Only a response minted under the CURRENT count is
    * applied: comparing the open list's id alone cannot tell a superseded fetch from the current one
@@ -214,7 +250,8 @@ export class ModifiersScreen extends LitElement {
   async #loadDependants(modal: Modal, kind: Kind, id: string, generation: number): Promise<void> {
     try {
       const rows = await this.#dependantsOf(kind, id);
-      if (generation === this.#generation[modal]) this.#setDependants(modal, rows, false);
+      if (generation === this.#generation[modal])
+        this.#setDependants(modal, this.#shown(rows), false);
     } catch {
       if (generation === this.#generation[modal]) this.#setDependants(modal, null, true);
     }
@@ -299,7 +336,53 @@ export class ModifiersScreen extends LitElement {
     return list.labels.map((label) => label.name).join(", ");
   }
   #statusText(kind: Kind, list: ModifierList): string {
-    return list.active ? t(`${kind}.active`) : t(`${kind}.not_in_use`);
+    return list.active ? t(`${kind}.active`) : t(`${kind}.inactive`);
+  }
+  /** Counts menu ENTRIES, not menus (`listExtraLists`, packages/catalogue/src/extras.ts), so it says
+   * "menu items". */
+  #menuItems(kind: Kind, list: ModifierList): number {
+    return kind === "extras" ? (list as ExtraListRow).usage.menus : 0;
+  }
+  #usageTotal(kind: Kind, list: ModifierList): number {
+    return list.usage.products + this.#menuItems(kind, list);
+  }
+  #count(key: "products" | "menu_items", count: number): string {
+    return count === 1
+      ? t(`modifiers.count_${key}_one`)
+      : t(`modifiers.count_${key}`).replace("{count}", String(count));
+  }
+  /** The non-zero counts, products first; empty when nothing carries the list. */
+  #usageCounts(kind: Kind, list: ModifierList): string[] {
+    const counts: string[] = [];
+    if (list.usage.products > 0) counts.push(this.#count("products", list.usage.products));
+    const menuItems = this.#menuItems(kind, list);
+    if (menuItems > 0) counts.push(this.#count("menu_items", menuItems));
+    return counts;
+  }
+  #usageText(kind: Kind, list: ModifierList): string {
+    const counts = this.#usageCounts(kind, list);
+    return counts.length === 0 ? t("modifiers.not_used") : counts.join(" · ");
+  }
+  #usageCell(kind: Kind, list: ModifierList) {
+    const counts = this.#usageCounts(kind, list);
+    if (counts.length === 0) return t("modifiers.not_used");
+    return html`<wt-button
+      variant="ghost"
+      align="start"
+      data-test=${`used-by-${kind === "extras" ? "extra" : "option"}-${list.id}`}
+      aria-label=${`${this.#usedByHeading(list)}: ${counts.join(" · ")}`}
+      exportparts="button: used-by"
+      @click=${() => this.#openModal("view", kind, list)}
+      ><span
+        >${counts.map(
+          (count, index) =>
+            html`${index > 0 ? html`<span part="used-by-separator"> · </span>` : nothing}<span
+                part="used-by-count"
+                >${count}</span
+              >`,
+        )}</span
+      ></wt-button
+    >`;
   }
   #columns(kind: Kind): DataTableColumn<ModifierList>[] {
     const detail: DataTableColumn<ModifierList> =
@@ -325,15 +408,16 @@ export class ModifiersScreen extends LitElement {
         label: t("modifiers.name"),
         searchValue: (list) => list.name,
         sortValue: (list) => list.name,
-        cell: (list) =>
-          html`<wt-button
-            variant="ghost"
-            data-test=${`open-${row}-${list.id}`}
-            @click=${() => this.#openModal("view", kind, list)}
-            >${list.name}</wt-button
-          >`,
+        cell: (list) => list.name,
       },
       detail,
+      {
+        key: "usedBy",
+        label: t("modifiers.used_by"),
+        searchValue: (list) => this.#usageText(kind, list),
+        sortValue: (list) => this.#usageTotal(kind, list),
+        cell: (list) => this.#usageCell(kind, list),
+      },
       {
         key: "status",
         label: t(`${kind}.status`),
@@ -345,7 +429,7 @@ export class ModifiersScreen extends LitElement {
           value: (list) => (list.active ? "active" : "inactive"),
           options: [
             { value: "active", label: t(`${kind}.active`) },
-            { value: "inactive", label: t(`${kind}.not_in_use`) },
+            { value: "inactive", label: t(`${kind}.inactive`) },
           ],
         },
       },
@@ -371,13 +455,20 @@ export class ModifiersScreen extends LitElement {
       },
     ];
   }
+  /** A menu row reads "{dish} — {menu}": one dish can carry an extras list on several menus. */
   #nameColumn<T extends Dependant>(): DataTableColumn<T> {
+    const label = (entry: T) =>
+      entry.menuName === undefined ? entry.name : `${entry.name} — ${entry.menuName}`;
     return {
       key: "name",
       label: t("modifiers.name"),
-      cell: (entry) => entry.name,
-      searchValue: (entry) => entry.name,
-      sortValue: (entry) => entry.name,
+      cell: (entry) =>
+        entry.menuName === undefined
+          ? entry.name
+          : html`${entry.name}<span part="usage-separator"> — </span
+              ><span part="usage-menu">${entry.menuName}</span>`,
+      searchValue: label,
+      sortValue: label,
     };
   }
   #usageColumns(): DataTableColumn<UsageDependant>[] {
@@ -421,7 +512,8 @@ export class ModifiersScreen extends LitElement {
       .rowKey=${(entry: Dependant) => entry.id}
     ></wt-data-table>`;
   }
-  #renderUsage() {
+  /** An options list is carried by products alone, so its table has no Type column (spec D3). */
+  #renderUsage(viewing: Target) {
     if (this.usageError)
       return html`<p class="error" data-test="usage-error" role="alert">
         ${t("modifiers.usage_error")}
@@ -432,20 +524,24 @@ export class ModifiersScreen extends LitElement {
       ...usage.products.map((entry) => ({ ...entry, type: "product" as const })),
       ...usage.menus.map((entry) => ({ ...entry, type: "menu" as const })),
     ];
+    const extras = viewing.kind === "extras";
     return html`<wt-data-table
       data-test="list-usage"
-      aria-label=${t("modifiers.products_modal")}
+      aria-label=${this.#usedByHeading(viewing)}
       searchable
-      searchLabel=${t("modifiers.search_usage")}
-      noMatchesMessage=${t("modifiers.usage_no_matches")}
-      viewKey="waitron.modifiers.usage.table"
+      searchLabel=${extras ? t("modifiers.search_usage") : t("modifiers.search_products")}
+      noMatchesMessage=${extras ? t("modifiers.usage_no_matches") : t("modifiers.products_no_matches")}
+      viewKey=${`waitron.modifiers.${viewing.kind}.usage.table`}
       sortKey="name"
       sortDirection="ascending"
       .rows=${rows}
-      .columns=${this.#usageColumns()}
+      .columns=${extras ? this.#usageColumns() : [this.#nameColumn<UsageDependant>()]}
       .rowKey=${(entry: UsageDependant) => `${entry.type}:${entry.id}`}
-      .emptyMessage=${t("modifiers.no_usage")}
+      .emptyMessage=${extras ? t("modifiers.no_usage") : t("modifiers.no_product_usage")}
     ></wt-data-table>`;
+  }
+  #usedByHeading(list: { name: string }): string {
+    return t("modifiers.used_by_named").replace("{name}", list.name);
   }
   #deleteWarning(dependants: ListDependants): string {
     const parts = [t("modifiers.delete_warning_intro")];
@@ -624,12 +720,12 @@ export class ModifiersScreen extends LitElement {
       <wt-modal
         data-test="detail-modal"
         .open=${this.viewing !== null}
-        heading=${this.viewing ? `${this.viewing.name} · ${t("modifiers.products_modal")}` : ""}
+        heading=${this.viewing ? this.#usedByHeading(this.viewing) : ""}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
           this.#closeModal("view");
         }}
-        >${this.viewing ? this.#renderUsage() : nothing}<wt-form-actions slot="footer"
+        >${this.viewing ? this.#renderUsage(this.viewing) : nothing}<wt-form-actions slot="footer"
           ><wt-button
             slot="cancel"
             data-test="close-detail"

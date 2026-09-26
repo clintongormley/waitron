@@ -25,16 +25,17 @@ Use **Options** when the diner picks exactly one label, such as a cup or a glass
 names and nothing else: no price, no tax treatment and no allergens. Each label has its own
 **Available** switch, and one of the available labels can be the **Default**.
 
-## Name a list and decide whether it is in use
+## Name a list and decide whether it is active
 
 Give the list a staff name in plain text — what you and your staff call it. A **Customer-facing
 name**, with one field per content language, and a **Kitchen name** are both optional and fall back
 to the staff name when you leave them blank. An options label carries the same three names. See
 [content languages](content-and-images.md).
 
-Each list has an **In use** switch. A list that is in use needs something to answer it with, so the
-form refuses to save an extras list in use with no products on it, or an options list in use with no
-available label. It tells you to add or enable one, or to take the list out of use.
+Each list has an **Active** switch, and the list's **Status** column reads **Active** or
+**Inactive**. An active list needs something to answer it with, so the form refuses to save an
+active extras list with no products on it, or an active options list with no available label. It
+tells you to add or enable one, or to make the list inactive.
 
 A **Default** seeds a new selection once. Changing it does not change an order you already started.
 Making the default label unavailable clears the default. An extras entry is either preselected or
@@ -54,16 +55,27 @@ change an existing menu offer. A menu offer can carry its own price for one of a
 products, and that price wins over the price on the list entry, which in turn wins over the
 product's own price — though no dashboard screen sets a menu price for an extra yet.
 
+## See what uses a list
+
+Each tab's table has a **Used by** column. For an extras list it counts the products that carry the
+list and the menu offers that carry it, for example "2 products · 1 menu item". Each menu offer is
+one dish on one menu, so a list offered with two dishes on the same menu counts as two menu items.
+An options list is attached to products only, so its count is products alone. A list that nothing
+uses reads "Not used". Click the count to open the list of what uses it; a menu offer there is
+named by its dish and then its menu.
+
 ## Deleting a list detaches it, and nothing refuses the delete
 
-Deleting a list removes it from every product carrying it and from the menu offers of those dishes.
-The confirmation dialog shows both sets before you confirm, and deleting cannot be undone.
+Deleting a list removes it from every product carrying it, and an extras list also from every menu
+offer carrying it. The confirmation dialog shows what the delete reaches before you confirm: the
+products, and for an extras list the menu offers, each named by its dish and its menu. Deleting
+cannot be undone.
 
 **An open order does not block a delete, and you are not told to finish or void one.** It does not
 need to: an open order holds no reference back to the list. An extras pick becomes its own order
 line naming the product that was picked, and an options answer is stored as the wording that was
 chosen. So deleting a list reaches no order that is already open — but it does take the list off
-every product at once. To stop a list being asked without deleting it, turn its **In use** switch
+every product at once. To stop a list being asked without deleting it, turn its **Active** switch
 off, or remove it from that one product's Modifiers section.
 
 ## Allergens and dietary information

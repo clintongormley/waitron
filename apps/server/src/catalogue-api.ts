@@ -481,7 +481,8 @@ function mountListSurface<TList, TDependants>(
       return c.json({ ok: true });
     }),
   );
-  // What deleting this list would touch — the preview a delete confirmation reads.
+  // What deleting this list would touch — read by the dashboard's Used by popup and its delete
+  // confirmation.
   app.get(`${one}/dependants`, (c) =>
     run(c, log, async () => {
       const id = requireUuidParam(c.req.param("id"), surface.idKind);

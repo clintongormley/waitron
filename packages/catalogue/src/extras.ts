@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, notInArray } from "drizzle-orm";
-import { products, type Transaction } from "@waitron/db";
+import { and, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
+import { catalogues, products, type Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, stringToCents } from "@waitron/shared";
 import { menuItems } from "./schema/menu.js";
 import { reachableMenuItem } from "./menu-structure.js";
@@ -19,7 +19,7 @@ import {
   type ExtraListInput,
   type MenuExtraPublication,
 } from "./extra-contract.js";
-import type { ExtraListDependants } from "./modifier-list-types.js";
+import type { ExtraListDependants, ExtraListRow } from "./modifier-list-types.js";
 import { findContentTranslationGap } from "./content-languages.js";
 import { parentsWithActiveVariants } from "./variants.js";
 import "./errors.js";
@@ -82,12 +82,33 @@ async function withItems(tx: Transaction, lists: Omit<ExtraList, "items">[]): Pr
   return lists.map((list) => ({ ...list, items: grouped.get(list.id) ?? [] }));
 }
 
-export async function listExtraLists(tx: Transaction): Promise<ExtraList[]> {
+export type { ExtraListRow } from "./modifier-list-types.js";
+
+/** Every list with its items and its usage: one grouped count per carrying table, never one per list. */
+export async function listExtraLists(tx: Transaction): Promise<ExtraListRow[]> {
   const lists = await tx
     .select(listColumns)
     .from(extraLists)
     .orderBy(extraLists.sort, extraLists.id);
-  return withItems(tx, lists);
+  const withAll = await withItems(tx, lists);
+  const productCounts = await tx
+    .select({
+      listId: productModifiers.extraListId,
+      count: sql<number>`count(distinct ${productModifiers.productId})`,
+    })
+    .from(productModifiers)
+    .where(isNotNull(productModifiers.extraListId))
+    .groupBy(productModifiers.extraListId);
+  const menuCounts = await tx
+    .select({ listId: menuItemExtraLists.listId, count: sql<number>`count(*)` })
+    .from(menuItemExtraLists)
+    .groupBy(menuItemExtraLists.listId);
+  const byProducts = new Map(productCounts.map((row) => [row.listId, row.count]));
+  const byMenus = new Map(menuCounts.map((row) => [row.listId, row.count]));
+  return withAll.map((list) => ({
+    ...list,
+    usage: { products: byProducts.get(list.id) ?? 0, menus: byMenus.get(list.id) ?? 0 },
+  }));
 }
 
 /** The named lists, in the order {@link listExtraLists} returns them, each with its items. */
@@ -444,11 +465,12 @@ export async function setMenuItemExtraLists(
 export type { ExtraListDependants } from "./modifier-list-types.js";
 
 /**
- * What deleting this list would touch — the preview a delete confirmation reads: the products that
- * carry it and the menu offers that publish it, each detached by the delete rather than blocking it.
- * No order is consulted: an order's child line records the list's id with no foreign key into it,
- * so the delete does not touch it. A menu publication has no name of its own, so it is identified by
- * the menu item's id and its product's staff name.
+ * What deleting this list would touch — read by the dashboard's Used by popup and its delete
+ * confirmation: the products that carry it and the menu offers that publish it, each detached by
+ * the delete rather than blocking it. No order is consulted: an order's child line records the
+ * list's id with no foreign key into it, so the delete does not touch it. A menu publication has no
+ * name of its own, so it is identified by the menu item's id, its product's staff name and its
+ * menu's name.
  */
 export async function extraListDependants(
   tx: Transaction,
@@ -463,10 +485,11 @@ export async function extraListDependants(
     .where(eq(productModifiers.extraListId, extraListId))
     .orderBy(products.name, products.id);
   const menus = await tx
-    .select({ id: menuItems.id, name: products.name })
+    .select({ id: menuItems.id, name: products.name, menuName: catalogues.name })
     .from(menuItemExtraLists)
     .innerJoin(menuItems, eq(menuItems.id, menuItemExtraLists.menuItemId))
     .innerJoin(products, eq(products.id, menuItems.productId))
+    .innerJoin(catalogues, eq(catalogues.id, menuItems.menuId))
     .where(eq(menuItemExtraLists.listId, extraListId))
     .orderBy(menuItems.id);
   return { products: carrying, menus };

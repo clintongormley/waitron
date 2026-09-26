@@ -760,17 +760,27 @@ describe("the menu publication in the catalogue's configuration transfer", () =>
 describe("what deleting an extras list would touch", () => {
   it("names every menu offer that publishes it, by the dish's staff name", async () => {
     const list = await run((tx) => createExtraList(tx, toppings(), "en"));
-    await run(async (tx) => {
+    const terraceOffer = await run(async (tx) => {
       await publish(tx, "burger", [{ listId: list.id, items: [] }]);
       await publish(tx, "pizza", [{ listId: list.id, items: [] }]);
+      const terrace = await createCatalogue(tx, { name: "Terrace" });
+      const offer = await addProductToMenu(tx, { menuId: terrace.id, productId: ids.pizza });
+      await setMenuItemExtraLists(tx, offer.id, [{ listId: list.id, items: [] }]);
+      return offer.id;
     });
 
     const dependants = await run((tx) => extraListDependants(tx, list.id));
 
-    // The two dishes carry different names, so a join that reaches the wrong product shows up here.
-    expect([...dependants.menus].sort((a, b) => a.name.localeCompare(b.name))).toEqual([
-      { id: offers.burger, name: "burger" },
-      { id: offers.pizza, name: "pizza" },
+    // The two dishes carry different names, so a join that reaches the wrong product shows up here;
+    // the menu names are no product's or list's, so a menuName read from either fails too. The pizza
+    // is also offered on "Terrace", which is not its product's catalogue, so a menuName read from the
+    // product's catalogue says "Deli" there.
+    const byNameThenMenu = (a: { name: string; menuName: string }, b: typeof a) =>
+      a.name.localeCompare(b.name) || a.menuName.localeCompare(b.menuName);
+    expect([...dependants.menus].sort(byNameThenMenu)).toEqual([
+      { id: offers.burger, name: "burger", menuName: "Deli" },
+      { id: offers.pizza, name: "pizza", menuName: "Deli" },
+      { id: terraceOffer, name: "pizza", menuName: "Terrace" },
     ]);
     // Both dishes carry the list as well as publishing it, which is the only way to publish it.
     // Alphabetical by staff name, so this pins the order as well as the membership.

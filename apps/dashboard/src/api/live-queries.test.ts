@@ -59,9 +59,15 @@ it("refreshes the open alerts passively and when incidents change", async () => 
 });
 
 it.each([
-  ["listOptionLists", [], ["option_lists", "option_labels"]],
+  // The list reads also count what carries each list (`listOptionLists` in
+  // packages/catalogue/src/options.ts, `listExtraLists` in extras.ts).
+  ["listOptionLists", [], ["option_lists", "option_labels", "product_modifiers"]],
   ["getOptionList", ["o1"], ["option_lists", "option_labels"]],
-  ["listExtraLists", [], ["extra_lists", "extra_list_items"]],
+  [
+    "listExtraLists",
+    [],
+    ["extra_lists", "extra_list_items", "product_modifiers", "menu_item_extra_lists"],
+  ],
   ["getExtraList", ["e1"], ["extra_lists", "extra_list_items"]],
   // A label's product count is read from `product_labels` (`listLabels`, packages/catalogue/src/labels.ts).
   ["listLabels", [], ["labels", "product_labels"]],

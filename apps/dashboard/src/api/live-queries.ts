@@ -123,13 +123,13 @@ export const QUERY_DEPENDENCIES = {
     // table, so neither is named here.
     "product_modifiers",
   ],
-  // The extras and options lists. Each read is two SELECTs and nothing else: the list table, then
-  // its children (`listOptionLists`/`readOptionListsByIds` in packages/catalogue/src/options.ts,
-  // `listExtraLists`/`readExtraListsByIds` in extras.ts). Neither joins `products`,
-  // `product_modifiers` or the `menu_item_extra_*` tables, so none of those is named here.
-  listOptionLists: ["option_lists", "option_labels"],
+  // The extras and options lists: the list table, then its children (`listOptionLists` and
+  // `getOptionList` in packages/catalogue/src/options.ts, `listExtraLists` and `getExtraList` in
+  // extras.ts). The two list reads also count what carries each list: `product_modifiers` for
+  // both, and `menu_item_extra_lists` for extras. The single-list reads count nothing.
+  listOptionLists: ["option_lists", "option_labels", "product_modifiers"],
   getOptionList: ["option_lists", "option_labels"],
-  listExtraLists: ["extra_lists", "extra_list_items"],
+  listExtraLists: ["extra_lists", "extra_list_items", "product_modifiers", "menu_item_extra_lists"],
   getExtraList: ["extra_lists", "extra_list_items"],
   listDeviceProfiles: ["device_profiles", "devices", "canvases"],
   getDeviceProfile: ["device_profiles", "canvases"],

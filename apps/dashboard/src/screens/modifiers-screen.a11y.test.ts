@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { ModifiersScreen } from "./modifiers-screen.js";
-import type { CatalogueSummary, DashboardApi, ExtraList, OptionList } from "../api/client.js";
+import type { CatalogueSummary, DashboardApi, ExtraListRow, OptionListRow } from "../api/client.js";
 
 afterEach(cleanupWidgets);
 
 const catalogues: CatalogueSummary[] = [{ id: "cat-1", name: "Main", active: true, version: 1 }];
 
 /** The three names read differently, so a surface showing the wrong one is visible (CLAUDE.md §3). */
-const optionList: OptionList = {
+const optionList: OptionListRow = {
   id: "o1",
   name: "Doneness",
   customerName: { es: "Punto de la carne" },
@@ -24,9 +24,10 @@ const optionList: OptionList = {
       available: true,
     },
   ],
+  usage: { products: 1 },
 };
 
-const extraList: ExtraList = {
+const extraList: ExtraListRow = {
   id: "e1",
   name: "Breads",
   customerName: { es: "Elige tu pan" },
@@ -35,6 +36,7 @@ const extraList: ExtraList = {
   maxPicks: 1,
   active: true,
   items: [],
+  usage: { products: 1, menus: 1 },
 };
 
 function api(state: "empty" | "populated" | "failed"): DashboardApi {
@@ -50,11 +52,10 @@ function api(state: "empty" | "populated" | "failed"): DashboardApi {
     listOptionLists: lists([optionList]),
     getExtraListDependants: vi.fn().mockResolvedValue({
       products: [{ id: "p1", name: "Café" }],
-      menus: [{ id: "mn1", name: "Desayuno" }],
+      menus: [{ id: "mn1", name: "Tostada", menuName: "Desayuno" }],
     }),
     getOptionListDependants: vi.fn().mockResolvedValue({
       products: [{ id: "p1", name: "Solomillo" }],
-      menus: [{ id: "mn1", name: "Menú noche" }],
     }),
   } as unknown as DashboardApi;
 }
@@ -106,8 +107,8 @@ describe.each(["light", "dark"] as const)("modifiers screen (%s)", (theme) => {
   });
 
   it.each([
-    ["extras", "extra-lists", "open-extra-e1"],
-    ["options", "option-lists", "open-option-o1"],
+    ["extras", "extra-lists", "used-by-extra-e1"],
+    ["options", "option-lists", "used-by-option-o1"],
   ] as const)("accessible %s detail modal", async (tab, testId, control) => {
     const { el, host } = await mountWidget<ModifiersScreen>(
       "dashboard-modifiers-screen",
