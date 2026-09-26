@@ -699,7 +699,7 @@ describe("the extras/options rework leaves the fiscal fingerprint byte-identical
         .where(eq(saleLines.saleId, saleId));
       expect(filed.find((line) => line.lineNo === 1)?.optionSnapshots).toEqual([ANSWER]);
       // The extra's own child line carries no answers: a pick IS a line, never an entry in the
-      // dish's snapshot list (spec §3.4).
+      // dish's snapshot list.
       expect(filed.find((line) => line.lineNo === 2)?.optionSnapshots).toEqual([]);
 
       const { rows } = await tx.execute<{
@@ -812,7 +812,7 @@ describe("a variant line is filed at its own effective VAT rate", () => {
 
 describe("a variant's names are not part of the huella", () => {
   // The variant counterpart of verify.test.ts's "entorno is not part of the huella": the filed
-  // sale line keeps the variant's frozen names (spec §4.3), and none of them may reach the
+  // sale line keeps the variant's frozen names, and none of them may reach the
   // fingerprint. Two sales differing ONLY in the variant's three names must hash the same. Each is
   // recorded and read back inside a transaction that is then ROLLED BACK, as the parent_line_id block
   // above does, so the second re-allocates the same `A/1` against the same empty chain.

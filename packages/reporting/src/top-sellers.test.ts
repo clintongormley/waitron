@@ -304,7 +304,7 @@ describe("computeTopSellers", () => {
     ]);
   });
 
-  describe("the wine-by-the-glass fixture (spec §12)", () => {
+  describe("the wine-by-the-glass fixture", () => {
     const wineName = "Wine by the glass";
     const wineText = { es: "Vino por copas" };
     const wine125Name = "Wine 125";

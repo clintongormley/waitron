@@ -66,7 +66,7 @@ An **extras list** bounds how many picks it takes — `minPicks` 0 makes it opti
 it required, `maxPicks` null leaves it uncapped — and each item bounds its own product with
 `maxQuantity` (at least 1, where 1 means "one or none"). An item names a product and adds only the
 terms of the offer: it duplicates none of the product's names, VAT class, allergens, dietary labels
-or photo, which all come from the product (spec §3.1). A product may appear at most once in
+or photo, which all come from the product. A product may appear at most once in
 one list (`extra_list_items_list_product_uq`).
 
 ### Attaching a list to a dish
@@ -90,12 +90,12 @@ carries the mechanism for the whole package and points at its receipt, `racePair
 
 A menu offer can publish a subset of a dish's extras lists and change the terms:
 `menu_item_extra_lists` says which lists this offer publishes and in what order, and
-`menu_item_extra_items` withdraws or re-prices individual products within one (spec §3.2). There is
+`menu_item_extra_items` withdraws or re-prices individual products within one. There is
 no management route for this today — `setMenuItemExtraLists` (`packages/catalogue/src/extras.ts`)
 is called from nothing outside `packages/catalogue` and the test suites.
 
-An options list has no per-menu version at all. A dish asks the same questions on every menu (spec
-§2.2), so every options list the dish carries is offered on every offer of it, and there is nothing
+An options list has no per-menu version at all. A dish asks the same questions on every menu,
+so every options list the dish carries is offered on every offer of it, and there is nothing
 to publish. The consequence worth knowing: a menu item created today offers its product's options
 lists and NONE of its extras lists, because an extras list reaches an offer only through
 `setMenuItemExtraLists` and nothing outside `packages/catalogue` and its tests calls that. Pinned by
@@ -104,7 +104,7 @@ lists and NONE of its extras lists, because an extras list reaches an offer only
 
 ### What an extra costs
 
-Three rungs, first one wins (`resolveExtraPrice`, `packages/catalogue/src/extras.ts`, spec §3.3):
+Three rungs, first one wins (`resolveExtraPrice`, `packages/catalogue/src/extras.ts`):
 the menu offer's `menu_item_extra_items.price`, then the list item's own `price`, then the product's
 `unit_price` (its own, or its parent's where a variant leaves it blank). A null at a rung means "ask
 the next one". Every price on the wire is a GROSS (VAT-inclusive) two-place decimal string; the
@@ -192,7 +192,7 @@ paired with the stored child lines by `editLineExtras`: a pick that pairs keeps 
 price it was sold at, a pick that pairs with nothing is new and priced from its list now, and a
 child no pick keeps is removed. A line whose quantity rises, while the kitchen does not have it,
 keeps its stored price, but its dish and its picks are priced afresh as a check first, so a dish or
-an extra that is Inactive or Unavailable, or has gained an Active variant (spec §15.1), refuses the
+an extra that is Inactive or Unavailable, or has gained an Active variant, refuses the
 raise with the code a new line naming it gets (`product.variant_required` for the variant). A line
 the edit does not change is not touched.
 
@@ -215,10 +215,10 @@ quantity and the two sides are no longer in step.
 
 **A stored extras child records the list it was taken from, and pairs only with a pick from that
 list.** `buildLineExtras` gives each child its pick's `listId`, and the order path stores it as
-`working_order_lines.extra_list_id` (menus plan D10, which reverses §3.5 of the design here). A pick
+`working_order_lines.extra_list_id` (menus plan D10). A pick
 and a stored child pair on list, product and quantity. So when two lists offer the same product at
 two prices, an edit keeps the child at the price its own list sold it at, whatever either list
-charges now, and whether or not that list still offers it (spec §11.7 example 7); a pick MOVED to the
+charges now, and whether or not that list still offers it (menus spec §11.7 example 7); a pick MOVED to the
 other list, or two picks that EXCHANGED counts between the two lists, pair with nothing and are new
 picks, priced from today's offers. A child stored before the column existed records no list and
 pairs with nothing either. Pinned in `apps/server/src/working-order.test.ts` by "keeps an extra's
@@ -233,7 +233,7 @@ is frozen onto the line as a changed one; the line keeps its row and its stored 
 line is touched. That is a decision, not an omission: an options answer freezes six names and no
 ids, so the wording is the only evidence the line carries about what was chosen, and a rename cannot
 be told from a different answer. Giving the comparison an id to use would mean putting one on the
-line, which §2.3 of the design rules out. Pinned by "keeps the price of a held line whose options
+line, and an options answer deliberately carries none. Pinned by "keeps the price of a held line whose options
 list was renamed between the two sends, freezing the new name"
 (`apps/server/src/working-order.test.ts`). On a line the kitchen already has, a changed answer is a
 change like any other: the kitchen gets a recall notice and a new ticket. An EXTRAS list is different: its children are compared by
@@ -273,15 +273,15 @@ from that field or from an available variant (`needsModifierPicker`,
 
 Six things it is worth knowing about that payload:
 
-- **The order is the product's own `product_modifiers.sort`, on both reads** (spec §5). A menu
+- **The order is the product's own `product_modifiers.sort`, on both reads**. A menu
   offer changes what is inside an extras entry, and whether the entry is there at all, but not
   where it sits — so `menu_item_extra_lists.display_order` decides nothing here. It still decides
   the order in which the order path builds a line's answers, which is the table above.
 - **An extras entry on a MENU offer is that offer's own version** — items withdrawn and repriced by
-  `menu_item_extra_items` (spec §3.2) — and a list the offer does not publish is left out of the
+  `menu_item_extra_items` — and a list the offer does not publish is left out of the
   walk entirely.
 - **Every price is settled**: the menu's price, then the list item's, then the product's
-  `unit_price` — its own, or its parent's where a variant leaves it blank (spec §3.3). A till has
+  `unit_price` — its own, or its parent's where a variant leaves it blank. A till has
   no way to walk that chain itself, because the last rung is not on the list item.
 - **Only ACTIVE lists are offered, and an options list offers only its AVAILABLE labels** — which
   is exactly the set `validateExtraSelections` (`extra-contract.ts`) and `validateOptionSelections`
@@ -291,7 +291,7 @@ Six things it is worth knowing about that payload:
   the two reads through `readOfferedModifiers`: a required list the picker never drew would refuse
   the order with `options.label_required` or `extras.limit_exceeded`, and an offered list the
   server does not know about would be refused as `options.invalid`.
-- **An extras list offers only the items whose product is Active and Available** (spec §15.6), and
+- **An extras list offers only the items whose product is Active and Available**, and
   a pick of any other item in a basket priced afresh is refused as `extras.invalid` (field
   `productId`), the same refusal as a pick the list never offered. That filter is NOT in
   `resolveAttachedModifiers`: it sits in the two separate queries that read the items' `products`
@@ -307,8 +307,8 @@ Six things it is worth knowing about that payload:
   "an extra the till cannot sell" in `packages/catalogue/src/offered-modifiers.test.ts`, and
   "refuses an extras pick of an Unavailable or an Inactive product as a pick the list does not
   offer" in `apps/server/src/till-sale.test.ts`.
-  An extras list also leaves out a product that has an Active variant (spec §15.1: it is never sold
-  as itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a
+  An extras list also leaves out a product that has an Active variant (it is never sold as
+  itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a
   different code, `product.variant_required`, in `priceOrderLines`
   (`apps/server/src/working-order.ts`). A pick of a variant
   still sells, as does a product whose only variants are Inactive. The catalogue's own saves do
@@ -326,14 +326,14 @@ Six things it is worth knowing about that payload:
   variant is Inactive" in `apps/server/src/till-api.zone-required.test.ts`.
 - **An extras item carries the PRODUCT's facts**, not the row's: its three names, its VAT class, its
   allergens and its dietary labels, because `extra_list_items` deliberately duplicates none of
-  them (spec §3.1). Each is the product's own or, where a variant leaves it blank, its parent's —
+  them. Each is the product's own or, where a variant leaves it blank, its parent's —
   except the names, which are always the variant's own. The two declaration fields take the names
   a CHILD LINE uses on the kitchen and expo screens — `addAllergens` and `suitableFor`, the field
   names `readQueueSubItems` (`apps/server/src/working-order.ts`) hands those screens — because a
   pick is what becomes such a line. That kitchen read took the product's RAW columns until #537
   (variants Task 5), so before it an extra that is a variant inheriting its parent's declarations
   showed none there. Shown beside the dish's own, never folded
-  into them (spec §3.4).
+  into them.
 
 ## On the filed sale
 

@@ -91,8 +91,6 @@ const USAGE = [
   "login secret must not reach argv, so each is read from WAITRON_ADMIN_PIN /",
   "WAITRON_ADMIN_PASSWORD or an echo-off prompt — and from nowhere else. The admin display name",
   "(--admin-name) is not a secret and stays a flag.",
-  "",
-  "There is no `tenant` yet: see packages/provisioning/README.md.",
 ].join("\n");
 
 /** Returns the exit code rather than calling `process.exit`; `bin.ts` is the only thing that

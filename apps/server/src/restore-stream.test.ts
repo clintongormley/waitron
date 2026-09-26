@@ -130,7 +130,7 @@ beforeAll(async () => {
   await writeSealedStateRow(db, T.nodeId, await sealNodeState(ENTRIES, RECOVERY_KEY), NOW);
   fixtureDb = join(await mkdtemp(join(tmpdir(), "waitron-stream-fixture-")), "venue.db");
   await db.archiveTo(fixtureDb);
-  // A copy restored from the bucket carries Litestream's own two tables (plan Reconciliation L1),
+  // A copy restored from the bucket carries Litestream's own two tables,
   // so every check below runs over a file that has them. The column shapes are not Litestream's
   // measured ones; only the names matter to a check that enumerates tables.
   const withLitestream = new DatabaseSync(fixtureDb);

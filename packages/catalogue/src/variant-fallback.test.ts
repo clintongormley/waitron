@@ -709,9 +709,9 @@ describe("dietary declarations on a variant", () => {
 });
 
 describe("INHERITED_KEYS", () => {
-  // Spec §1.2 minus the three names (§15.2), with the price (§15.3) and the photo. Pinned
-  // whole, so a key added or dropped is a decision somebody makes here rather than by accident.
-  it("inherits exactly the spec's set, and none of the names, flags or identity", () => {
+  // Every key below is read from the parent when a variant leaves it blank; the three names never are.
+  // Pinned whole, so a key added or dropped is a decision somebody makes here rather than by accident.
+  it("inherits exactly this set, and none of the names, flags or identity", () => {
     expect([...INHERITED_KEYS].sort()).toEqual(
       [
         "allergens",

@@ -281,7 +281,7 @@ describe("planVenue", () => {
     }
   });
 
-  it("canonicalizes country/taxId case and leading/trailing whitespace so es/ES reads as the SAME taxpayer (§5)", () => {
+  it("canonicalizes country/taxId case and leading/trailing whitespace so es/ES reads as the SAME taxpayer", () => {
     const canonicalTenant = planVenue(request({ country: "ES", taxId: "B12345678" }), MODULES).find(
       (a) => a.kind === "ensure-tenant",
     );

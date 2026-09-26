@@ -395,7 +395,7 @@ describe("applyVenue", () => {
     });
   });
 
-  it("collapses country/taxId case + surrounding-whitespace variants to ONE tenant on re-run (no duplicate, no PK error, §5)", async () => {
+  it("collapses country/taxId case + surrounding-whitespace variants to ONE tenant on re-run (no duplicate, no PK error)", async () => {
     // The count cannot exceed 1 (`tenants.id` is pinned to 1): what this catches is ensure-tenant's
     // identity comparison refusing the re-run.
     await applyVenue(planVenue(request("B88888888"), ALL_MODULES), {

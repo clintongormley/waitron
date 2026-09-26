@@ -260,7 +260,7 @@ export class TillApp extends LitElement {
         margin: 0;
       }
 
-      /* The compact waiting-for-promotion banner (till-reroute §4.4), muted so it informs without the
+      /* The compact waiting-for-promotion banner, muted so it informs without the
          alarm weight of the danger .error banner above. */
       .banner {
         margin: 0 0 var(--wt-space-3);
@@ -2360,7 +2360,7 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.#renderRefreshNotice("held")} ${this.#renderRefreshNotice("station")}
-        <!-- The waiting-for-promotion banner (till-reroute §4.4). On the shell surface (an operator
+        <!-- The waiting-for-promotion banner. On the shell surface (an operator
              mid-shift), the lock-screen's own status line is not visible, so the shell surfaces the same
              server.waiting_promotion copy compactly here while the router reports no server is accepting
              sales. Gated on the shell surface so it never double-renders beside the lock screen's own line. -->

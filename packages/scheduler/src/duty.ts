@@ -25,8 +25,8 @@ export interface DutyOutcome {
  * `drain` must not become a `PeriodDuty`: `parked` is terminal, so once `maxAttempts` attempts are
  * spent nothing retries it, and its hourly retry is a legal duty. It also keeps its own persisted
  * schedule (`envio_flujo.proximo_envio_en`, and `envios.proximo_intento_en` per record), which a
- * ledger row would duplicate. There is no second duty kind for `nextDueAt`-shaped duties: #34 ruled
- * one out for `drain` and deferred it for `forward`.
+ * ledger row would duplicate. There is no second duty kind for `nextDueAt`-shaped duties: one was
+ * ruled out for `drain` and deferred for `forward`.
  */
 export interface PeriodDuty {
   /** Stable ledger key, e.g. "payments.reconcile.stripe". It is an identifier: changing it orphans

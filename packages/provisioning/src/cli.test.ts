@@ -619,7 +619,7 @@ describe("runCli venue", () => {
     expect(h.openVenue).not.toHaveBeenCalled();
   });
 
-  it("refuses a SECOND, DIFFERENT fiscal identity in the same database, before applying (§5)", async () => {
+  it("refuses a SECOND, DIFFERENT fiscal identity in the same database, before applying", async () => {
     // The database holds ES/B99999999; VENUE_ARGS asks for ES/B12345678.
     const h = harness({
       env: VENUE_ENV,

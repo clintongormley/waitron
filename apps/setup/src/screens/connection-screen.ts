@@ -5,7 +5,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import { helpLinkStyles, actionsStyles, errorStyles } from "../form-styles.js";
 
 /**
- * A page cannot tell whether it was reached over a trusted certificate or through a warning the
+ * `isSecureContext` and a successful fetch cannot tell a trusted certificate from a warning the
  * operator clicked past (measured for #330 on Chrome 153: past the warning, `isSecureContext` was
  * true and a fetch answered 200), so this screen asks the operator to read the address bar and never
  * reports a verdict. Continue only checks that the server answers.

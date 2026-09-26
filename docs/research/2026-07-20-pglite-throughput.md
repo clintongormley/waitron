@@ -4,20 +4,21 @@
 **Status:** measured; re-measured 2026-07-21 against the completed write path — see
 "Re-measurement against the completed write path, 2026-07-21" below, which supersedes the
 figures under "Results" for accuracy.
-**Decides:** spec §3's open risk — "PGlite is single-connection and fully serialises queries",
-carried against §5's local-server recommendation, which makes that node the venue's ceiling.
+**Decides:** the sales-spine design's open risk — "PGlite is single-connection and fully serialises queries",
+carried against the architecture design's local-server recommendation
+([2026-07-18-pos-architecture-design.md §5](../superpowers/specs/2026-07-18-pos-architecture-design.md)), which makes that node the venue's ceiling.
 
 ## Method
 
 `bench/pglite-throughput` drives 8 concurrent virtual tills against one database node for 20
-seconds, discarding a 3-second warm-up. Each iteration is the spec §4 write-path transaction:
+seconds, discarding a 3-second warm-up. Each iteration is the sale write-path transaction:
 `SELECT ... FOR UPDATE` on the chain head, an insert into `bench_sales`, three into
 `bench_sale_lines`, one into `bench_records`, then an `UPDATE` of the head row — five statements
 and a SHA-256 inside one transaction.
 
 Real PostgreSQL 18 via Testcontainers runs the identical statements as a control. PGlite uses its
 own `transaction()` rather than hand-rolled `begin`/`commit`. Whether that choice actually matters
-for these numbers, and whether hand-rolling reproduces the false-pass trap spec §10 warns about,
+for these numbers, and whether hand-rolling reproduces the false-pass trap,
 was tested directly rather than assumed — see "Mutation 1: what it found, and where the real
 assurance actually lives" below for what that found.
 
@@ -97,7 +98,7 @@ PGlite version.
 **Expected:** reverting `runPglite` from PGlite's `transaction()` to hand-rolled `begin`/`commit`
 should let concurrent tills' statements interleave inside what the application still believes are
 separate transactions, and the resulting merge should surface as a `23505` unique-constraint
-violation — the false-pass trap spec §10 warns about.
+violation — the false-pass trap.
 
 **What happened:** three runs of the mutated file produced zero `23505` violations, and
 throughput was statistically indistinguishable from the correct `transaction()` version (mutated:
@@ -133,12 +134,12 @@ gap in this benchmark's design that a different mutation would dodge.
   were measured running the correct `transaction()` code path, never the mutated one, so the
   measured ~75x margin on throughput and ~27x margin on p95 latency against the criterion stand.
 - The contention risk mutation 1 was meant to stand in for — two writers racing to append to the
-  *same* till's chain, which spec §3 documents as a real risk with a PWA that can have multiple
+  *same* till's chain, a real risk with a PWA that can have multiple
   tabs open — is not tested by this benchmark at all, on any PGlite version. It is Task 14's job:
   20 concurrent appends to a single chain, proven against real PostgreSQL via Testcontainers,
-  where locking and blocking genuinely happen and can be observed. PGlite provably cannot test
+  where locking and blocking genuinely happen and can be observed. PGlite cannot test
   lock contention — concurrent queries serialise onto one backend, so `FOR UPDATE` parses and
-  runs but never blocks (spec §10).
+  runs but never blocks.
 
 ## Consequences
 

@@ -475,7 +475,7 @@ though no money is misfiled.
    human-readable list of its open tabs, their lines, and unfinished kitchen tickets, so staff can
    re-key or settle them on the new primary. Automatically merging two divergent live states — the
    winner may hold its own tab for the same table — is the interactive conflict merge deliberately
-   shelved (wire-protocol §7); it is named here, not gated.
+   shelved; it is named here, not gated.
 
 ---
 
@@ -572,7 +572,6 @@ and the cloud seat is minted; the venue becomes topology 4.1 with no restart and
 > **Pointer, 2026-09-25 (slice 2).** The stream goes to S3-compatible buckets only. Litestream 0.5
 > cannot encrypt what it uploads, so a NAS folder or a USB disk would hold the venue's whole database
 > in the clear; the encrypted archive stays the way to put a copy on a USB disk.
-> Slice 2's owner decision 2.
 
 ### 7.4 Superseded: ciphertext-only offsite, for the stream
 

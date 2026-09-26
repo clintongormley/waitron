@@ -2,10 +2,9 @@
 // on top of the last full copy, on a database carrying product images (they live in the database:
 // `media_image_data.bytes`, packages/media/src/schema/images.ts).
 //
-// Sizes: the owner's figure of up to 5,000 product images (Reconciliation O2), each stored as the
-// shrunk copy Task 0 makes — 171 KiB on average and 338 KB at most over ten real photos (Task 0's
-// measurement) — so the count is the owner's upper figure and the sizes are measured, and the line
-// says so (`sizes=owner-count-measured-size`). Run it twice: the average size, and every image at the
+// Sizes: the owner's figure of up to 5,000 product images, each stored as the
+// shrunk copy an upload makes — 171 KiB on average and 338 KB at most over ten real photos — so
+// the count is the owner's upper figure and the sizes are measured, and the line says so (`sizes=owner-count-measured-size`). Run it twice: the average size, and every image at the
 // largest measured size. Image bytes are random, which does not compress, the way an
 // already-compressed photo does not.
 //

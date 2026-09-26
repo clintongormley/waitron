@@ -42,9 +42,9 @@ export async function claimGeneration(
 
 /**
  * Delete every generation of this venue whose newest object is older than `windowMs` before `now`,
- * except `live` — the one the pointer names. Litestream tidies only the generation it writes (spec
- * §4.4). Only folders whose name is a generation name are ever touched; `current.json` and anything
- * else at the venue's root are not. Answers the names deleted, in order.
+ * except `live` — the one the pointer names. Litestream tidies only the generation it writes.
+ * Only folders whose name is a generation name are ever touched; `current.json` and anything else
+ * at the venue's root are not. Answers the names deleted, in order.
  */
 export async function pruneGenerations(
   store: ObjectStore,

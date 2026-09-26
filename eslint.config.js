@@ -107,7 +107,7 @@ export default tseslint.config(
   },
 
   {
-    // The generic layer is regime-neutral (spec §2). A second fiscal backend —
+    // The generic layer is regime-neutral. A second fiscal backend —
     // TicketBAI, Italy, Portugal — brings its own tables and its own
     // vocabulary and touches none of these packages. The moment packages/db
     // imports the Veri*Factu module, "generic" becomes a comment rather than a
@@ -131,7 +131,7 @@ export default tseslint.config(
               target: ["./packages/db/**/*", "./packages/core/**/*", "./packages/fiscal/**/*"],
               from: ["./packages/fiscal-verifactu/**"],
               message:
-                "The generic layer must not depend on a fiscal module (spec §2). Only the " +
+                "The generic layer must not depend on a fiscal module. Only the " +
                 "FiscalBackend interface crosses that boundary — if this needs something " +
                 "from the Veri*Factu module, it belongs behind the interface.",
             },
@@ -148,7 +148,7 @@ export default tseslint.config(
             {
               group: ["@waitron/verifactu", "@waitron/verifactu/*"],
               message:
-                "The generic layer must not depend on the Veri*Factu regime (spec §2). Only the " +
+                "The generic layer must not depend on the Veri*Factu regime. Only the " +
                 "FiscalBackend interface crosses that boundary — if this needs something from the " +
                 "Veri*Factu module, it belongs behind the interface.",
             },

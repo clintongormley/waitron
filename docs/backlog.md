@@ -549,15 +549,14 @@ line) and Options (reusable label lists, saved as a note on the dish line), comp
 ordered attachment list per product. Landed across #412, #436, #445, #449, #452, #456, #462, #465,
 #469, #471, #476, #478 and #480.
 
-**What branch 1 deliberately did NOT build, both recorded in the design rather than forgotten:**
+**What branch 1 deliberately did NOT build:**
 
 - **An options list is always required.** It asks for exactly one pick, with the default
   preselected, which is what today's behaviour was. An OPTIONAL options list —
-  one a diner may leave unanswered — is a possible future change, called out in the design and
-  not built. Today an unanswered ACTIVE list refuses the order with `options.label_required`.
+  one a diner may leave unanswered — is a possible future change, not built. Today an unanswered ACTIVE list refuses the order with `options.label_required`.
 - **A variant offers its parent's lists and cannot override them.** The attachment list is the one
-  thing a variant does not override (§4.4); a per-variant attachment row is a possible later
-  addition, recorded in §14. Everything else about a variant — price, names, photo, VAT, category,
+  thing a variant does not override; a per-variant attachment row is a possible later
+  addition. Everything else about a variant — price, names, photo, VAT, category,
   unit, kitchen station, allergens, dietary declarations — IS editable per variant. A product-level
   preparation route cannot name a variant: `createPreparationRoute`
   (`packages/venue-service/src/operations.ts`) refuses one with `route.subject_not_found`, and a
@@ -2747,7 +2746,7 @@ image constraints under *Detail → Box image*.
     `ticket-items.ts`, `orders.ts`). Stale test titles: "lists the node's open orders" and "…not a
     raw 23505" in `working-order.test.ts`; "the 23505 backstop" (twice) and "(Task B1, …)" in
     `working-order.pay-and-dispatch.test.ts`; "an UNLOCKED read" in `tabs.test.ts`; "recordSale
-    UNCHANGED" in `tabs.filing.test.ts`; many "(till-reroute §3.6)", "(KDS-…)" and "(A1)"-style
+    UNCHANGED" in `tabs.filing.test.ts`; many "(KDS-…)" and "(A1)"-style
     plan tags.
   - Found by #622 (`apps/server` part g), outside its files or not fixable in a comments-only
     change. `working-order.ts` (near `requireLiveCourse`) says the fire verbs use the same
@@ -2782,8 +2781,7 @@ image constraints under *Detail → Box image*.
     deleted `menu-filter.ts` comment: should the `no-meat`/`no-fish` lenses also hide a dish whose
     diet is still pending review, as `vegan`/`vegetarian` do? Today they hide only dishes known to
     contain the tag. Comments inside `till-app.ts`'s template text still carry design-doc pointers
-    (`till-reroute §4.4` in a `css` rule and in `render()`, `cash-drawer-authorization §5`,
-    `device-enrolment §3.1`), and many `till-app.test.ts` titles carry plan and review labels
+    (`cash-drawer-authorization §5`, `device-enrolment §3.1`), and many `till-app.test.ts` titles carry plan and review labels
     ("(Finding 2)", "(P6)", "(FP-1)", "(KDS-1)", "Task 8", "(SP-B2.1)"), as do three
     `session-activity.test.ts` titles ("(C3)").
   - Found by #620 (`apps/server` part h1), not fixable in a comments-only change.
@@ -4386,8 +4384,8 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   (`printers.status_inactive`, `printers.status_revoked`, `payments.reader_disabled`,
   `person.mark_inactive`); extras and options say **In use / Not in use** (`extras.not_in_use`,
   `options.not_in_use`); and a generic `action.deactivate` ("Deactivate") exists beside
-  `action.disable`. Branch 2 of the one-product model settles products on **Active / Inactive**
-  (spec §15.6), kept separate from **Available** (sold out for now). **Next action:** pick the one
+  `action.disable`. Branch 2 of the one-product model settles products on **Active / Inactive**,
+  kept separate from **Available** (sold out for now). **Next action:** pick the one
   pair, and the one action verb, for every screen whose record is switched off rather than deleted —
   deciding first whether a revoked printer or a disabled login is really the same state as an
   inactive product — then change the English and Spanish strings together and record the rule in
@@ -4815,7 +4813,7 @@ can still make the box refuse itself, because a restarted process starts with an
 so does a `current.json` deleted after the supervisor read it, on a bucket that answers a conditional
 write to a missing object with 412 (SeaweedFS; the in-memory test store); in both cases the owner's alert
 (`backup.stream_refused` in `apps/dashboard/src/i18n/alert-messages.ts`) still says another box is writing. On a bucket that answers that write with 404 instead (AWS, as it
-documents; versitygw, as measured — the plan's Task 10 notes), the deleted pointer surfaces as
+documents; versitygw, as measured), the deleted pointer surfaces as
 `backup.stream_request_failed` and `#movePointer` (`packages/stream/src/supervisor.ts`) logs
 `stream.pointer_write_failed` and retries every `OPEN_RETRY_MS` until the supervisor stops, never
 reaching `refused`;
@@ -5012,7 +5010,7 @@ names (`apps/server/src/restore-stream.ts`). Left open:
 - Open question: the first start's pointer read and the bucket rebuild's calls (the command line's
   `--from-bucket` and the wizard's `/setup-api/restore-bucket`) use different limits (15 seconds
   and 60 seconds) and report different codes (`restore.pointer_unreadable` and
-  `backup.stream_request_failed`). Neither the code nor the plan says why they differ. On the
+  `backup.stream_request_failed`). The code does not say why they differ. On the
   bucket rebuild, only a timed-out pointer read or newest-upload listing reaches the caller as
   `backup.stream_request_failed`. On every restore, a timed-out call in the clock check
   (`measureBucketSkew`, `apps/server/src/restore-stream.ts`) is reported as
@@ -5036,7 +5034,7 @@ question. Left open:
 - After an archive restore or a Cloud restore the final screen does not show the device steps the
   bucket rebuild's shows (`rebuilt` is set only on the bucket path, `apps/setup/src/setup-app.ts`),
   although the first start re-issues the certificate for this machine's addresses after an archive
-  restore too (spec §5.1 step 7, plan owner decision O4).
+  restore too.
 - After a refused Cloud restore the owner has to tick the Cloud screen's "old server and surviving
   peers are stopped" confirmation again: the shell shows the progress screen while the request runs
   and then draws a new Cloud screen, which starts unticked.

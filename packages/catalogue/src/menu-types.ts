@@ -179,7 +179,7 @@ export interface AccessibleCatalogue {
 
 /**
  * One product an extras list offers, with everything a surface needs to draw and describe it: the
- * RESOLVED price (§3.3's chain — the menu offer's own price, then the list item's, then the
+ * RESOLVED price (the menu offer's own price, then the list item's, then the
  * product's `unit_price` — already settled, because a till has no way to walk it), the terms of the
  * OFFER, and the product's names and declarations. Every product value here is the picked product's
  * EFFECTIVE one — its own, or its parent's where a variant leaves it blank — except the names, which

@@ -1304,7 +1304,7 @@ describe("listHeldOrders", () => {
     expect(held.map((o) => o.id)).toEqual([openId]);
   });
 
-  it("lists an open order from ANOTHER node of the same tenant — reads are venue-wide under warm standby (till-reroute §3.6)", async () => {
+  it("lists an open order from ANOTHER node of the same tenant — reads are venue-wide under warm standby", async () => {
     const { cfg, cafeId } = await setupVenue();
     const mine = randomUUID();
     await parkProducts(cfg, { id: mine, lines: [{ productId: cafeId, quantity: "1" }] });
@@ -1594,7 +1594,7 @@ describe("getHeldOrder", () => {
     });
   });
 
-  it("retrieves an open order from ANOTHER node of the same tenant — reads are venue-wide (till-reroute §3.6)", async () => {
+  it("retrieves an open order from ANOTHER node of the same tenant — reads are venue-wide", async () => {
     const { cfg } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
 
@@ -2163,7 +2163,7 @@ describe("updateHeldOrder", () => {
     expect((await getHeldOrder({ db }, cfg, id)).revision).toBe(copy.revision + 1);
   });
 
-  it("edits an open order from ANOTHER node of the same tenant — reads are venue-wide (till-reroute §3.6)", async () => {
+  it("edits an open order from ANOTHER node of the same tenant — reads are venue-wide", async () => {
     const { cfg, cafeId, zoneId } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
     // An edit prices from the order's own zone, which a raw order row does not carry.
@@ -2226,7 +2226,7 @@ describe("abandonHeldOrder", () => {
     });
   });
 
-  it("abandons an open order from ANOTHER node of the same tenant — reads are venue-wide (till-reroute §3.6)", async () => {
+  it("abandons an open order from ANOTHER node of the same tenant — reads are venue-wide", async () => {
     const { cfg } = await setupVenue();
     const foreign = await seedForeignNodeOrder(cfg);
 
