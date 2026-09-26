@@ -267,9 +267,11 @@ The two sell-side reads — `listAvailableProducts` and `listMenuOffers`
 extras and options lists a dish puts in front of a diner, already resolved. It is built by
 `readOfferedModifiers` (`packages/catalogue/src/offered-modifiers.ts`) and the shapes are declared
 beside the rest of the sell-side wire in `menu-types.ts` (`OfferedModifier`, `OfferedExtrasList`,
-`OfferedOptionsList`, `OfferedExtraItem`). The till app itself reads only `listMenuOffers`, through
-its zone-offer routes; nothing in `apps/till` outside its tests calls `GET /api/products`, the
-route over `listAvailableProducts`.
+`OfferedOptionsList`, `OfferedExtraItem`). The till app reads neither directly: its zone-offer
+routes serve each menu's published version (`listZoneOffers`, `packages/venue-service/src/operations.ts`),
+which `listMenuOffers` built when the menu was published, with each extras item and option label
+marked with whether it can be sold now; nothing in `apps/till` outside its tests calls
+`GET /api/products`, the route over `listAvailableProducts`.
 
 Nothing else on those two payloads describes a modifier. The till's picker walks
 `offeredModifiers` alone (`apps/till/src/widgets/modifier-picker.ts`), and the two surfaces that ADD
@@ -295,7 +297,10 @@ Six things it is worth knowing about that payload:
   order path read the same lists: since menus Task 7 both take them from the menu's published
   version, which `listMenuOffers` builds through `readOfferedModifiers` when the menu is published
   (`buildMenuDocument`, `packages/catalogue/src/menu-document.ts`), with availability put back
-  when it is served (`applyLiveFields`). A required list the picker never drew would refuse the
+  when it is served (`applyLiveFields`). One exception: an edit of a saved line whose dish the live
+  version no longer offers checks that line's options answer against the dish's own current lists
+  (`productOptionLists`, `apps/server/src/working-order.ts`), because no published list is left to
+  check it against. A required list the picker never drew would refuse the
   order with `options.label_required` or `extras.limit_exceeded`, and an offered list the server
   does not know about would be refused as `options.invalid`.
 - **An extras list offers only the items whose product is Active and Available**, and

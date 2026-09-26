@@ -162,7 +162,7 @@ type WalkedList =
  * Only ACTIVE lists are offered, and an options list offers only its AVAILABLE labels: exactly what
  * `validateExtraSelections` and `validateOptionSelections` will accept an answer from. An extras
  * item is left out when its product row is missing, Inactive or Unavailable, or has an
- * Active variant. The order path refuses a pick of the last three on its own read.
+ * Active variant.
  *
  * With `includeEveryModifierItem`, what a published document holds: every label, and an extras
  * item whether or not its product is Available and whether or not the offer withdraws it; an item

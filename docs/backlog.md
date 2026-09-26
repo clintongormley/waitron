@@ -326,9 +326,9 @@ is offered, and every new line is charged, what each menu's published version sa
 variant, its extras and its options. What is still read from the current rows: availability (a
 sold-out dish is served in its place marked unavailable, and a line for it is refused
 `product.unavailable`; an extras item sold out or switched off on the offer is refused as a pick the
-list does not offer); the VAT class, kitchen course and reporting category the served offer carries
-(`applyLiveFields`, `packages/catalogue/src/menu-document.ts`), so a VAT change still reaches a new
-line without a publish, which menus M7v changes next; and whether a picked extra has since gained
+list does not offer); the VAT class, kitchen course and reporting category the served offer carries,
+and each extras item's VAT class (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`), so
+a VAT change still reaches a new line and a new extra without a publish, which menus M7v changes next; and whether a picked extra has since gained
 an Active variant, which refuses the pick `product.variant_required`.
 Each unsaved line a till sends may name the version it was priced against (`menuVersionId`); a
 request naming one that is no longer live is refused `menu.version_changed` (409), listing each
@@ -1217,9 +1217,10 @@ What Task 12 deliberately did NOT do, so Task 13 is not surprised by it:
   transfer pickers (`apps/till/src/screens/till-table-order-screen.ts`), so nothing offers it an
   action it cannot take; whether the drawer should also INDENT it is a display question nobody has
   decided. Deliberately left as it is.
-- **Resolved by menus Task 7: the `products` row behind an extra is no longer read by two bodies.**
-  The order path's own read (`resolveBasketModifiers`) is gone; an extra's names, price and
-  availability now come from the menu's published version, which `readExtraProducts` built.
+- **Resolved by menus Task 7: the order path no longer runs a `products` read of its own for an
+  extra's facts.** `resolveBasketModifiers` is gone; the order path takes an extra's names, price,
+  VAT class and availability from the served offer (`offerModifiers`,
+  `apps/server/src/working-order.ts`).
 - **A published-but-DETACHED extras list is offered by nothing and demanded by the validator, and
   nothing cleans the publication up.** The two sides read different sets on ONE of the three reads
   that build those maps — the MENU-OFFER extras read, which is the read this scenario uses. The

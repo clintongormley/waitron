@@ -2544,11 +2544,7 @@ describe("basket-wide modifier resolution (perf)", () => {
   // CLAUDE.md §3: shared catalogue data is resolved ONCE before the line loop, never per line. The
   // two THREE-LINE baskets below — the same dish twice, then a second dish — are what can see that:
   // a read moved inside the loop runs three times instead of once. Behaviour alone cannot tell the
-  // two apart, so the reads are spied on. The MIDDLE case is a SINGLE line; it pins that a note edit
-  // of a stored line reads the zone's offers once.
-  //
-  // Every definition a line answers comes from the menu's published version, which the zone's
-  // offers snapshot carries (`VENUE_SERVICE.listZoneOffers`), so that read is what is counted.
+  // two apart, so the reads are spied on.
 
   it("reads each definition once for a basket of offers priced at their products' prices", async () => {
     const { cfg, cafeId, aguaId, catalogueId } = await setupVenue();
