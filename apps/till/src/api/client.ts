@@ -60,6 +60,12 @@ export function isNetworkFailure(err: unknown): boolean {
   return err instanceof TypeError || (err instanceof DOMException && err.name === "AbortError");
 }
 
+/** A read the caller can cancel: an aborted read rejects with `fetch`'s own abort error, which
+ * {@link isNetworkFailure} counts as no answer. */
+export interface ReadOptions {
+  signal?: AbortSignal;
+}
+
 /**
  * `GET /api/till` — the public boot info the app reads before login. `orderFlow` is needed before login
  * so the app can choose which pay control to render; `cardProvider`/`tipsEnabled` decide whether the
@@ -1321,8 +1327,13 @@ export class TillApi {
    * One station's kitchen queue → `GET /api/stations/:id/queue`, grouped by order, oldest first. A
    * malformed or unknown station id rejects with `station.not_found`.
    */
-  getStationQueue(stationId: string): Promise<StationQueue> {
-    return this.#request<StationQueue>(`/api/stations/${stationId}/queue`, "GET");
+  getStationQueue(stationId: string, options: ReadOptions = {}): Promise<StationQueue> {
+    return this.#request<StationQueue>(
+      `/api/stations/${stationId}/queue`,
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   /** Acknowledge one kitchen notice → `POST /api/kitchen-notices/:id/acknowledge`. An unknown id
@@ -1387,8 +1398,8 @@ export class TillApi {
    * The enrolled display's OWN bound station and queue → `GET /api/device/station`. A missing, rejected
    * or revoked cookie rejects `device.unauthorized` (401).
    */
-  getDeviceStation(): Promise<DeviceStation> {
-    return this.#request<DeviceStation>("/api/device/station", "GET");
+  getDeviceStation(options: ReadOptions = {}): Promise<DeviceStation> {
+    return this.#request<DeviceStation>("/api/device/station", "GET", undefined, options.signal);
   }
 
   /**
@@ -1726,7 +1737,12 @@ export class TillApi {
    * A 2xx with an EMPTY body resolves to `undefined`, where `res.json()` would throw; a method
    * whose route answers one types `T` as `void`.
    */
-  async #request<T>(path: string, method: string, body?: unknown): Promise<T> {
+  async #request<T>(
+    path: string,
+    method: string,
+    body?: unknown,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const fetchImpl = this.#fetchImpl;
     const init: RequestInit =
       body === undefined
@@ -1737,6 +1753,7 @@ export class TillApi {
             headers: { "content-type": "application/json" },
             body: JSON.stringify(body),
           };
+    if (signal !== undefined) init.signal = signal;
     const res = await fetchImpl(this.#baseUrl + path, init);
     if (!res.ok) {
       // The body is untrusted: it may not be JSON, and the literal `null` is valid JSON, so the parsed

@@ -29,6 +29,12 @@ const ADVANCE_FROM: Record<Exclude<TicketState, "queued">, TicketState> = {
 const REFRESH_MS = 15_000;
 
 /**
+ * How long a refresh read may stay out before it is cancelled. Longer than {@link REFRESH_MS}, so a
+ * server that is slow but answering still updates the screen; at most two refresh reads are ever out.
+ */
+const READ_LIMIT_MS = 2 * REFRESH_MS;
+
+/**
  * The TILL station-display screen: one station's queue. It fetches its own data and handles the queue
  * widget's events itself, STOPPING them so the app (which handles the counter's own default-station
  * widget) never double-fires them. A failed state change is SWALLOWED and the reload reconciles the
@@ -127,13 +133,16 @@ export class TillStationScreen extends LitElement {
   @state() private acknowledgeFailed = false;
   #initialConsumed = false;
   #refreshTimer?: ReturnType<typeof setInterval>;
+  readonly #refreshReads = new Set<AbortController>();
   /**
    * Notices this screen has acknowledged, filtered out of every answer until one arrives without them:
    * a read that set out before the acknowledgement landed still lists the notice.
    */
   readonly #acknowledged = new Set<string>();
 
+  /** Numbers every queue read; an answer is used only when its read set out after the one on screen. */
   #queueRequest = 0;
+  #appliedRequest = 0;
   // Preserve the requested ID until the station list can validate it.
   #stationsLoaded = false;
   readonly #url = new UrlStateController(
@@ -179,15 +188,31 @@ export class TillStationScreen extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     clearInterval(this.#refreshTimer);
+    for (const read of this.#refreshReads) read.abort();
+    this.#refreshReads.clear();
   }
 
   /**
-   * Every tick reads afresh, even when the previous tick's read has not answered: the client sets no
-   * timeout, so waiting for it would let one read that never answers freeze the display. That read's
-   * late answer is dropped by the request counter.
+   * Every tick reads afresh, even when the previous tick's read has not answered, so one read that
+   * never answers cannot freeze the display; that read is cancelled at {@link READ_LIMIT_MS}, which
+   * the caller sees as a silent failed refresh.
    */
   async #refresh(): Promise<void> {
-    await (this.deviceMode ? this.#loadDevice() : this.#reload());
+    const read = new AbortController();
+    const limit = setTimeout(() => read.abort(), READ_LIMIT_MS);
+    this.#refreshReads.add(read);
+    try {
+      await (this.deviceMode ? this.#loadDevice(read.signal) : this.#reload(read.signal));
+    } finally {
+      clearTimeout(limit);
+      this.#refreshReads.delete(read);
+    }
+  }
+
+  #isNewest(request: number): boolean {
+    if (request <= this.#appliedRequest) return false;
+    this.#appliedRequest = request;
+    return true;
   }
 
   #adoptNotices(notices: KitchenNotice[]): void {
@@ -212,7 +237,7 @@ export class TillStationScreen extends LitElement {
    * Any failure other than `device.unauthorized` is transient: keep the last-known queue rather than
    * tearing the kiosk down for a blip.
    */
-  async #loadDevice(): Promise<void> {
+  async #loadDevice(signal?: AbortSignal): Promise<void> {
     // A one-shot, so a later re-connect fetches and never reuses a stale initial.
     if (this.initialDeviceStation !== undefined && !this.#initialConsumed) {
       this.#initialConsumed = true;
@@ -221,8 +246,8 @@ export class TillStationScreen extends LitElement {
     }
     const request = ++this.#queueRequest;
     try {
-      const answer = await this.api.getDeviceStation();
-      if (request === this.#queueRequest) this.#adoptDeviceStation(answer);
+      const answer = await this.#readDeviceStation(signal);
+      if (this.#isNewest(request)) this.#adoptDeviceStation(answer);
     } catch (error) {
       if ((error as { code?: string }).code === "device.unauthorized") {
         this.dispatchEvent(
@@ -232,19 +257,24 @@ export class TillStationScreen extends LitElement {
     }
   }
 
+  #readDeviceStation(signal: AbortSignal | undefined): Promise<DeviceStation> {
+    return signal === undefined
+      ? this.api.getDeviceStation()
+      : this.api.getDeviceStation({ signal });
+  }
+
   #adoptDeviceStation({ station }: DeviceStation): void {
     this.activeStationId = station.id;
     this.groups = station.queue;
     this.#adoptNotices(station.notices);
   }
 
-  /** Ignores responses superseded by a later request. */
-  async #reload(): Promise<void> {
+  async #reload(signal?: AbortSignal): Promise<void> {
     if (this.deviceMode) {
       const request = ++this.#queueRequest;
       try {
-        const answer = await this.api.getDeviceStation();
-        if (request === this.#queueRequest) this.#adoptDeviceStation(answer);
+        const answer = await this.#readDeviceStation(signal);
+        if (this.#isNewest(request)) this.#adoptDeviceStation(answer);
       } catch {
         // Non-fatal — leave the last-known queue.
       }
@@ -253,8 +283,10 @@ export class TillStationScreen extends LitElement {
     if (this.activeStationId === undefined) return;
     const request = ++this.#queueRequest;
     try {
-      const { items, notices } = await this.api.getStationQueue(this.activeStationId);
-      if (this.isConnected && request === this.#queueRequest) {
+      const { items, notices } = await (signal === undefined
+        ? this.api.getStationQueue(this.activeStationId)
+        : this.api.getStationQueue(this.activeStationId, { signal }));
+      if (this.isConnected && this.#isNewest(request)) {
         this.groups = items;
         this.#adoptNotices(notices);
       }
@@ -268,6 +300,8 @@ export class TillStationScreen extends LitElement {
     if (this.activeStationId !== id) {
       this.groups = [];
       this.notices = [];
+      // Reads still out are for the station being left.
+      this.#appliedRequest = this.#queueRequest;
     }
     this.activeStationId = id;
     if (this.#ownsStationPath()) this.#url.write({ "till-station": id }, replace);

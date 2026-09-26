@@ -743,6 +743,36 @@ describe("TillApi", () => {
     expect(r).toEqual({ items: groups, notices });
   });
 
+  it("getStationQueue and getDeviceStation hand a caller's abort signal to fetch", async () => {
+    const fetchStub = vi.fn<typeof fetch>(async () => jsonResponse({ items: [], notices: [] }));
+    const api = new TillApi("", fetchStub);
+    const signal = new AbortController().signal;
+
+    await api.getStationQueue("st-1", { signal });
+    await api.getDeviceStation({ signal });
+
+    expect(fetchStub.mock.calls.map(([, init]) => init?.signal)).toEqual([signal, signal]);
+  });
+
+  it("an aborted read rejects with fetch's own abort error, which reads as no answer", async () => {
+    const fetchStub = vi.fn(
+      (_path: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) =>
+          init!.signal!.addEventListener("abort", () => reject(init!.signal!.reason)),
+        ),
+    );
+    const controller = new AbortController();
+    const read = new TillApi("", fetchStub as unknown as typeof fetch).getStationQueue("st-1", {
+      signal: controller.signal,
+    });
+    controller.abort();
+    const error = await read.catch((caught: unknown) => caught);
+    // The client passes the abort through untouched rather than mapping it to a `{ code }`.
+    expect(error).toBe(controller.signal.reason);
+    expect((error as DOMException).name).toBe("AbortError");
+    expect(isNetworkFailure(error)).toBe(true);
+  });
+
   it("acknowledgeKitchenNotice POSTs to the notice's acknowledge route, and a display to its device twin", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     const api = new TillApi("", fetchStub);
