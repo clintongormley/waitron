@@ -3055,7 +3055,18 @@ image constraints under *Detail → Box image*.
     (`apps/server/src/setup-api.ts`), when recording the setup operation fails before `execute`
     starts (for example with `setup.operation_conflict`), the in-memory setup lock stays set, so
     every later setup request answers `409 setup.already_provisioning` until the server restarts;
-    the adopt route has the same shape (read, not run). Stale wording outside f2: "a device with no
+    the adopt route has the same shape (read, not run). **Done (2026-09-26, lane A's A42):**
+    provision and adopt now release the lock whenever the request does not end in a success
+    answer, reading the body for its hash and recording the operation included; reproduced on the
+    old code for provision (a recorded operation for another request, an unreadable
+    `setup-operation.json`, a body that fails while it is read) and for adopt (the first and
+    third). Adopt also answered that operation conflict with a plain-text 500, because the
+    recording ran outside its error handling; it now answers the 409 its status table already
+    listed. The three restore routes already released on every failure (a new case each for the
+    archive and bucket restores; the Cloud restore's existing cases fail when its release is
+    deleted); `fiscal-test` and `configuration` release in a `finally` and never restart. A
+    completed operation replayed on a later request still keeps the lock set without restarting,
+    as before. Stale wording outside f2: "a device with no
     profile" in `apps/server/src/till-api.test.ts` (near lines 1377–1395) and
     `apps/till/src/till-app.test.ts` (near line 5765), though a device's profile column is NOT NULL;
     the "four ids" test title in `apps/server/src/provision.test.ts`, which asserts five;

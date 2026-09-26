@@ -2763,3 +2763,164 @@ describe("setup routes — remaining refusals and resumption paths", () => {
     });
   });
 });
+
+describe("the setup latch after a request refused before its work starts", () => {
+  /** A recorded setup operation, as `createSetupOperationStore` writes it. */
+  function recordOperation(dir: string, kind: string, requestHash: string): void {
+    writeFileSync(
+      join(dir, "setup-operation.json"),
+      JSON.stringify({
+        version: 1,
+        id: "00000000-0000-4000-8000-000000000001",
+        kind,
+        requestHash,
+        phase: "started",
+        data: {},
+        updatedAt: "2026-09-26T00:00:00.000Z",
+      }),
+    );
+  }
+
+  const sha256 = (text: string): string => createHash("sha256").update(text).digest("hex");
+
+  /** A POST whose body stream fails when it is read. */
+  function unreadableBody(path: string): Request {
+    return new Request(`http://localhost${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: new ReadableStream({
+        start(controller) {
+          controller.error(new Error("connection reset while reading the body"));
+        },
+      }),
+      duplex: "half",
+    } as RequestInit);
+  }
+
+  const busy = { error: { code: "setup.already_provisioning", params: {} } };
+
+  it("provision: a request refused for another recorded request leaves the matching one free to resume it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-latch-provision-"));
+    try {
+      const body = demoBody();
+      recordOperation(dir, "provision", sha256(JSON.stringify(body)));
+      const app = new Hono();
+      const deps = makeDeps({ operations: createSetupOperationStore(dir) });
+      mountSetup(app, deps.deps, noopLog);
+
+      const other = await postProvision(app, { ...body, mode: "demo", extra: "different" });
+      expect(other.status).toBe(409);
+      expect(await other.json()).toMatchObject({ error: { code: "setup.operation_conflict" } });
+
+      const matching = await postProvision(app, body);
+      expect(await matching.json()).not.toEqual(busy);
+      expect(matching.status).toBe(200);
+      expect(deps.provision).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("provision: an unreadable recorded operation is reported again, not as setup already running", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-latch-unreadable-"));
+    try {
+      writeFileSync(join(dir, "setup-operation.json"), "not-json");
+      const app = new Hono();
+      mountSetup(app, makeDeps({ operations: createSetupOperationStore(dir) }).deps, noopLog);
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const refused = await postProvision(app, demoBody());
+        expect(refused.status).toBe(409);
+        expect(await refused.json()).toMatchObject({
+          error: { code: "setup.operation_conflict" },
+        });
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("provision: a body that fails while it is read leaves the next request free", async () => {
+    const app = new Hono();
+    const deps = makeDeps();
+    mountSetup(app, deps.deps, noopLog);
+
+    const failed = await app.request(unreadableBody("/setup-api/provision"));
+    expect(failed.status).toBe(500);
+
+    const next = await postProvision(app, demoBody());
+    expect(await next.json()).not.toEqual(busy);
+    expect(next.status).toBe(200);
+  });
+
+  it("adopt: a request refused for another recorded request leaves the matching one free to resume it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-latch-adopt-"));
+    try {
+      recordOperation(dir, "adopt", sha256(JSON.stringify(adoptBody())));
+      const app = new Hono();
+      const deps = makeAdoptDeps({ operations: createSetupOperationStore(dir) });
+      mountSetup(app, deps.deps, noopLog);
+
+      const other = await postAdopt(app, { ...adoptBody(), extra: "different" });
+      expect(other.status).toBe(409);
+      expect(await other.json()).toMatchObject({ error: { code: "setup.operation_conflict" } });
+
+      const matching = await postAdopt(app, adoptBody());
+      expect(await matching.json()).not.toEqual(busy);
+      expect(matching.status).toBe(200);
+      expect(deps.adopt).toHaveBeenCalledOnce();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("adopt: a body that fails while it is read leaves the next request free", async () => {
+    const app = new Hono();
+    const deps = makeAdoptDeps();
+    mountSetup(app, deps.deps, noopLog);
+
+    const failed = await app.request(unreadableBody("/setup-api/adopt"));
+    expect(failed.status).toBe(500);
+
+    const next = await postAdopt(app, adoptBody());
+    expect(await next.json()).not.toEqual(busy);
+    expect(next.status).toBe(200);
+  });
+
+  it.each([
+    ["restore", (app: Hono) => postRestore(app, Uint8Array.from([1]))],
+    [
+      "restore-bucket",
+      (app: Hono) => postBucketRestore(app, { kit: "k", environment: "production" }),
+    ],
+  ] as const)(
+    "%s: a request refused for another recorded operation leaves the next one free",
+    async (_route, post) => {
+      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-latch-restore-"));
+      try {
+        const app = new Hono();
+        mountSetup(
+          app,
+          {
+            environment: "preproduction",
+            operations: createSetupOperationStore(dir),
+            stageRestore: vi.fn(async () => {}),
+            stageBucketRestore: vi.fn(async () => {}),
+            requestRestart: vi.fn(),
+          },
+          noopLog,
+        );
+        recordOperation(dir, "provision", "another-request");
+
+        const refused = await post(app);
+        expect(refused.status).toBe(409);
+        expect(await refused.json()).toMatchObject({ error: { code: "setup.operation_conflict" } });
+
+        rmSync(join(dir, "setup-operation.json"));
+        expect((await post(app)).status).toBe(202);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+});
