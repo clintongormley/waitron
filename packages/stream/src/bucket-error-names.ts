@@ -1,7 +1,8 @@
 /**
- * The error names a log line may carry. The bucket supplies the name, and the log tail is shown on
- * the unauthenticated recovery page, so a name off these lists is logged as
- * {@link UNLISTED_ERROR_NAME}, never as the bucket's text.
+ * The error names a log line may carry, and that `createS3ObjectStore` puts in
+ * `backup.stream_request_failed`'s `name`. The bucket can supply the name, and the log tail is shown
+ * on the unauthenticated recovery page, so a name off these lists becomes
+ * {@link UNLISTED_ERROR_NAME}, never the bucket's text.
  *
  * Source: the "Code" list of the `Error` data type in the Amazon S3 API Reference
  * (https://docs.aws.amazon.com/AmazonS3/latest/API/API_Error.html), which says: "The following is a
@@ -107,9 +108,22 @@ export const ANSWER_REFUSALS = [
 
 export type AnswerRefusal = (typeof ANSWER_REFUSALS)[number];
 
+/**
+ * Fixed names the client gives a failure that carries no bucket error code:
+ * `@smithy/node-http-handler` (4.12.1, `dist-cjs/index.js`) names a request that timed out, or whose
+ * connection was reset, `TimeoutError`, and passes any other request error, such as a refused
+ * connection, on as Node's plain `Error`. A bucket can also send either word as its code; being
+ * fixed words, they carry none of its text.
+ */
+const CLIENT_ERROR_NAMES = ["Error", "TimeoutError"] as const;
+
 export const UNLISTED_ERROR_NAME = "other";
 
-const LISTED: ReadonlySet<string> = new Set<string>([...S3_ERROR_NAMES, ...ANSWER_REFUSALS]);
+const LISTED: ReadonlySet<string> = new Set<string>([
+  ...S3_ERROR_NAMES,
+  ...ANSWER_REFUSALS,
+  ...CLIENT_ERROR_NAMES,
+]);
 
 export function loggableErrorName(name: string): string {
   return LISTED.has(name) ? name : UNLISTED_ERROR_NAME;

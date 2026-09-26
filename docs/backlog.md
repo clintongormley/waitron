@@ -6549,16 +6549,40 @@ line with what slice 2 built. Left open:
   request and the failure was found inside the answer — a file a batch delete refused (the
   `requestFailed` call in `packages/stream/src/s3-store.ts` that passes the answer's own status), an
   answer the store turned down as unusable (its `answerRefused` calls), or an answer the SDK could
-  not read (an error-branch `requestFailed` call passing the thrown error's 200, logged with
-  `errorName` `other`; shown with a scripted cut-off listing through the SDK, not pinned by a test).
+  not read (an error-branch `requestFailed` call passing the thrown error's 200, whose `name` is
+  `Error` — a listing cut off mid-XML at 200, sent through `s3-store.test.ts`'s scripted bucket in a
+  probe not kept, was rejected with status 200 and `name` `Error`; not pinned by a test. Its line
+  carried `errorName` `other` until A62 (2026-09-26) put `Error` on the list, and by reading
+  `loggableErrorName` it carries `Error` since).
   **DONE by lane A's A60 (#703, 2026-09-26):** the line also carries `errorName`,
   the bucket's error name when it is on the fixed list in `packages/stream/src/bucket-error-names.ts`
   (the S3 API Reference's list of error codes, one name from the PutObject page, and the names
   `s3-store.ts` gives an answer it refused) and `other` when it is not, so a 200 line now names a
-  listed error found inside the answer. Not covered by A60: the same `name` param still travels unvetted in the setup API's 502
-  answer (`apps/server/src/setup-api.ts`, pinned by a `boot.test.ts` case) and in any
-  `server.boot_failed` detail whose error is `backup.stream_request_failed`; whether a start can
-  fail with that code was not checked. Left by #686 and A57: that a real bucket's 403 to this LISTING reads
+  listed error found inside the answer. Not covered by A60, and **DONE by lane B's A62
+  (2026-09-26):** the error itself now carries the vetted name —
+  `requestFailed` in `packages/stream/src/s3-store.ts` stores what `loggableErrorName` answers, so
+  `backup.stream_request_failed`'s `name` from the S3 store is a listed name or `other`. Shown by
+  `s3-store.test.ts` (an unlisted, a secret-looking and a markup-bearing name, on a refused
+  request and inside a batch delete's answer, each read `other`; `AccessDenied` is kept) and by a
+  `boot.test.ts` case that sends the setup wizard's `POST /setup-api/restore-bucket` to a local
+  HTTP bucket answering 403 with each of those names: none of the three reached the 502 body, the
+  server's stdout or its log file, and `AccessDenied` reached all three. Each case expecting
+  `other` failed with the `loggableErrorName` call removed. The fixed names the client gives a
+  failure carrying no bucket error code (`Error`, `TimeoutError`) are on the list, so the existing
+  cases expecting them still read them; `boundObjectStore`'s own
+  `TimedOut` (`apps/server/src/bounded-store.ts`) never passes through the store and is
+  unchanged. No start
+  was found that fails with that code, by reading: the boot-time bucket calls (`runFirstStart`,
+  `StreamHost.start`) catch it and log the code alone, and a staged stream restore writes bytes
+  downloaded before staging. One case was run: `boot.test.ts`'s "keeps selling when a restore's
+  first start fails" boots against a bucket failing with that code and stays up. The recovery
+  page's `server.boot_failed` detail was not tested with it. **Open, not fixed:**
+  `backup.stream_name_invalid`'s `value` for `field: "listedKey"` (the `list` in
+  `packages/stream/src/s3-store.ts`, and `packages/stream/src/generations.ts`) is a key as the
+  bucket's listing named it, so it is bucket text in params too. Whether it reaches a log line or
+  an answer was only read, not run: the wizard's bucket restore lists the bucket
+  (`packages/stream/src/bucket-times.ts`) and its error boundary logs and answers params as they
+  are, which suggests it can. Left by #686 and A57: that a real bucket's 403 to this LISTING reads
   that code, and the status on each line, were shown by reading `packages/stream/src/s3-store.ts`,
   by the store's scripted HTTP answers and by the supervisor's injected errors, not against a real
   bucket, and A60's `errorName` was shown the same way — its list was checked against Amazon's

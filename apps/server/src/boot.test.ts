@@ -3549,6 +3549,90 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 60_000);
 
+  it("keeps a refusing bucket's own error name out of the answer and the log unless it is listed", async () => {
+    const venue = await freshVenue();
+    const logDir = await mkdtemp(join(tmpdir(), "waitron-boot-bucket-name-logs-"));
+    // XML-escaped on the wire; the client decodes it back to the markup.
+    let refusal = "";
+    const bucket = createHttpServer((_request, response) => {
+      response.writeHead(403, { "content-type": "application/xml" });
+      response.end(
+        `<?xml version="1.0" encoding="UTF-8"?><Error><Code>${refusal}</Code><Message>no</Message></Error>`,
+      );
+    });
+    await new Promise<void>((resolve) => bucket.listen(0, "127.0.0.1", resolve));
+    const endpoint = `http://127.0.0.1:${(bucket.address() as AddressInfo).port}`;
+    const kit = encodeRecoveryKit({
+      version: 1,
+      venueId: "c0000000-0000-4000-8000-000000000002",
+      bucket: { ...SILENT_BUCKET, endpoint },
+      recoveryKey: "recovery-key-one-strong",
+      pointerSignerPublicKey: "unused",
+    });
+    try {
+      await withCapturedStdout(async (lines) => {
+        await withSetupBoot(
+          venue.directory,
+          { WAITRON_LOG_DIR: logDir },
+          async ({ post, kills, stateDir }) => {
+            const restore = async (code: string) => {
+              refusal = code;
+              const response = await post("/setup-api/restore-bucket", {
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ kit, environment: "preproduction" }),
+              });
+              expect(response.status).toBe(502);
+              return response.text();
+            };
+            for (const code of [
+              "ProviderSpecificRefusal",
+              "sk_live_0123456789abcdefSECRET",
+              "&lt;script&gt;alert(1)&lt;/script&gt;",
+            ]) {
+              const body = await restore(code);
+              expect(JSON.parse(body)).toMatchObject({
+                error: {
+                  code: "backup.stream_request_failed",
+                  params: { status: 403, name: "other" },
+                },
+              });
+              for (const raw of ["ProviderSpecificRefusal", "sk_live_", "script"]) {
+                expect(body).not.toContain(raw);
+              }
+            }
+            expect(JSON.parse(await restore("AccessDenied"))).toMatchObject({
+              error: { params: { status: 403, name: "AccessDenied" } },
+            });
+            await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
+              code: "ENOENT",
+            });
+            expect(kills).toEqual([]);
+          },
+        );
+        const logged = [lines.join("\n"), await readFile(join(logDir, "waitron.log"), "utf8")];
+        for (const text of logged) {
+          const refusals = text
+            .split("\n")
+            .filter((line) => line.includes('"event":"backup.stream_request_failed"'));
+          expect(refusals.map((line) => (JSON.parse(line) as { name: string }).name)).toEqual([
+            "other",
+            "other",
+            "other",
+            "AccessDenied",
+          ]);
+          for (const raw of ["ProviderSpecificRefusal", "sk_live_", "script"]) {
+            expect(text).not.toContain(raw);
+          }
+        }
+      });
+    } finally {
+      await new Promise((resolve) => bucket.close(resolve));
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+      await rm(logDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   // An archive whose database holds bucket settings may be a copy of a server still selling, so
   // staging it checks that server's bucket first.
   it("asks whether the old server is gone when an archive's bucket never answers, staging nothing", async () => {
