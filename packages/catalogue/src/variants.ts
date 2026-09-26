@@ -4,12 +4,15 @@ import { AppError, decimal, decimalToCents, toScale } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { validateContentTranslations } from "./content-languages.js";
 import { reachableMenuItem } from "./menu-structure.js";
+import { batches } from "./batches.js";
+import { menuItems } from "./schema/menu.js";
 import { extraListItems, extraLists } from "./schema/extras.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { priceOrNull } from "./offer-price.js";
 import type { ProductPresentation } from "./product-presentation.js";
-import type { MenuOffer } from "./menu-types.js";
+import type { MenuOffer, MenuVariant } from "./menu-types.js";
+export type { MenuVariant } from "./menu-types.js";
 import { INHERITED_KEYS, productWithId } from "./variant-fallback.js";
 import "./errors.js";
 import type { ProductVariant, ProductVariantInput } from "./product-types.js";
@@ -19,13 +22,6 @@ export type { ProductVariant, ProductVariantInput } from "./product-types.js";
  * the editor body always carries, with `active` optional for a caller in code — absent creates a new
  * variant Active and leaves one sent by `id` Active or Inactive as it already is. */
 export type VariantWrite = Omit<ProductVariantInput, "active"> & { active?: boolean };
-
-/** One Active variant's settings on one menu: `price` null and `offered` true store nothing. */
-export interface MenuVariant {
-  variantId: string;
-  price: string | null;
-  offered: boolean;
-}
 
 const variantColumns = {
   id: products.id,
@@ -255,34 +251,51 @@ export async function listMenuVariants(
   menuItemId: string,
   menuId?: string,
 ): Promise<MenuVariant[]> {
-  return menuVariantsOf(tx, menuItemId, await offerProduct(tx, menuItemId, menuId));
+  await offerProduct(tx, menuItemId, menuId);
+  return menuVariantsOf(tx, menuItemId);
 }
 
-async function menuVariantsOf(
+async function menuVariantsOf(tx: Transaction, menuItemId: string): Promise<MenuVariant[]> {
+  return (await menuVariantsOfItems(tx, [menuItemId])).get(menuItemId) ?? [];
+}
+
+/**
+ * This menu's settings for the Active variants of each menu item's product, keyed by menu-item id,
+ * in variant order, in one query per batch of ids.
+ */
+export async function menuVariantsOfItems(
   tx: Transaction,
-  menuItemId: string,
-  productId: string,
-): Promise<MenuVariant[]> {
-  const overrides = new Map(
-    (
-      await tx
-        .select({
-          variantId: menuItemVariantOverrides.variantId,
-          price: menuItemVariantOverrides.price,
-          offered: menuItemVariantOverrides.offered,
-        })
-        .from(menuItemVariantOverrides)
-        .where(eq(menuItemVariantOverrides.menuItemId, menuItemId))
-    ).map((row) => [row.variantId, row]),
-  );
-  return (await activeVariants(tx, productId)).map((variant) => {
-    const override = overrides.get(variant.id);
-    return {
-      variantId: variant.id,
-      price: priceOrNull(override?.price ?? null),
-      offered: override?.offered ?? true,
-    };
-  });
+  menuItemIds: readonly string[],
+): Promise<Map<string, MenuVariant[]>> {
+  const grouped = new Map<string, MenuVariant[]>();
+  for (const batch of batches(menuItemIds))
+    for (const row of await tx
+      .select({
+        menuItemId: menuItems.id,
+        variantId: products.id,
+        price: menuItemVariantOverrides.price,
+        offered: menuItemVariantOverrides.offered,
+      })
+      .from(menuItems)
+      .innerJoin(products, eq(products.parentId, menuItems.productId))
+      .leftJoin(
+        menuItemVariantOverrides,
+        and(
+          eq(menuItemVariantOverrides.menuItemId, menuItems.id),
+          eq(menuItemVariantOverrides.variantId, products.id),
+        ),
+      )
+      .where(and(inArray(menuItems.id, batch), eq(products.active, true)))
+      .orderBy(menuItems.id, products.variantOrder, products.id)) {
+      const held = grouped.get(row.menuItemId) ?? [];
+      held.push({
+        variantId: row.variantId,
+        price: priceOrNull(row.price),
+        offered: row.offered ?? true,
+      });
+      grouped.set(row.menuItemId, held);
+    }
+  return grouped;
 }
 
 /**
@@ -337,7 +350,7 @@ export async function setMenuVariants(
         set: { price: row.price, offered: row.offered },
       });
   }
-  return menuVariantsOf(tx, menuItemId, productId);
+  return menuVariantsOf(tx, menuItemId);
 }
 
 /**

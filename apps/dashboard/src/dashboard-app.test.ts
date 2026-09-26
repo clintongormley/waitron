@@ -2703,7 +2703,7 @@ describe("dashboard URL navigation", () => {
     "denies a saved venue tab unless both module and permission are present: %j",
     async ({ modules, permissions }) => {
       const url = new URL(location.href);
-      url.pathname = "/manage/venue-operations/view/menus";
+      url.pathname = "/manage/venue-operations/view/zones";
       history.replaceState(null, "", url);
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
@@ -2729,7 +2729,7 @@ describe("dashboard URL navigation", () => {
 
   it("preserves a module-owned tab through refresh and Back from another section", async () => {
     const url = new URL(location.href);
-    url.pathname = "/manage/venue-operations/view/menus";
+    url.pathname = "/manage/venue-operations/view/zones";
     url.searchParams.set("dev", "1");
     history.replaceState(null, "", url);
     const api = stubApi({
@@ -2750,7 +2750,7 @@ describe("dashboard URL navigation", () => {
         : []) as never;
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
     await flush(el);
-    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
     await expect
       .poll(
         () =>
@@ -2758,8 +2758,8 @@ describe("dashboard URL navigation", () => {
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
             ?.shadowRoot?.querySelector("wt-tabs")?.value,
       )
-      .toBe("menus");
-    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+      .toBe("zones");
+    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
     el.remove();
     const { el: refreshed } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
     await flush(refreshed);
@@ -2770,8 +2770,8 @@ describe("dashboard URL navigation", () => {
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
             ?.shadowRoot?.querySelector("wt-tabs")?.value,
       )
-      .toBe("menus");
-    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+      .toBe("zones");
+    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
     expect(location.search).toBe(url.search);
     navItem(refreshed, "staff")!.click();
     await flush(refreshed);
@@ -2789,14 +2789,14 @@ describe("dashboard URL navigation", () => {
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
             ?.shadowRoot?.querySelector("wt-tabs")?.value,
       )
-      .toBe("menus");
-    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+      .toBe("zones");
+    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
     expect(location.search).toBe(url.search);
   });
 
   it("preserves a module-owned tab while signing in to a protected destination", async () => {
     const url = new URL(location.href);
-    url.pathname = "/manage/venue-operations/view/menus";
+    url.pathname = "/manage/venue-operations/view/zones";
     url.searchParams.set("dev", "1");
     history.replaceState(null, "", url);
     const getMe = vi.fn().mockRejectedValue({ code: "management_session.required" });
@@ -2810,7 +2810,7 @@ describe("dashboard URL navigation", () => {
     });
     await flush(el);
     expect(login(el)).not.toBeNull();
-    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
     getMe.mockResolvedValue({
       personId: "p1",
       role: "manager",
@@ -2823,7 +2823,7 @@ describe("dashboard URL navigation", () => {
     });
     emitLoggedIn(login(el)!);
     await flush(el);
-    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
     await expect
       .poll(
         () =>
@@ -2831,8 +2831,8 @@ describe("dashboard URL navigation", () => {
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
             ?.shadowRoot?.querySelector("wt-tabs")?.value,
       )
-      .toBe("menus");
-    expect(location.pathname).toBe("/manage/venue-operations/view/menus");
+      .toBe("zones");
+    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
     expect(location.search).toBe(url.search);
   });
 

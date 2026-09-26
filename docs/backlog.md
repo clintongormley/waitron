@@ -241,12 +241,12 @@ top-level list (a menu-owned `sections` row, pointed at by `menu_details`); `men
 dropped and `menu_items` rebuilt to hang off the menu; an offer carries every section path that
 reaches it (`placements`); the menu's own price, switch, variant prices and extras for a product
 reset when the menu stops reaching it. New routes: `GET /management-api/catalogues/:id/structure`
-and `POST /management-api/catalogues/:id/items`. Left by #659, none blocking: the 390 px offers
-table on Venue operations → Menus scrolls sideways (that tab goes in Task 5); the Menus tab fails to
-load for a menu with no `menu_details` row (every menu created now gets one); the image library
+and `POST /management-api/catalogues/:id/items`. Left by #659, none blocking: the image library
 links a menu-owned section's photo to the sections screen, though nothing puts a photo on one yet;
 `DELETE /management-api/catalogues/:id/items/:itemId` (`deactivateMenuItem`) still switches a
-product off but the dashboard no longer calls it, since `PATCH` now carries `active`; and
+product off but the dashboard no longer calls it, since `PATCH` now carries `active` (and since menus
+Task 5 nothing calls `GET …/catalogues/:id/offers` or `POST …/catalogues/:id/items` either: all
+three routes and their tests stay until someone removes them); and
 `sections_owner_menu_fk` still has no delete rule (Task 1's note stands) — nothing deletes a menu
 today, so it bites only when something does. A product reached through a section offers no extras
 list; that was already so before #659 (checked at `002b79f69`).
@@ -269,7 +269,29 @@ change's message sits under the menu's heading, above the tabs, so it shows whil
 on a phone the tree sits between it and the list it names; if someone else exactly undoes a move
 while it is still saving, the move's answer is shown over their change until the menu is next read
 (stated in a comment at the site); and no accessibility test covers that message while it shows.
-Next in the lane: menus Task 5 (menu prices, and the old Menus tab goes). The owner lifted the wait: the dependency upgrades are
+**Menus Task 5 (menu prices, and the old Menus tab goes), on `feat/menus-menu-prices`:** a menu's
+Prices tab (`/manage/menus/menu/<id>/view/prices`) lists each product the menu reaches once, with
+where it appears, its main category, its own price, this menu's price and the price that results,
+filtered by search, section, main category and "overridden only" (which also counts a variant's
+price set on this menu); its settings window sets or clears
+this menu's price ("Use product price"), switches the product on or off for this menu, and sets each
+variant's price and whether it is offered here. The read is `GET /management-api/catalogues/:id/prices`
+(`menuPrices`, `packages/catalogue/src/operations.ts`). Venue operations loses its Menus tab; its
+Zones tab still assigns menus to zones, and an old `…/venue-operations/view/menus` address opens the
+Status tab. `wt-data-table` filters may now match a list of values per row, and `wt-input` gains an
+optional always-shown `hint` line its input is described by. No migration. Left, none blocking:
+removing a product's last placement on the Structure tab clears its menu price and variant settings
+with no warning, where the old tab asked first (the spec's "starts fresh" needs none; the owner may
+want one back); a product sold only as its variants shows the product's own price on this menu as
+its resulting price, marked "Sold as its variants"; the main-category filter offers every category,
+not only those on the menu; the Prices tab replaces #541's struck-out product price with separate
+columns for the product's price, this menu's price and the resulting price, for the owner to
+confirm; and the product editor's help lines, and the price window's variant help sentence
+(`menu_prices.variants_help`), are still paragraphs beside their inputs rather than `wt-input`'s
+`hint`, so they are not linked to their inputs; and a product whose only override is a variant's
+price appears under "Overridden only" while its menu price column reads "None", for the owner to
+judge.
+Next in the lane: menus Task 6 (publishing). The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
@@ -714,10 +736,10 @@ needs `wa-wt reset demo <name>` (see above). What it left open:
   `assignProductUnit` and `deactivateProduct` are left without one: a variant's own page gives it
   its own unit through the first, and the second (which nothing outside the tests calls) makes a row
   Inactive, which a variant may be (V6).
-- **The menu offer editor accepts a price such as `007.5` that the server then refuses** — its
-  pattern (`packages/venue-service/src/dashboard/venue-operations-screen.ts`, `PRICE`) is looser
-  than `isProductPrice` (`packages/catalogue/src/modifier-limits.ts`). **Next action:** use one rule
-  for both, checking first that the catalogue helper is safe to load in the browser.
+- **DONE (2026-09-26, menus Task 5, `feat/menus-menu-prices`): a menu price is checked by the
+  server's rule.** The menu offer editor, whose pattern accepted a price such as `007.5` the server
+  then refused, went with the old Menus tab; the Prices tab's settings window checks prices with
+  `isProductPrice` (`packages/catalogue/src/modifier-limits.ts`).
 - **A variant's price may be left blank on its own page and in its product's variants list, and a
   blank variant is charged its product's price** (on a menu, a price that menu sets for the variant
   or its product comes first).
@@ -772,13 +794,15 @@ now that it has landed. What it left open, both put to the owner in #532 — now
   response: an offer is always a top-level product, which owns its price. Where that list lacks the
   product, a price the menu sets shows plainly, as before; a blank price is still greyed, since the
   offer itself records that its price is blank. The edit form is unchanged.
+  (2026-09-26: that offers list went with menus Task 5. The Prices tab shows the product's own
+  price, this menu's price and the resulting price in separate columns instead of a struck-out
+  price.)
   Two follow-ups #541's review raised, not taken, neither blocking: (1) the dashboard's product list
   shows a variant's blank price as its parent's with no marking
   (`apps/dashboard/src/widgets/product-list.ts`, the `price` column's cell) — whether it should grey
   it the way the offers list now does is the owner's call; (2) the rule that hides screen-reader
-  text now has four copies (`venue-operations-screen.ts`, `apps/till/src/widgets/numeric-pad.ts`,
-  `apps/dashboard/src/widgets/variant-table.ts`, `apps/dashboard/src/widgets/reorder-table.ts`);
-  a shared one in `packages/ui-core/src/base-styles.ts` would be an optional tidy-up.
+  text is copied into each widget that needs it (`grep -rln "clip: rect(0, 0, 0, 0)"` over
+  `apps/*/src` and `packages/*/src` lists them); a shared one in `packages/ui-core/src/base-styles.ts` would be an optional tidy-up.
 The till's "+€" label on a variant, priced from the parent's resolved price, was Task 5's work and
 landed with #537.
 

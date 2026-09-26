@@ -6,11 +6,12 @@ import type { PricingUnit, VatClass } from "./pricing.js";
 import type { SellableUnit } from "./product-types.js";
 
 /**
- * The SELL-SIDE wire shapes — the JSON the catalogue's read paths hand across the HTTP boundary to a
- * till (the menu offers a service zone sells, and the products in a location's menu list). Like
- * `product-types.ts`, this is a LEAF: type definitions only, no running code, and every type it
- * imports is itself browser-safe (nothing here reaches `@waitron/db`, drizzle or a `node:` builtin), so
- * the till can import ONE authoritative copy instead of re-declaring them by hand. The guard is
+ * The menu wire shapes — the JSON the catalogue's read paths hand across the HTTP boundary to a till
+ * (the menu offers a service zone sells, and the products in a location's menu list) and to the
+ * dashboard's menu screens. Like `product-types.ts`, this is a LEAF: type definitions only, no
+ * running code, and every type it imports is itself browser-safe (nothing here reaches
+ * `@waitron/db`, drizzle or a `node:` builtin), so the till and the dashboard can import ONE
+ * authoritative copy instead of re-declaring them by hand. The guard is
  * `scripts/dashboard-browser-purity.test.ts`.
  */
 
@@ -89,6 +90,37 @@ export interface MenuOfferVariant {
   dietOverride: DietOverride | null;
   dietaryDeclarations: DietaryLabel[];
   courseId: string | null;
+}
+
+/** One Active variant's settings on one menu: `price` null and `offered` true store nothing. */
+export interface MenuVariant {
+  variantId: string;
+  price: string | null;
+  offered: boolean;
+}
+
+/** One product a menu reaches, with what it costs there (`menuPrices`). */
+export interface MenuPriceRow {
+  menuItemId: string;
+  productId: string;
+  /** The staff name. */
+  name: string;
+  /** The product's reporting category, `products.category_id`. */
+  categoryId: string | null;
+  /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top
+   * level. */
+  placements: string[][];
+  productPrice: string;
+  /** The price this menu sets, or null when the product's own price applies. */
+  override: string | null;
+  /** This menu's price for the product itself, `override` or else `productPrice`, as
+   * `MenuOffer.unitPrice`. A product with Active variants is sold only as one of them
+   * (`selectMenuVariant`), and a variant with no price on this menu and none of its own is charged
+   * this. */
+  effectivePrice: string;
+  /** This menu's own switch for the product. */
+  active: boolean;
+  variants: MenuVariant[];
 }
 
 /**

@@ -44,7 +44,7 @@ import { addMember } from "./sections.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
-import { assertNotOfferedAsExtra } from "./variants.js";
+import { assertNotOfferedAsExtra, menuVariantsOfItems } from "./variants.js";
 import {
   assignProductUnit,
   clearProductUnit,
@@ -72,6 +72,7 @@ import type {
   MenuItem,
   MenuOffer,
   MenuOfferVariant,
+  MenuPriceRow,
 } from "./menu-types.js";
 export type {
   AccessibleCatalogue,
@@ -80,6 +81,7 @@ export type {
   MenuItem,
   MenuOffer,
   MenuOfferVariant,
+  MenuPriceRow,
   OfferedExtraItem,
   OfferedExtrasList,
   OfferedModifier,
@@ -490,12 +492,14 @@ interface OfferOptions {
   includeSwitchedOff?: boolean;
 }
 
-async function offersOn(
+/** The rows `offersOn` builds each offer from, in its order, and the paths placing each row's
+ * product. */
+async function offerRowsOn(
   tx: Transaction,
   roots: ReadonlyMap<string, string>,
   graph: SectionGraph,
   options: OfferOptions,
-): Promise<MenuOffer[]> {
+) {
   // Keyed in the order `reachableProducts` gives, so a key's position is its rank on the menu.
   const placed = new Map(
     [...roots].map(([menuId, rootSectionId]) => [
@@ -503,6 +507,11 @@ async function offersOn(
       placementsByProduct(graph, rootSectionId),
     ]),
   );
+  const placementsOf = (row: { menuId: string; productId: string }): string[][] =>
+    placed
+      .get(row.menuId)!
+      .get(row.productId)!
+      .map((path) => path.slice(1));
   const rankOf = new Map(
     [...placed].map(([menuId, paths]) => [
       menuId,
@@ -510,7 +519,6 @@ async function offersOn(
     ]),
   );
   const reached = [...new Set([...placed.values()].flatMap((paths) => [...paths.keys()]))];
-  if (reached.length === 0) return [];
   const menuIds = [...roots.keys()];
   const rows = [];
   for (const batch of batches(reached))
@@ -522,6 +530,7 @@ async function offersOn(
           productId: menuItems.productId,
           grossPrice: menuItems.grossPrice,
           productPrice: products.unitPrice,
+          categoryId: products.categoryId,
           active: menuItems.active,
           menuName: catalogues.name,
           name: products.name,
@@ -549,21 +558,47 @@ async function offersOn(
         )),
     );
   const offered = rows.filter((row) => rankOf.get(row.menuId)!.has(row.productId));
-  if (offered.length === 0) return [];
   const menuOrder = new Map(
-    (
-      await tx
-        .select({ id: catalogues.id })
-        .from(catalogues)
-        .where(inArray(catalogues.id, menuIds))
-        .orderBy(catalogues.name, catalogues.id)
-    ).map((row, index) => [row.id, index]),
+    roots.size > 1 && offered.length > 1
+      ? (
+          await tx
+            .select({ id: catalogues.id })
+            .from(catalogues)
+            .where(inArray(catalogues.id, menuIds))
+            .orderBy(catalogues.name, catalogues.id)
+        ).map((row, index) => [row.id, index])
+      : menuIds.map((id) => [id, 0]),
   );
   offered.sort(
     (a, b) =>
       menuOrder.get(a.menuId)! - menuOrder.get(b.menuId)! ||
       rankOf.get(a.menuId)!.get(a.productId)! - rankOf.get(b.menuId)!.get(b.productId)!,
   );
+  return { rows: offered, placementsOf };
+}
+
+/** An offer row's prices. Only a top-level product is an offer, so `products_top_level_owns_ck`
+ * sets `productPrice`. */
+function offerPrices(row: { grossPrice: number | null; productPrice: number | null }) {
+  const override = priceOrNull(row.grossPrice);
+  const productPrice = centsToDecimal(row.productPrice!);
+  const unitPrice = resolveOfferPrice({
+    variantMenuPrice: null,
+    variantPrice: null,
+    parentMenuPrice: override,
+    parentPrice: productPrice,
+  });
+  return { override, productPrice, unitPrice };
+}
+
+async function offersOn(
+  tx: Transaction,
+  roots: ReadonlyMap<string, string>,
+  graph: SectionGraph,
+  options: OfferOptions,
+): Promise<MenuOffer[]> {
+  const { rows: offered, placementsOf } = await offerRowsOn(tx, roots, graph, options);
+  if (offered.length === 0) return [];
   const content = await readContentLanguages(tx, FALLBACK_LOCALE);
   // The extras/options walk, keyed by MENU-ITEM id: on an offer each extras list is the version
   // this offer publishes (spec §3.2), while the order stays the product's own.
@@ -576,31 +611,60 @@ async function offersOn(
     offered.map((row) => row.id),
     content.defaultLanguage,
   );
-  return offered.map((row) => ({
-    id: row.id,
-    menuId: row.menuId,
-    productId: row.productId,
-    grossPrice: priceOrNull(row.grossPrice),
-    unitPrice: resolveOfferPrice({
-      variantMenuPrice: null,
-      variantPrice: null,
-      parentMenuPrice: priceOrNull(row.grossPrice),
-      // Only a top-level product is an offer, so `products_top_level_owns_ck` sets its price.
-      parentPrice: centsToDecimal(row.productPrice!),
-    }),
-    active: row.active,
-    menuName: row.menuName,
-    placements: placed
-      .get(row.menuId)!
-      .get(row.productId)!
-      .map((path) => path.slice(1)),
-    name: row.name,
-    customerName: row.customerName,
-    kitchenName: row.kitchenName,
-    ...offerLineValues(row, content.defaultLanguage),
-    offeredModifiers: offeredByItem.get(row.id) ?? [],
-    variants: variantsByItem.get(row.id) ?? [],
-  }));
+  return offered.map((row) => {
+    const { override, unitPrice } = offerPrices(row);
+    return {
+      id: row.id,
+      menuId: row.menuId,
+      productId: row.productId,
+      grossPrice: override,
+      unitPrice,
+      active: row.active,
+      menuName: row.menuName,
+      placements: placementsOf(row),
+      name: row.name,
+      customerName: row.customerName,
+      kitchenName: row.kitchenName,
+      ...offerLineValues(row, content.defaultLanguage),
+      offeredModifiers: offeredByItem.get(row.id) ?? [],
+      variants: variantsByItem.get(row.id) ?? [],
+    };
+  });
+}
+
+/**
+ * Every Active product the menu reaches, once each in `listMenuOffers`' order, with its own price
+ * and this menu's price for it. Products switched off on this menu, and sold-out ones, are listed:
+ * the dashboard is where both are switched back.
+ */
+export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuPriceRow[]> {
+  const rootSectionId = await requireMenuRoot(tx, menuId);
+  const { rows, placementsOf } = await offerRowsOn(
+    tx,
+    new Map([[menuId, rootSectionId]]),
+    await loadSectionGraph(tx),
+    { includeUnavailable: true, includeSwitchedOff: true },
+  );
+  if (rows.length === 0) return [];
+  const variantsByItem = await menuVariantsOfItems(
+    tx,
+    rows.map((row) => row.id),
+  );
+  return rows.map((row) => {
+    const { override, productPrice, unitPrice } = offerPrices(row);
+    return {
+      menuItemId: row.id,
+      productId: row.productId,
+      name: row.name,
+      categoryId: row.categoryId,
+      placements: placementsOf(row),
+      productPrice,
+      override,
+      effectivePrice: unitPrice,
+      active: row.active,
+      variants: variantsByItem.get(row.id) ?? [],
+    };
+  });
 }
 
 /**

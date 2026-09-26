@@ -15,21 +15,32 @@ import type { ImageUploader } from "./image-upload.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
 import { t, currentLocale } from "../i18n/t.js";
 
+/** The category, then each category above it, stopping at a parent the list lacks or a loop. */
+export function categoryAncestors(
+  category: CategorySummary,
+  categories: readonly CategorySummary[],
+): CategorySummary[] {
+  const chain: CategorySummary[] = [];
+  const seen = new Set<string>();
+  let current: CategorySummary | undefined = category;
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    chain.push(current);
+    current = categories.find((item) => item.id === current!.parentId);
+  }
+  return chain;
+}
+
 export function categoryPath(
   category: CategorySummary,
   categories: readonly CategorySummary[],
   language: string,
   config: ContentLanguages = { defaultLanguage: language, languages: [language] },
 ): string {
-  const names: string[] = [];
-  const seen = new Set<string>();
-  let current: CategorySummary | undefined = category;
-  while (current && !seen.has(current.id)) {
-    seen.add(current.id);
-    names.unshift(resolveEnabledContentText(current.name, language, config) || current.id);
-    current = categories.find((item) => item.id === current!.parentId);
-  }
-  return names.join(" / ");
+  return categoryAncestors(category, categories)
+    .map(({ id, name }) => resolveEnabledContentText(name, language, config) || id)
+    .reverse()
+    .join(" / ");
 }
 
 /** The collation `wt-data-table` sorts text with, so a picker or list and the tables agree. */

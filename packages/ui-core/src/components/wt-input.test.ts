@@ -47,6 +47,37 @@ test("links explanatory error text to the invalid native input", async () => {
   expect(error.textContent).toBe("Enter a valid email address");
 });
 
+test("shows a hint under the field and describes the native input by it, then by any error", async () => {
+  const el = await mount(
+    '<wt-input label="Price" name="price" hint="Leave it empty to use the product price."></wt-input>',
+  );
+  const input = el.shadowRoot!.querySelector("input")!;
+  const hint = el.shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
+  expect(hint.textContent).toBe("Leave it empty to use the product price.");
+  expect(hint.id).toMatch(/^wt-input-hint-\d+$/);
+  expect(input.getAttribute("aria-describedby")).toBe(hint.id);
+  expect(hint.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  el.setAttribute("error", "Enter a price");
+  await (el as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  const error = el.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+  expect(input.getAttribute("aria-describedby")).toBe(`${hint.id} ${error.id}`);
+});
+
+test("an input with no hint renders no hint line and is described by nothing", async () => {
+  const el = await mount('<wt-input label="Price"></wt-input>');
+  expect(el.shadowRoot!.querySelector("[data-hint]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("input")!.hasAttribute("aria-describedby")).toBe(false);
+});
+
+test("the hint paints from the muted-text and small-font tokens", async () => {
+  const el = await mount('<wt-input label="Price" hint="Optional"></wt-input>');
+  host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-font-size-sm", "11px");
+  const hint = el.shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
+  expect(getComputedStyle(hint).color).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(hint).fontSize).toBe("11px");
+});
+
 test("places field help beside the label without nesting its button inside the label", async () => {
   const el = await mount('<wt-input label="Email"><button slot="help">?</button></wt-input>');
   const label = el.shadowRoot!.querySelector("label")!;

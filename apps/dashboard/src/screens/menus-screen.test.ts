@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
@@ -7,12 +8,14 @@ import type {
   CategorySummary,
   DashboardApi,
   LibrarySection,
+  MenuPriceRow,
   MenuStructure,
   MenuStructureNode,
   Product,
   SectionMember,
   SectionUsages,
 } from "../api/client.js";
+import type { MenuPricesTable } from "../widgets/menu-prices-table.js";
 import type { MemberListEditor } from "../widgets/member-list-editor.js";
 import type { MenuStructureTree } from "../widgets/menu-structure-tree.js";
 import type { SectionAddProducts } from "../widgets/section-add-products.js";
@@ -24,6 +27,7 @@ beforeEach(() => sessionStorage.clear());
 beforeEach(() => history.replaceState(null, "", "/manage/menus"));
 
 const LUNCH_PATH = "/manage/menus/menu/menu-lunch/view/structure";
+const PRICES_PATH = "/manage/menus/menu/menu-lunch/view/prices";
 
 /** The three names read differently (docs/developers/products.md), so a surface showing the
  * customer-facing or kitchen name where the staff name belongs fails. */
@@ -178,6 +182,79 @@ function usages(): Record<string, SectionUsages> {
   };
 }
 
+/** Lemonade sits in Favourites and Drinks; Lager only inside Drinks' Beer. */
+function lunchPrices(): MenuPriceRow[] {
+  return [
+    {
+      menuItemId: "mi-burger",
+      productId: "p-burger",
+      name: "Burger",
+      categoryId: "c-mains",
+      placements: [[]],
+      productPrice: "12.00",
+      override: null,
+      effectivePrice: "12.00",
+      active: true,
+      variants: [],
+    },
+    {
+      menuItemId: "mi-lemonade",
+      productId: "p-lemonade",
+      name: "Lemonade",
+      categoryId: "c-drinks",
+      placements: [["s-fav"], ["s-drinks"]],
+      productPrice: "3.00",
+      override: "2.50",
+      effectivePrice: "2.50",
+      active: true,
+      variants: [
+        { variantId: "v-small", price: null, offered: true },
+        { variantId: "v-large", price: "3.75", offered: false },
+      ],
+    },
+    {
+      menuItemId: "mi-lager",
+      productId: "p-lager",
+      name: "Lager",
+      categoryId: "c-beer",
+      placements: [["s-drinks", "s-beer"]],
+      productPrice: "2.00",
+      override: null,
+      effectivePrice: "2.00",
+      active: true,
+      variants: [],
+    },
+  ];
+}
+
+/** Lemonade with two variants, each named differently for guests and the kitchen. */
+function variantProducts(): Product[] {
+  const variant = (id: string, name: string, unitPrice: string | null) => ({
+    id,
+    name,
+    customerName: { es: `${name} para clientes` },
+    kitchenName: `${name.toUpperCase()} COCINA`,
+    image: null,
+    unitPrice,
+    available: true,
+    active: true,
+    effective: {
+      unitPrice: unitPrice ?? "3.00",
+      vatClass: "general" as const,
+      primaryCategoryId: "c-drinks",
+      labelIds: [],
+    },
+  });
+  return products.map((each) =>
+    each.id === "p-lemonade"
+      ? {
+          ...each,
+          variants: [variant("v-small", "Small", null), variant("v-large", "Large", "3.40")],
+        }
+      : each,
+  );
+}
+
 const WRITES = [
   "createCatalogue",
   "renameCatalogue",
@@ -189,6 +266,8 @@ const WRITES = [
   "removeSectionMember",
   "moveSectionMember",
   "duplicateSection",
+  "updateMenuItem",
+  "setMenuVariants",
 ] as const;
 
 /** A menu's top level the fake keeps, so a move is visible in what the next read answers. */
@@ -238,6 +317,9 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
       return root.map((node, position) => ({ id: node.memberId, position, ref: node.ref }));
     }),
     duplicateSection: vi.fn().mockResolvedValue({ ...sections()[0]!, id: "s-drinks-copy" }),
+    getMenuPrices: vi.fn(async (id: string) => (id === "menu-lunch" ? lunchPrices() : [])),
+    updateMenuItem: vi.fn().mockResolvedValue(undefined),
+    setMenuVariants: vi.fn(async (_menu: string, _item: string, variants: unknown) => variants),
     ...overrides,
   };
   return client as unknown as DashboardApi & {
@@ -397,10 +479,31 @@ it("lists the menus and opens one, recording the menu and its tab in the address
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Lunch Menu"));
   const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;
   expect(tabs.value).toBe("structure");
-  expect(tabs.items.map((item) => item.key)).toEqual(["structure"]);
+  expect(tabs.items.map((item) => item.key)).toEqual(["structure", "prices"]);
   history.back();
   await vi.waitFor(() => expect(location.pathname).toBe("/manage/menus"));
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe(t("menus.title")));
+});
+
+it("lists the menus by name, and reverses that order when the name heading is pressed", async () => {
+  // Listed against name order, with ids that sort WITH that listing, so a list kept in the order
+  // it came in, or sorted by id, fails.
+  const el = await mount(
+    api({
+      listCatalogues: vi.fn().mockResolvedValue([
+        { id: "menu-a", name: "Terrace Menu", active: true, version: 1 },
+        { id: "menu-b", name: "Brunch Menu", active: true, version: 1 },
+      ]),
+    }),
+  );
+  const order = () =>
+    [...table(el).shadowRoot.querySelectorAll("tbody tr")].map((row) =>
+      row.getAttribute("data-row-key"),
+    );
+  expect(order()).toEqual(["menu-b", "menu-a"]);
+  table(el).shadowRoot.querySelector<HTMLElement>('button[data-sort="name"]')!.click();
+  await table(el).updateComplete;
+  expect(order()).toEqual(["menu-a", "menu-b"]);
 });
 
 it("opens the menu and tab the address names, and leaves the list by the Back control", async () => {
@@ -1968,4 +2071,617 @@ it("says the menu's structure could not be loaded, and tries again", async () =>
   await click(el, "structure-retry");
   await vi.waitFor(() => expect(tree(el)).not.toBeNull());
   expect(q(el, '[data-test="structure-error"]')).toBeNull();
+});
+
+// ---------------------------------------------------------------------------
+// The Prices tab
+
+function prices(el: MenusScreen): MenuPricesTable {
+  return q<MenuPricesTable>(el, "dashboard-menu-prices-table")!;
+}
+
+/** Opens Lunch's Prices from its address and waits for its rows. */
+async function mountPrices(client: Api = api()) {
+  const el = await mount(client, PRICES_PATH);
+  await vi.waitFor(() => expect(prices(el)?.rows.length).toBe(3));
+  return el;
+}
+
+async function chooseTab(el: MenusScreen, key: string): Promise<void> {
+  const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;
+  tabs.shadowRoot!.querySelector<HTMLElement>(`[role="tab"][data-key="${key}"]`)!.click();
+  await el.updateComplete;
+}
+
+function pricesModal(el: MenusScreen) {
+  return prices(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!;
+}
+
+async function openOffer(el: MenusScreen, menuItemId: string): Promise<void> {
+  const table = prices(el).shadowRoot!.querySelector<Table>("wt-data-table")!;
+  await table.updateComplete;
+  table.shadowRoot.querySelector<HTMLElement>(`[data-test="edit-${menuItemId}"]`)!.click();
+  await vi.waitFor(() => expect(pricesModal(el).open).toBe(true));
+}
+
+async function inOffer(el: MenusScreen, testId: string): Promise<void> {
+  pricesModal(el).querySelector<HTMLElement>(`[data-test="${testId}"]`)!.click();
+  await el.updateComplete;
+}
+
+function offerField(el: MenusScreen, name: string) {
+  return pricesModal(el).querySelector<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!;
+}
+
+/** A save with nothing changed writes nothing, so a test of a write changes the price first. */
+async function reprice(el: MenusScreen, price = "11.00"): Promise<void> {
+  type(offerField(el, "grossPrice"), price);
+  await el.updateComplete;
+}
+
+it("keeps the Prices tab in the address, and switching tabs keeps the chosen menu", async () => {
+  const client = api();
+  const el = await mountLunch(client);
+  expect(client.getMenuPrices).not.toHaveBeenCalled();
+  await chooseTab(el, "prices");
+  expect(location.pathname).toBe(PRICES_PATH);
+  await vi.waitFor(() => expect(prices(el)?.rows.length).toBe(3));
+  expect(client.getMenuPrices).toHaveBeenCalledWith("menu-lunch");
+  expect(text(q(el, "h1"))).toBe("Lunch Menu");
+  expect(prices(el).menuName).toBe("Lunch Menu");
+  await chooseTab(el, "structure");
+  expect(location.pathname).toBe(LUNCH_PATH);
+  expect(text(q(el, "h1"))).toBe("Lunch Menu");
+  history.back();
+  await vi.waitFor(() => expect(location.pathname).toBe(PRICES_PATH));
+  await vi.waitFor(() =>
+    expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("prices"),
+  );
+});
+
+it("opens the Prices tab the address names, with the library's sections, categories and products", async () => {
+  const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
+  const el = await mountPrices(client);
+  expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("prices");
+  const table = prices(el);
+  expect(table.sections.map(({ id }) => id)).toEqual(sections().map(({ id }) => id));
+  expect(table.categories).toEqual(categories);
+  expect(table.products.map(({ id }) => id)).toContain("p-lemonade");
+  const cells = text(
+    table.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.querySelector("tbody"),
+  );
+  expect(cells).toContain("Favourites");
+  expect(cells).toContain("Drinks › Beer");
+  expect(cells).not.toContain("Our picks");
+  expect(cells).not.toContain("Something to drink");
+});
+
+it("reads another menu's prices when the person opens it", async () => {
+  const client = api();
+  const el = await mountPrices(client);
+  await click(el, "back");
+  await inTable(el, "open-menu-dinner");
+  await chooseTab(el, "prices");
+  await vi.waitFor(() => expect(client.getMenuPrices).toHaveBeenCalledWith("menu-dinner"));
+  await vi.waitFor(() => expect(prices(el).rows).toEqual([]));
+});
+
+it("saves a product's settings on the menu with one PATCH and one PUT of its variants when both changed, then reads the prices again", async () => {
+  const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-lemonade");
+  const legends = [...pricesModal(el).querySelectorAll("fieldset legend")].map(text);
+  expect(legends).toEqual(["Small", "Large"]);
+  type(offerField(el, "grossPrice"), "2.80");
+  type(offerField(el, "variants.0.price"), "1.90");
+  await el.updateComplete;
+  const reads = client.getMenuPrices.mock.calls.length;
+  await inOffer(el, "offer-save");
+  await vi.waitFor(() => expect(pricesModal(el).open).toBe(false));
+  expect(client.updateMenuItem.mock.calls).toEqual([
+    ["menu-lunch", "mi-lemonade", { grossPrice: "2.80", active: true }],
+  ]);
+  expect(client.setMenuVariants.mock.calls).toEqual([
+    [
+      "menu-lunch",
+      "mi-lemonade",
+      [
+        { variantId: "v-small", price: "1.90", offered: true },
+        { variantId: "v-large", price: "3.75", offered: false },
+      ],
+    ],
+  ]);
+  expect(writeCalls(client)).toEqual(["updateMenuItem", "setMenuVariants"]);
+  await vi.waitFor(() => expect(client.getMenuPrices.mock.calls.length).toBeGreaterThan(reads));
+});
+
+it("sends no variants for a product without them", async () => {
+  const client = api();
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-burger");
+  await reprice(el);
+  await inOffer(el, "offer-save");
+  await vi.waitFor(() => expect(pricesModal(el).open).toBe(false));
+  expect(client.updateMenuItem.mock.calls).toEqual([
+    ["menu-lunch", "mi-burger", { grossPrice: "11.00", active: true }],
+  ]);
+  expect(client.setMenuVariants).not.toHaveBeenCalled();
+});
+
+it("sends the PATCH and no PUT when only the price of a product with variants changed", async () => {
+  const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-lemonade");
+  await reprice(el, "2.60");
+  await inOffer(el, "offer-save");
+  await vi.waitFor(() => expect(pricesModal(el).open).toBe(false));
+  expect(client.updateMenuItem.mock.calls).toEqual([
+    ["menu-lunch", "mi-lemonade", { grossPrice: "2.60", active: true }],
+  ]);
+  expect(writeCalls(client)).toEqual(["updateMenuItem"]);
+});
+
+it("sends the PUT and no PATCH when only a variant changed", async () => {
+  const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-lemonade");
+  type(offerField(el, "variants.0.price"), "1.90");
+  await el.updateComplete;
+  const reads = client.getMenuPrices.mock.calls.length;
+  await inOffer(el, "offer-save");
+  await vi.waitFor(() => expect(pricesModal(el).open).toBe(false));
+  expect(client.setMenuVariants.mock.calls).toEqual([
+    [
+      "menu-lunch",
+      "mi-lemonade",
+      [
+        { variantId: "v-small", price: "1.90", offered: true },
+        { variantId: "v-large", price: "3.75", offered: false },
+      ],
+    ],
+  ]);
+  expect(writeCalls(client)).toEqual(["setMenuVariants"]);
+  await vi.waitFor(() => expect(client.getMenuPrices.mock.calls.length).toBeGreaterThan(reads));
+});
+
+it("closes the window and writes nothing when nothing was changed", async () => {
+  const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-lemonade");
+  await inOffer(el, "offer-save");
+  await vi.waitFor(() => expect(pricesModal(el).open).toBe(false));
+  expect(writeCalls(client)).toEqual([]);
+  expect(prices(el).busy).toBe(false);
+});
+
+it("'Use product price' sends grossPrice: null", async () => {
+  const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-lemonade");
+  expect(offerField(el, "grossPrice").value).toBe("2.50");
+  await inOffer(el, "use-product-price");
+  await inOffer(el, "offer-save");
+  await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledOnce());
+  expect(client.updateMenuItem.mock.calls[0]![2]).toEqual({ grossPrice: null, active: true });
+});
+
+it("keeps the settings open and says why when the server refuses the price, sending no variants", async () => {
+  const client = api({
+    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
+    updateMenuItem: vi
+      .fn()
+      .mockRejectedValue({ code: "management.request_invalid", params: { field: "grossPrice" } }),
+  });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-lemonade");
+  type(offerField(el, "grossPrice"), "2.80");
+  await el.updateComplete;
+  await inOffer(el, "offer-save");
+  await vi.waitFor(() =>
+    expect(offerField(el, "grossPrice").error).toBe(codeMessage("management.request_invalid")),
+  );
+  expect(pricesModal(el).open).toBe(true);
+  expect(offerField(el, "grossPrice").value).toBe("2.80");
+  expect(client.setMenuVariants).not.toHaveBeenCalled();
+  await inOffer(el, "offer-cancel");
+  expect(pricesModal(el).open).toBe(false);
+});
+
+it("refuses a malformed price in the settings without sending anything", async () => {
+  const client = api();
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-burger");
+  type(offerField(el, "grossPrice"), "-2");
+  await el.updateComplete;
+  await inOffer(el, "offer-save");
+  expect(offerField(el, "grossPrice").error).toBe(t("editor.price_invalid"));
+  expect(writeCalls(client)).toEqual([]);
+});
+
+it("sends one save while one is out, and holds the window open until it is answered", async () => {
+  const pending = deferred<void>();
+  const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-burger");
+  await reprice(el);
+  await inOffer(el, "offer-save");
+  prices(el).dispatchEvent(
+    new CustomEvent("wt-offer-save", {
+      detail: {
+        menuItemId: "mi-burger",
+        name: "Burger",
+        item: { grossPrice: "11.00", active: true },
+        variants: null,
+      },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await inOffer(el, "offer-cancel");
+  expect(pricesModal(el).open).toBe(true);
+  expect(client.updateMenuItem).toHaveBeenCalledOnce();
+  pending.resolve();
+  await vi.waitFor(() => expect(pricesModal(el).open).toBe(false));
+});
+
+it("a save that succeeded but could not then be reloaded is a load failure, not a refused save", async () => {
+  const client = api();
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-burger");
+  await reprice(el);
+  client.getMenuPrices.mockRejectedValue(new Error("down"));
+  await inOffer(el, "offer-save");
+  await vi.waitFor(() => expect(prices(el).failed).toBe(true));
+  expect(pricesModal(el).open).toBe(false);
+  expect(prices(el).refusal).toBeNull();
+  expect(q(el, '[data-test="prices-retry"]')).not.toBeNull();
+});
+
+it("says the prices could not be loaded, and tries again", async () => {
+  const client = api();
+  client.getMenuPrices.mockRejectedValueOnce(new Error("down"));
+  const el = await mount(client, PRICES_PATH);
+  await vi.waitFor(() => expect(prices(el).failed).toBe(true));
+  await click(el, "prices-retry");
+  await vi.waitFor(() => expect(prices(el).rows.length).toBe(3));
+  expect(prices(el).failed).toBe(false);
+  expect(q(el, '[data-test="prices-retry"]')).toBeNull();
+});
+
+it("names the product when its save is refused after the person has gone to another menu", async () => {
+  const pending = deferred<void>();
+  const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-burger");
+  await reprice(el);
+  await inOffer(el, "offer-save");
+  history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/prices");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
+  expect(pricesModal(el).open).toBe(false);
+  pending.reject({ code: "catalogue.not_found" });
+  await vi.waitFor(() =>
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.change_not_saved")
+        .replace("{name}", "Burger")
+        .replace("{reason}", codeMessage("catalogue.not_found")),
+    ),
+  );
+  expect(pricesModal(el).open).toBe(false);
+});
+
+it("keeps the prices within a phone's width, the table scrolling inside it", async () => {
+  await page.viewport(390, 844);
+  try {
+    const el = await mountPrices();
+    expect(window.innerWidth).toBe(390);
+    expect(prices(el).getBoundingClientRect().width).toBeLessThanOrEqual(390);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+it("finishes a save quietly when the person has gone to another menu, reading no prices for the old one", async () => {
+  const pending = deferred<void>();
+  const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-burger");
+  await reprice(el);
+  await inOffer(el, "offer-save");
+  history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/prices");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await vi.waitFor(() => expect(client.getMenuPrices).toHaveBeenCalledWith("menu-dinner"));
+  const lunchReads = client.getMenuPrices.mock.calls.filter(([id]) => id === "menu-lunch").length;
+  pending.resolve();
+  await vi.waitFor(() => expect(prices(el).busy).toBe(false));
+  expect(client.getMenuPrices.mock.calls.filter(([id]) => id === "menu-lunch")).toHaveLength(
+    lunchReads,
+  );
+  expect(q(el, '[data-test="member-error"]')).toBeNull();
+  expect(prices(el).rows).toEqual([]);
+});
+
+it("stops following a menu's prices once another menu is opened, so its changes never show under the new one", async () => {
+  const live = new LiveData();
+  const client = api({ liveData: live });
+  const el = await mountPrices(client);
+  const dinner = deferred<MenuPriceRow[]>();
+  client.getMenuPrices.mockImplementation((id: string) =>
+    id === "menu-dinner" ? dinner.promise : Promise.resolve(lunchPrices()),
+  );
+  history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/structure");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
+  const reads = client.getMenuPrices.mock.calls.length;
+  live.invalidate([{ type: "menu_items" }]);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(client.getMenuPrices.mock.calls.length).toBe(reads);
+  await chooseTab(el, "prices");
+  await vi.waitFor(() => expect(client.getMenuPrices).toHaveBeenCalledWith("menu-dinner"));
+  expect(prices(el).rows).toEqual([]);
+  expect(prices(el).loading).toBe(true);
+  dinner.resolve([]);
+  await vi.waitFor(() => expect(prices(el).loading).toBe(false));
+});
+
+it("stops following the prices while the Structure tab is shown, and reads them again on return", async () => {
+  const live = new LiveData();
+  const client = api({ liveData: live });
+  const el = await mountPrices(client);
+  await chooseTab(el, "structure");
+  const reads = client.getMenuPrices.mock.calls.length;
+  const structureReads = client.getMenuStructure.mock.calls.length;
+  live.invalidate([{ type: "section_members" }, { type: "menu_items" }]);
+  // The structure's own read shows the change notice was handled.
+  await vi.waitFor(() =>
+    expect(client.getMenuStructure.mock.calls.length).toBeGreaterThan(structureReads),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(client.getMenuPrices.mock.calls.length).toBe(reads);
+  await chooseTab(el, "prices");
+  await vi.waitFor(() => expect(client.getMenuPrices.mock.calls.length).toBe(reads + 1));
+  expect(client.getMenuPrices).toHaveBeenLastCalledWith("menu-lunch");
+});
+
+it("shows the prices as loading on return to the Prices tab until they are read again", async () => {
+  const client = api();
+  const el = await mountPrices(client);
+  await chooseTab(el, "structure");
+  const again = deferred<MenuPriceRow[]>();
+  client.getMenuPrices.mockImplementation(() => again.promise);
+  const reads = client.getMenuPrices.mock.calls.length;
+  await chooseTab(el, "prices");
+  await vi.waitFor(() => expect(client.getMenuPrices.mock.calls.length).toBe(reads + 1));
+  await el.updateComplete;
+  expect(prices(el).rows).toEqual([]);
+  expect(prices(el).loading).toBe(true);
+  again.resolve(lunchPrices());
+  await vi.waitFor(() => expect(prices(el).rows.length).toBe(3));
+  expect(prices(el).loading).toBe(false);
+});
+
+it("starts no second read when the address is read again on the Prices tab it already shows", async () => {
+  const client = api();
+  const el = await mountPrices(client);
+  const reads = client.getMenuPrices.mock.calls.length;
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(client.getMenuPrices.mock.calls.length).toBe(reads);
+  expect(prices(el).rows.length).toBe(3);
+});
+
+it("reads no prices when a save finishes after the person has left the Prices tab", async () => {
+  const pending = deferred<void>();
+  const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-burger");
+  await reprice(el);
+  await inOffer(el, "offer-save");
+  await chooseTab(el, "structure");
+  const reads = client.getMenuPrices.mock.calls.length;
+  pending.resolve();
+  await vi.waitFor(() => expect(prices(el).busy).toBe(false));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(client.getMenuPrices.mock.calls.length).toBe(reads);
+});
+
+/** The native dialog inside the offer window: while it is open it blocks the rest of the page. */
+function offerDialogOpen(el: MenusScreen): boolean {
+  return pricesModal(el).shadowRoot!.querySelector("dialog")?.open ?? false;
+}
+
+it("closes the offer window when Back leaves the Prices tab, leaving the Structure tab usable", async () => {
+  const client = api();
+  const el = await mountLunch(client);
+  await chooseTab(el, "prices");
+  await vi.waitFor(() => expect(prices(el).rows.length).toBe(3));
+  await openOffer(el, "mi-burger");
+  expect(offerDialogOpen(el)).toBe(true);
+  history.back();
+  await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
+  await vi.waitFor(() =>
+    expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("structure"),
+  );
+  await vi.waitFor(() => expect(offerDialogOpen(el)).toBe(false));
+  expect(prices(el).editing).toBeNull();
+  await clickInTree(el, "edit-m-drinks");
+  await vi.waitFor(() => expect(breadcrumb(el)).toBe("Lunch Menu › Drinks"));
+});
+
+it("reports beside the Structure tab a save refused after Back left the Prices tab", async () => {
+  const pending = deferred<void>();
+  const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
+  const el = await mountLunch(client);
+  await chooseTab(el, "prices");
+  await vi.waitFor(() => expect(prices(el).rows.length).toBe(3));
+  await openOffer(el, "mi-burger");
+  await reprice(el);
+  await inOffer(el, "offer-save");
+  history.back();
+  await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
+  await vi.waitFor(() => expect(offerDialogOpen(el)).toBe(false));
+  pending.reject({ code: "catalogue.not_found" });
+  await vi.waitFor(() =>
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.change_not_saved")
+        .replace("{name}", "Burger")
+        .replace("{reason}", codeMessage("catalogue.not_found")),
+    ),
+  );
+  expect(offerDialogOpen(el)).toBe(false);
+});
+
+it("says the menu price was saved and the variants were not when only the variants are refused", async () => {
+  const client = api({
+    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
+    setMenuVariants: vi
+      .fn()
+      .mockRejectedValue({ code: "management.request_invalid", params: { field: "variants.0" } }),
+  });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-lemonade");
+  type(offerField(el, "grossPrice"), "2.80");
+  type(offerField(el, "variants.0.price"), "1.90");
+  await el.updateComplete;
+  const reads = client.getMenuPrices.mock.calls.length;
+  await inOffer(el, "offer-save");
+  const expected = t("menu_prices.variants_not_saved")
+    .replace("{name}", "Lemonade")
+    .replace("{reason}", codeMessage("management.request_invalid"));
+  await vi.waitFor(() => expect(prices(el).refusal?.message).toBe(expected));
+  expect(client.updateMenuItem).toHaveBeenCalledOnce();
+  expect(client.setMenuVariants).toHaveBeenCalledOnce();
+  expect(pricesModal(el).open).toBe(true);
+  expect(offerField(el, "grossPrice").value).toBe("2.80");
+  const summary =
+    pricesModal(el).querySelector<HTMLElementTagNameMap["wt-form-error-summary"]>(
+      "wt-form-error-summary",
+    )!;
+  await summary.updateComplete;
+  expect(text(summary.shadowRoot!.querySelector("li"))).toBe(expected);
+  // The menu price was saved, so the list is read again behind the window.
+  await vi.waitFor(() => expect(client.getMenuPrices.mock.calls.length).toBeGreaterThan(reads));
+});
+
+it("names the product and says its variants were not saved when that refusal lands after the person left its menu", async () => {
+  const pending = deferred<MenuVariantAnswer>();
+  const client = api({
+    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
+    setMenuVariants: vi.fn(() => pending.promise),
+  });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-lemonade");
+  type(offerField(el, "grossPrice"), "2.80");
+  type(offerField(el, "variants.0.price"), "1.90");
+  await el.updateComplete;
+  await inOffer(el, "offer-save");
+  await vi.waitFor(() => expect(client.setMenuVariants).toHaveBeenCalledOnce());
+  expect(client.updateMenuItem).toHaveBeenCalledOnce();
+  history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/prices");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
+  pending.reject({ code: "management.request_invalid" });
+  await vi.waitFor(() =>
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menu_prices.variants_not_saved")
+        .replace("{name}", "Lemonade")
+        .replace("{reason}", codeMessage("management.request_invalid")),
+    ),
+  );
+});
+
+it("says only why when the variants alone were changed and are refused, as nothing was saved", async () => {
+  const client = api({
+    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
+    setMenuVariants: vi
+      .fn()
+      .mockRejectedValue({ code: "management.request_invalid", params: { field: "variants.0" } }),
+  });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-lemonade");
+  type(offerField(el, "variants.0.price"), "1.90");
+  await el.updateComplete;
+  const reads = client.getMenuPrices.mock.calls.length;
+  await inOffer(el, "offer-save");
+  const expected = codeMessage("management.request_invalid");
+  await vi.waitFor(() => expect(prices(el).refusal?.message).toBe(expected));
+  expect(client.setMenuVariants).toHaveBeenCalledOnce();
+  expect(client.updateMenuItem).not.toHaveBeenCalled();
+  expect(pricesModal(el).open).toBe(true);
+  expect(offerField(el, "variants.0.price").value).toBe("1.90");
+  const summary =
+    pricesModal(el).querySelector<HTMLElementTagNameMap["wt-form-error-summary"]>(
+      "wt-form-error-summary",
+    )!;
+  await summary.updateComplete;
+  expect(text(summary.shadowRoot!.querySelector("li"))).toBe(expected);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(client.getMenuPrices.mock.calls.length).toBe(reads);
+});
+
+it("names the product and says the change was not saved when a variants-only refusal lands after the person left its menu", async () => {
+  const pending = deferred<MenuVariantAnswer>();
+  const client = api({
+    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
+    setMenuVariants: vi.fn(() => pending.promise),
+  });
+  const el = await mountPrices(client);
+  await openOffer(el, "mi-lemonade");
+  type(offerField(el, "variants.0.price"), "1.90");
+  await el.updateComplete;
+  await inOffer(el, "offer-save");
+  await vi.waitFor(() => expect(client.setMenuVariants).toHaveBeenCalledOnce());
+  history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/prices");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
+  pending.reject({ code: "management.request_invalid" });
+  await vi.waitFor(() =>
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.change_not_saved")
+        .replace("{name}", "Lemonade")
+        .replace("{reason}", codeMessage("management.request_invalid")),
+    ),
+  );
+  expect(client.updateMenuItem).not.toHaveBeenCalled();
+});
+
+type MenuVariantAnswer = { variantId: string; price: string | null; offered: boolean }[];
+
+it("opens no product's window while a save is out, even after Back and Forward closed the saving one", async () => {
+  const pending = deferred<void>();
+  const client = api({
+    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
+    updateMenuItem: vi.fn(() => pending.promise),
+  });
+  const el = await mountLunch(client);
+  await chooseTab(el, "prices");
+  await vi.waitFor(() => expect(prices(el).rows.length).toBe(3));
+  await openOffer(el, "mi-burger");
+  await reprice(el);
+  await inOffer(el, "offer-save");
+  history.back();
+  await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
+  history.forward();
+  await vi.waitFor(() => expect(location.pathname).toBe(PRICES_PATH));
+  await vi.waitFor(() =>
+    expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("prices"),
+  );
+  const table = prices(el).shadowRoot!.querySelector<Table>("wt-data-table")!;
+  await table.updateComplete;
+  const lemonade = table.shadowRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="edit-mi-lemonade"]',
+  )!;
+  expect(lemonade.disabled).toBe(true);
+  lemonade.click();
+  emit(prices(el), "wt-offer-edit", { menuItemId: "mi-lemonade" });
+  await el.updateComplete;
+  expect(pricesModal(el).open).toBe(false);
+  pending.resolve();
+  await vi.waitFor(() => expect(prices(el).busy).toBe(false));
+  await table.updateComplete;
+  expect(lemonade.disabled).toBe(false);
+  await openOffer(el, "mi-lemonade");
+  expect(offerField(el, "grossPrice").value).toBe("2.50");
 });

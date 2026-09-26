@@ -51,6 +51,7 @@ import {
   listCataloguesForLocation,
   listCategories,
   listMenuOffersWithTopLevel,
+  menuPrices,
   readMenuStructure,
   listOptionLists,
   getOptionList,
@@ -823,6 +824,14 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       return c.json(await gated(sessionId, (tx) => readMenuStructure(tx, menuId)));
+    }),
+  );
+
+  app.get("/management-api/catalogues/:id/prices", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      return c.json(await gated(sessionId, (tx) => menuPrices(tx, menuId)));
     }),
   );
 

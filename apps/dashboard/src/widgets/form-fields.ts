@@ -42,11 +42,13 @@ export function textField(
   change: (value: string) => void,
   required = false,
   placeholder = "",
+  hint = "",
 ) {
   return html`<wt-input
     name=${key}
     label=${label}
     placeholder=${placeholder}
+    hint=${hint}
     .value=${value}
     .required=${required}
     .disabled=${context.busy}

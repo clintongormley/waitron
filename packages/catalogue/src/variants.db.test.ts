@@ -530,6 +530,19 @@ describe("a variant's per-menu settings", () => {
     ]);
   });
 
+  it("lists nothing for an offer whose product has no Active variant", async () => {
+    const f = await fixture();
+    expect(await app((tx) => listMenuVariants(tx, f.offerId, f.catalogueId))).toEqual([]);
+    const [w125] = await app((tx) =>
+      setProductVariants(tx, f.parentId, [wine("Wine 125", null)], "en"),
+    );
+    await app((tx) =>
+      setMenuVariants(tx, f.offerId, [{ variantId: w125!.id, price: "6.00", offered: true }]),
+    );
+    await app((tx) => setProductVariants(tx, f.parentId, [], "en"));
+    expect(await app((tx) => listMenuVariants(tx, f.offerId, f.catalogueId))).toEqual([]);
+  });
+
   it("stores a row only while it overrides something", async () => {
     const f = await fixture();
     const [w125, w175] = await app((tx) =>

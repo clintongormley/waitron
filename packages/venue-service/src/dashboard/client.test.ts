@@ -11,7 +11,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("VenueServiceApi", () => {
-  it("sends edits to the existing department, menu and route", async () => {
+  it("sends edits to the existing department and route", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
     const department = {
@@ -27,7 +27,6 @@ describe("VenueServiceApi", () => {
       noPreparation: true,
     };
     await api.updateDepartment("d1", department);
-    await api.updateMenu("m1", "Dinner");
     await api.updateRoute("r1", route);
     expect(
       fetchImpl.mock.calls.map(([path, init]) => [
@@ -37,7 +36,6 @@ describe("VenueServiceApi", () => {
       ]),
     ).toEqual([
       ["/management-api/venue-service/departments/d1", "PATCH", department],
-      ["/management-api/catalogues/m1", "PATCH", { name: "Dinner" }],
       ["/management-api/venue-service/routes/r1", "PUT", route],
     ]);
   });
@@ -61,20 +59,7 @@ describe("VenueServiceApi", () => {
       )
       .mockResolvedValueOnce(jsonResponse([{ id: "s1", name: "Bar", isDefault: false }]))
       .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs" }]))
-      .mockResolvedValueOnce(
-        jsonResponse([{ id: "p1", name: "Negroni", customerName: { en: "House Aperitivo" } }]),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse([
-          {
-            id: "i1",
-            productId: "p1",
-            grossPrice: "9.00",
-            topLevelMember: { sectionId: "root-m1", memberId: "mem-p1" },
-          },
-          { id: "i2", productId: "p2", grossPrice: null, topLevelMember: null },
-        ]),
-      );
+      .mockResolvedValueOnce(jsonResponse([{ id: "p1", name: "Negroni" }]));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
 
     await expect(api.load()).resolves.toMatchObject({
@@ -82,15 +67,7 @@ describe("VenueServiceApi", () => {
       categories: [{ id: "c1", name: { en: "Cocktails" }, image: null, parentId: null }],
       stations: [{ id: "s1", name: "Bar" }],
       floorZones: [{ id: "z1", name: "Upstairs" }],
-      offers: [
-        {
-          id: "i1",
-          productId: "p1",
-          grossPrice: "9.00",
-          topLevelMember: { sectionId: "root-m1", memberId: "mem-p1" },
-        },
-        { id: "i2", productId: "p2", grossPrice: null, topLevelMember: null },
-      ],
+      products: [{ id: "p1", name: "Negroni" }],
     });
     expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
       "/management-api/venue-service",
@@ -99,7 +76,6 @@ describe("VenueServiceApi", () => {
       "/management-api/stations",
       "/management-api/zones",
       "/management-api/catalogues/m1/products",
-      "/management-api/catalogues/m1/offers",
     ]);
   });
 
@@ -120,11 +96,6 @@ describe("VenueServiceApi", () => {
     await api.allowMenu("z1", "m1", { displayOrder: 0, makeDefault: true });
     await api.createRoute({ zoneId: "z1", categoryId: "c1", stationId: "s1" });
     await api.deleteRoute("r1");
-    await api.createMenu("Terrace drinks");
-    await api.addProductToMenu("m1", { productId: "p1", grossPrice: "11.00" });
-    await api.updateMenuItem("m1", "i1", { grossPrice: "12.50" });
-    await api.updateMenuItem("m1", "i2", { active: false });
-    await api.removeMenuMember("root-m1", "mem-p1");
 
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
       ["/management-api/venue-service/departments", "POST"],
@@ -134,34 +105,7 @@ describe("VenueServiceApi", () => {
       ["/management-api/venue-service/zones/z1/menus/m1", "PUT"],
       ["/management-api/venue-service/routes", "POST"],
       ["/management-api/venue-service/routes/r1", "DELETE"],
-      ["/management-api/catalogues", "POST"],
-      ["/management-api/catalogues/m1/items", "POST"],
-      ["/management-api/catalogues/m1/items/i1", "PATCH"],
-      ["/management-api/catalogues/m1/items/i2", "PATCH"],
-      ["/management-api/sections/root-m1/members/mem-p1", "DELETE"],
     ]);
-    expect(JSON.parse(fetchImpl.mock.calls[8]![1].body as string)).toEqual({
-      productId: "p1",
-      grossPrice: "11.00",
-    });
-    expect(JSON.parse(fetchImpl.mock.calls[10]![1].body as string)).toEqual({ active: false });
-  });
-
-  it("replaces a menu offer's variant overrides in one PUT", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
-    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    const variants = [
-      { variantId: "v1", price: "4.50", offered: true },
-      { variantId: "v2", price: null, offered: false },
-    ];
-    await api.setMenuVariants("m1", "i1", variants);
-    expect(
-      fetchImpl.mock.calls.map(([path, init]) => [
-        path,
-        init.method,
-        JSON.parse(init.body as string),
-      ]),
-    ).toEqual([["/management-api/catalogues/m1/items/i1/variants", "PUT", { variants }]]);
   });
 
   it("reads through its background copy passively, so a refresh keeps no session alive", async () => {
@@ -188,7 +132,7 @@ describe("VenueServiceApi", () => {
     expect(background.liveData).toBe(liveData);
 
     await background.load();
-    expect(fetchImpl).toHaveBeenCalledTimes(7);
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
     for (const [, init] of fetchImpl.mock.calls as unknown as [string, RequestInit][]) {
       expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
     }
@@ -196,10 +140,10 @@ describe("VenueServiceApi", () => {
 
     fetchImpl.mockClear();
     await api.load();
-    expect(fetchImpl).toHaveBeenCalledTimes(7);
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
     for (const [, init] of fetchImpl.mock.calls as unknown as [string, RequestInit][]) {
       expect(new Headers(init.headers).get("x-waitron-live")).toBeNull();
     }
-    expect(onSuccess).toHaveBeenCalledTimes(7);
+    expect(onSuccess).toHaveBeenCalledTimes(6);
   });
 });

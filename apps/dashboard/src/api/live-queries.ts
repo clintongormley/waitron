@@ -62,6 +62,17 @@ export const QUERY_DEPENDENCIES = {
   listCatalogues: ["catalogues"],
   // `readMenuStructure` reads the root from `menu_details`, then the whole section graph.
   getMenuStructure: ["menu_details", "sections", "section_members"],
+  // `menuPrices` (packages/catalogue/src/operations.ts): the structure's tables for the placements,
+  // then each reached product's menu item, menu and price, and its variants' overrides.
+  getMenuPrices: [
+    "menu_details",
+    "sections",
+    "section_members",
+    "menu_items",
+    "catalogues",
+    "products",
+    "menu_item_variant_overrides",
+  ],
   listCategories: ["categories", "category_details"],
   getCategory: ["categories", "category_details"],
   listCategoryProducts: ["categories", "category_details", "products", "product_labels"],

@@ -81,9 +81,14 @@ export class WtInput extends LitElement {
         margin-inline-start: var(--wt-space-1);
       }
 
-      .error {
+      .error,
+      .hint {
         margin: var(--wt-space-1) 0 0;
         font-size: var(--wt-font-size-sm);
+      }
+
+      .hint {
+        color: var(--wt-color-text-muted);
       }
     `,
   ];
@@ -95,6 +100,9 @@ export class WtInput extends LitElement {
   @property() autocomplete = "";
   @property() placeholder = "";
   @property() error = "";
+  /** A line of help under the field, rendered in this shadow root so the native input is described
+   * by it; why a paragraph beside the element is not: design-system.md → Forms. */
+  @property() hint = "";
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property({ type: Boolean, reflect: true }) invalid = false;
@@ -105,6 +113,7 @@ export class WtInput extends LitElement {
   // shadow root, so repeated names do not collide with another field's label association.
   private readonly generatedInputId = uniqueId("wt-input");
   private readonly errorId = uniqueId("wt-input-error");
+  private readonly hintId = uniqueId("wt-input-hint");
 
   private onInput(event: Event): void {
     this.value = (event.target as HTMLInputElement).value;
@@ -117,6 +126,8 @@ export class WtInput extends LitElement {
 
   override render() {
     const hasError = this.error !== "";
+    const hasHint = this.hint !== "";
+    const describedBy = [...(hasHint ? [this.hintId] : []), ...(hasError ? [this.errorId] : [])];
     const inputId = this.name || this.generatedInputId;
     return html`
       ${
@@ -144,11 +155,12 @@ export class WtInput extends LitElement {
           ?required=${this.required}
           ?disabled=${this.disabled}
           aria-invalid=${this.invalid || hasError}
-          aria-describedby=${hasError ? this.errorId : nothing}
+          aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
           @input=${this.onInput}
         />
         <slot class="end" name="end" @slotchange=${this.onEndSlotChange}></slot>
       </div>
+      ${hasHint ? html`<p id=${this.hintId} class="hint" data-hint>${this.hint}</p>` : nothing}
       ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}
     `;
   }
