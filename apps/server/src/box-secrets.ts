@@ -1,5 +1,16 @@
-import { mkdir, access, chmod, copyFile, lstat, readFile, rename, rm } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import {
+  mkdir,
+  access,
+  chmod,
+  copyFile,
+  lstat,
+  open,
+  readFile,
+  rename,
+  rm,
+  type FileHandle,
+} from "node:fs/promises";
+import { constants, existsSync } from "node:fs";
 import { join } from "node:path";
 import { generateKeyRing, type GeneratedKeyRing } from "@waitron/provisioning";
 import { listBoxIpv4 } from "./box-reach.js";
@@ -53,6 +64,32 @@ export function mintedBoxLeaf(stateDir: string): TlsFiles | undefined {
   return { certFile, keyFile };
 }
 
+/**
+ * A linked `tls`, and the folder it points to, are left as found. The folder is opened without
+ * following a link and changed through that handle, so a `tls` swapped for a link mid-call is not
+ * followed (outside the EACCES fallback below); a link higher up the path is.
+ */
+export async function tightenTlsDir(stateDir: string): Promise<void> {
+  const { tlsDir } = boxTlsPaths(stateDir);
+  let handle: FileHandle;
+  try {
+    handle = await open(tlsDir, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+  } catch (err) {
+    // ENOTDIR: `tls` is a link or a file, or the state folder is not a folder.
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return;
+    // A folder its owner cannot read refuses a non-root open (EACCES), so its mode is changed by
+    // path, which would follow a link swapped in after the `lstat`.
+    if (code === "EACCES" && (await lstat(tlsDir)).isDirectory()) return chmod(tlsDir, 0o700);
+    throw err;
+  }
+  try {
+    await handle.chmod(0o700);
+  } finally {
+    await handle.close();
+  }
+}
+
 export interface EnsureBoxSecretsDeps {
   stateDir: string;
   /** dNSName SANs on the leaf. */
@@ -97,7 +134,7 @@ export async function ensureBoxSecrets(deps: EnsureBoxSecretsDeps): Promise<BoxT
 
   const files = boxTlsPaths(deps.stateDir);
   await mkdir(files.tlsDir, { recursive: true, mode: 0o700 });
-  if (!(await lstat(files.tlsDir)).isSymbolicLink()) await chmod(files.tlsDir, 0o700);
+  await tightenTlsDir(deps.stateDir);
 
   // server.key is the presence sentinel for all four TLS files.
   if (!(await exists(files.keyFile))) {

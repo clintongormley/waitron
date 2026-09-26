@@ -13,7 +13,18 @@ import { createConnection, createServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
 import { connect as tlsConnect } from "node:tls";
 import type { AddressInfo } from "node:net";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
@@ -69,7 +80,7 @@ import { provisionVenue, venueModuleConfig } from "./provision.js";
 import { DUTY_BUDGET_MS } from "./health.js";
 import { DRAIN_DUTY } from "./pass.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
-import { ensureBoxSecrets } from "./box-secrets.js";
+import { ensureBoxSecrets, tightenTlsDir } from "./box-secrets.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { REBUILD_MARKER } from "./rebuild-first-start.js";
@@ -155,6 +166,19 @@ vi.mock("./backup-turns.js", async (importOriginal) => {
         });
       };
     },
+  };
+});
+
+/**
+ * `boot.ts` imports `tightenTlsDir` directly, with no injection seam. This spy calls through to the
+ * real one, so a test can make the trading start's call refuse without touching `ensureBoxSecrets`,
+ * which calls its own module's copy.
+ */
+vi.mock("./box-secrets.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./box-secrets.js")>();
+  return {
+    ...actual,
+    tightenTlsDir: vi.fn(actual.tightenTlsDir),
   };
 });
 
@@ -835,6 +859,136 @@ describe("startServer, against a migrated venue directory", () => {
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
+
+  describe("a trading start and the box's tls folder", () => {
+    async function tradingStateDir(prefix: string): Promise<string> {
+      const stateDir = await mkdtemp(join(tmpdir(), prefix));
+      await writeFile(
+        join(stateDir, "modules.json"),
+        JSON.stringify({ modules: { "fiscal-none": false } }),
+      );
+      return stateDir;
+    }
+
+    function startTrading(stateDir: string, port: number) {
+      return startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_VENUE_DIR: sharedVenueDir,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "preproduction",
+          WAITRON_HTTP_LANDING_PORT: "0",
+        },
+        {},
+      );
+    }
+
+    function tightenFailures(lines: readonly string[]): string[] {
+      return lines.filter((line) => {
+        try {
+          return (JSON.parse(line) as LogLine).event === "tls.tighten_failed";
+        } catch {
+          return false;
+        }
+      });
+    }
+
+    it("makes a group- and world-readable tls folder owner-only", async () => {
+      const port = await freePort();
+      const stateDir = await tradingStateDir("waitron-boot-tls-mode-");
+      await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
+      await chmod(join(stateDir, "tls"), 0o755);
+      const server = await startTrading(stateDir, port);
+      try {
+        expect((await stat(join(stateDir, "tls"))).mode & 0o777).toBe(0o700);
+      } finally {
+        await server.close();
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    }, 60_000);
+
+    it("leaves a linked tls folder, and the folder it points to, as it found them, and still serves", async () => {
+      await withCapturedStdout(async (lines) => {
+        const port = await freePort();
+        const stateDir = await tradingStateDir("waitron-boot-tls-link-");
+        const elsewhere = await mkdtemp(join(tmpdir(), "waitron-boot-tls-elsewhere-"));
+        await ensureBoxSecrets({
+          stateDir: elsewhere,
+          hostnames: ["localhost"],
+          now: () => new Date(),
+        });
+        await chmod(join(elsewhere, "tls"), 0o755);
+        await symlink(join(elsewhere, "tls"), join(stateDir, "tls"));
+        const server = await startTrading(stateDir, port);
+        const { via, close } = httpsVia(await readFile(join(elsewhere, "tls", "ca.crt")));
+        try {
+          expect((await fetchHealthOk(`https://127.0.0.1:${port}/health`, via)).status).toBe(200);
+          expect((await lstat(join(stateDir, "tls"))).isSymbolicLink()).toBe(true);
+          expect((await stat(join(elsewhere, "tls"))).mode & 0o777).toBe(0o755);
+          expect(tightenFailures(lines)).toEqual([]);
+        } finally {
+          await server.close();
+          await close();
+          await rm(stateDir, { recursive: true, force: true });
+          await rm(elsewhere, { recursive: true, force: true });
+        }
+      });
+    }, 60_000);
+
+    it("creates no tls folder on a box that has none, and logs no failure for it", async () => {
+      await withCapturedStdout(async (lines) => {
+        const port = await freePort();
+        const stateDir = await tradingStateDir("waitron-boot-tls-none-");
+        const server = await startTrading(stateDir, port);
+        try {
+          expect((await fetchHealthOk(`http://127.0.0.1:${port}/health`)).status).toBe(200);
+          expect(existsSync(join(stateDir, "tls"))).toBe(false);
+          expect(tightenFailures(lines)).toEqual([]);
+        } finally {
+          await server.close();
+          await rm(stateDir, { recursive: true, force: true });
+        }
+      });
+    }, 60_000);
+
+    it.each([
+      ["rejects", (refusal: Error) => vi.mocked(tightenTlsDir).mockRejectedValueOnce(refusal)],
+      [
+        "throws before it returns",
+        (refusal: Error) =>
+          vi.mocked(tightenTlsDir).mockImplementationOnce(() => {
+            throw refusal;
+          }),
+      ],
+    ])(
+      "logs a failure to tighten it and keeps serving, when the call %s",
+      async (_, refuse) => {
+        await withCapturedStdout(async (lines) => {
+          const port = await freePort();
+          const stateDir = await tradingStateDir("waitron-boot-tls-refused-");
+          await mkdir(join(stateDir, "tls"));
+          refuse(
+            Object.assign(new Error(`EPERM: operation not permitted, ${stateDir}`), {
+              code: "EPERM",
+            }),
+          );
+          const server = await startTrading(stateDir, port);
+          try {
+            expect((await fetchHealthOk(`http://127.0.0.1:${port}/health`)).status).toBe(200);
+            const line = await waitForEvent(lines, "tls.tighten_failed");
+            expect(line).toMatchObject({ level: "warn", errno: "EPERM" });
+            expect(JSON.stringify(line)).not.toContain(stateDir);
+          } finally {
+            await server.close();
+            await rm(stateDir, { recursive: true, force: true });
+          }
+        });
+      },
+      60_000,
+    );
+  });
 
   it("locks this node's state files into the venue database at a trading start", async () => {
     const port = await freePort();

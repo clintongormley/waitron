@@ -3111,9 +3111,22 @@ image constraints under *Detail → Box image*.
     destination that does not exist yet is still created. The setup-mode start, before a venue is
     bound (`ensureBoxSecrets`, called only there from `boot.ts`), now makes a real `tls/` folder
     0700 as a restore does; a `tls/` that is a symbolic link it leaves as it found it, and still
-    writes the box's files through it (a restore refuses one pointing outside the destination). A trading start still leaves `tls/` as it finds
-    it; whether to extend it is the owner's call. The restore itself (`restoreSecrets`) keeps no
-    such check on the state folder it is given. A41's swap race above stays open, by the owner's
+    writes the box's files through it (a restore refuses one pointing outside the destination).
+    **Done (2026-09-26, lane A's A52):** a trading start now makes a real `tls/` folder 0700 too,
+    through the same `tightenTlsDir` (`box-secrets.ts`), called in `boot.ts` ahead of the
+    adoption-pending branch and both trading listeners. It creates none where there is none, and
+    it opens the folder without following a link, so a linked `tls/` and the folder it points to
+    are left as found, by the owner's choice, even when `tls/` itself is swapped for a link
+    mid-call; a link swapped in for the state folder or a folder above it is followed. And a
+    folder its owner cannot read refuses a non-root open, so it is changed by path after an
+    `lstat`, and a link swapped in between the two would be followed. A failure to tighten does not
+    stop a trading start: it logs `tls.tighten_failed` with the errno alone and the box serves
+    (`chflags uchg` on the folder, then the chmod through the open folder, answers `EPERM`, measured 2026-09-26 on macOS,
+    Node v26.7.0; the boot test injects that refusal). A setup-mode start still stops on such a
+    failure, as before. A start that serves the recovery page (`node-entry.ts`) presents the box's
+    certificate without tightening `tls/`. The restore itself (`restoreSecrets`) keeps none of the
+    command's destination refusals (a symbolic link, another user's folder, not a folder) on the
+    state folder it is given. A41's swap race above stays open, by the owner's
     choice.
     The lock-file measurement kept in `db-wipe.ts` names no engine version or platform.
   - Found by #657 (`apps/server` part f2: the node, identity and setup files), outside its files

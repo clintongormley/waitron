@@ -26,6 +26,7 @@ import { codeOf } from "@waitron/server-kit";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { writeFileAtomic } from "./fs-atomic.js";
 import { isUnset } from "./env-value.js";
+import { errnoOf } from "./errno.js";
 import { type ArchiveEntry, unpackArchive } from "./backup-archive.js";
 import { decryptArtifact } from "./artifact-cipher.js";
 import type { BackupManifest } from "./backup-manifest.js";
@@ -481,12 +482,6 @@ export async function clearReplacedDatabases(
       log("warn", "restore.db.aside_kept", { folder, errno: errnoOf(error) });
     }
   }
-}
-
-/** `codeOf` maps only AppErrors; the errno is a fixed symbol, never the path or message. */
-function errnoOf(error: unknown): string | undefined {
-  const code = (error as { code?: unknown } | null | undefined)?.code;
-  return typeof code === "string" ? code : undefined;
 }
 
 /**

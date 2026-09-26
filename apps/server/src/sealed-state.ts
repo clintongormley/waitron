@@ -7,6 +7,7 @@ import { decryptArtifact, encryptArtifactAsync } from "./artifact-cipher.js";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
 import type { DeploymentEnvironment } from "./config.js";
+import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
 
 /** The archive's entries without the database copy, in the archive's order. */
@@ -56,12 +57,9 @@ export async function readSealedStateRow(
   return rows[0]?.sealed ?? null;
 }
 
-/** A system error's code (`EACCES`, `ENOSPC`) is a fixed symbol; its message carries the path. */
 function failureFields(err: unknown): Record<string, string> {
-  const errno = (err as { code?: unknown } | null)?.code;
-  return typeof errno === "string" && /^E[A-Z0-9]+$/.test(errno)
-    ? { errorCode: codeOf(err), errno }
-    : { errorCode: codeOf(err) };
+  const errno = errnoOf(err);
+  return errno === undefined ? { errorCode: codeOf(err) } : { errorCode: codeOf(err), errno };
 }
 
 export type SealedStateOutcome = "sealed" | "no_key" | "failed";
