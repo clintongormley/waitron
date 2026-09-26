@@ -343,29 +343,75 @@ describe("checkCommentsOnly against a git repository", () => {
   it("passes a comment-only change and lists the code files it compared", () => {
     write("src/a.ts", "export const a = 1;\n");
     commit("prune");
-    expect(check("main~1")).toEqual({ checked: ["src/a.ts"], failure: null });
+    expect(check("main~1")).toEqual({ checked: ["src/a.ts"], skipped: [], failures: [] });
   });
 
-  it.each(["README.md", "package.json", "db/0001.sql", "deploy/run.sh"])(
+  it.each(["package.json", "db/0001.sql", "deploy/run.sh"])(
     "refuses a changed %s, which is not a code file",
     (path) => {
       write("src/a.ts", "export const a = 1;\n");
       write(path, "changed\n");
       commit("prune and more");
-      expect(check("main~1").failure).toEqual({
-        file: path,
-        reason: "not a code file, so not compared",
-      });
+      expect(check("main~1").failures).toEqual([
+        { file: path, reason: "not a code file, so not compared" },
+      ]);
     },
   );
+
+  it("lists a changed Markdown file as not compared and still compares the code files", () => {
+    write("README.md", "# changed\n");
+    write("src/a.ts", "export const a = 1;\n");
+    commit("prune and record it");
+    expect(check("main~1")).toEqual({
+      checked: ["src/a.ts"],
+      skipped: ["README.md"],
+      failures: [],
+    });
+  });
+
+  it("lists an added or deleted Markdown file as not compared too", () => {
+    git("rm", "-q", "README.md");
+    write("docs/new.md", "new\n");
+    commit("docs moved");
+    expect(check("main~1")).toEqual({
+      checked: [],
+      skipped: ["README.md", "docs/new.md"],
+      failures: [],
+    });
+  });
+
+  it("refuses a code change in a file after a changed Markdown file", () => {
+    write("README.md", "# changed\n");
+    write("src/a.ts", "// a\nexport const a = 5;\n");
+    commit("docs and code");
+    expect(check("main~1")).toEqual({
+      checked: ["src/a.ts"],
+      skipped: ["README.md"],
+      failures: [{ file: "src/a.ts", reason: 'line 2: code changed from "1" to "5"' }],
+    });
+  });
+
+  it("keeps checking after a refused file and reports every refusal", () => {
+    write("package.json", "changed\n");
+    write("src/a.ts", "export const a = 1;\n");
+    write("src/b.mjs", "// b\nexport const b = 3;\n");
+    commit("several");
+    expect(check("main~1")).toEqual({
+      checked: ["src/a.ts", "src/b.mjs"],
+      skipped: [],
+      failures: [
+        { file: "package.json", reason: "not a code file, so not compared" },
+        { file: "src/b.mjs", reason: 'line 2: code changed from "2" to "3"' },
+      ],
+    });
+  });
 
   it("refuses a code file whose executable bit was removed", () => {
     chmodSync(join(repo, "src/bin.mjs"), 0o644);
     commit("chmod");
-    expect(check("main~1").failure).toEqual({
-      file: "src/bin.mjs",
-      reason: "mode changed 100755 → 100644",
-    });
+    expect(check("main~1").failures).toEqual([
+      { file: "src/bin.mjs", reason: "mode changed 100755 → 100644" },
+    ]);
   });
 
   it("refuses a code file replaced by a symlink whose target text parses the same", () => {
@@ -375,7 +421,9 @@ describe("checkCommentsOnly against a git repository", () => {
     rmSync(join(repo, "src/link.ts"));
     symlinkSync("a//x", join(repo, "src/link.ts"));
     commit("a symlink");
-    expect(check("main~1").failure).toEqual({ file: "src/link.ts", reason: "file type changed" });
+    expect(check("main~1").failures).toEqual([
+      { file: "src/link.ts", reason: "file type changed" },
+    ]);
   });
 
   it("refuses a symlink whose target changed, since only a regular file is compared", () => {
@@ -384,38 +432,51 @@ describe("checkCommentsOnly against a git repository", () => {
     rmSync(join(repo, "src/link.ts"));
     symlinkSync("a//y", join(repo, "src/link.ts"));
     commit("retarget");
-    expect(check("main~1").failure).toEqual({
-      file: "src/link.ts",
-      reason: "not a regular file (mode 120000)",
-    });
+    expect(check("main~1").failures).toEqual([
+      { file: "src/link.ts", reason: "not a regular file (mode 120000)" },
+    ]);
   });
 
-  it("names the first changed file whose code differs", () => {
+  it("names the changed file whose code differs", () => {
     write("src/a.ts", "export const a = 1;\n");
     write("src/b.mjs", "// b\nexport const b = 3;\n");
     commit("prune and edit");
     expect(check("main~1")).toEqual({
       checked: ["src/a.ts", "src/b.mjs"],
-      failure: { file: "src/b.mjs", reason: 'line 2: code changed from "2" to "3"' },
+      skipped: [],
+      failures: [{ file: "src/b.mjs", reason: 'line 2: code changed from "2" to "3"' }],
     });
+  });
+
+  it("reports a code difference in every file, not only the first", () => {
+    write("src/a.ts", "// a\nexport const a = 5;\n");
+    write("src/b.mjs", "// b\nexport const b = 3;\n");
+    commit("two edits");
+    expect(check("main~1").failures).toEqual([
+      { file: "src/a.ts", reason: 'line 2: code changed from "1" to "5"' },
+      { file: "src/b.mjs", reason: 'line 2: code changed from "2" to "3"' },
+    ]);
   });
 
   it("refuses an added code file", () => {
     write("src/c.ts", "export const c = 1;\n");
     commit("add");
-    expect(check("main~1").failure).toEqual({ file: "src/c.ts", reason: "file added" });
+    expect(check("main~1").failures).toEqual([{ file: "src/c.ts", reason: "file added" }]);
   });
 
   it("refuses a deleted code file", () => {
     git("rm", "-q", "src/b.mjs");
     commit("delete");
-    expect(check("main~1").failure).toEqual({ file: "src/b.mjs", reason: "file deleted" });
+    expect(check("main~1").failures).toEqual([{ file: "src/b.mjs", reason: "file deleted" }]);
   });
 
   it("refuses a renamed file as a deletion and an addition", () => {
     git("mv", "src/b.mjs", "src/renamed.mjs");
     commit("rename");
-    expect(check("main~1").failure).toEqual({ file: "src/b.mjs", reason: "file deleted" });
+    expect(check("main~1").failures).toEqual([
+      { file: "src/b.mjs", reason: "file deleted" },
+      { file: "src/renamed.mjs", reason: "file added" },
+    ]);
   });
 
   it("compares from where the branch left the base, so the base's own later code changes do not count", () => {
@@ -426,7 +487,7 @@ describe("checkCommentsOnly against a git repository", () => {
     write("src/b.mjs", "// b\nexport const b = 99;\n");
     commit("main moves on");
     git("checkout", "-q", "prune");
-    expect(check("main")).toEqual({ checked: ["src/a.ts"], failure: null });
+    expect(check("main")).toEqual({ checked: ["src/a.ts"], skipped: [], failures: [] });
   });
 
   it("throws on a base git cannot resolve", () => {
@@ -446,12 +507,15 @@ describe("checkCommentsOnly against a git repository", () => {
       return { code, out, err };
     };
 
-    it("exits 0 and states how many files it compared", () => {
+    it("exits 0, naming each file it compared and how many", () => {
       write("src/a.ts", "export const a = 1;\n");
       commit("prune");
       expect(run(["main~1"])).toEqual({
         code: 0,
-        out: ["comments-only: 1 code file compared; only comments changed"],
+        out: [
+          "comments-only: compared src/a.ts",
+          "comments-only: 1 code file compared; only comments changed",
+        ],
         err: [],
       });
     });
@@ -461,8 +525,38 @@ describe("checkCommentsOnly against a git repository", () => {
       write("src/b.mjs", "export const b = 2;\n");
       commit("prune");
       expect(run(["main~1"]).out).toEqual([
+        "comments-only: compared src/a.ts",
+        "comments-only: compared src/b.mjs",
         "comments-only: 2 code files compared; only comments changed",
       ]);
+    });
+
+    it("exits 0 naming a Markdown file it did not compare beside the code it did", () => {
+      write("README.md", "# changed\n");
+      write("src/a.ts", "export const a = 1;\n");
+      commit("prune and record it");
+      expect(run(["main~1"])).toEqual({
+        code: 0,
+        out: [
+          "comments-only: compared src/a.ts",
+          "comments-only: not compared (Markdown) README.md",
+          "comments-only: 1 code file compared; only comments changed",
+        ],
+        err: [],
+      });
+    });
+
+    it("says it compared nothing when only Markdown changed", () => {
+      write("README.md", "# changed\n");
+      commit("docs");
+      expect(run(["main~1"])).toEqual({
+        code: 0,
+        out: [
+          "comments-only: not compared (Markdown) README.md",
+          "comments-only: no code file changed, so nothing was compared",
+        ],
+        err: [],
+      });
     });
 
     it("exits 0 and says so when nothing changed at all", () => {
@@ -475,12 +569,12 @@ describe("checkCommentsOnly against a git repository", () => {
     });
 
     it("exits 1 naming a changed file that is not code", () => {
-      write("README.md", "# changed\n");
-      commit("docs");
+      write("package.json", "changed\n");
+      commit("config");
       expect(run(["main~1"])).toEqual({
         code: 1,
         out: [],
-        err: ["comments-only: README.md: not a code file, so not compared"],
+        err: ["comments-only: package.json: not a code file, so not compared"],
       });
     });
 
@@ -489,8 +583,22 @@ describe("checkCommentsOnly against a git repository", () => {
       commit("edit");
       expect(run(["main~1"])).toEqual({
         code: 1,
-        out: [],
+        out: ["comments-only: compared src/a.ts"],
         err: ['comments-only: src/a.ts: line 2: code changed from "1" to "5"'],
+      });
+    });
+
+    it("exits 1 naming every refused file", () => {
+      write("package.json", "changed\n");
+      write("src/a.ts", "// a\nexport const a = 5;\n");
+      commit("config and code");
+      expect(run(["main~1"])).toEqual({
+        code: 1,
+        out: ["comments-only: compared src/a.ts"],
+        err: [
+          "comments-only: package.json: not a code file, so not compared",
+          'comments-only: src/a.ts: line 2: code changed from "1" to "5"',
+        ],
       });
     });
 

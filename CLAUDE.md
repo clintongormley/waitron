@@ -90,9 +90,9 @@ wide margin. This section stays in full deliberately: it applies to every change
   to rewording: a rewording is a new claim. A comment another rule here requires at its site stays:
   a guard's "weaker than its name" hedge, a decision "stated at its site", a "commented decision".
   A sweep shows it changed nothing but comments with `node scripts/comments-only.mjs <base>`, weaker
-  than its name: it reads committed changes only; a comment read by a tool its hand-written list
-  does not name is dropped unseen; and a listed tool comment moved to another line without crossing
-  a token passes. Cost: about three in ten non-blank lines of non-test code were comment-only on
+  than its name: it reads committed changes only; a changed Markdown file is listed as not
+  compared and never read; a comment read by a tool its hand-written list does not name is dropped
+  unseen; and a listed tool comment moved to another line without crossing a token passes. Cost: about three in ten non-blank lines of non-test code were comment-only on
   2026-09-24 ([writing-claims.md](docs/developers/writing-claims.md)).
 
 ---

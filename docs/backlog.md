@@ -2954,7 +2954,10 @@ image constraints under *Detail → Box image*.
   §1). The rule change and the checker every pruning pull request passes,
   `scripts/comments-only.mjs <base>`, came first; its header states what it refuses and misses.
   What a pruner meets: it reads commits only, never an uncommitted edit; any changed file that is
-  not TypeScript or JavaScript fails it; and it refuses a trailing comma added or dropped after a
+  not TypeScript, JavaScript or Markdown fails it, while a Markdown file is listed as not compared
+  (since `fix/comments-only-all-files`: before it, the first Markdown file, such as this backlog,
+  failed the run and no file after it was compared); it checks every file and names every refusal;
+  and it refuses a trailing comma added or dropped after a
   spread, where Prettier writes one, so a pruning edit that lets such a call, array or object
   fold onto one line is refused. The packages follow, the fiscal ones under the
   same gates as any other fiscal change: the golden huella test and the `inmutabilidad` suite pass
