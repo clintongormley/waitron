@@ -103,6 +103,16 @@ export const en = {
   "station.state.queued": "New",
   "station.state.preparing": "Preparing",
   "station.state.ready": "Ready",
+  "station.notices": "Changes to sent orders",
+  "station.notice.recalled": "Recalled",
+  "station.notice.void": "Void",
+  "station.notice.changed": "Changed",
+  "station.notice.moved": "Moved",
+  "station.notice.started": "Started",
+  // `{table}` is substituted at the call site.
+  "station.notice.moved_to": "Moved to {table}",
+  "station.notice.acknowledge": "Got it",
+  "station.acknowledge_error": "Could not clear the notice, try again",
   // Device join. `{number}` is substituted at the call site. A refused knock's error code resolves
   // through `i18n/codes.ts`, not a key here.
   "device.join_name_title": "Set up this device",
@@ -450,6 +460,15 @@ export const es: Record<StringKey, string> = {
   "station.state.queued": "Nuevo",
   "station.state.preparing": "Preparando",
   "station.state.ready": "Listo",
+  "station.notices": "Cambios en pedidos enviados",
+  "station.notice.recalled": "Retirado",
+  "station.notice.void": "Anulado",
+  "station.notice.changed": "Cambiado",
+  "station.notice.moved": "Movido",
+  "station.notice.started": "Empezado",
+  "station.notice.moved_to": "Movido a {table}",
+  "station.notice.acknowledge": "Entendido",
+  "station.acknowledge_error": "No se pudo quitar el aviso, inténtalo de nuevo",
   "device.join_name_title": "Configurar este dispositivo",
   "device.join_name_hint":
     "Pon un nombre a este dispositivo y pide a un responsable que lo apruebe en el panel",

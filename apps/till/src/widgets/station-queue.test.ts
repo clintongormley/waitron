@@ -5,7 +5,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { TillStationQueue } from "./station-queue.js";
-import type { StationQueueGroup } from "../api/client.js";
+import type { KitchenNotice, StationQueueGroup } from "../api/client.js";
 
 // The shipped DB defaults.
 const DEFAULT_THRESHOLDS: StationThresholds = {
@@ -1060,4 +1060,172 @@ it("shows a dish's frozen options answers in the KITCHEN's wording", async () =>
     stationId: "st-1",
   });
   expect(el.shadowRoot!.querySelector(".modifier-answer")!.textContent).toBe("PTO: PH");
+});
+
+describe("till-station-queue — kitchen notices strip", () => {
+  const notice = (overrides: Partial<KitchenNotice>): KitchenNotice => ({
+    id: "kn-1",
+    stationId: "st-1",
+    workingOrderId: "wo-1",
+    orderLabel: "#5 · Mesa 4",
+    kind: "void",
+    lineName: "Burger",
+    quantity: "1.000",
+    note: null,
+    wasStarted: false,
+    movedTo: null,
+    createdAt: "2026-08-17T10:10:00.000Z",
+    ...overrides,
+  });
+
+  const fourKinds: KitchenNotice[] = [
+    notice({ id: "kn-void", kind: "void", wasStarted: true }),
+    notice({ id: "kn-recalled", kind: "recalled", lineName: "Paella", quantity: "2.000" }),
+    notice({ id: "kn-changed", kind: "changed", note: "no onions" }),
+    notice({ id: "kn-moved", kind: "moved", movedTo: "Mesa 9", orderLabel: "#7" }),
+  ];
+
+  const rows = (el: TillStationQueue) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-notice]"),
+  ];
+
+  it("renders the notices ABOVE the queue items, in the order the server sent them", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      notices: fourKinds,
+    });
+    expect(rows(el).map((row) => row.dataset.notice)).toEqual([
+      "kn-void",
+      "kn-recalled",
+      "kn-changed",
+      "kn-moved",
+    ]);
+    const strip = el.shadowRoot!.querySelector(".notices")!;
+    const firstItem = el.shadowRoot!.querySelector("[data-item]")!;
+    expect(
+      strip.compareDocumentPosition(firstItem) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("names each kind in TEXT and with its own icon, never by colour alone", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      notices: fourKinds,
+    });
+    const kinds = rows(el).map((row) => row.querySelector(".notice-kind")!.textContent!.trim());
+    expect(kinds).toEqual([
+      t("station.notice.void"),
+      t("station.notice.recalled"),
+      t("station.notice.changed"),
+      t("station.notice.moved"),
+    ]);
+    const icons = rows(el).map((row) => row.querySelector("wt-icon")!);
+    expect(icons.map((icon) => icon.getAttribute("name"))).toEqual([
+      "notice-void",
+      "notice-recalled",
+      "notice-changed",
+      "notice-moved",
+    ]);
+    // An unregistered icon name renders nothing, so each must actually draw a path, and a distinct one.
+    await Promise.all(
+      icons.map(
+        (icon) => (icon as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete,
+      ),
+    );
+    const paths = icons.map((icon) => icon.shadowRoot!.querySelector("path")?.getAttribute("d"));
+    expect(paths.every((d) => typeof d === "string" && d.length > 0)).toBe(true);
+    expect(new Set(paths).size).toBe(4);
+  });
+
+  it("shows the line, its quantity formatted like the queue's, and the order label", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      notices: [
+        notice({ quantity: "1.000" }),
+        notice({ id: "kn-2", quantity: "0.250", lineName: "Jamón" }),
+      ],
+    });
+    const [first, second] = rows(el);
+    expect(first!.querySelector(".notice-line")!.textContent!.trim()).toBe("1× Burger");
+    expect(first!.querySelector(".notice-order")!.textContent!.trim()).toBe("#5 · Mesa 4");
+    expect(second!.querySelector(".notice-line")!.textContent!.trim()).toBe("0.25× Jamón");
+  });
+
+  it("marks a started void as started, and says nothing of it on one that was not", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      notices: [notice({ wasStarted: true }), notice({ id: "kn-2", wasStarted: false })],
+    });
+    const [started, notStarted] = rows(el);
+    expect(started!.querySelector(".notice-started")!.textContent!.trim()).toBe(
+      t("station.notice.started"),
+    );
+    expect(notStarted!.querySelector(".notice-started")).toBeNull();
+  });
+
+  it("shows a changed notice's new note, and the table a moved notice now belongs to", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      notices: fourKinds,
+    });
+    const [voided, , changed, moved] = rows(el);
+    expect(changed!.querySelector(".notice-note")!.textContent!.trim()).toBe("no onions");
+    expect(moved!.querySelector(".notice-moved")!.textContent!.trim()).toBe(
+      t("station.notice.moved_to").replace("{table}", "Mesa 9"),
+    );
+    expect(voided!.querySelector(".notice-note")).toBeNull();
+    expect(voided!.querySelector(".notice-moved")).toBeNull();
+  });
+
+  it("Acknowledge emits acknowledge-notice with the notice's id, bubbling and composed", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      notices: fourKinds,
+    });
+    const handler = vi.fn();
+    document.addEventListener("acknowledge-notice", handler);
+    try {
+      rows(el)[2]!.querySelector<HTMLElement>("[data-acknowledge]")!.click();
+    } finally {
+      document.removeEventListener("acknowledge-notice", handler);
+    }
+    expect(handler).toHaveBeenCalledOnce();
+    expect((handler.mock.calls[0]![0] as CustomEvent).detail).toEqual({ noticeId: "kn-changed" });
+  });
+
+  it("each Acknowledge button's name starts with its visible text and says which notice it clears", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      notices: fourKinds,
+    });
+    const label = rows(el)[0]!.querySelector("[data-acknowledge]")!.getAttribute("aria-label")!;
+    expect(label.startsWith(t("station.notice.acknowledge"))).toBe(true);
+    expect(label).toContain(t("station.notice.void"));
+    expect(label).toContain("1× Burger");
+    expect(label).toContain("#5 · Mesa 4");
+  });
+
+  it("keeps the notices on screen when the queue itself is empty (a void can take the last item)", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [],
+      notices: [notice({})],
+    });
+    expect(rows(el)).toHaveLength(1);
+    expect(el.shadowRoot!.textContent).toContain(t("station.empty"));
+  });
+
+  it("renders no strip at all when there are no notices", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+    });
+    expect(el.shadowRoot!.querySelector(".notices")).toBeNull();
+  });
 });
