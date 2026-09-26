@@ -74,9 +74,8 @@ const ADMIN_PIN = "1234";
 const DEVICE_TOKEN = "stream-pause-e2e-device-token";
 
 /**
- * Above the side file boot and the baseline sales leave with the bucket up — a 1 MiB limit paused
- * the stream while it was still opening (measured 2026-09-26) — and a few seconds of sales once
- * the bucket is frozen. The default is 256 MiB.
+ * Above the side file boot and the baseline sales leave with the bucket up: a 1 MiB limit paused
+ * the stream while it was still opening (measured 2026-09-26). The default is 256 MiB.
  */
 const WAL_LIMIT_BYTES = 16 * 1024 * 1024;
 
@@ -89,7 +88,8 @@ const WAL_LIMIT_BYTES = 16 * 1024 * 1024;
 // Litestream's stop, which escalates to SIGKILL after five seconds.
 const POINTER_WAIT_MS = 30_000;
 const BOOT_MS = 30_000;
-const FILL_WAIT_MS = 30_000;
+/** A loaded CI runner took more than 30 s to reach the limit (testing-guide.md, the pause test). */
+const FILL_WAIT_MS = 180_000;
 const FOLD_SLACK_MS = 15_000;
 const RESUME_WAIT_MS = 30_000;
 const UPLOAD_WAIT_MS = 30_000;
@@ -491,7 +491,9 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
         walStart: number,
         done: (sale: TimedSale, sold: number) => boolean,
         deadline?: { at: number; what: string },
+        beforeEachSale?: () => Promise<void>,
       ): Promise<TimedSale[][]> => {
+        const began = Date.now();
         let sold = 0;
         let stop = false;
         return Promise.all(
@@ -499,10 +501,13 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
             const mine: TimedSale[] = [];
             let walBefore = walStart;
             while (!stop) {
+              await beforeEachSale?.();
+              if (stop) break;
               if (deadline !== undefined && Date.now() > deadline.at) {
                 stop = true;
                 throw new Error(
-                  `timed out waiting for ${deadline.what}: the stream reads ${JSON.stringify(stream())}, the side file ${walBefore} bytes`,
+                  `timed out waiting for ${deadline.what}: the stream reads ${JSON.stringify(stream())}, the side file ${walBefore} bytes, ` +
+                    `${sold} sales in ${Date.now() - began} ms from ${walStart} bytes`,
                 );
               }
               const sale = await sell(walBefore);
@@ -517,6 +522,9 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
       };
       const crosses = (sale: TimedSale) =>
         sale.walBefore >= WAL_LIMIT_BYTES && sale.walAfter < WAL_LIMIT_BYTES;
+      /** The supervisor measures the side file every TICK_MS from the moment it began streaming. */
+      const checkAfter = (at: number) =>
+        streamingSince + TICK_MS * Math.max(1, Math.ceil((at - streamingSince) / TICK_MS));
 
       // 5. Sales with the bucket answering set the bound: a sale that waited on the frozen bucket
       //    would hang with it, so the bound sits far below that and far above a healthy sale.
@@ -543,22 +551,34 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
       ).toBe("unanswered");
 
       // 7. Sales grow the side file past the limit while Litestream still runs against the frozen
-      //    bucket.
+      //    bucket. A supervisor measurement landing after the fill passed the limit but before
+      //    step 8 would pause the stream early, so near one the sellers post nothing from `bound`
+      //    plus LEAD_MS before it until LEAD_MS after it. That holds while each sale beats the
+      //    bound, as step 9 asserts, and the measurement is less than LEAD_MS late.
+      const fillStarted = Date.now();
+      const walAtFill = await fileBytes(walPath);
       const filling = (
-        await sellAtOnce(await fileBytes(walPath), (sale) => sale.walAfter >= WAL_LIMIT_BYTES, {
-          at: Date.now() + FILL_WAIT_MS,
-          what: "the side file to reach the limit",
-        })
+        await sellAtOnce(
+          walAtFill,
+          (sale) => sale.walAfter >= WAL_LIMIT_BYTES,
+          { at: fillStarted + FILL_WAIT_MS, what: "the side file to reach the limit" },
+          async () => {
+            const check = checkAfter(Date.now());
+            if (check - Date.now() < bound + LEAD_MS) {
+              await delay(Math.max(0, check + LEAD_MS - Date.now()));
+            }
+          },
+        )
       ).flat();
+      const fillMs = Date.now() - fillStarted;
       expect(stream().state).toBe("streaming");
 
-      // 8. The supervisor measures the side file every TICK_MS from the moment it began streaming.
-      //    The sellers start again just before its next measurement and sell until one of them sees
-      //    the file folded back: the only thing in the server's own code that shrinks it is the
-      //    stream's fold-back (`checkpointTruncate`, from `stream-host.ts`). Each seller's sales tile
-      //    the time it sold, so each has exactly one sale whose two measurements straddle the fold-back.
-      const nextCheck =
-        streamingSince + TICK_MS * Math.max(1, Math.ceil((Date.now() - streamingSince) / TICK_MS));
+      // 8. The sellers start again just before the supervisor's next measurement and sell until one
+      //    of them sees the file folded back: the only thing in the server's own code that shrinks
+      //    it is the stream's fold-back (`checkpointTruncate`, from `stream-host.ts`). Each seller's
+      //    sales tile the time it sold, so each has exactly one sale whose two measurements straddle
+      //    the fold-back.
+      const nextCheck = checkAfter(Date.now());
       await delay(Math.max(0, nextCheck - LEAD_MS - Date.now()));
       const walAtLead = await fileBytes(walPath);
       expect(
@@ -569,6 +589,7 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
         at: nextCheck + FOLD_SLACK_MS,
         what: "the fold-back",
       });
+      const foldSeenMs = Date.now() - nextCheck;
       const across = folding.map((seller) => seller.filter(crosses));
       expect(across.map((sales) => sales.length)).toEqual(Array<number>(SELLERS).fill(1));
       expect(stream()).toMatchObject({ state: "paused", reason: "side_file_limit", generation });
@@ -583,11 +604,12 @@ describe("the stream's pause at the side-file limit, with sales on the server's 
       const frozen = [...filling, ...folding.flat()];
       console.log(
         `stream pause timings (ms), ${SELLERS} sellers on one till session: slowest of ${baseline.length} with the bucket up ${slowest(baseline).toFixed(0)}; ` +
+          `the fill ${filling.length} sales from ${walAtFill} to ${Math.max(...filling.map((sale) => sale.walAfter))} bytes in ${fillMs}; ` +
           `slowest of ${frozen.length} frozen before the pause ${slowest(frozen).toFixed(0)}; ` +
           `the sales across the fold-back ${across
             .flat()
             .map((sale) => `${sale.ms.toFixed(0)} (${sale.walBefore} -> ${sale.walAfter} bytes)`)
-            .join(", ")}; ` +
+            .join(", ")}, the last answered ${foldSeenMs} after the expected measurement; ` +
           `slowest of ${duringPause.length} during the pause ${slowest(duringPause).toFixed(0)}; bound ${bound.toFixed(0)}`,
       );
       expect(slowest(frozen)).toBeLessThan(bound);
