@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -9,6 +9,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 // The wording is asserted as a person reads it, in English unless a case says otherwise.
 beforeEach(() => setLocale("en"));
 afterEach(() => {
+  vi.restoreAllMocks();
   setLocale("es-ES");
   cleanupWidgets();
 });
@@ -25,17 +26,20 @@ const changedStatus: MenuStatus = {
 };
 
 function preview(changes: MenuChange[], warnings: MenuPreview["warnings"] = []): MenuPreview {
-  return { hash: NEW_HASH, changes, warnings };
+  return { hash: NEW_HASH, changes, warnings, status: changedStatus };
 }
 
-async function mount(props: Partial<MenuPreviewPanel>) {
-  const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", {
+async function mountIn(props: Partial<MenuPreviewPanel>) {
+  return mountWidget<MenuPreviewPanel>("dashboard-menu-preview", {
     menuName: "Lunch Menu",
     status: changedStatus,
     preview: preview([]),
     ...props,
   });
-  return el;
+}
+
+async function mount(props: Partial<MenuPreviewPanel>) {
+  return (await mountIn(props)).el;
 }
 
 function q<T extends HTMLElement = HTMLElement>(el: MenuPreviewPanel, selector: string): T | null {
@@ -263,14 +267,84 @@ it("names the one menu on the publish button, and asks to publish the hash it pr
 });
 
 it("says there is nothing to publish when the working menu matches its live version, and offers no publish", async () => {
-  const el = await mount({
-    status: { state: "current", version: 4, publishedAt: PUBLISHED_AT, hash: NEW_HASH },
-    preview: preview([]),
-  });
+  const current: MenuStatus = {
+    state: "current",
+    version: 4,
+    publishedAt: PUBLISHED_AT,
+    hash: NEW_HASH,
+  };
+  const el = await mount({ status: current, preview: { ...preview([]), status: current } });
   expect(text(q(el, '[data-test="nothing"]'))).toBe(
     t("menu_preview.nothing").replace("{number}", "4"),
   );
   expect(q(el, '[data-test="publish"]')).toBeNull();
+});
+
+it("judges whether there is anything to publish by the state read with the preview", async () => {
+  const current: MenuStatus = {
+    state: "current",
+    version: 4,
+    publishedAt: PUBLISHED_AT,
+    hash: NEW_HASH,
+  };
+  const el = await mount({ status: null, preview: { ...preview([]), status: current } });
+  expect(text(q(el, '[data-test="nothing"]'))).toBe(
+    t("menu_preview.nothing").replace("{number}", "4"),
+  );
+  el.status = current;
+  el.preview = preview([]);
+  await el.updateComplete;
+  expect(q(el, '[data-test="nothing"]')).toBeNull();
+  expect(q(el, '[data-test="publish"]')).not.toBeNull();
+});
+
+it("keeps the click that asks for a publish or a retry from reaching the page around it", async () => {
+  const { el, host } = await mountIn({
+    preview: preview([{ kind: "order_changed", list: [], source: "this_menu" }]),
+  });
+  const clicks: EventTarget[] = [];
+  host.addEventListener("click", (event) => clicks.push(event.target!));
+  const asked: string[] = [];
+  host.addEventListener("wt-menu-publish", (event) => asked.push(event.type));
+  host.addEventListener("wt-preview-retry", (event) => asked.push(event.type));
+  q(el, '[data-test="publish"]')!.click();
+  el.preview = null;
+  el.failed = true;
+  await el.updateComplete;
+  q(el, '[data-test="preview-retry"]')!.click();
+  expect(asked).toEqual(["wt-menu-publish", "wt-preview-retry"]);
+  expect(clicks).toEqual([]);
+});
+
+it("builds one list formatter per language and reuses it", async () => {
+  const Original = Intl.ListFormat;
+  const built: string[] = [];
+  vi.spyOn(Intl, "ListFormat").mockImplementation(function (
+    locale?: Intl.LocalesArgument,
+    options?: Intl.ListFormatOptions,
+  ) {
+    built.push(String(locale));
+    return new Original(locale, options);
+  } as unknown as typeof Intl.ListFormat);
+  const changes: MenuChange[] = [
+    {
+      kind: "product_moved",
+      productId: "p-soup",
+      name: "Soup",
+      from: [["Starters"]],
+      to: [[], ["Mains", "Hot"]],
+      source: "this_menu",
+      alsoOn: ["Dinner Menu", "Terrace Menu"],
+    },
+  ];
+  const el = await mount({ preview: preview(changes) });
+  setLocale("es-ES");
+  el.requestUpdate();
+  await el.updateComplete;
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(items(el, "changes")[0]).toContain("Dinner Menu y Terrace Menu");
+  expect(new Set(built).size).toBe(built.length);
 });
 
 it("offers the publish when the menu differs from its live version but no change can be listed", async () => {

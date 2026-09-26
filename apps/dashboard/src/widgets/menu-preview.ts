@@ -68,8 +68,16 @@ export function statusWords(status: MenuStatus): {
       };
 }
 
+const listFormats = new Map<string, Intl.ListFormat>();
+
 function list(items: readonly string[]): string {
-  return new Intl.ListFormat(currentLocale(), { type: "conjunction" }).format(items);
+  const locale = currentLocale();
+  let format = listFormats.get(locale);
+  if (format === undefined) {
+    format = new Intl.ListFormat(locale, { type: "conjunction" });
+    listFormats.set(locale, format);
+  }
+  return format.format(items);
 }
 
 /** Says a publish did not happen, what is still live, and that the working edits are kept. */
@@ -256,15 +264,15 @@ export class MenuPreviewPanel extends LitElement {
       : source;
   }
 
-  /** The live version's number when the working menu is exactly that version, else null. */
-  #upToDate(): number | null {
-    const status = this.status;
-    return status !== null && status.state !== "unpublished" && status.hash === this.preview?.hash
-      ? status.version
-      : null;
+  /** The live version's number when the working menu is exactly that version, else null. Read
+   * from the state that came with the preview, so both describe the same moment. */
+  #upToDate(preview: MenuPreview): number | null {
+    const { status } = preview;
+    return status.state !== "unpublished" && status.hash === preview.hash ? status.version : null;
   }
 
-  #publish(): void {
+  #publish(event: Event): void {
+    event.stopPropagation();
     if (this.publishing || this.preview === null) return;
     this.dispatchEvent(
       new CustomEvent("wt-menu-publish", {
@@ -326,10 +334,12 @@ export class MenuPreviewPanel extends LitElement {
           <wt-button
             variant="secondary"
             data-test="preview-retry"
-            @click=${() =>
+            @click=${(event: Event) => {
+              event.stopPropagation();
               this.dispatchEvent(
                 new CustomEvent("wt-preview-retry", { detail: {}, bubbles: true, composed: true }),
-              )}
+              );
+            }}
             >${t("menus.retry")}</wt-button
           >
         </div>`;
@@ -337,9 +347,9 @@ export class MenuPreviewPanel extends LitElement {
       body = html`<p class="note" role="status" data-test="preview-loading">
         ${t("menu_preview.loading")}
       </p>`;
-    else if (this.#upToDate() !== null)
+    else if (this.#upToDate(preview) !== null)
       body = html`<p data-test="nothing">
-        ${fill("menu_preview.nothing", { number: String(this.#upToDate()) })}
+        ${fill("menu_preview.nothing", { number: String(this.#upToDate(preview)) })}
       </p>`;
     else if (preview.changes.length === 0)
       body = html`<p class="note" data-test="no-changes">${t("menu_preview.no_changes")}</p>`;
@@ -379,14 +389,15 @@ export class MenuPreviewPanel extends LitElement {
   }
 
   #renderPublish() {
-    if (this.failed || this.preview === null || this.#upToDate() !== null) return nothing;
+    if (this.failed || this.preview === null || this.#upToDate(this.preview) !== null)
+      return nothing;
     const menu = { menu: this.menuName };
     return html`<div class="actions">
       <wt-button
         variant="primary"
         data-test="publish"
         .loading=${this.publishing}
-        @click=${() => this.#publish()}
+        @click=${(event: Event) => this.#publish(event)}
         >${fill(
           this.publishing ? "menu_preview.publishing" : "menu_preview.publish",
           menu,

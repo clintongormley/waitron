@@ -113,6 +113,12 @@ function api(state: State): DashboardApi {
         },
       ],
       warnings: [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lager" }],
+      status: {
+        state: "changed",
+        version: 2,
+        publishedAt: "2026-09-26T10:15:00.000Z",
+        hash: "a".repeat(64),
+      },
     }),
     getMenuPrices: vi.fn().mockResolvedValue([
       {

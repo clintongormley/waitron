@@ -33,6 +33,7 @@ const changes: MenuPreview = {
     },
   ],
   warnings: [{ kind: "shortcut_omitted", layoutName: "Home", name: "Lemonade" }],
+  status: live,
 };
 
 const states: Record<string, Partial<MenuPreviewPanel>> = {
@@ -43,7 +44,12 @@ const states: Record<string, Partial<MenuPreviewPanel>> = {
   unpublished: { status: { state: "unpublished" }, preview: changes },
   "nothing to publish": {
     status: { ...live, state: "current", hash: changes.hash },
-    preview: { ...changes, changes: [], warnings: [] },
+    preview: {
+      ...changes,
+      changes: [],
+      warnings: [],
+      status: { ...live, state: "current", hash: changes.hash },
+    },
   },
   "no changes to list": { preview: { ...changes, changes: [], warnings: [] } },
   publishing: { preview: changes, publishing: true },

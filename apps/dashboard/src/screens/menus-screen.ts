@@ -341,7 +341,8 @@ export class MenusScreen extends LitElement {
   /** Every menu's publication state, followed while the list is shown; null until read. */
   @state() private statuses: Record<string, MenuStatus> | null = null;
   @state() private statusesError = false;
-  /** The open menu's publication state, followed while its editor is shown; null until read. */
+  /** The open menu's publication state, followed while its editor is shown: on the Preview tab
+   * through the preview, which carries it. Null until read. */
   @state() private status: MenuStatus | null = null;
   @state() private statusError = false;
   /** Null until the open menu's preview is read, which happens only on the Preview tab. */
@@ -413,11 +414,14 @@ export class MenusScreen extends LitElement {
   );
   /** The menu whose state is followed, null for every menu's, undefined before the first. */
   #statusFor: string | null | undefined = undefined;
+  /** Whether the open menu's state is followed through its own query rather than the preview. */
+  #statusOwnQuery = false;
   readonly #previewQueries = new DashboardQueries(
     this,
     () => this.api,
     () => {
       this.previewError = true;
+      if (this.status === null) this.statusError = true;
     },
   );
   #previewFor: string | null = null;
@@ -651,11 +655,15 @@ export class MenusScreen extends LitElement {
   }
 
   /** Follows every menu's state while the list is shown, and the open menu's alone while its
-   * editor is. `again` reads it afresh even when it is already followed. */
+   * editor is — except on the Preview tab, where the preview's own answer carries it and a second
+   * query would only repeat the read. `again` reads it afresh even when it is already followed. */
   #followStatus(again = false): void {
     const menuId = this.menuId;
-    if (!again && this.#statusFor === menuId) return;
+    const ownQuery = menuId !== null && this.view !== "preview";
+    if (!again && this.#statusFor === menuId && this.#statusOwnQuery === ownQuery) return;
+    const sameMenu = this.#statusFor === menuId;
     this.#statusFor = menuId;
+    this.#statusOwnQuery = ownQuery;
     if (menuId === null) {
       this.#statusQueries.release("getMenuStatus");
       this.statuses = null;
@@ -669,8 +677,15 @@ export class MenusScreen extends LitElement {
       return;
     }
     this.#statusQueries.release("getMenuStatuses");
-    this.status = null;
-    this.statusError = false;
+    // Moving between tabs of one menu keeps the state on screen until the next read replaces it.
+    if (again || !sameMenu) {
+      this.status = null;
+      this.statusError = false;
+    }
+    if (!ownQuery) {
+      this.#statusQueries.release("getMenuStatus");
+      return;
+    }
     void this.#statusQueries
       .watch("getMenuStatus", [menuId], (value) => {
         this.status = value;
@@ -688,6 +703,8 @@ export class MenusScreen extends LitElement {
       await this.#previewQueries.watch("getMenuPreview", [menuId], (value) => {
         this.preview = value;
         this.previewError = false;
+        this.status = value.status;
+        this.statusError = false;
       });
     } catch {
       this.previewError = true;
@@ -713,6 +730,7 @@ export class MenusScreen extends LitElement {
    * other tab write tables the prices read depends on. The preview likewise. */
   #showView(view: Tab): void {
     this.view = view;
+    this.#followStatus();
     if (view !== "preview") this.#releasePreview();
     else if (this.menuId !== null && this.#previewFor !== this.menuId)
       void this.#watchPreview(this.menuId);
@@ -751,9 +769,12 @@ export class MenusScreen extends LitElement {
     this.publishResult = null;
     this.#releasePrices();
     this.#releasePreview();
-    this.#followStatus();
-    if (menuId === null) this.#structureQueries.release("getMenuStructure");
-    else void this.#watchStructure();
+    // An open menu's state waits for `#showView`, which each caller opening a menu runs next and
+    // which knows whether the Preview tab carries it, so no query starts only to be released.
+    if (menuId === null) {
+      this.#followStatus();
+      this.#structureQueries.release("getMenuStructure");
+    } else void this.#watchStructure();
   }
 
   /** Replaces an address naming a menu that does not exist, or a tab the editor does not have. */
