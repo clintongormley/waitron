@@ -3043,7 +3043,7 @@ describe("mountCatalogueApi — option lists", () => {
     const list = await createListVia(app, { ...doneness(), name: "Lista con dependientes" });
     const res = await send(app, "GET", `/management-api/modifiers/options/${list.id}/dependants`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ dependants: { products: [], menus: [] } });
+    expect(await res.json()).toEqual({ dependants: { products: [] } });
   });
 });
 

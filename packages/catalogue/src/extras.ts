@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, notInArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { AppError, centsToDecimal, stringToCents } from "@waitron/shared";
 import { menuItems } from "./schema/menu.js";
@@ -19,7 +19,7 @@ import {
   type ExtraListInput,
   type MenuExtraPublication,
 } from "./extra-contract.js";
-import type { ExtraListDependants } from "./modifier-list-types.js";
+import type { ExtraListDependants, ExtraListRow } from "./modifier-list-types.js";
 import { findContentTranslationGap } from "./content-languages.js";
 import { parentsWithActiveVariants } from "./variants.js";
 import "./errors.js";
@@ -82,12 +82,34 @@ async function withItems(tx: Transaction, lists: Omit<ExtraList, "items">[]): Pr
   return lists.map((list) => ({ ...list, items: grouped.get(list.id) ?? [] }));
 }
 
-export async function listExtraLists(tx: Transaction): Promise<ExtraList[]> {
+export type { ExtraListRow } from "./modifier-list-types.js";
+
+/** Every list with its items and its usage: one grouped count per carrying table, never one per list. */
+export async function listExtraLists(tx: Transaction): Promise<ExtraListRow[]> {
   const lists = await tx
     .select(listColumns)
     .from(extraLists)
     .orderBy(extraLists.sort, extraLists.id);
-  return withItems(tx, lists);
+  const withAll = await withItems(tx, lists);
+  // Awaited in turn, never Promise.all: they share one transaction (CLAUDE.md §3).
+  const productCounts = await tx
+    .select({
+      listId: productModifiers.extraListId,
+      count: sql<number>`count(distinct ${productModifiers.productId})`,
+    })
+    .from(productModifiers)
+    .where(isNotNull(productModifiers.extraListId))
+    .groupBy(productModifiers.extraListId);
+  const menuCounts = await tx
+    .select({ listId: menuItemExtraLists.listId, count: sql<number>`count(*)` })
+    .from(menuItemExtraLists)
+    .groupBy(menuItemExtraLists.listId);
+  const byProducts = new Map(productCounts.map((row) => [row.listId, row.count]));
+  const byMenus = new Map(menuCounts.map((row) => [row.listId, row.count]));
+  return withAll.map((list) => ({
+    ...list,
+    usage: { products: byProducts.get(list.id) ?? 0, menus: byMenus.get(list.id) ?? 0 },
+  }));
 }
 
 /** The named lists, in the order {@link listExtraLists} returns them, each with its items. */

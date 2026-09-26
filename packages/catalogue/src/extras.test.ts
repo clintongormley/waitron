@@ -17,7 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
-import { createCatalogue, createProduct } from "./operations.js";
+import { addProductToMenu, createCatalogue, createProduct } from "./operations.js";
 import {
   createExtraList,
   deleteExtraList,
@@ -25,6 +25,7 @@ import {
   getExtraList,
   listExtraLists,
   resolveExtraPrice,
+  setMenuItemExtraLists,
   updateExtraList,
 } from "./extras.js";
 import { writeProductModifiers } from "./product-modifiers.js";
@@ -397,6 +398,48 @@ describe("extra list CRUD", () => {
     ]);
     // Nothing publishes it on a menu: the two sides are separate reads, and this file has no menu.
     expect(dependants.menus).toEqual([]);
+  });
+
+  it("lists each extras list with how many products and menu entries carry it", async () => {
+    const carried = await run((tx) => createExtraList(tx, breadList(), "en"));
+    const idle = await run((tx) => createExtraList(tx, { ...breadList(), name: "Idle" }, "en"));
+    const elsewhere = await run((tx) =>
+      createExtraList(tx, { ...breadList(), name: "Soup" }, "en"),
+    );
+    await run(async (tx) => {
+      const lunch = await createCatalogue(tx, { name: "Lunch" });
+      const dinner = await createCatalogue(tx, { name: "Dinner" });
+      const dish = async (name: string, listId: string) => {
+        const product = await createProduct(tx, {
+          catalogueId: lunch.id,
+          categoryId: null,
+          name,
+          unitId: null,
+          unitPrice: "6.00",
+          vatClass: "reduced",
+        });
+        await writeProductModifiers(tx, product.id, [{ kind: "extras", id: listId }]);
+        return product.id;
+      };
+      const sandwich = await dish("sandwich", carried.id);
+      const toastie = await dish("toastie", carried.id);
+      await dish("soup", elsewhere.id);
+      // Three menu entries of carrying dishes; the two on Lunch publish the list and the one on
+      // Dinner does not. So the count of entries is 2, of menus 1, and of every entry of a carrying
+      // dish 3.
+      for (const productId of [sandwich, toastie]) {
+        const entry = await addProductToMenu(tx, { menuId: lunch.id, productId });
+        await setMenuItemExtraLists(tx, entry.id, [{ listId: carried.id, items: [] }]);
+      }
+      await addProductToMenu(tx, { menuId: dinner.id, productId: sandwich });
+    });
+
+    const rows = await run((tx) => listExtraLists(tx));
+
+    const usage = (id: string) => rows.find((row) => row.id === id)!.usage;
+    expect(usage(carried.id)).toEqual({ products: 2, menus: 2 });
+    expect(usage(elsewhere.id)).toEqual({ products: 1, menus: 0 });
+    expect(usage(idle.id)).toEqual({ products: 0, menus: 0 });
   });
 
   it("refuses to read an id that names no list", async () => {

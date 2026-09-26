@@ -1,17 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, notInArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, notInArray, sql } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { optionLabels, optionLists } from "./schema/options.js";
 import { productModifiers } from "./schema/extras.js";
-import { menuItems } from "./schema/menu.js";
 import {
   parseOptionListInput,
   type OptionLabel,
   type OptionList,
   type OptionListInput,
 } from "./option-contract.js";
-import type { OptionListDependants } from "./modifier-list-types.js";
+import type { OptionListDependants, OptionListRow } from "./modifier-list-types.js";
 import { findContentTranslationGap } from "./content-languages.js";
 import "./errors.js";
 
@@ -59,12 +58,25 @@ async function withLabels(
   return lists.map((list) => ({ ...list, labels: grouped.get(list.id) ?? [] }));
 }
 
-export async function listOptionLists(tx: Transaction): Promise<OptionList[]> {
+export type { OptionListRow } from "./modifier-list-types.js";
+
+/** Every list with its labels and the number of products carrying it, counted in one grouped query. */
+export async function listOptionLists(tx: Transaction): Promise<OptionListRow[]> {
   const lists = await tx
     .select(listColumns)
     .from(optionLists)
     .orderBy(optionLists.sort, optionLists.id);
-  return withLabels(tx, lists);
+  const withAll = await withLabels(tx, lists);
+  const productCounts = await tx
+    .select({
+      listId: productModifiers.optionListId,
+      count: sql<number>`count(distinct ${productModifiers.productId})`,
+    })
+    .from(productModifiers)
+    .where(isNotNull(productModifiers.optionListId))
+    .groupBy(productModifiers.optionListId);
+  const byProducts = new Map(productCounts.map((row) => [row.listId, row.count]));
+  return withAll.map((list) => ({ ...list, usage: { products: byProducts.get(list.id) ?? 0 } }));
 }
 
 /**
@@ -242,14 +254,11 @@ export async function deleteOptionList(tx: Transaction, optionListId: string): P
 export type { OptionListDependants } from "./modifier-list-types.js";
 
 /**
- * What deleting this list would touch — the preview a delete confirmation reads. Both sides are
- * detached by the delete rather than blocking it: the `product_modifiers` key cascades, and an
- * order line carries the chosen names as text and points at nothing here.
- *
- * Options lists have no per-menu row at all, so `menus` is every menu offer of a dish
- * that holds the list, named by that product's staff name. An INACTIVE offer is listed like any
- * other. Products come back alphabetical by staff name with the id breaking a tie; menus in
- * offer-id order.
+ * What deleting this list would touch — the preview a delete confirmation reads: the products that
+ * carry it, alphabetical by staff name with the id breaking a tie. They are detached by the delete
+ * rather than blocking it: the `product_modifiers` key cascades, and an order line carries the chosen
+ * names as text and points at nothing here. No table attaches an options list to a menu offer, so a
+ * menu is never a dependant.
  *
  * ``grep -rn 'REFERENCES `option_l' --include='*.sql' packages apps`` prints two keys, both into
  * `option_lists`: `option_labels`' and `product_modifiers`'. No foreign key references `option_labels`.
@@ -259,22 +268,11 @@ export async function optionListDependants(
   optionListId: string,
 ): Promise<OptionListDependants> {
   await assertOptionList(tx, optionListId);
-  // A LEFT join on the offers: a carrying dish that is on no menu still has to reach the products
-  // side, and one that is on several menus contributes one row per offer.
-  const rows = await tx
-    .select({ productId: products.id, name: products.name, menuItemId: menuItems.id })
+  const carrying = await tx
+    .select({ id: products.id, name: products.name })
     .from(productModifiers)
     .innerJoin(products, eq(products.id, productModifiers.productId))
-    .leftJoin(menuItems, eq(menuItems.productId, productModifiers.productId))
     .where(eq(productModifiers.optionListId, optionListId))
     .orderBy(products.name, products.id);
-  const carrying = new Map<string, { id: string; name: string }>();
-  const menus: { id: string; name: string }[] = [];
-  for (const row of rows) {
-    // A dish on two menus arrives twice; the map keeps the query's order and the first of the pair.
-    carrying.set(row.productId, { id: row.productId, name: row.name });
-    if (row.menuItemId !== null) menus.push({ id: row.menuItemId, name: row.name });
-  }
-  menus.sort((left, right) => (left.id < right.id ? -1 : 1));
-  return { products: [...carrying.values()], menus };
+  return { products: carrying };
 }
