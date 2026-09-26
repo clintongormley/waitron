@@ -2955,7 +2955,7 @@ image constraints under *Detail → Box image*.
   `scripts/comments-only.mjs <base>`, came first; its header states what it refuses and misses.
   What a pruner meets: it reads commits only, never an uncommitted edit; any changed file that is
   not TypeScript, JavaScript or a `.md` file fails it, while a `.md` file is listed as not compared
-  and never read; it checks every other file and names every refused file; and it refuses a
+  and never read (#679); it checks every other file and names every refused file; and it refuses a
   trailing comma added or dropped after a spread, where Prettier writes one, so a pruning edit that
   lets such a call, array or object fold onto one line is refused. The packages follow, the fiscal
   ones under the same gates as any other fiscal change: the golden huella test and the
