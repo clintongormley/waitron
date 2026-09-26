@@ -250,7 +250,7 @@ product off but the dashboard no longer calls it, since `PATCH` now carries `act
 `sections_owner_menu_fk` still has no delete rule (Task 1's note stands) — nothing deletes a menu
 today, so it bites only when something does. A product reached through a section offers no extras
 list; that was already so before #659 (checked at `002b79f69`).
-**Menus Task 4 (the Menus screen), on `feat/menus-menu-editor`:** **Products and recipes → Menus**
+**Menus Task 4 (the Menus screen), landed as #664 (2026-09-26):** **Products and recipes → Menus**
 (`/manage/menus`) lists, creates and renames menus, and a menu's Structure tab
 (`/manage/menus/menu/<id>/view/structure`) shows its whole tree, edits any list in it (add, remove,
 reorder by arrow keys, create a section in place, add several products at once) with a breadcrumb
@@ -264,7 +264,11 @@ and colour are still edited on the Sections screen; which section is being edite
 address, only the menu and the tab; and opening "Add to menus" sends one `getMenuStructure` request
 per menu, each of which reads the whole section graph on the server (`readMenuStructure`,
 `packages/catalogue/src/menu-structure.ts`) — one server read returning every menu's structure, as
-`librarySectionUsages` does for usages, would make it one.
+`librarySectionUsages` does for usages, would make it one. Also left by #664: a refused
+change's message sits under the menu's heading, above the tabs, so it shows while the menu loads —
+on a phone the tree sits between it and the list it names; if someone else exactly undoes a move
+while it is still saving, the move's answer is shown over their change until the menu is next read
+(stated in a comment at the site); and no accessibility test covers that message while it shows.
 Next in the lane: menus Task 5 (menu prices, and the old Menus tab goes). The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
