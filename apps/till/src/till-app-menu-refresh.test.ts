@@ -758,3 +758,304 @@ describe("an offers load", () => {
     expect(dialogText(el)).toContain("Lemonade €3.00 → €2.50");
   });
 });
+
+// ── Fix round 1 ──────────────────────────────────────────────────────────────────────────────────
+
+/** A till whose canvas mounts the table screen as the `order` tab's card, beside the counter. */
+const tableCanvas: CanvasDef = {
+  formFactor: "till",
+  tabs: [
+    canvas.tabs[0]!,
+    {
+      key: "floor",
+      title: "Floor",
+      columns: 24,
+      cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
+    },
+    {
+      key: "order",
+      title: "Order",
+      columns: 12,
+      cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
+    },
+  ],
+};
+
+const DINING = {
+  ...V1,
+  context: { ...V1.context, zoneId: "zone-dining", serviceMode: "table_tab" as const },
+};
+
+const table = {
+  id: "t2",
+  label: "2",
+  zoneId: "zone-dining",
+  capacity: 4,
+  state: "open-tab",
+  hasOpenTab: true,
+  tabId: "wo-7",
+  tabLineCount: 1,
+  tabTotal: "3.00",
+  pendingDeliveries: 0,
+  pendingToServe: 1,
+  readyToServe: 0,
+  enRoute: 0,
+  timingBand: "fresh",
+  status: null,
+  nextReservation: null,
+  posX: null,
+  posY: null,
+  shape: null,
+  rotation: null,
+};
+
+const tabLemonade = {
+  lineNo: 1,
+  productId: "Lemonade",
+  quantity: "1.000",
+  unitPriceGross: "3.00",
+  servedAt: null,
+  courseId: null,
+  sentAt: "2026-09-26T09:59:00.000Z",
+  firedAt: "2026-09-26T09:59:00.000Z",
+  state: "queued",
+  note: null,
+  listId: null,
+  menuItemId: "offer-lemonade",
+  parentProductId: null,
+};
+
+/** Table-service stubs; `diningOffers` answers every read of the table's zone after the first. */
+function tableStubs(
+  diningOffers: ZoneOfferCatalogue = DINING,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    getTill: vi.fn().mockResolvedValue({ ...till, canvas: tableCanvas }),
+    listZoneOffers: vi.fn((zoneId: string) =>
+      Promise.resolve(zoneId === "zone-dining" ? DINING : V1),
+    ),
+    getTablesState: vi.fn().mockResolvedValue([table]),
+    listZones: vi
+      .fn()
+      .mockResolvedValue([{ id: "zone-dining", name: "Comedor", displayOrder: 0, active: true }]),
+    listStatuses: vi.fn().mockResolvedValue([]),
+    getTabLines: vi
+      .fn()
+      .mockResolvedValue({ lines: [tabLemonade], revision: 0, editSentLines: true }),
+    addTabRound: vi.fn().mockResolvedValue(undefined),
+    _dining: diningOffers,
+    ...overrides,
+  };
+}
+
+const shellGrid = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-card-grid")!;
+const tableScreen = (el: TillApp) =>
+  shellGrid(el).shadowRoot!.querySelector<
+    HTMLElement & { products: { id: string; available?: boolean }[] }
+  >("till-table-order-screen")!;
+const roundGrid = (el: TillApp) =>
+  tableScreen(el).shadowRoot!.querySelector<
+    HTMLElement & { store: { lines: { blocked?: string }[]; lineCount: number } }
+  >("till-product-grid")!;
+
+async function toTable(el: TillApp): Promise<void> {
+  await toCounter(el);
+  emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+  await flush(el);
+  const floorScreen = shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!;
+  emit(floorScreen, "open-table", { tableId: "t2", hasOpenTab: true });
+  await flush(el);
+  // After the open, every read of the dining zone answers the republished offers.
+  const dining = api._dining as unknown as ZoneOfferCatalogue;
+  api.listZoneOffers.mockImplementation((zoneId: string) =>
+    Promise.resolve(zoneId === "zone-dining" ? dining : V1),
+  );
+}
+
+/** Taps the round's Lemonade tile and then Send. */
+async function sendLemonadeRound(el: TillApp): Promise<void> {
+  const tileButton = [...roundGrid(el).shadowRoot!.querySelectorAll<HTMLElement>("wt-button")].find(
+    (button) => button.querySelector(".name")!.textContent === "Lemonade",
+  )!;
+  tileButton.click();
+  await flush(el);
+  tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-send-round]")!.click();
+  await flush(el);
+}
+
+const versionRefusal = {
+  code: "menu.version_changed",
+  status: 409,
+  menus: [{ menuId: "lunch", liveVersionId: "v2" }],
+};
+
+describe("a table round refused because the menu changed", () => {
+  it("re-sends the round once, asserting v2, when nothing in it changed", async () => {
+    const { el } = await mountApp(
+      tableStubs(catalogue("v2", V1.offers), {
+        addTabRound: vi.fn().mockRejectedValueOnce(versionRefusal).mockResolvedValueOnce(undefined),
+      }),
+    );
+    await toTable(el);
+    await sendLemonadeRound(el);
+
+    expect(api.addTabRound.mock.calls.map((call) => call[1])).toEqual([
+      [{ menuItemId: "offer-lemonade", menuVersionId: "v1", quantity: "1" }],
+      [{ menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1" }],
+    ]);
+    expect(dialog(el)).toBeNull();
+    expect(roundGrid(el).store.lineCount).toBe(0);
+  });
+
+  it("keeps the round and shows the dialog when a price in it changed, sending nothing more", async () => {
+    const { el } = await mountApp(
+      tableStubs(catalogue("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]), {
+        addTabRound: vi.fn().mockRejectedValue(versionRefusal),
+      }),
+    );
+    await toTable(el);
+    await sendLemonadeRound(el);
+
+    expect(api.addTabRound).toHaveBeenCalledOnce();
+    expect(dialogText(el)).toContain("Lemonade €3.00 → €2.50");
+    expect(roundGrid(el).store.lineCount).toBe(1);
+
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
+    await flush(el);
+    expect(roundGrid(el).store.lineCount).toBe(1);
+    expect(api.addTabRound).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a round whose line the new version removed, marked, and sends nothing", async () => {
+    const { el } = await mountApp(
+      tableStubs(catalogue("v2", [burgerOffer()]), {
+        addTabRound: vi.fn().mockRejectedValue(versionRefusal),
+      }),
+    );
+    await toTable(el);
+    await sendLemonadeRound(el);
+
+    expect(dialogText(el)).toContain("Lemonade is no longer on this menu");
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
+    await flush(el);
+    expect(roundGrid(el).store.lines.map((line) => line.blocked)).toEqual(["removed"]);
+    expect(api.addTabRound).toHaveBeenCalledOnce();
+  });
+
+  it("empties the round once the server has taken it", async () => {
+    const { el } = await mountApp(tableStubs());
+    await toTable(el);
+    await sendLemonadeRound(el);
+    expect(api.addTabRound).toHaveBeenCalledOnce();
+    expect(roundGrid(el).store.lineCount).toBe(0);
+  });
+});
+
+describe("the counter's basket hold stays on the counter", () => {
+  it("leaves a table tab's Pay enabled while a counter line is sold out", async () => {
+    const { el } = await mountApp(tableStubs());
+    await toCounter(el);
+    add(el, "Burger");
+    api.menuState.mockResolvedValue(menuState("v1", { products: ["Burger"] }));
+    await poll(el);
+    expect(payButton(el).disabled).toBe(true);
+
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    await flush(el);
+    emit(shellGrid(el).shadowRoot!.querySelector("till-floor-screen")!, "open-table", {
+      tableId: "t2",
+      hasOpenTab: true,
+    });
+    await flush(el);
+    tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+    const tablePay = tableScreen(el)
+      .shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!
+      .shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".pay")!;
+    expect(tablePay.disabled).toBe(false);
+  });
+});
+
+describe("the poll's own costs", () => {
+  it("does not rebuild the counter's products when the sold-out list has not changed", async () => {
+    const { el } = await mountApp();
+    await toCounter(el);
+    api.menuState.mockResolvedValue(menuState("v1", { products: ["Burger"] }));
+    await poll(el);
+    const built = counter(el).products;
+    api.menuState.mockResolvedValue(menuState("v1", { products: ["Burger"] }));
+    await poll(el);
+    expect(counter(el).products).toBe(built);
+  });
+
+  it("stops reading a table's zone once the waiter has left the table", async () => {
+    const { el } = await mountApp(tableStubs());
+    await toTable(el);
+    await poll(el);
+    expect(api.menuState.mock.calls.map((call) => call[0])).toEqual([
+      "zone-counter",
+      "zone-dining",
+    ]);
+
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "tab-select", { key: "floor" });
+    await flush(el);
+    api.menuState.mockClear();
+    await poll(el);
+    expect(api.menuState.mock.calls.map((call) => call[0])).toEqual(["zone-counter"]);
+  });
+
+  it("does not discard a change of service area that a poll's reload overlaps", async () => {
+    let answerSwitch!: (value: ZoneOfferCatalogue) => void;
+    const terrace = {
+      ...catalogue("t1", [offer("offer-terrace-water", "Water", "2.00")]),
+      context: {
+        zoneId: "zone-terrace",
+        departmentId: "department-bar",
+        serviceMode: "prepay" as const,
+      },
+    };
+    const zone = (id: string) => ({
+      id,
+      name: id,
+      departmentId: "department-bar",
+      departmentName: "Bar",
+      serviceMode: "prepay" as const,
+    });
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi
+        .fn()
+        .mockResolvedValue({ ...V1, zones: [zone("zone-counter"), zone("zone-terrace")] }),
+      listZoneOffers: vi.fn((zoneId: string) =>
+        zoneId === "zone-terrace"
+          ? new Promise<ZoneOfferCatalogue>((resolve) => (answerSwitch = resolve))
+          : Promise.resolve(catalogue("v2", V1.offers)),
+      ),
+    });
+    await toCounter(el);
+    emit(counter(el), "counter-zone-selected", { zoneId: "zone-terrace" });
+    await flush(el);
+    api.menuState.mockResolvedValue(menuState("v2"));
+    await poll(el);
+    answerSwitch(terrace);
+    await flush(el);
+
+    expect(counter(el).selectedServiceZoneId).toBe("zone-terrace");
+    expect(counter(el).products.map((product) => product.productId)).toEqual(["Water"]);
+  });
+});
+
+describe("a sign-in whose offers fail to load", () => {
+  it("marks no kept line as gone, and keeps Pay shut", async () => {
+    const { el } = await mountApp();
+    await toCounter(el);
+    add(el, "Lemonade");
+    emit(counter(el), "logout");
+    await flush(el);
+    api.listDefaultZoneOffers.mockRejectedValue(new TypeError("Failed to fetch"));
+    await toCounter(el);
+
+    expect(counter(el).store.lines[0]!.blocked).toBeUndefined();
+    expect(payButton(el).disabled).toBe(true);
+  });
+});

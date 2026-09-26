@@ -284,6 +284,17 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
+  /** Takes out these line objects, wherever they now are; lines added since stay. */
+  removeLines(lines: readonly OrderLine[]): void {
+    const gone = new Set(lines);
+    const kept = this.#lines.filter((line) => !gone.has(line));
+    this.#lines.length = 0;
+    this.#lines.push(...kept);
+    this.#invalidatePricing();
+    this.#markDirty();
+    this.emit("changed");
+  }
+
   removeLine(index: number): void {
     if (index < 0 || index >= this.#lines.length) {
       return;
@@ -294,9 +305,15 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
-  /** Replaces each line named by its index, as a basket refresh re-priced it. */
+  /** Rewrites each line named by its index, as a basket refresh re-priced it. The line object stays
+   * the same one, so whatever a screen keys on it (a round line's course or hold) is kept. */
   adoptLines(adopted: ReadonlyMap<number, OrderLine>): void {
-    for (const [index, line] of adopted) if (index < this.#lines.length) this.#lines[index] = line;
+    for (const [index, line] of adopted) {
+      const own = this.#lines[index];
+      if (own === undefined) continue;
+      for (const key of Object.keys(own)) delete own[key as keyof OrderLine];
+      Object.assign(own, line);
+    }
     this.#invalidatePricing();
     this.#markDirty();
     this.emit("changed");

@@ -61,6 +61,17 @@ import type { FireControlMode } from "../widgets/station-queue.js";
 export type { TableServiceStatus };
 
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
+/**
+ * A round to add to the tab. The round stays in `round` until the app has the server's answer: it
+ * takes out the `sent` lines (the ones `lines` was built from, in order) once the round is added, and
+ * a refused round is kept (D9).
+ */
+export interface SendRoundDetail {
+  lines: RoundLine[];
+  round: WorkingOrderStore;
+  sent: readonly OrderLine[];
+}
+
 export interface ChangeLineDetail {
   lineNo: number;
   /** The line's staff name, for a message about the change shown once another order is open. */
@@ -623,10 +634,12 @@ export class TillTableOrderScreen extends LitElement {
       }
       return roundLine;
     });
-    this.dispatchEvent(
-      new CustomEvent("send-round", { detail: { lines }, bubbles: true, composed: true }),
-    );
-    this.#roundStore.clear();
+    const detail: SendRoundDetail = {
+      lines,
+      round: this.#roundStore,
+      sent: this.#roundStore.lines,
+    };
+    this.dispatchEvent(new CustomEvent("send-round", { detail, bubbles: true, composed: true }));
   }
 
   #selectedCourseId(line: OrderLine): string {

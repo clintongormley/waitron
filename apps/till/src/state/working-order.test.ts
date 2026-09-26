@@ -450,6 +450,31 @@ describe("WorkingOrderStore", () => {
       expect(notified).toBe(1);
     });
 
+    it("adoptLines keeps each line's identity, so what is keyed on a line survives", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "1");
+      const [line] = s.lines;
+      s.adoptLines(new Map([[0, { product: { ...cafe, unitPrice: "1.20" }, quantity: "1" }]]));
+      expect(s.lines[0]).toBe(line);
+      expect(line!.product.unitPrice).toBe("1.20");
+    });
+
+    it("removeLines takes out exactly the named lines, whatever was added since", () => {
+      const s = new WorkingOrderStore();
+      s.addProduct(cafe, "1");
+      s.addProduct(jamon, "0.500");
+      const sent = s.lines.slice(0, 1);
+      s.addProduct(cafe, "2");
+      let notified = 0;
+      s.subscribe(() => notified++);
+      s.removeLines(sent);
+      expect(s.lines.map((line) => [line.product.id, line.quantity])).toEqual([
+        ["jamon", "0.500"],
+        ["cafe", "2"],
+      ]);
+      expect(notified).toBe(1);
+    });
+
     it("setBlocked marks and clears lines, notifying only when a mark changed, never marking dirty", () => {
       const s = new WorkingOrderStore();
       s.addProduct(cafe, "1");

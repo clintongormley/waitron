@@ -185,7 +185,7 @@ export function refreshBasket(
     outcome.adopted.set(index, adopted);
     const from = lineGross(line);
     const to = lineGross(adopted);
-    if (block === undefined && compareDecimal(from, to) !== 0)
+    if (compareDecimal(from, to) !== 0)
       outcome.changed.push({ lineNo, name: lineProductName(product), from, to });
   });
   return outcome;

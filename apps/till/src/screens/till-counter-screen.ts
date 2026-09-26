@@ -111,8 +111,10 @@ export class TillCounterScreen extends LitElement {
   @state() private showAllergens = false;
   /** null shows every dish in the selected menu. */
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
-  /** Pay is shut: a sale is in flight, or a basket line must be resolved first (till-app). */
+  /** A sale is in flight: the visible half of the app's single-flight double-file guard. */
   @property({ type: Boolean }) busy = false;
+  /** A basket line must be resolved before paying (till-app's refresh flow). */
+  @property({ type: Boolean }) payHeld = false;
   /** When undefined the grid renders nothing. */
   @property({ attribute: false }) counterTab?: TabDef;
   @property() cardProvider: CardProvider = "none";
@@ -256,6 +258,7 @@ export class TillCounterScreen extends LitElement {
         .stationQueue=${this.stationQueue}
         .defaultStationId=${this.defaultStationId}
         .busy=${this.busy}
+        .payHeld=${this.payHeld}
         .orderFlow=${this.orderFlow}
         .stage=${this.stage}
         .cardProvider=${this.cardProvider}

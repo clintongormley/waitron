@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
+import { WorkingOrderStore } from "./state/working-order.js";
 import { ServerRouter } from "./api/server-router.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -2190,7 +2191,7 @@ describe("till-app table ordering: a split-off bill left unpaid goes back to its
 });
 
 describe("till-app table ordering: a menu published while a table is open", () => {
-  it("reloads the table's offers and says why when a round is refused for an old menu version", async () => {
+  it("reloads the table's offers, sends the round again once, and says why when that is refused too", async () => {
     const { el } = await mountApp({
       addTabRound: vi.fn().mockRejectedValue({
         code: "menu.version_changed",
@@ -2201,11 +2202,17 @@ describe("till-app table ordering: a menu published while a table is open", () =
     const screen = await toTableOrder(el);
     expect(api.listZoneOffers).toHaveBeenCalledTimes(1);
 
-    emit(screen, "send-round", { lines: [{ menuItemId: "menu-item-sopa-0", quantity: "1" }] });
+    const round = new WorkingOrderStore();
+    emit(screen, "send-round", {
+      lines: [{ menuItemId: "menu-item-sopa-0", quantity: "1" }],
+      round,
+      sent: [],
+    });
     await flush(el);
     await flush(el);
 
-    expect(api.listZoneOffers).toHaveBeenCalledTimes(2);
+    expect(api.addTabRound).toHaveBeenCalledTimes(2);
+    expect(api.listZoneOffers).toHaveBeenCalledTimes(3);
     expect(api.listZoneOffers).toHaveBeenLastCalledWith(floorZone.id);
     expect(banner(el)!.textContent).toContain(codeMessage("menu.version_changed"));
   });

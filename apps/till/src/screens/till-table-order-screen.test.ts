@@ -148,7 +148,7 @@ describe("till-table-order-screen", () => {
     expect(grid(el).products.map((p) => p.id)).toEqual(["vegan"]);
   });
 
-  it("accumulates a round and emits send-round with the picked lines, then clears the round", async () => {
+  it("accumulates a round and emits send-round with the picked lines, keeping the round for the app to empty once sent", async () => {
     const { el } = await mount();
     // Pick a café into the current round (the grid rings an `each` tile straight into its store).
     grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
@@ -162,8 +162,10 @@ describe("till-table-order-screen", () => {
     expect(captured!.composed).toBe(true);
     expect(captured!.bubbles).toBe(true);
     expect(captured!.detail.lines).toEqual([{ menuItemId: "menu-item-cafe", quantity: "1" }]);
-    // The round bar is the CURRENT round only — it clears once sent, ready for the next round.
-    expect(grid(el).store.lineCount).toBe(0);
+    // The round stays until the app has the server's answer: a refused round must not be lost.
+    expect(captured!.detail.round).toBe(grid(el).store);
+    expect(captured!.detail.sent).toEqual(grid(el).store.lines);
+    expect(grid(el).store.lineCount).toBe(1);
   });
 
   it("sends a zone offer by menu-item identity", async () => {

@@ -21,7 +21,7 @@ import "./screens/till-ticket-view.js";
 import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
-import type { ChangeLineDetail } from "./screens/till-table-order-screen.js";
+import type { ChangeLineDetail, SendRoundDetail } from "./screens/till-table-order-screen.js";
 import "./screens/till-station-screen.js";
 import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
@@ -72,6 +72,7 @@ import { SessionActivity } from "./session-activity.js";
 import { MenuStatePoll } from "./state/menu-state-poll.js";
 import {
   type BasketRefresh,
+  type BlockReason,
   lineBlock,
   refreshBasket,
   withUnavailable,
@@ -293,22 +294,56 @@ function versionsMoved(loaded: readonly TillZoneMenu[], polled: MenuState["menus
 /** The offers a zone sells now: as loaded, or with the latest poll's unavailable set applied. */
 class ZoneOffers {
   #loaded: TillMenuOffer[] = [];
+  /** The set last applied, as a sorted key, so an unchanged poll answer rebuilds nothing. */
+  #unavailableKey: string | null = null;
   /** The offers with the latest unavailable set applied, kept rather than rebuilt at each read. */
   live: TillMenuOffer[] = [];
+  byId = new Map<string, TillMenuOffer>();
   versions = new Map<string, string>();
+  /** False after a load that failed, when there is nothing to judge a line against. */
+  loaded = false;
 
-  load(catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">): void {
+  load(catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">, loaded = true): void {
     this.#loaded = catalogue.offers;
-    this.live = catalogue.offers;
+    this.#unavailableKey = null;
+    this.#setLive(catalogue.offers);
     this.versions = new Map(catalogue.menus.map((menu) => [menu.id, menu.versionId]));
+    this.loaded = loaded;
   }
 
-  setUnavailable(unavailable: MenuUnavailable): void {
-    this.live = withUnavailable(this.#loaded, unavailable);
+  /** Whether the set differs from the one last applied; only then is it applied. */
+  setUnavailable(unavailable: MenuUnavailable): boolean {
+    const key = JSON.stringify([
+      [...unavailable.products].sort(),
+      [...unavailable.optionLabels].sort(),
+      unavailable.extraItems
+        .map((item) => `${item.menuItemId} ${item.extraListId} ${item.productId}`)
+        .sort(),
+    ]);
+    if (key === this.#unavailableKey) return false;
+    this.#unavailableKey = key;
+    this.#setLive(withUnavailable(this.#loaded, unavailable));
+    return true;
+  }
+
+  #setLive(live: TillMenuOffer[]): void {
+    this.live = live;
+    this.byId = new Map(live.map((offer) => [offer.id, offer]));
   }
 
   products(): TillProduct[] {
     return this.live.map((offer) => menuOfferToTillProduct(offer, this.versions.get(offer.menuId)));
+  }
+
+  /** Why each line cannot be sold as it stands. A line with no menu version is the server's to price
+   * from the live version, so a missing offer marks only a line that came from a versioned one. */
+  blocks(lines: readonly OrderLine[]): (BlockReason | undefined)[] {
+    return lines.map((line) => {
+      if (!this.loaded || line.workingOrderLineId !== undefined) return undefined;
+      const offer = this.byId.get(line.product.menuItemId ?? "");
+      if (offer === undefined && line.product.menuVersionId === undefined) return undefined;
+      return lineBlock(line, offer)?.reason;
+    });
   }
 }
 
@@ -566,8 +601,9 @@ export class TillApp extends LitElement {
   readonly #tableOffers = new ZoneOffers();
   /** The zone {@link tableProducts} came from, polled beside the counter's while it is set. */
   #tableZoneId?: string;
-  /** The basket-refresh dialog's contents while it is open (D9), and the lines it would re-price. */
-  @state() private basketRefresh?: BasketRefresh;
+  /** The basket-refresh dialog's contents while it is open (D9): the counter's basket or a table's
+   * round, and the lines it would re-price. */
+  @state() private basketRefresh?: BasketRefresh & { store: WorkingOrderStore };
   /** Whether an unsaved basket line keeps Pay shut: it cannot be sold as it stands, or it was priced
    * against a menu version staff have not yet reviewed. */
   @state() private basketHeld = false;
@@ -575,10 +611,22 @@ export class TillApp extends LitElement {
   @state() private basketStale = false;
   /** The refresh flow in flight, which a second trigger joins rather than repeats. */
   #basketRefreshing?: Promise<"adopted" | "confirming" | "failed">;
+  /** Identify the latest poll-started reload of each zone's offers. Kept apart from the staff
+   * actions' counters, so a reload never discards a zone switch's or a table open's answer. */
+  #counterRefreshRequest = 0;
+  #tableRefreshRequest = 0;
+  /** A round being added to the tab, so a second Send waits for its answer rather than doubling it. */
+  #sendingRound = false;
   readonly #menuPoll = new MenuStatePoll({
     read: (zoneId, signal) => this.api.menuState(zoneId, { signal }),
+    // A table's zone only while its order is on screen: each read takes a turn of the write lock.
     zones: () =>
-      [...new Set([this.counterServiceZoneId, this.#tableZoneId ?? ""])].filter((id) => id !== ""),
+      [
+        ...new Set([
+          this.counterServiceZoneId,
+          this.#tableCatalogueActive() ? (this.#tableZoneId ?? "") : "",
+        ]),
+      ].filter((id) => id !== ""),
     onState: (zoneId, state) => this.#onMenuState(zoneId, state),
   });
   @state() private tableSelectedCatalogueId = "";
@@ -909,7 +957,7 @@ export class TillApp extends LitElement {
         this.orderFlow = context.serviceMode;
     } catch {
       offerLoadFailed = true;
-      this.#loadCounterOffers({ offers: [], menus: [] });
+      this.#loadCounterOffers({ offers: [], menus: [] }, false);
       this.counterServiceZones = [];
       this.counterServiceZoneId = "";
     }
@@ -1186,8 +1234,8 @@ export class TillApp extends LitElement {
     }
   }
 
-  #loadCounterOffers(catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">): void {
-    this.#counterOffers.load(catalogue);
+  #loadCounterOffers(catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">, loaded = true): void {
+    this.#counterOffers.load(catalogue, loaded);
     this.menus = catalogue.menus;
     this.#showCounterOffers();
   }
@@ -1207,23 +1255,11 @@ export class TillApp extends LitElement {
     this.tableProducts = this.#tableOffers.products();
   }
 
-  /**
-   * Marks each unsaved basket line that cannot be sold as it stands against the counter's offers,
-   * and works out whether Pay is held. A line with no menu version is the server's to price from the
-   * live version, so a missing offer marks only a line that came from a versioned one.
-   */
+  /** Marks each unsaved basket line that cannot be sold as it stands against the counter's offers,
+   * and works out whether Pay is held. */
   #evaluateBasket(): void {
-    const offerById = new Map(this.#counterOffers.live.map((offer) => [offer.id, offer]));
     const versions = this.#counterOffers.versions;
-    const lines = this.#store.lines;
-    this.#store.setBlocked(
-      lines.map((line) => {
-        if (line.workingOrderLineId !== undefined) return undefined;
-        const offer = offerById.get(line.product.menuItemId ?? "");
-        if (offer === undefined && line.product.menuVersionId === undefined) return undefined;
-        return lineBlock(line, offer)?.reason;
-      }),
-    );
+    this.#store.setBlocked(this.#counterOffers.blocks(this.#store.lines));
     const unsaved = this.#store.lines.filter((line) => line.workingOrderLineId === undefined);
     const stale = (line: OrderLine) =>
       line.product.menuVersionId !== undefined &&
@@ -1239,31 +1275,38 @@ export class TillApp extends LitElement {
    */
   #onMenuState(zoneId: string, state: MenuState): void {
     if (zoneId === this.counterServiceZoneId) {
-      this.#counterOffers.setUnavailable(state.unavailable);
-      this.#showCounterOffers();
+      if (this.#counterOffers.setUnavailable(state.unavailable)) this.#showCounterOffers();
       const busy = this.submitting || this.parking || this.placing;
       if (versionsMoved(this.menus, state.menus) && !busy && this.basketRefresh === undefined)
         void this.#refreshBasket();
     }
     if (zoneId === this.#tableZoneId) {
-      this.#tableOffers.setUnavailable(state.unavailable);
-      this.tableProducts = this.#tableOffers.products();
+      if (this.#tableOffers.setUnavailable(state.unavailable))
+        this.tableProducts = this.#tableOffers.products();
       if (versionsMoved(this.tableMenus, state.menus)) void this.#reloadTableOffers(zoneId);
     }
   }
 
-  /** A table's round is sent straight from the table screen, so its offers are only reloaded. */
-  async #reloadTableOffers(zoneId: string): Promise<void> {
-    const request = ++this.#tableOfferRequest;
+  /** Reloads the open table's offers; false when they could not be read or a table open overtook
+   * the read. */
+  async #reloadTableOffers(zoneId: string): Promise<boolean> {
+    const action = this.#tableOfferRequest;
+    const request = ++this.#tableRefreshRequest;
     try {
       const catalogue = await this.api.listZoneOffers(zoneId);
-      if (request !== this.#tableOfferRequest || zoneId !== this.#tableZoneId) return;
+      if (
+        request !== this.#tableRefreshRequest ||
+        action !== this.#tableOfferRequest ||
+        zoneId !== this.#tableZoneId
+      )
+        return false;
       this.#loadTableOffers(zoneId, catalogue);
       if (!catalogue.menus.some((menu) => menu.id === this.tableSelectedCatalogueId))
         this.tableSelectedCatalogueId =
           catalogue.defaultMenuId ?? this.#defaultCatalogueId(catalogue.menus);
+      return true;
     } catch {
-      // The next poll tries again.
+      return false;
     }
   }
 
@@ -1274,10 +1317,15 @@ export class TillApp extends LitElement {
   #refreshBasket(): Promise<"adopted" | "confirming" | "failed"> {
     this.#basketRefreshing ??= (async () => {
       const zoneId = this.counterServiceZoneId;
-      const request = ++this.#counterOfferRequest;
+      const action = this.#counterOfferRequest;
+      const request = ++this.#counterRefreshRequest;
       try {
         const catalogue = await this.api.listZoneOffers(zoneId);
-        if (request !== this.#counterOfferRequest || zoneId !== this.counterServiceZoneId)
+        if (
+          request !== this.#counterRefreshRequest ||
+          action !== this.#counterOfferRequest ||
+          zoneId !== this.counterServiceZoneId
+        )
           return "failed";
         this.#loadCounterOffers(catalogue);
       } catch {
@@ -1289,24 +1337,40 @@ export class TillApp extends LitElement {
   }
 
   /** Nothing relevant changed: the lines take the live version silently. Otherwise the dialog. */
-  #reconcileBasket(): "adopted" | "confirming" {
-    const outcome = refreshBasket(
-      this.#store.lines,
-      this.#counterOffers.live,
-      this.#counterOffers.versions,
-    );
+  #reconcileBasket(
+    store: WorkingOrderStore = this.#store,
+    offers: ZoneOffers = this.#counterOffers,
+  ): "adopted" | "confirming" {
+    const outcome = refreshBasket(store.lines, offers.live, offers.versions);
     if (outcome.changed.length === 0 && outcome.blocked.length === 0) {
-      if (outcome.adopted.size > 0) this.#store.adoptLines(outcome.adopted);
+      if (outcome.adopted.size > 0) store.adoptLines(outcome.adopted);
       return "adopted";
     }
-    this.basketRefresh = outcome;
+    this.basketRefresh = { ...outcome, store };
     return "confirming";
   }
 
   #onBasketRefreshConfirmed(): void {
-    const adopted = this.basketRefresh?.adopted;
+    const refresh = this.basketRefresh;
     this.basketRefresh = undefined;
-    if (adopted !== undefined && adopted.size > 0) this.#store.adoptLines(adopted);
+    if (refresh === undefined) return;
+    if (refresh.adopted.size > 0) refresh.store.adoptLines(refresh.adopted);
+    // The counter's basket is marked again on every change; a round is marked here.
+    if (refresh.store !== this.#store)
+      refresh.store.setBlocked(this.#tableOffers.blocks(refresh.store.lines));
+  }
+
+  /**
+   * A round refused `menu.version_changed` gets the counter basket's treatment (D9): the table's
+   * offers are reloaded and the round compared with them. It is never lost: the table screen keeps
+   * it until the app takes out the lines the server added.
+   */
+  async #refreshRound(round: WorkingOrderStore): Promise<"adopted" | "confirming" | "failed"> {
+    const zoneId = this.#tableZoneId;
+    if (zoneId === undefined || !(await this.#reloadTableOffers(zoneId))) return "failed";
+    const outcome = this.#reconcileBasket(round, this.#tableOffers);
+    round.setBlocked(this.#tableOffers.blocks(round.lines));
+    return outcome;
   }
 
   /**
@@ -2134,23 +2198,53 @@ export class TillApp extends LitElement {
   /** A round sent to a seated party's settled or abandoned tab lands on the party's next tab, which
    * the screen follows. */
   async #onSendRound(event: Event): Promise<void> {
-    const { lines } = (event as CustomEvent<{ lines: RoundLine[] }>).detail;
-    if (this.activeTabId === undefined) return;
+    const { lines, round, sent } = (
+      event as CustomEvent<Pick<SendRoundDetail, "lines"> & Partial<SendRoundDetail>>
+    ).detail;
+    const tabId = this.activeTabId;
+    if (tabId === undefined || this.#sendingRound) return;
+    this.#sendingRound = true;
+    try {
+      await this.#sendRound(tabId, lines, round, sent ?? [], false);
+    } finally {
+      this.#sendingRound = false;
+    }
+  }
+
+  /**
+   * A refused round stays on the table screen. One the server may have added — no answer came —
+   * is taken out as before, because sending it again could put it on the tab twice.
+   */
+  async #sendRound(
+    tabId: string,
+    lines: RoundLine[],
+    round: WorkingOrderStore | undefined,
+    sent: readonly OrderLine[],
+    retried: boolean,
+  ): Promise<void> {
     this.errorKey = undefined;
     let landedOn: string;
     try {
-      landedOn = (await this.api.addTabRound(this.activeTabId, lines)).tabId;
+      landedOn = (await this.api.addTabRound(tabId, lines)).tabId;
     } catch (error) {
-      this.errorKey = tableWriteError(error);
-      // The table screen has already emptied its round, so the waiter adds it again from the offers
-      // reloaded here.
-      if (isVersionRefusal(error) && this.#tableZoneId !== undefined) {
-        this.errorKey = { code: "menu.version_changed" };
-        await this.#reloadTableOffers(this.#tableZoneId);
+      if (isVersionRefusal(error) && round !== undefined) {
+        const outcome = await this.#refreshRound(round);
+        if (outcome === "adopted" && !retried) {
+          const reasserted = lines.map((line, index) => {
+            const own = sent[index];
+            return own === undefined ? line : { ...line, ...toWireProductIdentity(own.product) };
+          });
+          return this.#sendRound(tabId, reasserted, round, sent, true);
+        }
+        if (outcome !== "confirming") this.errorKey = { code: "menu.version_changed" };
+        return;
       }
+      this.errorKey = tableWriteError(error);
+      if (isNetworkFailure(error)) round?.removeLines(sent);
       return;
     }
-    if (landedOn !== this.activeTabId) {
+    round?.removeLines(sent);
+    if (landedOn !== tabId && this.activeTabId === tabId) {
       this.activeTabId = landedOn;
       await this.#reloadTables();
       this.#rememberOrderParty();
@@ -2555,6 +2649,7 @@ export class TillApp extends LitElement {
    * answers would hold up every table the next operator opens. */
   #endOperatorSession(): void {
     this.#menuPoll.stop();
+    this.#tableZoneId = undefined;
     // The basket stays as it was, as a cancel leaves it; the next sign-in's offers load checks it.
     this.basketRefresh = undefined;
     this.#operatorSession++;
@@ -2785,7 +2880,8 @@ export class TillApp extends LitElement {
         .invoiceLocale=${this.invoiceLocale}
         .orderFlow=${this.orderFlow}
         .stage=${this.stage}
-        .busy=${this.submitting || this.placing || this.basketHeld}
+        .busy=${this.submitting || this.placing}
+        .payHeld=${this.basketHeld}
         .counterTab=${tab}
         .cardProvider=${this.cardProvider}
         .tipsEnabled=${this.tipsEnabled}
@@ -2803,7 +2899,8 @@ export class TillApp extends LitElement {
       .heldOrders=${this.heldOrders}
       .stationQueue=${this.stationQueue}
       .defaultStationId=${this.#defaultStationId()}
-      .busy=${this.submitting || this.basketHeld}
+      .busy=${this.submitting}
+      .payHeld=${this.basketHeld}
       .orderFlow=${this.orderFlow}
       .stage=${this.stage}
       .cardProvider=${this.cardProvider}

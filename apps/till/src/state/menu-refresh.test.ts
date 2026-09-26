@@ -351,6 +351,26 @@ describe("refreshBasket", () => {
     expect(outcome.adopted.get(1)!.product.menuVersionId).toBe("v2");
   });
 
+  it("shows the new price of a line it blocks too, so confirming never re-prices it unseen", () => {
+    const cheese = {
+      listId: "list-extras",
+      productId: "cheese",
+      name: "cheese",
+      price: "1.00",
+      quantity: 1,
+    };
+    const line = lineOf(burger, "v1", { extras: [cheese] });
+    const dearerNoCheese = {
+      ...burger,
+      unitPrice: "12.00",
+      offeredModifiers: [extrasList("list-extras", [extraItem("cheese", "1.00", false)])],
+    };
+    const outcome = refreshBasket([line], [dearerNoCheese], live);
+    expect(outcome.blocked).toEqual([{ lineNo: 1, name: "cheese", reason: "extra_unavailable" }]);
+    expect(outcome.changed).toEqual([{ lineNo: 1, name: "burger", from: "10.00", to: "13.00" }]);
+    expect(outcome.adopted.get(0)!.product.unitPrice).toBe("12.00");
+  });
+
   it("keeps a pick the live version no longer offers as it was, so the line stays blocked for it", () => {
     const bacon = {
       listId: "list-extras",
