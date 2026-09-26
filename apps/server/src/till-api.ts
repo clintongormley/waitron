@@ -229,6 +229,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "sale.empty_basket": 400,
   "sale.unknown_product": 400,
   "product.variant_required": 400,
+  // A line never sent whose product sold out, refused at send and at pay (spec §11.3).
+  "product.unavailable": 409,
   "modifier.invalid": 400,
   "sale.unsupported_tender": 400,
   "sale.tender_shortfall": 400,

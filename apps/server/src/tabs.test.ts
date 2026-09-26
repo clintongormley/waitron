@@ -1407,3 +1407,63 @@ describe("with changes to sent items switched off", () => {
     expect(state!.ticket!.firedAt).toBeNull();
   });
 });
+
+describe("a line with no fired ticket whose product sold out cannot be sent", () => {
+  it("refuses to send a recalled line again once its product is unavailable, changing nothing", async () => {
+    const { cfg, tableId, cafeId, cafeOffer } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
+    );
+    await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]));
+    await db.execute(sql`update products set available = 0 where id = ${cafeId}`);
+
+    await expect(asApp(cfg, (tx) => sendLines(tx, cfg, tabId, [1]))).rejects.toMatchObject({
+      code: "product.unavailable",
+      params: { productId: cafeId },
+    });
+    const [state] = await sentState(tabId);
+    expect(state!.ticket!.firedAt).toBeNull();
+  });
+
+  it("refuses to fire a held course whose line sold out, and one whose extra did", async () => {
+    const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
+    const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
+    const course = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
+    );
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [
+        {
+          menuItemId: cafeOffer,
+          quantity: "1",
+          courseId: course.id,
+          hold: true,
+          extras: [{ listId, picks: [{ productId: aguaId, quantity: 1 }] }],
+        },
+      ]),
+    );
+    await db.execute(sql`update products set available = 0 where id = ${aguaId}`);
+
+    await expect(asApp(cfg, (tx) => fireCourse(tx, cfg, tabId, course.id))).rejects.toMatchObject({
+      code: "product.unavailable",
+      params: { productId: aguaId },
+    });
+    expect((await sentState(tabId)).map((line) => line.sentAt)).toEqual([null, null]);
+  });
+
+  it("sends a held line whose product is still available", async () => {
+    const { cfg, tableId, cafeOffer, aguaId } = await setupVenue();
+    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", hold: true }]),
+    );
+    // Another product selling out does not matter.
+    await db.execute(sql`update products set available = 0 where id = ${aguaId}`);
+
+    await asApp(cfg, (tx) => sendLines(tx, cfg, tabId, []));
+
+    expect((await sentState(tabId))[0]!.ticket!.firedAt).not.toBeNull();
+  });
+});

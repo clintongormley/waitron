@@ -64,6 +64,7 @@ import {
   parkOrder,
   placeOrder,
   priceStoredOrder,
+  priceStoredOrderForIssuance,
   readTabLines,
   recallLines,
   sendLines,
@@ -2846,6 +2847,26 @@ describe("placeOrder / sendToPrep fire ticket items", () => {
       .where(eq(ticketItems.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     expect(items.map((item) => item.firedAt !== null)).toEqual([true, false]);
+  });
+
+  it("placeOrder refuses a line whose product sold out after it was parked, placing nothing", async () => {
+    const { cfg, catalogueId } = await setupVenue("ticket_then_pay");
+    const cafe = await withTransaction(db, async (tx) => {
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      return makeProduct(tx, cfg, catalogueId, {});
+    });
+    const id = randomUUID();
+    await parkProducts(cfg, { id, lines: [line(cafe)] });
+    await db.execute(sql`update products set available = 0 where id = ${cafe}`);
+
+    await expect(
+      placeOrder({ db, backend: stubBackend, clock: stubClock }, cfg, id, OPERATOR, cfg.tillId),
+    ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: cafe } });
+    const [order] = await db
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, id));
+    expect(order!.status).toBe("open");
   });
 
   it("sendToPrep refuses an order that is not settled (working_order.not_settled)", async () => {
@@ -7241,5 +7262,52 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, id)),
     ).toEqual([parked]);
+  });
+});
+
+describe("pricing a stored order to pay it refuses a line never sent whose product sold out", () => {
+  async function variantOrder(): Promise<{
+    orderId: string;
+    variantId: string;
+    productId: string;
+  }> {
+    const { cfg, zoneId, catalogueId } = await setupVenue();
+    const orderId = randomUUID();
+    const seeded = await withTransaction(db, async (tx) => {
+      const offer = await seedVariantOffer(tx, catalogueId);
+      await createOpenOrder(
+        tx,
+        cfg,
+        orderId,
+        [{ menuItemId: offer.offerId, variantId: offer.variantId, quantity: "1" }],
+        null,
+        { zoneId },
+      );
+      return offer;
+    });
+    return { orderId, variantId: seeded.variantId, productId: seeded.productId };
+  }
+
+  it("refuses a variant line when the dish it is a variant of sold out", async () => {
+    const { orderId, variantId, productId } = await variantOrder();
+    await db.execute(sql`update products set available = 0 where id = ${productId}`);
+
+    await expect(
+      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId)),
+    ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: variantId } });
+  });
+
+  it("prices the same line while both are available, and once it was sent", async () => {
+    const { orderId, productId } = await variantOrder();
+    await expect(
+      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId)),
+    ).resolves.toMatchObject({ priced: { total: "3.20" } });
+
+    await db.execute(sql`update working_order_lines set sent_at = ${nowIso()}
+      where working_order_id = ${orderId}`);
+    await db.execute(sql`update products set available = 0 where id = ${productId}`);
+    await expect(
+      withTransaction(db, (tx) => priceStoredOrderForIssuance(tx, orderId)),
+    ).resolves.toMatchObject({ priced: { total: "3.20" } });
   });
 });

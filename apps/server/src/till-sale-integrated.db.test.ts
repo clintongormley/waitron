@@ -868,6 +868,37 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     expect(payments[0]!.linkedToSale).toBe(true);
   });
 
+  it("recovers a lost capture whose product has since sold out: the card was charged, so it files", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const { deps } = integratedDeps(cfg, suite.db);
+    const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
+    suite.db.run(sql`update products set available = 0 where id = ${cafe.id}`);
+
+    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+
+    expect(out.outcome).toBe("captured");
+    expect(await filedSaleTotal(id)).toBe("1.50");
+  });
+
+  it("refuses a fresh card payment before the reader is asked when a line never sent has sold out", async () => {
+    const { cfg, cafe } = await setupVenue();
+    const { deps, client } = integratedDeps(cfg, suite.db);
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    suite.db.run(sql`update products set available = 0 where id = ${cafe.id}`);
+
+    await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
+      code: "product.unavailable",
+      params: { productId: cafe.id },
+    });
+    expect(client.lastCreateIntent).toBeUndefined();
+    expect(await saleCount(id)).toBe(0);
+  });
+
   it("recovers a lost-T2 capture on a PLACED order: files, stamps collected_at, drops from the station queue", async () => {
     const { cfg, cafe } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);

@@ -898,7 +898,7 @@ async function finalizeRecovery(
       tx,
       cfg,
       req.id,
-      await priceStoredOrderForIssuance(tx, req.id),
+      await priceStoredOrderForIssuance(tx, req.id, { refuseUnsentUnavailable: false }),
     );
     const capturedAmount = decimal(captured.amount);
 

@@ -471,6 +471,10 @@ async function priceOrderLines(
  */
 const firedQuantity = sql<number>`coalesce(${ticketItems.quantity}, ${workingOrderLines.quantity})`;
 
+/** A line's product can be sold now: Active and Available, and so is its parent for a variant. */
+const productSellable = sql<number>`(${products.active} and ${products.available}
+  and (${parentProducts.id} is null or (${parentProducts.active} and ${parentProducts.available})))`;
+
 const storedLineColumns = {
   id: workingOrderLines.id,
   productId: workingOrderLines.productId,
@@ -524,9 +528,14 @@ export async function readLockedLines(
 async function readLockedLinesForIssuance(
   tx: Transaction,
   workingOrderId: string,
-): Promise<(StoredOrderLine & { vatClass: VatClass | null })[]> {
+): Promise<(StoredOrderLine & { vatClass: VatClass | null; payable: boolean })[]> {
   const rows = await tx
-    .select({ ...storedLineColumns, vatClass: effectiveProductColumns.vatClass })
+    .select({
+      ...storedLineColumns,
+      vatClass: effectiveProductColumns.vatClass,
+      sentAt: workingOrderLines.sentAt,
+      sellable: productSellable,
+    })
     .from(workingOrderLines)
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(parentProducts, parentJoin)
@@ -536,6 +545,9 @@ async function readLockedLinesForIssuance(
     ...line,
     // `working_order_lines_product_fk` is `on delete restrict`, so a line naming a product joins it.
     vatClass: line.identity.productId === null ? null : (rows[i]!.vatClass as VatClass),
+    // A sent line is committed work, payable whatever its product's availability now.
+    payable:
+      line.identity.productId === null || rows[i]!.sentAt !== null || Boolean(rows[i]!.sellable),
   }));
 }
 
@@ -607,12 +619,22 @@ export async function priceStoredOrder(
  * The resolved rate and its net unit price are written back, on the caller's transaction, onto each
  * line whose rate changed, but only while the order is open. A placed order's lines are not
  * written.
+ *
+ * A line never sent whose product cannot be sold now is refused `product.unavailable` (spec §11.3):
+ * staff remove it, or split the rest off, before paying. A sent line pays whatever its product's
+ * availability. `refuseUnsentUnavailable: false` is for a payment the card network has already
+ * captured, which is filed as it stands.
  */
 export async function priceStoredOrderForIssuance(
   tx: Transaction,
   workingOrderId: string,
+  options: { refuseUnsentUnavailable: boolean } = { refuseUnsentUnavailable: true },
 ): Promise<PricedOrder> {
   const stored = await readLockedLinesForIssuance(tx, workingOrderId);
+  const unpayable = stored.find((line) => !line.payable);
+  if (options.refuseUnsentUnavailable && unpayable !== undefined) {
+    throw new AppError("product.unavailable", { productId: unpayable.identity.productId! });
+  }
   const priced = priceLockedLines(
     stored.map(({ locked, vatClass }) =>
       // A line with no product names nothing to resolve from, so it keeps the rate it was added at.
@@ -1187,6 +1209,35 @@ async function heldNoRouteLines(
 }
 
 /**
+ * Refuse `product.unavailable` for the first of these dish lines, or their extras children, whose
+ * product cannot be sold now. A caller passes the lines it is about to send that have no fired
+ * ticket item — never fired, held, or recalled — so a sold-out dish is never sent to the kitchen
+ * again, whether or not the line was stamped sent before.
+ */
+async function assertSendable(tx: Transaction, lineIds: readonly string[]): Promise<void> {
+  if (lineIds.length === 0) return;
+  const [refused] = await tx
+    .select({ productId: workingOrderLines.productId })
+    .from(workingOrderLines)
+    .innerJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(parentProducts, parentJoin)
+    .where(
+      and(
+        or(
+          inArray(workingOrderLines.id, [...lineIds]),
+          inArray(workingOrderLines.parentLineId, [...lineIds]),
+        ),
+        sql`not ${productSellable}`,
+      ),
+    )
+    .orderBy(workingOrderLines.lineNo)
+    .limit(1);
+  if (refused !== undefined) {
+    throw new AppError("product.unavailable", { productId: refused.productId! });
+  }
+}
+
+/**
  * Release held items of a course by stamping fired_at. Require the course to exist
  * in this venue, including a deactivated course whose food still needs release.
  * Already-fired items retain their timestamps; an empty held set is a no-op.
@@ -1215,6 +1266,7 @@ export async function fireCourse(
       quantity: ticketItems.quantity,
     });
   const noRoute = await heldNoRouteLines(tx, cfg, orderId, { courseIds: [courseId], lineIds: [] });
+  await assertSendable(tx, [...firedItems.map((item) => item.workingOrderLineId), ...noRoute]);
   await stampSent(
     tx,
     orderId,
@@ -1275,6 +1327,7 @@ export async function sendLines(
     courseIds: [...new Set(firedItems.map((item) => item.courseId))],
     lineIds: namedLineIds,
   });
+  await assertSendable(tx, [...firedItems.map((item) => item.workingOrderLineId), ...noRoute]);
   await stampSent(
     tx,
     tabId,
@@ -2927,6 +2980,18 @@ export async function placeOrder(
     const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
     const orderFlow = serviceContext?.serviceMode ?? cfg.orderFlow;
 
+    // Nothing on an open order has fired yet, so every dish line is about to be sent.
+    await assertSendable(
+      tx,
+      (
+        await tx
+          .select({ id: workingOrderLines.id })
+          .from(workingOrderLines)
+          .where(
+            and(eq(workingOrderLines.workingOrderId, id), isNull(workingOrderLines.parentLineId)),
+          )
+      ).map((line) => line.id),
+    );
     // Placing commits the whole order, a course the kitchen holds included, so every line is sent.
     // Stamped while the order is still open, which is the only time a line may be written.
     await tx
@@ -3087,6 +3152,10 @@ export async function sendToPrep(
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
+    await assertSendable(
+      tx,
+      firedLines.filter((line) => line.parentLineId === null).map((line) => line.id),
+    );
     await fireLines(tx, cfg, id, firedLines);
   });
 }

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { floorZones, locations, tills, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -394,7 +395,7 @@ describe("table + tab routes", () => {
     const { id } = (await (
       await request("/api/tables", {
         method: "POST",
-        body: JSON.stringify({ label: "11", zoneId: tablesZoneId }),
+        body: JSON.stringify({ label: `V-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
       })
     ).json()) as { id: string };
     const { tabId } = (await (
@@ -423,6 +424,40 @@ describe("table + tab routes", () => {
       quantity: string;
     }[];
     expect(lines.map((line) => line.quantity)).toEqual(["2.000"]);
+  });
+
+  it("POST .../lines/send answers 409 product.unavailable for a recalled line whose product sold out", async () => {
+    const { id } = (await (
+      await request("/api/tables", {
+        method: "POST",
+        body: JSON.stringify({ label: `S-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
+      })
+    ).json()) as { id: string };
+    const { tabId } = (await (
+      await request(`/api/tables/${id}/tab`, { method: "POST", body: JSON.stringify({}) })
+    ).json()) as { tabId: string };
+    await request(`/api/working-orders/${tabId}/round`, {
+      method: "POST",
+      body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
+    });
+    await request(`/api/working-orders/${tabId}/lines/recall`, {
+      method: "POST",
+      body: JSON.stringify({ lineNos: [1] }),
+    });
+    await suite.db.execute(sql`update products set available = 0 where id = ${productId}`);
+    try {
+      const sent = await request(`/api/working-orders/${tabId}/lines/send`, {
+        method: "POST",
+        body: JSON.stringify({ lineNos: [1] }),
+      });
+      expect(sent.status).toBe(409);
+      expect(await sent.json()).toMatchObject({
+        error: { code: "product.unavailable", params: { productId } },
+      });
+    } finally {
+      // The suite shares one product across its cases.
+      await suite.db.execute(sql`update products set available = 1 where id = ${productId}`);
+    }
   });
 
   it("GET /api/working-orders/:id/lines reads an open tab's lines with locked price + served state", async () => {

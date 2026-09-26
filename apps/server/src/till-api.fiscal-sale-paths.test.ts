@@ -2363,4 +2363,46 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
     expect(await sent.text()).toBe("");
     expect((await queue()).find((g) => g.orderId === workingOrderId)).toBeDefined();
   });
+  it("answers 409 product.unavailable and fires nothing when the paid product has since sold out", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    await suite.db.execute(
+      sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
+    );
+    await suite.db.execute(sql`
+      update departments set default_service_mode = 'ticket_then_pay'
+      where location_id = ${cfg.locationId}`);
+    const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDeps(modeCfg), noopLog);
+    const cookie = await loginSession(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg);
+    const workingOrderId = randomUUID();
+    const sale = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    });
+    expect(sale.status).toBe(200);
+    await suite.db.execute(sql`update products set available = 0 where id = ${each.id}`);
+
+    const sent = await app.request(`/api/working-orders/${workingOrderId}/prep`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+
+    expect(sent.status).toBe(409);
+    expect(await sent.json()).toMatchObject({
+      error: { code: "product.unavailable", params: { productId: each.id } },
+    });
+    const fired = await suite.db.execute(
+      sql`select 1 from ticket_items where working_order_id = ${workingOrderId}`,
+    );
+    expect(fired.rows).toHaveLength(0);
+  });
 });
