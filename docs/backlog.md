@@ -3267,10 +3267,11 @@ image constraints under *Detail → Box image*.
     resend answered 200 (`expected 200 to be 409`), adopt was called twice, and the record moved
     from "venue_committed" to "complete". Still not measured: what the first identity leaves
     behind on the primary and on this node; the wizard has no way to reset such a box.
-    **Found after A50 (#685); (a) still open, (b) done by A55 below:** the owner answered both on
+    **Found after A50 (#685); (a) done box-side by A56 below, (b) done by A55 below:** the owner answered both on
     2026-09-26 — (a) "wizard now", a reset driven from the setup wizard, queued as A56; (b) "queue
-    it", queued as A55. (a) both new wizard messages tell the
-    operator to contact support, and nothing tells support what to do for this case. The reset is
+    it", queued as A55. (a) several wizard messages, among them
+    `ALREADY_STAMPED_MESSAGE` (`apps/setup/src/setup-app.ts`), tell the operator to contact support,
+    and nothing tells support what to do for this case. The reset is
     `sudo bash waitron.sh reset` (`deploy/README.md`, "Resetting a box"), run by someone with a
     terminal on the box: it empties the box's state volume except its certificate folder, which
     removes the venue database, `setup-operation.json`, `modules.json`, `pending-adoption.json`
@@ -3319,8 +3320,10 @@ image constraints under *Detail → Box image*.
     /setup-api/reset-incomplete-adopt` (`apps/server/src/setup-api.ts`) checks them against a proof
     adopt now saves in `setup-operation.json` when the primary has accepted that login (the person
     id and a scrypt hash of the password; `/setup-api/status` never returns it), with the dashboard
-    login's delay policy after repeated wrong passwords. It answers `setup.reset_unavailable` unless
-    an adopt is saved past "started" and short of "complete". The route deletes nothing: it stages
+    login's delay policy after repeated wrong passwords, counted against the saved login whatever
+    person id is sent. It answers `setup.operation_conflict` when `setup-operation.json` holds
+    something that is not a valid setup record, and `setup.reset_unavailable` unless an adopt is saved past "started" and short of
+    "complete". The route deletes nothing: it stages
     `reset-request.json` and restarts, and the next start (`runStagedReset`,
     `apps/server/src/reset-request.ts`, run by `runEntry` after the staged restore) takes the venue
     lock, re-checks that no `trading.env` exists, that the saved adopt is the one staged and still

@@ -1374,9 +1374,10 @@ by nothing.
 | --- | --- | --- |
 | `apps/server/src/boot.ts` | the server | locks three times in turn: the stamp probe, the migrate, and the long-lived store, which holds it until the server closes or its start fails. Between them the folder is briefly free, unless the container entry (`node-entry.ts`) started the server: its hold covers those gaps |
 | `apps/server/src/backup-supervisor.ts` (`reload`) | inside the server | shares the server's hold |
-| `apps/server/src/node-entry.ts` (`clearReplacedDatabases`, `assertNotAhead`) and the staged restore it runs | the container entrypoint, the same process as the server | the staged restore locks on its own; then `runEntry` takes `lockVenueDatabase` and holds it from clearing set-aside folders (`clearReplacedDatabases`) through the ahead check until `startServer` settles or an earlier step throws. The ahead check's opens and the server's opens during its start share that hold |
+| `apps/server/src/node-entry.ts` (`clearReplacedDatabases`, `assertNotAhead`) and the staged restore and staged reset it runs | the container entrypoint, the same process as the server | the staged restore, then the staged reset, each locks on its own and releases before `runEntry` takes `lockVenueDatabase` and holds it from clearing set-aside folders (`clearReplacedDatabases`) through the ahead check until `startServer` settles or an earlier step throws. The ahead check's opens and the server's opens during its start share that hold |
 | `apps/server/src/restore.ts` (`writeValidated`) | `waitron-restore` (server stopped) and the staged restore | takes the lock before its first change and holds it to the end; its migrate and hook open share it. Refused while another process holds the folder |
 | `apps/server/src/restore-stream.ts` (`refuseIfArchiveSourceLive`, and `readRestoredCopy` inside `prepareStreamRestore`) | `waitron-restore`, before `writeValidated`; and the setup-mode server before it stages a restore (`boot.ts`): `refuseIfArchiveSourceLive` for `/setup-api/restore` and `/setup-api/cloud-recovery/restore`, `prepareStreamRestore` for `/setup-api/restore-bucket` | each locks (default) its own scratch folder under the state folder, made fresh per run (`archive-source-check-XXXXXX` for the archive's copy, `stream-restore-XXXXXX` for the download, which is opened once), never the venue folder; no contention |
+| `apps/server/src/reset-request.ts` (`runStagedReset`) | the container entrypoint, when the setup wizard has staged a reset, before the server starts | takes `lockVenueDatabase` before its first check and holds it through the wipe; its `openVenueDatabase` for the check shares that hold, and it releases before `runEntry` locks again |
 | `apps/server/src/rejoin-command.ts` | `waitron-rejoin` (server stopped) | takes the lock before its first read and holds it through the wipe and re-migrate. Refused while another process holds the folder |
 | `packages/migrations/src/apply.ts` | boot, restore, rejoin, dev scripts | locks (default), inside its own `migrations.lock` |
 | `packages/provisioning/src/bin.ts` (`waitron-provision venue`) | once per venue | locks; refused while another process holds the folder, printed as `provisioning.database_in_use {"database":…}` |
@@ -1545,8 +1546,8 @@ a newer ref instead (`docs/superpowers/specs/2026-09-11-waitron-sh-box-command-d
 `apps/server/src/restore-stream.ts`, which checks the downloaded copy before anything is placed
 (2026-09-25, slice 2 Task 9b). WHERE boot's call sits changed with the storage switch. It used to run after
 `ensureInstance`, which had already migrated a behind database forward; `ensureInstance` no longer
-exists. It now runs after `runStagedRestore` — the restore that replaces the venue files — and BEFORE
-`startServer`, so it reads a database nothing has migrated yet, because boot owns the migration now
+exists. It now runs after `runStagedRestore` — the restore that replaces the venue files — and
+`runStagedReset`, which removes them, and BEFORE `startServer`, so it reads a database nothing has migrated yet, because boot owns the migration now
 (`apps/server/src/boot.ts`). The ordering, and the one-direction comparison that lets a virgin venue
 directory pass it, are stated at `runEntry` in `apps/server/src/node-entry.ts`.
 
