@@ -576,7 +576,7 @@ export class SetupApp extends LitElement {
       this.screen = "done";
     } catch (error) {
       if (!this.isConnected) return;
-      this.#mapAdoptError(error as ApiError);
+      await this.#mapAdoptError(error as ApiError);
     }
   }
 
@@ -783,20 +783,18 @@ export class SetupApp extends LitElement {
   /**
    * The terminal refusals offer a bare "Reload": only a box still in setup mode answers an adopt, and
    * reloading one reopens this wizard. `setup.already_provisioned` is thrown only by the provision
-   * path today and is mapped here for parity. Everything else routes back to the connect form, the
-   * mirror path's retry surface.
+   * path today and is mapped here for parity. Any other code the server answered (the error carries
+   * an HTTP `status`) reads the saved setup first, and an adopt saved past "started" and short of
+   * "complete" gets the stopped-partway message. Otherwise `setup.operation_conflict` is terminal
+   * too, and everything else routes back to the connect form, the mirror path's retry surface.
    */
-  #mapAdoptError(error: ApiError): void {
+  async #mapAdoptError(error: ApiError): Promise<void> {
     const code =
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
     switch (code) {
+      // Not read against the saved setup: an adopt still running on the server is past "started" too.
       case "setup.already_provisioning":
         this.provisionMessage = "Setup is already in progress on this server.";
-        this.provisionCanRetry = false;
-        this.provisionReloadLabel = "Reload";
-        return;
-      case "setup.operation_conflict":
-        this.provisionMessage = OPERATION_CONFLICT_MESSAGE;
         this.provisionCanRetry = false;
         this.provisionReloadLabel = "Reload";
         return;
@@ -815,10 +813,36 @@ export class SetupApp extends LitElement {
         this.provisionCanRetry = false;
         this.provisionReloadLabel = "Reload";
         return;
-      default:
-        this.connectError = ADOPT_ERROR_MESSAGES[code] ?? ADOPT_GENERIC_ERROR;
-        this.screen = "connect";
-        return;
+    }
+    // The server matches a resend by its exact body, and a one-time code changes it, so an adopt
+    // that stopped partway can come back as a conflict or as the first failure itself. With no
+    // answer from the server the adopt may still be running there, past "started" too.
+    const stoppedPartway = error.status !== undefined && (await this.#savedAdoptStoppedPartway());
+    if (!this.isConnected) return;
+    if (stoppedPartway) {
+      this.provisionMessage = ADOPT_INCOMPLETE_MESSAGE;
+      this.provisionCanRetry = false;
+      this.provisionReloadLabel = "Reload";
+    } else if (code === "setup.operation_conflict") {
+      this.provisionMessage = OPERATION_CONFLICT_MESSAGE;
+      this.provisionCanRetry = false;
+      this.provisionReloadLabel = "Reload";
+    } else {
+      this.connectError = ADOPT_ERROR_MESSAGES[code] ?? ADOPT_GENERIC_ERROR;
+      this.screen = "connect";
+    }
+  }
+
+  async #savedAdoptStoppedPartway(): Promise<boolean> {
+    try {
+      const operation = (await this.api.getStatus()).operation;
+      return (
+        operation?.kind === "adopt" &&
+        operation.phase !== "started" &&
+        operation.phase !== "complete"
+      );
+    } catch {
+      return false;
     }
   }
 
