@@ -2206,7 +2206,9 @@ address that answers is then asked for its paper sizes on port 631.
   owner's decisions of 2026-09-26, what a review against the code found missing, and what the menus
   work superseded); [plan](superpowers/plans/2026-09-26-service-ordering-and-billing.md), eighteen
   tasks. Two start now: the payment and billing design (Task 0), and adjustment reasons and policies
-  as a new module (Task 1). Every other task waits for lane C's menus tasks that change the same order
+  as a new module (Task 1). **Task 0 is written (2026-09-26) and awaits the owner's approval:**
+  [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md), with nine open
+  points in its §11; Task 14 does not start until it is approved. Every other task waits for lane C's menus tasks that change the same order
   and till code (M7c, M7v, M9, M7b2), because building beside them would collide on
   `apps/server/src/working-order.ts`, the till and the core migrations, and would build on order rules
   still being decided there. Owner decisions (2026-09-26):
