@@ -592,6 +592,7 @@ async function attachExtra(
     await writeProductModifiers(tx, shop.aguaId, [{ kind: "extras", id: list.id }]);
     // An offer carries only the extras lists published on it.
     await setMenuItemExtraLists(tx, shop.aguaMenuItemId, [{ listId: list.id, items: [] }]);
+    await publishWorkingMenu(tx, shop.menuId);
     return { productId: panecillo.id, listId: list.id };
   });
 }

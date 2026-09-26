@@ -1,4 +1,9 @@
-import { buildLineExtras, editLineExtras, sameOptionSelections } from "./modifier-selection.js";
+import {
+  buildLineExtras,
+  editLineExtras,
+  namedPicks,
+  sameOptionSelections,
+} from "./modifier-selection.js";
 import type { ExtraChild, ExtraProductFacts } from "./modifier-selection.js";
 import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
@@ -76,7 +81,9 @@ import {
   priceBasket,
   priceBasketWithOptions,
   priceLockedLines,
-  resolveAttachedModifiers,
+  menusOfVersions,
+  readOptionListsByIds,
+  readProductModifiers,
   resolveVatRate,
   toInvoiceLineDescriptions,
   readContentLanguages,
@@ -92,17 +99,18 @@ import {
   staffPresentationName,
 } from "@waitron/catalogue";
 import type {
-  AttachedModifiers,
   BasketItemWithOptions,
   DietaryLabel,
   DietProfile,
   LockedLine,
+  OptionList,
   PricedLines,
   ProductAllergens,
+  ResolvedExtraList,
   VatClass,
 } from "@waitron/catalogue";
 import { formatInvoiceNumber, recordSale } from "@waitron/core";
-import type { FloorAnnotator, PreparationRoute, ZoneOffers } from "@waitron/module";
+import type { FloorAnnotator, PreparationRoute, ZoneMenuOffer, ZoneOffers } from "@waitron/module";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { FloorTableShape } from "./tables.js";
 import { issuancePass } from "./issuance-pass.js";
@@ -142,96 +150,160 @@ type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
  * this price rather than pricing the basket twice. */
 type PricedBasket = PricedLines;
 
-/** `note` is a free-text kitchen note on the parent dish line: non-fiscal, never part of a sale. */
-export type LineExtras = { note?: string; variantId?: string };
+/**
+ * `note` is a free-text kitchen note on the parent dish line: non-fiscal, never part of a sale.
+ * `menuVersionId` is the menu version an UNSAVED line was priced against on the till: what staff
+ * saw, never a request for that version's prices. Absent, the line takes the live version.
+ */
+export type LineExtras = { note?: string; variantId?: string; menuVersionId?: string };
 
 /**
- * Every extras and options definition the dishes in one basket offer, read ONCE before the line
- * loop (CLAUDE.md §3). The lists come from the same body the till's picker is drawn from, so what
- * the till is offered is the set the validators answer. Receipt: docs/developers/modifiers.md.
+ * The extras and options lists one published offer puts in front of a diner, as the validators
+ * take them. An extras item that cannot be picked now is left out, so a pick of it is refused as a
+ * pick the list never offered; an edit keeps a pick a stored line already holds by itself
+ * ({@link editLineExtras}).
  */
-interface BasketModifiers extends AttachedModifiers {
-  /** Every Active and Available product an ACTIVE list offers, by id — what
-   * {@link buildLineExtras} freezes onto a child. */
+interface OfferModifiers {
+  extras: ResolvedExtraList[];
+  options: OptionList[];
+  /** Every product {@link OfferModifiers.extras} offers, by id: what {@link buildLineExtras}
+   * freezes onto a child. */
   extraProducts: ReadonlyMap<string, ExtraProductFacts>;
 }
 
-/**
- * Only an ACTIVE list's products are read: only an active list can be answered at all
- * (`validateExtraSelections`). Inactive and Unavailable products are dropped from every list, so a
- * pick of one is refused exactly as a pick the list never offered; an edit keeps a pick a stored line
- * already holds by itself ({@link editLineExtras}).
- */
-async function resolveBasketModifiers(
-  tx: Transaction,
-  dishes: readonly { productId: string; menuItemId: string }[],
-  defaultLanguage: string,
-): Promise<BasketModifiers> {
-  const attached = await resolveAttachedModifiers(tx, dishes);
+const NO_MODIFIERS: OfferModifiers = { extras: [], options: [], extraProducts: new Map() };
 
-  const offeredProductIds = [
-    ...new Set(
-      [...attached.extrasByHolder.values()].flatMap((lists) =>
-        lists.flatMap((list) => (list.active ? list.items.map((item) => item.productId) : [])),
-      ),
-    ),
-  ];
+function copyNames(names: Readonly<Record<string, string>> | null): Record<string, string> | null {
+  return names === null ? null : { ...names };
+}
+
+function offerModifiers(offer: ZoneMenuOffer, defaultLanguage: string): OfferModifiers {
+  const extras: ResolvedExtraList[] = [];
+  const options: OptionList[] = [];
   const extraProducts = new Map<string, ExtraProductFacts>();
-  if (offeredProductIds.length > 0) {
-    const rows = await tx
-      .select({
-        id: products.id,
-        name: products.name,
-        customerName: products.customerName,
-        kitchenName: products.kitchenName,
-        // A variant that leaves its VAT blank is taxed at its parent's rate.
-        vatClass: effectiveProductColumns.vatClass,
-      })
-      .from(products)
-      .leftJoin(parentProducts, parentJoin)
-      .where(
-        and(
-          inArray(products.id, offeredProductIds),
-          eq(products.active, true),
-          eq(products.available, true),
-        ),
-      );
-    for (const row of rows) {
-      extraProducts.set(row.id, {
-        id: row.id,
-        name: row.name,
+  for (const entry of offer.offeredModifiers) {
+    const names = {
+      id: entry.id,
+      name: entry.name,
+      customerName: copyNames(entry.customerName),
+      kitchenName: entry.kitchenName,
+      active: true,
+    };
+    if (entry.kind === "options") {
+      options.push({
+        ...names,
+        defaultLabelId: entry.defaultLabelId,
+        labels: entry.labels.map((label) => ({
+          ...label,
+          customerName: copyNames(label.customerName),
+        })),
+      });
+      continue;
+    }
+    const items = entry.items.filter((item) => item.available);
+    for (const item of items) {
+      extraProducts.set(item.productId, {
+        id: item.productId,
+        name: item.name,
         descriptions: customerPresentationText(
           {
-            name: row.name,
-            customerName: row.customerName,
-            kitchenName: row.kitchenName,
+            name: item.name,
+            customerName: item.customerName,
+            kitchenName: item.kitchenName,
             variantName: null,
             variantCustomerName: null,
             variantKitchenName: null,
           },
           defaultLanguage,
         ).product,
-        kitchenName: row.kitchenName,
-        vatClass: row.vatClass as VatClass,
+        kitchenName: item.kitchenName,
+        vatClass: item.vatClass as VatClass,
       });
     }
-  }
-  const extrasByHolder = new Map(
-    [...attached.extrasByHolder].map(([holder, lists]) => [
-      holder,
-      lists.map((list) => ({
-        ...list,
-        items: list.items.filter((item) => extraProducts.has(item.productId)),
+    extras.push({
+      ...names,
+      minPicks: entry.minPicks,
+      maxPicks: entry.maxPicks,
+      items: items.map((item) => ({
+        id: "",
+        productId: item.productId,
+        maxQuantity: item.maxQuantity,
+        preselected: item.preselected,
+        price: item.price,
       })),
+    });
+  }
+  return { extras, options, extraProducts };
+}
+
+/** Each product's own options lists, in its order, keyed by the lower-cased product id. */
+async function productOptionLists(
+  tx: Transaction,
+  productIds: readonly string[],
+): Promise<Map<string, OptionList[]>> {
+  if (productIds.length === 0) return new Map();
+  const refs = await readProductModifiers(tx, [...new Set(productIds)]);
+  const lists = new Map(
+    (
+      await readOptionListsByIds(tx, [
+        ...new Set(
+          [...refs.values()].flatMap((held) =>
+            held.flatMap((ref) => (ref.kind === "options" ? [ref.id] : [])),
+          ),
+        ),
+      ])
+    ).map((list) => [list.id, list]),
+  );
+  return new Map(
+    [...refs].map(([productId, held]) => [
+      productId,
+      held.flatMap((ref) => {
+        const list = ref.kind === "options" ? lists.get(ref.id) : undefined;
+        return list === undefined ? [] : [list];
+      }),
     ]),
   );
-  return { ...attached, extrasByHolder, extraProducts };
 }
 
 /**
- * Price requested lines from the order's zone's menu offers. Return both the insertable line
- * snapshots and the basket result so a caller filing the same basket can reuse it. Stored gross
- * unit prices preserve the price agreed at add time.
+ * The zone's offers from each menu's live version, once every version the basket's lines assert is
+ * live (`menu.version_changed` otherwise, before anything is priced or written). An asserted id
+ * that is no menu version at all is a malformed request.
+ */
+async function readBasketOffers(
+  tx: Transaction,
+  cfg: TillConfig,
+  workingOrderId: string,
+  zoneId: string | undefined,
+  lines: readonly { menuVersionId?: unknown }[],
+): Promise<ZoneOffers> {
+  if (zoneId === undefined) {
+    throw new AppError("order.service_context_missing", { workingOrderId });
+  }
+  const versionIds = new Set<string>();
+  for (const { menuVersionId } of lines) {
+    if (menuVersionId === undefined) continue;
+    if (typeof menuVersionId !== "string" || !isUuid(menuVersionId)) {
+      throw new AppError("management.request_invalid", { field: "menuVersionId" });
+    }
+    versionIds.add(menuVersionId.toLowerCase());
+  }
+  const menus = await menusOfVersions(tx, [...versionIds]);
+  if (menus.size < versionIds.size) {
+    throw new AppError("management.request_invalid", { field: "menuVersionId" });
+  }
+  return VENUE_SERVICE.listZoneOffers(
+    tx,
+    cfg,
+    zoneId,
+    [...menus].map(([versionId, menuId]) => ({ menuId, versionId })),
+  );
+}
+
+/**
+ * Price requested lines from the order's zone's live menu versions — the dish, variant, extras and
+ * options alike. Return both the insertable line snapshots and the basket result so a caller filing
+ * the same basket can reuse it. Stored gross unit prices preserve the price agreed at add time.
  */
 async function priceOrderLines(
   tx: Transaction,
@@ -252,6 +324,8 @@ async function priceOrderLines(
     frozenExtras?: ExtraChild[];
   } & LineExtras)[],
   zoneId?: string,
+  /** The zone's offers, when the caller has already read them with {@link readBasketOffers}. */
+  snapshot?: ZoneOffers,
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
   priced: PricedBasket;
@@ -270,39 +344,47 @@ async function priceOrderLines(
       offers: { defaultMenuId: null, menus: [], offers: [] },
     };
   }
-  if (zoneId === undefined) {
-    throw new AppError("order.service_context_missing", { workingOrderId });
-  }
-  const offers = await VENUE_SERVICE.listZoneOffers(tx, cfg, zoneId);
-  const availableById = new Map(
-    offers.offers.filter((offer) => offer.available).map((offer) => [offer.id, offer]),
-  );
+  const offers =
+    snapshot ?? (await readBasketOffers(tx, cfg, workingOrderId, zoneId, requestedLines));
+  const offerById = new Map(offers.offers.map((offer) => [offer.id, offer]));
+  const versionOf = new Map(offers.menus.map((menu) => [menu.id, menu.versionId]));
   const lines = requestedLines.map((line) => {
     // The wire body is JSON, so a line may still name a product the types no longer carry.
     if (typeof line.menuItemId !== "string" || Object.hasOwn(line, "productId")) {
       throw new AppError("management.request_invalid", { field: "lines" });
     }
-    const offer = availableById.get(line.menuItemId);
+    const offer = offerById.get(line.menuItemId);
     if (offer === undefined) {
       throw new AppError("service_zone.offer_not_allowed", {
-        zoneId,
+        zoneId: zoneId!,
         menuItemId: line.menuItemId,
       });
+    }
+    // Every asserted version is live, so one naming another menu is not this line's.
+    if (
+      line.menuVersionId !== undefined &&
+      line.menuVersionId.toLowerCase() !== versionOf.get(offer.menuId)
+    ) {
+      throw new AppError("management.request_invalid", { field: "menuVersionId" });
+    }
+    if (!offer.available) {
+      throw new AppError("product.unavailable", { productId: offer.productId });
     }
     return { ...line, offer };
   });
   const invoiceLocales = await readInvoiceLocales(tx, cfg.locationId);
   const contentConfig = await readContentLanguages(tx, cfg.locale);
 
-  // One read per definition kind for the whole basket, never per line (CLAUDE.md §3).
-  const modifiers = await resolveBasketModifiers(
-    tx,
-    lines.map((line) => ({ productId: line.offer.productId, menuItemId: line.menuItemId })),
-    contentConfig.defaultLanguage,
+  const modifiersByOffer = new Map(
+    lines.map((line) => [line.offer.id, offerModifiers(line.offer, contentConfig.defaultLanguage)]),
   );
   // A product with an Active variant is never sold as itself, and an extras pick cannot name a
-  // variant, so a pick of such a product is refused below.
-  const requiresVariant = await parentsWithActiveVariants(tx, [...modifiers.extraProducts.keys()]);
+  // variant, so a pick of such a product is refused below, before the published lists are asked:
+  // a version published after the variant was switched on no longer offers the product at all.
+  const picksOf = (line: (typeof lines)[number]) => line.frozenExtras ?? namedPicks(line.extras);
+  const requiresVariant = await parentsWithActiveVariants(tx, [
+    ...new Set(lines.flatMap((line) => picksOf(line).map((pick) => pick.productId))),
+  ]);
 
   // `priceBasketWithOptions` expands each item to a parent row then its child rows in this same
   // order, so `lineMeta[i]` lines up with `priced.lines[i]` one-for-one.
@@ -339,16 +421,17 @@ async function priceOrderLines(
     // Validated before pricing, so a bad note aborts the whole basket.
     const note = screenNote(line.note);
 
+    for (const { productId } of picksOf(line)) {
+      if (requiresVariant.has(productId)) {
+        throw new AppError("product.variant_required", { productId });
+      }
+    }
+
+    const modifiers = modifiersByOffer.get(offer.id)!;
     const built = buildLineExtras(
       {
-        extras:
-          line.frozenExtras === undefined
-            ? (modifiers.extrasByHolder.get(line.menuItemId) ?? [])
-            : [],
-        options:
-          line.frozenOptions === undefined
-            ? (modifiers.optionsByProduct.get(offer.productId) ?? [])
-            : [],
+        extras: line.frozenExtras === undefined ? modifiers.extras : [],
+        options: line.frozenOptions === undefined ? modifiers.options : [],
       },
       modifiers.extraProducts,
       {
@@ -359,11 +442,6 @@ async function priceOrderLines(
     );
     const extraChildren = line.frozenExtras ?? built.extraChildren;
     const optionSnapshots = line.frozenOptions ?? built.optionSnapshots;
-    for (const child of extraChildren) {
-      if (requiresVariant.has(child.productId)) {
-        throw new AppError("product.variant_required", { productId: child.productId });
-      }
-    }
 
     // A child is priced at dish quantity × pick quantity, so a dish sold by weight would bill a
     // fraction of each extra.
@@ -3421,16 +3499,26 @@ async function applyLineEdits(
   const defaultLanguage = needsModifiers
     ? (await readContentLanguages(tx, cfg.locale)).defaultLanguage
     : "";
-  const modifiers = needsModifiers
-    ? await resolveBasketModifiers(
-        tx,
-        plan.edits.map(({ parent }) => ({
-          productId: parent.parentProductId ?? parent.productId!,
-          menuItemId: menuItemOf(parent),
-        })),
-        defaultLanguage,
+  // Read once for the answers the edits are checked against and for the lines priced below.
+  const snapshot = needsModifiers
+    ? await readBasketOffers(tx, cfg, orderId, context?.zoneId, plan.fresh)
+    : undefined;
+  const offerOf = (line: EditableParent) =>
+    snapshot!.offers.find((candidate) => candidate.id === menuItemOf(line));
+  // A stored line whose dish the live version no longer offers has no published lists left: its
+  // options answer, which carries no price, is checked against the dish's own lists instead.
+  const withdrawnDishes = needsModifiers
+    ? plan.edits.flatMap(({ parent }) =>
+        offerOf(parent) === undefined ? [parent.parentProductId ?? parent.productId!] : [],
       )
-    : null;
+    : [];
+  const ownOptions = await productOptionLists(tx, withdrawnDishes);
+  const modifiersOf = (line: EditableParent): OfferModifiers => {
+    const offer = offerOf(line);
+    if (offer !== undefined) return offerModifiers(offer, defaultLanguage);
+    const dishId = (line.parentProductId ?? line.productId!).toLowerCase();
+    return { ...NO_MODIFIERS, options: ownOptions.get(dishId) ?? [] };
+  };
 
   type Action = "free" | "change" | "raise" | "drop";
   const changes: {
@@ -3460,12 +3548,12 @@ async function applyLineEdits(
       positive: true,
     });
     const requested = decimal(intent.quantity);
-    const dishId = parent.parentProductId ?? parent.productId!;
+    const modifiers = needsModifiers ? modifiersOf(parent) : NO_MODIFIERS;
     let optionSnapshots = parent.optionSnapshots;
     if (intent.options !== null) {
       const frozen = buildLineExtras(
-        { extras: [], options: modifiers!.optionsByProduct.get(dishId) ?? [] },
-        modifiers!.extraProducts,
+        { extras: [], options: modifiers.options },
+        modifiers.extraProducts,
         { options: intent.options.set },
         defaultLanguage,
       ).optionSnapshots;
@@ -3482,12 +3570,10 @@ async function applyLineEdits(
             added: [],
             removed: [],
           }
-        : editLineExtras(
-            modifiers!.extrasByHolder.get(menuItemOf(parent)) ?? [],
-            modifiers!.extraProducts,
-            intent.extras.set,
-            { children: parent.children, dishQuantity: parent.quantity },
-          );
+        : editLineExtras(modifiers.extras, modifiers.extraProducts, intent.extras.set, {
+            children: parent.children,
+            dishQuantity: parent.quantity,
+          });
     const changed =
       intent.note !== parent.note ||
       optionSnapshots !== parent.optionSnapshots ||
@@ -3577,7 +3663,7 @@ async function applyLineEdits(
   }
 
   // Priced before anything is written, so a refused line leaves the order as it was.
-  const priced = await priceOrderLines(tx, cfg, orderId, pricing, context?.zoneId);
+  const priced = await priceOrderLines(tx, cfg, orderId, pricing, context?.zoneId, snapshot);
   const groups: { rows: WorkingOrderLineInsert[]; contexts: typeof priced.lineContexts }[] = [];
   priced.lineRows.forEach((row, index) => {
     if (row.parentLineId === null) groups.push({ rows: [], contexts: [] });

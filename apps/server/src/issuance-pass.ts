@@ -13,10 +13,10 @@ import type { PricedOrder } from "./working-order.js";
 
 /**
  * The issuance pass: what each line of the sale about to be filed records about its product at the
- * moment the record is issued — the product sold, a variant's parent, the menu it was sold from and
- * its reporting chain and labels. Every till filing path calls it on the priced lines it files, in the
- * pass that issues the record (spec 2026-09-25-sales-classification §3), and a replay or reprint
- * never does.
+ * moment the record is issued — the product sold, a variant's parent, the menu and menu version it
+ * was sold from and its reporting chain and labels. Every till filing path calls it on the priced
+ * lines it files, in the pass that issues the record (spec 2026-09-25-sales-classification §3), and
+ * a replay or reprint never does.
  *
  * `order.identities[i]` is the working-order line `order.priced.lines[i]` was priced from, as
  * `priceStoredOrderForIssuance` and `createOpenOrder` both return them. The classification is read
@@ -35,10 +35,10 @@ export async function issuancePass(
     );
   }
 
-  const menuByLine = new Map(
+  const contextByLine = new Map(
     (await VENUE_SERVICE.listLineContexts(tx, cfg, workingOrderId)).map((context) => [
       context.workingOrderLineId,
-      context.menuId,
+      context,
     ]),
   );
   // The language the line's free-text `category` is resolved in (`listMenuOffers`).
@@ -56,8 +56,8 @@ export async function issuancePass(
         ...line,
         productId,
         parentProductId: productId === null ? null : parentProductOf(classification, productId),
-        menuId: menuByLine.get(id) ?? null,
-        menuVersionId: null,
+        menuId: contextByLine.get(id)?.menuId ?? null,
+        menuVersionId: contextByLine.get(id)?.menuVersionId ?? null,
         // Empty, not null: a null classification means the line was filed without one.
         classification:
           productId === null

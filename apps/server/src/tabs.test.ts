@@ -1994,6 +1994,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     );
     const ticket = await ticketOfLine(tabId, 1);
     await db.execute(sql`update extra_list_items set price = 80 where list_id = ${listId}`);
+    await withTransaction(db, republishMenus);
 
     await asApp(cfg, async (tx) =>
       updateOrderLine(
@@ -2069,6 +2070,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
       ]),
     );
     await db.execute(sql`update extra_list_items set price = 80 where list_id = ${listId}`);
+    await withTransaction(db, republishMenus);
 
     await asApp(cfg, async (tx) =>
       updateOrderLine(tx, cfg, tabId, 1, { note: "solo" }, await revisionOf(tabId)),

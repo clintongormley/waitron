@@ -2130,6 +2130,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
       await setMenuItemExtraLists(tx, product.menuItemId, [
         { listId: extras.id, items: [{ productId: queso.id, price: "0.35" }] },
       ]);
+      await publishWorkingMenu(tx, catalogueId);
       return {
         extraListId: extras.id,
         quesoId: queso.id,
