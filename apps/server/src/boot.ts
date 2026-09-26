@@ -130,6 +130,7 @@ import { stageRestoreRequest, stageStreamRestore } from "./restore-request.js";
 import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { boundObjectStore } from "./bounded-store.js";
 import { RESTORE_STAGING_DIR, validateArtifact } from "./restore.js";
+import { errnoOf } from "./errno.js";
 import {
   clearStagedConfigurationImport,
   readStagedConfigurationImport,
@@ -167,7 +168,7 @@ import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
-import { ensureBoxSecrets, mintedBoxLeaf } from "./box-secrets.js";
+import { ensureBoxSecrets, mintedBoxLeaf, tightenTlsDir } from "./box-secrets.js";
 import { resolveTradingTls } from "./trading-tls.js";
 import { deferFirstStart, readBucketPointerTerm, runFirstStart } from "./rebuild-first-start.js";
 import { buildLandingApp } from "./landing-app.js";
@@ -991,6 +992,13 @@ async function bootServer(
 
   // TRADING MODE — a venue is bound.
   //
+  // Logged rather than thrown: a certificate folder left readable is no reason to stop selling.
+  try {
+    await tightenTlsDir(config.stateDir);
+  } catch (error: unknown) {
+    log("warn", "tls.tighten_failed", { errno: errnoOf(error) });
+  }
+
   // The env straight through: `loadKeyRing` owns the WAITRON_CREDENTIALS_KEY* names and their
   // validation. Loaded here rather than in the shared prefix, so an unprovisioned box needs no key.
   const ring = loadKeyRing(env);

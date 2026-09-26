@@ -18,6 +18,7 @@ import { buildManifest, type BackupManifest } from "./backup-manifest.js";
 import type { BackupSchedule } from "./backup-config.js";
 import { MAX_SLEEP_MS, nextFireMs, type ScheduleClock } from "./backup-schedule.js";
 import type { DeploymentEnvironment } from "./config.js";
+import { errnoOf } from "./errno.js";
 import { codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import {
@@ -125,11 +126,11 @@ export async function runOnce(
           await pruneBackend(backend, deps.retain, deps.retainDays, nowMs);
           deps.log("info", "backup.destination_completed", { destination: backend.id, key });
         } catch (err) {
-          // `codeOf` maps only AppErrors; the errno is a fixed symbol, never the path or message.
+          // `codeOf` maps only AppErrors.
           deps.log("warn", "backup.destination_failed", {
             destination: backend.id,
             errorCode: codeOf(err),
-            errno: (err as NodeJS.ErrnoException).code,
+            errno: errnoOf(err),
           });
           if (deps.outcomes && !stored)
             recordBackupOutcome(deps.outcomes, backend.id, false, stamp.toISOString());

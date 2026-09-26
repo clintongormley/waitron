@@ -6,29 +6,29 @@ import { join } from "node:path";
 import { createSecureContext } from "node:tls";
 import forge from "node-forge";
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
-import { chmod, lstat, symlink, writeFile, mkdir } from "node:fs/promises";
-import { ensureBoxSecrets, mintedBoxLeaf, reissueBoxLeaf } from "./box-secrets.js";
+import { chmod, lstat, symlink, writeFile, mkdir, type FileHandle } from "node:fs/promises";
+import { ensureBoxSecrets, mintedBoxLeaf, reissueBoxLeaf, tightenTlsDir } from "./box-secrets.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
-// `access`, `chmod`, `copyFile` and `rename` are wrapped so a test can inject a failure for a single path;
-// every other call forwards to the real implementation.
-const { accessMock, chmodMock, copyFileMock, renameMock } = vi.hoisted(() => ({
+// `access`, `copyFile`, `open` and `rename` are wrapped so a test can inject a failure for a single
+// path; every other call forwards to the real implementation.
+const { accessMock, copyFileMock, openMock, renameMock } = vi.hoisted(() => ({
   accessMock: vi.fn(),
-  chmodMock: vi.fn(),
   copyFileMock: vi.fn(),
+  openMock: vi.fn(),
   renameMock: vi.fn(),
 }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   accessMock.mockImplementation(actual.access);
-  chmodMock.mockImplementation(actual.chmod);
   copyFileMock.mockImplementation(actual.copyFile);
+  openMock.mockImplementation(actual.open);
   renameMock.mockImplementation(actual.rename);
   return {
     ...actual,
     access: accessMock,
-    chmod: chmodMock,
     copyFile: copyFileMock,
+    open: openMock,
     rename: renameMock,
   };
 });
@@ -245,15 +245,21 @@ describe("ensureBoxSecrets", () => {
     const eperm = Object.assign(new Error("operation not permitted"), {
       code: "EPERM",
     }) as NodeJS.ErrnoException;
-    const passthrough = chmodMock.getMockImplementation()!;
-    chmodMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
-      if (p === tlsDir) throw eperm;
-      return (passthrough as (...a: unknown[]) => unknown)(p, ...rest);
+    const passthrough = openMock.getMockImplementation()!;
+    openMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
+      const handle = (await (passthrough as (...a: unknown[]) => unknown)(
+        p,
+        ...rest,
+      )) as FileHandle;
+      if (p === tlsDir) {
+        handle.chmod = () => Promise.reject(eperm);
+      }
+      return handle;
     });
     try {
       await expect(ensureBoxSecrets(deps(d))).rejects.toBe(eperm);
     } finally {
-      chmodMock.mockImplementation(passthrough);
+      openMock.mockImplementation(passthrough);
     }
     await expect(readFile(join(d, "secrets.env"), "utf8")).rejects.toMatchObject({
       code: "ENOENT",
@@ -476,5 +482,52 @@ describe.runIf(haveOpenssl())("ensureBoxSecrets leaf verifies against its own CA
       { encoding: "utf8" },
     );
     expect(out).toMatch(/OK/);
+  });
+});
+
+describe("tightenTlsDir", () => {
+  it("creates no tls folder where there is none", async () => {
+    const d = await newDir();
+    await tightenTlsDir(d);
+    expect(await readdir(d)).toEqual([]);
+  });
+
+  it("makes a tls folder its owner cannot read (0300) 0700", async () => {
+    const d = await newDir();
+    await mkdir(join(d, "tls"));
+    await chmod(join(d, "tls"), 0o300);
+    await tightenTlsDir(d);
+    expect((await stat(join(d, "tls"))).mode & 0o777).toBe(0o700);
+  });
+
+  it("rethrows a failure to open a real tls folder", async () => {
+    const d = await newDir();
+    const tlsDir = join(d, "tls");
+    await mkdir(tlsDir);
+    const emfile = Object.assign(new Error("too many open files"), {
+      code: "EMFILE",
+    }) as NodeJS.ErrnoException;
+    const passthrough = openMock.getMockImplementation()!;
+    openMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
+      if (p === tlsDir) throw emfile;
+      return (passthrough as (...a: unknown[]) => unknown)(p, ...rest);
+    });
+    try {
+      await expect(tightenTlsDir(d)).rejects.toBe(emfile);
+    } finally {
+      openMock.mockImplementation(passthrough);
+    }
+  });
+
+  it("rethrows a refusal other than a missing folder", async () => {
+    const d = await newDir();
+    await mkdir(join(d, "tls"));
+    // Without search permission on the state folder, looking up `tls` is refused with EACCES.
+    await chmod(d, 0o600);
+    try {
+      await expect(tightenTlsDir(d)).rejects.toMatchObject({ code: "EACCES" });
+    } finally {
+      await chmod(d, 0o700);
+    }
   });
 });
