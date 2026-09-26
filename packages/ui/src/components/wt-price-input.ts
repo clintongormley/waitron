@@ -3,7 +3,10 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
-/** The unit button's visible text is its accessible name, so an empty `unit` leaves it nameless. */
+/**
+ * The unit button's visible text is its accessible name, so an empty `unit` leaves it nameless.
+ * `fixed-unit` shows the unit as text instead, for a field whose unit is not chosen here.
+ */
 @customElement("wt-price-input")
 export class WtPriceInput extends LitElement {
   static override shadowRootOptions = delegatesFocusShadowRootOptions;
@@ -33,6 +36,7 @@ export class WtPriceInput extends LitElement {
 
       input {
         flex: 1;
+        width: var(--wt-price-field-width);
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-3);
@@ -55,6 +59,12 @@ export class WtPriceInput extends LitElement {
         ${disabledStyles}
       }
 
+      input:last-child {
+        border-inline-end: 1px solid var(--wt-color-border);
+        border-start-end-radius: var(--wt-radius-md);
+        border-end-end-radius: var(--wt-radius-md);
+      }
+
       input[aria-invalid="true"] {
         border-color: var(--wt-color-danger);
       }
@@ -71,6 +81,12 @@ export class WtPriceInput extends LitElement {
         color: var(--wt-color-text);
         font: inherit;
         cursor: pointer;
+      }
+
+      span.unit {
+        display: inline-flex;
+        align-items: center;
+        cursor: default;
       }
 
       .unit:disabled {
@@ -101,9 +117,13 @@ export class WtPriceInput extends LitElement {
   @property() error = "";
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
+  /** Names the field for assistive technology without drawing the label above it. */
+  @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
+  @property({ type: Boolean, attribute: "fixed-unit" }) fixedUnit = false;
 
   private readonly generatedInputId = uniqueId("wt-price-input");
   private readonly errorId = uniqueId("wt-price-input-error");
+  private readonly unitId = uniqueId("wt-price-input-unit");
 
   private onInput(event: Event): void {
     this.value = (event.target as HTMLInputElement).value;
@@ -118,12 +138,29 @@ export class WtPriceInput extends LitElement {
     );
   }
 
+  private renderUnit() {
+    if (!this.fixedUnit)
+      return html`<button
+        type="button"
+        class="unit"
+        ?disabled=${this.disabled}
+        @click=${this.onUnitClick}
+      >
+        ${this.unit}
+      </button>`;
+    return this.unit ? html`<span id=${this.unitId} class="unit">${this.unit}</span>` : nothing;
+  }
+
   override render() {
     const hasError = this.error !== "";
     const inputId = this.name || this.generatedInputId;
+    const describedBy = [
+      ...(hasError ? [this.errorId] : []),
+      ...(this.fixedUnit && this.unit ? [this.unitId] : []),
+    ];
     return html`
       ${
-        this.label
+        this.label && !this.hideLabel
           ? html`<div class="label-row">
               <label for=${inputId}
                 >${this.label}${
@@ -144,13 +181,11 @@ export class WtPriceInput extends LitElement {
           placeholder=${this.placeholder || nothing}
           ?required=${this.required}
           ?disabled=${this.disabled}
+          aria-label=${this.hideLabel && this.label ? this.label : nothing}
           aria-invalid=${hasError}
-          aria-describedby=${hasError ? this.errorId : nothing}
+          aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
           @input=${this.onInput}
-        />
-        <button type="button" class="unit" ?disabled=${this.disabled} @click=${this.onUnitClick}>
-          ${this.unit}
-        </button>
+        />${this.renderUnit()}
       </div>
       ${hasError ? html`<p id=${this.errorId} class="error" data-error>${this.error}</p>` : nothing}
     `;

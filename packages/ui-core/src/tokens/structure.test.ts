@@ -45,6 +45,8 @@ test("defines the structural contract", () => {
     "--wt-modal-inline-padding",
     "--wt-cell-name-max-width",
     "--wt-stepper-field-width",
+    "--wt-stepper-field-width-wide",
+    "--wt-price-field-width",
   ]) {
     expect(token(el, name), `${name} should be defined`).not.toBe("");
   }
@@ -77,6 +79,13 @@ test("a stepper's number box is never narrower than the tap target", () => {
   const el = mount();
   expect(parseInt(token(el, "--wt-stepper-field-width"), 10)).toBeGreaterThanOrEqual(
     parseInt(token(el, "--wt-tap-min"), 10),
+  );
+});
+
+test("a wide stepper box is wider than the standard one", () => {
+  const el = mount();
+  expect(parseInt(token(el, "--wt-stepper-field-width-wide"), 10)).toBeGreaterThan(
+    parseInt(token(el, "--wt-stepper-field-width"), 10),
   );
 });
 

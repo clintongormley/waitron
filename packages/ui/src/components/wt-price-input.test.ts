@@ -230,3 +230,80 @@ test("each error message gets its own id shaped wt-price-input-error-N, and the 
   expect(idA).not.toBe(idB);
   expect(a.shadowRoot!.querySelector("input")!.getAttribute("aria-describedby")).toBe(idA);
 });
+
+test("hide-label names the field for assistive technology but draws no label", async () => {
+  const el = await mount(
+    '<wt-price-input label="Price" name="price" required hide-label></wt-price-input>',
+  );
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(el.shadowRoot!.querySelector("label")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-required]")).toBeNull();
+  expect(input.getAttribute("aria-label")).toBe("Price");
+  expect(input.required).toBe(true);
+});
+
+test("a drawn label names the field, so the field carries no aria-label of its own", async () => {
+  const el = await mount('<wt-price-input label="Price" name="price"></wt-price-input>');
+  expect(el.shadowRoot!.querySelector("input")!.hasAttribute("aria-label")).toBe(false);
+});
+
+test("fixed-unit shows the unit as text, with no control to focus or press", async () => {
+  const el = await mount('<wt-price-input label="Price" unit="kg" fixed-unit></wt-price-input>');
+  let unitClicks = 0;
+  el.addEventListener("wt-unit-click", () => unitClicks++);
+  const unit = el.shadowRoot!.querySelector<HTMLElement>(".unit")!;
+
+  expect(el.shadowRoot!.querySelector("button")).toBeNull();
+  expect(unit.textContent!.trim()).toBe("kg");
+  expect(unit.tabIndex).toBe(-1);
+  unit.click();
+  expect(unitClicks).toBe(0);
+});
+
+test("a fixed unit is read out with the field, after any error", async () => {
+  const el = await mount(
+    '<wt-price-input label="Price" unit="kg" fixed-unit error="Enter a price"></wt-price-input>',
+  );
+  const input = el.shadowRoot!.querySelector("input")!;
+  const unit = el.shadowRoot!.querySelector<HTMLElement>(".unit")!;
+  const error = el.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+  expect(input.getAttribute("aria-describedby")).toBe(`${error.id} ${unit.id}`);
+});
+
+test("a fixed unit paints its border and text from tokens, and stands as tall as the field", async () => {
+  const el = await mount('<wt-price-input unit="kg" fixed-unit></wt-price-input>');
+  host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
+  const unit = el.shadowRoot!.querySelector<HTMLElement>(".unit")!;
+  const input = el.shadowRoot!.querySelector("input")!;
+  const styles = getComputedStyle(unit);
+  expect(styles.borderTopColor).toBe("rgb(1, 2, 3)");
+  expect(styles.color).toBe("rgb(4, 5, 6)");
+  expect(styles.cursor).not.toBe("pointer");
+  expect(unit.getBoundingClientRect().height).toBe(input.getBoundingClientRect().height);
+});
+
+test("a fixed unit that is empty draws no unit box, and the field keeps its own trailing edge", async () => {
+  const el = await mount("<wt-price-input fixed-unit></wt-price-input>");
+  host.style.setProperty("--wt-radius-md", "7px");
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(el.shadowRoot!.querySelector(".unit")).toBeNull();
+  expect(input.hasAttribute("aria-describedby")).toBe(false);
+  expect(getComputedStyle(input).borderInlineEndWidth).toBe("1px");
+  expect(getComputedStyle(input).borderStartEndRadius).toBe("7px");
+});
+
+test("the amount box is --wt-price-field-width wide when nothing stretches it", async () => {
+  const el = await mount(
+    '<wt-price-input unit="kg" style="display: inline-block"></wt-price-input>',
+  );
+  host.style.setProperty("--wt-price-field-width", "91px");
+  expect(el.shadowRoot!.querySelector("input")!.getBoundingClientRect().width).toBe(91);
+});
+
+test("the amount box still fills a wider field", async () => {
+  const el = await mount('<wt-price-input unit="kg" style="width: 400px"></wt-price-input>');
+  const input = el.shadowRoot!.querySelector("input")!.getBoundingClientRect();
+  const unit = el.shadowRoot!.querySelector(".unit")!.getBoundingClientRect();
+  expect(input.width + unit.width).toBe(400);
+});
