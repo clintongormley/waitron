@@ -299,11 +299,11 @@ is now offered on a queued line too, and a line of several whole units asks "Can
 all". With the venue's "allow changes to items already sent" setting off, Change and Recall are
 hidden on sent kitchen work. The tab-lines answer (`GET /api/working-orders/:id/lines`) now carries
 that setting, and each line when it was released, its note, its offer and its parent product. A
-change the server refuses says why; one answered after the waiter has moved to another table names
-the dish and the table instead of acting on the wrong order. The kitchen screen shows the order's
-notices above its queue (kind as a word and an icon, "started", the new note, the table a line moved
-to), each with an acknowledge button, and re-reads its queue every 15 seconds; a read that has not
-answered after 25 seconds is cancelled. No migration. Left open: a notice carries no unit, so a
+change or recall the server refuses says why; a change answered after the waiter has moved to
+another table names the dish and the table instead of acting on the wrong order. The kitchen screen
+shows the station's notices above its queue (kind as a word and an icon, "started", the new note, the
+table a line moved to), each with an acknowledge button, and re-reads its queue every 15 seconds; a
+refresh read that has not answered after 25 seconds is cancelled. No migration. Left open: a notice carries no unit, so a
 weighed line's notice reads "0.5×" without "kg"; the counter's prep-queue card shows no notices and
 does not refresh; a failed kitchen refresh is silent, so a display that loses the server goes stale
 without a warning; the till's API client has no general request timeout (only the kitchen refresh
