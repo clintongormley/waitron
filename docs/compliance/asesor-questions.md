@@ -611,7 +611,7 @@ cents, the cash never matches the invoice exactly.
 
 **Why it matters.** The owner decided on 2026-09-26 that a table's bill is invoiced when it is
 fully paid, and that paying must be flexible
-([service design §14.1](../superpowers/specs/2026-09-20-service-ordering-and-billing-design.md#141-decisions-owner-2026-09-26),
+([service design §6](../superpowers/specs/2026-09-20-service-ordering-and-billing-design.md#6-take-contributions-without-consuming-somebody-elses-tip),
 decision 3). The case that needs an answer:
 
 - A table's bill is €120. One guest hands over €50 "towards the bill". No invoice exists yet.

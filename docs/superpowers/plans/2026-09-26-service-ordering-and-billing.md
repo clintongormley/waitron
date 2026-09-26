@@ -25,9 +25,9 @@ lane C's menus work is landing now.
 routes, Lit web components (till, dashboard, venue-service dashboard), Vitest (`useVenueDb` real
 SQLite databases; real Chromium for the front-ends).
 
-**Spec:** `docs/superpowers/specs/2026-09-20-service-ordering-and-billing-design.md`. **Read §14
-first**: the owner's decisions of 2026-09-26 (§14.1), the review's findings (§14.2), and the table
-of what the menus work has superseded (§14.3). §14 wins over §1–§13. Then read the menus spec's
+**Spec:** `docs/superpowers/specs/2026-09-20-service-ordering-and-billing-design.md`, Revision 2.
+**Read its §14 first**: the owner's decisions of 2026-09-26, what the menus work now governs, and
+the rules marked **Proposed**. Then the whole spec. Then read the menus spec's
 §10.3 and §11 (`2026-09-20-menus-categories-and-home-layouts-design.md`) and the menus plan's D10
 and D22 (`docs/superpowers/plans/2026-09-25-menus-categories-home-layouts.md`), because every task
 here builds on them.
@@ -237,7 +237,7 @@ names it so the owner can overturn it at review.
   groups the id is recorded on the `order_group_events` row the command writes
   (`submission_id`, unique per visit where not null). A repeat finds that row and returns the
   first result, writing nothing. Task 0 decides the payment equivalent.
-- **D9. A draft is priced like an unsaved basket** (plan decision; spec §14.3's last paragraph). It
+- **D9. A draft is priced like an unsaved basket** (spec §2, "Prices in a draft"). It
   follows the live published menu until it is submitted, and staff confirm any price change the
   till shows (menus D9). Its prices lock at submission, when its lines become saved-order lines.
 - **D10. Line merging (spec §2).** Within one draft group, two lines merge (quantities add) when
@@ -322,7 +322,7 @@ Every task's requirements implicitly include this section.
 - **Step 0 of every task: re-map.** Read the files the task names on the `main` it starts from.
   Write down, in the task's ledger (`docs/handoffs/`), each "today" fact this plan states that no
   longer holds, and what replaced it. Follow the landed code. If the difference changes an owner
-  decision (D1–D4, or spec §14.1), stop, write the question in the lane's `questions.md` with a
+  decision (D1–D4, or the spec's owner decisions in §14), stop, write the question in the lane's `questions.md` with a
   recommended default, and mark the task `blocked`.
 - **Worktree, never `main`.** Each task is its own branch and worktree, created with
   `python3 ~/workspace/tools/worktree.py new waitron feat/service-<slug>`, where the slug is in
@@ -482,8 +482,8 @@ for, which Task 14 implements. Branch, `commit -s`, fast-forward `main`, push di
      - The €25 steak with €15 left: two offered choices.
      - Earlier tips are never consumed.
      - An item already paid for cannot be charged again.
-  3. **Moving lines to another bill after a contribution** (the owner's example in spec §14.1
-     decision 3):
+  3. **Moving lines to another bill after a contribution** (the owner's example in spec §6,
+     "Split whole items into bills"):
      - The contribution stays on the original bill.
      - A line already covered by an item-specific payment cannot move.
      - What is refused when the move would leave the original bill owing less than it has
@@ -1174,7 +1174,7 @@ Spec §1 (the floor and counter landing views; signals that coexist; the station
 
 ## Task 11: Cancellations, comps and discounts — slug `adjustments`
 
-Spec §7 (reasons, approval, the history); D4, D6, D15; §14.3's row on cancelling preparation
+Spec §7 (reasons, approval, the history); D4, D6, D15; spec §7 on cancelling preparation
 versus the charge. **It changes what an invoice charges; it lands on the automated fiscal gates
 (Global Constraints).**
 
@@ -1383,7 +1383,7 @@ design. The tests below are the minimum it must contain whatever the design deci
     the three payments settle the bill exactly.
   - **Item already paid:** an item-specific payment for the Steak, then a second item-specific
     payment naming the Steak, is refused (code from the design).
-  - **Split after a contribution (the owner's example, spec §14.1 decision 3):**
+  - **Split after a contribution (the owner's example, spec §6):**
     - €120.00 with €50.00 contributed;
     - move two lines (€30.00) to a new bill, pay €30.00, and its invoice is issued at once;
     - the original bill now owes €40.00 with the €50.00 still applied;

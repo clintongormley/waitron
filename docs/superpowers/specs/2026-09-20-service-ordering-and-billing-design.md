@@ -1,25 +1,48 @@
 # Service, ordering and billing workflows
 
-**Status:** product decisions agreed with the owner on 2026-09-20; implementation deferred.
+**Status:** Revision 2, 2026-09-26, **awaiting the owner's review**. Revision 1 (2026-09-20)
+recorded the product decisions from the workflow discussion. This revision folds in:
+
+- the owner's decisions of 2026-09-26;
+- a review of this spec against the code on `main` at `17dd4b147` and lane C's unlanded
+  order-editing branch (`feat/menus-order-edits` at `1996d4ce7`), by reading, not running;
+- what the [menus design](2026-09-20-menus-categories-and-home-layouts-design.md) §10–§11 has since
+  decided, which this spec now follows.
+
+Rules marked **Proposed** were added by the planning session to close gaps the review found; they
+are not yet the owner's decisions. Rules marked **Owner, 2026-09-26** were decided that day. §14
+lists every change from Revision 1. Revision 1's text is in git history.
 
 You should be able to take orders quickly, see what needs attention, control when food reaches the
 kitchen, and collect payments without losing track of the table. The same service model must work
 on a handheld or till, with a kitchen using paper, screens, or both.
 
-This is intended behaviour, not a description of verified application features. Implementation
-waits for the PostgreSQL-to-SQLite work, dependency upgrades, and variants/extras-as-products
-changes to land. Inspect their landed contracts before making an implementation plan. Inventory,
-guest cloud access and the other later features below are not prerequisites for the staff workflow.
+This is intended behaviour, not a description of verified application features. It builds on the
+order, kitchen and menu rules the menus work (lane C) is landing — saved-order editing, kitchen
+notices, the recorded "sent" mark, selling from the published menu, and the till's home page — so
+most of it is built after those land. The
+[implementation plan](../plans/2026-09-26-service-ordering-and-billing.md) orders the work and names
+each dependency. Inventory, guest cloud access and the other later features below are not
+prerequisites for the staff workflow.
 
 This spec complements the [menu, category and home-layout design](2026-09-20-menus-categories-and-home-layouts-design.md).
-It records the final decisions from the workflow discussion. In particular, it replaces the earlier
-ideas of permanent named course buckets, automatic matching of later additions to those names,
-and a special initial-meal-ordering phase.
+It replaces the earlier ideas of permanent named course buckets, automatic matching of later
+additions to those names, and a special initial-meal-ordering phase.
 
-Here, a **tab** holds the visit's shared orders, a **bill** is a collection of charges you can pay
-separately, and an **invoice** is an issued fiscal document. These are workflow distinctions, not
-new database entities chosen by this spec. Splitting bills must not fragment the kitchen's view
-of the visit.
+**Terms.**
+
+- A **visit** is one seated party at a table, from seating until the table is finished. It holds
+  the party's tab, every bill split from it, anything ordered after a payment, and the sequence of
+  groups sent to the kitchen. **Owner, 2026-09-26:** the visit is a record of its own; it is the
+  one new entity this spec chooses.
+- A **tab** holds the visit's shared orders.
+- A **bill** is a collection of charges you can pay separately.
+- An **invoice** is an issued fiscal document.
+- A **group** is a set of submitted items meant to reach the kitchen together, identified by its
+  position in the visit's sequence and its contents, never by a name.
+- A **draft** is one staff member's unsent items.
+
+Splitting bills must not fragment the kitchen's view of the visit.
 
 ## 1. Start with the service dashboard
 
@@ -27,31 +50,46 @@ For table service, you start on a floor plan or flat table list. For counter ser
 on a flat list of tabs, including tabs without a table, identified by a name or order number.
 
 The dashboard distinguishes unoccupied tables from occupied ones and highlights work needing
-attention: taking an order, food or drinks ready to deliver, a long wait, a held group needing
-release, or a requested bill. Several signals can coexist; payment and kitchen progress are not
-one mutually exclusive status. Exact priority, thresholds and landing-view configuration remain
-interaction-design work.
+attention. Several signals can coexist on one table; payment and kitchen progress are not one
+mutually exclusive status. **Proposed:** the signals are:
+
+- take an order (seated, nothing ordered or drafted yet);
+- an unsent draft, naming whose;
+- food or drinks ready to deliver, per station;
+- a long wait, using the station's configured waiting bands;
+- a held group due for release (§4);
+- a held item that has become unavailable (§10);
+- bill requested — a fact on the visit, set by a Bill requested action and cleared when every bill
+  is paid, not one of the venue's manual table statuses;
+- needs clearing (§8).
+
+Exact priority, thresholds and landing-view configuration remain interaction-design work. The
+venue's own manual table statuses stay alongside these.
 
 Stations appear here too. The bar can show drinks waiting for Tables 2 and 8, while those tables
 also show the corresponding readiness. Open the station to see the actual items and destinations.
 These are two views of the same work, not separate notifications to clear independently.
 
 Tap an occupied table to open its tab on **Ordering**, with **Current orders** as a second view.
-Tap an empty table to seat guests, record the guest count and open a tab. All bills split from the
-visit remain attached to that table. You can see each bill's paid and outstanding amounts, the
-table's total outstanding balance, and settled bills when you need their receipts.
+Tap an empty table to seat guests: this opens a visit, records the guest count (optional) and opens
+a tab. All bills split from the visit remain attached to it. You can see each bill's paid and
+outstanding amounts, the table's total outstanding balance, and settled bills when you need their
+receipts. **Paying does not free the table** (§8).
 
 Staff-to-table assignments are deferred. The dashboard must be usable without them.
 
 ## 2. Take an order without submitting it accidentally
 
-The ordering home uses the published menu's search, shortcut grid and category structure. A plain
-product tap adds one unit to your unsent draft. Three taps on Beer produce Beer ×3. An item with
-extras or options opens its customisation screen first; confirming adds the configured item.
+The ordering home is the till's home page from the menus work: the published menu's search,
+shortcut grid and section structure. A plain product tap adds one unit to your unsent draft. Three
+taps on Beer produce Beer ×3. An item with extras or options opens its customisation screen first;
+confirming adds the configured item.
 
-Combine identical products and selections within the same draft group. Compare selection values,
-not the order in which you picked them. Different notes or customisations stay separate. Do not
-merge a new addition into previously fired work merely because the dish is identical.
+**Combining identical items. Proposed:** within the same draft group, two lines combine
+(quantities add) when they have the same product and variant, the same set of option values
+(compared as values, never by the order you picked them), the same extras (each counted as which
+product, from which extras list), and the same note. Anything different stays separate. A draft
+line never combines with work already submitted, even if the dish is identical.
 
 The last-added item stays visible at the bottom, with its distinguishing selections and +1/−1
 controls. On a handheld, open a separate **Review** screen for the whole draft; do not squeeze a
@@ -59,28 +97,45 @@ full basket beside browsing. Returning preserves the draft and browsing position
 can show browsing and the draft together.
 
 Use **Split quantity** to turn Burger ×3 into three individual rows before moving one elsewhere.
-Do not immediately regroup those rows and undo the separation you just requested.
+Rows you split stay separate; do not regroup them and undo the separation you just requested.
+
+**Prices in a draft. Proposed:** a draft is priced like an unsaved basket in the menus design
+(§11.2 there). It follows the live published menu until it is submitted, and staff confirm any
+price change the till shows. Its prices lock at submission, when its items join the tab; from then
+on the menus design's saved-order rules apply (a line keeps the price it was given; an edit prices
+only what it adds).
 
 ### Separate drafts, shared submitted orders
 
-Each waiter has their own draft, so one can take drinks while another takes food. Leaving the
-ordering screen retains the draft and shows an unsent-items indication at the table. Other staff
-can see “Alex has an unsent order” and open its contents.
+Each waiter has their own draft, so one can take drinks while another takes food. **Proposed:** a
+draft belongs to the signed-in operator (the till's PIN lock screen identifies who that is) and to
+the visit, not the tab, so it survives "pay, then order dessert" opening a new tab. A person has at
+most one open draft per visit. Drafts are saved on the server, so leaving the ordering screen, a
+reload or a change of device retains them, and the table shows an unsent-items indication. Other
+staff can see "Alex has an unsent order" and open its contents.
 
 To edit or submit another waiter's draft, explicitly **Take over draft**. Ownership transfers;
 Alex sees who took over and can no longer edit or submit that draft. Keep the identity of each
 item's author and the person who submits it. Concurrent takeover or a stale screen must not allow
-the same draft to be submitted twice. The persistence and conflict mechanism belongs in the plan.
+the same draft to be submitted twice, and a retried submission (a lost reply) must not submit it
+twice either.
+
+The counter's basket is unchanged: it belongs to the till device, and the counter's "hold" keeps
+its meaning of parking an order. In this spec, "held" always means submitted to the tab but not
+released to the kitchen.
 
 Guests have separate private baskets. Staff cannot inspect or take over those baskets before
-submission. Once staff or guests submit, the order becomes shared tab information.
+submission. Once staff or guests submit, the order becomes shared tab information. (Guest ordering
+itself is later work, §5.)
 
 ## 3. Turn the draft into a sequence of groups
 
-Product defaults initially organise items under configurable course names, such as Drinks,
-Starters or Mains. Names and their order belong to the venue, not a fixed restaurant template.
-Bulk assignment through categories is a useful setup direction; inheritance and precedence are
-not decided here. A venue need not use named defaults to select and submit groups.
+**Owner, 2026-09-26: groups replace courses.** Today the kitchen works in named courses; from this
+spec on, a group is the kitchen's unit of hold and release. Course names (Drinks, Starters, Mains,
+…) survive only as product defaults that pre-sort a draft. Names and their order belong to the
+venue, not a fixed restaurant template. Bulk assignment through categories is a useful setup
+direction; inheritance and precedence are not decided here. A venue need not use named defaults to
+select and submit groups.
 
 These names help you assemble the draft. They do not create permanent named containers on the tab.
 After submission, a group is identified by its contents, position in the sequence and status.
@@ -91,6 +146,10 @@ the kitchen as work intended to arrive together. It does not mean every cook sta
 the same instant, or that preparation has been observed to start. Kitchen staff coordinate timing;
 automatic preparation-time scheduling is outside this design.
 
+**Who may release a held group** stays a venue setting, as it is for courses today: the waiter's
+screen, the kitchen screen or the expo (pass) screen offers Fire (**Owner, 2026-09-26**). The
+pass's "ready" and "away" steps work per group instead of per course.
+
 | Draft action | Result |
 | --- | --- |
 | Send all | Submit the remaining displayed groups, preserving their grouping and order, as held work. |
@@ -99,7 +158,7 @@ automatic preparation-time scheduling is outside this design.
 | Fire selected now | Combine the checked items into one immediately released group. Leave the rest in the draft. |
 
 The interface can show All or Selected actions according to selection. Show the scope and result
-before submission. “All” refers to your current draft, not another waiter's draft or groups already
+before submission. "All" refers to your current draft, not another waiter's draft or groups already
 held on the tab. Explicit submission is required; navigating away does not send anything.
 
 For example, select drinks and Fire selected now. Select four cold starters and Fire selected now.
@@ -114,26 +173,34 @@ and what remains held. A partial submission leaves you able to continue with the
 
 Later additions default to **Fire now**. Review also offers:
 
-- **Add to held course…**: choose an existing held group by position and contents, such as
-  “Next: 2 steaks, 1 fish”.
-- **Add as new course**: append a new held group to the sequence.
+- **Add to held group…**: choose an existing held group by position and contents, such as
+  "Next: 2 steaks, 1 fish".
+- **Add as new group**: append a new held group to the sequence.
 
 There is no automatic matching against a remembered Main or Dessert label. Adding to a held group
-keeps its sequence position and reminder timer. Already fired work is not silently expanded.
+keeps its sequence position and reminder timer. Already fired work is never expanded.
 
 ### Held groups remain editable
 
 You can reorder held groups, move items between them, split quantities, or edit their quantities,
-extras, options and notes. Remove a group from the pending sequence when it becomes empty. Record
-changes in the history. Fired groups retain their recorded history; changing a held group is not
-a way to undo a fire.
+extras, options and notes. A group left empty drops out of the sequence. Record every change in
+the history, with who made it. Fired groups keep their recorded history; changing a held group is
+not a way to undo a fire.
 
-Cancelling an already fired item sends a correction to the kitchen. It cannot guarantee that
-preparation stops. Cancelling preparation and removing the charge are separate decisions.
+Items in a held group have not been sent, so editing them is free. **Editing work already sent** is
+governed by the menus design (§10.3, §11.5, §11.6 there): a sent item the kitchen has not started
+can be changed from the till's Change action, and the kitchen receives a recall and a new ticket;
+an item the kitchen has started cannot be changed, only cancelled and re-ordered; every correction
+reaches a kitchen screen as a notice as well as a printed slip; and a venue with a paper-only
+kitchen can switch off changes to sent items, leaving only cancellation. A line's price follows
+the menus design's saved-order rules: it keeps the price it was given, and an edit prices only what
+it adds.
 
-The exact price treatment when editing held customisations was not settled. Do not infer blanket
-repricing or silently rewrite unchanged prices from this permission to edit; resolve it against
-the landed order and menu snapshot contracts before implementation.
+**Groups and bills. Proposed:** a group belongs to the visit, not to one bill. Splitting items onto
+another bill of the same visit keeps them in their group, held or fired, so the kitchen's view does
+not change. Moving items to a DIFFERENT visit (another table's tab): an item in a held group cannot
+move until it is fired or taken out of the group; an item already fired moves, leaves its group,
+and the kitchen gets the "moved to table X" slip the menus work builds.
 
 ## 4. Show what is known, including in a paper kitchen
 
@@ -142,89 +209,106 @@ quantities. Keep held work, released work and subsequent additions distinguishab
 
 A paper kitchen may provide no preparation or readiness feedback. Sending a job to a printer is
 not proof that paper emerged, somebody read it, or cooking began. Show preparation or readiness
-only when there is an observation to support it. “Fired 20 minutes ago” is different from a claim
+only when there is an observation to support it. "Fired 20 minutes ago" is different from a claim
 that the food is ready. A waiting-time warning can use a configured threshold without inventing
 kitchen progress. Mixed paper and screen stations must retain these distinctions.
 
 Mark items **Served** from inside Current orders, where you can inspect what you are claiming to
-have delivered. Select items/quantities or the visible group. Do not put a blind Mark served action
-on the floor dashboard. Paper workflows can go directly from fired to served.
+have delivered. Select items and quantities, or the visible group; undo is available. Do not put a
+blind Mark served action on the floor dashboard. Paper workflows can go directly from fired to
+served. **Proposed:** serving can be recorded on a bill that has already been paid, because a
+guest may pay before the food arrives; serving is an operational fact, not billing.
 
 There is no separate **Collected** state. Ready work stays visible until served, accepting that
 some of it may briefly be in transit.
 
 ### Remind staff to release the next group
 
-Staff control the release of held groups, not guests. Remind staff when a configurable interval
-has passed since the preceding group was fully marked served. Show the reminder on the table or
-tab and in its details. If service has not been recorded, show the held group without inventing a
-served timestamp or a timer based on one.
+Staff control the release of held groups, not guests. **Proposed rules:**
 
-You can fire the group or snooze the reminder, for example for another five minutes. Snoozing
-changes the next reminder time, not the actual served time. Firing or cancelling the pending group
-clears its reminder. Reminder behaviour after reordering, deletion or overlapping fires needs
-precise rules in the later interaction design.
+- The group needing release is the first held group in the visit's sequence.
+- Its reminder is due a configurable interval (default 10 minutes; the venue can switch reminders
+  off) after every fired group before it has been fully marked served, counted from the latest of
+  those served times.
+- If a fired group before it is not fully served, or its service was never recorded, there is no
+  timer: show the held group without inventing a served time.
+- **Snooze** (for example five more minutes) moves the next reminder time; it never changes a
+  served time.
+- Firing, emptying or cancelling the group clears its reminder, and the next held group becomes the
+  one waiting. Reordering moves the reminder to whichever group is now first.
+
+Show the reminder on the table or tab and in its details. You can fire the group or snooze it.
 
 ### Print at fire time by default
 
 By default, print preparation tickets only when their groups fire. A configurable alternative
-prints advance order information clearly marked HOLD, followed by an explicit FIRE instruction.
-If held work already appeared on an advance ticket, edits and cancellations need clear correction
-tickets; otherwise the eventual preparation ticket simply contains the updated group.
+(off by default) prints advance order information clearly marked HOLD, followed by an explicit FIRE
+instruction. If held work already appeared on an advance ticket, edits and cancellations print
+clear HOLD corrections, also shown on kitchen screens as notices; otherwise the eventual preparation
+ticket simply contains the updated group.
 
-Kitchen output can present identical items as one entry ×N or N entries, independently of billing
-and draft grouping.
+**Proposed:** kitchen output presents identical items as one entry ×N (the default) or as N
+entries, a venue setting independent of billing and draft grouping.
 
-Detected printing problems alert configurable recipients, including the kitchen, manager and
-waiter. Keep the problem visible, but allow the waiter to continue taking orders. Do not describe
-an accepted order as missing merely because printing failed. Alert channels, defaults and how an
-issue is resolved remain to be designed.
+Detected printing problems stay visible on the affected table and station, with Reprint, and
+alert configurable recipients (kitchen, manager, waiter). The waiter can continue taking orders. Do
+not describe an accepted order as missing merely because printing failed. Alert channels beyond
+the table and station, their defaults, and how an issue is resolved remain to be designed.
 
-For detected or undetected failures, staff can **Reprint kitchen ticket**. Clearly mark the ticket
-REPRINT to help avoid duplicate preparation; do not create another order or fire event. Fiscal
-invoice duplicates are a separate document workflow governed by the receipt spec below.
+For detected or undetected failures, staff can **Reprint kitchen ticket**. The ticket is clearly
+marked REPRINT to help avoid duplicate preparation; a reprint creates no new order or fire event.
+Fiscal invoice duplicates are a separate document workflow governed by the receipt spec below.
 
 ## 5. Guest access and counter service
 
-When cloud connectivity is available, seating can offer a printed, visit-specific QR link. A
-venue can expose the menu, ordering, a simplified view of known order status, and payment. Seating
-and local staff service must not depend on obtaining that cloud link.
+**Guest access is later work** and needs its own security and interaction design before it is
+built (link lifetime, bill selection, access after closure). The intended direction stays as
+Revision 1 recorded it:
 
-If guest ordering is enabled, a submitted guest order is processed without a staff approval gate.
-Otherwise offer a menu-only experience or do not issue an ordering link. Present the same grouping
-concepts in a simpler form, using the venue's configured defaults. Guests cannot release already
-held groups. The exact initial guest grouping controls still need interaction design.
+- When cloud connectivity is available, seating can offer a printed, visit-specific QR link. A
+  venue can expose the menu, ordering, a simplified view of known order status, and payment.
+  Seating and local staff service must not depend on obtaining that link.
+- If guest ordering is enabled, a submitted guest order is processed without a staff approval gate.
+  Otherwise offer a menu-only experience or no ordering link. Guests see the same grouping concepts
+  in a simpler form and cannot release held groups.
+- Guest edits are limited to held items, including items already shown on an advance HOLD ticket.
+  Whether guests may cancel held items is configurable, and decreasing quantity follows the same
+  rule. Fired items cannot be edited normally. A venue may allow a cancellation request after
+  firing while keeping the charge, with an explicit warning; it is not an automatic refund or a
+  guarantee that preparation stops.
+- The link follows the visit, not the physical table. Closing the visit stops new guest orders and
+  must not expose the next party's tab.
 
-Guest edits are limited to held items, including items already shown on an advance HOLD ticket.
-Whether guests may cancel held items is configurable; decreasing quantity must respect that same
-rule. Fired items cannot be edited normally. A venue may optionally allow a cancellation request
-after firing while retaining the charge, with an explicit warning before confirmation. This is
-not an automatic refund or a guarantee that preparation can be stopped.
-
-The guest link follows the visit rather than granting permanent access to a physical table.
-Closing the visit stops new guest orders and must not expose the next party's tab. Link lifetime,
-bill selection and access after closure need a security and interaction design before this feature
-is built.
-
-At a counter, Pay is the primary action; Send without payment is a venue-enabled alternative.
-The pay-first path releases new preparation work after successful payment. Paying work already
-sent must not fire it again. Paid but unfulfilled tabs remain on the dashboard until handed over;
-payment and handover can happen in either order. Completion keeps their history accessible.
+**Counter service.** Pay is the primary action; Send without payment is a venue-enabled
+alternative. The pay-first path releases new preparation work after successful payment. Paying
+work already sent must not fire it again. Paid but unfulfilled orders remain listed until handed
+over; payment and handover can happen in either order. Completion keeps their history accessible.
 
 ## 6. Take contributions without consuming somebody else's tip
 
+**Owner, 2026-09-26: a bill's invoice is issued when the bill is fully paid, and paying is
+flexible.** Several payments can be taken against one bill before its invoice exists. The venue
+may alternatively want the invoice printed at the start, before anyone pays, with a correction if
+the table later splits; that option waits for the advisor (Q27, below).
+
 At any point you can pay for selected items, contribute a fixed amount, or divide the outstanding
-balance equally. Show the remaining balance after every successful payment. Equal shares must
-sum to the exact remaining amount, with a deterministic allocation of rounding cents.
+balance equally. Show the remaining balance after every successful payment. Equal shares must sum
+to the exact remaining amount. **Proposed:** each share is the amount divided equally in whole
+cents, and the first shares take one extra cent each until the total is exact (€100.01 across three
+is €33.34, €33.34, €33.33).
 
 Keep the amount applied to the bill, the tendered amount, change and tip distinct:
 
 - Selected items cost €40 and you hand over €50 cash: €40 pays the bill and €10 is change unless
   you explicitly leave it as a tip.
-- Selected items cost €40 and you confirm €50 by card or Bizum: €40 pays the bill and €10 is a
-  tip. Show that allocation before payment confirmation, even if other guests still owe money.
+- Selected items cost €40 and you confirm €50 by card: €40 pays the bill and €10 is a tip. Show that
+  allocation before payment confirmation, even if other guests still owe money.
 - You choose to contribute €50 without selecting items: €50 pays down the bill, provided at
   least that much is outstanding. Any excess follows the cash-change/electronic-tip rule.
+
+A tip is outside the invoice: a voluntary tip is not part of the taxable amount and does not appear
+on the invoice (advisor Q13, closed). Bizum is not available today — no connected payment provider
+offers it — so the electronic case means card until one does.
 
 A general contribution is a pool against the bill, not a proportional discount spread over each
 item. If somebody later chooses their €25 steak, they pay €25 while at least that much remains
@@ -232,14 +316,24 @@ owing. If only €15 remains, offer two explicit choices: pay €25 with €10 t
 €15 using €10 of the earlier contribution toward the steak. Earlier tips are never consumed.
 
 Distinguish item-specific payments from general contributions so an item already paid for cannot
-be charged again unnoticed. All devices need the current shared balance; simultaneous payment
-attempts, pending provider outcomes and retries require a separate payment design before building.
+be charged again unnoticed. All devices need the current shared balance. **A separate payment
+design** (plan Task 0) decides how payments against an un-invoiced bill are recorded, what happens
+when two devices take payments on one bill at once (today one card payment in progress locks the
+whole order, menus design §11.4), pending provider outcomes, retries, refunds, and what happens to
+money already received when a later comp or discount leaves the bill owing less than was paid —
+which is never silently turned into a tip. The owner approves that design before it is built.
 
 ### Split whole items into bills; split money within a bill
 
-If someone leaving early wants their own invoice, the chosen workflow is to select their items
-and quantities and split them into a separate bill. The remainder stays open. Billing separation
-does not cancel, resend or reset the progress of kitchen work.
+If someone leaving early wants their own invoice, select their items and quantities and split them
+into a separate bill. The remainder stays open. Billing separation does not cancel, resend or reset
+the progress of kitchen work (the menus work moves a split item's kitchen ticket with it, and a
+group spans the visit's bills, §3).
+
+**Owner, 2026-09-26:** this works after money has been taken too. After one guest contributes €50
+"towards the bill", another can still ask for their own invoice: staff move those items to a
+separate bill, take its payment and print its invoice, then return to the original bill, which
+keeps the €50. The original bill's invoice is issued when it is fully paid, for what remains on it.
 
 Do not split fractions of a discrete item off the main bill. For a €30 bottle shared three ways,
 move the whole bottle to a separate bill and take three €10 contributions. The others can pay
@@ -247,60 +341,90 @@ later. This is one bottle on one bill, not three fractional wine items or three 
 Splitting two units out of Beer ×3 remains a whole-unit split; this rule does not change the
 catalogue's normal measured-product units.
 
-All related bills remain visible under the same table and visit, including paid ones. A table
-must not appear fully paid while one of its related bills is outstanding. How a standalone
-counter tab presents its related bills is a later interaction detail.
+All related bills remain visible under the same visit, including paid ones. A table must not appear
+fully paid while one of its related bills is outstanding. How a standalone counter tab presents its
+related bills is a later interaction detail.
 
 ### Fiscal questions remain explicit
 
 The [receipt design](2026-09-12-receipts-payment-slips-and-duplicates-design.md) records item-based
 splitting for separate invoices and defers per-person VAT duplicates pending
 [advisor question Q19](../../compliance/asesor-questions.md#q19-several-guests-one-table--separate-facturas-or-one-factura-with-duplicados-added-2026-09-12).
-This workflow discussion does not resolve that question or authorise building the deferred route.
+This workflow does not resolve Q19 or authorise building the deferred route. A payment
+confirmation is not a substitute for an individual tax invoice.
 
-The recorded alternatives are one invoice, or an original and marked duplicates showing each
-recipient's share of taxable base and VAT. Their applicability to restaurant simplified invoices
-remains open in Q19. A payment confirmation is not a substitute for an individual tax invoice.
+Four more advisor questions bear on this section and stay open:
 
-Issuing an invoice and closing the visit are separate events. Guests can pay and subsequently
-order dessert; the new charge must not rewrite earlier payments, tips or issued fiscal records.
-The intended direction is another invoice for genuinely new consumption, with corrections handled
-through the fiscal correction workflow where applicable. Before implementation, resolve issuance
-timing for contributions, partial payments, post-payment additions, adjustments and refunds with
-the fiscal design and advisor. Do not assume waiting for the last payer is always valid, or that
-this document settles the legal treatment of every split.
+- [Q27](../../compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26):
+  money taken against a bill before its invoice exists, then a split; and printing the invoice
+  first.
+- [Q21](../../compliance/asesor-questions.md#q21-when-a-table-asks-for-the-bill--pre-bill-first-or-the-invoice-straight-away-added-2026-09-23):
+  a pre-bill first, or the invoice when the table asks for the bill.
+- [Q14](../../compliance/asesor-questions.md#q14-is-a-restaurant-precuenta-a-prefactura-for-art-292j-lgt-added-2026-07-31):
+  whether a pre-bill is a *prefactura*.
+- [Q28](../../compliance/asesor-questions.md#q28-a-table-leaves-without-paying--is-the-invoice-still-owed-added-2026-09-26):
+  whether an invoice is still owed when a table leaves without paying (§8).
+
+Issuing an invoice and closing the visit are separate events. Guests can pay and then order dessert:
+the new charge goes on a new bill of the same visit with its own invoice, and it never rewrites
+earlier payments, tips or issued fiscal records. Corrections to an issued invoice go through the
+fiscal correction workflow. Printing a pre-bill, when one exists, never sends anything to the
+kitchen or fires held food (menus design §10.3).
 
 ## 7. Resolve complaints without erasing what happened
 
 Provide configurable reasons and permissions for cancelling items, making selected lines
 complimentary, and applying euro or percentage discounts to lines or a bill. Reasons are policies,
-not just free text: specify applicable actions, amounts or percentages allowed, who can apply them,
-when approval is required and whether a note is mandatory. Apply limits cumulatively so several
-small adjustments do not bypass a cap.
+not just free text: they say which actions apply, the amounts or percentages allowed, who can apply
+them, when approval is required and whether a note is mandatory.
+
+**Limits add up. Proposed:** a reason's euro limit caps the total that reason takes off one bill,
+percentage discounts included; its percentage limit caps the combined percentage it takes off one
+line. Asking above a limit is refused; the owner raises the policy to allow more. Someone below the
+reason's applying role needs approval from someone at or above its approving role.
 
 Examples supplied by the owner include entry error, changed mind, unavailable item, complaint,
 friends and family, employee discount and manager special. They are examples, not a mandatory
-reason list. “Already paid” and “Paid separately” need payment reconciliation, not an automatic
-discount. “Customer left without paying” is an unpaid departure, not a comp. Training belongs to
-the separate training environment, not a reason to erase a live transaction.
+reason list. "Already paid" and "Paid separately" need payment reconciliation, not an automatic
+discount. "Customer left without paying" is an unpaid departure (§8), not a comp. Training belongs
+to the separate training environment, not a reason to erase a live transaction.
+
+**Owner, 2026-09-26: discounts and comps reduce the line.** A line discount lowers that line's
+price. A whole-bill discount is spread across the bill's lines in proportion to their amounts, so
+each VAT rate's taxable amount drops correctly. A comp is the line at 100% off, shown on the invoice
+with its original price and €0.00. This rests on the advisor finding that a reduction agreed before
+the invoice is issued is a *descuento* (Q15, closed). **Proposed details:**
+
+- A line always keeps a whole number of cents per unit, because the invoice is built from unit
+  price × quantity. Comping or discounting part of a line (1 of Steak ×2) first splits that part
+  into its own line; a reduced total that does not divide into whole-cent units becomes at most two
+  lines (Croquetas ×3 at €3.33 with 10% off: 2 × €3.00 and 1 × €2.99).
+- A whole-bill discount is shared out in whole cents, rounded down, and the cents left over go to
+  the lines with the largest remainders, earlier lines first on a tie, so the shares sum exactly.
+- A weighed item (sold by weight) cannot take a line discount and takes no share of a bill discount.
+- A comp or discount on a bill that is already paid is refused; the invoice is corrected through
+  the fiscal correction workflow instead.
 
 Preparation cancellation, a reduced charge, payment refund and unpaid debt are distinct outcomes.
-Keep the order history and actual preparation/service facts. A comp does not pretend the food
-was never made. A post-payment reduction must not silently turn the difference into a tip.
-Issued invoice adjustments follow the fiscal workflow, not edits to an issued record.
+Keep the order history and actual preparation/service facts. A comp does not pretend the food was
+never made, and it sends nothing to the kitchen. **Cancelling** follows the menus design (§11.5
+there): it takes the item off the bill at once and the kitchen receives a VOID notice; an item the
+kitchen made anyway is re-added with a note so it is billed. The adjustment record keeps what
+happened in the kitchen and what happened to the charge as separate facts. A post-payment reduction
+must not silently turn the difference into a tip.
 
 There is no separate replacement-item action. Order the replacement normally, usually Fire now,
 and comp the original or new item with the appropriate reason. Both remain in the history.
 
-When approval is needed, a manager can authorise on the waiter's device without logging the waiter
-out. Record requester and approver separately, along with the reason, before/after values and time.
-The authentication mechanism and permission vocabulary are later implementation decisions.
+When approval is needed, a manager can authorise on the waiter's device, with their PIN, without
+logging the waiter out. Record requester and approver separately, along with the reason,
+before/after values and time.
 
 ### Make adjustments reviewable
 
-Provide overall and per-waiter reports for comps, voids/cancellations and discounts, with counts,
-values, reasons and drill-down to the underlying history. Distinguish actions before and after
-firing or service, and show who requested and approved them. Attribute an adjustment to its actual
+Provide overall and per-waiter reports for comps, cancellations and discounts, with counts, values,
+reasons and drill-down to the underlying history. Distinguish actions before firing, after firing
+and after serving, and show who requested and approved them. Attribute an adjustment to its actual
 actor, not automatically to the original order taker or whoever later owns the table. Guest
 cancellations have separate attribution.
 
@@ -315,16 +439,22 @@ an issued fiscal record.
 
 Paying does not by itself free an occupied table. By default, **Finish table** closes the visit
 and makes the table available. An optional clearing workflow, off by default, instead closes the
-visit into **Needs clearing**, followed by **Mark cleared** when ready for the next party.
+visit into **Needs clearing**, followed by **Mark cleared** when ready for the next party. The next
+party's visit starts empty: it never shows the previous visit's bills.
 
 An outstanding related bill blocks ordinary closure. Offer Take payment or a permission-controlled
 **Record unpaid departure**, with a reason. The latter releases the table while retaining the
 unpaid amount and the staff member who recorded it. Collection of that debt later is not specified
 here. Settled bills and the visit's history remain accessible after closure.
 
+**Unpaid departure waits for advisor Q28.** In a venue that issues the invoice at payment, no
+invoice exists when the table leaves, although the food was served. The working assumption is that
+the invoice is issued anyway, for the full amount, and recorded as unpaid; unpaid departure is not
+built until Q28 is answered or the owner decides without it.
+
 ## 9. Keep menu access separate from product use
 
-Replace the standalone-sale boolean with a three-way **Standalone ordering** setting:
+Replace the standalone-sale yes/no setting with a three-way **Standalone ordering** setting:
 
 | Value | Who can order the product on its own |
 | --- | --- |
@@ -344,16 +474,25 @@ If a guest wants bacon after their burger has fired, order bacon as a separate p
 standalone price, normally Fire now. There is no special retrospective Add extra action or required
 link to the burger. The restaurant must make bacon sellable to staff and include it in the menu.
 
-Snapshot behaviour for this setting, guest filtering of category/home shortcuts, menu overrides
-versus extra prices, and server enforcement must be reconciled with the menu publication design.
-This permission must never depend solely on hiding a tile.
+**Proposed:**
+
+- The published menu carries the setting, so changing it marks the menu as changed until it is
+  published again (the menus design's publishing rules).
+- The server refuses a standalone order for a product that is not sold separately; hiding a tile
+  is never the only protection.
+- Until guest ordering exists, Staff only behaves exactly like Public.
+- Upgrading a venue sets every product to Public, because no data is carried across before
+  production. A venue must reset any product it had marked as not sold on its own.
 
 ## 10. Availability now; inventory integration later
 
-Marking a product unavailable prevents new orders and alerts staff to affected held items. Do not
-automatically cancel or substitute existing work. Preserve affected unsent drafts, flag their
-unavailable lines and prevent submission of those lines; let staff explicitly send unaffected
-items. Restoring availability permits ordering again without rewriting existing orders.
+Marking a product unavailable prevents new orders and alerts staff to affected held items (the
+held-unavailable signal, §1). Do not automatically cancel or substitute existing work. Preserve
+affected unsent drafts, flag their unavailable lines and prevent submission of those lines; let
+staff explicitly send unaffected items. A held group containing an unavailable item cannot be fired
+until staff remove or replace it (the menus design's rule that an unsent line whose product became
+unavailable cannot be sent or paid for, §11.3 there). An item already sent stays payable.
+Restoring availability permits ordering again without rewriting existing orders.
 
 When inventory counts are introduced, commit stock at submission to the tab, including held
 groups, not while an item is only in a draft. Firing a held group does not deduct it again. At zero
@@ -396,155 +535,117 @@ Deferred features:
 - Daily working floor layouts: join/split tables, change chair counts, move tabs or selected items,
   add/remove tables, and start each service day from a saved default. Resolve open tabs across the
   day boundary; preserve kitchen progress when moving items.
-- Full inventory and stock ordering, cloud guest access, and the source-code screen plugin contract.
+- Guest access (§5), full inventory and stock ordering, the source-code screen plugin contract, a
+  Bizum tender, and printing the invoice before payment (§6, Q27).
 
 ## 12. Checks to turn into acceptance tests
 
 These are future acceptance requirements, not tests run while writing this document:
 
-1. Two staff take separate drafts on one tab; takeover makes the former owner read-only and only
-   one submission succeeds. Guests' unsubmitted baskets stay private.
-2. Three Beer taps group; different options do not. Split quantity stays split for moving items.
-   Partial submission preserves all unselected items.
+1. Two staff take separate drafts on one visit; takeover makes the former owner read-only and only
+   one submission succeeds, in either order of events, and a retried submission creates nothing
+   twice. Guests' unsubmitted baskets stay private.
+2. Three Beer taps group; different options, notes or extras lists do not; the same options picked
+   in a different order do. Split quantity stays split for moving items. Partial submission
+   preserves all unselected items.
 3. The drinks/cold starters/warm starters/mains/desserts example produces the specified released
    and held groups. Send all preserves grouping; Fire all now combines the current draft only.
 4. A later main defaults to Fire now, can explicitly join a held group, and never gets silently
-   matched to a historical course label. Editing, reordering and empty-group removal preserve history.
-5. A paper-only station shows no invented Ready state. Mark served uses visible quantities;
-   snoozing a held-group reminder leaves its source served timestamp intact.
+   matched to a historical course label. Editing, reordering and empty-group removal preserve
+   history. A fired group can never be joined.
+5. A paper-only station shows no invented Ready state. Mark served uses visible quantities, and
+   works on a bill already paid. Snoozing a held-group reminder leaves its source served time
+   intact.
 6. Advance HOLD edits produce corrections; print-on-fire emits the current contents. A detected
-   print failure alerts without blocking orders. Reprint produces no new order or fire event.
-7. €50 paid for €40 of items yields €10 cash change or a confirmed €10 electronic tip. Later
-   payments cannot consume the tip. A general contribution does not discount each item.
+   print failure shows on the table and station without blocking orders. Reprint is marked
+   REPRINT and produces no new order or fire event.
+7. €50 paid for €40 of items yields €10 cash change or a confirmed €10 card tip. Later payments
+   cannot consume the tip. A general contribution does not discount each item.
 8. A €25 steak with €15 still owing offers the two agreed allocations. A whole shared bottle moves
-   onto one related bill; asynchronous contributions settle it without fractional bottle lines.
-9. An outstanding related bill blocks ordinary Finish table. Unpaid departure preserves debt and
-   attribution. Needs clearing is optional and off by default.
-10. A manager approves without replacing the waiter session. Reports distinguish requester,
-    approver, guest actions and actual financial reductions without double-counting them.
+   onto one related bill; separate contributions settle it without fractional bottle lines. After
+   a €50 contribution on €120, two items (€30) split to their own bill are paid and invoiced there,
+   and the original bill's invoice, issued at full payment, is for €90 with the €50 applied.
+9. A table with one bill paid and another outstanding never reads as paid, and Finish table is
+   refused. After Finish, the next party sees none of the previous visit's bills. Needs clearing is
+   optional and off by default. Unpaid departure preserves debt and attribution (after Q28).
+10. A manager approves with their PIN without replacing the waiter session. A comp of a served dish
+    sends nothing to the kitchen. A discount on Croquetas ×3 leaves whole cents per unit. Reports
+    distinguish requester, approver, guest actions, nominal value and actual financial reductions
+    without double-counting them.
 11. Staff-only bacon is searchable within its menu, absent from guest ordering, but visible on the
-    guest's bill once ordered. Not sold separately does not mean Extra only.
+    guest's bill once ordered. Not sold separately is refused by the server as a standalone order,
+    and still sells as an extra.
 12. With inventory enabled, simultaneous submissions cannot oversell the last portion; held
     cancellation releases stock, firing does not deduct twice, and a comp does not restore stock.
-13. Guest edits, submission retries, takeover, firing and payment races are checked at the write
-    boundary, not only through disabled controls. No stale edit silently undoes a fire.
+13. Guest edits, submission retries, takeover, firing, adjustments and payment races are checked at
+    the write boundary, not only through disabled controls. No stale edit silently undoes a fire.
 14. Render the workflows in both themes at handheld and till sizes. Use the
     [design system](../../developers/design-system.md), audience-appropriate product names,
     visible action scope, accessible touch targets and alternatives to drag-only reordering.
 
-## 13. Before implementation
+## 13. What remains open
 
-Reconcile this document with the landed order, product, payment, printing and fiscal contracts.
-Audit existing behaviour rather than assuming every requirement needs new code. Then resolve:
+- **The payment design** (plan Task 0): the questions §6 hands it. The owner approves it before
+  multi-payment bills are built.
+- **Advisor questions:** Q19 (duplicates per guest), Q21 and Q14 (pre-bill versus invoice at the
+  table), Q27 (money before the invoice, and printing the invoice first), Q28 (unpaid departure).
+- **Guest access:** its security and interaction design (§5).
+- **Interaction design:** signal priority and landing views (§1), alert channels for print problems
+  (§4), and how a counter tab presents related bills (§6).
+- **Later specs:** inventory (§10), kitchen routing rules (menus design §10.5), floor layouts
+  during service, seat assignment, staff assignment.
 
-- Draft persistence/recovery, takeover races, guest identity, connection-loss behaviour and
-  idempotent submission, firing, printing and payment commands.
-- Default course assignment, initial guest grouping, reminder semantics after structural edits,
-  operational alert delivery and authority to release groups.
-- Menu version changes during drafts/held edits, locked-price treatment, access-setting publication
-  and manual availability versus future stock exhaustion.
-- Payment allocations across related bills, pending captures, refunds, issuance timing and Q19.
+## 14. Changes from Revision 1
 
-Write implementation slices only after those dependencies and questions are addressed. This change
-adds no schema, API, runtime behaviour or production tests.
+**Owner decisions, 2026-09-26:**
 
-## 14. Owner decisions and review findings, 2026-09-26
+1. Groups replace named courses; who may release a held group stays a venue setting (§3).
+2. A visit record ties one party's orders and bills and keeps the table occupied until Finish
+   table (terms, §1, §8).
+3. A bill's invoice is issued when it is fully paid; several payments may come before it; items can
+   still be split to their own bill after a contribution; printing the invoice first waits for Q27
+   (§6).
+4. Discounts and comps reduce the line; comps show at €0.00 with the original price (§7).
 
-Added after a review of this spec against `main` at `17dd4b147` and lane C's unlanded order-edits
-branch (`feat/menus-order-edits` at `1996d4ce7`). Both audits only read code; nothing was run. The
-implementation plan is
-[2026-09-26-service-ordering-and-billing.md](../plans/2026-09-26-service-ordering-and-billing.md).
-Where this section and §1–§13 disagree, this section wins.
+**Now governed by the menus design** (§10.3, §11.2–§11.6 there, and the owner's answers while lane
+C built them): prices on saved orders and edits to them; editing sent work (Change, recall, the
+paper-only-kitchen setting, kitchen notices); unavailable items at send and pay; a split item's
+kitchen ticket and the "moved to table X" slip; the one-card-payment-at-a-time lock; VAT recorded
+on the line from the published menu (lane C's item M7v). Revision 1's §3 "price treatment not
+settled", §3 and §4's correction wording, and §10's held-work availability now defer to it.
 
-### 14.1 Decisions (owner, 2026-09-26)
+**Proposed by the planning session, for the owner's review:**
 
-1. **Groups replace courses.** A group becomes the kitchen's unit of hold and release. Today's
-   named courses (`kitchen_courses`) survive only as product defaults that pre-sort a draft. The
-   venue setting that says which surface may fire (`locations.fire_control`: waiter, kitchen or
-   expo) stays configurable, per group instead of per course, and so does "away" at the pass.
-2. **A visit record ties one party's orders and bills together.** Seating opens a visit and
-   records the guest count. The tab, every bill split from it, and anything ordered after a payment
-   belong to the visit. The table stays occupied until Finish table (or an unpaid departure)
-   closes the visit. This is the one new entity this spec now chooses, overriding the "not new
-   database entities" sentence above for the visit only.
-3. **A bill's invoice is issued when the bill is fully paid, and paying is flexible.** Several
-   payments can be taken against one bill before its invoice exists. After a general contribution
-   ("here's €50"), another guest can still ask for their own bill: staff move those lines to a
-   separate bill, take its payment and print its invoice, then return to the original bill, which
-   keeps the contribution. The venue may alternatively print the invoice at the start, before any
-   payment; if the table then splits, the original is corrected through the fiscal correction
-   workflow. Both points go to the advisor as
-   [Q27](../../compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26);
-   the plan builds invoice-at-full-payment and holds the print-first option until Q27 is answered.
-4. **Discounts and comps reduce the line.** A line discount lowers that line's price. A whole-bill
-   discount is spread across the bill's lines in proportion to their amounts, with rounding cents
-   allocated deterministically, so each VAT rate's taxable amount drops correctly. A comp is the
-   line at 100% off, shown on the invoice with its original price and €0.00. This rests on the
-   closed advisor finding that a reduction agreed before issuance is a *descuento*
-   ([Q15](../../compliance/asesor-questions.md#q15-short-payment--a-discount-or-a-bad-debt-added-2026-07-31)).
+- the dashboard's list of signals, with Bill requested as a visit fact (§1);
+- when identical items combine in a draft (§2);
+- a draft is priced like an unsaved basket and locks at submission (§2);
+- a draft belongs to the signed-in operator and the visit, and is saved on the server (§2);
+- a group belongs to the visit, so bill splits keep it; moving held items to another visit is
+  refused (§3);
+- serving can be recorded on a paid bill (§4);
+- the release-reminder rules, default 10 minutes (§4);
+- kitchen tickets as ×N or N entries, a venue setting (§4);
+- equal shares in whole cents, first shares taking the extra cent (§6);
+- how adjustment limits add up, and approval by role (§7);
+- whole cents per unit on a reduced line, how a bill discount is shared, no discounts on weighed
+  items, no adjustments on a paid bill (§7);
+- a comp sends nothing to the kitchen (§7);
+- the Standalone ordering details, including every product starting Public on upgrade (§9);
+- a held group with an unavailable item cannot fire (§10).
 
-### 14.2 What the review found missing
+**What the review of the code found, which shaped the above:** much of §3–§4 already exists
+(courses with hold and fire, per-line send and recall, kitchen screen states, void and recall slips,
+reprint, waiting bands), as do a pay-first counter mode, whole-item bill splitting with an invoice
+per bill, table moves and joins, and a manager PIN override that keeps the waiter signed in. Missing
+today: paying frees the table; a split bill has no link to its table; every bill is paid in one go
+at the moment its invoice is issued; the counter basket belongs to the device and the table's round
+lives only on screen; cancelling a line records no reason or actor; a reprint is not marked; served
+is whole-line only; sending a round takes no protection against a retried request.
 
-- **Existing behaviour the spec did not account for.** Much of §3–§5 exists: named courses with
-  hold and fire, per-line send and recall, queued/preparing/ready kitchen states, void and recall
-  slips, reprint, waiting-time bands, a pay-first counter mode and a handover stamp, whole-item
-  bill splitting (each bill gets its own invoice), table moves, joins and line transfers, and a
-  manager PIN override that keeps the waiter signed in (`authorize` in
-  `packages/identity/src/authorize.ts`).
-- **Today, paying frees the table.** A trigger (`working_orders_clear_table_status`,
-  `packages/db/drizzle/0001_behavioural_triggers.sql`) clears the table's status when its tab
-  settles, and a settled order is terminal. A split-off bill carries no link to its table. §8's
-  Finish table and §6's related bills both depend on decision 2.
-- **Taking money before the invoice exists.** `settleSale` takes every tender at once and a
-  trigger refuses a tender once the sale is settled. Decision 3 needs payments held against an
-  un-invoiced bill. That is new fiscal ground (Q27), and it also touches the open
-  [Q21](../../compliance/asesor-questions.md#q21-when-a-table-asks-for-the-bill--pre-bill-first-or-the-invoice-straight-away-added-2026-09-23)
-  and [Q14](../../compliance/asesor-questions.md#q14-is-a-restaurant-precuenta-a-prefactura-for-art-292j-lgt-added-2026-07-31),
-  which §6 did not name.
-- **Unpaid departure in a venue that invoices on payment.** The food was served and no invoice
-  exists. Whether one must still be issued is
-  [Q28](../../compliance/asesor-questions.md#q28-a-table-leaves-without-paying--is-the-invoice-still-owed-added-2026-09-26).
-- **Tips.** Settled: a voluntary tip is outside the VAT base and off the invoice (Q13, closed).
-  Cash and manual-card payments record no tip today; only integrated card payments do.
-- **Bizum** has no connected provider (SumUp cannot take it, per
-  `docs/research/2026-09-18-online-payment-providers-bizum.md`). §6's Bizum example is future.
-- **Who owns a draft on a shared till.** Drafts belong to the signed-in operator (the till's PIN
-  lock screen already identifies one). Today the counter basket belongs to the device and survives
-  a change of operator, and the table round draft lives only in the screen's memory.
-- **Several payments at once.** Lane C's card-payment lock (`working_orders.payment_attempt_at`,
-  menus plan D22) is one timestamp per order, so it cannot represent two guests paying at the same
-  time. The payment design (plan Task 0) starts from it.
-- **Two meanings of "held".** In the code a held order is also a parked counter basket
-  (`parkOrder`). In this spec and its plan, "held" means submitted but not released to the
-  kitchen; the counter's action keeps the code name "park".
-- **Held-customisation prices** (§3's open point) are settled by the menus plan's D10: a line's
-  price locks when it is added to a saved order.
-- **Smaller gaps:** "bill requested" is today one manual status per table, so it cannot coexist
-  with another status; a reprinted kitchen ticket is not marked REPRINT; served is whole-line only;
-  cancelling a line deletes it with no reason or actor recorded, so there is nothing for §7's
-  reports to count; sending a round to the kitchen (`addTabRound`) takes no idempotency key
-  (read, not run); cumulative adjustment caps do not say what they add up over (the plan decides:
-  per bill, per reason).
-
-### 14.3 Superseded by the menus work
-
-This spec was written before the menus work in lane C began. The
-[menus spec](2026-09-20-menus-categories-and-home-layouts-design.md) §10–§11 and its plan's
-decisions (as the owner amended them while lane C built them) now govern the following, and this
-spec defers to them:
-
-| Here | Now governed by | What it says |
-| --- | --- | --- |
-| §3 "the exact price treatment when editing held customisations was not settled" | menus §10.3, §11.2 | A saved order's line keeps the price it was given when added; an edit prices only what it adds. An unsaved basket follows the live published menu, and staff confirm any change. |
-| §3 cancelling fired work; §4 corrections | menus §10.3, §11.5; plan D10 | Sent, not started: the edit is allowed and the kitchen receives a recall plus a new ticket. Started (only a kitchen screen can say so): refused; void and re-add. Every correction is a kitchen notice as well as a slip. The venue setting "Allow changes to items already sent to the kitchen" (for a paper-only kitchen) leaves only void. |
-| §3 staff edit sent work | menus §11.6 | The till's Change action on a sent, not-started line. |
-| §10 availability of existing work | menus §11.3 | An unsent line whose product became unavailable cannot be sent or paid for; a sent line stays payable. "Sent" is recorded on the line. |
-| §6 billing separation keeps kitchen progress | lane C's order-edits branch (menus Task 7b) and the owner's answers of 2026-09-26 | A split line takes its own kitchen ticket; moving sent work to another table prints a "MOVED" slip. |
-| §6 simultaneous payments | menus §11.4; plan D22 | While a card payment on an order is between pricing and filing, the order refuses line writes, and (as built) other payments too. The payment design must start from this. |
-| VAT on lines | lane C's queue item M7v (owner, 2026-09-26) | A line records its VAT rate and reporting classification from the published menu when its price locks. |
-| §7 "cancelling preparation and removing the charge are separate" | menus §11.5 | A void removes the line from the bill at once; a line the kitchen made anyway is re-added with a note so it is billed. The adjustment record keeps the preparation outcome and the charge outcome as separate facts. |
-| §9 how the ordering setting enters the snapshot | still open; the menus plan's D20 leaves it out of scope | Decided in this spec's plan. |
-
-The plan also decides, subject to the owner's review, that a draft (§2) is priced like an unsaved
-basket: it follows the live published menu until it is submitted, and its prices lock at
-submission.
+**Removed from Revision 1:** the paragraph deferring implementation until the PostgreSQL-to-SQLite
+work, dependency upgrades and variants/extras-as-products land. The dependency upgrades and
+variants/extras-as-products have landed (#480, #556). SQLite slice 2 is still landing in lane A, but
+the owner decided on 2026-09-25 that the menus work does not wait for it (menus plan,
+"Prerequisites"), and this work follows the menus work. Also removed: the §13 list of
+questions to resolve before planning, now answered above or listed in the new §13; Bizum as a
+current payment example.
