@@ -122,6 +122,7 @@ describe("configuration", () => {
       "dashboard-modules",
       "country",
       "country-packs",
+      "adjustments",
     ]);
   });
 

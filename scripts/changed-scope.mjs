@@ -217,6 +217,7 @@ export const LIGHT_A_PACKAGES = [
   "@waitron/dashboard-modules",
   "@waitron/store",
   "@waitron/stream",
+  "@waitron/adjustments",
 ];
 
 export const LIGHT_B_PACKAGES = [

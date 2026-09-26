@@ -50,6 +50,7 @@ export const GENERIC_PACKAGES = [
   // deliberately outside this generic vocabulary boundary.
   "country",
   "country-packs",
+  "adjustments",
 ] as const;
 
 /**

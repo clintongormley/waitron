@@ -1510,7 +1510,7 @@ describe("startServer, against a migrated venue directory", () => {
       // `expected > 0` is the control: an empty journal would make `0 === 0` pass. `fiscal-none`
       // ships no migrations, so its version is legitimately 0.
       const sets = orderedMigrationSets(ALL_MODULES);
-      expect(sets).toHaveLength(13);
+      expect(sets).toHaveLength(14);
       for (const set of sets) {
         const expected = expectedSchemaVersion(set, migrationsRoot);
         if (set.name === "fiscal-none") expect(expected).toBe(0);

@@ -157,6 +157,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.1
         version: 2.1.1(hono@4.13.8)
+      '@waitron/adjustments':
+        specifier: workspace:*
+        version: link:../../packages/adjustments
       '@waitron/bookings':
         specifier: workspace:*
         version: link:../../packages/bookings
@@ -449,6 +452,49 @@ importers:
         specifier: ^7.0.0
         version: 7.0.2
 
+  packages/adjustments:
+    dependencies:
+      '@waitron/db':
+        specifier: workspace:*
+        version: link:../db
+      '@waitron/identity':
+        specifier: workspace:*
+        version: link:../identity
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../module
+      '@waitron/server-kit':
+        specifier: workspace:*
+        version: link:../server-kit
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@waitron/sync-enrolment':
+        specifier: workspace:*
+        version: link:../sync-enrolment
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.5.8)(@types/pg@8.23.1)(pg@8.23.0)
+      hono:
+        specifier: ^4.13.8
+        version: 4.13.8
+    devDependencies:
+      '@types/node':
+        specifier: ^26.0.0
+        version: 26.6.2
+      '@vitest/coverage-v8':
+        specifier: ^4.1.11
+        version: 4.1.11(@vitest/browser@4.1.11)(vitest@4.1.11)
+      drizzle-kit:
+        specifier: ^0.31.10
+        version: 0.31.10
+      typescript:
+        specifier: ^7.0.0
+        version: 7.0.2
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@26.6.2)(@vitest/browser-playwright@4.1.11)(@vitest/coverage-v8@4.1.11)(vite@8.3.0(@types/node@26.6.2)(esbuild@0.28.2)(tsx@4.23.13)(yaml@2.9.0))
+
   packages/bookings:
     dependencies:
       '@waitron/dashboard-kit':
@@ -558,6 +604,9 @@ importers:
 
   packages/composition:
     dependencies:
+      '@waitron/adjustments':
+        specifier: workspace:*
+        version: link:../adjustments
       '@waitron/bookings':
         specifier: workspace:*
         version: link:../bookings

@@ -7,6 +7,7 @@ import { listAvailableProducts } from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
 import { seedFloor } from "./seed-floor.js";
 import { seedStaff } from "./seed-staff.js";
+import { seedAdjustmentReasons } from "./seed-adjustments.js";
 import { seedMedia } from "./seed-media.js";
 import { seedOptionLists } from "./seed-option-lists.js";
 import { demoSeedEnvironment, seedSales } from "./seed-sales.js";
@@ -43,6 +44,7 @@ export async function seedDemoRestaurant(
     await seedOptionLists(tx, { productsByImage, locale });
     await seedFloor(tx, { locationId, locale, menuIds });
     await seedStaff(tx);
+    await seedAdjustmentReasons(tx, { locale });
     await seedMedia(tx, { productsByImage });
     return (await listAvailableProducts(tx, locationId)).products;
   });

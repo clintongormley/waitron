@@ -37,6 +37,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "3.1136.0",
     "@hono/node-server": "^2.1.1",
+    "@waitron/adjustments": "workspace:*",
     "@waitron/bookings": "workspace:*",
     "@waitron/catalogue": "workspace:*",
     "@waitron/composition": "workspace:*",
