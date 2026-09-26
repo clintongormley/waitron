@@ -1214,9 +1214,8 @@ picked product is offered by more than one of the dish's active lists.
 - **Superseded by menus plan Task 7b (branch `feat/menus-order-edits`):** a stored extras child now
   records its list (`working_order_lines.extra_list_id`) and a stored child pairs with a pick on list,
   product and quantity (`editLineExtras`, which replaced `matchExtraChildren`), so the refusal and the
-  escape it left are gone. The till's
-  `apps/till/src/state/held-extras.ts` still guesses a stored child's list; reading `listId` there is
-  Task 7b's till part.
+  escape it left are gone. The till reads each held pick's `listId` too
+  (`apps/till/src/state/held-extras.ts`) and no longer guesses the list.
 
 Task 9 has landed as **#469**: the filed sale line carries a dish's frozen answers in
 `sale_lines.option_snapshots` (core migration 0041), written by both filing routes, and the customer
@@ -7188,6 +7187,7 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 | Q15 (short payment = descuento) | a *descuento* agreed at/before issuance is outside the base (LIVA 78.Tres.2º) | **Closed** on primary source |
 | Q5(a) (one series per till) | a series belongs to the server-SIF; two concurrent SIFs need **disjoint** series | needs advisor |
 | **Q14 (precuenta → amendment log)** | a printed pre-bill may oblige an amendment log | **Open** — the interpretive hinge |
+| Q21 (pre-bill, or the invoice when a table asks for the bill) | the table screen prints no pre-bill; when one is built, printing it never fires held food and never marks a line sent (menus plan D10) | needs advisor |
 | F3 canje (`IDOtro`, a separate F3 series, `Destinatarios` XSD) | foreign recipient refused; F3 reuses `standard` | needs advisor / XSD before the first real filing |
 
 **The laboral advisor** (a *graduado social / gestoría*) has its own list in

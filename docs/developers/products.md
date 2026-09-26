@@ -293,7 +293,7 @@ Unavailable is refused. Paying a held order bills its stored lines and does not
 re-check them; only each line's VAT rate is resolved again, as _What a sold line freezes_ says
 (`priceStoredOrderForIssuance`, same file). On the till, retrieving the order keeps such an extra
 in the basket, marked "Not offered now" and counted in the total, as it keeps a sold-out one,
-because the extras lists it rebuilds the picks from no longer offer it (`deriveExtraSelections`,
+because the list the pick was taken from no longer offers it (`deriveExtraSelections`,
 `apps/till/src/state/held-extras.ts`) and paying with no edit still bills it: an unedited retrieved
 basket sends no update (`#syncIfDirty`, `apps/till/src/till-app.ts`). The till never sends such a
 pick, so the first edit takes it off the basket, and the server removes that extra from the line
