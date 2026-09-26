@@ -647,7 +647,7 @@ its part done here when it lands.
   sideways inside their own box, further than before by the new column: Extras 511px of content in
   388px (439px before) in English, 610px (463px) in Spanish; Options 457px (402px) and 479px
   (405px). The page itself does not scroll sideways.
-- **A66 (the Extras editor) — built, no pull request number yet.** The customer-facing and kitchen names fold into a
+- **A66 (the Extras editor) — LANDED, #717.** The customer-facing and kitchen names fold into a
   "Customer and kitchen names" section, closed until opened, whose heading counts the names filled
   in ("1 of 3 filled in") and which opens by itself when the server refuses one of them. Minimum and
   maximum choices are − / + steppers side by side (one above the other where the form is 30rem wide
@@ -665,7 +665,10 @@ its part done here when it lands.
   163px of sideways scroll in English and 206px in Spanish, and a 104px price column, for each of
   "g", "ración", "kilogramos", "Unidadesdeembalaje" and a unit with no abbreviation named "Large
   half portion" / "Media ración grande". An earlier measurement, not repeated, read 234px (English)
-  and 271px (Spanish) before the A66 rework. Still to come: A67, the Options editor.
+  and 271px (Spanish) before the A66 rework. Open point for the owner: clearing the Minimum
+  choices box saves 0, as it did before A66 (the save format's own default); the plan's Review Focus
+  item 3 reads as if a cleared minimum should be refused instead. Still to come: A67, the Options
+  editor.
 
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
