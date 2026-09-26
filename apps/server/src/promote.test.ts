@@ -25,6 +25,7 @@ import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/cred
 import {
   endorseKey,
   generateNodeKeyPair,
+  MAX_NODES,
   verifyMembershipDocument,
   type Endorsement,
   type MembershipNode,
@@ -505,6 +506,36 @@ describe("promoteMirrorToPrimary", () => {
     );
     expect(isAppError(err) && err.code).toBe("promotion.node_fenced");
     expect(isAppError(err) && err.params).toEqual({ standing: "evicted" });
+    expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
+    expect((await readNodeMembership(db))?.body.term).toBe(3);
+    expect(persisted).toEqual([]);
+  });
+
+  it("refuses with membership.chart_too_large, leaving it a mirror, when its held chart lists MAX_NODES machines but not itself", async () => {
+    const { db, deps, nodeId } = await mirror();
+    await writeNodeMembership(db, {
+      body: {
+        term: 3,
+        nodes: Array.from({ length: MAX_NODES }, (_, i) => ({
+          nodeId: `other-${i}`,
+          contactUrl: `https://other-${i}`,
+          standing: i === 0 ? ("serving-primary" as const) : ("serving-secondary" as const),
+        })),
+      },
+      signerNodeId: "other-0",
+      signature: "held-placeholder-sig",
+      endorsements: [],
+    });
+    const persisted: string[] = [];
+    const err = await captureError(() =>
+      promoteMirrorToPrimary(
+        deps(noopLog, async (seriesId) => {
+          persisted.push(seriesId);
+        }),
+        { oldNodeNeutralised: true },
+      ),
+    );
+    expect(isAppError(err) && err.code).toBe("membership.chart_too_large");
     expect(await readDeploymentMode(db, nodeId)).toBe("mirror");
     expect((await readNodeMembership(db))?.body.term).toBe(3);
     expect(persisted).toEqual([]);

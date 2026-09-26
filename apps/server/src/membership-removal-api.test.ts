@@ -26,6 +26,7 @@ import type { Logger } from "./logger.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import { mountMembershipRemovalApi } from "./membership-removal-api.js";
 import { establishNodeIdentity } from "./node-identity.js";
+import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 
 const RING: KeyRing = loadKeyRing({
@@ -280,6 +281,20 @@ describe("POST /management-api/servers/:nodeId/remove", () => {
         gone,
       ]);
       await expectRefused(p, gone.nodeId, 409, "membership.not_primary");
+    });
+
+    it("refuses 409 membership.revoked_node_listed when the held chart lists the standby in both lists, so no chart can be minted", async () => {
+      const p = await primary();
+      const both = standby();
+      await writeNodeMembership(
+        p.db,
+        signedMembershipDoc(1, {
+          signerNodeId: p.nodeId,
+          nodes: [self(p), both],
+          revoked: [both.nodeId],
+        }),
+      );
+      await expectRefused(p, both.nodeId, 409, "membership.revoked_node_listed");
     });
   });
 

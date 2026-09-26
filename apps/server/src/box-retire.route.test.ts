@@ -174,6 +174,30 @@ describe("POST /api/box/retire", () => {
     expect(await res.json()).toMatchObject({ error: { code: "node.retire_not_fenced" } });
   });
 
+  it("409 when the held chart's revoked list names a machine twice, so the eviction cannot be minted", async () => {
+    await writeNodeMembership(suite.db, {
+      signerNodeId: nodeId,
+      signature: "self-placeholder-sig",
+      endorsements: [],
+      body: {
+        term: 5,
+        nodes: [
+          { nodeId, contactUrl: "", standing: "sell-only" },
+          { nodeId: CARRIER_NODE_ID, contactUrl: "https://carrier", standing: "serving-primary" },
+        ],
+        revoked: ["gone", "gone"],
+      },
+    });
+    const app = buildApp(nodeId);
+    const res = await app.request("/api/box/retire", {
+      method: "POST",
+      headers: { cookie: managerCookie },
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "membership.revoked_duplicate" } });
+    expect((await readNodeMembership(suite.db))?.body.term).toBe(5);
+  });
+
   it("200 evicts a fenced node with a carrier and flips self to evicted", async () => {
     // A held term-5 chart marking THIS node sell-only (the fence) AND the carrier serving-primary —
     // retireSelf mints the eviction and persists it term-guarded.

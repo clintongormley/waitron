@@ -15,7 +15,11 @@ import { authorizeManager, endManagementSession, loginManagerById } from "@waitr
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
 import { assembleMirrorBundle, refuseFullChart, refuseRemovedStandby } from "./mirror-bundle.js";
-import { MAX_CHART_WRITE_ROUNDS, mintNextMembershipDocument } from "./membership-mint.js";
+import {
+  CHART_MINT_REFUSALS,
+  MAX_CHART_WRITE_ROUNDS,
+  mintNextMembershipDocument,
+} from "./membership-mint.js";
 import { isBareOrigin } from "./config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
@@ -46,6 +50,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.standby_invalid": 400,
   "mirror.standby_removed": 409,
   "mirror.membership_full": 409,
+  ...CHART_MINT_REFUSALS,
   "membership.write_contended": 503,
 };
 

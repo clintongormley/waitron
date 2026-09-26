@@ -765,6 +765,39 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(await readNodeMembership(db)).toEqual(chartBefore);
   });
 
+  it("refuses 409 membership.revoked_duplicate when the held chart's revoked list names a machine twice, so no chart can be minted", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+    await writeNodeMembership(
+      db,
+      signedMembershipDoc(seedTerm, {
+        signerNodeId: designated.nodeId,
+        nodes: [
+          {
+            nodeId: designated.nodeId,
+            contactUrl: "https://box.deli.test",
+            standing: "serving-primary",
+          },
+        ],
+        revoked: ["gone", "gone"],
+      }),
+    );
+    const chartBefore = await readNodeMembership(db);
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      ...validStandby(),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "membership.revoked_duplicate", params: { nodeId: "gone" } },
+    });
+    expect(await readNodeMembership(db)).toEqual(chartBefore);
+  });
+
   describe("a held chart already listing MAX_NODES machines", () => {
     /** This primary and MAX_NODES - 1 others, the first of them `evicted`; returns their ids. */
     async function holdFullChart(

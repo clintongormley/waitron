@@ -6,6 +6,7 @@ import { authorizeManager } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
 import { clearRemovedMachine, listServers, removeUnjoinedStandby } from "./membership-removal.js";
+import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 
 export interface MembershipRemovalApiDeps {
@@ -25,7 +26,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "membership.node_has_served": 409,
   "membership.standby_joined": 409,
   "membership.node_not_removed": 409,
-  "membership.chart_too_large": 409,
+  ...CHART_MINT_REFUSALS,
   "membership.write_contended": 503,
 };
 

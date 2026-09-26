@@ -4,6 +4,7 @@ import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import { retireSelf } from "./retire.js";
+import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import { requireManagementSession } from "@waitron/server-kit";
 import { createErrorBoundary } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -30,6 +31,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "node.retire_not_fenced": 409,
   "node.retire_no_carrier": 409,
   "node.retire_superseded": 409,
+  ...CHART_MINT_REFUSALS,
 };
 
 /**
