@@ -88,6 +88,21 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "hash-chained order amendments in flight; copied to a standby, never drained back",
   ),
   classify("print_jobs", "state", STATE),
+  classify(
+    "visits",
+    "state",
+    "a seated party in flight and the tables it holds; copied to a standby, never drained back",
+  ),
+  classify(
+    "visit_tables",
+    "state",
+    "which tables a seated party holds; copied to a standby, never drained back",
+  ),
+  classify(
+    "service_commands",
+    "state",
+    "the recorded result of each service command, so a retry after a lost reply is answered rather than repeated; copied to a standby with the visits and bills it answers for, never drained back",
+  ),
 
   // state — one row per database, the same whichever node reads it.
   classify(

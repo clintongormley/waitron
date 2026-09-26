@@ -32,14 +32,17 @@ import {
  * after settlement, a working order's status transitions, lines written against an order that is
  * not open, a line's description maps matching the venue's invoice locales, a device profile's form
  * factor while an active device uses it, and a device's station-or-register binding against its
- * profile's form factor — plus the one that ACTS rather than refuses, clearing a dining table's
- * service status when its tab closes. A trigger cannot be declared in the TypeScript schema, so a
- * regenerated migration set does not carry it.
+ * profile's form factor. A trigger cannot be declared in the TypeScript schema, so a regenerated
+ * migration set does not carry it.
  *
  * It also holds `packages/db/drizzle/0004_variant_one_level.sql`'s three triggers on `products`: a
  * variant is one level deep, keeps the parent it was created with, and no product's id changes.
  * `working_orders_enforce_transition` is re-created, with the same name, by
- * `packages/db/drizzle/0015_settled_order_freeze_new_columns.sql`.
+ * `packages/db/drizzle/0015_settled_order_freeze_new_columns.sql` and again by
+ * `packages/db/drizzle/0019_settled_order_freeze_visit_id.sql`. The one trigger that ACTS rather
+ * than refuses is `visits_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`):
+ * a table's service status comes off when the party's visit leaves `open`, on every table still a
+ * member of it. It replaced `working_orders_clear_table_status`, which cleared it when a tab settled.
  *
  * **It migrates through `applyMigrations`**: a guard that installs the thing under test cannot see
  * the product failing to install it.
@@ -108,8 +111,8 @@ const EXPECTED_TRIGGERS = [
   "working_order_lines_check_variant_locales_update",
   "working_order_lines_require_open_parent_delete",
   "working_order_lines_require_open_parent_insert",
+  "visits_clear_table_status",
   "working_order_lines_require_open_parent_update",
-  "working_orders_clear_table_status",
   "working_orders_enforce_transition",
 ];
 
@@ -185,6 +188,31 @@ function sale(id, total, correctsSaleId = null) {
   );
 }
 
+/** An open visit. Check constraints are off here, so `closed_at` need not follow `state`. */
+function visit(id) {
+  return (
+    `insert into visits (id, state, opened_at, opened_by, revision) ` +
+    `values ('${id}', 'open', '${STAMP}', 'person', 0)`
+  );
+}
+
+/** A dining table carrying the `status-busy` status. */
+function table(id, label) {
+  return (
+    `insert into dining_tables (id, location_id, label, status_id, created_at) ` +
+    `values ('${id}', 'loc', '${label}', 'status-busy', '${STAMP}')`
+  );
+}
+
+/** A table's membership of a visit; `leftAt` null while the table belongs to it. */
+function membership(id, visitId, tableId, leftAt) {
+  const left = leftAt === null ? "null" : `'${leftAt}'`;
+  return (
+    `insert into visit_tables (id, visit_id, table_id, joined_at, left_at) ` +
+    `values ('${id}', '${visitId}', '${tableId}', '${STAMP}', ${left})`
+  );
+}
+
 function tender(id, saleId, amount, tip = 0) {
   return (
     `insert into tenders (id, sale_id, method, amount, tip_amount, settled_at) ` +
@@ -218,13 +246,13 @@ function seed(connection) {
     workingOrder("wo-settled-extra", "settled"),
     workingOrder("wo-settled-revision", "settled"),
     workingOrder("wo-settled-payment", "settled"),
+    workingOrder("wo-settled-visit", "settled"),
     workingOrder("wo-settled-reopen", "settled"),
     workingOrder("wo-flip", "open"),
     workingOrder("wo-lines-update", "open"),
     workingOrder("wo-lines-delete", "open"),
     workingOrder("wo-orphaned-parent", "open"),
     workingOrder("wo-tab", "open"),
-    workingOrder("wo-tab-placed", "open"),
     // A till that does not exist, so the join to a location resolves to nothing.
     workingOrder("wo-orphan", "open", { tillId: "ghost-till" }),
 
@@ -234,13 +262,29 @@ function seed(connection) {
     line("line-delete", "wo-lines-delete", '{"es":"Plato","ca":"Plat"}'),
     line("line-orphaned", "wo-orphaned-parent", '{"es":"Plato","ca":"Plat"}'),
 
-    // Dining tables carrying a service status, for the clear-on-close trigger.
+    // A tab's table carrying a service status: settling the tab leaves it (the visit clears it).
     `insert into table_service_statuses (id, label, color, created_at) ` +
       `values ('status-busy', 'Ocupada', '#ff0000', '${STAMP}')`,
     `insert into dining_tables (id, location_id, label, tab_id, status_id, created_at) ` +
       `values ('dt-closes', 'loc', '1', 'wo-tab', 'status-busy', '${STAMP}')`,
-    `insert into dining_tables (id, location_id, label, tab_id, status_id, created_at) ` +
-      `values ('dt-stays', 'loc', '2', 'wo-tab-placed', 'status-busy', '${STAMP}')`,
+
+    // Visits and their memberships, for the clear-when-the-visit-leaves-open trigger. Each case
+    // moves its own visit, so no case's write changes what another case reads.
+    visit("visit-finishes"),
+    visit("visit-clearing"),
+    visit("visit-bumped"),
+    visit("visit-frozen"),
+    table("dt-member-a", "3"),
+    table("dt-member-b", "4"),
+    table("dt-left-earlier", "5"),
+    table("dt-bystander", "6"),
+    table("dt-clearing", "7"),
+    table("dt-bumped", "8"),
+    membership("vt-a", "visit-finishes", "dt-member-a", null),
+    membership("vt-b", "visit-finishes", "dt-member-b", null),
+    membership("vt-left", "visit-finishes", "dt-left-earlier", STAMP),
+    membership("vt-clearing", "visit-clearing", "dt-clearing", null),
+    membership("vt-bumped", "visit-bumped", "dt-bumped", null),
 
     // Sales and their tenders. Every tender is written BEFORE any settlement, because
     // tenders_reject_post_settlement is one of the triggers under test.
@@ -452,6 +496,18 @@ describe("working_orders_enforce_transition", () => {
     ).toBe(TRANSITION_REFUSAL);
   });
 
+  // Changing `visit_id` ALONE would be refused whether or not the column is in the list, because the
+  // settled exception also needs `collected_at` to go from null to set; so the stamp rides along.
+  it("refuses the handover stamp when the order's visit changes with it", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set collected_at = '${STAMP}', visit_id = 'visit-frozen' ` +
+          `where id = 'wo-settled-visit'`,
+      ),
+    ).toBe(TRANSITION_REFUSAL);
+  });
+
   it("refuses the handover stamp when a card payment attempt is marked with it", () => {
     expect(
       refusalFor(
@@ -585,21 +641,38 @@ describe("working_order_lines_check_variant_locales", () => {
   });
 });
 
-describe("working_orders_clear_table_status", () => {
+describe("visits_clear_table_status", () => {
   const statusOf = (table) =>
     connection.prepare(`select status_id from dining_tables where id = ?`).get(table).status_id;
 
-  it("clears the dining table's service status when its tab settles", () => {
-    expect(statusOf("dt-closes")).toBe("status-busy");
+  it("clears the status of every table still a member when the visit closes, and no other", () => {
+    connection.exec(
+      `update visits set state = 'closed', closed_at = '${STAMP}' where id = 'visit-finishes'`,
+    );
+    expect(statusOf("dt-member-a")).toBeNull();
+    expect(statusOf("dt-member-b")).toBeNull();
+    expect(statusOf("dt-left-earlier")).toBe("status-busy");
+    expect(statusOf("dt-bystander")).toBe("status-busy");
+  });
+
+  it("clears it when the visit moves to needs clearing", () => {
+    connection.exec(
+      `update visits set state = 'needs_clearing', closed_at = '${STAMP}' where id = 'visit-clearing'`,
+    );
+    expect(statusOf("dt-clearing")).toBeNull();
+  });
+
+  it("leaves it alone when an open visit only changes its revision", () => {
+    connection.exec(`update visits set revision = revision + 1 where id = 'visit-bumped'`);
+    expect(statusOf("dt-bumped")).toBe("status-busy");
+  });
+
+  // The behaviour this trigger replaced: paying a bill no longer frees or clears the table.
+  it("leaves a table's status alone when its tab settles", () => {
     connection.exec(
       `update working_orders set status = 'settled', settled_at = '${STAMP}' where id = 'wo-tab'`,
     );
-    expect(statusOf("dt-closes")).toBeNull();
-  });
-
-  it("leaves it alone when the tab is only placed", () => {
-    connection.exec(`update working_orders set status = 'placed' where id = 'wo-tab-placed'`);
-    expect(statusOf("dt-stays")).toBe("status-busy");
+    expect(statusOf("dt-closes")).toBe("status-busy");
   });
 });
 
