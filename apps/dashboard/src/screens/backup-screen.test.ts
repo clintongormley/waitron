@@ -174,6 +174,17 @@ describe("backup-screen", () => {
     expect(invalidate).toHaveBeenCalledWith([{ type: "backup_status" }]);
   });
 
+  it("shows the button that replaces a too-short key above the bucket-copy panel, as the panel's refusal says", async () => {
+    const api = stubApi({}, { ...OFF, recoveryKeySet: true, recoveryKeyTooShort: true });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    const apply = q(el, "[data-test=apply]")!;
+    expect(apply.textContent!.trim()).toBe(t("backup.apply"));
+    expect(t("stream.error.recovery_key_too_short")).toContain(t("backup.apply"));
+    const panel = q(el, "dashboard-stream-settings")!;
+    expect(apply.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("explains a refused second recovery key in words", async () => {
     const api = stubApi(
       { applyBackup: vi.fn().mockRejectedValue({ code: "backup.recovery_key_exists" }) },

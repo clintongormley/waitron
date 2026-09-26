@@ -5,7 +5,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { DashboardApi, StreamSettingsView, StreamStatusView } from "../api/client.js";
 import type { StreamSettingsPanel } from "./stream-settings-panel.js";
 import "./stream-settings-panel.js";
@@ -790,6 +790,27 @@ describe("stream-settings-panel: once set up", () => {
         await press(el, "show-kit");
       }
       expect(text(el, "[role=alert]")).toBe(t("stream.error.recovery_key_too_short"));
+    },
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "in %s, points a too-short-key refusal at the button above that replaces the key",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi({
+          saveStreamSettings: vi
+            .fn()
+            .mockRejectedValue({ code: "backup.recovery_key_too_short", params: { min: 12 } }),
+        });
+        const { el } = await mount(api);
+        fillRequired(el);
+        await press(el, "save");
+        expect(text(el, "[role=alert]")).toContain(t("backup.apply"));
+      } finally {
+        setLocale(before);
+      }
     },
   );
 
