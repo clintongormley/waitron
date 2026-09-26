@@ -231,7 +231,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     updatePrinter: vi.fn().mockResolvedValue(undefined),
     deactivatePrinter: vi.fn().mockResolvedValue(undefined),
     testPrinterDrawer: vi.fn().mockResolvedValue({ jobId: "drawer-test" }),
-    testPrint: vi.fn().mockResolvedValue({ jobId: "j9", calibrationLocale: "es-ES" }),
+    testPrint: vi.fn().mockResolvedValue({ jobId: "j9" }),
     sampleReceipt: vi.fn().mockResolvedValue({ jobId: "j10" }),
     testCharacterTables: vi.fn().mockResolvedValue({ jobId: "j11", calibrationLocale: "es-ES" }),
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
@@ -688,7 +688,7 @@ describe("printers-screen", () => {
     expect(text(el, "[data-test=agent-last-seen-a2]")).toBe(t("printers.last_seen_never", "es-ES"));
   });
 
-  it("renders each printer's transport, and no serving-agent column (eligibility is derived)", async () => {
+  it("renders each printer's transport and derived connection mode", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -698,8 +698,11 @@ describe("printers-screen", () => {
       transportName("network_tcp", "es-ES"),
     );
     expect(text(el, "[data-test=printer-transport-p2]")).toBe(transportName("cloud_poll", "es-ES"));
-    expect(q(el, "[data-test=printer-agent-p1]")).toBeNull();
-    expect(q(el, "[data-test=printer-agent-p2]")).toBeNull();
+    expect(text(el, "[data-test=printer-agent-p1]")).toBe("Sin observaciones recientes");
+    expect(text(el, "[data-test=printer-agent-p2]")).toBe("—");
+    expect(text(el, "[data-test=printer-connection-p1]")).toBe("Cualquier agente del local");
+    expect(text(el, "[data-test=printer-connection-p2]")).toBe("Directa (sin agente)");
+    expect(text(el, "[data-test=printer-connection-p3]")).toBe("Puede cambiar de agente");
   });
 
   it("renders each job's status, attempts, resolved printer and last error", async () => {
@@ -2597,6 +2600,58 @@ it("keeps a disabled printer available when adding it again fails", async () => 
   expect(api.createPrinter).not.toHaveBeenCalled();
   expect(q(el, "[data-test=register-SN-2]")).not.toBeNull();
   expect(text(el, "[role=alert]")).toContain(codeMessage("printer.not_found"));
+});
+
+it.each(["printer-row-p1", "job-printer-j1"])(
+  "opens printer calibration from %s",
+  async (selector) => {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    await selectTab(el, selector.startsWith("printer-row") ? "printers" : "queue");
+    q(el, `[data-test=${selector}]`)!.click();
+    await flush(el);
+    expect(q(el, "[data-test=edit-printer-modal]")?.checkVisibility()).toBe(true);
+    expect((q(el, "[data-test=printer-name-p1]") as import("@waitron/ui").WtInput)?.value).toBe(
+      "Cocina",
+    );
+  },
+);
+
+it("shows the newest observing agent even when discovery entries arrive out of order", async () => {
+  const device = discovered[1]!;
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue([
+        {
+          ...device,
+          agentId: "a2",
+          agentName: "Barra agent",
+          lastSeenAt: "2026-09-26T13:00:00.000Z",
+        },
+        device,
+      ]),
+    }),
+  });
+  await flush(el);
+  await filterPrinters(el, "all");
+  expect(text(el, "[data-test=printer-agent-p3]")).toBe("Barra agent");
+  expect(text(el, "[data-test=printer-last-seen-p3]")).toContain("2026-09-26 13:00");
+});
+
+it("labels Reprint and separates it visibly from View printout", async () => {
+  const { el, host } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  await selectTab(el, "queue");
+  host.style.setProperty("--wt-space-2", "13px");
+  await flush(el);
+  const view = q(el, "[data-test=view-job-j2]")!;
+  const reprint = q(el, "[data-test=resend-job-j2]")!;
+  expect.soft(reprint.textContent?.trim()).toBe("Reimprimir");
+  expect(reprint.getBoundingClientRect().left - view.getBoundingClientRect().right).toBeCloseTo(13);
 });
 
 it("offers resend for eligible jobs and enqueues the selected document only once while pending", async () => {

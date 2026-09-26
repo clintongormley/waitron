@@ -1544,11 +1544,9 @@ describe("mountPrintApi — management: test-print", () => {
           headers: { cookie: managerCookie, "accept-language": browserLocale },
         });
         expect(res.status).toBe(202);
-        const { jobId, calibrationLocale } = (await res.json()) as {
-          jobId: string;
-          calibrationLocale: SupportedLocale;
-        };
-        expect(calibrationLocale).toBe(venueLocale);
+        const body = (await res.json()) as { jobId: string };
+        const { jobId } = body;
+        expect(body).toEqual({ jobId });
         const [job] = await suite.db
           .select({ payload: printJobs.payload })
           .from(printJobs)

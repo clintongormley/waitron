@@ -760,8 +760,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           session.locale,
           resolveLoginLocale(c.req.header("Accept-Language"), deps.venueLocale),
         );
-        const queued = await enqueuePrintJob(tx, deps.cfg, id, formatTestPage({ locale }));
-        return { ...queued, calibrationLocale: deps.venueLocale };
+        return enqueuePrintJob(tx, deps.cfg, id, formatTestPage({ locale }));
       });
       return c.json(result, 202);
     }),

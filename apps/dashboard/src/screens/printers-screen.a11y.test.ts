@@ -98,7 +98,7 @@ const jobs: PrintJobRow[] = [
     id: "j1",
     printerId: "p1",
     status: "failed",
-    canResend: false,
+    canResend: true,
     attempts: 2,
     lastError: "printer offline",
     createdAt: "2026-08-25T14:00:00.000Z",
@@ -223,21 +223,26 @@ async function openDiscovery(el: PrintersScreen): Promise<void> {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (theme) => {
-  it("renders the agents, printers and jobs lists plus the pending queue accessibly", async () => {
-    const { el, host } = await mountWidget<PrintersScreen>(
-      "dashboard-printers-screen",
-      { api: stubApi() },
-      theme,
-    );
-    await flush(el);
-    for (const key of ["queue", "printers", "agents"]) {
-      q(el, "wt-tabs")!
-        .shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!
-        .click();
+  it.each([390, 1280])(
+    "renders the agents, printers and jobs lists accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const { el, host } = await mountWidget<PrintersScreen>(
+        "dashboard-printers-screen",
+        { api: stubApi() },
+        theme,
+      );
       await flush(el);
-      await expectNoA11yViolations(host);
-    }
-  });
+      for (const key of ["queue", "printers", "agents"]) {
+        q(el, "wt-tabs")!
+          .shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!
+          .click();
+        await flush(el);
+        await expectNoA11yViolations(host);
+      }
+      await page.viewport(1280, 900);
+    },
+  );
 
   it("renders the open pairing window accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(

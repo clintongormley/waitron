@@ -98,6 +98,16 @@ export class PrintersScreen extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
+      wt-data-table::part(printer-name) {
+        text-align: start;
+        overflow-wrap: anywhere;
+        --wt-color-text: var(--wt-color-primary);
+      }
+      wt-data-table::part(job-actions) {
+        display: flex;
+        gap: var(--wt-space-2);
+        align-items: center;
+      }
       wt-data-table::part(printer-provenance) {
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-sm);
@@ -1407,16 +1417,46 @@ export class PrintersScreen extends LitElement {
 
   #renderPrintersSection(): TemplateResult {
     const seen = new Map<string, DiscoveredPrinter>();
-    for (const device of this.discovered)
-      if (device.printerId !== null) seen.set(device.printerId, device);
+    for (const device of this.discovered) {
+      if (device.printerId === null) continue;
+      const previous = seen.get(device.printerId);
+      if (!previous || device.lastSeenAt > previous.lastSeenAt) seen.set(device.printerId, device);
+    }
     const columns: DataTableColumn<Printer>[] = [
       {
         key: "name",
         label: t("printers.name"),
         sortValue: (p) => p.name,
         cell: (p) =>
-          html`<span data-test=${`printer-row-${p.id}`}>${p.name}</span
+          html`<wt-button
+            variant="ghost"
+            part="printer-name"
+            data-test=${`printer-row-${p.id}`}
+            @click=${(event: Event) => this.#openPrinter(p, event)}
+            >${p.name}</wt-button
+          >`,
+      },
+      {
+        key: "agent",
+        label: t("printers.last_seen_by"),
+        cell: (p) =>
+          html`<span data-test=${`printer-agent-${p.id}`}>
+              ${p.transport === "cloud_poll" ? "—" : (seen.get(p.id)?.agentName ?? t("printers.agent_unknown"))} </span
             >${this.#seenStatus(p.id, seen.get(p.id))}`,
+      },
+      {
+        key: "connection",
+        label: t("printers.connection"),
+        cell: (p) =>
+          html`<span data-test=${`printer-connection-${p.id}`}
+            >${t(
+              p.transport === "cloud_poll"
+                ? "printers.connection_direct"
+                : p.transport === "network_tcp"
+                  ? "printers.connection_network"
+                  : "printers.connection_roaming",
+            )}</span
+          >`,
       },
       {
         key: "pending",
@@ -1503,10 +1543,24 @@ export class PrintersScreen extends LitElement {
       {
         key: "printer",
         label: t("printers.job_printer"),
-        cell: (j) =>
-          html`<span data-test=${`job-row-${j.id}`}
-            ><span data-test=${`job-printer-${j.id}`}>${this.#printerName(j.printerId)}</span></span
-          >`,
+        cell: (j) => {
+          const printer = this.printers.find((p) => p.id === j.printerId);
+          return html`<span data-test=${`job-row-${j.id}`}
+            >${
+              printer
+                ? html`<wt-button
+                    variant="ghost"
+                    part="printer-name"
+                    data-test=${`job-printer-${j.id}`}
+                    @click=${(event: Event) => this.#openPrinter(printer, event)}
+                    >${printer.name}</wt-button
+                  >`
+                : html`<span data-test=${`job-printer-${j.id}`}
+                    >${this.#printerName(j.printerId)}</span
+                  >`
+            }</span
+          >`;
+        },
       },
       {
         key: "status",
@@ -1538,7 +1592,8 @@ export class PrintersScreen extends LitElement {
         key: "preview",
         label: t("printers.actions"),
         cell: (j) =>
-          html`<wt-button data-test=${`view-job-${j.id}`} @click=${() => void this.#viewJob(j.id)}
+          html`<div part="job-actions">
+            <wt-button data-test=${`view-job-${j.id}`} @click=${() => void this.#viewJob(j.id)}
               >${t("printers.view_job")}</wt-button
             >${
               j.canResend
@@ -1549,7 +1604,8 @@ export class PrintersScreen extends LitElement {
                     >${t("printers.resend_job")}</wt-button
                   >`
                 : nothing
-            }`,
+            }
+          </div>`,
       },
     ];
     return html`<section>

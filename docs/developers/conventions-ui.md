@@ -328,7 +328,7 @@ the printer it is printing to (`paperWidth`, `resolution`, `characterSet` on `pr
 passed through `prepareText` before it is measured, and through `wrapText`/`labelAmountLines` before
 it is printed, so a string is never counted in one character set and printed in another. The fiscal
 QR is a raster image, its dot size chosen per receipt by `chooseQrDots` for the largest fitting size
-within 30-40mm, including its blank border when checking the paper width —
+at most 40mm, reaching 30mm where the grid and paper allow it, including its blank border when checking the paper width —
 never the printer's own built-in QR command, which cannot be sized this way. A test reads a payload's
 printed text with `printedLines` (`apps/server/src/testing/decode-ticket.ts`), which fails the test
 on an unsupported byte instead of silently stopping partway and hiding the rest of the ticket. Design:

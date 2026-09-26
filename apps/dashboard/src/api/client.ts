@@ -2155,8 +2155,8 @@ export class DashboardApi {
     return this.#request<PrintJobRow[]>("/management-api/print-jobs", "GET");
   }
 
-  testPrint(printerId: string): Promise<{ jobId: string; calibrationLocale: SupportedLocale }> {
-    return this.#request<{ jobId: string; calibrationLocale: SupportedLocale }>(
+  testPrint(printerId: string): Promise<{ jobId: string }> {
+    return this.#request<{ jobId: string }>(
       `/management-api/printers/${printerId}/test-print`,
       "POST",
     );
