@@ -404,24 +404,25 @@ describe("till-app: the party's bills and Finish table", () => {
   });
 });
 
+const phone: CanvasDef = {
+  formFactor: "phone-portrait",
+  tabs: [
+    {
+      key: "floor",
+      title: "Floor",
+      columns: 12,
+      cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
+    },
+    {
+      key: "order",
+      title: "Order",
+      columns: 12,
+      cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
+    },
+  ],
+};
+
 describe("till-app: the party on a handheld", () => {
-  const phone: CanvasDef = {
-    formFactor: "phone-portrait",
-    tabs: [
-      {
-        key: "floor",
-        title: "Floor",
-        columns: 12,
-        cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
-      },
-      {
-        key: "order",
-        title: "Order",
-        columns: 12,
-        cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
-      },
-    ],
-  };
   const orderCard = (el: TillApp) =>
     tabGrid(el)?.shadowRoot?.querySelector<TillTableOrderScreen>("till-table-order-screen") ?? null;
 
@@ -728,23 +729,31 @@ describe("till-app: every table move sends the party revision it last read", () 
   });
 });
 
+const tablet: CanvasDef = {
+  formFactor: "tablet-landscape",
+  tabs: [
+    {
+      key: "floor",
+      title: "Floor",
+      columns: 24,
+      cards: [
+        { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
+        { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
+      ],
+    },
+  ],
+};
+const onTablet = () => ({
+  getTill: vi.fn().mockResolvedValue({ ...till, canvas: tablet }),
+  getDeviceIdentity: vi
+    .fn()
+    .mockResolvedValue({ deviceId: "tb1", formFactor: "tablet-landscape", stationId: null }),
+});
+const tabletOrderCard = (el: TillApp) =>
+  tabGrid(el)?.shadowRoot?.querySelector<TillTableOrderScreen>("till-table-order-screen") ?? null;
+
 describe("till-app: a party's split-off bill left unpaid goes back with the party's revision", () => {
-  const tablet: CanvasDef = {
-    formFactor: "tablet-landscape",
-    tabs: [
-      {
-        key: "floor",
-        title: "Floor",
-        columns: 24,
-        cards: [
-          { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
-          { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
-        ],
-      },
-    ],
-  };
-  const orderCard = (el: TillApp) =>
-    tabGrid(el)?.shadowRoot?.querySelector<TillTableOrderScreen>("till-table-order-screen") ?? null;
+  const orderCard = tabletOrderCard;
 
   /** The floor reads the party at revision 3 until the split, and at 4 once the split has moved it. */
   function floorAcrossSplit() {
@@ -778,6 +787,19 @@ describe("till-app: a party's split-off bill left unpaid goes back with the part
     expect(banner(el)).toBeNull();
   });
 
+  it("reads the floor once after the merge when a till goes Back", async () => {
+    const { el } = await mountApp(floorAcrossSplit());
+    const order = await openMesa(el);
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+    const reads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+
+    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
+  });
+
   it("sends the returned party's revision, not the next table's, when a tablet opens another table", async () => {
     const { el } = await mountApp({
       ...floorAcrossSplit(),
@@ -800,6 +822,69 @@ describe("till-app: a party's split-off bill left unpaid goes back with the part
       expectedVisitRevision: 4,
     });
     expect(orderCard(el)!.orderId).toBe("wo-7");
+  });
+
+  it("sends the revision the merge moved the party to when a tablet comes back to its table", async () => {
+    let revision = 3;
+    const { el } = await mountApp({
+      ...onTablet(),
+      getTablesState: vi.fn(async () => [seated({}, { revision }), mesa7, mesa9]),
+      splitTab: vi.fn(async () => {
+        revision = 4;
+        return { checkId: "wo-check" };
+      }),
+      mergeTabs: vi.fn(async () => {
+        revision = 5;
+      }),
+    });
+    const screen = await toFloor(el);
+    emit(screen, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    emit(orderCard(el)!, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    expect(api.mergeTabs).toHaveBeenCalledOnce();
+
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    emit(orderCard(el)!, "finish-table", {});
+    await flush(el);
+
+    expect(api.finishTable).toHaveBeenCalledExactlyOnceWith("v1", 5);
+  });
+
+  it("sends the revision the merge moved the party to when a handheld comes back to its Order tab", async () => {
+    let revision = 3;
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+      getTablesState: vi.fn(async () => [seated({}, { revision }), mesa7, mesa9]),
+      splitTab: vi.fn(async () => {
+        revision = 4;
+        return { checkId: "wo-check" };
+      }),
+      mergeTabs: vi.fn(async () => {
+        revision = 5;
+      }),
+    });
+    await toFloor(el);
+    emit(shell(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    emit(orderCard(el)!, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    emit(shell(el), "tab-select", { key: "order" });
+    await flush(el);
+    expect(orderCard(el)!.orderId).toBe("wo-4");
+    emit(orderCard(el)!, "finish-table", {});
+    await flush(el);
+
+    expect(api.finishTable).toHaveBeenCalledExactlyOnceWith("v1", 5);
   });
 
   it("keeps the bill held, without sending it again, when the party changed elsewhere first", async () => {
@@ -972,5 +1057,34 @@ describe("till-app: another device changed the table first", () => {
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(codeMessage(code));
+  });
+});
+
+describe("till-app: leaving a finished party", () => {
+  it("keeps the finished party's lines and bills off the screen when their read answers late", async () => {
+    let answerLines!: (tab: unknown) => void;
+    let answerBills!: (bills: VisitBill[]) => void;
+    const { el } = await mountApp(onTablet());
+    const screen = await toFloor(el);
+    emit(screen, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    vi.mocked(api.getTabLines).mockImplementationOnce(
+      () => new Promise((resolve) => (answerLines = resolve as (tab: unknown) => void)),
+    );
+    vi.mocked(api.getVisitBills).mockImplementationOnce(
+      () => new Promise((resolve) => (answerBills = resolve)),
+    );
+    emit(tabletOrderCard(el)!, "join-table", { tableId: "t9" });
+    await flush(el);
+
+    emit(tabletOrderCard(el)!, "finish-table", {});
+    await flush(el);
+    answerLines({ lines: [tabLine], revision: 0, editSentLines: true });
+    answerBills([tabBill, checkBill]);
+    await flush(el);
+
+    expect(api.finishTable).toHaveBeenCalledOnce();
+    expect(tabletOrderCard(el)!.lines).toEqual([]);
+    expect(tabletOrderCard(el)!.bills).toEqual([]);
   });
 });

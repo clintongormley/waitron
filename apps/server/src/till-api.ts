@@ -2,7 +2,7 @@ import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
-import { AppError, isAppError, MAX_GUEST_COUNT, SUPPORTED_LOCALES } from "@waitron/shared";
+import { AppError, isAppError, isValidGuestCount, SUPPORTED_LOCALES } from "@waitron/shared";
 import type { FloorAnnotator } from "@waitron/module";
 import { locations, readNodeMembership, readTenant, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -386,12 +386,7 @@ function requireVisitParam(id: string): string {
 /** An optional guest count: absent or null records none, otherwise a whole number from 1. */
 function requireGuestCount(value: unknown): number | null {
   if (value === undefined || value === null) return null;
-  if (
-    typeof value !== "number" ||
-    !Number.isInteger(value) ||
-    value < 1 ||
-    value > MAX_GUEST_COUNT
-  ) {
+  if (!isValidGuestCount(value)) {
     throw new AppError("management.request_invalid", { field: "guestCount" });
   }
   return value;
@@ -1274,18 +1269,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      const body = await readJsonBody<{
-        guestCount?: unknown;
-        lines?: { menuItemId: string; quantity: string }[];
-      }>(c);
+      const body = await readJsonBody<{ guestCount?: unknown }>(c);
       const guestCount = requireGuestCount(body.guestCount);
       const result = await withTransaction(deps.db, async (tx) => {
-        return seatTable(tx, deps.cfg, {
-          tableId: id,
-          guestCount,
-          operatorId: personId,
-          lines: body.lines,
-        });
+        return seatTable(tx, deps.cfg, { tableId: id, guestCount, operatorId: personId });
       });
       return c.json(result);
     }),

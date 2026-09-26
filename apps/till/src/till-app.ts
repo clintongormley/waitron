@@ -532,7 +532,7 @@ export class TillApp extends LitElement {
   #splitCheck?: { checkId: string; tabId: string };
   /** The last merge {@link #returnSplitCheck} started in this operator's session, so a later exit
    * waits for it. */
-  #checkReturn: Promise<void> = Promise.resolve();
+  #checkReturn: Promise<boolean> = Promise.resolve(false);
   /** Bumped when the operator's session ends by logout or a server switch, so a split answering
    * afterwards records no origin and a merge answering afterwards changes nothing on screen. */
   #operatorSession = 0;
@@ -1690,10 +1690,12 @@ export class TillApp extends LitElement {
     const leftOrder = wasShowingOrder && !this.#tableCatalogueActive();
     if (leftOrder) this.#orderVisit++;
     if (!wasShowingOrder && this.#tableCatalogueActive()) this.#shownOnVisit = this.#orderVisit;
-    const returned = leftOrder ? this.#returnSplitCheck() : Promise.resolve();
+    const returned = leftOrder ? this.#returnSplitCheck() : Promise.resolve(false);
     if (this.#tabNeedsFloorData(tab)) {
-      const read = this.#floorLoaded ? () => this.#refreshFloor() : () => this.#loadFloorData();
-      void returned.then(read);
+      void returned.then((floorRead) => {
+        if (!this.#floorLoaded) return this.#loadFloorData();
+        return floorRead ? undefined : this.#refreshFloor();
+      });
     }
   }
 
@@ -2214,6 +2216,8 @@ export class TillApp extends LitElement {
     this.activeTabId = undefined;
     this.activeTableId = undefined;
     this.orderParty = null;
+    this.#tabLinesRead++;
+    this.#visitBillsRead++;
     this.tabLines = [];
     this.visitBills = [];
     const floorTab = this.canvas?.tabs.find((tab) => this.#tabNeedsFloorData(tab))?.key;
@@ -2263,22 +2267,25 @@ export class TillApp extends LitElement {
   /** Leaving a split-off check unpaid puts its lines back on the tab it came from, with their kitchen
    * tickets. A check whose payment is running here is left to that payment, and a failed merge is not
    * retried. Resolves once the latest merge started in this session has settled, so an exit's next
-   * read comes after it. */
-  #returnSplitCheck(): Promise<void> {
+   * read comes after it; true when this call's own merge has already re-read the floor. */
+  #returnSplitCheck(): Promise<boolean> {
     const split = this.#splitCheck;
-    if (split === undefined || this.activeTabId !== split.checkId) return this.#checkReturn;
+    const earlier = this.#checkReturn.then(() => false);
+    if (split === undefined || this.activeTabId !== split.checkId) return earlier;
     this.#splitCheck = undefined;
     if (this.submitting) {
       this.#showCheckOutcome("table.check_kept_held");
-      return this.#checkReturn;
+      return earlier;
     }
     this.#checkReturn = this.#mergeCheckBack(split);
     return this.#checkReturn;
   }
 
   /** Sends the revision of the party whose table holds the tab, as the floor last read it, because
-   * the operator may already be opening another party's table. */
-  async #mergeCheckBack(split: { checkId: string; tabId: string }): Promise<void> {
+   * the operator may already be opening another party's table. A merge moves that party's revision
+   * on, so a successful one re-reads the floor before the till acts on the party again, and resolves
+   * to whether it did. */
+  async #mergeCheckBack(split: { checkId: string; tabId: string }): Promise<boolean> {
     const session = this.#operatorSession;
     const party = this.#visitOfTab(split.tabId);
     try {
@@ -2289,16 +2296,20 @@ export class TillApp extends LitElement {
         party === null ? {} : { expectedVisitRevision: party.revision },
       );
     } catch (error) {
-      if (session !== this.#operatorSession) return;
+      if (session !== this.#operatorSession) return false;
       // No answer means the merge may have happened.
       this.#showCheckOutcome(
         isNetworkFailure(error) ? "table.check_return_unconfirmed" : "table.check_kept_held",
       );
-      return;
+      return false;
     }
-    if (session !== this.#operatorSession || this.activeTabId !== split.checkId) return;
+    if (session !== this.#operatorSession) return false;
+    await this.#refreshFloor();
+    if (session !== this.#operatorSession || this.activeTabId !== split.checkId) return true;
     this.activeTabId = split.tabId;
+    this.#rememberOrderParty();
     await this.#loadTabLines();
+    return true;
   }
 
   /** A merge still in flight is not waited for: its request has no time limit, so one that never
@@ -2306,7 +2317,7 @@ export class TillApp extends LitElement {
   #endOperatorSession(): void {
     this.#operatorSession++;
     this.#splitCheck = undefined;
-    this.#checkReturn = Promise.resolve();
+    this.#checkReturn = Promise.resolve(false);
   }
 
   #showCheckOutcome(key: "table.check_kept_held" | "table.check_return_unconfirmed"): void {
@@ -2429,7 +2440,9 @@ export class TillApp extends LitElement {
     if (this.#inShell()) {
       this.#clearErrorKeepingLateChange();
       this.#popDrill();
-      void this.#returnSplitCheck().then(() => this.#refreshFloor());
+      void this.#returnSplitCheck().then((floorRead) =>
+        floorRead ? undefined : this.#refreshFloor(),
+      );
     } else {
       void this.#onShowFloor();
     }

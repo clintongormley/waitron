@@ -183,6 +183,22 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   });
 }
 
+/** Seats table `id` and rings one line on its tab; returns the tab id. */
+async function seatWithOneLine(id: string): Promise<string> {
+  const seated = await request(`/api/tables/${id}/seat`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  expect(seated.status).toBe(200);
+  const { tabId } = (await seated.json()) as { tabId: string };
+  const round = await request(`/api/working-orders/${tabId}/round`, {
+    method: "POST",
+    body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
+  });
+  expect(round.status).toBe(200);
+  return tabId;
+}
+
 describe("table + tab routes", () => {
   it("POST /api/tables creates and GET /api/tables lists it", async () => {
     const create = await request("/api/tables", {
@@ -336,11 +352,16 @@ describe("table + tab routes", () => {
     ).json()) as { id: string };
     const open = await request(`/api/tables/${id}/seat`, {
       method: "POST",
-      body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
+      body: JSON.stringify({}),
     });
     expect(open.status).toBe(200);
     const { tabId } = (await open.json()) as { tabId: string };
     expect(tabId).toBeDefined();
+    const round = await request(`/api/working-orders/${tabId}/round`, {
+      method: "POST",
+      body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
+    });
+    expect(round.status).toBe(200);
 
     const again = await request(`/api/tables/${id}/seat`, {
       method: "POST",
@@ -366,12 +387,7 @@ describe("table + tab routes", () => {
         body: JSON.stringify({ label: "5", zoneId: tablesZoneId }),
       })
     ).json()) as { id: string };
-    const { tabId } = (await (
-      await request(`/api/tables/${id}/seat`, {
-        method: "POST",
-        body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
-      })
-    ).json()) as { tabId: string };
+    const tabId = await seatWithOneLine(id);
 
     const round = await request(`/api/working-orders/${tabId}/round`, {
       method: "POST",
@@ -470,15 +486,17 @@ describe("table + tab routes", () => {
       })
     ).json()) as { id: string };
     const { tabId } = (await (
-      await request(`/api/tables/${id}/seat`, {
-        method: "POST",
-        body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
-      })
+      await request(`/api/tables/${id}/seat`, { method: "POST", body: JSON.stringify({}) })
     ).json()) as { tabId: string };
-    // A second round so there are two lines, then serve line 1 (the two floor states the screen renders).
+    // One round of two lines, then serve line 1 (the two floor states the screen renders).
     await request(`/api/working-orders/${tabId}/round`, {
       method: "POST",
-      body: JSON.stringify({ lines: [{ menuItemId, quantity: "2" }] }),
+      body: JSON.stringify({
+        lines: [
+          { menuItemId, quantity: "1" },
+          { menuItemId, quantity: "2" },
+        ],
+      }),
     });
     await request(`/api/working-orders/${tabId}/lines/1/served`, { method: "POST" });
 
@@ -516,12 +534,7 @@ describe("table + tab routes", () => {
         body: JSON.stringify({ label: `C-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
       })
     ).json()) as { id: string };
-    const { tabId } = (await (
-      await request(`/api/tables/${id}/seat`, {
-        method: "POST",
-        body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
-      })
-    ).json()) as { tabId: string };
+    const tabId = await seatWithOneLine(id);
     const read = async () =>
       (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as {
         editSentLines: boolean;
@@ -578,12 +591,7 @@ describe("table + tab routes", () => {
         body: JSON.stringify({ label: "88", zoneId: tablesZoneId }),
       })
     ).json()) as { id: string };
-    const { tabId } = (await (
-      await request(`/api/tables/${id}/seat`, {
-        method: "POST",
-        body: JSON.stringify({ lines: [{ menuItemId, quantity: "1" }] }),
-      })
-    ).json()) as { tabId: string };
+    const tabId = await seatWithOneLine(id);
 
     const res = await request(`/api/working-orders/${tabId}/lines/9999999999`, {
       method: "DELETE",

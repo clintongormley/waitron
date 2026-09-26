@@ -2770,9 +2770,17 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     expect(tableRes.status).toBe(200);
     const { id: tableId } = (await tableRes.json()) as { id: string };
 
-    // Open a tab with TWO lines. `priceBasket` maps items 1:1 (it does NOT merge by product), so two
-    // lines of the one seeded product become line_no 1 and 2 — pendingToServe starts at 2.
+    // Seat the table, then ring TWO lines. `priceBasket` maps items 1:1 (it does NOT merge by
+    // product), so two lines of the one seeded product become line_no 1 and 2 — pendingToServe
+    // starts at 2.
     const tabRes = await app.request(`/api/tables/${tableId}/seat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({}),
+    });
+    expect(tabRes.status).toBe(200);
+    const { tabId } = (await tabRes.json()) as { tabId: string };
+    const round = await app.request(`/api/working-orders/${tabId}/round`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({
@@ -2782,8 +2790,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
         ],
       }),
     });
-    expect(tabRes.status).toBe(200);
-    const { tabId } = (await tabRes.json()) as { tabId: string };
+    expect(round.status).toBe(200);
 
     // GET /api/zones lists the active zone (session-gated, by display_order).
     const zonesRes = await app.request("/api/zones", { headers: { cookie } });
@@ -2888,9 +2895,15 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     const tabRes = await app.request(`/api/tables/${tableId}/seat`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lines: [{ menuItemId: tab.aguaOffer, quantity: "1" }] }),
+      body: JSON.stringify({}),
     });
     const { tabId } = (await tabRes.json()) as { tabId: string };
+    const round = await app.request(`/api/working-orders/${tabId}/round`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ lines: [{ menuItemId: tab.aguaOffer, quantity: "1" }] }),
+    });
+    expect(round.status).toBe(200);
 
     for (const lineNo of ["abc", "1.5", "0", "9999999999"]) {
       const res = await app.request(`/api/working-orders/${tabId}/lines/${lineNo}/served`, {
@@ -2920,9 +2933,15 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
     const tabRes = await app.request(`/api/tables/${tableId}/seat`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ lines: [{ menuItemId: tab.aguaOffer, quantity: "1" }] }),
+      body: JSON.stringify({}),
     });
     const { tabId } = (await tabRes.json()) as { tabId: string };
+    const round = await app.request(`/api/working-orders/${tabId}/round`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ lines: [{ menuItemId: tab.aguaOffer, quantity: "1" }] }),
+    });
+    expect(round.status).toBe(200);
 
     const res = await app.request(`/api/working-orders/${tabId}/lines/99/served`, {
       method: "POST",
@@ -3543,7 +3562,7 @@ describe("canonical modifier HTTP serialization", () => {
     });
   });
 
-  it("carries extras and options through table opening and a later round", async () => {
+  it("carries extras and options through each round on a seated table", async () => {
     const f = await modifierOfferFixture();
     const [zone] = await suite.db
       .insert(floorZones)
@@ -3579,16 +3598,18 @@ describe("canonical modifier HTTP serialization", () => {
     const opened = await f.app.request(`/api/tables/${tableId}/seat`, {
       method: "POST",
       headers: f.headers,
-      body: JSON.stringify({ lines: [line] }),
+      body: JSON.stringify({}),
     });
     expect(opened.status, await opened.clone().text()).toBe(200);
     const { tabId } = (await opened.json()) as { tabId: string };
-    const round = await f.app.request(`/api/working-orders/${tabId}/round`, {
-      method: "POST",
-      headers: f.headers,
-      body: JSON.stringify({ lines: [line] }),
-    });
-    expect(round.status, await round.clone().text()).toBe(200);
+    for (let round = 0; round < 2; round++) {
+      const rung = await f.app.request(`/api/working-orders/${tabId}/round`, {
+        method: "POST",
+        headers: f.headers,
+        body: JSON.stringify({ lines: [line] }),
+      });
+      expect(rung.status, await rung.clone().text()).toBe(200);
+    }
     const got = await f.app.request(`/api/working-orders/${tabId}`, { headers: f.headers });
     expect(got.status).toBe(200);
     const body = (await got.json()) as { lines: HeldLine[]; revision: number };

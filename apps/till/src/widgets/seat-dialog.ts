@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { MAX_GUEST_COUNT } from "@waitron/shared";
+import { isValidGuestCount } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 
 export interface SeatConfirmDetail {
@@ -16,7 +16,7 @@ function parseGuestCount(value: string): { guestCount: number | null } | undefin
   if (trimmed === "") return { guestCount: null };
   if (!/^[0-9]+$/.test(trimmed)) return undefined;
   const count = Number(trimmed);
-  return count >= 1 && count <= MAX_GUEST_COUNT ? { guestCount: count } : undefined;
+  return isValidGuestCount(count) ? { guestCount: count } : undefined;
 }
 
 /**

@@ -291,7 +291,7 @@ describe("openTab", () => {
     });
   });
 
-  it("treats a STALE tab_id (pointing at a settled order) as free and overwrites it", async () => {
+  it("treats a STALE tab_id (pointing at a settled order) on a table no party holds as free and overwrites it", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId: firstTab } = await asApp(cfg, (tx) =>
       openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
@@ -861,12 +861,10 @@ describe("listTablesWithState (occupancy)", () => {
     ]);
 
     const { tabId, visitId } = await asApp(cfg, (tx) =>
-      seatTable(tx, cfg, {
-        tableId,
-        guestCount: null,
-        operatorId,
-        lines: [{ menuItemId: cafeOffer, quantity: "2" }],
-      }),
+      seatTable(tx, cfg, { tableId, guestCount: null, operatorId }),
+    );
+    await asApp(cfg, (tx) =>
+      addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "2" }]),
     );
     const busy = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
     expect(busy[0]).toMatchObject({

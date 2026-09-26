@@ -17,6 +17,7 @@ import {
   isAppError,
   isSupportedLocale,
   isUuid,
+  isValidGuestCount,
   isValidTelephone,
   isZeroDecimal,
   locationId,
@@ -95,8 +96,9 @@ describe("package public surface (./index.js)", () => {
     expect(MAX_RATE_INTEGER_DIGITS).toBe(3);
   });
 
-  it("re-exports the seating bound", () => {
+  it("re-exports the seating bound and its check", () => {
     expect(MAX_GUEST_COUNT).toBe(999);
+    expect(isValidGuestCount(MAX_GUEST_COUNT)).toBe(true);
   });
 
   it("re-exports the string-to-stored-count converters", () => {

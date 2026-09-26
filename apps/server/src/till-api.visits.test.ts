@@ -168,6 +168,14 @@ describe("POST /api/tables/:id/seat", () => {
     },
   );
 
+  it("takes the guest count alone: lines sent with the seat are not rung", async () => {
+    const res = await post(`/api/tables/${await table()}/seat`, {
+      guestCount: 2,
+      lines: [{ menuItemId: randomUUID(), quantity: "1" }],
+    });
+    expect(res.status, await res.clone().text()).toBe(200);
+  });
+
   it("refuses a malformed table id as a missing table", async () => {
     const res = await post(`/api/tables/not-a-uuid/seat`, { guestCount: 2 });
     expect(res.status).toBe(404);

@@ -56,7 +56,6 @@ export async function seatTable(
     tableId: string;
     guestCount: number | null;
     operatorId: string;
-    lines?: { menuItemId: string; quantity: string }[];
   },
 ): Promise<{ visitId: string; tabId: string; revision: number; orderNumber: number }> {
   // The visit row comes first because the tab is inserted naming it, and the table joins it only
@@ -65,7 +64,6 @@ export async function seatTable(
   const { visitId, revision } = await insertVisit(tx, args);
   const { tabId, orderNumber } = await openTab(tx, cfg, {
     tableId: args.tableId,
-    lines: args.lines,
     visitId,
   });
   await tx.insert(visitTables).values({ visitId, tableId: args.tableId });
