@@ -412,7 +412,7 @@ describe("table + tab routes", () => {
       });
       expect(refused.status).toBe(400);
       expect(await refused.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "quantity" } },
+        error: { code: "tab.void_quantity_invalid", params: { tabId, lineNo: 1, quantity } },
       });
     }
 

@@ -1627,7 +1627,7 @@ export async function voidTabLine(
   if (target === undefined) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
-  const removed = quantity === undefined ? null : voidQuantity(quantity, target);
+  const removed = quantity === undefined ? null : voidQuantity(tabId, lineNo, quantity, target);
   const wasStarted = target.state === "preparing" || target.state === "ready";
   const voided =
     target.firedAt !== null
@@ -1715,26 +1715,27 @@ async function reduceLine(
 
 /**
  * The part of a line a void removes, as thousandths, or `null` for the whole line. Refused
- * `management.request_invalid` unless it is a positive decimal no larger than the line, in the
- * line's unit's decimal places, and for a part of an extras child, whose quantity follows its dish.
+ * `tab.void_quantity_invalid` unless it is a positive decimal no larger than the line, in the line's
+ * unit's decimal places, and the whole of an extras child, whose quantity follows its dish.
  */
 function voidQuantity(
+  tabId: string,
+  lineNo: number,
   quantity: string,
   line: { quantity: number; parentLineId: string | null; unitPrecision: number | null },
 ): number | null {
+  const invalid = () => new AppError("tab.void_quantity_invalid", { tabId, lineNo, quantity });
   let asked: number;
   try {
     asked = stringToThousandths(quantity);
   } catch {
-    throw new AppError("management.request_invalid", { field: "quantity" });
+    throw invalid();
   }
   if (asked <= 0 || asked > line.quantity || !fitsUnitPrecision(asked, line.unitPrecision)) {
-    throw new AppError("management.request_invalid", { field: "quantity" });
+    throw invalid();
   }
   if (asked === line.quantity) return null;
-  if (line.parentLineId !== null) {
-    throw new AppError("management.request_invalid", { field: "quantity" });
-  }
+  if (line.parentLineId !== null) throw invalid();
   return asked;
 }
 

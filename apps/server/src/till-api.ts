@@ -290,6 +290,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.merge_self": 400,
   "tab.transfer_self": 400,
   "tab.transfer_quantity_invalid": 400,
+  "tab.void_quantity_invalid": 400,
   "tab.transfer_duplicate_line": 400,
   "table.not_joined": 409,
   "table.not_shared": 409,

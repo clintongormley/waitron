@@ -1561,7 +1561,8 @@ export class TillApi {
    * Cancel (VOID) ONE line of an open tab → `DELETE /api/working-orders/:orderId/lines/:lineNo`: the
    * cancel path for a line the kitchen has already STARTED, which can no longer be recalled. NON-FISCAL;
    * the server prints a correction slip. `quantity`, a decimal string, voids that part of the line
-   * only; absent voids all of it. Rejects `tab.not_open` or `tab.line_not_found`.
+   * only; absent voids all of it. Rejects `tab.not_open`, `tab.line_not_found` or
+   * `tab.void_quantity_invalid`.
    */
   async voidLine(orderId: string, lineNo: number, quantity?: string): Promise<void> {
     const part = quantity === undefined ? "" : `?quantity=${encodeURIComponent(quantity)}`;

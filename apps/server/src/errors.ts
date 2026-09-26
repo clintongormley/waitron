@@ -338,6 +338,12 @@ declare module "@waitron/shared" {
      */
     "tab.transfer_quantity_invalid": { tabId: string; lineNo: number; quantity: string };
     /**
+     * A void named a `quantity` outside `0 < quantity ≤ line.quantity`, not a valid decimal, finer
+     * than the line's unit counts, or less than the whole of an extras line, whose quantity follows
+     * its dish. `quantity` is the caller's own text.
+     */
+    "tab.void_quantity_invalid": { tabId: string; lineNo: number; quantity: string };
+    /**
      * A transfer batch named the same source `line_no` more than once. Refused because each entry is
      * checked against the line's quantity before the batch, so repeats would not conserve quantity.
      * `lineNo` is the first that repeats.

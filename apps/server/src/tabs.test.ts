@@ -1401,8 +1401,8 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
       await expect(
         asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1, quantity)),
       ).rejects.toMatchObject({
-        code: "management.request_invalid",
-        params: { field: "quantity" },
+        code: "tab.void_quantity_invalid",
+        params: { tabId, lineNo: 1, quantity },
       });
       expect(await linesOf(tabId)).toEqual([expect.objectContaining({ quantity: 2000 })]);
       expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
@@ -1418,8 +1418,8 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     const ticket = await ticketOfLine(tabId, 1);
 
     await expect(asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1, "0.5"))).rejects.toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "quantity" },
+      code: "tab.void_quantity_invalid",
+      params: { tabId, lineNo: 1, quantity: "0.5" },
     });
     expect(await linesOf(tabId)).toEqual([expect.objectContaining({ quantity: 2000 })]);
     expect((await ticketOfLine(tabId, 1)).quantity).toBe(2000);
@@ -1441,8 +1441,8 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     );
 
     await expect(asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 2, "1"))).rejects.toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "quantity" },
+      code: "tab.void_quantity_invalid",
+      params: { tabId, lineNo: 2, quantity: "1" },
     });
     expect((await linesOf(tabId)).map((line) => line.quantity)).toEqual([2000, 2000]);
   });
