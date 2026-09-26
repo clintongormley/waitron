@@ -140,9 +140,8 @@ const DEFAULT_MIN_TICK_MS = 5_000;
 export const DEFAULT_HTTP_PORT = 8080;
 /** Port 80, where a phone lands by typing the box's bare address. Exported for recovery. */
 export const DEFAULT_HTTP_LANDING_PORT = 80;
-/** Exported for the entrypoint, which writes the log file before `loadConfig` has run. */
-export const DEFAULT_LOG_MAX_BYTES = 10_000_000;
-export const DEFAULT_LOG_MAX_FILES = 5;
+const DEFAULT_LOG_MAX_BYTES = 10_000_000;
+const DEFAULT_LOG_MAX_FILES = 5;
 /** Loopback, so an unconfigured box never binds a public interface. Exported for recovery. */
 export const DEFAULT_HTTP_HOST = "127.0.0.1";
 /** The highest port `net.Server.listen` accepts; above it `serve()` throws a raw `RangeError`

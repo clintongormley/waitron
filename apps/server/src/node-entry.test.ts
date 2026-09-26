@@ -916,6 +916,25 @@ describe("runEntry", () => {
     ]);
   });
 
+  // A copy started beside a running server writes into that server's file: a rotation by the entry
+  // would be a second process rotating it, with no lock between the two (`log-file.ts`).
+  it("appends its lines to a log file past the server's size limit without rotating it", async () => {
+    const logDir = await mkdtemp(join(tmpdir(), "wt-entry-log-"));
+    const earlier = `${JSON.stringify({ event: "earlier", pad: "x".repeat(10_000_000) })}\n`;
+    await writeFile(join(logDir, "waitron.log"), earlier);
+    const failure = new Error("probe");
+    await expect(
+      runEntry(deps({ logDir, startServer: vi.fn<StartServer>(() => Promise.reject(failure)) })),
+    ).rejects.toBe(failure);
+
+    expect((await logEvents(logDir)).map((line) => line.event)).toEqual([
+      "earlier",
+      "server.boot_started",
+      "server.boot_failed",
+    ]);
+    expect(existsSync(join(logDir, "waitron.log.1"))).toBe(false);
+  });
+
   it("records only that it started when the start succeeds", async () => {
     const logDir = await mkdtemp(join(tmpdir(), "wt-entry-log-"));
     await runEntry(deps({ logDir }));
@@ -931,19 +950,25 @@ describe("runEntry", () => {
     const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
       Promise.resolve(),
     );
+    const log = vi.fn();
     await expect(
       runEntry(
         deps({
           logDir: join(blocker, "logs"),
+          log,
           writeRecoveryState,
           startServer: vi.fn<StartServer>(() => Promise.reject(failure)),
         }),
       ),
     ).rejects.toBe(failure);
     expect(writeRecoveryState.mock.calls.at(-1)![1].lastErrorCode).toBe("server.config_missing");
+    // The first write fails and switches the sink off; the loss is reported once.
+    expect(log.mock.calls.filter((call) => call[1] === "log.file_unavailable")).toEqual([
+      ["warn", "log.file_unavailable"],
+    ]);
   });
 
-  // The 2026-09-26 incident's shape, through the real migrator: a migration the engine refuses.
+  // Through the real migrator: a migration naming a table the venue does not have.
   it("shows a refused migration's own line and the engine's reason on the page", async () => {
     const logDir = await mkdtemp(join(tmpdir(), "wt-entry-log-"));
     const venueDir = await mkdtemp(join(tmpdir(), "wt-venue-"));

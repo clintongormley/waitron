@@ -31,8 +31,6 @@ import {
   DEFAULT_HTTP_HOST,
   DEFAULT_HTTP_LANDING_PORT,
   DEFAULT_HTTP_PORT,
-  DEFAULT_LOG_MAX_BYTES,
-  DEFAULT_LOG_MAX_FILES,
   MAX_HTTP_PORT,
   resolveConfigDir,
 } from "./config.js";
@@ -285,8 +283,9 @@ function paramsLine(params: unknown): string {
 
 /**
  * What a failed boot reports, to the installer's channel and to the log file the recovery page
- * reads: the outer error's name, message and stack, then every wrapped `cause` by name and message,
- * and an `AppError`'s params at whichever level carries them, all through `redactSecrets`.
+ * reads: the outer error's name, message and stack, then each wrapped `cause` by name and message
+ * down to `MAX_CAUSE_DEPTH` levels in all, and an `AppError`'s params at whichever of those levels
+ * carries them, all through `redactSecrets`.
  */
 function failureDetail(error: unknown): string {
   const lines: string[] = [];
@@ -310,17 +309,16 @@ function failureDetail(error: unknown): string {
 
 /**
  * A logger onto the recovery page's log file, for the lines written before the server's own logger
- * exists or after it has gone. A fresh sink each time, so its size is read from the file rather than
- * remembered across the server's own writes. The sink swallows a failed write: this runs on the
- * failure path, whose outcome it must not change.
+ * exists or after it has gone. It appends and never rotates: this start may be a second copy refused
+ * beside a running server, whose sink rotates the same file by a size it keeps in memory. A failed
+ * write is reported once on `log` and never thrown, because this runs on the failure path, whose
+ * outcome it must not change.
  */
-function pageLog(logDir: string, now: () => Date): Logger {
+function pageLog(logDir: string, now: () => Date, log: Logger): Logger {
   return createLogger(
-    createRotatingFileSink({
-      dir: logDir,
-      maxBytes: DEFAULT_LOG_MAX_BYTES,
-      maxFiles: DEFAULT_LOG_MAX_FILES,
-    }),
+    createRotatingFileSink({ dir: logDir, maxBytes: Number.POSITIVE_INFINITY, maxFiles: 1 }, () =>
+      log("warn", "log.file_unavailable"),
+    ),
     now,
   );
 }
@@ -436,8 +434,9 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   const attempt = await changeState(deps, (current) =>
     afterFailure(current, BOOT_INCOMPLETE, now()),
   );
+  const page = pageLog(logDir, now, deps.log);
   // Marks where this attempt's lines begin, so the page never presents an earlier run's as its own.
-  pageLog(logDir, now)("info", "server.boot_started");
+  page("info", "server.boot_started");
 
   let server: { close(): Promise<void> };
   try {
@@ -495,7 +494,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     const detail = failureDetail(error);
     (deps.reportFailure ?? (() => {}))(detail);
     const code = classifyBootFailure(error);
-    pageLog(logDir, now)("error", "server.boot_failed", { errorCode: code, detail });
+    page("error", "server.boot_failed", { errorCode: code, detail });
     const at = now();
     if (code === "provisioning.database_in_use") {
       await recordRefusal(deps, attempt, at);
