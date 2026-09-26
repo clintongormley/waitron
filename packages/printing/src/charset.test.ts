@@ -74,19 +74,19 @@ describe("prepareText / encodeText", () => {
   it("maps compact finder codes to both printer settings across selected blocks", () => {
     const first = characterFinderOptions("es-ES", 0);
     expect(first).toHaveLength(32);
-    expect(first[0]).toEqual({ code: "W-00", characterSet: "wpc1252", characterTable: 0 });
-    expect(first.find(({ code }) => code === "8-06")).toEqual({
-      code: "8-06",
+    expect(first[0]).toEqual({ code: "00-W", characterSet: "wpc1252", characterTable: 0 });
+    expect(first.find(({ code }) => code === "06-8")).toEqual({
+      code: "06-8",
       characterSet: "pc858",
       characterTable: 6,
     });
-    expect(first.at(-1)?.code).toBe("8-15");
+    expect(first.at(-1)?.code).toBe("15-8");
     const last = characterFinderOptions("en-GB", 240);
-    expect(last[0]?.code).toBe("W-240");
-    expect(last.at(-1)?.code).toBe("8-255");
+    expect(last[0]?.code).toBe("240-W");
+    expect(last.at(-1)?.code).toBe("255-8");
     const unaligned = characterFinderOptions("es-ES", 5);
-    expect(unaligned[0]?.code).toBe("W-05");
-    expect(unaligned.at(-1)?.code).toBe("8-20");
+    expect(unaligned[0]?.code).toBe("05-W");
+    expect(unaligned.at(-1)?.code).toBe("20-8");
     expect(() => characterFinderOptions("en-GB", -1)).toThrow(RangeError);
     expect(() => characterFinderOptions("en-GB", 256)).toThrow(RangeError);
   });

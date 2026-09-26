@@ -646,12 +646,16 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           printer_id: string;
           pending_jobs: number;
           last_print_at: string | null;
+          last_print_agent_id: string | null;
         }>(sql`
           select printer_id,
             cast(count(*) filter (where status in ('queued', 'printing')
               or (status = 'failed' and attempts < ${MAX_DELIVERY_ATTEMPTS})) as int) as pending_jobs,
-            max(delivered_at) as last_print_at
-          from print_jobs
+            max(delivered_at) as last_print_at,
+            (select latest.claimed_by from print_jobs latest
+              where latest.printer_id = jobs.printer_id and latest.delivered_at is not null
+              order by latest.delivered_at desc, latest.id desc limit 1) as last_print_agent_id
+          from print_jobs jobs
           group by printer_id`);
         const byPrinter = new Map(summaries.rows.map((row) => [row.printer_id, row]));
         return configured.map((printer) => {
@@ -659,6 +663,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           return {
             ...printer,
             pendingJobs: summary?.pending_jobs ?? 0,
+            lastPrintAgentId: summary?.last_print_agent_id ?? null,
             lastPrintAt:
               summary?.last_print_at == null ? null : new Date(summary.last_print_at).toISOString(),
           };

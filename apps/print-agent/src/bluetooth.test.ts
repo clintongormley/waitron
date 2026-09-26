@@ -56,6 +56,15 @@ describe("parsePairResult", () => {
 });
 
 describe("createBluetoothctlHost", () => {
+  it.each([
+    "No default controller available",
+    "Failed to start discovery: org.bluez.Error.NotReady",
+  ])("reports a refused scan: %s", async (output) => {
+    const run = vi.fn().mockResolvedValueOnce(output).mockResolvedValue("");
+    await expect(createBluetoothctlHost({ run }).scan()).rejects.toThrow(output);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
   it("scan() runs an inquiry then lists devices, mapped to DiscoveredDevice", async () => {
     const run = vi.fn<(args: string[]) => Promise<string>>(async (args) =>
       args.includes("scan") ? "Discovery started\r\n" : DEVICES_OUTPUT,

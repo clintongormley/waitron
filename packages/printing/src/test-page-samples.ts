@@ -94,7 +94,7 @@ export function characterFinderOptions(
   const encodings = characterCalibration(locale).finderEncodings;
   return Array.from({ length: 16 }, (_, offset) => firstTable + offset).flatMap((characterTable) =>
     encodings.map(({ label, characterSet }) => ({
-      code: `${label}-${String(characterTable).padStart(2, "0")}`,
+      code: `${String(characterTable).padStart(2, "0")}-${label}`,
       characterSet,
       characterTable,
     })),

@@ -62,7 +62,11 @@ export function createBluetoothctlHost(opts: {
   const scanSeconds = opts.scanSeconds ?? 6;
   return {
     async scan(): Promise<DiscoveredDevice[]> {
-      await opts.run(["--timeout", String(scanSeconds), "scan", "on"]);
+      const output = await opts.run(["--timeout", String(scanSeconds), "scan", "on"]);
+      const failure = /(?:No default controller available|Failed to start discovery[^\r\n]*)/.exec(
+        output.replace(ANSI, ""),
+      );
+      if (failure) throw new Error(failure[0]);
       const listed = parseBluetoothctlDevices(await opts.run(["devices"]));
       return listed.map((d) => ({
         transport: "bluetooth",
