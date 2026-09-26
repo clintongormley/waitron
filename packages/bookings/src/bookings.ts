@@ -191,12 +191,15 @@ export async function completeBooking(
   await advanceStatus(tx, cfg, id, ["seated"], "completed");
 }
 
-/** Opens a tab on the requested table, or the booking's own, and links it to the booking. */
+/**
+ * Seats the party at the requested table, or the booking's own, for the booking's size, and links
+ * the party's tab to the booking. `seatedBy` is the person seating it.
+ */
 export async function seatBooking(
   tx: Transaction,
   cfg: BookingConfig,
   id: string,
-  req: { tableId?: string },
+  req: { tableId?: string; seatedBy: string },
   core: CoreServices,
 ): Promise<{ tabId: string }> {
   const booking = await getBooking(tx, cfg, id);
@@ -210,8 +213,8 @@ export async function seatBooking(
   if (tableId === null || tableId === undefined) {
     throw new AppError("booking.table_required", {});
   }
-  // Only the location is checked here: `openTab` refuses a missing or inactive table itself, keeping
-  // `table.inactive` distinct.
+  // Only the location is checked here: `seatTable` refuses a missing or inactive table itself,
+  // keeping `table.inactive` distinct.
   if (req.tableId !== undefined) {
     const [inLocation] = await tx
       .select({ id: diningTables.id })
@@ -223,8 +226,12 @@ export async function seatBooking(
       throw new AppError("table.not_found", { tableId: req.tableId });
     }
   }
-  // A throw after `openTab` relies on the caller's transaction to roll back the tab it opened.
-  const { tabId } = await core.openTab(tx, { tableId });
+  // A throw after `seatTable` relies on the caller's transaction to roll back the tab it opened.
+  const { tabId } = await core.seatTable(tx, {
+    tableId,
+    guestCount: booking.partySize,
+    operatorId: req.seatedBy,
+  });
   const seated = await tx
     .update(bookings)
     .set({ tableId, tabId, status: "seated" })

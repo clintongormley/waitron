@@ -185,7 +185,9 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
         if (body.tableId !== undefined && body.tableId !== null) {
           req.tableId = requireBodyUuid(body.tableId, "tableId");
         }
-        const seated = await gated(sessionId, (tx) => seatBooking(tx, cfg, id, req, core));
+        const seated = await gated(sessionId, (tx, { authorizedBy }) =>
+          seatBooking(tx, cfg, id, { ...req, seatedBy: authorizedBy }, core),
+        );
         return c.json(seated);
       }),
     );

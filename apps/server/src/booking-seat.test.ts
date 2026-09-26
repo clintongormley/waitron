@@ -24,15 +24,13 @@ import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { ModuleRouteContext } from "@waitron/module";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { openTab } from "./working-order.js";
+import { seatTable } from "./visits.js";
 import "./errors.js";
 
-// The `seatBooking ↔ openTab` edge with the REAL `apps/server` `openTab` — the one seam the bookings
-// package's own route suite cannot pin, since a module cannot import apps/server and so its route tests
-// bind a `fakeCore`. Here the generic mount receives the EXACT `core` closure boot builds
-// (`{ openTab: (tx, req) => openTab(tx, till, req) }`, boot.ts), and the seat route drives it end to end:
-// the real verb opens a real `working_orders` row and the booking is marked seated with that tab id.
-// What this pins is the wiring edge itself, never a grant.
+// The `seatBooking ↔ seatTable` edge with the REAL `apps/server` `seatTable` — the one seam the
+// bookings package's own route suite cannot pin, since a module cannot import apps/server and so its
+// route tests bind a `fakeCore`. Here the generic mount receives the same `core` closure boot builds,
+// and the seat route drives it end to end.
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
@@ -52,6 +50,7 @@ const noopLog: Logger = () => {};
 interface Venue {
   tillCfg: TillConfig;
   ctx: ModuleRouteContext;
+  managerId: string;
   managerCookie: string;
 }
 
@@ -83,22 +82,27 @@ async function setupVenue(): Promise<Venue> {
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const managerSid = await withTransaction(db, async (tx) => {
+  const manager = await withTransaction(db, async (tx) => {
     // Through the table definition for the same reason as the venue rows above.
     const [p] = await tx
       .insert(persons)
       .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })
       .returning({ id: persons.id });
     const session = await startManagementSession(tx, { personId: p!.id });
-    return session.token;
+    return { id: p!.id, sid: session.token };
   });
   const ctx: ModuleRouteContext = {
     db,
     cfg: { locationId: tillCfg.locationId },
-    // The EXACT closure boot wires (boot.ts): the module reaches the tab verb ONLY through this seat.
-    core: { openTab: (tx, req) => openTab(tx, tillCfg, req) },
+    // The EXACT closure boot wires (boot.ts): the module reaches the seat verb ONLY through this seat.
+    core: { seatTable: (tx, req) => seatTable(tx, tillCfg, req) },
   };
-  return { tillCfg, ctx, managerCookie: `${MANAGEMENT_COOKIE}=${managerSid}` };
+  return {
+    tillCfg,
+    ctx,
+    managerId: manager.id,
+    managerCookie: `${MANAGEMENT_COOKIE}=${manager.sid}`,
+  };
 }
 
 function mountApp(ctx: ModuleRouteContext): Hono {
@@ -117,7 +121,7 @@ async function post(app: Hono, path: string, cookie: string, body?: unknown): Pr
   });
 }
 
-describe("bookings seat route → real openTab", () => {
+describe("bookings seat route → real seatTable", () => {
   it("opens a real working-order tab and seats the booking with its tab id", async () => {
     const v = await setupVenue();
     const app = mountApp(v.ctx);
@@ -152,6 +156,12 @@ describe("bookings seat route → real openTab", () => {
         sql`select id, status from working_orders where id = ${tabId}`,
       );
       expect(order.rows[0]).toEqual({ id: tabId, status: "open" });
+      // The party is seated as a visit, opened by the manager who seated the booking, for its size.
+      const visit = await tx.execute<{ opened_by: string; guest_count: number; state: string }>(
+        sql`select v.opened_by, v.guest_count, v.state from visits v
+            join working_orders wo on wo.visit_id = v.id where wo.id = ${tabId}`,
+      );
+      expect(visit.rows).toEqual([{ opened_by: v.managerId, guest_count: 4, state: "open" }]);
     });
   });
 });

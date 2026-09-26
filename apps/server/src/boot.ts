@@ -143,7 +143,7 @@ import {
 } from "./configuration-transfer.js";
 import { createFiscalReadinessStore } from "./fiscal-readiness.js";
 import { fiscalReadinessInput, submitFiscalReadiness } from "./fiscal-readiness-runner.js";
-import { openTab } from "./working-order.js";
+import { seatTable } from "./visits.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
@@ -1475,8 +1475,8 @@ async function bootServer(
   );
   mountUnitsApi(app, { db, venueLocale }, log);
   mountPurchasingApi(app, { db }, log);
-  // Every ENABLED module's routes, so a module toggled off mounts nothing. `core.openTab` closes over
-  // the full `till` here, so `nodeId`/`tillId` never enter a module's cfg.
+  // Every ENABLED module's routes, so a module toggled off mounts nothing. `core.seatTable` closes
+  // over the full `till` here, so `nodeId`/`tillId` never enter a module's cfg.
   const routeCtx: ModuleRouteContext = {
     db,
     cfg: {
@@ -1484,7 +1484,7 @@ async function bootServer(
       contentDefaultLanguage: venueLocale,
     },
     maxUploadBytes: MAX_UPLOAD_BYTES,
-    core: { openTab: (tx, req) => openTab(tx, till, { tableId: req.tableId }) },
+    core: { seatTable: (tx, req) => seatTable(tx, till, req) },
   };
   for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
   // `dataNodeId`, not this node's own id: see its declaration above.

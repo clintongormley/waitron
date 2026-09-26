@@ -21,14 +21,14 @@ import { BOOKINGS_ROUTES } from "./routes.js";
 // A manager holds `booking.manage` only once the module's seat is registered, as boot does.
 registerModulePermissions(BOOKINGS_PERMISSIONS);
 
-// `core.openTab` is `fakeCore`: the real verb lives in apps/server, which a module cannot import.
+// `core.seatTable` is `fakeCore`: the real verb lives in apps/server, which a module cannot import.
 const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 
 const noopLog: Logger = () => {};
 
 interface Venue {
   cfg: ModuleRouteContext["cfg"];
-  /** The route context `BOOKINGS_ROUTES.mount` receives — `core.openTab` bound to this venue. */
+  /** The route context `BOOKINGS_ROUTES.mount` receives — `core.seatTable` bound to this venue. */
   ctx: ModuleRouteContext;
   /** A live MANAGEMENT session cookie for a `manager` (holds `booking.manage`). */
   managerCookie: string;
