@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import { formatMoney } from "@waitron/shared";
 import type {
   MenuChange,
   MenuPreview,
@@ -11,8 +12,7 @@ import type {
 } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
-import { formatMoney } from "../i18n/format.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
 /** How the host's last publish ended, for the panel to say. */
@@ -49,13 +49,23 @@ function fill(key: StringKey, values: Record<string, string>): string {
 }
 
 /** A menu's publication state in words, for the menus list and the editor: what it is, and the live
- * version beside it. */
-export function statusWords(status: MenuStatus): { label: string; detail: string | null } {
-  if (status.state === "unpublished") return { label: t("menu_status.unpublished"), detail: null };
-  const values = { number: String(status.version), time: formatIsoMinute(status.publishedAt) };
+ * version and its publication time beside it. */
+export function statusWords(status: MenuStatus): {
+  label: string;
+  live: { version: string; time: string } | null;
+} {
+  if (status.state === "unpublished") return { label: t("menu_status.unpublished"), live: null };
+  const number = { number: String(status.version) };
+  const time = formatIsoMinute(status.publishedAt);
   return status.state === "current"
-    ? { label: t("menu_status.current"), detail: fill("menu_status.current_detail", values) }
-    : { label: t("menu_status.changed"), detail: fill("menu_status.changed_detail", values) };
+    ? {
+        label: t("menu_status.current"),
+        live: { version: fill("menu_status.current_version", number), time },
+      }
+    : {
+        label: t("menu_status.changed"),
+        live: { version: fill("menu_status.changed_version", number), time },
+      };
 }
 
 /** Says a publish did not happen, what is still live, and that the working edits are kept. */
@@ -149,33 +159,51 @@ export class MenuPreviewPanel extends LitElement {
   @property({ type: Boolean }) publishing = false;
   @property({ attribute: false }) result: PublishResult | null = null;
 
+  /** One place, named as the Prices tab names it. */
   #place(path: readonly string[]): string {
-    return path.length === 0 ? this.menuName : path.join(" › ");
+    return path.length === 0 ? t("menu_prices.top_level") : path.join(" › ");
+  }
+
+  #places(paths: readonly (readonly string[])[]): string {
+    return new Intl.ListFormat(currentLocale(), { type: "conjunction" }).format(
+      paths.map((path) => this.#place(path)),
+    );
+  }
+
+  /** A change at one place: its own wording at the top level, else `key` with the place filled. */
+  #at(key: StringKey, top: StringKey, path: readonly string[], values: Record<string, string>) {
+    return path.length === 0
+      ? fill(top, values)
+      : fill(key, { ...values, place: this.#place(path) });
   }
 
   #words(change: MenuChange): string {
     switch (change.kind) {
       case "product_added":
-        return fill("menu_preview.product_added", {
-          name: change.name,
-          place: this.#place(change.under),
-        });
+        return this.#at(
+          "menu_preview.product_added",
+          "menu_preview.product_added_top",
+          change.under,
+          { name: change.name },
+        );
       case "product_removed":
-        return fill("menu_preview.product_removed", {
-          name: change.name,
-          place: this.#place(change.under),
-        });
+        return this.#at(
+          "menu_preview.product_removed",
+          "menu_preview.product_removed_top",
+          change.under,
+          { name: change.name },
+        );
       case "product_moved":
         return fill("menu_preview.product_moved", {
           name: change.name,
-          from: change.from.map((path) => this.#place(path)).join(", "),
-          to: change.to.map((path) => this.#place(path)).join(", "),
+          from: this.#places(change.from),
+          to: this.#places(change.to),
         });
       case "price_changed":
         return fill("menu_preview.price_changed", {
           name: change.name,
-          from: formatMoney(change.from),
-          to: formatMoney(change.to),
+          from: formatMoney(change.from, currentLocale()),
+          to: formatMoney(change.to, currentLocale()),
         });
       case "product_changed":
         return fill("menu_preview.changed_fields", {
@@ -183,15 +211,19 @@ export class MenuPreviewPanel extends LitElement {
           fields: change.fields.map((field) => t(PRODUCT_FIELDS[field])).join(", "),
         });
       case "section_added":
-        return fill("menu_preview.section_added", {
-          name: change.name,
-          place: this.#place(change.under),
-        });
+        return this.#at(
+          "menu_preview.section_added",
+          "menu_preview.section_added_top",
+          change.under,
+          { name: change.name },
+        );
       case "section_removed":
-        return fill("menu_preview.section_removed", {
-          name: change.name,
-          place: this.#place(change.under),
-        });
+        return this.#at(
+          "menu_preview.section_removed",
+          "menu_preview.section_removed_top",
+          change.under,
+          { name: change.name },
+        );
       case "section_changed":
         return change.fields.length === 1 && change.fields[0] === "names"
           ? fill("menu_preview.section_renamed", { name: change.name })
@@ -200,7 +232,12 @@ export class MenuPreviewPanel extends LitElement {
               fields: change.fields.map((field) => t(SECTION_FIELDS[field])).join(", "),
             });
       case "order_changed":
-        return fill("menu_preview.order_changed", { place: this.#place(change.list) });
+        return this.#at(
+          "menu_preview.order_changed",
+          "menu_preview.order_changed_top",
+          change.list,
+          {},
+        );
       case "layout_changed":
         return fill("menu_preview.layout_changed", { name: change.name });
       case "default_layout_changed":

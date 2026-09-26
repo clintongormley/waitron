@@ -3,8 +3,8 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
-import { formatMoney } from "../i18n/format.js";
-import { t } from "../i18n/t.js";
+import { formatMoney } from "@waitron/shared";
+import { currentLocale, t } from "../i18n/t.js";
 import { lineGross } from "../state/order-line.js";
 import { productName } from "./product-name.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
@@ -33,8 +33,8 @@ function pickKey(listId: string, productId: string): string {
 /** "+€1.50" for a variant dearer than its parent, "−€0.50" (a minus sign) for a cheaper one. */
 function priceDifference(difference: string): string {
   return difference.startsWith("-")
-    ? `\u2212${formatMoney(difference.slice(1))}`
-    : `+${formatMoney(difference)}`;
+    ? `\u2212${formatMoney(difference.slice(1), currentLocale())}`
+    : `+${formatMoney(difference, currentLocale())}`;
 }
 
 /**
@@ -348,7 +348,7 @@ export class TillModifierPicker extends LitElement {
       quantity: this.quantity,
       extras: this.#selectedExtras(),
     };
-    return formatMoney(lineGross(previewLine));
+    return formatMoney(lineGross(previewLine), currentLocale());
   }
 
   #setCount(listId: string, productId: string, quantity: number): void {
@@ -445,7 +445,9 @@ export class TillModifierPicker extends LitElement {
                             >${priceDifference(variant.unitPriceDifference)}</span
                           >`
                     }
-                    <span class="option-delta">${formatMoney(variant.unitPrice)}</span>
+                    <span class="option-delta"
+                      >${formatMoney(variant.unitPrice, currentLocale())}</span
+                    >
                   </label>`,
               )}
             </fieldset>`
@@ -515,7 +517,7 @@ export class TillModifierPicker extends LitElement {
 
   /** A free pick shows no price at all — "0,00" beside a bread roll reads as a charge. */
   #priceOf(item: OfferedExtraItem) {
-    return Number(item.price) !== 0 ? formatMoney(item.price) : nothing;
+    return Number(item.price) !== 0 ? formatMoney(item.price, currentLocale()) : nothing;
   }
 
   #renderPick(list: OfferedExtrasList, item: OfferedExtraItem, atListMax: boolean) {

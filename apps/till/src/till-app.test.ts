@@ -1,13 +1,13 @@
 import { page } from "vitest/browser";
 import { currentContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
-import { formatMoney } from "./i18n/format.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
@@ -2076,7 +2076,7 @@ describe("till-app", () => {
     expect(basketText(el)).toContain("Leche extra ×2");
     expect(basketText(el)).toContain(t("basket.not_offered"));
     // Two cafés at 1.50, and two milks per café at 0.75.
-    expect(totalText(el)).toContain(formatMoney("6.00"));
+    expect(totalText(el)).toContain(formatMoney("6.00", currentLocale()));
   });
 
   it("takes a not-offered pick off the basket and the total once the order is edited", async () => {
@@ -2092,7 +2092,7 @@ describe("till-app", () => {
 
     expect(basketText(el)).not.toContain("Leche extra");
     // Three cafés at 1.50, and no milk: what the server re-prices the edit to.
-    expect(totalText(el)).toContain(formatMoney("4.50"));
+    expect(totalText(el)).toContain(formatMoney("4.50", currentLocale()));
   });
 
   it("never sends a not-offered pick, whether the order is paid unedited, held, or edited", async () => {

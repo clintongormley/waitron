@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { formatMoney } from "../i18n/format.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { setContentLanguages } from "@waitron/ui";
+import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { TillBasket } from "./basket.js";
@@ -176,7 +176,7 @@ describe("till-basket", () => {
     expect(rows[0]!.textContent).toContain("Café");
     expect(rows[0]!.textContent).toContain("2");
     // 1.50 × 2, rounded to money scale.
-    expect(rows[0]!.textContent).toContain(formatMoney("3.00"));
+    expect(rows[0]!.textContent).toContain(formatMoney("3.00", currentLocale()));
   });
 
   it("labels a weight line's quantity in kg and prices it by weight", async () => {
@@ -187,7 +187,7 @@ describe("till-basket", () => {
     expect(row.textContent).toContain("0.320");
     expect(row.textContent).toContain("kg");
     // 10.00 × 0.320 = 3.20.
-    expect(row.textContent).toContain(formatMoney("3.20"));
+    expect(row.textContent).toContain(formatMoney("3.20", currentLocale()));
   });
 
   it("re-renders when the store changes after mount", async () => {
@@ -296,14 +296,14 @@ describe("till-basket", () => {
 
     // The dish shows its OWN gross (10.00 × 1), never the dish+picks running total (10.50).
     expect(dishRows[0]!.textContent).toContain("Hamburguesa");
-    expect(dishRows[0]!.textContent).toContain(formatMoney("10.00"));
+    expect(dishRows[0]!.textContent).toContain(formatMoney("10.00", currentLocale()));
 
     // Each pick is indented under the dish at its own gross, by its STAFF name; the free one is 0.00.
     expect(optionRows[0]!.textContent).toContain("Extra queso");
     expect(optionRows[0]!.textContent).not.toContain("Extra queso carta");
-    expect(optionRows[0]!.textContent).toContain(formatMoney("0.50"));
+    expect(optionRows[0]!.textContent).toContain(formatMoney("0.50", currentLocale()));
     expect(optionRows[1]!.textContent).toContain("Sin cebolla");
-    expect(optionRows[1]!.textContent).toContain(formatMoney("0.00"));
+    expect(optionRows[1]!.textContent).toContain(formatMoney("0.00", currentLocale()));
 
     // A child is NOT independently deletable: only the dish carries a remove control, and no pick row
     // carries a stepper (a pick is counted through the picker, not the basket).
@@ -333,7 +333,7 @@ describe("till-basket", () => {
     expect(optionRows[0]!.textContent).toContain("Extra chupito");
     expect(optionRows[0]!.textContent).toContain("×2"); // taken twice → badge
     // …and it is priced twice: 0.50 × (1 dish × 2).
-    expect(optionRows[0]!.textContent).toContain(formatMoney("1.00"));
+    expect(optionRows[0]!.textContent).toContain(formatMoney("1.00", currentLocale()));
     expect(optionRows[1]!.textContent).toContain("Sin cebolla");
     expect(optionRows[1]!.textContent).not.toContain("×"); // single pick → no badge
   });
@@ -587,7 +587,7 @@ describe("till-basket", () => {
     const pickRow = el.shadowRoot!.querySelector(".option")!;
     expect(pickRow.textContent).toContain("Leche de avena");
     // 0.40 × 2 cafés × 2 per café.
-    expect(pickRow.textContent).toContain(formatMoney("1.60"));
+    expect(pickRow.textContent).toContain(formatMoney("1.60", currentLocale()));
     expect(pickRow.textContent).toContain(tag);
     const names = [...el.shadowRoot!.querySelectorAll(".line > .name")];
     expect(names[0]!.textContent).not.toContain(tag);

@@ -45,6 +45,7 @@ const states: Record<string, Partial<MenuPreviewPanel>> = {
     status: { ...live, state: "current", hash: changes.hash },
     preview: { ...changes, changes: [], warnings: [] },
   },
+  "no changes to list": { preview: { ...changes, changes: [], warnings: [] } },
   publishing: { preview: changes, publishing: true },
   published: { preview: changes, result: { kind: "published", number: 3 } },
   stale: { preview: changes, result: { kind: "stale" } },

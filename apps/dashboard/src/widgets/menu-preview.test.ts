@@ -122,6 +122,20 @@ it("words every kind of change, each with where it came from", async () => {
         source: "this_menu",
       },
       {
+        kind: "product_removed",
+        productId: "p-bread",
+        name: "Bread",
+        under: [],
+        source: "this_menu",
+      },
+      {
+        kind: "section_removed",
+        sectionId: "s-specials",
+        name: "Specials",
+        under: [],
+        source: "this_menu",
+      },
+      {
         kind: "section_removed",
         sectionId: "s-beer",
         name: "Beer",
@@ -148,13 +162,15 @@ it("words every kind of change, each with where it came from", async () => {
     "Lemonade: allergens — shared product, also on Dinner Menu",
     "Drinks renamed — shared section",
     "Lager removed from Drinks › Beer — shared section, also on Dinner Menu, Terrace Menu",
-    "Chips added under Lunch Menu — this menu",
-    "Soup moved from Starters to Lunch Menu, Mains › Hot — this menu",
+    "Chips added at the top level — this menu",
+    "Soup moved from Starters to Top level and Mains › Hot — this menu",
     "Cola: names, description, photo, unit, diet, variants, extras, options — shared product",
-    "Section Desserts added under Lunch Menu — this menu",
+    "Section Desserts added at the top level — this menu",
+    "Bread removed from the top level — this menu",
+    "Section Specials removed from the top level — this menu",
     "Section Beer removed from Drinks — shared section",
     "Mains: name, photo, colour — shared section",
-    "Order changed in Lunch Menu — this menu",
+    "Order changed at the top level — this menu",
     "Order changed in Drinks — shared section",
     "Home page layout Bar changed — this menu",
     "Default home page layout changed from Home to Bar — this menu",
@@ -167,6 +183,15 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
   const el = await mount({
     preview: preview([
       {
+        kind: "product_moved",
+        productId: "p-soup",
+        name: "Soup",
+        from: [["Starters"]],
+        to: [[], ["Mains", "Hot"]],
+        source: "this_menu",
+      },
+      { kind: "order_changed", list: [], source: "this_menu" },
+      {
         kind: "price_changed",
         productId: "p-burger",
         name: "Burger",
@@ -177,10 +202,11 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
       },
     ]),
   });
-  const [line] = items(el, "changes");
-  expect(line!.replace(/\s/g, " ")).toBe(
+  expect(items(el, "changes").map((line) => line.replace(/\s/g, " "))).toEqual([
+    "Se ha movido Soup de Starters a Nivel principal y Mains › Hot — este menú",
+    "Ha cambiado el orden en el nivel principal — este menú",
     "Ha cambiado el precio de Burger de 12,00 € a 13,00 € — producto compartido, también en Dinner Menu",
-  );
+  ]);
 });
 
 it("shows the live version and when it was published, apart from the pending changes", async () => {

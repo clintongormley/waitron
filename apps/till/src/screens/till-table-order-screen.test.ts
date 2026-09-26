@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTableOrderScreen, type TableServiceStatus } from "./till-table-order-screen.js";
-import { formatMoney } from "../i18n/format.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import type { TabLine, TableState, TillProduct } from "../api/client.js";
 import type { TillProductGrid } from "../widgets/product-grid.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
@@ -222,7 +222,7 @@ describe("till-table-order-screen", () => {
     await openDrawer(el);
     // 2 × 1.50 + 1 × 1.50 = 4.50, summed at money scale from the locked unit prices.
     expect(el.shadowRoot!.querySelector("[data-tab-total]")!.textContent).toContain(
-      formatMoney("4.50"),
+      formatMoney("4.50", currentLocale()),
     );
   });
 
@@ -347,7 +347,7 @@ describe("till-table-order-screen", () => {
     expect(text).toContain(t("table.none_pending"));
     expect(text).toContain(t("table.none_served"));
     expect(el.shadowRoot!.querySelector("[data-tab-total]")!.textContent).toContain(
-      formatMoney("0.00"),
+      formatMoney("0.00", currentLocale()),
     );
   });
 

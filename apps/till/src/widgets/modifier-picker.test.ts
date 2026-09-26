@@ -1,11 +1,12 @@
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { formatMoney } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { formatMoney } from "../i18n/format.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillProductGrid } from "./product-grid.js";
 import { TillModifierPicker } from "./modifier-picker.js";
 import { sellingValuesOf, type OfferedModifier, type TillProduct } from "../api/client.js";
+import { currentLocale } from "../i18n/t.js";
 
 /**
  * Every fixture below gives a list, a label and a picked product THREE DIFFERENT texts for their
@@ -271,8 +272,8 @@ describe("till-modifier-picker", () => {
 
   it("prices each offered item at the price the offer resolved", async () => {
     const { picker } = await openPicker(burger, "Burger", new WorkingOrderStore());
-    expect(picker.shadowRoot!.textContent).toContain(formatMoney("1.50"));
-    expect(picker.shadowRoot!.textContent).toContain(formatMoney("1.00"));
+    expect(picker.shadowRoot!.textContent).toContain(formatMoney("1.50", currentLocale()));
+    expect(picker.shadowRoot!.textContent).toContain(formatMoney("1.00", currentLocale()));
   });
 
   it("gives a once-only item a checkbox and a repeatable item a stepper", async () => {
@@ -381,15 +382,15 @@ describe("till-modifier-picker", () => {
       offeredModifiers: [{ ...extrasList, maxPicks: null }, cookedList],
     };
     const { picker } = await openPicker(roomy, "Burger", new WorkingOrderStore());
-    expect(picker.shadowRoot!.textContent).toContain(formatMoney("8.00"));
+    expect(picker.shadowRoot!.textContent).toContain(formatMoney("8.00", currentLocale()));
     pickBox(picker, "list-extras", "p-bacon")!.click();
     await picker.updateComplete;
-    expect(picker.shadowRoot!.textContent).toContain(formatMoney("9.50"));
+    expect(picker.shadowRoot!.textContent).toContain(formatMoney("9.50", currentLocale()));
     // A pick taken twice is priced twice; the options answer above it adds nothing.
     incButton(picker, "list-extras", "p-cheese")!.click();
     incButton(picker, "list-extras", "p-cheese")!.click();
     await picker.updateComplete;
-    expect(picker.shadowRoot!.textContent).toContain(formatMoney("11.50"));
+    expect(picker.shadowRoot!.textContent).toContain(formatMoney("11.50", currentLocale()));
   });
 
   it("rings the dish with its picks and its answers on Add, then closes", async () => {
@@ -445,10 +446,10 @@ describe("till-modifier-picker", () => {
     const { el, picker } = await openPicker(burger, "Burger", store);
     pickBox(picker, "list-extras", "p-bacon")!.click();
     await picker.updateComplete;
-    expect(picker.shadowRoot!.textContent).toContain(formatMoney("9.50"));
+    expect(picker.shadowRoot!.textContent).toContain(formatMoney("9.50", currentLocale()));
     pickBox(picker, "list-extras", "p-bacon")!.click();
     await picker.updateComplete;
-    expect(picker.shadowRoot!.textContent).toContain(formatMoney("8.00"));
+    expect(picker.shadowRoot!.textContent).toContain(formatMoney("8.00", currentLocale()));
     addButton(picker).click();
     await el.updateComplete;
     expect(store.lines[0]!.extras).toBeUndefined();
@@ -690,8 +691,8 @@ describe("till-modifier-picker", () => {
         ...picker.shadowRoot!.querySelectorAll<HTMLElement>("fieldset label.option"),
       ].map((option) => option.querySelector(".price-difference")?.textContent?.trim() ?? null);
       expect(differences).toEqual([
-        `\u2212${formatMoney("0.50")}`,
-        `+${formatMoney("1.50")}`,
+        `\u2212${formatMoney("0.50", currentLocale())}`,
+        `+${formatMoney("1.50", currentLocale())}`,
         null,
       ]);
     });

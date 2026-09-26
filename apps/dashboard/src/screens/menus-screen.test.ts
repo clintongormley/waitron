@@ -2748,9 +2748,18 @@ it("opens no product's window while a save is out, even after Back and Forward c
 // Publishing
 
 describe("publishing", () => {
-  // Read as a person reads the page, in English.
-  beforeEach(() => setLocale("en"));
-  afterEach(() => setLocale("es-ES"));
+  // Read as a person reads the page, in English, on a screen wide enough for every column.
+  const frame = { width: 0, height: 0 };
+  beforeEach(async () => {
+    setLocale("en");
+    frame.width = window.innerWidth;
+    frame.height = window.innerHeight;
+    await page.viewport(1280, 900);
+  });
+  afterEach(async () => {
+    setLocale("es-ES");
+    await page.viewport(frame.width, frame.height);
+  });
 
   function statusCell(el: MenusScreen, menuId: string): string {
     return text(table(el).shadowRoot.querySelector(`[data-test="status-${menuId}"]`));
@@ -2843,6 +2852,53 @@ describe("publishing", () => {
     await table(el).updateComplete;
     await vi.waitFor(() => expect(statusCell(el, "menu-lunch")).toBe("Could not be checked"));
     expect(q(el, '[data-test="load-error"]')).toBeNull();
+  });
+
+  it("reads every menu's state again when the person retries a failed load", async () => {
+    const client = api({
+      listCatalogues: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(menus),
+      getMenuStatuses: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockResolvedValue(statuses()),
+    });
+    const el = await mount(client);
+    expect(q(el, '[data-test="load-error"]')).not.toBeNull();
+    await click(el, "retry");
+    await vi.waitFor(() => expect(table(el)).not.toBeNull());
+    await vi.waitFor(async () => {
+      await table(el).updateComplete;
+      expect(statusCell(el, "menu-dinner")).toBe(
+        `Published Version 5 · ${formatIsoMinute("2026-09-20T18:00:00.000Z")}`,
+      );
+    });
+    expect(client.getMenuStatuses).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows each menu's state under its name on a phone-width list, with no status column", async () => {
+    const el = await mount();
+    await page.viewport(390, 844);
+    await vi.waitFor(async () => {
+      await table(el).updateComplete;
+      expect(
+        [...table(el).shadowRoot.querySelectorAll("thead th")].map((th) => text(th)),
+      ).not.toContain("Status");
+    });
+    const lunchRow = table(el).shadowRoot.querySelector('tr[data-row-key="menu-lunch"]')!;
+    await vi.waitFor(() =>
+      expect(text(lunchRow.querySelector("td"))).toBe(
+        `Lunch Menu Unpublished changes Live: version 2 · ${formatIsoMinute(PUBLISHED_AT)}`,
+      ),
+    );
+    const scroll = table(el).shadowRoot.querySelector<HTMLElement>(".scroll")!;
+    expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
+    await page.viewport(1280, 900);
+    await vi.waitFor(async () => {
+      await table(el).updateComplete;
+      expect(
+        [...table(el).shadowRoot.querySelectorAll("thead th")].map((th) => text(th)),
+      ).toContain("Status");
+    });
   });
 
   it("follows every menu's state on the list alone, and one menu's in its editor", async () => {
@@ -3032,6 +3088,57 @@ describe("publishing", () => {
         `Lunch Menu was not published: version 2 is still live. Your changes are still saved. ${codeMessage("menu.changed_since_preview")}`,
       ),
     );
+  });
+
+  it("keeps each menu's publish apart: another menu publishes while one's publish is out", async () => {
+    const lunchOut = deferred<{ versionId: string; number: number }>();
+    const client = api({
+      publishMenu: vi.fn((id: string) =>
+        id === "menu-lunch" ? lunchOut.promise : Promise.resolve({ versionId: "v-d", number: 6 }),
+      ),
+    });
+    const el = await mountPreview(client);
+    await publish(el);
+    const button = () => inPanel(el, "publish") as HTMLElementTagNameMap["wt-button"] | null;
+    expect(button()!.loading).toBe(true);
+    history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/preview");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() => expect(text(inPanel(el, "publish"))).toBe("Publish Dinner Menu"));
+    expect(button()!.loading).toBe(false);
+    await publish(el);
+    expect(client.publishMenu).toHaveBeenLastCalledWith("menu-dinner", "c".repeat(64));
+    await vi.waitFor(() =>
+      expect(text(inPanel(el, "result"))).toBe("Dinner Menu version 6 is now live."),
+    );
+    history.back();
+    await vi.waitFor(() => expect(text(inPanel(el, "publish"))).toBe("Publishing Lunch Menu…"));
+    expect(button()!.loading).toBe(true);
+    lunchOut.resolve({ versionId: "v-lunch-3", number: 3 });
+    await vi.waitFor(() =>
+      expect(text(inPanel(el, "result"))).toBe("Lunch Menu version 3 is now live."),
+    );
+  });
+
+  it("never shows a preview that lands after the person has gone to another menu", async () => {
+    const lunchPreviewRead = deferred<MenuPreview>();
+    const client = api({
+      getMenuPreview: vi.fn((id: string) =>
+        id === "menu-lunch"
+          ? lunchPreviewRead.promise
+          : Promise.resolve({ hash: "c".repeat(64), changes: [], warnings: [] }),
+      ),
+    });
+    const el = await mount(client, PREVIEW_PATH);
+    await vi.waitFor(() => expect(inPanel(el, "preview-loading")).not.toBeNull());
+    history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/preview");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() => expect(inPanel(el, "no-changes")).not.toBeNull());
+    lunchPreviewRead.resolve(lunchPreview());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.updateComplete;
+    expect(inPanel(el, "changes")).toBeNull();
+    expect(inPanel(el, "warnings")).toBeNull();
+    expect(text(inPanel(el, "publish"))).toBe("Publish Dinner Menu");
   });
 
   it("says there is nothing to publish when the menu matches its live version", async () => {

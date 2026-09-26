@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type { DashboardApi, LibrarySection, MenuStructureNode, Product } from "../api/client.js";
@@ -249,7 +250,13 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("accessible menus list with each menu's state", async () => {
+  it.each([
+    ["under each name, on a phone", 390],
+    ["in its own column", 1280],
+  ])("accessible menus list with each menu's state %s", async (_where, width) => {
+    const frame = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, 900);
+    onTestFinished(() => page.viewport(frame.width, frame.height));
     const { el, host } = await mount("populated", theme, "/manage/menus");
     const table = q(el, '[data-test="menus"]');
     await vi.waitFor(() =>

@@ -3,8 +3,13 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { baseStyles } from "@waitron/ui";
-import { addDecimal, decimal, perDishOptionQuantity, resolveSnapshotText } from "@waitron/shared";
-import { formatMoney } from "../i18n/format.js";
+import {
+  addDecimal,
+  decimal,
+  formatMoney,
+  perDishOptionQuantity,
+  resolveSnapshotText,
+} from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
 import type { TillSaleLine, TillSaleResult } from "../api/client.js";

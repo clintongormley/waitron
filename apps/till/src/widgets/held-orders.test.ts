@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { formatMoney } from "../i18n/format.js";
-import { t } from "../i18n/t.js";
+import { formatMoney } from "@waitron/shared";
+import { currentLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillHeldOrders } from "./held-orders.js";
 import type { HeldOrderSummary } from "../api/client.js";
@@ -48,7 +48,7 @@ describe("till-held-orders", () => {
     expect(rows[0]!.textContent).toContain("5");
     expect(rows[0]!.textContent).toContain("Mesa 4");
     expect(rows[0]!.textContent).toContain("2");
-    expect(rows[0]!.textContent).toContain(formatMoney("3.00"));
+    expect(rows[0]!.textContent).toContain(formatMoney("3.00", currentLocale()));
   });
 
   it("renders an unlabelled order (label null) without crashing", async () => {
@@ -56,7 +56,7 @@ describe("till-held-orders", () => {
     const rows = el.shadowRoot!.querySelectorAll(".order");
     expect(rows).toHaveLength(1);
     expect(rows[0]!.textContent).toContain("6");
-    expect(rows[0]!.textContent).toContain(formatMoney("1.50"));
+    expect(rows[0]!.textContent).toContain(formatMoney("1.50", currentLocale()));
   });
 
   it("a Retrieve control emits a composed retrieve-order carrying its own id", async () => {

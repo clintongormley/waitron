@@ -1,9 +1,14 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { submitOnEnter, baseStyles } from "@waitron/ui";
-import { type Decimal, compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
-import { formatMoney } from "../i18n/format.js";
-import { t } from "../i18n/t.js";
+import {
+  compareDecimal,
+  decimal,
+  formatMoney,
+  subtractDecimal,
+  type Decimal,
+} from "@waitron/shared";
+import { currentLocale, t } from "../i18n/t.js";
 import "./numeric-pad.js";
 import "./reader-picker.js";
 import "./modifier-picker.js";
@@ -703,7 +708,7 @@ export class TillTenderPay extends LitElement {
         <p class="tender-kind">${t("tender.card")}</p>
         <div class="row">
           <span class="label">${t("label.total")}</span>
-          <span class="amount total">${formatMoney(this.store.total)}</span>
+          <span class="amount total">${formatMoney(this.store.total, currentLocale())}</span>
         </div>
       </div>
       <wt-input
@@ -739,7 +744,7 @@ export class TillTenderPay extends LitElement {
         <p class="tender-kind">${t("tender.cash")}</p>
         <div class="row">
           <span class="label">${t("label.total")}</span>
-          <span class="amount total">${formatMoney(total)}</span>
+          <span class="amount total">${formatMoney(total, currentLocale())}</span>
         </div>
         <div class="row">
           <span class="label">${t("label.tendered")}</span>
@@ -751,7 +756,9 @@ export class TillTenderPay extends LitElement {
             : html`
                 <div class="row change">
                   <span class="label">${t("label.change")}</span>
-                  <span class="amount">${formatMoney(subtractDecimal(entered, total))}</span>
+                  <span class="amount"
+                    >${formatMoney(subtractDecimal(entered, total), currentLocale())}</span
+                  >
                 </div>
               `
         }

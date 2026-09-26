@@ -1,8 +1,8 @@
 import { setContentLanguages } from "@waitron/ui";
 import { afterEach, describe, expect, it } from "vitest";
-import { setLocale } from "../i18n/t.js";
+import { formatMoney } from "@waitron/shared";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { formatMoney } from "../i18n/format.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillProductGrid } from "./product-grid.js";
 import { sellingValuesOf, type TillProduct } from "../api/client.js";
@@ -120,7 +120,7 @@ describe("till-product-grid", () => {
     const tiles = el.shadowRoot!.querySelectorAll("wt-button");
     expect(tiles).toHaveLength(2);
     expect(tiles[0]!.textContent).toContain("Café");
-    expect(tiles[0]!.textContent).toContain(formatMoney("1.50"));
+    expect(tiles[0]!.textContent).toContain(formatMoney("1.50", currentLocale()));
   });
 
   it("appends the localized unit to a product's price", async () => {
@@ -131,7 +131,7 @@ describe("till-product-grid", () => {
     });
     const tile = el.shadowRoot!.querySelector("wt-button")!;
     expect(tile.textContent).toContain("Jamón");
-    expect(tile.textContent).toContain(formatMoney("10.00"));
+    expect(tile.textContent).toContain(formatMoney("10.00", currentLocale()));
     expect(tile.textContent).toContain("/kg");
   });
 

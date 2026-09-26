@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { formatMoney } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { formatMoney } from "../i18n/format.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillTenderPay } from "./tender-pay.js";
 import { sellingValuesOf, type TillProduct } from "../api/client.js";
@@ -122,7 +122,7 @@ describe("till-tender-pay", () => {
     click(el, ".pay");
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain(t("label.total"));
-    expect(el.shadowRoot!.textContent).toContain(formatMoney("3.00"));
+    expect(el.shadowRoot!.textContent).toContain(formatMoney("3.00", currentLocale()));
     expect(el.shadowRoot!.textContent).toContain(t("tender.cash"));
     expect(query(el, "till-numeric-pad")).not.toBeNull();
   });
@@ -135,7 +135,7 @@ describe("till-tender-pay", () => {
     await el.updateComplete;
     await type(el, "5"); // tendered 5 → change 2.00
     expect(el.shadowRoot!.textContent).toContain(t("label.change"));
-    expect(query(el, ".change")!.textContent).toContain(formatMoney("2.00"));
+    expect(query(el, ".change")!.textContent).toContain(formatMoney("2.00", currentLocale()));
   });
 
   it("hides the change while the tender is short", async () => {
@@ -180,7 +180,7 @@ describe("till-tender-pay", () => {
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     click(el, ".pay");
     await el.updateComplete;
-    expect(el.shadowRoot!.textContent).toContain(formatMoney("4.00")); // the cash screen shows the full total
+    expect(el.shadowRoot!.textContent).toContain(formatMoney("4.00", currentLocale())); // the cash screen shows the full total
     await type(el, "3"); // 3.00 covers the dish-only price but is SHORT of the 4.00 total
     expect(query(el, ".confirm")!.hasAttribute("disabled")).toBe(true);
     await press(el, "backspace");
@@ -476,7 +476,7 @@ describe("till-tender-pay", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.textContent).toContain(t("tender.card"));
     expect(el.shadowRoot!.textContent).toContain(t("label.total"));
-    expect(el.shadowRoot!.textContent).toContain(formatMoney("3.00"));
+    expect(el.shadowRoot!.textContent).toContain(formatMoney("3.00", currentLocale()));
     expect(query(el, "till-numeric-pad")).toBeNull(); // a card charges the exact total — no keypad
     expect(query(el, ".ref-input")).not.toBeNull(); // the optional operation-number field
   });
@@ -1165,7 +1165,7 @@ it("collects a fractional quantity before the picker, and prices each pick per f
   expect(store.lines).toHaveLength(0);
   // dish 10.00 × 0.125 = 1.25; pick 1.00 × (0.125 × 2) = 0.25 → 1.50.
   expect(picker.shadowRoot!.querySelector(".running-amount")!.textContent).toBe(
-    formatMoney("1.50"),
+    formatMoney("1.50", currentLocale()),
   );
   picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
   expect(store.lines[0]?.quantity).toBe("0.125");
