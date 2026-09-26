@@ -3744,6 +3744,20 @@ describe("publishing a menu", () => {
     expect(await status(app, menuId)).toEqual({ state: "unpublished" });
   });
 
+  it("answers a publish of an unchanged menu with its live version, writing nothing", async () => {
+    const app = mountApp();
+    const { menuId } = await menuWithProduct(app);
+    const { hash } = await preview(app, menuId);
+    const publish = `/management-api/catalogues/${menuId}/publish`;
+    const first = await send(app, "POST", publish, { body: { expectedHash: hash } });
+    expect(first.status).toBe(200);
+    const live = (await first.json()) as { versionId: string; number: number };
+    const again = await send(app, "POST", publish, { body: { expectedHash: hash } });
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual(live);
+    expect(await versionsOf(menuId)).toEqual([{ number: 1, publishedBy: managerPersonId }]);
+  });
+
   it("lists a shortcut that publishing would leave out as a warning", async () => {
     const app = mountApp();
     const { menuId } = await menuWithProduct(app);
@@ -3770,8 +3784,14 @@ describe("publishing a menu", () => {
     });
     const unpublished = await menuWithProduct(app);
     const path = "/management-api/catalogues/status";
-    expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
-    expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
+    const anonymous = await send(app, "GET", path, { cookie: null });
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+    const staff = await send(app, "GET", path, { cookie: staffCookie });
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
     const res = await send(app, "GET", path);
     expect(res.status).toBe(200);
     const all = (await res.json()) as Record<string, MenuStatus>;

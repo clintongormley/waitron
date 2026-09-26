@@ -3,7 +3,6 @@ import type { DashboardApi } from "./client.js";
 
 const MENU_PUBLICATION_READS = [
   "catalogues",
-  "categories",
   "content_languages",
   "extra_list_items",
   "extra_lists",
@@ -96,8 +95,9 @@ export const QUERY_DEPENDENCIES = {
     "products",
     "menu_item_variant_overrides",
   ],
-  // Every table `menuStatus` and `previewMenu` read (packages/catalogue/src/menu-publication.ts),
-  // recorded from the statements they prepared.
+  // The tables `menuStatus` and `previewMenu` (packages/catalogue/src/menu-publication.ts) read
+  // over `menusFixture`, recorded from the statements they prepared. `categories` is read too, but
+  // the document strips the category, so a category change moves neither answer.
   getMenuStatuses: MENU_PUBLICATION_READS,
   getMenuStatus: MENU_PUBLICATION_READS,
   getMenuPreview: MENU_PUBLICATION_READS,
