@@ -3069,28 +3069,82 @@ image constraints under *Detail → Box image*.
     restarting and keeps the lock set, as before (measured on the old and new code; the Cloud
     restore's replay does restart). A body that fails while it is read now answers a 500 with the
     JSON code `server.internal` on provision and adopt, instead of a plain-text 500.
-    Still open, not fixed, and predating A42: a refused adopt keeps its recorded operation. Adopt's
-    inner `runAdopt` turns a refusal into a returned answer, and the operation store deletes its
-    record only when the work throws while the record is at phase "started", so
-    `setup-operation.json` stays on disk at that phase. Measured with a real operation store on the
-    new code: after the `adopt` step failed with `mirror.bundle_fetch_failed` (502), the
-    original body resent got the 502 again while the primary still failed and 200 once it recovered;
-    after the body was refused with `setup.request_invalid` (400), the original body resent got the
-    400 again, because the body itself is the cause; in both, a different body got
-    `409 setup.operation_conflict`. So after a 400 nothing can adopt while `setup-operation.json`
-    stays, and an operator who corrects a wrong password cannot adopt. On the old code (same probe) it
-    was worse:
-    the different body got a plain-text 500 and the lock stayed set, so even the original body then
-    got `setup.already_provisioning`. Not measured: whether a server restart clears it (the file
-    stays on disk, so probably not). Read, not run: the store's conflict check compares the
-    operation's kind as well as its hash (`apps/server/src/setup-operation.ts`), so after a refused
-    adopt, provision and the restore routes are refused with `setup.operation_conflict` too.
+    Found open, predating A42: a refused adopt kept its recorded operation. Adopt's inner
+    `runAdopt` turned a refusal into a returned answer, and the operation store deletes its record
+    only when the work throws while the record is at phase "started", so `setup-operation.json`
+    stayed on disk at that phase. Measured with a real operation store on A42's code: after the
+    `adopt` step failed with `mirror.bundle_fetch_failed` (502), the original body resent got the
+    502 again while the primary still failed and 200 once it recovered; after the body was refused
+    with `setup.request_invalid` (400), the original body resent got the 400 again, because the body
+    itself is the cause; in both, a different body got `409 setup.operation_conflict`. So an
+    operator who corrected a wrong password could not adopt. On the old code (same probe) it was
+    worse: the different body got a plain-text 500 and the lock stayed set, so even the original
+    body then got `setup.already_provisioning`. Not measured: whether a server restart clears it.
     Provision's own refusals before the venue is committed are thrown, so the record is deleted and
     a corrected body succeeds; a provision failure after `advance("venue_committed")` keeps the
-    record by design, so the same request can resume. Read, not run: the setup wizard's
-    `#mapAdoptError` (`apps/setup/src/setup-app.ts`) has no `setup.operation_conflict` case, so that
-    409 shows the generic "Couldn't connect to the primary…" message and sends the operator back to
-    the form; the provision mapper has one.
+    record by design, so the same request can resume. **Done (2026-09-26, lane A's A43):** run
+    first on the unfixed code, through the real route and a real operation store
+    (`apps/server/src/setup-api.test.ts`): after an adopt refused 502 `mirror.bundle_fetch_failed`
+    (a wrong password), 400 `setup.request_invalid` (no credential) or 400
+    `mirror.primary_url_invalid` (`http://169.254.169.254/…`), `setup-operation.json` stayed and a
+    corrected adopt got `409 setup.operation_conflict`; after the 502, provision, the archive
+    restore, the bucket restore and the Cloud restore each got that 409 too, because the store's
+    conflict check compares the operation's kind as well as its hash. Adopt's refusals are now
+    thrown inside the recorded operation and turned into the answer by the route's outer error
+    handling, as provision's are: after each of the three refusals the file is gone and the
+    corrected adopt answers 200; after the 502, provision answers 200 and the three restores 202.
+    The record is kept once adopt is past its own checks: `adoptFromPrimary`
+    (`apps/server/src/adopt.ts`) awaits a `beforeFirstWrite` step, supplied by the route,
+    immediately before `stampDeployment`, its first writing step, and the route moves the
+    record to phase "venue_committed" there. A fake adopt that took that step and then failed left
+    the record at "venue_committed", and a different adopt body was refused
+    `409 setup.operation_conflict`. In `apps/server/src/adopt.test.ts` the step runs once while the
+    deployment is still unstamped, a throw from it leaves the deployment unstamped, and an
+    environment mismatch, a foreign tenant, an unknown module (`module.config_unknown`) and a
+    same-tenant venue (`provisioning.second_venue`) never reach it. `stampDeployment`'s own
+    `deployment.already_stamped` refusal came after the step, and a running server could reach it:
+    the provision route stamps the environment its request picks (`parseProvisionPayload` in
+    `apps/server/src/setup-api.ts`: live outside dev mode is production, anything else
+    preproduction), and a provision refused inside `applyVenue` keeps that stamp while its own
+    record is deleted. Adopt now reads the stamp before the step and refuses there with
+    `deployment.already_stamped` when it names another environment than the bundle's. In
+    `adopt.test.ts`, on a database stamped for the other environment, the step was called once
+    without the check and is not called with it; a database already stamped for the same
+    environment still adopts. A new case in `apps/server/src/boot.test.ts` runs the real server in
+    setup mode against a local fake primary, stamps its database production after start, and sends
+    two adopts with different passwords: without the check the first answered 400
+    `deployment.already_stamped` and the second `409 setup.operation_conflict`; with it both answer
+    400 `deployment.already_stamped` and nothing restarts. Open for the owner: adopt answers that
+    code with 400 (`ADOPT_STATUS` in `setup-api.ts` has no entry for it), where provision answers
+    409; the wizard shows "This server is already set up." for that code
+    (`apps/setup/src/setup-app.ts`, read, not run), which does not describe a box a failed
+    provision only stamped. So a failed adopt's record is deleted at "started" and kept once it
+    has moved past it. The setup wizard's `#mapAdoptError` (`apps/setup/src/setup-app.ts`) had no
+    `setup.operation_conflict` case, so that 409 sent the operator back to the connect form with
+    "Couldn't connect to the primary…"; it now shows provision's saved-setup message with Reload and
+    no retry (`apps/setup/src/setup-app.test.ts`, with a stubbed server). Each fix was deleted and
+    its new tests failed: restoring adopt's inner error handling (the seven refused-adopt route
+    cases), dropping the route's move to "venue_committed" (the kept-record case), dropping the
+    step in `adoptFromPrimary` or moving it after the stamp (two cases), moving it above the
+    refusals (the never-reached case), moving it between the foreign-tenant and second-venue
+    checks (the unknown-module and same-tenant-venue case), and dropping the wizard case. The step
+    is now a required argument of `adoptFromPrimary`, so deleting its forwarding in
+    `apps/server/src/boot.ts` (from the call and the wrapper's parameter) fails
+    `pnpm --filter @waitron/server typecheck` with `TS2554: Expected 3 arguments, but got 2`;
+    before, that deletion typechecked clean and `adopt.test.ts` and `setup-api.test.ts` passed. One existing case
+    changed: the retried-adoption case (from #534) asserted the record stayed at "started" after a
+    502, which is the behaviour removed here; it now asserts no record, and still asserts the same
+    request resent answers 200 and ends at "complete".
+    Open, measured in A43's review: after a failure past the first write (module config
+    persistence made to fail), resending the same adopt body answered 200 and ended at
+    "complete", but the retry ran adopt from the start and generated a second standby identity
+    (two different node ids), because the adopt route does not read the record's phase the way
+    provision does (`setupPhaseReached` in the provision route). This predates the branch: before
+    it, every failed adopt kept its record at "started" and a resend ran adopt from the start too
+    (the old `execute` had no phase check — visible in
+    `git diff 4cb93dd85 -- apps/server/src/setup-api.ts`). Not measured: what the first identity's
+    reservation on the primary and its rows on this node leave behind. Whether adopt should
+    resume, refuse, or discard the first identity is the owner's decision.
     Also open from A42's review, read and not run: if `operation.complete()` throws after `execute`
     has scheduled the restart, the lock is now released while that restart is pending (before A42
     that throw was outside the release and the lock stayed set).

@@ -122,6 +122,8 @@ const ADOPT_ERROR_MESSAGES: Record<string, string> = {
   "setup.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
 };
 
+const OPERATION_CONFLICT_MESSAGE =
+  "This server has saved setup work for a different request. Resume the original setup or contact support.";
 const KIT_DAMAGED =
   "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Upload the kit file as it was saved, or paste the whole kit.";
 const KEY_DOES_NOT_OPEN =
@@ -160,8 +162,7 @@ const BUCKET_ERROR_MESSAGES: Record<string, string> = {
   "setup.already_provisioning":
     "Setup is already in progress on this server. Wait for it to finish, then reload this page.",
   "setup.not_ready": "The server isn't ready yet. Wait a moment, then try again.",
-  "setup.operation_conflict":
-    "This server has saved setup work for a different request. Resume the original setup or contact support.",
+  "setup.operation_conflict": OPERATION_CONFLICT_MESSAGE,
   "setup.request_invalid":
     "The server rejected the details. Check the kit and the environment, then try again.",
 };
@@ -525,8 +526,7 @@ export class SetupApp extends LitElement {
         this.provisionReloadLabel = "Reload";
         return;
       case "setup.operation_conflict":
-        this.provisionMessage =
-          "This server has saved setup work for a different request. Resume the original setup or contact support.";
+        this.provisionMessage = OPERATION_CONFLICT_MESSAGE;
         this.provisionCanRetry = false;
         this.provisionReloadLabel = "Reload";
         return;
@@ -784,6 +784,11 @@ export class SetupApp extends LitElement {
     switch (code) {
       case "setup.already_provisioning":
         this.provisionMessage = "Setup is already in progress on this server.";
+        this.provisionCanRetry = false;
+        this.provisionReloadLabel = "Reload";
+        return;
+      case "setup.operation_conflict":
+        this.provisionMessage = OPERATION_CONFLICT_MESSAGE;
         this.provisionCanRetry = false;
         this.provisionReloadLabel = "Reload";
         return;

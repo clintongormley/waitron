@@ -16,7 +16,7 @@ import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { DeploymentEnvironment } from "./config.js";
 import type { ProvisionRequest } from "./provision.js";
-import type { AdoptCredential, AdoptRequest } from "./adopt.js";
+import type { AdoptCredential, AdoptHooks, AdoptRequest } from "./adopt.js";
 import type { TradingConfig } from "./trading-config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
@@ -65,7 +65,7 @@ export interface SetupDeps {
   /** Fetches the primary's bundle SERVER-SIDE, so the admin credential never touches a
    * browser→primary hop. The returned `breakGlassSecret` is surfaced ONCE in the connect response
    * and never logged. */
-  adopt?: (req: AdoptRequest) => Promise<{ breakGlassSecret: string }>;
+  adopt?: (req: AdoptRequest, hooks: AdoptHooks) => Promise<{ breakGlassSecret: string }>;
   /** Used to seal the fiscal regime's provisioning secret through its `provisioningSecret.seal`
    * seat. */
   db?: Database;
@@ -711,33 +711,40 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
     }
     provisioning = true;
 
-    // Its own boundary, so a refusal is returned, not thrown; the outer one checks `response.ok`.
-    // A returned refusal keeps the recorded operation: open defect in docs/backlog.md (A42).
-    const execute = () =>
-      runAdopt(c, log, async () => {
-        // The credential is validated PER FIELD at the mirror's own boundary, so a wrong-shape body
-        // is a clean 400 rather than forwarded to fail at the primary as a 502. The password and
-        // TOTP are never logged: `asString` names the field, never its value.
-        const body = await readJsonBody<{ primaryUrl?: unknown; credential?: unknown }>(c);
-        const primaryUrl = asString(body.primaryUrl, "primaryUrl");
-        // SSRF guard: this route is UNAUTHENTICATED, so without it anyone who can reach a box in
-        // setup could point `primaryUrl` at a metadata endpoint or an internal host and have the
-        // box POST its admin credential there. Refused before `adopt` fetches anything.
-        assertSafePrimaryUrl(primaryUrl);
-        const cred = asObject(body.credential, "credential");
-        const credential: AdoptCredential = {
-          personId: asString(cred.personId, "credential.personId"),
-          password: asString(cred.password, "credential.password"),
-          totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
-        };
+    const execute = async (operation?: ActiveSetupOperation): Promise<Response> => {
+      // The credential is validated PER FIELD at the mirror's own boundary, so a wrong-shape body
+      // is a clean 400 rather than forwarded to fail at the primary as a 502. The password and
+      // TOTP are never logged: `asString` names the field, never its value.
+      const body = await readJsonBody<{ primaryUrl?: unknown; credential?: unknown }>(c);
+      const primaryUrl = asString(body.primaryUrl, "primaryUrl");
+      // SSRF guard: this route is UNAUTHENTICATED, so without it anyone who can reach a box in
+      // setup could point `primaryUrl` at a metadata endpoint or an internal host and have the
+      // box POST its admin credential there. Refused before `adopt` fetches anything.
+      assertSafePrimaryUrl(primaryUrl);
+      const cred = asObject(body.credential, "credential");
+      const credential: AdoptCredential = {
+        personId: asString(cred.personId, "credential.personId"),
+        password: asString(cred.password, "credential.password"),
+        totp: cred.totp === undefined ? undefined : asString(cred.totp, "credential.totp"),
+      };
 
-        const { breakGlassSecret } = await adopt({ primaryUrl, credential });
+      const { breakGlassSecret } = await adopt(
+        { primaryUrl, credential },
+        {
+          // For adopt this phase means "adopt is past its own checks and may have written to this
+          // node": the store keeps a record past "started", so a different request cannot run over
+          // a half-adopted node.
+          beforeFirstWrite: async () => {
+            await operation?.advance("venue_committed");
+          },
+        },
+      );
 
-        // The operator's only chance to record the offline promote fallback. It is NEVER logged.
-        const response = c.json({ adopted: true, breakGlassSecret, restarting: true }, 200);
-        setTimeout(() => requestRestart(), 0);
-        return response;
-      });
+      // The operator's only chance to record the offline promote fallback. It is NEVER logged.
+      const response = c.json({ adopted: true, breakGlassSecret, restarting: true }, 200);
+      setTimeout(() => requestRestart(), 0);
+      return response;
+    };
     return runAdopt(c, log, async () => {
       let succeeded = false;
       try {
@@ -751,7 +758,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
                 if (operation.phase === "complete") {
                   return c.json(operation.data as { adopted: true; restarting: true });
                 }
-                const response = await execute();
+                const response = await execute(operation);
                 if (response.ok) {
                   await operation.complete({ adopted: true, restarting: true });
                 }

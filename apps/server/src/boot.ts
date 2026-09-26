@@ -935,7 +935,7 @@ async function bootServer(
           return result;
         },
         seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
-        adopt: (req) =>
+        adopt: (req, hooks) =>
           adoptFromPrimary(
             {
               ownerDb: db,
@@ -950,6 +950,7 @@ async function bootServer(
               database: ownerDatabaseName,
             },
             req,
+            hooks,
           ),
         establishIdentity: (nodeId) => establishNodeIdentity({ ownerDb: db, ring }, nodeId),
         seedMembership: (nodeId) =>
