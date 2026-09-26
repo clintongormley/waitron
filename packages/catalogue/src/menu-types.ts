@@ -6,11 +6,12 @@ import type { PricingUnit, VatClass } from "./pricing.js";
 import type { SellableUnit } from "./product-types.js";
 
 /**
- * The SELL-SIDE wire shapes — the JSON the catalogue's read paths hand across the HTTP boundary to a
- * till (the menu offers a service zone sells, and the products in a location's menu list). Like
- * `product-types.ts`, this is a LEAF: type definitions only, no running code, and every type it
- * imports is itself browser-safe (nothing here reaches `@waitron/db`, drizzle or a `node:` builtin), so
- * the till can import ONE authoritative copy instead of re-declaring them by hand. The guard is
+ * The menu wire shapes — the JSON the catalogue's read paths hand across the HTTP boundary to a till
+ * (the menu offers a service zone sells, and the products in a location's menu list) and to the
+ * dashboard's menu screens. Like `product-types.ts`, this is a LEAF: type definitions only, no
+ * running code, and every type it imports is itself browser-safe (nothing here reaches
+ * `@waitron/db`, drizzle or a `node:` builtin), so the till and the dashboard can import ONE
+ * authoritative copy instead of re-declaring them by hand. The guard is
  * `scripts/dashboard-browser-purity.test.ts`.
  */
 
@@ -109,8 +110,7 @@ export interface MenuPriceRow {
   /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top
    * level. */
   placements: string[][];
-  /** The product's own price. */
-  productPrice: string | null;
+  productPrice: string;
   /** The price this menu sets, or null when the product's own price applies. */
   override: string | null;
   /** This menu's price for the product itself, `override` or else `productPrice`, as

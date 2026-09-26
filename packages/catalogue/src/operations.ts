@@ -8,7 +8,6 @@ import {
   resolveContentText,
   FALLBACK_LOCALE,
   stringToCents,
-  type Decimal,
 } from "@waitron/shared";
 import { catalogues, categories, locationCatalogues, locations, now, products } from "@waitron/db";
 import { productLabels } from "./schema/labels.js";
@@ -45,7 +44,7 @@ import { addMember } from "./sections.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
-import { assertNotOfferedAsExtra } from "./variants.js";
+import { assertNotOfferedAsExtra, menuVariantsOfItems } from "./variants.js";
 import {
   assignProductUnit,
   clearProductUnit,
@@ -74,7 +73,6 @@ import type {
   MenuOffer,
   MenuOfferVariant,
   MenuPriceRow,
-  MenuVariant,
 } from "./menu-types.js";
 export type {
   AccessibleCatalogue,
@@ -494,11 +492,8 @@ interface OfferOptions {
   includeSwitchedOff?: boolean;
 }
 
-/**
- * The rows `offersOn` builds each offer from, in its order, with the paths placing each product.
- * Only a top-level product is an offer, so `products_top_level_owns_ck` sets each row's
- * `productPrice`.
- */
+/** The rows `offersOn` builds each offer from, in its order, and the paths placing each row's
+ * product. */
 async function offerRowsOn(
   tx: Transaction,
   roots: ReadonlyMap<string, string>,
@@ -512,6 +507,11 @@ async function offerRowsOn(
       placementsByProduct(graph, rootSectionId),
     ]),
   );
+  const placementsOf = (row: { menuId: string; productId: string }): string[][] =>
+    placed
+      .get(row.menuId)!
+      .get(row.productId)!
+      .map((path) => path.slice(1));
   const rankOf = new Map(
     [...placed].map(([menuId, paths]) => [
       menuId,
@@ -519,7 +519,6 @@ async function offerRowsOn(
     ]),
   );
   const reached = [...new Set([...placed.values()].flatMap((paths) => [...paths.keys()]))];
-  if (reached.length === 0) return [];
   const menuIds = [...roots.keys()];
   const rows = [];
   for (const batch of batches(reached))
@@ -559,30 +558,37 @@ async function offerRowsOn(
         )),
     );
   const offered = rows.filter((row) => rankOf.get(row.menuId)!.has(row.productId));
-  if (offered.length === 0) return [];
   const menuOrder = new Map(
-    (
-      await tx
-        .select({ id: catalogues.id })
-        .from(catalogues)
-        .where(inArray(catalogues.id, menuIds))
-        .orderBy(catalogues.name, catalogues.id)
-    ).map((row, index) => [row.id, index]),
+    roots.size > 1 && offered.length > 1
+      ? (
+          await tx
+            .select({ id: catalogues.id })
+            .from(catalogues)
+            .where(inArray(catalogues.id, menuIds))
+            .orderBy(catalogues.name, catalogues.id)
+        ).map((row, index) => [row.id, index])
+      : menuIds.map((id) => [id, 0]),
   );
   offered.sort(
     (a, b) =>
       menuOrder.get(a.menuId)! - menuOrder.get(b.menuId)! ||
       rankOf.get(a.menuId)!.get(a.productId)! - rankOf.get(b.menuId)!.get(b.productId)!,
   );
-  return offered.map((row) => ({
-    ...row,
-    grossPrice: priceOrNull(row.grossPrice),
-    productPrice: centsToDecimal(row.productPrice!),
-    placements: placed
-      .get(row.menuId)!
-      .get(row.productId)!
-      .map((path) => path.slice(1)),
-  }));
+  return { rows: offered, placementsOf };
+}
+
+/** An offer row's prices. Only a top-level product is an offer, so `products_top_level_owns_ck`
+ * sets `productPrice`. */
+function offerPrices(row: { grossPrice: number | null; productPrice: number | null }) {
+  const override = priceOrNull(row.grossPrice);
+  const productPrice = centsToDecimal(row.productPrice!);
+  const unitPrice = resolveOfferPrice({
+    variantMenuPrice: null,
+    variantPrice: null,
+    parentMenuPrice: override,
+    parentPrice: productPrice,
+  });
+  return { override, productPrice, unitPrice };
 }
 
 async function offersOn(
@@ -591,7 +597,7 @@ async function offersOn(
   graph: SectionGraph,
   options: OfferOptions,
 ): Promise<MenuOffer[]> {
-  const offered = await offerRowsOn(tx, roots, graph, options);
+  const { rows: offered, placementsOf } = await offerRowsOn(tx, roots, graph, options);
   if (offered.length === 0) return [];
   const content = await readContentLanguages(tx, FALLBACK_LOCALE);
   // The extras/options walk, keyed by MENU-ITEM id: on an offer each extras list is the version
@@ -605,31 +611,26 @@ async function offersOn(
     offered.map((row) => row.id),
     content.defaultLanguage,
   );
-  return offered.map((row) => ({
-    id: row.id,
-    menuId: row.menuId,
-    productId: row.productId,
-    grossPrice: row.grossPrice,
-    unitPrice: offerPrice(row),
-    active: row.active,
-    menuName: row.menuName,
-    placements: row.placements,
-    name: row.name,
-    customerName: row.customerName,
-    kitchenName: row.kitchenName,
-    ...offerLineValues(row, content.defaultLanguage),
-    offeredModifiers: offeredByItem.get(row.id) ?? [],
-    variants: variantsByItem.get(row.id) ?? [],
-  }));
-}
-
-const offerPrice = (row: { grossPrice: Decimal | null; productPrice: Decimal }): Decimal =>
-  resolveOfferPrice({
-    variantMenuPrice: null,
-    variantPrice: null,
-    parentMenuPrice: row.grossPrice,
-    parentPrice: row.productPrice,
+  return offered.map((row) => {
+    const { override, unitPrice } = offerPrices(row);
+    return {
+      id: row.id,
+      menuId: row.menuId,
+      productId: row.productId,
+      grossPrice: override,
+      unitPrice,
+      active: row.active,
+      menuName: row.menuName,
+      placements: placementsOf(row),
+      name: row.name,
+      customerName: row.customerName,
+      kitchenName: row.kitchenName,
+      ...offerLineValues(row, content.defaultLanguage),
+      offeredModifiers: offeredByItem.get(row.id) ?? [],
+      variants: variantsByItem.get(row.id) ?? [],
+    };
   });
+}
 
 /**
  * Every Active product the menu reaches, once each in `listMenuOffers`' order, with its own price
@@ -638,69 +639,32 @@ const offerPrice = (row: { grossPrice: Decimal | null; productPrice: Decimal }):
  */
 export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuPriceRow[]> {
   const rootSectionId = await requireMenuRoot(tx, menuId);
-  const rows = await offerRowsOn(
+  const { rows, placementsOf } = await offerRowsOn(
     tx,
     new Map([[menuId, rootSectionId]]),
     await loadSectionGraph(tx),
     { includeUnavailable: true, includeSwitchedOff: true },
   );
   if (rows.length === 0) return [];
-  const variantsByItem = await readMenuItemVariants(
+  const variantsByItem = await menuVariantsOfItems(
     tx,
     rows.map((row) => row.id),
   );
-  return rows.map((row) => ({
-    menuItemId: row.id,
-    productId: row.productId,
-    name: row.name,
-    categoryId: row.categoryId,
-    placements: row.placements,
-    productPrice: row.productPrice,
-    override: row.grossPrice,
-    effectivePrice: offerPrice(row),
-    active: row.active,
-    variants: variantsByItem.get(row.id) ?? [],
-  }));
-}
-
-/**
- * This menu's settings for the Active variants of each item's product, keyed by menu-item id, in
- * variant order: what `listMenuVariants` gives for one item, read for all of them in one query per
- * batch.
- */
-async function readMenuItemVariants(
-  tx: Transaction,
-  menuItemIds: readonly string[],
-): Promise<Map<string, MenuVariant[]>> {
-  const grouped = new Map<string, MenuVariant[]>();
-  for (const batch of batches(menuItemIds))
-    for (const row of await tx
-      .select({
-        menuItemId: menuItems.id,
-        variantId: products.id,
-        price: menuItemVariantOverrides.price,
-        offered: menuItemVariantOverrides.offered,
-      })
-      .from(menuItems)
-      .innerJoin(products, eq(products.parentId, menuItems.productId))
-      .leftJoin(
-        menuItemVariantOverrides,
-        and(
-          eq(menuItemVariantOverrides.menuItemId, menuItems.id),
-          eq(menuItemVariantOverrides.variantId, products.id),
-        ),
-      )
-      .where(and(inArray(menuItems.id, batch), eq(products.active, true)))
-      .orderBy(menuItems.id, products.variantOrder, products.id)) {
-      const held = grouped.get(row.menuItemId) ?? [];
-      held.push({
-        variantId: row.variantId,
-        price: priceOrNull(row.price),
-        offered: row.offered ?? true,
-      });
-      grouped.set(row.menuItemId, held);
-    }
-  return grouped;
+  return rows.map((row) => {
+    const { override, productPrice, unitPrice } = offerPrices(row);
+    return {
+      menuItemId: row.id,
+      productId: row.productId,
+      name: row.name,
+      categoryId: row.categoryId,
+      placements: placementsOf(row),
+      productPrice,
+      override,
+      effectivePrice: unitPrice,
+      active: row.active,
+      variants: variantsByItem.get(row.id) ?? [],
+    };
+  });
 }
 
 /**
