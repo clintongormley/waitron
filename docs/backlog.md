@@ -2275,6 +2275,15 @@ address that answers is then asked for its paper sizes on port 631.
     durable-attempt rule.
   - **Task 1** (adjustment reasons and policies, a new module) is the one build task that can start
     now.
+  - **A keydown guard that cancels Escape while a save runs may not keep a dialog open.** Measured
+    on Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`): a real
+    Escape pressed with Vitest's `userEvent` during a save closed the editor, although the screen's
+    keydown handler called `preventDefault()` on Escape while busy; why it missed the key was not
+    established. That screen now sets `wt-modal`'s `dismissible` to false while busy instead. The
+    same keydown guard is on other dashboard forms, for example `#guardEscape` in
+    `apps/dashboard/src/screens/menus-screen.ts`; none of them was tried with a real key. **Next
+    action:** press a real Escape during a save on each, and move the ones that close to
+    `dismissible`.
   - **Every other task waits for lane C's menus tasks that change the same order and till code**
     (M7c, M7v, M9; M7b landed as #696, M7b2 as #702). Building beside them would collide on
     `apps/server/src/working-order.ts`, the till and the core migrations.
