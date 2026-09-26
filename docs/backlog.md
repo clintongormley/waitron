@@ -3316,7 +3316,7 @@ image constraints under *Detail → Box image*.
     `expected <setup-connect-screen …> to be null` (`server.internal`, and
     `mirror.bundle_fetch_failed` at HTTP 502, run alone against the wizard of `17dd4b147`). Not run:
     the wizard against a real server.
-    **Done (2026-09-26, lane A's A56), for (a), box side only:** where the wizard shows the
+    **Done (2026-09-26, lane A's A56, #694), for (a), box side only:** where the wizard shows the
     stopped-partway message it now offers "Reset this server" instead of "contact support". The
     operator types the admin person ID and password the join used; `POST
     /setup-api/reset-incomplete-adopt` (`apps/server/src/setup-api.ts`) checks them against a proof
