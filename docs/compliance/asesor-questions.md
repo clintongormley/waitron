@@ -682,9 +682,10 @@ that:
 - a whole-bill discount is shared across the lines in proportion, so each VAT rate's taxable amount
   drops by its lines' share;
 - a comp (an item given free) appears as its own line at €0.00, beside its original price;
-- an item sold by weight takes a discount by lowering its per-kilo price to the nearest cent, so on a
-  heavy item the discount actually applied can differ from the one agreed by about a cent. The
-  invoice shows what was actually charged.
+- an item sold by weight takes a discount by lowering its per-kilo price to a whole cent, so on a
+  heavy item the discount actually applied can differ from the one agreed: by up to half the weight
+  in cents (up to 2 cents at 3.2–5 kg, 5 cents at 10 kg). The invoice shows what was actually
+  charged, and staff see it before confirming.
 
 > **(a)** En una factura simplificada, ¿es correcto reflejar un descuento concedido antes de la
 > expedición reduciendo directamente el precio unitario de la línea afectada, sin una línea de
@@ -700,8 +701,9 @@ that:
 > consumición sin contraprestación?
 >
 > **(d)** En productos vendidos al peso, si el descuento acordado se aplica redondeando el precio por
-> kilo al céntimo, de modo que el importe descontado puede diferir en un céntimo del acordado, ¿basta
-> con que la factura refleje el importe efectivamente cobrado?
+> kilo al céntimo, de modo que el importe descontado puede diferir en algunos céntimos del acordado
+> (hasta 2 céntimos en una pieza de 3 a 5 kg, 5 céntimos en una de 10 kg), ¿basta con que la factura
+> refleje el importe efectivamente cobrado, que el personal confirma antes de aplicarlo?
 
 ---
 

@@ -10,8 +10,8 @@ recorded the product decisions from the workflow discussion. This revision folds
   decided, which this spec now follows.
 
 The planning session proposed several rules to close gaps the review found; the owner accepted them
-on 2026-09-26, and changed two (who an item is credited to, §2, and discounts on weighed items,
-§7). Every such rule is marked **Owner, 2026-09-26**. §14 lists every change from Revision 1.
+on 2026-09-26, and changed three (who an item is credited to, §2; discounts on weighed items, §7;
+and whose sales an adjustment rate is measured against, §7). Every such rule is marked **Owner, 2026-09-26**. §14 lists every change from Revision 1.
 Revision 1's text is in git history.
 
 You should be able to take orders quickly, see what needs attention, control when food reaches the
@@ -413,9 +413,10 @@ the invoice is issued is a *descuento* (Q15, closed). **Details, Owner, 2026-09-
 - A whole-bill discount is shared out in whole cents, rounded down, and the cents left over go to
   the lines with the largest remainders, earlier lines first on a tie, so the shares sum exactly.
 - **A weighed item (sold by weight) can take a discount (Owner, 2026-09-26)** by lowering its
-  per-kilo price to the whole-cent price whose line total comes nearest the discounted amount. Under
-  1 kg that is exact; on a heavier item the amount actually taken off can differ from the amount
-  asked by about a cent (at 2.5 kg, one cent of per-kilo price moves the line by 2.5 cents). Staff
+  per-kilo price to the whole-cent price whose line total comes nearest the discounted amount. Up
+  to 1 kg that is exact; on a heavier item the amount actually taken off can differ from the amount
+  asked by up to half the weight in cents: up to 2 cents at 3.2–5 kg, 5 cents at 10 kg, 12 cents at
+  25 kg (one cent of per-kilo price moves a 2.5 kg line by 2.5 cents). Staff
   see the exact amount before confirming, and the adjustment records the amount actually taken off.
   A whole-bill discount shares out over every line, weighed ones included, and any cent a weighed
   line could not take goes to the other lines, so the bill drops by exactly what was asked
