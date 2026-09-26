@@ -113,7 +113,10 @@ export interface MenuPriceRow {
   productPrice: string | null;
   /** The price this menu sets, or null when the product's own price applies. */
   override: string | null;
-  /** The price charged, resolved as `MenuOffer.unitPrice` is. */
+  /** This menu's price for the product itself, `override` or else `productPrice`, as
+   * `MenuOffer.unitPrice`. A product with Active variants is sold only as one of them
+   * (`selectMenuVariant`), and a variant with no price on this menu and none of its own is charged
+   * this. */
   effectivePrice: string;
   /** This menu's own switch for the product. */
   active: boolean;

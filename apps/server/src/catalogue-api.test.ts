@@ -3566,7 +3566,23 @@ describe("a menu's prices", () => {
     const app = mountApp();
     const menuId = await createCatalogueVia(app, "Priced menu");
     const name = `Oferta ${crypto.randomUUID()}`;
-    const productId = await createNamedProductVia(app, name);
+    const product = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId: await createCatalogueVia(app, `Catalogue for ${name}`),
+        categoryId: null,
+        name,
+        customerName: { en: `${name} (customer)`, es: `${name} (cliente)` },
+        pricingUnit: "each",
+        unitPrice: "1.00",
+        vatClass: "general",
+      },
+    });
+    expect(product.status).toBe(201);
+    const productId = ((await product.json()) as { id: string }).id;
+    // This route takes no kitchen name, so it is written to the row.
+    await suite.db.execute(
+      sql`update products set kitchen_name = ${`${name} (kitchen)`} where id = ${productId}`,
+    );
     const items = `/management-api/catalogues/${menuId}/items`;
     const created = await send(app, "POST", items, { body: { productId, grossPrice: "1.40" } });
     const itemId = ((await created.json()) as { id: string }).id;

@@ -12,6 +12,7 @@ import {
   deactivateProduct,
   listMenuOffers,
   listMenuOffersWithTopLevel,
+  menuPrices,
   renameCatalogue,
   updateMenuItem,
   updateProduct,
@@ -23,7 +24,7 @@ import { menuDetails, menuItems } from "./schema/menu.js";
 import { menuItemExtraItems, menuItemExtraLists } from "./schema/extras.js";
 import { sections } from "./schema/sections.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
-import { menuPrices, readMenuStructure, syncMenuOffers } from "./menu-structure.js";
+import { readMenuStructure, syncMenuOffers } from "./menu-structure.js";
 import { createCategory } from "./categories.js";
 import {
   addMember,
@@ -912,8 +913,9 @@ describe("a menu's prices", () => {
     ]);
   });
 
-  it("lists nothing while the menu is inactive", async () => {
+  it("lists nothing for a menu that reaches nothing, or while the menu is inactive", async () => {
     const f = await fixture();
+    expect(await app((tx) => menuPrices(tx, f.lunch))).toEqual([]);
     await app((tx) => addMember(tx, f.lunchRoot, product(f.water)));
     expect(await app((tx) => menuPrices(tx, f.lunch))).toHaveLength(1);
     await app((tx) => deactivateCatalogue(tx, f.lunch));
