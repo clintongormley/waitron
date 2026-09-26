@@ -1302,6 +1302,7 @@ describe("TillApi", () => {
         posY: 400,
         shape: "round",
         rotation: 15,
+        visit: null,
       },
       {
         id: "t2",
@@ -1322,6 +1323,7 @@ describe("TillApi", () => {
         posY: null,
         shape: null,
         rotation: null,
+        visit: null,
       },
     ];
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(rows));
@@ -1373,50 +1375,13 @@ describe("TillApi", () => {
     expect(init.headers).toBeUndefined();
   });
 
-  it("openTab POSTs an initial round to the table's /tab route, returning { tabId, orderNumber }", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ tabId: "wo9", orderNumber: 12 }));
-    const api = new TillApi("", fetchStub);
-
-    const r = await api.openTab("tbl-1", [{ menuItemId: "mi-cafe", quantity: "2" }]);
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/tables/tbl-1/tab",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ lines: [{ menuItemId: "mi-cafe", quantity: "2" }] }),
-      }),
-    );
-    expect(r).toEqual({ tabId: "wo9", orderNumber: 12 });
-  });
-
-  it("openTab with no initial lines POSTs an empty-object body (tab opens empty)", async () => {
-    // `openTab(tableId)` omits `lines`; `JSON.stringify({ lines: undefined })` is `"{}"`, so the server
-    // reads `body.lines` as absent and opens the tab empty — the client still sends a JSON body so the
-    // route's `c.req.json()` has something to parse.
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ tabId: "wo9", orderNumber: 12 }));
-
-    await new TillApi("", fetchStub).openTab("tbl-1");
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/tables/tbl-1/tab",
-      expect.objectContaining({
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: "{}",
-      }),
-    );
-  });
-
-  it("addTabRound POSTs the round's lines to the order's /round route (empty 200 body)", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+  it("addTabRound POSTs the round's lines to the order's /round route and returns the tab they landed on", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ tabId: "ord-2" }));
     const api = new TillApi("", fetchStub);
 
     await expect(
       api.addTabRound("ord-1", [{ menuItemId: "mi-agua", quantity: "1" }]),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ tabId: "ord-2" });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/ord-1/round",
@@ -2101,6 +2066,147 @@ describe("TillApi", () => {
       }),
     );
     expect(out).toBeUndefined();
+  });
+});
+
+describe("TillApi: a seated party", () => {
+  const post = (body: unknown) =>
+    expect.objectContaining({
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  it("seatTable POSTs the guest count to the table's /seat route and returns the party and its tab", async () => {
+    const answer = { visitId: "v1", tabId: "wo-1", revision: 0, orderNumber: 12 };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
+
+    await expect(new TillApi("", fetchStub).seatTable("tbl-1", 3)).resolves.toEqual(answer);
+
+    expect(fetchStub).toHaveBeenCalledWith("/api/tables/tbl-1/seat", post({ guestCount: 3 }));
+  });
+
+  it("seatTable sends an explicit null when no guest count was given", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ visitId: "v1", tabId: "wo-1" }));
+
+    await new TillApi("", fetchStub).seatTable("tbl-1", null);
+
+    expect(fetchStub).toHaveBeenCalledWith("/api/tables/tbl-1/seat", post({ guestCount: null }));
+  });
+
+  it("finishTable POSTs the revision it read to the party's /finish route", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ state: "needs_clearing" }));
+
+    await expect(new TillApi("", fetchStub).finishTable("v1", 4)).resolves.toEqual({
+      state: "needs_clearing",
+    });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/finish",
+      post({ expectedVisitRevision: 4 }),
+    );
+  });
+
+  it("finishTable surfaces the unpaid-bill refusal as { code }", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "visit.bill_outstanding" } }, 409));
+
+    await expect(new TillApi("", fetchStub).finishTable("v1", 4)).rejects.toMatchObject({
+      code: "visit.bill_outstanding",
+      status: 409,
+    });
+  });
+
+  it("markCleared POSTs the revision it read to the party's /cleared route (empty 204 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+
+    await expect(new TillApi("", fetchStub).markCleared("v1", 5)).resolves.toBeUndefined();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/cleared",
+      post({ expectedVisitRevision: 5 }),
+    );
+  });
+
+  it("getVisitBills GETs the party's bills", async () => {
+    const bills = [
+      {
+        workingOrderId: "wo-1",
+        visitId: "v1",
+        label: null,
+        status: "settled",
+        total: "14.00",
+        outstanding: "0.00",
+        receiptAvailable: true,
+      },
+    ];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(bills));
+
+    await expect(new TillApi("", fetchStub).getVisitBills("v1")).resolves.toEqual(bills);
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/visits/v1/bills",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it.each([
+    [
+      "moveTab",
+      (api: TillApi) => api.moveTab("wo-1", "tbl-9", { expectedVisitRevision: 3 }),
+      "/api/tabs/wo-1/move",
+      { toTableId: "tbl-9", expectedVisitRevision: 3 },
+    ],
+    [
+      "joinTable",
+      (api: TillApi) => api.joinTable("wo-1", "tbl-9", { expectedVisitRevision: 3 }),
+      "/api/tabs/wo-1/join",
+      { tableId: "tbl-9", expectedVisitRevision: 3 },
+    ],
+    [
+      "mergeTabs",
+      (api: TillApi) =>
+        api.mergeTabs("wo-into", "wo-from", true, {
+          expectedVisitRevision: 3,
+          expectedSourceVisitRevision: 7,
+        }),
+      "/api/tabs/wo-into/merge",
+      {
+        fromTabId: "wo-from",
+        freeSourceTable: true,
+        expectedVisitRevision: 3,
+        expectedSourceVisitRevision: 7,
+      },
+    ],
+    [
+      "transferLines",
+      (api: TillApi) =>
+        api.transferLines("wo-src", "wo-dst", [{ lineNo: 1 }], {
+          expectedVisitRevision: 7,
+          expectedSourceVisitRevision: 3,
+        }),
+      "/api/tabs/wo-src/transfer",
+      {
+        toTabId: "wo-dst",
+        transfers: [{ lineNo: 1 }],
+        expectedVisitRevision: 7,
+        expectedSourceVisitRevision: 3,
+      },
+    ],
+    [
+      "splitTab",
+      (api: TillApi) => api.splitTab("wo-7", [{ lineNo: 1 }], { expectedVisitRevision: 3 }),
+      "/api/tabs/wo-7/split",
+      { transfers: [{ lineNo: 1 }], expectedVisitRevision: 3 },
+    ],
+  ] as const)("%s sends the party revisions it was given", async (_name, call, path, body) => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ checkId: "c1" }));
+
+    await call(new TillApi("", fetchStub));
+
+    expect(fetchStub).toHaveBeenCalledWith(path, post(body));
   });
 });
 

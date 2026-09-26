@@ -22,12 +22,14 @@ import type {
   StationQueueGroup,
   TableServiceStatus,
   TableState,
+  TableVisit,
   TabLine,
   TillActiveReader,
   TillApi,
   TillCourse,
   TillMenu,
   TillProduct,
+  VisitBill,
 } from "../api/client.js";
 import type { BumpMode, FireControlMode } from "./station-queue.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
@@ -94,6 +96,9 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) statuses: TableServiceStatus[] = [];
   @property({ attribute: false }) courses: TillCourse[] = [];
   @property() orderId?: string;
+  @property({ attribute: false }) visit: TableVisit | null = null;
+  @property({ attribute: false }) visitBills: VisitBill[] = [];
+  @property({ type: Boolean }) finishRefused = false;
 
   override render(): TemplateResult | typeof nothing {
     const tab = this.tab;
@@ -214,6 +219,9 @@ export class TillCardGrid extends LitElement {
           .fireControl=${this.fireControl}
           .tables=${this.tables}
           .orderId=${this.orderId}
+          .visit=${this.visit}
+          .bills=${this.visitBills}
+          .finishRefused=${this.finishRefused}
           .busy=${this.busy}
         ></till-table-order-screen>`;
       case "notifications":

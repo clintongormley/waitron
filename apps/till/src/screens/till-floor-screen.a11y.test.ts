@@ -35,6 +35,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
+    visit: null,
   },
   {
     id: "t2",
@@ -54,6 +55,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
+    visit: null,
   },
   {
     id: "t3",
@@ -73,6 +75,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
+    visit: null,
   },
   {
     id: "t9",
@@ -92,6 +95,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
+    visit: null,
   },
   {
     id: "t5",
@@ -114,6 +118,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
+    visit: null,
   },
   {
     id: "t6",
@@ -136,6 +141,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
+    visit: null,
   },
 ];
 
@@ -162,6 +168,7 @@ const placedTables: TableState[] = [
     posY: 400,
     shape: "round",
     rotation: 0,
+    visit: null,
   },
   {
     id: "t4",
@@ -181,7 +188,59 @@ const placedTables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
+    visit: null,
   },
+];
+
+const party = {
+  revision: 4,
+  guestCount: 3,
+  billCount: 2,
+  tableIds: ["t5", "t6"],
+};
+
+/** A party still owing, a paid party, and a finished party waiting to be cleared at two tables. */
+const partyTables: TableState[] = [
+  {
+    ...tables[0]!,
+    id: "t5",
+    label: "5",
+    status: null,
+    nextReservation: null,
+    visit: { ...party, id: "v1", state: "open", outstanding: "44.00" },
+  },
+  {
+    ...tables[0]!,
+    id: "t7",
+    label: "7",
+    hasOpenTab: false,
+    tabLineCount: undefined,
+    tabTotal: undefined,
+    status: null,
+    nextReservation: null,
+    visit: { ...party, id: "v2", state: "open", outstanding: "0.00", tableIds: ["t7"] },
+  },
+  ...["t8", "t9"].map((id): TableState => ({
+    ...tables[0]!,
+    id,
+    label: id.slice(1),
+    hasOpenTab: false,
+    tabId: undefined,
+    tabLineCount: undefined,
+    tabTotal: undefined,
+    pendingToServe: 0,
+    readyToServe: 0,
+    enRoute: 0,
+    status: null,
+    nextReservation: null,
+    visit: {
+      ...party,
+      id: "v3",
+      state: "needs_clearing",
+      outstanding: "0.00",
+      tableIds: ["t8", "t9"],
+    },
+  })),
 ];
 
 afterEach(cleanupWidgets);
@@ -193,6 +252,53 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
       { zones, tables },
       theme,
     );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations rendering seated parties: owing, paid, and needing clearing", async () => {
+    const { host } = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: partyTables },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with the seat dialog open", async () => {
+    const { el, host } = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>('[data-table="t3"]')!.click();
+    await el.updateComplete;
+    await el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "till-seat-dialog",
+    )!.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with the map's Mark cleared dialog open", async () => {
+    const onMap = partyTables.map((table, index) => ({
+      ...table,
+      posX: 100 + index * 200,
+      posY: 300,
+      shape: "round" as const,
+      rotation: 0,
+    }));
+    const { el, host } = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: onMap },
+      theme,
+    );
+    el.shadowRoot!.querySelector("wt-floor-canvas")!.dispatchEvent(
+      new CustomEvent("wt-open-table", {
+        detail: { tableId: "t8" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 

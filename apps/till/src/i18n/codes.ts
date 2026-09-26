@@ -19,6 +19,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A bill for this table is still unpaid. Take payment before finishing the table",
     es: "Hay una cuenta de esta mesa sin pagar. Cóbrala antes de cerrar la mesa",
   },
+  "table.occupied": {
+    en: "That table is already taken. Choose a free table",
+    es: "Esa mesa ya está ocupada. Elige una mesa libre",
+  },
+  "tab.already_open": {
+    en: "Another party is already seated at this table. Check the floor and try again",
+    es: "Ya hay clientes sentados en esta mesa. Revisa la sala e inténtalo de nuevo",
+  },
+  "table.not_shared": {
+    en: "This is the party's only table, so it cannot be separated from its bill",
+    es: "Es la única mesa de estos clientes, así que no se puede separar de su cuenta",
+  },
   "submission.id_reused": {
     en: "This request could not be matched to what was sent before. Reload and try again",
     es: "Esta petición no coincide con la que se envió antes. Vuelve a cargar e inténtalo de nuevo",

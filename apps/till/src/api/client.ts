@@ -918,9 +918,45 @@ export interface FloorZone {
 }
 
 /**
- * One row of the live-floor occupancy read-model from `GET /api/tables/state`. The
- * `tabId`/`tabLineCount`/`tabTotal` trio is present iff a tab is open; `tabTotal` is the tab's gross
- * draft total as a two-place decimal string. `status` is the table's MANUAL service status,
+ * The party seated at a table (`TableState.visit`). `outstanding` is what the party's open and placed
+ * bills still owe, merged parties' bills included, as a two-place decimal string; `billCount` leaves
+ * out abandoned bills; `tableIds` lists every table the party sits at, in the order they joined it.
+ * `revision` is what a command that changes the party's tables or bills sends back.
+ */
+export interface TableVisit {
+  id: string;
+  revision: number;
+  guestCount: number | null;
+  state: "open" | "needs_clearing" | "closed";
+  outstanding: string;
+  billCount: number;
+  tableIds: string[];
+}
+
+/** One bill of a seated party from `GET /api/visits/:id/bills`. `outstanding` is zero on a settled or
+ * abandoned bill; `receiptAvailable` says a sale was filed for it, so its receipt can be printed again. */
+export interface VisitBill {
+  workingOrderId: string;
+  visitId: string;
+  label: string | null;
+  status: "open" | "placed" | "settled" | "abandoned";
+  total: string;
+  outstanding: string;
+  receiptAvailable: boolean;
+}
+
+/** The party revisions a table move sends (D19): the destination party's, and on a merge or transfer
+ * between two parties, the source party's. An absent one is left out of the body. */
+export interface VisitRevisions {
+  expectedVisitRevision?: number;
+  expectedSourceVisitRevision?: number;
+}
+
+/**
+ * One row of the live-floor occupancy read-model from `GET /api/tables/state`. A table is
+ * `"open-tab"` while a party holds it, paid or not. `tabLineCount`/`tabTotal` are present iff a tab
+ * is open; `tabId` names the open tab, or the paid tab a seated party's table still points at.
+ * `tabTotal` is the tab's gross draft total as a two-place decimal string. `status` is the table's MANUAL service status,
  * independent of occupancy. `pendingToServe` counts the open tab's lines still to deliver,
  * `readyToServe` those the kitchen has bumped `ready` but the waiter has not served, and `enRoute`
  * those the pass has dispatched but the waiter has not acknowledged; all three are DISTINCT from
@@ -960,6 +996,7 @@ export interface TableState {
   posY: number | null;
   shape: TableShape | null;
   rotation: number | null;
+  visit: TableVisit | null;
 }
 
 /** The rendered shape of a placed table; a server round-trip re-validates against the real vocabulary. */
@@ -985,9 +1022,11 @@ export interface TableServiceStatus {
   color: string;
 }
 
-/** `POST /api/tables/:id/tab` success — the new tab's working-order id and its order number. */
-export interface TabResult {
+/** `POST /api/tables/:id/seat` success — the new party, its tab and the tab's order number. */
+export interface SeatResult {
+  visitId: string;
   tabId: string;
+  revision: number;
   orderNumber: number;
 }
 
@@ -1534,21 +1573,47 @@ export class TillApi {
   }
 
   /**
-   * Open the running tab on a table → `POST /api/tables/:tableId/tab`. `lines` opens it with an initial
-   * round; absent, the tab opens empty and the body is `{}`, so the route still has JSON to parse.
-   * `table.not_found`, `table.inactive` and `tab.already_open` surface as a rejected `{ code }`.
+   * Seat a party at a free table → `POST /api/tables/:tableId/seat`, which opens its tab. `guestCount`
+   * is sent as an explicit null when none was given. A table a party already holds rejects
+   * `tab.already_open`; `table.not_found` and `table.inactive` surface as a rejected `{ code }`.
    */
-  openTab(tableId: string, lines?: SaleLine[]): Promise<TabResult> {
-    return this.#request<TabResult>(`/api/tables/${tableId}/tab`, "POST", { lines });
+  seatTable(tableId: string, guestCount: number | null): Promise<SeatResult> {
+    return this.#request<SeatResult>(`/api/tables/${tableId}/seat`, "POST", { guestCount });
   }
 
   /**
-   * Append a round to an open tab → `POST /api/working-orders/:orderId/round`. The new lines are priced
-   * at add-time and the existing lines are NOT re-priced. `tab.not_open` and `sale.empty_basket` surface
-   * as a rejected `{ code }`.
+   * Finish a party's table → `POST /api/visits/:visitId/finish`. Rejects `visit.bill_outstanding`
+   * while a bill is unpaid, `visit.not_open`, or `visit.out_of_date` when the party changed since
+   * `expectedVisitRevision` was read.
    */
-  async addTabRound(orderId: string, lines: RoundLine[]): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${orderId}/round`, "POST", { lines });
+  finishTable(
+    visitId: string,
+    expectedVisitRevision: number,
+  ): Promise<{ state: "closed" | "needs_clearing" }> {
+    return this.#request(`/api/visits/${visitId}/finish`, "POST", { expectedVisitRevision });
+  }
+
+  /** Free a finished party's tables → `POST /api/visits/:visitId/cleared`. Rejects `visit.not_open`
+   * unless the party needs clearing, and `visit.out_of_date`. */
+  async markCleared(visitId: string, expectedVisitRevision: number): Promise<void> {
+    await this.#request<void>(`/api/visits/${visitId}/cleared`, "POST", { expectedVisitRevision });
+  }
+
+  /** Every bill of a party, merged parties' included → `GET /api/visits/:visitId/bills`. */
+  getVisitBills(visitId: string): Promise<VisitBill[]> {
+    return this.#request<VisitBill[]>(`/api/visits/${visitId}/bills`, "GET");
+  }
+
+  /**
+   * Append a round to a table's tab → `POST /api/working-orders/:orderId/round`. The new lines are priced
+   * at add-time and the existing lines are NOT re-priced. Sent to the paid tab a seated party's table
+   * still points at, it opens the party's next tab: the answer names the tab the round landed on.
+   * `tab.not_open` and `sale.empty_basket` surface as a rejected `{ code }`.
+   */
+  addTabRound(orderId: string, lines: RoundLine[]): Promise<{ tabId: string }> {
+    return this.#request<{ tabId: string }>(`/api/working-orders/${orderId}/round`, "POST", {
+      lines,
+    });
   }
 
   /**
@@ -1615,18 +1680,19 @@ export class TillApi {
 
   /**
    * Relocate this tab's party to a FREE table → `POST /api/tabs/:tabId/move`. No line moves;
-   * PRE-FISCAL. Rejects `table.occupied`, `table.inactive`, `table.not_found` or `tab.not_open`.
+   * PRE-FISCAL. Rejects `table.occupied`, `table.inactive`, `table.not_found`, `tab.not_open`, and
+   * on a party's tab `visit.not_open` or `visit.out_of_date`.
    */
-  async moveTab(orderId: string, toTableId: string): Promise<void> {
-    await this.#request<void>(`/api/tabs/${orderId}/move`, "POST", { toTableId });
+  async moveTab(orderId: string, toTableId: string, revisions: VisitRevisions = {}): Promise<void> {
+    await this.#request<void>(`/api/tabs/${orderId}/move`, "POST", { toTableId, ...revisions });
   }
 
   /**
    * Extend this tab onto an ADDITIONAL free table → `POST /api/tabs/:tabId/join`. No line moves;
    * PRE-FISCAL. Same rejection codes as {@link moveTab}.
    */
-  async joinTable(orderId: string, tableId: string): Promise<void> {
-    await this.#request<void>(`/api/tabs/${orderId}/join`, "POST", { tableId });
+  async joinTable(orderId: string, tableId: string, revisions: VisitRevisions = {}): Promise<void> {
+    await this.#request<void>(`/api/tabs/${orderId}/join`, "POST", { tableId, ...revisions });
   }
 
   /**
@@ -1635,8 +1701,17 @@ export class TillApi {
    * `freeSourceTable` frees the vacated table (`true`) or re-points it at this tab (`false`).
    * PRE-FISCAL. Rejects `tab.not_open` or `tab.merge_self`.
    */
-  async mergeTabs(orderId: string, fromTabId: string, freeSourceTable: boolean): Promise<void> {
-    await this.#request<void>(`/api/tabs/${orderId}/merge`, "POST", { fromTabId, freeSourceTable });
+  async mergeTabs(
+    orderId: string,
+    fromTabId: string,
+    freeSourceTable: boolean,
+    revisions: VisitRevisions = {},
+  ): Promise<void> {
+    await this.#request<void>(`/api/tabs/${orderId}/merge`, "POST", {
+      fromTabId,
+      freeSourceTable,
+      ...revisions,
+    });
   }
 
   /**
@@ -1649,13 +1724,25 @@ export class TillApi {
     orderId: string,
     toTabId: string,
     transfers: readonly TabTransfer[],
+    revisions: VisitRevisions = {},
   ): Promise<void> {
-    await this.#request<void>(`/api/tabs/${orderId}/transfer`, "POST", { toTabId, transfers });
+    await this.#request<void>(`/api/tabs/${orderId}/transfer`, "POST", {
+      toTabId,
+      transfers,
+      ...revisions,
+    });
   }
 
   /** Carve selected items from a table tab into a detached check, ready for the existing pay path. */
-  splitTab(orderId: string, transfers: readonly TabTransfer[]): Promise<{ checkId: string }> {
-    return this.#request<{ checkId: string }>(`/api/tabs/${orderId}/split`, "POST", { transfers });
+  splitTab(
+    orderId: string,
+    transfers: readonly TabTransfer[],
+    revisions: VisitRevisions = {},
+  ): Promise<{ checkId: string }> {
+    return this.#request<{ checkId: string }>(`/api/tabs/${orderId}/split`, "POST", {
+      transfers,
+      ...revisions,
+    });
   }
 
   /**

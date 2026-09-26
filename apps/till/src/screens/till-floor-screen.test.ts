@@ -28,6 +28,7 @@ function table(over: Partial<TableState> = {}): TableState {
     posY: null,
     shape: null,
     rotation: null,
+    visit: null,
     ...over,
   };
 }
@@ -225,17 +226,26 @@ describe("till-floor-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-en-route]")).toBeNull();
   });
 
-  it("emits open-table with hasOpenTab:false when a free table is tapped", async () => {
+  it("asks for the guest count when a free table is tapped, and seats it once that is given", async () => {
     const { el } = await mount({
       zones: [zone()],
       tables: [table({ id: "t1", state: "free", hasOpenTab: false })],
     });
     const seen = captureOpenTable(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-table="t1"]')!.click();
-    expect(seen.detail).toEqual({ tableId: "t1", hasOpenTab: false });
+    await el.updateComplete;
+    expect(seen.detail).toBeUndefined();
+    el.shadowRoot!.querySelector("till-seat-dialog")!.dispatchEvent(
+      new CustomEvent("seat-confirm", {
+        detail: { guestCount: null },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    expect(seen.detail).toEqual({ tableId: "t1", seated: false, guestCount: null });
   });
 
-  it("emits open-table with hasOpenTab:true when an occupied table is tapped", async () => {
+  it("emits open-table with seated:true when an occupied table is tapped", async () => {
     const { el } = await mount({
       zones: [zone()],
       tables: [
@@ -251,11 +261,13 @@ describe("till-floor-screen", () => {
     });
     const seen = captureOpenTable(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-table="t7"]')!.click();
-    expect(seen.detail).toEqual({ tableId: "t7", hasOpenTab: true });
+    expect(seen.detail).toEqual({ tableId: "t7", seated: true });
   });
 
   it("emits a composed, bubbling open-table event (it must reach the app)", async () => {
-    const { el } = await mount({ tables: [table({ id: "t1" })] });
+    const { el } = await mount({
+      tables: [table({ id: "t1", state: "open-tab", hasOpenTab: true, tabId: "wo-1" })],
+    });
     let captured: Event | undefined;
     el.addEventListener("open-table", (event) => (captured = event));
     el.shadowRoot!.querySelector<HTMLElement>('[data-table="t1"]')!.click();
@@ -589,11 +601,11 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
     expect(el.shadowRoot!.querySelector('[data-tray-table="t1"]')).toBeNull();
   });
 
-  it("emits open-table (with the resolved hasOpenTab) when a tray table is tapped in VIEW mode", async () => {
+  it("opens a free tray table (asking for its guest count) when it is tapped in VIEW mode", async () => {
     const el = await mountFloor({ tables: [placed("t1"), table({ id: "t9", label: "9" })] });
-    const seen = captureOpenTable(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-tray-table="t9"]')!.click();
-    expect(seen.detail).toEqual({ tableId: "t9", hasOpenTab: false });
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-seat-dialog")!.tableLabel).toBe("9");
   });
 
   it("in EDIT mode, tapping an unplaced tray table PLACES it (not opens it)", async () => {
@@ -645,7 +657,7 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
     expect(refreshed).toBe(true);
   });
 
-  it("re-emits a canvas wt-open-table as open-table with hasOpenTab resolved from the read-model", async () => {
+  it("re-emits a canvas wt-open-table as open-table, resolving from the read-model that the table is seated", async () => {
     const el = await mountFloor({
       tables: [
         placed("t1", {
@@ -665,7 +677,7 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
         composed: true,
       }),
     );
-    expect(seen.detail).toEqual({ tableId: "t1", hasOpenTab: true });
+    expect(seen.detail).toEqual({ tableId: "t1", seated: true });
   });
 
   it("ignores a canvas wt-open-table for a table the read-model does not know", async () => {
