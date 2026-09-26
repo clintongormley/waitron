@@ -1,8 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { locations, tills, withTransaction } from "@waitron/db";
+import {
+  kitchenStations,
+  locations,
+  printJobs,
+  ticketItems,
+  tills,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -22,6 +30,8 @@ import {
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
+import { createPrinter } from "@waitron/printing";
+import { attachPrinterToStation } from "./station-printers.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -500,5 +510,139 @@ describe("POST /api/tabs/:id/unjoin", () => {
     expect(await res.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "body" } },
     });
+  });
+});
+
+/** The merge the till sends when a waiter leaves an unpaid split-off check without paying it. */
+describe("POST /api/tabs/:id/merge of a check back into the tab it was split from", () => {
+  /** A tab whose second line was sent to a kitchen with a printer, then split whole onto a check. */
+  async function splitSentLine(): Promise<{
+    app: Hono;
+    tabA: string;
+    checkId: string;
+    cookie: string;
+    printerId: string;
+    ticket: { id: string; quantity: number | null };
+  }> {
+    const { app, d, tabA, cookie } = await setupTabApp("1");
+    const stationId = await kitchenStation(d.cfg);
+    const offers = await withTransaction(suite.db, (tx) =>
+      offerProducts(tx, d.cfg, { zone: "tables" }),
+    );
+    const printerId = await withTransaction(suite.db, async (tx) => {
+      const { id } = await createPrinter(
+        tx,
+        { locationId: d.cfg.locationId },
+        {
+          name: `P-${randomUUID().slice(0, 8)}`,
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+        },
+      );
+      await attachPrinterToStation(tx, { stationId, printerId: id });
+      return id;
+    });
+    await withTransaction(suite.db, (tx) =>
+      addTabRound(tx, d.cfg, tabA, [{ menuItemId: offers.offerFor(cafeId), quantity: "2" }]),
+    );
+    const [ticket] = await ticketsOn(tabA);
+    expect(ticket).toMatchObject({ lineNo: 2, quantity: 2000 });
+    const split = await app.request(`/api/tabs/${tabA}/split`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ transfers: [{ lineNo: 2 }] }),
+    });
+    const { checkId } = (await split.json()) as { checkId: string };
+    return { app, tabA, checkId, cookie, printerId, ticket: ticket! };
+  }
+
+  /** The suite shares one database, and an earlier case may already have seeded the default station. */
+  async function kitchenStation(config: TillConfig): Promise<string> {
+    const [existing] = await suite.db
+      .select({ id: kitchenStations.id })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.locationId, config.locationId));
+    return existing?.id ?? seedKitchenStation(suite.db, { locationId: config.locationId });
+  }
+
+  /** Each ticket item on the order, with the line number of the line it belongs to. */
+  async function ticketsOn(orderId: string) {
+    return suite.db
+      .select({
+        id: ticketItems.id,
+        quantity: ticketItems.quantity,
+        lineNo: workingOrderLines.lineNo,
+      })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(ticketItems.workingOrderId, orderId))
+      .orderBy(workingOrderLines.lineNo);
+  }
+
+  async function heldOrderIds(app: Hono, cookie: string): Promise<string[]> {
+    const res = await app.request("/api/working-orders", { headers: { cookie } });
+    return ((await res.json()) as { id: string }[]).map((order) => order.id);
+  }
+
+  async function noticeCount(...orderIds: string[]): Promise<number> {
+    const { rows } = await suite.db.execute<{ count: number }>(
+      sql`select cast(count(*) as int) as count from kitchen_notices where working_order_id in (${sql.join(
+        orderIds.map((id) => sql`${id}`),
+        sql`, `,
+      )})`,
+    );
+    return rows[0]!.count;
+  }
+
+  async function printJobCount(printerId: string): Promise<number> {
+    return (
+      await suite.db
+        .select({ id: printJobs.id })
+        .from(printJobs)
+        .where(eq(printJobs.printerId, printerId))
+    ).length;
+  }
+
+  it("puts the check's sent line and its kitchen ticket back on the tab, and tells the kitchen nothing", async () => {
+    const { app, tabA, checkId, cookie, printerId, ticket } = await splitSentLine();
+    expect(await heldOrderIds(app, cookie)).toContain(checkId);
+    expect((await ticketsOn(checkId)).map((item) => item.id)).toEqual([ticket.id]);
+    const jobsBefore = await printJobCount(printerId);
+
+    const res = await app.request(`/api/tabs/${tabA}/merge`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ fromTabId: checkId, freeSourceTable: false }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(await ticketsOn(tabA)).toEqual([
+      { id: ticket.id, quantity: ticket.quantity, lineNo: expect.any(Number) },
+    ]);
+    expect(await ticketsOn(checkId)).toEqual([]);
+    expect(await heldOrderIds(app, cookie)).not.toContain(checkId);
+    expect(await noticeCount(tabA, checkId)).toBe(0);
+    expect(await printJobCount(printerId)).toBe(jobsBefore);
+  });
+
+  it("refuses order.payment_in_flight while the check is being paid by card, leaving its lines on it", async () => {
+    const { app, tabA, checkId, cookie, ticket } = await splitSentLine();
+    suite.db.run(
+      sql`update working_orders set payment_attempt_at = '2026-09-26T10:00:00.000Z' where id = ${checkId}`,
+    );
+
+    const res = await app.request(`/api/tabs/${tabA}/merge`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ fromTabId: checkId, freeSourceTable: false }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "order.payment_in_flight", params: { workingOrderId: checkId } },
+    });
+    expect((await ticketsOn(checkId)).map((item) => item.id)).toEqual([ticket.id]);
+    expect(await ticketsOn(tabA)).toEqual([]);
+    expect(await heldOrderIds(app, cookie)).toContain(checkId);
   });
 });
