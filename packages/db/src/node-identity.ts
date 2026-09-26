@@ -23,9 +23,7 @@ export function setNodePublicKey(db: Database, nodeId: string, publicKey: string
 
 /**
  * The node's membership trust anchors: every `nodes` row's `{ id → public_key }`, skipping the
- * keyless ones. A cloud mirror gets an EMPTY set, because nothing creates a `nodes` row on it
- * today: `adoptFromPrimary` inserts no venue rows (`apps/server/src/adopt.ts`), and the standby's
- * OWN row cannot be inserted without the venue's `locations` row it foreign-keys to.
+ * keyless ones.
  */
 export function readMembershipTrustSet(db: Database): Promise<TrustSet> {
   return withTransaction(db, async (tx) => {

@@ -31,6 +31,7 @@ import {
   readDeploymentEnvironment,
   readMembershipTrustSet,
   readNodeMembership,
+  writeNodeMembership,
   stampDeployment,
   tenants,
   tills,
@@ -1006,6 +1007,73 @@ describe("startServer, against a migrated venue directory", () => {
       await rm(stateDir, { recursive: true, force: true });
     }
   }, 60_000);
+
+  // The marker is written here rather than by a real restore: both restores leave the same file
+  // through `writeValidated` (restore.ts), differing only in `source`.
+  it.each(["archive", "stream"] as const)(
+    "refuses to start after a %s restore whose membership document no longer matches its signature",
+    async (source) => {
+      const venue = await freshVenue();
+      const db = venue.store.venue;
+      await seedTradingVenue(db);
+      const ring = loadKeyRing(KEY_ENV);
+      await establishNodeIdentity({ ownerDb: db, ring }, TILL_ENV.WAITRON_TILL_NODE_ID);
+      await seedTermZeroMembership(
+        { db, ring },
+        TILL_ENV.WAITRON_TILL_NODE_ID,
+        "https://old-box.example",
+      );
+      const held = (await readNodeMembership(db))!;
+      const intruder = {
+        nodeId: "c0000000-0000-4000-8000-00000000000f",
+        contactUrl: "https://intruder.example",
+        standing: "serving-secondary" as const,
+      };
+      await writeNodeMembership(db, {
+        ...held,
+        body: { ...held.body, nodes: [...held.body.nodes, intruder] },
+      });
+      const tampered = await readNodeMembership(db);
+      const port = await freePort();
+      const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-first-start-refused-"));
+      await writeFile(
+        join(stateDir, "modules.json"),
+        JSON.stringify({ modules: { "fiscal-none": false } }),
+      );
+      await ensureBoxSecrets({
+        stateDir,
+        hostnames: ["waitron.local", "localhost"],
+        now: () => new Date(),
+        listIpv4: () => ["192.168.1.10"],
+      });
+      const leafBefore = await readFile(join(stateDir, "tls", "server.crt"));
+      await writeFile(join(stateDir, REBUILD_MARKER), JSON.stringify({ version: 1, source }));
+      try {
+        await expect(
+          startServer({
+            ...KEY_ENV,
+            WAITRON_STATE_DIR: stateDir,
+            WAITRON_VENUE_DIR: venue.directory,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_ENV: "preproduction",
+            WAITRON_BOX_ADDRESSES: "10.1.2.3",
+          }),
+        ).rejects.toMatchObject({
+          code: "restore.membership_invalid",
+          params: { reason: "bad_signature" },
+        });
+        expect(await readNodeMembership(db)).toEqual(tampered);
+        expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(leafBefore);
+        expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(true);
+      } finally {
+        await venue.store.close();
+        await rm(venue.directory, { recursive: true, force: true });
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
 
   it("keeps selling when a restore's first start fails, and raises restore.first_start_failed", async () => {
     const venue = await freshVenue();
