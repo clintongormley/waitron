@@ -42,6 +42,7 @@ import {
   readDeploymentEnvironment,
   readMembershipTrustSet,
   readNodeMembership,
+  setDeploymentMode,
   writeMirrorConfig,
   writeNodeMembership,
   stampDeployment,
@@ -1230,15 +1231,29 @@ describe("startServer, against a migrated venue directory", () => {
     60_000,
   );
 
-  // Damage rather than a wrong signature: the stored text is not JSON, or its list of machines is
-  // not a list. With a peer configured, the held document is also read before the peer is asked.
+  // Damage rather than a wrong signature: the stored text is not JSON, or it is JSON that is not a
+  // document. With a peer configured, the held document is also read before the peer is asked. The
+  // fenced case would otherwise come up read-only and put off its restore's checks, as a mirror does.
   it.each([
-    { damage: "unreadable JSON", document: "{not json", withPeer: false },
-    { damage: "unreadable JSON", document: "{not json", withPeer: true },
-    { damage: "a machine list that is not a list", document: "list", withPeer: false },
+    { damage: "unreadable JSON", document: "{not json", withPeer: false, asMirror: false },
+    { damage: "unreadable JSON", document: "{not json", withPeer: true, asMirror: false },
+    { damage: "unreadable JSON", document: "{not json", withPeer: false, asMirror: true },
+    {
+      damage: "a machine list that is not a list",
+      document: "list",
+      withPeer: false,
+      asMirror: false,
+    },
+    { damage: "the JSON value null", document: "null", withPeer: false, asMirror: false },
+    {
+      damage: "a fencing standing and a key no document has",
+      document: "fenced",
+      withPeer: false,
+      asMirror: false,
+    },
   ])(
-    "refuses a restore whose membership document holds $damage with restore.membership_invalid (peer: $withPeer)",
-    async ({ document, withPeer }) => {
+    "refuses a restore whose membership document holds $damage with restore.membership_invalid (peer: $withPeer, mirror: $asMirror)",
+    async ({ document, withPeer, asMirror }) => {
       const venue = await freshVenue();
       const db = venue.store.venue;
       await seedTradingVenue(db);
@@ -1256,8 +1271,21 @@ describe("startServer, against a migrated venue directory", () => {
               ...held,
               body: { ...held.body, nodes: { first: held.body.nodes[0] } },
             })
-          : document;
+          : document === "fenced"
+            ? JSON.stringify({
+                ...held,
+                body: {
+                  ...held.body,
+                  nodes: held.body.nodes.map((n) => ({ ...n, standing: "sell-only" })),
+                },
+                extra: true,
+              })
+            : document;
       await db.execute(sql`update node_membership set document = ${stored} where id = 1`);
+      // Demoting a fenced node writes its role, and so does making one a mirror: `requireStamp`
+      // refuses both on an unstamped database.
+      if (document === "fenced" || asMirror) await stampDeployment(db, "preproduction");
+      if (asMirror) await setDeploymentMode(db, TILL_ENV.WAITRON_TILL_NODE_ID, "mirror");
       if (withPeer) {
         await writeMirrorConfig(db, TILL_ENV.WAITRON_TILL_NODE_ID, {
           relayUrl: `http://127.0.0.1:${await freePort()}`,

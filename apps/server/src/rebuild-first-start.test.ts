@@ -700,6 +700,18 @@ describe("assertRestoredMembershipReadable", () => {
     });
   });
 
+  it.each(["null", "42", '"a document"'])(
+    "refuses a restored row whose stored document is the JSON value %s",
+    async (text) => {
+      const stateDir = await rebuiltStateDir("stream");
+      await storeDocumentText(text);
+      await expect(assertRestoredMembershipReadable(stateDir, suite.db)).rejects.toMatchObject({
+        code: "restore.membership_invalid",
+        params: { reason: "malformed" },
+      });
+    },
+  );
+
   it("does not look at the document on an ordinary start", async () => {
     const stateDir = await rebuiltStateDir(false);
     await storeDocumentText("{not json");

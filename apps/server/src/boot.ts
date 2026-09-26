@@ -1064,13 +1064,13 @@ async function bootServer(
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
   // separate reads could straddle a concurrent promotion and yield an impossible `(mirror, primary)`.
   const initialAxes = await readDeploymentAxes(db, config.till.nodeId);
+  await assertRestoredMembershipReadable(config.stateDir, db);
   // A returned box that died before it was fenced would otherwise boot with a stale chart and SELL
   // while the promoted cloud is also primary — two nodes filing under one NIF (CLAUDE.md §5). So a
   // non-mirror node with a configured cloud peer best-effort fetches the peer's signed chart and
   // persists it if it verifies and is strictly newer. It runs BEFORE the held-membership read below,
   // so a persisted superseding document flows into the `fenced` demote. An unreachable peer lets
   // boot proceed as primary: the MVP's accepted window. Demote-only: it can never self-promote.
-  await assertRestoredMembershipReadable(config.stateDir, db);
   if (initialAxes.mode !== "mirror") {
     const peer = await readMirrorConfig(db, config.till.nodeId);
     if (peer !== null) {

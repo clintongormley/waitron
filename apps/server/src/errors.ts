@@ -774,9 +774,10 @@ declare module "@waitron/shared" {
      * failed with no code of its own. The first start fails rather than sign a term the pointer may
      * be above. Logged, never shown. */
     "restore.pointer_unreadable": Record<string, never>;
-    /** A restored box's first start found a held membership document that fails its check against
-     * the restored copy's own node keys, so it signs nothing over it and the start is refused.
-     * `reason` is the check's own failure. */
+    /** After a restore, the held membership document cannot be read or is not shaped as a
+     * document (`reason` is `malformed`; on any restored start not finishing an adoption), or, at the
+     * start that finishes the restore, fails its check against the copy's own node keys (`reason` is
+     * the check's own failure). The start is refused and nothing is signed over it. */
     "restore.membership_invalid": { reason: VerifyFailure };
     /**
      * The restore gate (`restore-gate.ts`) refused: the backup's environment differs from the

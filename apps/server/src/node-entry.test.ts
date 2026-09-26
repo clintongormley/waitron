@@ -804,6 +804,32 @@ describe("runEntry", () => {
     expect(reported).toContain("deadbeefhash");
   });
 
+  // The boot cases in boot.test.ts pin that a damaged restored membership document rejects the start
+  // with this error; this follows the error from the start's rejection to the rendered page.
+  it("shows a start refused with restore.membership_invalid its own line on the page", async () => {
+    const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    await expect(
+      runEntry(
+        deps({
+          writeRecoveryState,
+          startServer: vi.fn<StartServer>(() =>
+            Promise.reject(new AppError("restore.membership_invalid", { reason: "malformed" })),
+          ),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "restore.membership_invalid" });
+
+    const persisted = writeRecoveryState.mock.calls.at(-1)![1];
+    const body = await (
+      await recoveryApp({ state: persisted, logDir: "/nonexistent", onRetry: vi.fn() }).request("/")
+    ).text();
+    expect(body).toContain(
+      "The list of machines in the restored copy is damaged or does not carry a valid signature",
+    );
+  });
+
   // The message is injected as a real boot failure and followed to both channels: a test rendering
   // a page the message never reached would pass against an implementation that leaks everywhere.
   it("keeps a leaked connection string off the page while the installer's channel carries it", async () => {

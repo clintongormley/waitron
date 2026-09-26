@@ -5999,9 +5999,9 @@ endorsement stored when that round reads, not the first round's"
     node was rewritten, with its document re-signed by the matching key, passes, and the next term
     is signed over the added node: the case "passes a document re-signed with a key the copy's own
     node row was changed to name" pins that.
-  - Only the start that finishes a restore checks the row. A start that puts that off (a mirror, a
-    fenced node, or one still finishing an adoption) does not, and no other code that signs over the
-    held row checks it first (promotion, `retireSelf` and the standby chart append among them:
+  - Only the start that finishes a restore checks the row's signature. A mirror or fenced start
+    checks only that it can be read and is shaped as a document (A53); a start still finishing an
+    adoption checks neither. No other code that signs over the held row checks its signature first (promotion, `retireSelf` and the standby chart append among them:
     `apps/server/src/promote.ts`, `apps/server/src/retire.ts`,
     `apps/server/src/mirror-bundle-api.ts`). Gating promotion on the same check was measured and not
     done, because it would refuse a genuine document: on 2026-09-26 a scratch case built the way
@@ -6010,16 +6010,18 @@ endorsement stored when that round reads, not the first round's"
     `establishReservedStandbyIdentity`, a trust set naming the standby alone; and a document the
     primary signed with its real key, written there, verified as `untrusted_signer`. Nothing writes
     a document on a mirror today, so its held document is null (from reading the writers, not a
-    run). Which key a mirror should check a restored document against is the owner's call.
+    run). The owner's decision on this, 2026-09-26, is under the failover residuals ("a standby
+    checks a promotion against the primary's key").
   - **Closed for a restore by A53 (`fix/restore-membership-damaged-document-message`), 2026-09-26,
     on the owner's A45 answer ("move the check earlier").** When a restore's marker is present,
     boot now runs `assertRestoredMembershipReadable` (`apps/server/src/rebuild-first-start.ts`)
     before its first read of the held row, ahead of the peer reconciliation: stored text that is not
-    JSON, or a document not shaped as one (`isMembershipDocument`, `@waitron/membership`), throws
+    JSON, a stored JSON null, or a document not shaped as one (`isMembershipDocument`,
+    `@waitron/membership`, including its limits such as the maximum number of machines), throws
     `restore.membership_invalid { reason: "malformed" }`, and the recovery page's wording now says
-    the list "is damaged or does not carry a valid signature" (EN and ES). It runs on a fenced
-    restored box too, which defers the signature check; a box still finishing an adoption returns
-    before it. Cases: `apps/server/src/boot.test.ts` ("refuses a restore whose membership document
+    the list "is damaged or does not carry a valid signature" (EN and ES). It runs on a fenced or
+    mirror restored box too, neither of which checks the signature; a box still finishing an
+    adoption returns before it. Cases: `apps/server/src/boot.test.ts` ("refuses a restore whose membership document
     holds …", unreadable JSON with and without a configured peer, and a machine list that is not a
     list; each failed on the old code with a `SyntaxError` or `TypeError`, the peer case also when
     the call was moved after the reconciliation) and the `assertRestoredMembershipReadable` cases in
@@ -6995,8 +6997,9 @@ pointer, would cut off exactly the tail this decision is meant to keep. Invoices
 stay recoverable from AEAT either way.
 
 **Owner decision 2026-09-26 (A45's first point) — a standby checks a promotion against the
-primary's key, built in slice 3.** A restored membership document is checked only at the start that
-finishes a restore (#678, A53). Promotion, `retireSelf` and the standby chart append
+primary's key, built in slice 3.** A restored membership document's signature is checked only at
+the start that finishes a restore (#678); A53 added a check that it can be read and is shaped as a
+document on every restored start not finishing an adoption. Promotion, `retireSelf` and the standby chart append
 (`apps/server/src/promote.ts`, `apps/server/src/retire.ts`, `apps/server/src/mirror-bundle-api.ts`)
 sign over the held document without checking it, because a mirror's stored keys name only itself,
 so a document its primary genuinely signed fails the check there (measured, see Task 9a's #678

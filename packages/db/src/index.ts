@@ -147,6 +147,7 @@ export {
   persistNodeMembershipIfNewer,
   persistNodeMembershipIfNewerTx,
   readNodeMembership,
+  readNodeMembershipRow,
   writeNodeMembership,
   writeNodeMembershipTx,
 } from "./node-membership.js";

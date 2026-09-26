@@ -6,6 +6,7 @@ import {
   persistNodeMembershipIfNewer,
   readMembershipTrustSet,
   readNodeMembership,
+  readNodeMembershipRow,
   type Database,
 } from "@waitron/db";
 import { isMembershipDocument, verifyMembershipDocument } from "@waitron/membership";
@@ -61,9 +62,10 @@ export async function assertRestoredMembershipValid(db: Database): Promise<void>
 
 /**
  * Throws `restore.membership_invalid` with the reason `malformed` when a restore's marker is present
- * and the held membership document's stored text is not JSON, or is not shaped as a document. Boot
- * runs it before its first read of the document, which would otherwise fail on such a copy with an
- * error carrying no code. Does nothing when no restore left its marker.
+ * and the held membership row's stored text is not JSON, or is not shaped as a document (the JSON
+ * value `null` included). Boot runs it before its first read of the document, which on such a copy
+ * would throw an error carrying no code, or read a stored `null` as no document at all. Passes when
+ * the row or the table is absent, and does nothing when no restore left its marker.
  */
 export async function assertRestoredMembershipReadable(
   stateDir: string,
@@ -75,16 +77,16 @@ export async function assertRestoredMembershipReadable(
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
     throw error;
   }
-  let held: unknown;
+  let row: { document: unknown } | null;
   try {
-    held = await readNodeMembership(db);
+    row = await readNodeMembershipRow(db);
   } catch (error) {
     if (error instanceof SyntaxError) {
       throw new AppError("restore.membership_invalid", { reason: "malformed" });
     }
     throw error;
   }
-  if (held !== null && !isMembershipDocument(held)) {
+  if (row !== null && !isMembershipDocument(row.document)) {
     throw new AppError("restore.membership_invalid", { reason: "malformed" });
   }
 }

@@ -6,7 +6,8 @@ import { nodeMembership } from "./schema/node-membership.js";
 
 /**
  * The held membership document, or `null` when the table or the row is absent. Callers must not
- * tell those two apart: both mean nothing has recorded who is currently in charge.
+ * tell those two apart: both mean nothing has recorded who is currently in charge. A row holding the
+ * JSON value `null` also reads as `null`; `readNodeMembershipRow` below tells that row from none.
  *
  * Not verified here. A peer's document is stored only after `acceptMembershipDocument`
  * (@waitron/membership) passes it; every other write is one this node minted and signed itself
@@ -29,6 +30,18 @@ import { nodeMembership } from "./schema/node-membership.js";
 export async function readNodeMembership(
   db: Database | Transaction,
 ): Promise<SignedMembershipDocument | null> {
+  const row = await readNodeMembershipRow(db);
+  return (row?.document ?? null) as SignedMembershipDocument | null;
+}
+
+/**
+ * The held row's parsed document, with nothing checking its shape, or `null` when the table or the
+ * row is absent (told apart no more than by `readNodeMembership`). Unlike that reader, a present row
+ * whose document is the JSON value `null` reads as `{ document: null }`.
+ */
+export async function readNodeMembershipRow(
+  db: Database | Transaction,
+): Promise<{ document: unknown } | null> {
   const present = await db.execute<{ name: string }>(
     sql`select name from sqlite_master where type = 'table' and name = ${"node_membership"}`,
   );
@@ -40,7 +53,7 @@ export async function readNodeMembership(
     .select({ document: nodeMembership.document })
     .from(nodeMembership)
     .where(eq(nodeMembership.id, 1));
-  return row?.document ?? null;
+  return row === undefined ? null : { document: row.document };
 }
 
 /**

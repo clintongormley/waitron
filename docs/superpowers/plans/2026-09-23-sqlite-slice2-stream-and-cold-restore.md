@@ -227,7 +227,8 @@ single task is most likely to get wrong.
   `restore.first_start_failed` (English and Spanish wording), and retries at the next start (the
   marker stays) — Task 9a's `runFirstStart`.
   _(2026-09-26: except `restore.membership_invalid`, a restored membership document that fails
-  its signature check, which fails the start; see `docs/backlog.md`'s Task 9a entry.)_
+  its signature check, or cannot be read or is not shaped as a list of machines (A53,
+  2026-09-26), which fails the start; see `docs/backlog.md`'s Task 9a entry.)_
 - N25. **Generation pruning is wired:** Task 6's supervisor calls Task 5's `pruneGenerations` from
   its streaming tick, at most once a day, with the live generation's name and 168 hours; the call
   is not awaited, so a bucket that never answers cannot hold the tick.
