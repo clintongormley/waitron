@@ -97,16 +97,19 @@ table's own stamp, throwing `deployment.environment_mismatch` (see "Running it" 
 letting a host boot against another environment's database. That probe is closed again before
 migrations start.
 
-**What actually writes the stamp.** Two paths do, and both call the same programmatic
+**What actually writes the stamp.** Three paths do, and all call the same programmatic
 `stampDeployment` (`@waitron/db`) rather than writing the row themselves. The browser setup wizard's
 provision handler does it (`provisionVenue`, `apps/server/src/provision.ts`), from the demo/live
-choice the operator made. `waitron-provision venue` does it for a directory that carries no stamp,
-from `WAITRON_ENV` — unset means `preproduction` and `production` has to be typed out in full — which
-is what lets an automated deployment stand a venue up with no browser. Neither can move a stamp that
-is already there: `stampDeployment` refuses a different value with `deployment.already_stamped`, and
-both let it propagate. (`waitron-provision instance`, which used to be the only stamping path, was
-deleted with the PostgreSQL deployment model. So was the retired
-`apps/server/sql/bootstrap-tenant.sql`, removed on 2026-08-04, which wrote the row by hand.)
+choice the operator made. Its adopt handler does it (`adoptFromPrimary`, `apps/server/src/adopt.ts`),
+from the environment in the primary's bundle. `waitron-provision venue` does it for a directory that
+carries no stamp, from `WAITRON_ENV` — unset means `preproduction` and `production` has to be typed
+out in full — which is what lets an automated deployment stand a venue up with no browser. None can
+move a stamp that is already there: `stampDeployment` refuses a different value with
+`deployment.already_stamped`, and provision and `waitron-provision venue` let it propagate; adopt
+reads the stamp first and throws that code itself, before its first write. (`waitron-provision
+instance`, which used to be the only stamping path, was deleted with the PostgreSQL deployment
+model. So was the retired `apps/server/sql/bootstrap-tenant.sql`, removed on 2026-08-04, which
+wrote the row by hand.)
 
 A database nobody has stamped reads `deployment` as `null` and **boots normally, with this check
 inert**, exactly as if the check did not exist. Only a database stamped for the OTHER environment

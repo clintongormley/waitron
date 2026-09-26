@@ -3165,7 +3165,8 @@ image constraints under *Detail → Box image*.
     immediately before `stampDeployment`, its first writing step, and the route moves the
     record to phase "venue_committed" there. A fake adopt that took that step and then failed left
     the record at "venue_committed", and a different adopt body was refused
-    `409 setup.operation_conflict`. In `apps/server/src/adopt.test.ts` the step runs once while the
+    `409 setup.operation_conflict`. So a failed adopt's record is deleted at "started" and kept once
+    it has moved past it. In `apps/server/src/adopt.test.ts` the step runs once while the
     deployment is still unstamped, a throw from it leaves the deployment unstamped, and an
     environment mismatch, a foreign tenant, an unknown module (`module.config_unknown`) and a
     same-tenant venue (`provisioning.second_venue`) never reach it. `stampDeployment`'s own
@@ -3181,27 +3182,33 @@ image constraints under *Detail → Box image*.
     setup mode against a local fake primary, stamps its database production after start, and sends
     two adopts with different passwords: without the check the first answered 400
     `deployment.already_stamped` and the second `409 setup.operation_conflict`; with it both answer
-    400 `deployment.already_stamped` and nothing restarts. Open for the owner: adopt answers that
-    code with 400 (`ADOPT_STATUS` in `setup-api.ts` has no entry for it), where provision answers
-    409; the wizard shows "This server is already set up." for that code
-    (`apps/setup/src/setup-app.ts`, read, not run), which does not describe a box a failed
-    provision only stamped. So a failed adopt's record is deleted at "started" and kept once it
-    has moved past it. The setup wizard's `#mapAdoptError` (`apps/setup/src/setup-app.ts`) had no
-    `setup.operation_conflict` case, so that 409 sent the operator back to the connect form with
-    "Couldn't connect to the primary…"; it now shows provision's saved-setup message with Reload and
-    no retry (`apps/setup/src/setup-app.test.ts`, with a stubbed server). Each fix was deleted and
-    its new tests failed: restoring adopt's inner error handling (the seven refused-adopt route
-    cases), dropping the route's move to "venue_committed" (the kept-record case), dropping the
-    step in `adoptFromPrimary` or moving it after the stamp (two cases), moving it above the
-    refusals (the never-reached case), moving it between the foreign-tenant and second-venue
-    checks (the unknown-module and same-tenant-venue case), and dropping the wizard case. The step
-    is now a required argument of `adoptFromPrimary`, so deleting its forwarding in
-    `apps/server/src/boot.ts` (from the call and the wrapper's parameter) fails
-    `pnpm --filter @waitron/server typecheck` with `TS2554: Expected 3 arguments, but got 2`;
-    before, that deletion typechecked clean and `adopt.test.ts` and `setup-api.test.ts` passed. One existing case
-    changed: the retried-adoption case (from #534) asserted the record stayed at "started" after a
-    502, which is the behaviour removed here; it now asserts no record, and still asserts the same
-    request resent answers 200 and ends at "complete".
+    400 `deployment.already_stamped` and nothing restarts. The setup wizard's `#mapAdoptError`
+    (`apps/setup/src/setup-app.ts`) had no `setup.operation_conflict` case, so that 409 sent the
+    operator back to the connect form with "Couldn't connect to the primary…"; it now shows
+    provision's saved-setup message with Reload and no retry (`apps/setup/src/setup-app.test.ts`,
+    with a stubbed server). Each fix was deleted and its new tests failed: restoring adopt's inner
+    error handling (the seven refused-adopt route cases), dropping the route's move to
+    "venue_committed" (the kept-record case), dropping the step in `adoptFromPrimary` or moving it
+    after the stamp (two cases), moving it above the refusals (the never-reached case), moving it
+    between the foreign-tenant and second-venue checks (the unknown-module and same-tenant-venue
+    case), and dropping the wizard case. The step is now a required argument of `adoptFromPrimary`,
+    so deleting its forwarding in `apps/server/src/boot.ts` (from the call and the wrapper's
+    parameter) fails `pnpm --filter @waitron/server typecheck` with `TS2554: Expected 3 arguments,
+    but got 2`; before, that deletion typechecked clean and `adopt.test.ts` and `setup-api.test.ts`
+    passed. One existing case changed: the retried-adoption case (from #534) asserted the record
+    stayed at "started" after a 502, which is the behaviour removed here; it now asserts no record,
+    and still asserts the same request resent answers 200 and ends at "complete".
+    Open for the owner: adopt answers `deployment.already_stamped` with 400 (`ADOPT_STATUS` in
+    `setup-api.ts` has no entry for it), where provision answers 409; the wizard shows "This server
+    is already set up." for that code (`apps/setup/src/setup-app.ts`, read, not run), which does
+    not describe a box a failed provision only stamped.
+    **Done (2026-09-26, lane A's A50):** adopt now answers `deployment.already_stamped` with 409,
+    as provision does, and on both the provision and adopt paths the wizard says a previous attempt
+    left the server partly set up for a different environment, tells the operator to contact
+    support to reset it, and offers a plain "Reload" with no retry. Before the change the
+    two-password boot case in `apps/server/src/boot.test.ts` answered 400 (it now asserts 409), a
+    new route case in `setup-api.test.ts` failed `expected 400 to be 409`, and the new wizard cases
+    for that code failed `expected 'This server is already set up.' to contain 'partly set up'`.
     Open, measured in A43's review: after a failure past the first write (module config
     persistence made to fail), resending the same adopt body answered 200 and ended at
     "complete", but the retry ran adopt from the start and generated a second standby identity
@@ -3212,6 +3219,37 @@ image constraints under *Detail → Box image*.
     `git diff 4cb93dd85 -- apps/server/src/setup-api.ts`). Not measured: what the first identity's
     reservation on the primary and its rows on this node leave behind. Whether adopt should
     resume, refuse, or discard the first identity is the owner's decision.
+    **Done (2026-09-26, lane A's A50):** the owner chose to refuse. The same adopt body resent after
+    a failure past the first write now answers 409 `setup.adopt_incomplete` without calling adopt
+    again, leaves `setup-operation.json` byte for byte as it was and schedules no restart, and a
+    request after that gets the same answer rather than `setup.already_provisioning`, so the lock
+    is released. The wizard tells the operator the join stopped partway and to contact support to
+    reset the server, with a plain "Reload" and no retry. Measured before the fix with a new case
+    in `apps/server/src/setup-api.test.ts` whose fake adopt fails once past the first write: the
+    resend answered 200 (`expected 200 to be 409`), adopt was called twice, and the record moved
+    from "venue_committed" to "complete". Still not measured: what the first identity leaves
+    behind on the primary and on this node; the wizard has no way to reset such a box.
+    **Still open after A50, for the owner (not done):** (a) both new wizard messages tell the
+    operator to contact support, and nothing tells support what to do for this case. The reset is
+    `sudo bash waitron.sh reset` (`deploy/README.md`, "Resetting a box"), run by someone with a
+    terminal on the box: it empties the box's state volume except its certificate folder, which
+    removes the venue database, `setup-operation.json`, `modules.json`, `pending-adoption.json`
+    and `trading.env`. Once adopt has stamped this box with the primary's environment, the reset on
+    a standby of a production primary refuses without `--force-production`. It runs on this box
+    only, so it leaves what the primary recorded for the abandoned standby: the standby's place in
+    the primary's membership list, and what the primary's modules reserved for it (with
+    `fiscal-verifactu` enabled, an installation number). (b) Found by reading, not measured: when
+    the primary's admin uses an authenticator, the wizard's adopt most likely meets
+    `setup.operation_conflict` rather than `setup.adopt_incomplete`. The setup route identifies a
+    request by a SHA-256 of its raw body (`requestHash` in the adopt handler,
+    `apps/server/src/setup-api.ts`), and that body carries the one-time code
+    (`apps/setup/src/screens/connect-screen.ts`), which changes every 30 seconds, so a resend is a
+    different request. The server still refuses it and mints no second identity, but the wizard then
+    shows `OPERATION_CONFLICT_MESSAGE` ("Resume the original setup or contact support"), and
+    resuming a half-finished adopt is always refused. Also, the FIRST failure past the first write
+    reaches the wizard as a generic error that sends the operator back to the connect form with "try
+    again", which is now always refused. Choosing the fix (for example, the wizard reading the saved
+    operation from `/setup-api/status` after a failed adopt) is the owner's.
     Also open from A42's review, read and not run: if `operation.complete()` throws after `execute`
     has scheduled the restart, the lock is now released while that restart is pending (before A42
     that throw was outside the release and the lock stayed set).
@@ -3759,21 +3797,21 @@ image constraints under *Detail → Box image*.
       `test/fixtures.ts`. Correct them only in a change allowed to touch that file.
   - `apps/setup` code, found by #567 and not changed: `#onGoto` in `setup-app.ts` does not clear
     `fiscalTestError`, so the routed-back fiscal-test banner survives navigating away and back;
-    `deployment.already_stamped` is labelled "Reload to open the till" on the provision path and
-    plain "Reload" on the adopt path, and a reload of a box still in setup mode reopens the wizard;
+    `deployment.already_stamped` was labelled "Reload to open the till" on the provision path and
+    plain "Reload" on the adopt path, and a reload of a box still in setup mode reopens the wizard
+    (done 2026-09-26 in A50: both paths now say "Reload" for that code);
     `AdoptOutcome`'s `breakGlassSecret` is typed as required, but a replayed adopt answers without
     it (`apps/server/src/setup-api.ts`); the done screen treats any failed status read as "the box
     is trading", so a passing 503 could offer the reload early; the mode screen's own text says a
     live server files real invoices, which a live run on a development box does not;
     `setup-app.test.ts` has two test titles naming a `SyntaxError` from a non-JSON error body that
-    `apiError` turns into `server.internal`, and one saying a re-POST is "unrecoverable" where the
-    server answers 409; `events.test.ts` has no case for the restore and fiscal-test dispatchers;
-    the `*.css?inline` declaration in `vite-env.d.ts` is redundant (vite/client declares it);
-    `vitest.config.ts` excludes `.stryker-tmp` in a package with no Stryker config; `paintCanvas` in
-    `widgets/test-helpers.ts` has no accessibility suite that fails without it; `done-screen.ts`'s
-    styles use hex fallbacks and `rem`, and a CSS comment inside its style string is history; and
-    `connection-screen.ts`'s `connection-continue` event is not named `wt-*` and carries no
-    `detail`.
+    `apiError` turns into `server.internal`; `events.test.ts` has no case for the restore and
+    fiscal-test dispatchers; the `*.css?inline` declaration in `vite-env.d.ts` is redundant
+    (vite/client declares it); `vitest.config.ts` excludes `.stryker-tmp` in a package with no
+    Stryker config; `paintCanvas` in `widgets/test-helpers.ts` has no accessibility suite that
+    fails without it; `done-screen.ts`'s styles use hex fallbacks and `rem`, and a CSS comment
+    inside its style string is history; and `connection-screen.ts`'s `connection-continue` event is
+    not named `wt-*` and carries no `detail`.
   - "Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)", which #567
     deleted from `apps/setup/src/server-fields.ts`, is too wide: with
     `import "@waitron/fiscal-verifactu";` added there, that guard still passed, since its regime

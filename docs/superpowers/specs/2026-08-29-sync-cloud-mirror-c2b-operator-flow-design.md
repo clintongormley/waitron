@@ -179,6 +179,14 @@ other management routes the trading primary already mounts.
   ([boot.ts retention wiring](../../../apps/server/src/boot.ts)); the handler reuses it. Each call
   mints a **new** active `sync_peers` row for `subscriberId = nodeId` — rotation is supported (A §4),
   so re-running adopt is safe and leaves the prior token valid until revoked.
+
+  > **2026-09-26:** every adopt run generates a new standby identity and has the primary reserve
+  > it (a place in the primary's membership list, plus whatever its modules reserve, such as an
+  > installation number), so adopt has no idempotent re-run. Since A50 the setup route refuses a
+  > resend of the same request once an attempt has reached its first write
+  > (`setup.adopt_incomplete`); a retry after a refusal that came before the first write still runs
+  > adopt again.
+
 - **CA read.** The handler reads `caCertPath(stateDir)` (the single source of truth the discovery-api
   already serves, [discovery-api.ts](../../../apps/server/src/discovery-api.ts)).
 - **Relay coords.** From the primary's own `loadTunnelConfig`; if the primary has no tunnel configured

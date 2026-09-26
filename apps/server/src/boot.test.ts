@@ -3394,7 +3394,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             headers: { "content-type": "application/json" },
             body: adoptBody(password),
           });
-          expect(response.status).toBe(400);
+          expect(response.status).toBe(409);
           expect(await response.json()).toEqual(expected);
         }
         expect(kills).toEqual([]);

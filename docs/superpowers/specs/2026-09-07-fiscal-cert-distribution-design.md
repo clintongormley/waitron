@@ -124,6 +124,14 @@ the reserved SIF's node (`adopt.ts:115,189-198`) and burns a primary-side reserv
 idempotency is unproven (`adopt.test.ts` exercises no second adopt) and fixing it is out of scope
 (§8).
 
+> **2026-09-26:** every adopt run generates a new standby identity and has the primary reserve
+> it (a place in the primary's membership list, plus whatever its modules reserve, such as an
+> installation number), so adopt has no idempotent re-run. Since A50 the setup route refuses a
+> resend of the same request once an attempt has reached its first write
+> (`setup.adopt_incomplete`); a retry after a refusal that came before the first write still runs
+> adopt again. A43's review measured a second adopt after a failure past the first write: it
+> generated a second standby identity, with a different node id.
+
 ### 2.3 The shared envelope primitive lives in `apps/server`, not `credentials`
 
 `encryptBundle`/`decryptBundle` in `apps/server/src/recovery-bundle.ts` are extracted to

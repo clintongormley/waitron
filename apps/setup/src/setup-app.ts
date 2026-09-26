@@ -124,6 +124,10 @@ const ADOPT_ERROR_MESSAGES: Record<string, string> = {
 
 const OPERATION_CONFLICT_MESSAGE =
   "This server has saved setup work for a different request. Resume the original setup or contact support.";
+const ALREADY_STAMPED_MESSAGE =
+  "A previous setup attempt left this server partly set up, for a different environment. Contact support to reset this server, then start setup again.";
+const ADOPT_INCOMPLETE_MESSAGE =
+  "A previous attempt to join this server to a restaurant stopped partway and left it partly set up. It cannot be finished from here. Contact support to reset this server, then start setup again.";
 const KIT_DAMAGED =
   "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Upload the kit file as it was saved, or paste the whole kit.";
 const KEY_DOES_NOT_OPEN =
@@ -531,10 +535,14 @@ export class SetupApp extends LitElement {
         this.provisionReloadLabel = "Reload";
         return;
       case "setup.already_provisioned":
-      case "deployment.already_stamped":
         this.provisionMessage = "This server is already set up.";
         this.provisionCanRetry = false;
         this.provisionReloadLabel = "Reload to open the till";
+        return;
+      case "deployment.already_stamped":
+        this.provisionMessage = ALREADY_STAMPED_MESSAGE;
+        this.provisionCanRetry = false;
+        this.provisionReloadLabel = "Reload";
         return;
       case "setup.not_ready":
         this.provisionMessage = "The server isn't ready yet. Wait a moment, then try again.";
@@ -793,8 +801,17 @@ export class SetupApp extends LitElement {
         this.provisionReloadLabel = "Reload";
         return;
       case "setup.already_provisioned":
-      case "deployment.already_stamped":
         this.provisionMessage = "This server is already set up.";
+        this.provisionCanRetry = false;
+        this.provisionReloadLabel = "Reload";
+        return;
+      case "deployment.already_stamped":
+        this.provisionMessage = ALREADY_STAMPED_MESSAGE;
+        this.provisionCanRetry = false;
+        this.provisionReloadLabel = "Reload";
+        return;
+      case "setup.adopt_incomplete":
+        this.provisionMessage = ADOPT_INCOMPLETE_MESSAGE;
         this.provisionCanRetry = false;
         this.provisionReloadLabel = "Reload";
         return;

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -2423,6 +2423,56 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
         rmSync(dir, { recursive: true, force: true });
       }
     });
+
+    it("refuses the same request resent after adopt failed past its first write, leaving the record untouched", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-half-resend-"));
+      try {
+        const operations = createSetupOperationStore(dir);
+        let calls = 0;
+        const adopt = vi.fn(async (_req: AdoptRequest, hooks: AdoptHooks) => {
+          calls += 1;
+          await hooks.beforeFirstWrite();
+          if (calls === 1) throw new AppError("mirror.bundle_fetch_failed", {});
+          return { breakGlassSecret: BREAK_GLASS_SECRET };
+        });
+        const app = new Hono();
+        const { deps, requestRestart } = makeAdoptDeps({ adopt, operations });
+        mountSetup(app, deps, noopLog);
+
+        expect((await postAdopt(app, adoptBody())).status).toBe(502);
+        const before = readFileSync(recordPath(dir), "utf8");
+
+        const resent = await postAdopt(app, adoptBody());
+        expect(resent.status).toBe(409);
+        expect(await resent.json()).toEqual({
+          error: { code: "setup.adopt_incomplete", params: {} },
+        });
+        expect(adopt).toHaveBeenCalledOnce();
+        expect(readFileSync(recordPath(dir), "utf8")).toBe(before);
+        await tick();
+        expect(requestRestart).not.toHaveBeenCalled();
+
+        const again = await postAdopt(app, adoptBody());
+        expect((await again.json()).error.code).toBe("setup.adopt_incomplete");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  it("answers adopt's refusal on a database stamped for another environment with 409", async () => {
+    const adopt = vi.fn(async () => {
+      throw new AppError("deployment.already_stamped", {
+        stamped: "production",
+        requested: "preproduction",
+      });
+    });
+    const app = new Hono();
+    mountSetup(app, makeAdoptDeps({ adopt }).deps, noopLog);
+
+    const response = await postAdopt(app, adoptBody());
+    expect(response.status).toBe(409);
+    expect((await response.json()).error.code).toBe("deployment.already_stamped");
   });
 });
 

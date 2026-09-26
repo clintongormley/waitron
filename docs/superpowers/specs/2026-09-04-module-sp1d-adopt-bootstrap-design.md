@@ -141,6 +141,13 @@ re-adopt overwrites in place, matching the rest of `adoptFromPrimary`'s idempote
 `adopt.ts:80-83`). An empty file and an absent file are semantically identical to `readModuleConfig`
 (both → all-enabled), so this changes no enabled set.
 
+> **2026-09-26:** every adopt run generates a new standby identity and has the primary reserve
+> it (a place in the primary's membership list, plus whatever its modules reserve, such as an
+> installation number), so adopt has no idempotent re-run. Since A50 the setup route refuses a
+> resend of the same request once an attempt has reached its first write
+> (`setup.adopt_incomplete`); a retry after a refusal that came before the first write still runs
+> adopt again.
+
 ## 4. The two new functions
 
 **`serializeModuleConfig` (pure, `@waitron/module`).** The inverse of `parseModuleConfig`:
@@ -264,6 +271,14 @@ rediscover the absence of a channel.
 - **Adopt idempotency preserved.** The new step is a validated overwrite of `modules.json`; a re-run
   overwrites in place, consistent with `adoptFromPrimary`'s documented idempotent re-run
   (`adopt.ts:80-83`).
+
+  > **2026-09-26:** every adopt run generates a new standby identity and has the primary reserve
+  > it (a place in the primary's membership list, plus whatever its modules reserve, such as an
+  > installation number), so adopt has no idempotent re-run. Since A50 the setup route refuses a
+  > resend of the same request once an attempt has reached its first write
+  > (`setup.adopt_incomplete`); a retry after a refusal that came before the first write still runs
+  > adopt again.
+
 - **English-only preserved, not exempted-around.** `serializeModuleConfig` is generic (no module name,
   no vocabulary); `@waitron/module` stays a scanned English package. The Spanish names stay in the
   exempt fiscal package + composition root.
