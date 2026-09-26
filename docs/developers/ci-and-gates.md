@@ -699,8 +699,26 @@ binaries, and a skip reads as a pass"). That is about 13.5 MB of Litestream and 
 for linux/amd64 (the release APIs' `size` fields, read 2026-09-25), from GitHub's release downloads,
 each checked against a pinned SHA-256. Run locally with `CI=true` on the owner's Mac (2026-09-26),
 that job's command took 72 seconds: the loop test 13 and the pause test 70, the two files running
-side by side (`apps/server/vitest.config.ts` sets `maxWorkers: 4`). Its time on CI has not been
-measured yet. Guard: `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT.
+side by side (`apps/server/vitest.config.ts` sets `maxWorkers: 4`). Guard:
+`scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT.
+
+Measured on CI, one run each side (2026-09-26). After: run 36231025265, PR #682 at `81b07b698`.
+Before: run 36229776393, `main` at `1821da0e0`, the last run before the change to execute the
+server jobs. Times are each job's start to finish as GitHub reports them.
+
+- `test-server-stream` took 103 s: 3 s for the two downloads, 78 s for the test step (Vitest's
+  own `Duration` 77.15 s; the loop test 13.2 s, the pause test 72.1 s). The pause test filled the
+  side file with 283 sales, from 5,586,752 to 17,353,472 bytes, in 16.9 s. On the shard before
+  the change the same fill took 745 sales and 78.1 s, and A37's run for `464d9eca7` 895 sales and
+  82 s.
+- The three `test-server` shards took 123, 124 and 170 s, against 106, 130 and 242 s before; the
+  pause test had been in the third. From the shards' start to the end of `test-server-merge` the
+  server's jobs took 198 s, against 278 s before.
+- Their `Test Files` counts were 96, 96 and 95, and with the stream job's 2 that makes 289, the
+  total `test-server-merge` reported. Before, the shards held 97, 96 and 96.
+- `test-server-merge` reported 289 files and 4,449 tests passed, none skipped, with both stream
+  files among them, and the same coverage totals as before: 98.69% statements, 96.71% branches,
+  98.7% functions, 99.02% lines.
 
 They are not cached. On 2026-09-25 `gh api repos/:owner/:repo/actions/cache/usage` reported
 11,174,362,480 bytes across 1,066 entries, and the plan's grouping of the entries on 2026-09-23 put
@@ -716,8 +734,10 @@ same for `scripts/setup-s3-test-server.mjs`, each printed `code=true`, `scope=pa
 `packages=@waitron/server`; and `pnpm --filter "...@waitron/server" ls --depth -1 --json | node
 scripts/changed-scope.mjs`, the `changes` job's gate step for that scope, printed `server=true` with
 every other gate false. `test-server`'s and `test-server-stream`'s `if:` ask for `code` and
-`server` both true. On `main` the `changes` job forces `scope=global`, whose gate step prints every gate true. That a real pull
-request then runs the shards and `test-server-stream` has not been checked on CI. The cost, read from the jobs' `if:` lines
+`server` both true. On `main` the `changes` job forces `scope=global`, whose gate step prints every gate true. On a real pull
+request, PR #682: its run for `1081bbb7c`, which changed `ci.yml`, docs and root scripts but neither
+installer, skipped the shards and `test-server-stream`; its next run, 36231025265, for a commit
+that added one line to `scripts/setup-litestream.mjs`, ran both and `test-server-merge`. The cost, read from the jobs' `if:` lines
 in `.github/workflows/ci.yml`: on a pull request an installer change runs the three server shards,
 `test-server-stream`, `test-server-merge`, and `typecheck` and `bundle-smoke`, which ask for
 `code` alone; on its merge to `main` those two run again, the forced global scope runs every test job and `mutation-shared`, and
