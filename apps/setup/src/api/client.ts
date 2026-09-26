@@ -11,6 +11,20 @@ export interface SetupStatus {
   developmentMode?: boolean;
   needs: string[];
   operationBlocked?: boolean;
+  operation?: {
+    id: string;
+    kind: "provision" | "adopt" | "restore" | "import";
+    phase:
+      | "started"
+      | "venue_committed"
+      | "content_seeded"
+      | "identity_established"
+      | "membership_seeded"
+      | "secret_sealed"
+      | "publishing"
+      | "complete";
+    updatedAt: string;
+  };
 }
 
 /** Sent in plain text: the server hashes `pin` and `password` (`apps/server/src/setup-api.ts`). */

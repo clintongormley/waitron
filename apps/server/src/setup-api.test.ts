@@ -2458,6 +2458,41 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
         rmSync(dir, { recursive: true, force: true });
       }
     });
+
+    // The wizard reads the status to show the partly-set-up message for this conflict: a resend
+    // carrying a fresh one-time code hashes differently, so it is never answered adopt_incomplete.
+    it("answers a resend with a fresh one-time code as a conflict, and the status then reports the half-finished adopt", async () => {
+      const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-half-totp-"));
+      try {
+        const operations = createSetupOperationStore(dir);
+        const adopt = vi.fn(async (_req: AdoptRequest, hooks: AdoptHooks) => {
+          await hooks.beforeFirstWrite();
+          throw new AppError("mirror.bundle_fetch_failed", {});
+        });
+        const app = new Hono();
+        const { deps } = makeAdoptDeps({ adopt, operations });
+        mountSetup(app, deps, noopLog);
+
+        const first = { ...adoptBody(), credential: { ...ADOPT_CREDENTIAL, totp: "123456" } };
+        expect((await postAdopt(app, first)).status).toBe(502);
+
+        const resent = await postAdopt(app, {
+          ...adoptBody(),
+          credential: { ...ADOPT_CREDENTIAL, totp: "654321" },
+        });
+        expect(resent.status).toBe(409);
+        expect(await resent.json()).toEqual(conflict);
+        expect(adopt).toHaveBeenCalledOnce();
+
+        const status = (await (await app.request("/setup-api/status")).json()) as {
+          operation?: { kind: string; phase: string };
+        };
+        expect(status.operation?.kind).toBe("adopt");
+        expect(status.operation?.phase).toBe("venue_committed");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
   });
 
   it("answers adopt's refusal on a database stamped for another environment with 409", async () => {

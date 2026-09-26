@@ -1236,15 +1236,15 @@ describe("setup-app", () => {
   });
 
   it.each([
-    ["mirror.bundle_fetch_failed", "reach the primary"],
-    ["setup.request_invalid", "rejected the details"],
-    ["setup.not_ready", "isn't ready"],
-    ["server.internal", "Couldn't connect"],
-    ["some.unexpected_code", "Couldn't connect"],
+    ["mirror.bundle_fetch_failed", 502, "reach the primary"],
+    ["setup.request_invalid", 400, "rejected the details"],
+    ["setup.not_ready", 503, "isn't ready"],
+    ["server.internal", 500, "Couldn't connect"],
+    ["some.unexpected_code", 400, "Couldn't connect"],
   ])(
-    "routes the adopt failure %s back to the connect form with a banner",
-    async (code, fragment) => {
-      const adopt = vi.fn().mockRejectedValue({ code, params: {} });
+    "routes the adopt failure %s (HTTP %i) back to the connect form with a banner",
+    async (code, status, fragment) => {
+      const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
       const el = await mountSetupApp(stubApi({ adopt }));
       adoptRequest(el);
       await flush(el);
@@ -1329,7 +1329,9 @@ describe("setup-app", () => {
   );
 
   it("maps setup.operation_conflict on adopt to the terminal saved-setup message with a reload (no retry)", async () => {
-    const adopt = vi.fn().mockRejectedValue({ code: "setup.operation_conflict", params: {} });
+    const adopt = vi
+      .fn()
+      .mockRejectedValue({ code: "setup.operation_conflict", params: {}, status: 409 });
     const el = await mountSetupApp(stubApi({ adopt }));
     adoptRequest(el);
     await flush(el);
@@ -1345,7 +1347,7 @@ describe("setup-app", () => {
   it("re-adopts when the connect form re-emits adopt-requested after a routed-back failure", async () => {
     const adopt = vi
       .fn()
-      .mockRejectedValueOnce({ code: "mirror.bundle_fetch_failed", params: {} })
+      .mockRejectedValueOnce({ code: "mirror.bundle_fetch_failed", params: {}, status: 502 })
       .mockResolvedValue({ adopted: true, restarting: true });
     const el = await mountSetupApp(stubApi({ adopt }));
     adoptRequest(el);
@@ -1355,6 +1357,128 @@ describe("setup-app", () => {
     await flush(el);
     expect(adopt).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+  });
+
+  describe("an adopt refusal read against the saved setup operation", () => {
+    type SavedOperation = NonNullable<SetupStatus["operation"]>;
+    const savedOperation = (kind: SavedOperation["kind"], phase: SavedOperation["phase"]) => ({
+      id: "op-1",
+      kind,
+      phase,
+      updatedAt: "2026-09-26T10:00:00.000Z",
+    });
+    const statusWith = (operation?: SavedOperation) =>
+      vi.fn().mockResolvedValue({
+        provisioned: false,
+        environment: "preproduction",
+        needs: ["venue"],
+        ...(operation === undefined ? {} : { operation }),
+      } satisfies SetupStatus);
+    // 409: setup-api.ts's ADOPT_STATUS; 500: packages/server-kit/src/error-boundary.ts.
+    const answered = [
+      ["setup.operation_conflict", 409],
+      ["server.internal", 500],
+    ] as const;
+
+    async function expectAdoptIncomplete(el: SetupApp): Promise<void> {
+      expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).toBeNull();
+      const text = await screenText(el, "provisioning", "[data-test=error]");
+      expect(text).toContain("stopped partway");
+      expect(text).toContain("Contact support");
+      expect(text).not.toContain("saved setup");
+      const host = await screenHost(el, "provisioning");
+      expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+      expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent?.trim()).toBe(
+        "Reload",
+      );
+    }
+
+    async function expectConflictMessageOrConnectForm(el: SetupApp, code: string): Promise<void> {
+      if (code === "setup.operation_conflict") {
+        expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("saved setup");
+      } else {
+        expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
+        expect(await screenText(el, "connect", "[data-test=server-error]")).toContain(
+          "Couldn't connect",
+        );
+      }
+    }
+
+    it.each([...answered, ["mirror.bundle_fetch_failed", 502] as const])(
+      "shows the partly-set-up message for %s (HTTP %i) when the status reports an adopt stopped past its start",
+      async (code, status) => {
+        const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
+        const getStatus = statusWith(savedOperation("adopt", "venue_committed"));
+        const el = await mountSetupApp(stubApi({ adopt, getStatus }));
+        adoptRequest(el);
+        await flush(el);
+        await expectAdoptIncomplete(el);
+      },
+    );
+
+    it.each([
+      ["no saved operation", undefined],
+      ["an adopt still at its start", savedOperation("adopt", "started")],
+      ["a completed adopt", savedOperation("adopt", "complete")],
+      ["a provision past its start", savedOperation("provision", "venue_committed")],
+      ["a restore past its start", savedOperation("restore", "venue_committed")],
+    ])(
+      "keeps the saved-setup message for a conflict and the connect form otherwise when the status reports %s",
+      async (_label, operation) => {
+        for (const [code, status] of answered) {
+          const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
+          const el = await mountSetupApp(stubApi({ adopt, getStatus: statusWith(operation) }));
+          adoptRequest(el);
+          await flush(el);
+          await expectConflictMessageOrConnectForm(el, code);
+        }
+      },
+    );
+
+    it.each(answered)(
+      "keeps the saved-setup message for a conflict and the connect form otherwise for %s when the status read itself fails",
+      async (code, status) => {
+        const getStatus = statusWith();
+        const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
+        const el = await mountSetupApp(stubApi({ adopt, getStatus }));
+        getStatus.mockRejectedValue(new TypeError("Failed to fetch"));
+        adoptRequest(el);
+        await flush(el);
+        await expectConflictMessageOrConnectForm(el, code);
+      },
+    );
+
+    // A dropped connection says nothing about the adopt, which may still be running on the server
+    // at a phase past "started".
+    it("sends a rejection with no HTTP status back to the connect form without reading the status", async () => {
+      const getStatus = statusWith(savedOperation("adopt", "venue_committed"));
+      const adopt = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const el = await mountSetupApp(stubApi({ adopt, getStatus }));
+      const bootReads = getStatus.mock.calls.length;
+      adoptRequest(el);
+      await flush(el);
+      expect(getStatus).toHaveBeenCalledTimes(bootReads);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
+      expect(await screenText(el, "connect", "[data-test=server-error]")).toContain(
+        "Couldn't connect",
+      );
+    });
+
+    it.each([
+      ["setup.adopt_incomplete", 409, "stopped partway"],
+      ["setup.already_provisioning", 409, "already in progress"],
+      ["setup.already_provisioned", 400, "already set up"],
+      ["deployment.already_stamped", 409, "for a different environment"],
+    ])("maps %s (HTTP %i) without reading the status", async (code, status, fragment) => {
+      const getStatus = statusWith(savedOperation("adopt", "venue_committed"));
+      const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
+      const el = await mountSetupApp(stubApi({ adopt, getStatus }));
+      const bootReads = getStatus.mock.calls.length;
+      adoptRequest(el);
+      await flush(el);
+      expect(getStatus).toHaveBeenCalledTimes(bootReads);
+      expect(await screenText(el, "provisioning", "[data-test=error]")).toContain(fragment);
+    });
   });
 });
 
@@ -2465,6 +2589,42 @@ describe("an answer that arrives after the element is detached", () => {
     await flush(el);
     expect(readState(el, Object.keys(unchanged))).toEqual(unchanged);
     if (method === "stageConfiguration") expect(readDraft(el).configurationImport).toBeUndefined();
+  });
+
+  it("writes nothing for a saved-setup read that answers an adopt refusal", async () => {
+    const getStatus = vi.fn().mockResolvedValue({
+      provisioned: false,
+      environment: "preproduction",
+      needs: ["venue"],
+    } satisfies SetupStatus);
+    const adopt = vi
+      .fn()
+      .mockRejectedValue({ code: "setup.operation_conflict", params: {}, status: 409 });
+    const el = await mountSetupApp(stubApi({ adopt, getStatus }));
+    const bootReads = getStatus.mock.calls.length;
+    const pending = deferred<SetupStatus>();
+    getStatus.mockReturnValue(pending.promise);
+    adoptRequest(el);
+    await flush(el);
+    expect(getStatus).toHaveBeenCalledTimes(bootReads + 1);
+    el.remove();
+    pending.resolve({
+      provisioned: false,
+      environment: "preproduction",
+      needs: ["venue"],
+      operation: {
+        id: "op-1",
+        kind: "adopt",
+        phase: "venue_committed",
+        updatedAt: "2026-09-26T10:00:00.000Z",
+      },
+    });
+    await flush(el);
+    expect(readState(el, ["screen", "provisionMessage", "connectError"])).toEqual({
+      screen: "provisioning",
+      provisionMessage: undefined,
+      connectError: undefined,
+    });
   });
 });
 

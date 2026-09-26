@@ -3258,7 +3258,9 @@ image constraints under *Detail → Box image*.
     resend answered 200 (`expected 200 to be 409`), adopt was called twice, and the record moved
     from "venue_committed" to "complete". Still not measured: what the first identity leaves
     behind on the primary and on this node; the wizard has no way to reset such a box.
-    **Still open after A50 (#685), for the owner (not done):** (a) both new wizard messages tell the
+    **Found after A50 (#685); (a) still open, (b) done by A55 below:** the owner answered both on
+    2026-09-26 — (a) "wizard now", a reset driven from the setup wizard, queued as A56; (b) "queue
+    it", queued as A55. (a) both new wizard messages tell the
     operator to contact support, and nothing tells support what to do for this case. The reset is
     `sudo bash waitron.sh reset` (`deploy/README.md`, "Resetting a box"), run by someone with a
     terminal on the box: it empties the box's state volume except its certificate folder, which
@@ -3279,6 +3281,29 @@ image constraints under *Detail → Box image*.
     reaches the wizard as a generic error that sends the operator back to the connect form with "try
     again", which is now always refused. Choosing the fix (for example, the wizard reading the saved
     operation from `/setup-api/status` after a failed adopt) is the owner's.
+    **Done (2026-09-26, lane A's A55, #691), for (b) and the first-failure sentence; (a) stays open:** a
+    new case in `apps/server/src/setup-api.test.ts`, whose fake adopt fails once past the first
+    write, resends the adopt with a different one-time code: on unchanged server code it answered
+    409 `setup.operation_conflict`, adopt was called once, and `GET /setup-api/status` then reported
+    an operation of kind "adopt" at phase "venue_committed". With the
+    resend's code made equal to the first, the same case failed on `setup.adopt_incomplete`. The
+    wizard (`#mapAdoptError`, `apps/setup/src/setup-app.ts`) now reads the status after the server
+    answered a failed adopt (the error carries an HTTP status) with `setup.operation_conflict` or
+    any code it has no terminal message for, and shows the stopped-partway message with a plain
+    "Reload" and no retry when the status reports an adopt past "started" and short of "complete";
+    with no saved operation, an adopt at "started" or "complete", a provision or restore record, or
+    a failed status read, it maps the failure as before. Four codes never read the status:
+    `setup.already_provisioning`, because an adopt still running on the server can be past
+    "started" too; and `setup.already_provisioned`, `deployment.already_stamped` and
+    `setup.adopt_incomplete`, which already show a final message. Nor does a failure with no HTTP
+    status, such as a dropped connection, because the adopt may still be running on the server: a wizard
+    case rejecting with a bare `TypeError("Failed to fetch")` while the status reports an adopt at
+    "venue_committed" failed `expected "vi.fn()" to be called 1 times, but got 2 times` before
+    that condition was added. Before the change, the new wizard cases failed
+    `expected 'This server has saved setup work for …' to contain 'stopped partway'` (conflict) and
+    `expected <setup-connect-screen …> to be null` (`server.internal`, and
+    `mirror.bundle_fetch_failed` at HTTP 502, run alone against the wizard of `17dd4b147`). Not run:
+    the wizard against a real server.
     Also open from A42's review, read and not run: if `operation.complete()` throws after `execute`
     has scheduled the restart, the lock is now released while that restart is pending (before A42
     that throw was outside the release and the lock stayed set).
