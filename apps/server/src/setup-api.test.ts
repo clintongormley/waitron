@@ -1051,7 +1051,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     await tick();
   });
 
-  it("resets the latch after a FAILED provision so a corrected retry is accepted", async () => {
+  it("resets the latch after a FAILED provision so a retry is accepted (no operation store)", async () => {
     const app = new Hono();
     const provision = vi
       .fn()
@@ -2066,7 +2066,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     await tick();
   });
 
-  it("resets the latch after a FAILED adopt so a corrected retry is accepted", async () => {
+  it("resets the latch after a FAILED adopt so a retry is accepted (no operation store)", async () => {
     const app = new Hono();
     const adopt = vi
       .fn()
@@ -2804,6 +2804,7 @@ describe("the setup latch after a request refused before its work starts", () =>
     try {
       const body = demoBody();
       recordOperation(dir, "provision", sha256(JSON.stringify(body)));
+      expect((await createSetupOperationStore(dir).read())?.kind).toBe("provision");
       const app = new Hono();
       const deps = makeDeps({ operations: createSetupOperationStore(dir) });
       mountSetup(app, deps.deps, noopLog);
@@ -2847,6 +2848,7 @@ describe("the setup latch after a request refused before its work starts", () =>
 
     const failed = await app.request(unreadableBody("/setup-api/provision"));
     expect(failed.status).toBe(500);
+    expect(await failed.json()).toEqual({ error: { code: "server.internal" } });
 
     const next = await postProvision(app, demoBody());
     expect(await next.json()).not.toEqual(busy);
@@ -2857,6 +2859,7 @@ describe("the setup latch after a request refused before its work starts", () =>
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-latch-adopt-"));
     try {
       recordOperation(dir, "adopt", sha256(JSON.stringify(adoptBody())));
+      expect((await createSetupOperationStore(dir).read())?.kind).toBe("adopt");
       const app = new Hono();
       const deps = makeAdoptDeps({ operations: createSetupOperationStore(dir) });
       mountSetup(app, deps.deps, noopLog);
@@ -2881,6 +2884,7 @@ describe("the setup latch after a request refused before its work starts", () =>
 
     const failed = await app.request(unreadableBody("/setup-api/adopt"));
     expect(failed.status).toBe(500);
+    expect(await failed.json()).toEqual({ error: { code: "server.internal" } });
 
     const next = await postAdopt(app, adoptBody());
     expect(await next.json()).not.toEqual(busy);
@@ -2911,6 +2915,7 @@ describe("the setup latch after a request refused before its work starts", () =>
           noopLog,
         );
         recordOperation(dir, "provision", "another-request");
+        expect((await createSetupOperationStore(dir).read())?.kind).toBe("provision");
 
         const refused = await post(app);
         expect(refused.status).toBe(409);
