@@ -731,8 +731,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       const { breakGlassSecret } = await adopt(
         { primaryUrl, credential },
         {
-          // For adopt this phase means "adopt has written to this node": the store keeps a record
-          // past "started", so a different request cannot run over a half-adopted node.
+          // For adopt this phase means "adopt is past its own checks and may have written to this
+          // node": the store keeps a record past "started", so a different request cannot run over
+          // a half-adopted node.
           beforeFirstWrite: async () => {
             await operation?.advance("venue_committed");
           },

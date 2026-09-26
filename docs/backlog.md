@@ -3093,27 +3093,58 @@ image constraints under *Detail → Box image*.
     thrown inside the recorded operation and turned into the answer by the route's outer error
     handling, as provision's are: after each of the three refusals the file is gone and the
     corrected adopt answers 200; after the 502, provision answers 200 and the three restores 202.
-    The record is kept once adopt has written to this node: `adoptFromPrimary`
+    The record is kept once adopt is past its own checks: `adoptFromPrimary`
     (`apps/server/src/adopt.ts`) awaits a `beforeFirstWrite` step, supplied by the route,
-    immediately before `stampDeployment`, and the route moves the record to phase
-    "venue_committed" there. A fake adopt that took that step and then failed left the record at
-    "venue_committed", and a different adopt body was refused `409 setup.operation_conflict`. In
-    `apps/server/src/adopt.test.ts` the step runs once while the deployment is still unstamped, a
-    throw from it leaves the deployment unstamped, and an environment mismatch and a foreign tenant
-    never reach it (the other refusals in `adoptFromPrimary` sit above it, read, not run). So a
-    failed adopt's record is deleted at "started" and kept at "venue_committed" and "complete". The
-    setup wizard's `#mapAdoptError` (`apps/setup/src/setup-app.ts`) had no
+    immediately before `stampDeployment`, its first writing step, and the route moves the
+    record to phase "venue_committed" there. A fake adopt that took that step and then failed left
+    the record at "venue_committed", and a different adopt body was refused
+    `409 setup.operation_conflict`. In `apps/server/src/adopt.test.ts` the step runs once while the
+    deployment is still unstamped, a throw from it leaves the deployment unstamped, and an
+    environment mismatch, a foreign tenant, an unknown module (`module.config_unknown`) and a
+    same-tenant venue (`provisioning.second_venue`) never reach it. `stampDeployment`'s own
+    `deployment.already_stamped` refusal came after the step, and a running server could reach it:
+    the provision route stamps the environment its request picks (`parseProvisionPayload` in
+    `apps/server/src/setup-api.ts`: live outside dev mode is production, anything else
+    preproduction), and a provision refused inside `applyVenue` keeps that stamp while its own
+    record is deleted. Adopt now reads the stamp before the step and refuses there with
+    `deployment.already_stamped` when it names another environment than the bundle's. In
+    `adopt.test.ts`, on a database stamped for the other environment, the step was called once
+    without the check and is not called with it; a database already stamped for the same
+    environment still adopts. A new case in `apps/server/src/boot.test.ts` runs the real server in
+    setup mode against a local fake primary, stamps its database production after start, and sends
+    two adopts with different passwords: without the check the first answered 400
+    `deployment.already_stamped` and the second `409 setup.operation_conflict`; with it both answer
+    400 `deployment.already_stamped` and nothing restarts. Open for the owner: adopt answers that
+    code with 400 (`ADOPT_STATUS` in `setup-api.ts` has no entry for it), where provision answers
+    409; the wizard shows "This server is already set up." for that code
+    (`apps/setup/src/setup-app.ts`, read, not run), which does not describe a box a failed
+    provision only stamped. So a failed adopt's record is deleted at "started" and kept once it
+    has moved past it. The setup wizard's `#mapAdoptError` (`apps/setup/src/setup-app.ts`) had no
     `setup.operation_conflict` case, so that 409 sent the operator back to the connect form with
     "Couldn't connect to the primary…"; it now shows provision's saved-setup message with Reload and
     no retry (`apps/setup/src/setup-app.test.ts`, with a stubbed server). Each fix was deleted and
     its new tests failed: restoring adopt's inner error handling (the seven refused-adopt route
     cases), dropping the route's move to "venue_committed" (the kept-record case), dropping the
     step in `adoptFromPrimary` or moving it after the stamp (two cases), moving it above the
-    refusals (the never-reached case), and dropping the wizard case. One existing case changed: the
-    retried-adoption case (from #534) asserted the record stayed at "started" after a 502, which
-    is the behaviour removed here; it now asserts no record, and still asserts the same request
-    resent answers 200 and ends at "complete". Not run: resending the same adopt after a failure
-    past the first write.
+    refusals (the never-reached case), moving it between the foreign-tenant and second-venue
+    checks (the unknown-module and same-tenant-venue case), and dropping the wizard case. The step
+    is now a required argument of `adoptFromPrimary`, so deleting its forwarding in
+    `apps/server/src/boot.ts` (from the call and the wrapper's parameter) fails
+    `pnpm --filter @waitron/server typecheck` with `TS2554: Expected 3 arguments, but got 2`;
+    before, that deletion typechecked clean and `adopt.test.ts` and `setup-api.test.ts` passed. One existing case
+    changed: the retried-adoption case (from #534) asserted the record stayed at "started" after a
+    502, which is the behaviour removed here; it now asserts no record, and still asserts the same
+    request resent answers 200 and ends at "complete".
+    Open, measured in A43's review: after a failure past the first write (module config
+    persistence made to fail), resending the same adopt body answered 200 and ended at
+    "complete", but the retry ran adopt from the start and generated a second standby identity
+    (two different node ids), because the adopt route does not read the record's phase the way
+    provision does (`setupPhaseReached` in the provision route). This predates the branch: before
+    it, every failed adopt kept its record at "started" and a resend ran adopt from the start too
+    (the old `execute` had no phase check — visible in
+    `git diff 4cb93dd85 -- apps/server/src/setup-api.ts`). Not measured: what the first identity's
+    reservation on the primary and its rows on this node leave behind. Whether adopt should
+    resume, refuse, or discard the first identity is the owner's decision.
     Also open from A42's review, read and not run: if `operation.complete()` throws after `execute`
     has scheduled the restart, the lock is now released while that restart is pending (before A42
     that throw was outside the release and the lock stayed set).

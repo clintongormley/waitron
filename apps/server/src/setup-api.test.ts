@@ -2315,20 +2315,24 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
             return { breakGlassSecret: BREAK_GLASS_SECRET };
           });
           const app = new Hono();
-          mountSetup(
-            app,
-            makeAdoptDeps({ adopt, operations: createSetupOperationStore(dir) }).deps,
-            noopLog,
-          );
+          const { deps, requestRestart } = makeAdoptDeps({
+            adopt,
+            operations: createSetupOperationStore(dir),
+          });
+          mountSetup(app, deps, noopLog);
 
           const refused = await postAdopt(app, refusedBody);
           expect(refused.status).toBe(status);
           expect((await refused.json()).error.code).toBe(code);
           expect(existsSync(recordPath(dir))).toBe(false);
+          await tick();
+          expect(requestRestart).not.toHaveBeenCalled();
 
           const corrected = await postAdopt(app, adoptBody());
           expect(await corrected.json()).not.toEqual(conflict);
           expect(corrected.status).toBe(200);
+          await tick();
+          expect(requestRestart).toHaveBeenCalledTimes(1);
         } finally {
           rmSync(dir, { recursive: true, force: true });
         }
@@ -2359,7 +2363,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
         const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-refused-other-"));
         try {
           const app = new Hono();
-          const { deps } = makeDeps({
+          const { deps, requestRestart } = makeDeps({
             operations: createSetupOperationStore(dir),
             adopt: vi.fn(async () => {
               throw new AppError("mirror.bundle_fetch_failed", {});
@@ -2377,29 +2381,35 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
           mountSetup(app, deps, noopLog);
 
           expect((await postAdopt(app, adoptBody())).status).toBe(502);
+          await tick();
+          expect(requestRestart).not.toHaveBeenCalled();
 
           const next = await post(app);
           expect(await next.json()).not.toEqual(conflict);
           expect(next.status).toBe(status);
           await tick();
+          expect(requestRestart).toHaveBeenCalledTimes(1);
         } finally {
           rmSync(dir, { recursive: true, force: true });
         }
       },
     );
 
-    it("keeps the record once adopt has written to this node, so a different request is refused", async () => {
+    it("keeps the record once adopt is past its own checks, so a different request is refused", async () => {
       const dir = mkdtempSync(join(tmpdir(), "waitron-setup-adopt-half-"));
       try {
         const operations = createSetupOperationStore(dir);
-        const adopt = vi.fn(async (_req: AdoptRequest, hooks?: AdoptHooks) => {
-          await hooks?.beforeFirstWrite();
+        const adopt = vi.fn(async (_req: AdoptRequest, hooks: AdoptHooks) => {
+          await hooks.beforeFirstWrite();
           throw new AppError("mirror.bundle_fetch_failed", {});
         });
         const app = new Hono();
-        mountSetup(app, makeAdoptDeps({ adopt, operations }).deps, noopLog);
+        const { deps, requestRestart } = makeAdoptDeps({ adopt, operations });
+        mountSetup(app, deps, noopLog);
 
         expect((await postAdopt(app, adoptBody())).status).toBe(502);
+        await tick();
+        expect(requestRestart).not.toHaveBeenCalled();
         expect((await operations.read())?.phase).toBe("venue_committed");
 
         const other = await postAdopt(app, {

@@ -7,13 +7,19 @@ import {
   readDeploymentEnvironment,
   readDeploymentMode,
   readMirrorConfig,
+  stampDeployment,
   tenants,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isEnabled, type ModuleConfig } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
-import { adoptFromPrimary, type AdoptCredential, type PersistTradingArgs } from "./adopt.js";
+import {
+  adoptFromPrimary,
+  type AdoptCredential,
+  type AdoptHooks,
+  type PersistTradingArgs,
+} from "./adopt.js";
 import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle, ReservedIdentity } from "./mirror-bundle.js";
 import type { PendingAdoption } from "./finish-adoption.js";
@@ -65,6 +71,7 @@ const CREDENTIAL: AdoptCredential = {
 };
 const REQ = { primaryUrl: "https://primary.test/", credential: CREDENTIAL } as const;
 const ADVERTISED_ORIGIN = "https://standby.deli.test";
+const NO_HOOKS: AdoptHooks = { beforeFirstWrite: async () => {} };
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -127,6 +134,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
         },
       }),
       REQ,
+      NO_HOOKS,
     );
 
     expect(await readDeploymentEnvironment(suite.db)).toBe("preproduction");
@@ -164,6 +172,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
         },
       }),
       REQ,
+      NO_HOOKS,
     );
     const pending = JSON.parse(
       await readFile(join(stateDir, "pending-adoption.json"), "utf8"),
@@ -190,6 +199,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
         },
       }),
       REQ,
+      NO_HOOKS,
     );
     expect(capturedStandby!.contactUrl).toBe(ADVERTISED_ORIGIN);
   });
@@ -235,6 +245,66 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(beforeFirstWrite).not.toHaveBeenCalled();
   });
 
+  it("never calls beforeFirstWrite for an unknown module or a same-tenant venue", async () => {
+    const beforeFirstWrite = vi.fn(async () => {});
+    const unknown = await adoptFromPrimary(
+      deps({
+        fetchBundle: async () => makeBundle({ moduleOverrides: { "no-such": false } }),
+      }),
+      REQ,
+      { beforeFirstWrite },
+    ).catch((e: unknown) => e);
+    expect(isAppError(unknown) && unknown.code).toBe("module.config_unknown");
+    expect(beforeFirstWrite).not.toHaveBeenCalled();
+
+    await suite.db
+      .insert(tenants)
+      .values({ id: 1, country: "ES", taxId: "80000001K", legalName: "Incumbent SL" });
+    await suite.db.insert(locations).values({
+      name: "Existing venue",
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+    });
+    const secondVenue = await adoptFromPrimary(deps(), REQ, { beforeFirstWrite }).catch(
+      (e: unknown) => e,
+    );
+    expect(isAppError(secondVenue) && secondVenue.code).toBe("provisioning.second_venue");
+    expect(beforeFirstWrite).not.toHaveBeenCalled();
+  });
+
+  it("never calls beforeFirstWrite for a database stamped for the other environment", async () => {
+    await stampDeployment(suite.db, "production");
+    const beforeFirstWrite = vi.fn(async () => {});
+    const error = await adoptFromPrimary(deps(), REQ, { beforeFirstWrite }).catch(
+      (e: unknown) => e,
+    );
+    expect(isAppError(error) && error.code).toBe("deployment.already_stamped");
+    expect(isAppError(error) && error.params).toEqual({
+      stamped: "production",
+      requested: "preproduction",
+    });
+    expect(beforeFirstWrite).not.toHaveBeenCalled();
+    expect(await readDeploymentEnvironment(suite.db)).toBe("production");
+  });
+
+  it("adopts into a database already stamped for the same environment", async () => {
+    await stampDeployment(suite.db, "preproduction");
+    const beforeFirstWrite = vi.fn(async () => {});
+    const persistedTrading: PersistTradingArgs[] = [];
+    await adoptFromPrimary(
+      deps({
+        persistTrading: async (a) => {
+          persistedTrading.push(a);
+        },
+      }),
+      REQ,
+      { beforeFirstWrite },
+    );
+    expect(beforeFirstWrite).toHaveBeenCalledTimes(1);
+    expect(await readDeploymentEnvironment(suite.db)).toBe("preproduction");
+    expect(await readDeploymentMode(suite.db, persistedTrading[0]!.nodeId)).toBe("mirror");
+  });
+
   it("refuses a bundle for a DIFFERENT environment before any stamp", async () => {
     let tradingPersisted = false;
     const error = await adoptFromPrimary(
@@ -246,6 +316,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
         fetchBundle: async () => makeBundle({ environment: "production" }),
       }),
       REQ,
+      NO_HOOKS,
     ).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("mirror.environment_mismatch");
     expect(isAppError(error) && error.params).toMatchObject({
@@ -261,7 +332,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     await suite.db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "99999999R", legalName: "Incumbent SL" });
-    const error = await adoptFromPrimary(deps(), REQ).catch((e: unknown) => e);
+    const error = await adoptFromPrimary(deps(), REQ, NO_HOOKS).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("provisioning.foreign_tenant");
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
   });
@@ -275,7 +346,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
     });
-    const error = await adoptFromPrimary(deps(), REQ).catch((e: unknown) => e);
+    const error = await adoptFromPrimary(deps(), REQ, NO_HOOKS).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("provisioning.second_venue");
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
   });
@@ -286,6 +357,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
         fetchBundle: async () => makeBundle({ moduleOverrides: { "no-such": false } }),
       }),
       REQ,
+      NO_HOOKS,
     ).catch((e: unknown) => e);
     expect(isAppError(error) && error.code).toBe("module.config_unknown");
     expect(await readDeploymentEnvironment(suite.db)).toBeNull();
@@ -302,6 +374,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
         fetchBundle: async () => makeBundle({ moduleOverrides: { [toggleable]: false } }),
       }),
       REQ,
+      NO_HOOKS,
     );
     expect(persisted).toBeDefined();
     expect(isEnabled(persisted!, toggleable)).toBe(false);

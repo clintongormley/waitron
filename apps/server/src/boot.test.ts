@@ -10,6 +10,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { randomUUID, X509Certificate } from "node:crypto";
 import { createConnection, createServer } from "node:net";
+import { createServer as createHttpServer } from "node:http";
 import { connect as tlsConnect } from "node:tls";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -3279,6 +3280,59 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         expect(kills).toEqual([]);
       });
     } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("refuses an adopt into a database stamped for another environment without locking setup", async () => {
+    const venue = await freshVenue();
+    const bundle = {
+      designated: {
+        locationId: "22222222-2222-4222-8222-222222222222",
+        tillId: "33333333-3333-4333-8333-333333333333",
+        nodeId: "44444444-4444-4444-8444-444444444444",
+        seriesId: "55555555-5555-4555-8555-555555555555",
+      },
+      tenant: { country: "ES", taxId: "80000001K" },
+      primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
+      environment: "preproduction",
+      moduleOverrides: {},
+    };
+    const primary = createHttpServer((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(bundle));
+    });
+    await new Promise<void>((resolve) => primary.listen(0, "127.0.0.1", resolve));
+    const primaryUrl = `http://127.0.0.1:${(primary.address() as AddressInfo).port}`;
+    const adoptBody = (password: string) =>
+      JSON.stringify({
+        primaryUrl,
+        credential: { personId: "33333333-3333-4333-8333-333333333333", password },
+      });
+    try {
+      await withSetupBoot(venue.directory, {}, async ({ post, kills }) => {
+        // Stamped after boot, as a live provision refused inside `applyVenue` leaves it on a
+        // preproduction host; boot itself refuses a database stamped for another environment.
+        await stampDeployment(venue.store.venue, "production");
+        const expected = {
+          error: {
+            code: "deployment.already_stamped",
+            params: { stamped: "production", requested: "preproduction" },
+          },
+        };
+        for (const password of ["first", "second"]) {
+          const response = await post("/setup-api/adopt", {
+            headers: { "content-type": "application/json" },
+            body: adoptBody(password),
+          });
+          expect(response.status).toBe(400);
+          expect(await response.json()).toEqual(expected);
+        }
+        expect(kills).toEqual([]);
+      });
+    } finally {
+      await new Promise((resolve) => primary.close(resolve));
       await venue.store.close();
       await rm(venue.directory, { recursive: true, force: true });
     }

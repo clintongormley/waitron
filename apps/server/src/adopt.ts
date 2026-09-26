@@ -1,4 +1,10 @@
-import { setDeploymentMode, stampDeployment, writeMirrorConfig, type Database } from "@waitron/db";
+import {
+  readDeploymentEnvironment,
+  setDeploymentMode,
+  stampDeployment,
+  writeMirrorConfig,
+  type Database,
+} from "@waitron/db";
 import {
   assertNoForeignTenant,
   assertNoOperationalVenue,
@@ -32,7 +38,8 @@ export interface AdoptRequest {
 }
 
 export interface AdoptHooks {
-  /** Awaited after every refusal and immediately before the first write to this node. */
+  /** Awaited after `adoptFromPrimary`'s own checks, immediately before `stampDeployment`, its first
+   * writing step. */
   beforeFirstWrite: () => Promise<void>;
 }
 
@@ -66,14 +73,14 @@ export interface AdoptDeps {
  * Adopts an existing venue into this mirror's own database. It inserts no scaffold rows and registers
  * no SIF, so it forks no fiscal chain; the reserved standby identity stays dormant.
  *
- * Every refusal runs before any write to this node, and `stampDeployment` precedes
- * `setDeploymentMode` because a node's role may be written only to a stamped database. The caller
- * restarts the box.
+ * Every refusal `adoptFromPrimary` raises itself runs before any write to this node, and
+ * `stampDeployment` precedes `setDeploymentMode` because a node's role may be written only to a
+ * stamped database. The caller restarts the box.
  */
 export async function adoptFromPrimary(
   deps: AdoptDeps,
   req: AdoptRequest,
-  hooks?: AdoptHooks,
+  hooks: AdoptHooks,
 ): Promise<{ breakGlassSecret: string }> {
   const standby = generateStandbyIdentity();
   const bundle = await deps.fetchBundle(req.primaryUrl, req.credential, {
@@ -102,7 +109,17 @@ export async function adoptFromPrimary(
   );
   assertNoOperationalVenue(await readOperationalVenueIds(deps.ownerDb));
 
-  await hooks?.beforeFirstWrite();
+  // `stampDeployment` refuses this too, but only after `hooks.beforeFirstWrite`; every refusal
+  // belongs before it.
+  const stamped = await readDeploymentEnvironment(deps.ownerDb);
+  if (stamped !== null && stamped !== bundle.environment) {
+    throw new AppError("deployment.already_stamped", {
+      stamped,
+      requested: bundle.environment,
+    });
+  }
+
+  await hooks.beforeFirstWrite();
   await stampDeployment(deps.ownerDb, bundle.environment);
   await setDeploymentMode(deps.ownerDb, standby.nodeId, "mirror");
   await writeMirrorConfig(deps.ownerDb, standby.nodeId, {
