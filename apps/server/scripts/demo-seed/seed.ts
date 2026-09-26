@@ -3,7 +3,12 @@
 
 import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { listAvailableProducts } from "@waitron/catalogue";
+import {
+  buildMenuDocument,
+  listAvailableProducts,
+  menuDocumentHash,
+  publishMenu,
+} from "@waitron/catalogue";
 import { seedCatalogues } from "./seed-catalogue.js";
 import { seedFloor } from "./seed-floor.js";
 import { seedStaff } from "./seed-staff.js";
@@ -46,6 +51,11 @@ export async function seedDemoRestaurant(
     await seedStaff(tx);
     await seedAdjustmentReasons(tx, { locale });
     await seedMedia(tx, { productsByImage });
+    // Published last, so each live version holds the option lists and photos above (D17).
+    for (const menuId of Object.values(menuIds)) {
+      const { document } = await buildMenuDocument(tx, menuId);
+      await publishMenu(tx, menuId, menuDocumentHash(document), "demo-seed");
+    }
     return (await listAvailableProducts(tx, locationId)).products;
   });
 
