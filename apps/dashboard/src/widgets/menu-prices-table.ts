@@ -42,8 +42,7 @@ interface Draft {
 
 const blankToNull = (text: string): string | null => (text.trim() === "" ? null : text.trim());
 
-/** The form field a refusal's `field` belongs beside. The server names a variant by its whole
- * entry (`variants.N`), whichever of its values it refused, so that goes to the summary alone. */
+/** Only a refusal naming the menu price is shown beside a field; any other goes to the summary. */
 const refusedField = (field: string): string => (field === "grossPrice" ? field : "_form");
 
 /**
@@ -141,7 +140,12 @@ export class MenuPricesTable extends LitElement {
       this.#variants = new Map(
         this.products.flatMap(({ variants }) => variants.map((variant) => [variant.id, variant])),
       );
-    if (changed.has("sections") || changed.has("categories") || changed.has("rows"))
+    if (
+      changed.has("sections") ||
+      changed.has("categories") ||
+      changed.has("rows") ||
+      changed.has("busy")
+    )
       this.#columns = this.#buildColumns();
     if (changed.has("editing") || changed.has("rows")) this.#seed();
     if (changed.has("refusal"))
@@ -242,9 +246,10 @@ export class MenuPricesTable extends LitElement {
               variant="ghost"
               part="name"
               data-test=${`edit-${row.menuItemId}`}
+              .disabled=${this.busy}
               @click=${(event: Event) => {
                 event.stopPropagation();
-                this.#emit("wt-offer-edit", { menuItemId: row.menuItemId });
+                if (!this.busy) this.#emit("wt-offer-edit", { menuItemId: row.menuItemId });
               }}
               >${row.name}</wt-button
             >

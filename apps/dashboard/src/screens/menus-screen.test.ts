@@ -2448,3 +2448,39 @@ it("names the product and says its variants were not saved when that refusal lan
 });
 
 type MenuVariantAnswer = { variantId: string; price: string | null; offered: boolean }[];
+
+it("opens no product's window while a save is out, even after Back and Forward closed the saving one", async () => {
+  const pending = deferred<void>();
+  const client = api({
+    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
+    updateMenuItem: vi.fn(() => pending.promise),
+  });
+  const el = await mountLunch(client);
+  await chooseTab(el, "prices");
+  await vi.waitFor(() => expect(prices(el).rows.length).toBe(3));
+  await openOffer(el, "mi-burger");
+  await inOffer(el, "offer-save");
+  history.back();
+  await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
+  history.forward();
+  await vi.waitFor(() => expect(location.pathname).toBe(PRICES_PATH));
+  await vi.waitFor(() =>
+    expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("prices"),
+  );
+  const table = prices(el).shadowRoot!.querySelector<Table>("wt-data-table")!;
+  await table.updateComplete;
+  const lemonade = table.shadowRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="edit-mi-lemonade"]',
+  )!;
+  expect(lemonade.disabled).toBe(true);
+  lemonade.click();
+  emit(prices(el), "wt-offer-edit", { menuItemId: "mi-lemonade" });
+  await el.updateComplete;
+  expect(pricesModal(el).open).toBe(false);
+  pending.resolve();
+  await vi.waitFor(() => expect(prices(el).busy).toBe(false));
+  await table.updateComplete;
+  expect(lemonade.disabled).toBe(false);
+  await openOffer(el, "mi-lemonade");
+  expect(offerField(el, "grossPrice").value).toBe("2.50");
+});

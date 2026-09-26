@@ -1272,6 +1272,9 @@ export class MenusScreen extends LitElement {
         .refusal=${this.offerRefusal}
         @wt-offer-edit=${(event: CustomEvent<{ menuItemId: string }>) => {
           event.stopPropagation();
+          // One window at a time while a save is out, so its outcome lands in the window it came
+          // from, or beside the list once that window has closed.
+          if (this.savingOffer) return;
           this.offerRefusal = null;
           this.editingOffer = event.detail.menuItemId;
         }}

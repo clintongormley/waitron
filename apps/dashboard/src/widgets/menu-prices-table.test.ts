@@ -356,6 +356,24 @@ it("asks to open a product's settings when its name is pressed", async () => {
   expect(heard).toHaveBeenCalledWith({ menuItemId: "mi-lemonade" });
 });
 
+it("offers no product's settings while a save is out", async () => {
+  const el = await mount({ busy: true });
+  const heard = vi.fn();
+  el.addEventListener("wt-offer-edit", heard);
+  const name = table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="edit-mi-lemonade"]',
+  )!;
+  expect(name.disabled).toBe(true);
+  name.click();
+  expect(heard).not.toHaveBeenCalled();
+  el.busy = false;
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(name.disabled).toBe(false);
+  name.click();
+  expect(heard).toHaveBeenCalledOnce();
+});
+
 it("passes the loading, failed and empty states to the table", async () => {
   const el = await mount({ loading: true });
   expect(text(table(el).shadowRoot.querySelector("[role=status]"))).toBe(t("menu_prices.loading"));
@@ -478,10 +496,8 @@ it("shows a refusal naming the menu price beside it and in the summary", async (
   expect(field(el, "grossPrice").error).toBe("Refused here");
 });
 
-// The server names a whole variant entry (`variants.N`) whichever of its values it refused, so
-// the refusal is not pinned on the variant's price.
-it.each(["_form", "active", "variants", "variants.1"])(
-  "shows a refusal naming %s, which is no one text field, in the summary alone",
+it.each(["_form", "active", "variants", "variants.1", "price", "variantId"])(
+  "shows a refusal naming %s in the summary alone",
   async (refused) => {
     const el = await mount({ editing: "mi-lemonade" });
     el.refusal = { field: refused, message: "Refused" };
