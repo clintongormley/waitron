@@ -291,7 +291,36 @@ confirm; and the product editor's help lines, and the price window's variant hel
 `hint`, so they are not linked to their inputs; and a product whose only override is a variant's
 price appears under "Overridden only" while its menu price column reads "None", for the owner to
 judge.
-Next in the lane: menus Task 6 (publishing). The owner lifted the wait: the dependency upgrades are
+**Menus Task 6 (publishing), landed as #677 (2026-09-26):** a menu can be published. Publishing
+freezes the menu's working state (structure, names, prices, photos, variants, extras, options,
+allergens and diet) as a numbered version in `menu_versions`, which can never be changed or deleted,
+and points `menu_publications` at it; availability, VAT class, course and reporting category are left
+out, so changing them marks no menu as changed (`packages/catalogue/src/menu-document.ts`,
+`menu-publication.ts`). The Menus list shows each menu's status (under its name at phone width) and a
+Preview tab words each change with where it came from and publishes the one menu; routes
+`GET /management-api/catalogues/status`, `GET …/:id/status`, `GET …/:id/preview`, `POST …/:id/publish`
+(`menu.changed_since_preview`, 409, when the preview is out of date). A photo a live version shows
+cannot be deleted or renamed (media migration `0003`). The money formatter moved into
+`@waitron/shared`, used by the dashboard and the till. No fiscal file changed; the golden fingerprint
+test and `inmutabilidad` pass unedited. The migrations only add tables and triggers, and a venue main
+had migrated and demo-seeded upgraded cleanly (measured); a dev venue that applied an earlier copy of
+this branch's media `0003` lacks its insert check and needs `wa-wt reset demo <name>`. **Tills still
+sell from the working state until menus Task 7.** Left, none blocking: changing the photo of a product
+used only as an extra does not flag a menu (no screen shows an extra's photo); after a publish the
+editor's heading shows the browser's clock until the next read, because the publish answer carries no
+time; a deleted extras product stays in the frozen copy, so deleting it flags no menu (tills hide it
+at once through availability); a re-enabled product's "added" change can name its section as the
+source; the status and preview reads build every menu's frozen copy inside `withTransaction`, the
+venue's write lock — measured about 21 ms median for 4 menus and 300 dishes on a dev laptop, not on
+the box; at phone width the list keeps a fixed room for the row menu, and a status sort falls back to
+a name sort. **For menus Task 7:** the configuration import (`apps/server/src/configuration-transfer.ts`,
+run only inside provisioning's `beforeCommit`) deletes every `catalogues` row, so if Task 7 makes
+provisioning or the demo seed publish a menu BEFORE the import runs, the import's commit fails on the
+`menu_versions` → `catalogues` key, which cannot be deleted because the table is append-only.
+Also seen once while landing it: `apps/dashboard/src/widgets/variant-form.test.ts` (a file #677 did not
+touch) failed in one local dashboard coverage run and passed three times alone — an intermittent
+failure that needs its cause found and fixed, not a re-run.
+Next in the lane: menus Task 7a (VAT is resolved when the invoice record is issued). The owner lifted the wait: the dependency upgrades are
 finished, and the work does not wait for SQLite slice 2. The menus plan's decisions D1–D23 settle
 the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the ones flagged for the
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
