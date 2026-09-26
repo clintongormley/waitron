@@ -23,8 +23,16 @@ export const CATALOGUE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("sections", "state", STATE),
   classify("section_members", "state", STATE),
   classify("menu_details", "state", STATE),
-  appendOnly("menu_versions", "state", STATE),
-  appendOnly("menu_version_images", "state", STATE),
+  appendOnly(
+    "menu_versions",
+    "state",
+    "published menu versions, never changed once written; copied to a standby, never drained back",
+  ),
+  appendOnly(
+    "menu_version_images",
+    "state",
+    "the photos each published menu version names; copied to a standby, never drained back",
+  ),
   classify("menu_publications", "state", STATE),
 ];
 

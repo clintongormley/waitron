@@ -15,7 +15,7 @@ export const menuVersions = table(
     publishedAt: ts("published_at").notNull(),
     // The management session's person id, as plain text with no key: persons belong to the
     // identity module, which catalogue does not require.
-    publishedBy: label("published_by").notNull(),
+    publishedBy: id("published_by").notNull(),
   },
   (t) => [
     foreignKey({

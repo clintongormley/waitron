@@ -492,7 +492,7 @@ interface OfferOptions {
   includeSwitchedOff?: boolean;
   /** Every extras item and option label, whatever its availability: what a published document
    * holds. */
-  everyModifierItem?: boolean;
+  includeEveryModifierItem?: boolean;
   /** The graph the caller has already loaded for this operation. */
   graph?: SectionGraph;
 }
@@ -610,7 +610,7 @@ async function offersOn(
   const offeredByItem = await readOfferedModifiers(
     tx,
     offered.map((row) => ({ productId: row.productId, menuItemId: row.id })),
-    { everyItem: options.everyModifierItem === true },
+    { includeEveryModifierItem: options.includeEveryModifierItem === true },
   );
   const variantsByItem = await readOfferVariants(
     tx,

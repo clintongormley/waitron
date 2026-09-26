@@ -1,4 +1,4 @@
-import { and, eq, inArray, max } from "drizzle-orm";
+import { and, eq, inArray, max, sql, type SQL } from "drizzle-orm";
 import { now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
@@ -11,9 +11,7 @@ import {
   type DiffEntry,
   type OmittedShortcut,
 } from "./menu-document.js";
-import { menuDetails } from "./schema/menu.js";
 import { menuPublications, menuVersionImages, menuVersions } from "./schema/publication.js";
-import { sections } from "./schema/sections.js";
 import { menusContaining, reachableProducts } from "./section-graph.js";
 import type {
   DocumentMember,
@@ -23,7 +21,6 @@ import type {
   MenuStatus,
   PublishedMenuVersion,
 } from "./menu-document-types.js";
-import type { MemberRef } from "./section-types.js";
 import "./errors.js";
 
 export type { MenuStatus } from "./menu-document-types.js";
@@ -33,55 +30,64 @@ interface LiveVersion {
   number: number;
   publishedAt: Date;
   contentHash: string;
+  /** Read only when asked for. */
+  document: MenuDocument | null;
 }
 
+/** The named menus' live versions, or every published menu's when `menuIds` is left out. */
 async function liveVersions(
   tx: Transaction,
-  menuIds: readonly string[],
+  menuIds: readonly string[] | undefined,
+  withDocument: boolean,
 ): Promise<Map<string, LiveVersion>> {
-  const live = new Map<string, LiveVersion>();
-  for (const batch of batches(menuIds))
-    for (const row of await tx
+  const read = (where?: SQL) =>
+    tx
       .select({
         menuId: menuPublications.menuId,
         versionId: menuVersions.id,
         number: menuVersions.number,
         publishedAt: menuVersions.publishedAt,
         contentHash: menuVersions.contentHash,
+        document: withDocument ? menuVersions.document : sql<null>`null`,
       })
       .from(menuPublications)
       .innerJoin(menuVersions, eq(menuVersions.id, menuPublications.versionId))
-      .where(inArray(menuPublications.menuId, batch)))
-      live.set(row.menuId, row);
-  return live;
+      .where(where);
+  const rows = [];
+  if (menuIds === undefined) rows.push(...(await read()));
+  else
+    for (const batch of batches(menuIds))
+      rows.push(...(await read(inArray(menuPublications.menuId, batch))));
+  return new Map(rows.map(({ menuId, ...version }) => [menuId, version]));
+}
+
+/** `hash` is the working document's. */
+function statusOf(hash: string, version: LiveVersion | undefined): MenuStatus {
+  return version === undefined
+    ? { state: "unpublished" }
+    : {
+        state: hash === version.contentHash ? "current" : "changed",
+        version: version.number,
+        publishedAt: version.publishedAt.toISOString(),
+        hash: version.contentHash,
+      };
 }
 
 /**
- * Each menu's publication state. Every menu's document is built in one pass, because the menu list
- * asks again on every live change. An id that names no menu is left out.
+ * Each menu's publication state, or every menu's when `menuIds` is left out. Every menu's document
+ * is built in one pass, because the menu list asks again on every live change. An id that names no
+ * menu is left out.
  */
 export async function menuStatus(
   tx: Transaction,
-  menuIds: readonly string[],
+  menuIds?: readonly string[],
 ): Promise<Map<string, MenuStatus>> {
   const status = new Map<string, MenuStatus>();
-  if (menuIds.length === 0) return status;
+  if (menuIds?.length === 0) return status;
   const { menus } = await buildMenuDocuments(tx, menuIds);
-  const live = await liveVersions(tx, [...menus.keys()]);
-  for (const [menuId, { document }] of menus) {
-    const version = live.get(menuId);
-    status.set(
-      menuId,
-      version === undefined
-        ? { state: "unpublished" }
-        : {
-            state: menuDocumentHash(document) === version.contentHash ? "current" : "changed",
-            version: version.number,
-            publishedAt: version.publishedAt.toISOString(),
-            hash: version.contentHash,
-          },
-    );
-  }
+  const live = await liveVersions(tx, menuIds, false);
+  for (const [menuId, { document }] of menus)
+    status.set(menuId, statusOf(menuDocumentHash(document), live.get(menuId)));
   return status;
 }
 
@@ -91,28 +97,23 @@ export async function readLiveDocuments(
   menuIds: readonly string[],
 ): Promise<Map<string, { versionId: string; document: MenuDocument }>> {
   const live = new Map<string, { versionId: string; document: MenuDocument }>();
-  for (const batch of batches(menuIds))
-    for (const row of await tx
-      .select({
-        menuId: menuPublications.menuId,
-        versionId: menuVersions.id,
-        document: menuVersions.document,
-      })
-      .from(menuPublications)
-      .innerJoin(menuVersions, eq(menuVersions.id, menuPublications.versionId))
-      .where(inArray(menuPublications.menuId, batch)))
-      live.set(row.menuId, { versionId: row.versionId, document: row.document });
+  for (const [menuId, { versionId, document }] of await liveVersions(tx, menuIds, true))
+    live.set(menuId, { versionId, document: document! });
   return live;
 }
 
-/** Does the document's structure hold the section anywhere? */
-function documentHoldsSection(document: MenuDocument, sectionId: string): boolean {
-  const walk = (members: readonly DocumentMember[]): boolean =>
-    members.some(
-      (member) =>
-        member.kind === "section" && (member.sectionId === sectionId || walk(member.members)),
-    );
-  return walk(document.root.members);
+/** Every section id the document's structure holds. */
+function sectionsOf(document: MenuDocument): Set<string> {
+  const held = new Set<string>();
+  const walk = (members: readonly DocumentMember[]): void => {
+    for (const member of members)
+      if (member.kind === "section") {
+        held.add(member.sectionId);
+        walk(member.members);
+      }
+  };
+  walk(document.root.members);
+  return held;
 }
 
 /** The key two menus' changes share when one shared edit made both. */
@@ -148,22 +149,41 @@ function sameEdit(a: DiffEntry, b: DiffEntry): boolean {
 }
 
 /**
- * What publishing the menu would change, each change naming its source, and the shortcuts the
- * publish would leave out (D13). `hash` is what `publishMenu` must be handed back.
+ * What publishing the menu would change, each change naming its source, the shortcuts the publish
+ * would leave out (D13), and the menu's publication state. `hash` is what `publishMenu` must be
+ * handed back.
  *
  * A change inside a library section is the shared section's only while another menu reaches that
  * section, in its working structure or its live version. A shared change's `alsoOn` names the
  * other published menus whose own preview holds the same change.
  */
 export async function previewMenu(tx: Transaction, menuId: string): Promise<MenuPreview> {
-  const menuIds = (await tx.select({ menuId: menuDetails.menuId }).from(menuDetails)).map(
-    (row) => row.menuId,
-  );
-  const { graph, menus } = await buildMenuDocuments(tx, menuIds);
+  const { graph, menus, sectionNames } = await buildMenuDocuments(tx, [menuId]);
   const mine = menus.get(menuId);
   if (mine === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
-  const live = await readLiveDocuments(tx, [...menus.keys()]);
-  const entries = diffEntries(live.get(menuId)?.document ?? null, mine.document);
+  const own = (await liveVersions(tx, [menuId], true)).get(menuId);
+  const entries = diffEntries(own?.document ?? null, mine.document);
+
+  // Every published menu's live version, read only once a change needs another menu.
+  let everyLive: Map<string, LiveVersion> | undefined;
+  const allLive = async () => (everyLive ??= await liveVersions(tx, undefined, true));
+  let liveSections: [string, Set<string>][] | undefined;
+  const heldLive = async (sectionId: string, owner: string): Promise<boolean> => {
+    liveSections ??= [...(await allLive())].map(([id, { document }]) => [
+      id,
+      sectionsOf(document!),
+    ]);
+    return liveSections.some(([other, held]) => other !== owner && held.has(sectionId));
+  };
+  const containing = new Map<string, string[]>();
+  const menusReaching = (sectionId: string): string[] => {
+    let found = containing.get(sectionId);
+    if (found === undefined) {
+      found = menusContaining(graph, sectionId);
+      containing.set(sectionId, found);
+    }
+    return found;
+  };
 
   const inactiveOf = async (lists: readonly DiffEntry[][]): Promise<Set<string>> => {
     const removed = lists.flatMap((list) =>
@@ -178,8 +198,13 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
         inactive.add(row.id);
     return inactive;
   };
-  const refine = (list: DiffEntry[], owner: string, deleted: ReadonlySet<string>): void => {
-    const reached = new Set(reachableProducts(graph, menus.get(owner)!.rootSectionId));
+  const refine = async (
+    list: DiffEntry[],
+    owner: string,
+    rootSectionId: string,
+    deleted: ReadonlySet<string>,
+  ): Promise<void> => {
+    const reached = new Set(reachableProducts(graph, rootSectionId));
     for (const entry of list) {
       const { change } = entry;
       if (change.kind === "product_removed" && reached.has(change.productId)) {
@@ -188,10 +213,8 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
       } else if (entry.section !== undefined) {
         const section = entry.section;
         const shared =
-          menusContaining(graph, section).some((other) => other !== owner) ||
-          [...live].some(
-            ([other, { document }]) => other !== owner && documentHoldsSection(document, section),
-          );
+          menusReaching(section).some((other) => other !== owner) ||
+          (await heldLive(section, owner));
         if (!shared) {
           change.source = "this_menu";
           delete entry.section;
@@ -199,20 +222,27 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
       }
     }
   };
-  refine(entries, menuId, await inactiveOf([entries]));
+  await refine(entries, menuId, mine.rootSectionId, await inactiveOf([entries]));
 
-  // The other menus are compared only to fill in a shared change's `alsoOn`.
+  // The other menus are built and compared only to fill in a shared change's `alsoOn`.
   if (entries.some(({ change }) => change.source !== "this_menu")) {
-    const others = [...live]
-      .filter(([other]) => other !== menuId && menus.has(other))
-      .map(([other, { document }]) => ({
+    const live = await allLive();
+    const { menus: built } = await buildMenuDocuments(
+      tx,
+      [...live.keys()].filter((other) => other !== menuId),
+      graph,
+    );
+    const others = [...built]
+      .map(([other, { document, rootSectionId }]) => ({
         menuId: other,
-        name: menus.get(other)!.document.menuName,
-        entries: diffEntries(document, menus.get(other)!.document),
+        name: document.menuName,
+        rootSectionId,
+        entries: diffEntries(live.get(other)!.document, document),
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
     const deleted = await inactiveOf(others.map((other) => other.entries));
-    for (const other of others) refine(other.entries, other.menuId, deleted);
+    for (const other of others)
+      await refine(other.entries, other.menuId, other.rootSectionId, deleted);
     for (const entry of entries) {
       if (entry.change.source === "this_menu") continue;
       const alsoOn = others
@@ -222,39 +252,36 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     }
   }
 
+  const hash = menuDocumentHash(mine.document);
   return {
-    hash: menuDocumentHash(mine.document),
+    hash,
     changes: entries.map(({ change }) => change),
-    warnings: await shortcutWarnings(tx, mine.document, mine.omittedShortcuts),
+    warnings: await shortcutWarnings(tx, mine.document, mine.omittedShortcuts, sectionNames),
+    status: statusOf(hash, own),
   };
 }
 
+/** The omitted shortcuts, named: a section's name is already read, and a product's is read here. */
 async function shortcutWarnings(
   tx: Transaction,
   document: MenuDocument,
   omitted: readonly OmittedShortcut[],
+  sectionNames: ReadonlyMap<string, string>,
 ): Promise<{ kind: "shortcut_omitted"; layoutName: string; name: string }[]> {
-  const idOf = (ref: MemberRef) => (ref.kind === "product" ? ref.productId : ref.sectionId);
-  const idsOf = (kind: MemberRef["kind"]) =>
-    omitted.flatMap(({ ref }) => (ref.kind === kind ? [idOf(ref)] : []));
-  const names = new Map<string, string>();
-  for (const batch of batches(idsOf("product")))
+  const productIds = omitted.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : []));
+  const productNames = new Map<string, string>();
+  for (const batch of batches(productIds))
     for (const row of await tx
       .select({ id: products.id, name: products.name })
       .from(products)
       .where(inArray(products.id, batch)))
-      names.set(row.id, row.name);
-  for (const batch of batches(idsOf("section")))
-    for (const row of await tx
-      .select({ id: sections.id, name: sections.internalName })
-      .from(sections)
-      .where(inArray(sections.id, batch)))
-      names.set(row.id, row.name);
+      productNames.set(row.id, row.name);
   const layoutNames = new Map(document.homeLayouts.map((layout) => [layout.id, layout.name]));
   return omitted.map(({ layoutId, ref }) => ({
     kind: "shortcut_omitted",
     layoutName: layoutNames.get(layoutId)!,
-    name: names.get(idOf(ref))!,
+    name:
+      ref.kind === "product" ? productNames.get(ref.productId)! : sectionNames.get(ref.sectionId)!,
   }));
 }
 
@@ -272,7 +299,7 @@ export async function publishMenu(
   const { document } = await buildMenuDocument(tx, menuId);
   const contentHash = menuDocumentHash(document);
   if (contentHash !== expectedHash) throw new AppError("menu.changed_since_preview", { menuId });
-  const current = (await liveVersions(tx, [menuId])).get(menuId);
+  const current = (await liveVersions(tx, [menuId], false)).get(menuId);
   if (current?.contentHash === contentHash)
     return { versionId: current.versionId, number: current.number };
   const [latest] = await tx

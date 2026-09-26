@@ -94,14 +94,14 @@ async function resolveHeldLists(
  *
  * An INACTIVE list is returned rather than dropped: its `active` flag is what
  * `validateExtraSelections` (extra-contract.ts) reads to answer only the ACTIVE lists. An item the
- * offer withdraws is left out unless `includeWithdrawn` asks for it.
+ * offer withdraws is left out unless `includeEveryModifierItem` asks for it.
  *
  * A bounded number of queries whatever the number of menu items.
  */
 export async function readMenuExtras(
   tx: Transaction,
   menuItemIds: string[],
-  options: { includeWithdrawn?: boolean } = {},
+  options: { includeEveryModifierItem?: boolean } = {},
 ): Promise<Map<string, ResolvedExtraList[]>> {
   if (menuItemIds.length === 0) return new Map();
   const publications = await tx
@@ -136,7 +136,7 @@ export async function readMenuExtras(
     if (definition === undefined) return [];
     const items = definition.items.flatMap((item): Candidate[] => {
       const override = overrides.get(key(publication.menuItemId, definition.id, item.productId));
-      if (override?.available === false && options.includeWithdrawn !== true) return [];
+      if (override?.available === false && options.includeEveryModifierItem !== true) return [];
       return [{ item, menuPrice: override?.price ?? null }];
     });
     return [{ holder: publication.menuItemId, definition, items }];

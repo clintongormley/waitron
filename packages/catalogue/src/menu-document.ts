@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, type SQL } from "drizzle-orm";
 import { catalogues, categories, products, type Transaction } from "@waitron/db";
 import { AppError, FALLBACK_LOCALE, resolveContentText } from "@waitron/shared";
 import { batches } from "./batches.js";
@@ -15,7 +15,6 @@ import type { MenuOffer } from "./menu-types.js";
 import type { VatClass } from "./pricing.js";
 import type { MemberRef } from "./section-types.js";
 import type {
-  ChangeSource,
   DocumentLayout,
   DocumentMember,
   DocumentTile,
@@ -24,6 +23,7 @@ import type {
   LiveOffer,
   LiveOfferedModifier,
   MenuChange,
+  MenuChangeSource,
   MenuDocument,
   ProductChangeField,
   SectionChangeField,
@@ -45,10 +45,12 @@ interface BuiltMenu {
   rootSectionId: string;
 }
 
-/** Several menus' documents built together, and the section graph they were built from. */
+/** Several menus' documents built together, and what they were built from. */
 export interface BuiltMenus {
   graph: SectionGraph;
   menus: Map<string, BuiltMenu>;
+  /** Every section's internal name, by id. */
+  sectionNames: Map<string, string>;
 }
 
 interface SectionRow {
@@ -61,35 +63,53 @@ interface SectionRow {
   ownerMenuId: string | null;
 }
 
+function groupBy<T>(values: readonly T[], keyOf: (value: T) => string | null): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const value of values) {
+    const key = keyOf(value);
+    if (key === null) continue;
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, [value]);
+    else group.push(value);
+  }
+  return groups;
+}
+
 /**
- * Every named menu's document, from one graph load and one offers read however many menus. A menu
- * with no details row is left out.
+ * The named menus' documents, or every menu's when `menuIds` is left out, from one graph load and
+ * one offers read however many menus. A menu with no details row is left out. `graph` is one the
+ * caller has already loaded in this transaction.
  */
 export async function buildMenuDocuments(
   tx: Transaction,
-  menuIds: readonly string[],
+  menuIds?: readonly string[],
+  graph?: SectionGraph,
 ): Promise<BuiltMenus> {
+  const readDetails = (where?: SQL) =>
+    tx
+      .select({
+        menuId: menuDetails.menuId,
+        rootSectionId: menuDetails.rootSectionId,
+        defaultHomeLayoutId: menuDetails.defaultHomeLayoutId,
+        menuName: catalogues.name,
+      })
+      .from(menuDetails)
+      .innerJoin(catalogues, eq(catalogues.id, menuDetails.menuId))
+      .where(where)
+      .orderBy(catalogues.createdAt, catalogues.id);
   const details = [];
-  for (const batch of batches(menuIds))
-    details.push(
-      ...(await tx
-        .select({
-          menuId: menuDetails.menuId,
-          rootSectionId: menuDetails.rootSectionId,
-          defaultHomeLayoutId: menuDetails.defaultHomeLayoutId,
-          menuName: catalogues.name,
-        })
-        .from(menuDetails)
-        .innerJoin(catalogues, eq(catalogues.id, menuDetails.menuId))
-        .where(inArray(menuDetails.menuId, batch))),
-    );
-  const graph = await loadSectionGraph(tx);
+  if (menuIds === undefined) details.push(...(await readDetails()));
+  else
+    for (const batch of batches(menuIds))
+      details.push(...(await readDetails(inArray(menuDetails.menuId, batch))));
+  const loaded = graph ?? (await loadSectionGraph(tx));
   const menus = new Map<string, BuiltMenu>();
-  if (details.length === 0) return { graph, menus };
+  const sectionNames = new Map<string, string>();
+  if (details.length === 0) return { graph: loaded, menus, sectionNames };
   const offers = await listMenuOffers(
     tx,
     details.map((row) => row.menuId),
-    { includeUnavailable: true, everyModifierItem: true, graph },
+    { includeUnavailable: true, includeEveryModifierItem: true, graph: loaded },
   );
   const dishFacts = await readDishFacts(tx, [...new Set(offers.map((offer) => offer.productId))]);
   const sectionRows: SectionRow[] = await tx
@@ -105,15 +125,21 @@ export async function buildMenuDocuments(
     .from(sections)
     .orderBy(sections.internalName, sections.id);
   const sectionById = new Map(sectionRows.map((row) => [row.id, row]));
+  for (const row of sectionRows) sectionNames.set(row.id, row.internalName);
+  const offersByMenu = groupBy(offers, (offer) => offer.menuId);
+  const layoutsByMenu = groupBy(sectionRows, (section) =>
+    section.role === "home_layout" ? section.ownerMenuId : null,
+  );
   for (const row of details) {
     const onMenu = new Map(
-      offers
-        .filter((offer) => offer.menuId === row.menuId)
-        .map((offer) => [offer.productId, freezeOffer(offer, dishFacts.get(offer.productId)!)]),
+      (offersByMenu.get(row.menuId) ?? []).map((offer) => [
+        offer.productId,
+        freezeOffer(offer, dishFacts.get(offer.productId)!),
+      ]),
     );
     const reachedSections = new Set<string>();
     const listOf = (sectionId: string, path: readonly string[]): DocumentMember[] =>
-      graph.children(sectionId).flatMap(({ ref }): DocumentMember[] => {
+      loaded.children(sectionId).flatMap(({ ref }): DocumentMember[] => {
         if (ref.kind === "product") {
           const offer = onMenu.get(ref.productId);
           return offer === undefined
@@ -137,15 +163,13 @@ export async function buildMenuDocuments(
       });
     const root = { members: listOf(row.rootSectionId, [row.rootSectionId]) };
     const omittedShortcuts: OmittedShortcut[] = [];
-    const layouts = sectionRows.filter(
-      (section) => section.role === "home_layout" && section.ownerMenuId === row.menuId,
-    );
+    const layouts = layoutsByMenu.get(row.menuId) ?? [];
     const homeLayouts = [
       ...layouts.filter((layout) => layout.id === row.defaultHomeLayoutId),
       ...layouts.filter((layout) => layout.id !== row.defaultHomeLayoutId),
     ].map((layout): DocumentLayout => {
       const tiles: DocumentTile[] = [];
-      for (const { ref } of graph.children(layout.id)) {
+      for (const { ref } of loaded.children(layout.id)) {
         const onThisMenu =
           ref.kind === "product" ? onMenu.has(ref.productId) : reachedSections.has(ref.sectionId);
         if (onThisMenu) tiles.push(ref);
@@ -167,7 +191,7 @@ export async function buildMenuDocuments(
       },
     });
   }
-  return { graph, menus };
+  return { graph: loaded, menus, sectionNames };
 }
 
 /** The document the menu's working state would publish, and the shortcuts it leaves out (D13). */
@@ -480,7 +504,7 @@ function namesOf(shape: Shape, path: readonly string[]): string[] {
 }
 
 /** A change to the list at the end of `path`: the menu's own top level, or a library section. */
-function listSource(path: readonly string[]): { source: ChangeSource; section?: string } {
+function listSource(path: readonly string[]): { source: MenuChangeSource; section?: string } {
   const holder = path.at(-1);
   return holder === undefined
     ? { source: "this_menu" }

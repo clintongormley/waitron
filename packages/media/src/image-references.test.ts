@@ -15,6 +15,8 @@ import {
   createCatalogue,
   createProduct,
   createSection,
+  menuVersionImages,
+  menuVersions,
   previewMenu,
   publishMenu,
   readMenuStructure,
@@ -28,9 +30,9 @@ import { mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 
 /**
- * `products.image`, `category_details.image` and `sections.image` may only name a photo that
- * exists, and a photo one of them still names cannot be deleted or renamed. Nor can a photo a LIVE
- * menu version names. The rules are triggers, not keys
+ * `products.image`, `category_details.image`, `sections.image` and `menu_version_images.filename`
+ * may only name a photo that exists, and a photo one of the first three still names cannot be
+ * deleted or renamed. Nor can a photo a LIVE menu version names. The rules are triggers, not keys
  * (`packages/media/drizzle/0001_image_references.sql`, whose header carries why,
  * `0002_section_image_references.sql` for `sections.image`, and
  * `0003_published_image_references.sql` for a published version's photos).
@@ -119,6 +121,7 @@ it("creates the triggers that stand in for the foreign keys", async () => {
     "category_details_media_image_fk_parent_delete",
     "category_details_media_image_fk_parent_rename",
     "category_details_media_image_fk_update",
+    "menu_version_images_media_image_fk_insert",
     "menu_version_images_media_image_fk_parent_delete",
     "menu_version_images_media_image_fk_parent_rename",
     "products_media_image_fk_insert",
@@ -348,6 +351,31 @@ describe("an image a live menu version names", () => {
       sql`select filename from media_images`,
     );
     expect(rows.rows.map((row) => row.filename)).toEqual([ABSENT]);
+  });
+
+  it("is refused on a menu_version_images insert unless an image carries it", async () => {
+    const [version] = await suite.db
+      .insert(menuVersions)
+      .values({
+        menuId: ids.catalogueId,
+        number: 1,
+        document: {} as never,
+        contentHash: "hash",
+        publishedAt: new Date(),
+        publishedBy: "person-1",
+      })
+      .returning({ id: menuVersions.id });
+    const insert = async (filename: string): Promise<void> => {
+      await suite.db.insert(menuVersionImages).values({ versionId: version!.id, filename });
+    };
+    await expect(insert(ABSENT)).rejects.toMatchObject({
+      message: "menu_version_images_media_image_fk",
+    });
+    await insert(PRESENT);
+    const rows = await suite.db.execute<{ filename: string }>(
+      sql`select filename from menu_version_images`,
+    );
+    expect(rows.rows.map((row) => row.filename)).toEqual([PRESENT]);
   });
 
   it("can be renamed to itself while the live version names it", async () => {

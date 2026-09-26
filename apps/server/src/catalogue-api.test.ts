@@ -3685,6 +3685,7 @@ describe("publishing a menu", () => {
       expect.objectContaining({ kind: "product_added", name, under: [], source: "this_menu" }),
     ]);
     expect(first.warnings).toEqual([]);
+    expect(first.status).toEqual({ state: "unpublished" });
 
     const publish = `/management-api/catalogues/${menuId}/publish`;
     const published = await send(app, "POST", publish, { body: { expectedHash: first.hash } });
@@ -3698,7 +3699,13 @@ describe("publishing a menu", () => {
       publishedAt: expect.any(String),
       hash: first.hash,
     });
-    expect(await preview(app, menuId)).toEqual({ hash: first.hash, changes: [], warnings: [] });
+    const current = await status(app, menuId);
+    expect(await preview(app, menuId)).toEqual({
+      hash: first.hash,
+      changes: [],
+      warnings: [],
+      status: current,
+    });
 
     expect(
       (
@@ -3713,6 +3720,7 @@ describe("publishing a menu", () => {
     expect(second.changes).toEqual([
       expect.objectContaining({ kind: "price_changed", name, from: "2.00", to: "2.50" }),
     ]);
+    expect(second.status).toEqual({ ...current, state: "changed" });
     const again = await send(app, "POST", publish, { body: { expectedHash: second.hash } });
     expect(again.status).toBe(200);
     const two = (await again.json()) as { versionId: string; number: number };

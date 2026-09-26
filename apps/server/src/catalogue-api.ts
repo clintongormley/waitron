@@ -795,12 +795,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.get("/management-api/catalogues/status", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const status = await gated(sessionId, async (tx) =>
-        menuStatus(
-          tx,
-          (await listCatalogues(tx)).map((menu) => menu.id),
-        ),
-      );
+      const status = await gated(sessionId, (tx) => menuStatus(tx));
       return c.json(Object.fromEntries(status));
     }),
   );

@@ -224,6 +224,16 @@ describe("menuStatus", () => {
     expect(await app((tx) => menuStatus(tx, []))).toEqual(new Map());
   });
 
+  it("answers every menu when no ids are named", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.dinner);
+    const brunch = await app((tx) => createCatalogue(tx, { name: "Brunch Menu" }));
+    const status = await app((tx) => menuStatus(tx));
+    expect([...status.keys()].sort()).toEqual([f.lunch, f.dinner, brunch.id].sort());
+    expect(status.get(f.dinner)).toMatchObject({ state: "current", version: 1 });
+    expect(status.get(brunch.id)).toEqual({ state: "unpublished" });
+  });
+
   // Review Focus 3: shared edits flag exactly the menus they change.
   describe("flags exactly the menus a shared edit changes", () => {
     async function published(): Promise<MenusFixture> {
@@ -500,6 +510,70 @@ describe("previewMenu", () => {
       { kind: "order_changed", list: [], source: "this_menu" },
     ]);
     expect(diffs).toHaveBeenCalledOnce();
+  });
+
+  it("builds only this menu's document when every change is its own", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    await publish(f.dinner);
+    await app(async (tx) => moveMember(tx, f.lunchRoot, await memberOf(f.lunchRoot, f.soup), 0));
+    const offers = vi.spyOn(operations, "listMenuOffers");
+    await app((tx) => previewMenu(tx, f.lunch));
+    expect(offers.mock.calls.map(([, menuIds]) => menuIds)).toEqual([[f.lunch]]);
+  });
+
+  it("builds the other published menus, and no unpublished one, only when a change is shared", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    await publish(f.dinner);
+    await app((tx) => createCatalogue(tx, { name: "Brunch Menu" }));
+    await app((tx) =>
+      updateProduct(tx, f.lemonade, { allergens: { sulphites: { presence: "contains" } } }),
+    );
+    const graphs = vi.spyOn(sectionGraph, "loadSectionGraph");
+    const offers = vi.spyOn(operations, "listMenuOffers");
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    expect(preview.changes.map((change) => change.alsoOn)).toEqual([["Dinner Menu"]]);
+    expect(offers.mock.calls.map(([, menuIds]) => menuIds)).toEqual([[f.lunch], [f.dinner]]);
+    expect(graphs).toHaveBeenCalledOnce();
+  });
+
+  it("asks once per section which menus reach it", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    await publish(f.dinner);
+    await app(async (tx) => {
+      await updateSection(tx, f.drinks, { internalName: "Refreshments" });
+      await moveMember(tx, f.drinks, await memberOf(f.drinks, f.lemonade), 5);
+    });
+    const containing = vi.spyOn(sectionGraph, "menusContaining");
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    expect(preview.changes.map((change) => change.alsoOn)).toEqual([
+      ["Dinner Menu"],
+      ["Dinner Menu"],
+    ]);
+    const asked = containing.mock.calls.map(([, sectionId]) => sectionId);
+    expect(asked).toEqual([f.drinks]);
+  });
+
+  it("carries the menu's live-version status beside its changes", async () => {
+    const f = await menusFixture(fx.db);
+    expect((await app((tx) => previewMenu(tx, f.lunch))).status).toEqual({ state: "unpublished" });
+    const { hash } = await app((tx) => previewMenu(tx, f.lunch));
+    await app((tx) => publishMenu(tx, f.lunch, hash, "person-1"));
+    const [row] = await versionRows();
+    const current = await app((tx) => previewMenu(tx, f.lunch));
+    expect(current.status).toEqual({
+      state: "current",
+      version: 1,
+      publishedAt: row!.publishedAt.toISOString(),
+      hash,
+    });
+    expect(current.status).toEqual((await app((tx) => menuStatus(tx, [f.lunch]))).get(f.lunch));
+    await app((tx) => updateProduct(tx, f.soup, { name: "Broth" }));
+    const changed = await app((tx) => previewMenu(tx, f.lunch));
+    expect(changed.status).toEqual({ ...current.status, state: "changed" });
+    expect(changed.hash).not.toBe(hash);
   });
 
   it("names a reorder of Lunch's top level as this menu's change", async () => {

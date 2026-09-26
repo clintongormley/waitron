@@ -107,10 +107,10 @@ export interface LiveOffer extends MenuOffer {
 }
 
 /** Where a change came from (spec §11.1). */
-export type ChangeSource = "this_menu" | "shared_product" | "shared_section";
+export type MenuChangeSource = "this_menu" | "shared_product" | "shared_section";
 
 export type MenuChange = {
-  source: ChangeSource;
+  source: MenuChangeSource;
   /** The other published menus the same shared change flags, by name. */
   alsoOn?: string[];
 } & (
@@ -159,6 +159,8 @@ export interface MenuPreview {
   hash: string;
   changes: MenuChange[];
   warnings: { kind: "shortcut_omitted"; layoutName: string; name: string }[];
+  /** The menu's publication state, as `menuStatus` answers it. */
+  status: MenuStatus;
 }
 
 /** The version a publish made live. */

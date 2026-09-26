@@ -62,7 +62,7 @@ import {
  * `products.image`, `category_details.image` and `sections.image`
  * (`packages/media/drizzle/0001_image_references.sql` carries the reasoning, and
  * `packages/media/drizzle/0002_section_image_references.sql` adds the four on `sections.image`),
- * and keep a photo a live menu version names
+ * and for `menu_version_images.filename`, keeping a photo a live menu version names
  * (`packages/media/drizzle/0003_published_image_references.sql`).
  * Named here only because the assertion below is an EQUALITY over every non-append-only trigger.
  */
@@ -71,6 +71,7 @@ const IMAGE_REFERENCE_TRIGGERS = [
   "category_details_media_image_fk_parent_delete",
   "category_details_media_image_fk_parent_rename",
   "category_details_media_image_fk_update",
+  "menu_version_images_media_image_fk_insert",
   "menu_version_images_media_image_fk_parent_delete",
   "menu_version_images_media_image_fk_parent_rename",
   "products_media_image_fk_insert",
