@@ -1002,21 +1002,37 @@ describe("setup-app", () => {
     expect(host.shadowRoot!.querySelector("[data-test=reload]")).not.toBeNull();
   });
 
-  it.each(["setup.already_provisioned", "deployment.already_stamped"])(
-    "maps the fiscal 409 %s to 'already set up' with a reload and NO retry (re-POST is unrecoverable)",
-    async (code) => {
-      const provision = vi.fn().mockRejectedValue({ code, params: {} });
-      const el = await mountSetupApp(stubApi({ provision }));
-      provisionRequest(el);
-      await flush(el);
-      expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("already set up");
-      const host = await screenHost(el, "provisioning");
-      expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
-      expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain(
-        "open the till",
-      );
-    },
-  );
+  it("maps the fiscal 409 setup.already_provisioned to 'already set up' with a reload and NO retry (re-POST is unrecoverable)", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "setup.already_provisioned", params: {} });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("already set up");
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain(
+      "open the till",
+    );
+  });
+
+  it("maps deployment.already_stamped to a partly-set-up message that sends the operator to support, with a bare reload and NO retry", async () => {
+    const provision = vi.fn().mockRejectedValue({
+      code: "deployment.already_stamped",
+      params: { stamped: "production", requested: "preproduction" },
+    });
+    const el = await mountSetupApp(stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    const text = await screenText(el, "provisioning", "[data-test=error]");
+    expect(text).toContain("partly set up");
+    expect(text).toContain("Contact support");
+    expect(text).not.toContain("already set up");
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+    expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent?.trim()).toBe(
+      "Reload",
+    );
+  });
 
   it("maps setup.not_ready to a not-ready message that CAN be retried", async () => {
     const provision = vi.fn().mockRejectedValue({ code: "setup.not_ready", params: {} });
@@ -1275,19 +1291,40 @@ describe("setup-app", () => {
     expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent).toContain("Reload");
   });
 
-  it.each(["setup.already_provisioned", "deployment.already_stamped"])(
-    "maps the fiscal 409 %s on adopt to 'already set up' with a bare reload and NO retry",
-    async (code) => {
+  it("maps the fiscal 409 setup.already_provisioned on adopt to 'already set up' with a bare reload and NO retry", async () => {
+    const adopt = vi.fn().mockRejectedValue({ code: "setup.already_provisioned", params: {} });
+    const el = await mountSetupApp(stubApi({ adopt }));
+    adoptRequest(el);
+    await flush(el);
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("already set up");
+    const host = await screenHost(el, "provisioning");
+    expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+    const reload = host.shadowRoot!.querySelector("[data-test=reload]");
+    expect(reload?.textContent?.trim()).toBe("Reload");
+    expect(reload?.textContent).not.toContain("dashboard");
+  });
+
+  it.each([
+    ["deployment.already_stamped", "for a different environment"],
+    ["setup.adopt_incomplete", "stopped partway"],
+  ])(
+    "maps %s on adopt to a partly-set-up message that sends the operator to support, with a bare reload and NO retry",
+    async (code, detail) => {
       const adopt = vi.fn().mockRejectedValue({ code, params: {} });
       const el = await mountSetupApp(stubApi({ adopt }));
       adoptRequest(el);
       await flush(el);
-      expect(await screenText(el, "provisioning", "[data-test=error]")).toContain("already set up");
+      expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).toBeNull();
+      const text = await screenText(el, "provisioning", "[data-test=error]");
+      expect(text).toContain("partly set up");
+      expect(text).toContain(detail);
+      expect(text).toContain("Contact support");
+      expect(text).not.toContain("already set up");
       const host = await screenHost(el, "provisioning");
       expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
-      const reload = host.shadowRoot!.querySelector("[data-test=reload]");
-      expect(reload?.textContent?.trim()).toBe("Reload");
-      expect(reload?.textContent).not.toContain("dashboard");
+      expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent?.trim()).toBe(
+        "Reload",
+      );
     },
   );
 

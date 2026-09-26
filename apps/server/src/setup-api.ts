@@ -196,6 +196,8 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.bundle_fetch_failed": 502,
   "setup.operation_conflict": 409,
   "setup.already_provisioning": 409,
+  "setup.adopt_incomplete": 409,
+  "deployment.already_stamped": 409,
 };
 
 const runAdopt = createErrorBoundary(ADOPT_STATUS, "setup.adopt_failed");
@@ -757,6 +759,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
             : await deps.operations.run("adopt", requestHash, async (operation) => {
                 if (operation.phase === "complete") {
                   return c.json(operation.data as { adopted: true; restarting: true });
+                }
+                if (operation.phase !== "started") {
+                  throw new AppError("setup.adopt_incomplete", {});
                 }
                 const response = await execute(operation);
                 if (response.ok) {

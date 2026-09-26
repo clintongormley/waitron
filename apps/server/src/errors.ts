@@ -520,6 +520,12 @@ declare module "@waitron/shared" {
     /** A different request owns the box's persisted incomplete first-boot operation. */
     "setup.operation_conflict": Record<string, never>;
     /**
+     * The same adopt request was sent again after an earlier attempt failed past its first write to
+     * this node. Nothing can safely resume a half-finished adopt, and running it again would mint a
+     * second standby identity, so the request is refused and the saved operation left as it is.
+     */
+    "setup.adopt_incomplete": Record<string, never>;
+    /**
      * A first-boot setup POST arrived before the box wired the dependencies that action needs; the
      * box is up but cannot serve it yet.
      */

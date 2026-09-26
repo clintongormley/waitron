@@ -3185,7 +3185,14 @@ image constraints under *Detail → Box image*.
     code with 400 (`ADOPT_STATUS` in `setup-api.ts` has no entry for it), where provision answers
     409; the wizard shows "This server is already set up." for that code
     (`apps/setup/src/setup-app.ts`, read, not run), which does not describe a box a failed
-    provision only stamped. So a failed adopt's record is deleted at "started" and kept once it
+    provision only stamped. **Done (2026-09-26, lane A's A50):** adopt now answers
+    `deployment.already_stamped` with 409, as provision does, and on both the provision and adopt
+    paths the wizard says a previous attempt left the server partly set up for a different
+    environment, tells the operator to contact support to reset it, and offers a plain "Reload"
+    with no retry. Before the change the boot case above answered 400 (it now asserts 409), a new
+    route case in `setup-api.test.ts` failed `expected 400 to be 409`, and the new wizard cases
+    for that code failed `expected 'This server is already set up.' to contain 'partly set up'`.
+    So a failed adopt's record is deleted at "started" and kept once it
     has moved past it. The setup wizard's `#mapAdoptError` (`apps/setup/src/setup-app.ts`) had no
     `setup.operation_conflict` case, so that 409 sent the operator back to the connect form with
     "Couldn't connect to the primary…"; it now shows provision's saved-setup message with Reload and
@@ -3212,6 +3219,16 @@ image constraints under *Detail → Box image*.
     `git diff 4cb93dd85 -- apps/server/src/setup-api.ts`). Not measured: what the first identity's
     reservation on the primary and its rows on this node leave behind. Whether adopt should
     resume, refuse, or discard the first identity is the owner's decision.
+    **Done (2026-09-26, lane A's A50):** the owner chose to refuse. The same adopt body resent after
+    a failure past the first write now answers 409 `setup.adopt_incomplete` without calling adopt
+    again, leaves `setup-operation.json` byte for byte as it was and schedules no restart, and a
+    request after that gets the same answer rather than `setup.already_provisioning`, so the lock
+    is released. The wizard tells the operator the join stopped partway and to contact support to
+    reset the server, with a plain "Reload" and no retry. Measured before the fix with a new case
+    in `apps/server/src/setup-api.test.ts` whose fake adopt fails once past the first write: the
+    resend answered 200 (`expected 200 to be 409`), adopt was called twice, and the record moved
+    from "venue_committed" to "complete". Still not measured: what the first identity leaves
+    behind on the primary and on this node; the wizard has no way to reset such a box.
     Also open from A42's review, read and not run: if `operation.complete()` throws after `execute`
     has scheduled the restart, the lock is now released while that restart is pending (before A42
     that throw was outside the release and the lock stayed set).
@@ -3759,8 +3776,9 @@ image constraints under *Detail → Box image*.
       `test/fixtures.ts`. Correct them only in a change allowed to touch that file.
   - `apps/setup` code, found by #567 and not changed: `#onGoto` in `setup-app.ts` does not clear
     `fiscalTestError`, so the routed-back fiscal-test banner survives navigating away and back;
-    `deployment.already_stamped` is labelled "Reload to open the till" on the provision path and
-    plain "Reload" on the adopt path, and a reload of a box still in setup mode reopens the wizard;
+    `deployment.already_stamped` was labelled "Reload to open the till" on the provision path and
+    plain "Reload" on the adopt path, and a reload of a box still in setup mode reopens the wizard
+    (done 2026-09-26 in A50: both paths now say "Reload" for that code);
     `AdoptOutcome`'s `breakGlassSecret` is typed as required, but a replayed adopt answers without
     it (`apps/server/src/setup-api.ts`); the done screen treats any failed status read as "the box
     is trading", so a passing 503 could offer the reload early; the mode screen's own text says a
