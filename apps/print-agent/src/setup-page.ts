@@ -69,7 +69,17 @@ function layout(body: string): string {
   dt { font-weight: 600; margin-top: .75rem; }
 </style>
 </head>
-<body><main>${body}</main></body>
+<body><main>${body}</main>
+<script>
+const scan = document.querySelector('#bluetooth-scan');
+scan?.addEventListener('submit', () => {
+  const button = scan.querySelector('button');
+  button.disabled = true;
+  button.textContent = 'Scanning…';
+  document.querySelector('#bluetooth-progress').hidden = false;
+});
+</script>
+</body>
 </html>`;
 }
 
@@ -144,6 +154,7 @@ ${lastError}
  */
 function bluetoothCard(state: {
   scanned?: DiscoveredDevice[];
+  scanFailed?: boolean;
   pair?: { mac: string; result: PairResult };
 }): string {
   let found = "";
@@ -170,7 +181,9 @@ function bluetoothCard(state: {
   }
   return `<h2>Bluetooth printers</h2>
 <p>Pair a Bluetooth printer to this box, then choose it in the dashboard.</p>
-<form method="post" action="/bluetooth/scan"><button type="submit">Scan for printers</button></form>
+<form id="bluetooth-scan" method="post" action="/bluetooth/scan"><button type="submit">Scan for printers</button></form>
+<p id="bluetooth-progress" role="status" hidden><progress aria-label="Scanning for Bluetooth printers"></progress> Searching for nearby Bluetooth devices…</p>
+${state.scanFailed ? '<p class="error" role="alert">Could not scan for Bluetooth printers. Check that this print agent has a powered Bluetooth adapter and access to Bluetooth, then try again.</p>' : ""}
 ${found}${outcome}`;
 }
 
@@ -190,6 +203,7 @@ export function createSetupApp(deps: SetupDeps): Hono {
 
   const renderRoot = async (bt: {
     scanned?: DiscoveredDevice[];
+    scanFailed?: boolean;
     pair?: { mac: string; result: PairResult };
   }): Promise<string> => {
     return layout(card(await mainCard()) + card(bluetoothCard(bt)));
@@ -216,8 +230,12 @@ export function createSetupApp(deps: SetupDeps): Hono {
   });
 
   app.post("/bluetooth/scan", async (c) => {
-    const scanned = await deps.scanBluetooth();
-    return c.html(await renderRoot({ scanned }));
+    try {
+      const scanned = await deps.scanBluetooth();
+      return c.html(await renderRoot({ scanned }));
+    } catch {
+      return c.html(await renderRoot({ scanFailed: true }), 503);
+    }
   });
 
   app.post("/bluetooth/pair", async (c) => {

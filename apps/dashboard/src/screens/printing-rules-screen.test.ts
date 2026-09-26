@@ -31,6 +31,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
+    lastPrintAgentId: null,
     active: true,
   },
   {
@@ -49,6 +50,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
+    lastPrintAgentId: null,
     active: false,
   },
 ];

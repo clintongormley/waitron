@@ -53,6 +53,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
+    lastPrintAgentId: null,
     active: true,
   },
   {
@@ -71,6 +72,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
+    lastPrintAgentId: null,
     active: false,
   },
   {
@@ -89,6 +91,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
+    lastPrintAgentId: null,
     active: false,
   },
 ];
@@ -223,6 +226,26 @@ async function openDiscovery(el: PrintersScreen): Promise<void> {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (theme) => {
+  it.each([390, 1280])("renders printer status accessibly at %ipx", async (width) => {
+    await page.viewport(width, 900);
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    q(el, "wt-tabs")!
+      .shadowRoot!.querySelector<HTMLButtonElement>('[data-key="printers"]')!
+      .click();
+    await flush(el);
+    q(el, "[data-test=printer-row-p1]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=printer-status]")!.checkVisibility()).toBe(true);
+    expect(el.scrollWidth).toBeLessThanOrEqual(width);
+    await expectNoA11yViolations(host);
+    await page.screenshot();
+    await page.viewport(1280, 900);
+  });
   it.each([390, 1280])(
     "renders the agents, printers and jobs lists accessibly at %ipx",
     async (width) => {
@@ -320,6 +343,8 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
     await expectNoA11yViolations(host);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
     const drawer = q(el, '[name="printer-cash-drawer"]')!.shadowRoot!.querySelector("input")!;
     drawer.checked = true;
     drawer.dispatchEvent(new Event("change", { bubbles: true }));
@@ -386,6 +411,19 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
           "printer-character-set",
           "printer-character-table",
         ]);
+        const w = q(el, '[data-test="finder-expected-W"]')!.getBoundingClientRect();
+        const eight = q(el, '[data-test="finder-expected-8"]')!.getBoundingClientRect();
+        if (width === 1280) {
+          expect(eight.left).toBeGreaterThan(w.right);
+          expect(eight.top).toBe(w.top);
+        }
+        expect(
+          (q(el, '[data-test="print-character-tables-p1"]') as import("@waitron/ui").WtButton)
+            .variant,
+        ).toBe("primary");
+        await page.screenshot({
+          path: `__screenshots__/calibration-characters-${theme}-${width}.png`,
+        });
         await expectNoA11yViolations(host);
         q(el, "[data-test=calibration-next]")!.click();
         await flush(el);
@@ -397,6 +435,9 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
           expect(new Set(fields.map((rect) => Math.round(rect.bottom))).size).toBe(1);
         }
         q(el, '[data-test="print-test-page-p1"]')!.click();
+        await flush(el);
+        await expectNoA11yViolations(host);
+        q(el, "[data-test=calibration-next]")!.click();
         await flush(el);
         await expectNoA11yViolations(host);
         q(el, "[data-test=calibration-next]")!.click();

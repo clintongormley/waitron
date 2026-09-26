@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import dgram from "node:dgram";
 import { connectTcp } from "./tcp-probe.js";
 import { networkInterfaces } from "node:os";
@@ -11,6 +10,7 @@ import type {
   WireJob,
 } from "@waitron/print-agent";
 import { type BluetoothHost, createBluetoothctlHost } from "./bluetooth.js";
+import { runBluetoothctl } from "./bluetooth-command.js";
 import { PDL_SERVICE, parsePdlResponse } from "./network.js";
 import { SWEEP_PORT, mergeDiscovered, sweepCandidates, sweepPort } from "./sweep.js";
 import { type UsbPrinter, readUsbPrinters } from "./usb.js";
@@ -133,18 +133,8 @@ export function buildPdlQuery(): Buffer {
   return Buffer.concat([header, ...parts, qtypeClass]);
 }
 
-/* v8 ignore start -- spawns bluetoothctl, opens the mDNS and port-9100 sockets; covered by the
+/* v8 ignore start -- opens the mDNS and port-9100 sockets; covered by the
    receipts, not unit tests (no radio or LAN in CI). */
-function runBluetoothctl(args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("bluetoothctl", args, { stdio: ["ignore", "pipe", "ignore"] });
-    let out = "";
-    child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => (out += chunk));
-    child.on("error", reject);
-    child.on("close", () => resolve(out));
-  });
-}
 
 /** There is no per-MAC RFCOMM node yet, and a shared `/dev/rfcomm0` would route two paired printers
  * to the same node, so resolving a Bluetooth job FAILS LOUD. */

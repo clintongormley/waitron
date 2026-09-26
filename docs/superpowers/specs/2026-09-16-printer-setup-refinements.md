@@ -1,6 +1,6 @@
 # Printer setup refinements
 
-**26 September 2026:** the [three-step calibration wizard](2026-09-26-printer-calibration-wizard.md)
+**26 September 2026:** the [calibration wizard and its four-step follow-up](2026-09-26-printer-calibration-wizard.md)
 supersedes this document's combined calibration editor and finder labels. That follow-up records
 the physical tests of table switching; the earlier table-zero reset assumption is not established
 by those tests.

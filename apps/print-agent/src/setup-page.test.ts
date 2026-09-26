@@ -1,4 +1,5 @@
 import type { AgentConfig, AgentStatus } from "@waitron/print-agent";
+import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import { createSetupApp, type SetupDeps } from "./setup-page.js";
 
@@ -16,6 +17,30 @@ function deps(overrides: Partial<SetupDeps> = {}): SetupDeps {
 }
 
 describe("createSetupApp — GET /", () => {
+  it("disables Scan and reveals its progress indicator on submission", async () => {
+    const html = await (await createSetupApp(deps()).request("/")).text();
+    const script = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];
+    expect(script).toBeDefined();
+    let submit!: () => void;
+    const button = { disabled: false, textContent: "Scan for printers" };
+    const progress = { hidden: true };
+    const form = {
+      addEventListener: (_: string, handler: () => void) => {
+        submit = handler;
+      },
+      querySelector: () => button,
+    };
+    runInNewContext(script!, {
+      document: {
+        querySelector: (selector: string) => (selector === "#bluetooth-scan" ? form : progress),
+      },
+    });
+    submit();
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toBe("Scanning…");
+    expect(progress.hidden).toBe(false);
+  });
+
   it("unconfigured renders the server-address form with the default name prefilled", async () => {
     const app = createSetupApp(deps());
     const res = await app.request("/");
@@ -274,6 +299,22 @@ describe("createSetupApp — Bluetooth pairing", () => {
     expect(html).toContain("AA:BB:CC:DD:EE:FF");
     expect(html).toContain('action="/bluetooth/pair"');
     expect(html).toContain('value="AA:BB:CC:DD:EE:FF"');
+  });
+
+  it("POST /bluetooth/scan explains a failed scan and allows another attempt", async () => {
+    const app = createSetupApp(
+      deps({
+        scanBluetooth: async () => {
+          throw new Error("unavailable");
+        },
+      }),
+    );
+    const res = await app.request("/bluetooth/scan", { method: "POST" });
+    expect(res.status).toBe(503);
+    const html = await res.text();
+    expect(html).toContain("Could not scan for Bluetooth printers");
+    expect(html).toContain('action="/bluetooth/scan"');
+    expect(html).not.toContain("No Bluetooth printers found");
   });
 
   it("POST /bluetooth/scan with no devices says so", async () => {

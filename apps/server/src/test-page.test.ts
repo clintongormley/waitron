@@ -17,16 +17,27 @@ function rasterHeaders(bytes: Uint8Array): { widthBytes: number; heightDots: num
 }
 
 describe("formatTestPage", () => {
-  it("prints only the resolution measurement, without width or character-set questions", () => {
+  it("prints the width measurements without the retired character-set questions", () => {
     const lines = printedLines(formatTestPage({ locale: "en-GB" }));
-    expect(lines.join(" ")).toMatch(/^Measure the black square/);
-    expect(lines.filter((line) => /^[ABCD] -|^[1-4]:/.test(line))).toEqual([]);
+    for (const [label, length] of [
+      ["A", 30],
+      ["B", 32],
+      ["C", 42],
+      ["D", 48],
+    ] as const) {
+      expect(lines.find((line) => line.startsWith(`${label} -`))).toBe(
+        `${label} ${"-".repeat(length - 3)}|`,
+      );
+    }
+    expect(lines.filter((line) => /^[1-4]:/.test(line))).toEqual([]);
     expect(lines.join(" ")).not.toContain("Choose the first line");
   });
 
   it("wraps every caption to 30 columns", () => {
     for (const locale of ["es-ES", "en-GB"] as const) {
-      const lines = printedLines(formatTestPage({ locale }));
+      const lines = printedLines(formatTestPage({ locale })).filter(
+        (line) => !/^[ABCD] -/.test(line),
+      );
       for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
     }
   });

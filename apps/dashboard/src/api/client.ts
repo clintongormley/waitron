@@ -680,6 +680,7 @@ export interface PrintAgentRow {
 }
 
 export interface Printer {
+  lastPrintAgentId: string | null;
   pendingJobs: number;
   lastPrintAt: string | null;
   id: string;

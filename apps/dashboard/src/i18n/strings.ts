@@ -753,12 +753,13 @@ export const en = {
     "Print tables 0–15 first. Compare both lines with the examples below, then choose the first matching code. If none matches, print the next range.",
   "printers.agent_setup": "Open print agent",
   "printers.calibrate": "Calibrate printer",
-  "printers.calibration_progress": "Step {step} of 3",
+  "printers.calibration_progress": "Step {step} of 4",
   "printers.calibration_characters": "Choose a character set",
   "printers.calibration_layout": "Set paper width and resolution",
-  "printers.calibration_receipt": "Test the receipt and cash drawer",
+  "printers.calibration_receipt": "Test the receipt",
+  "printers.calibration_drawer": "Does this printer have a cash drawer?",
   "printers.resolution_hint":
-    "Choose the paper width. To check resolution, print a test page and measure the QR code’s black square, excluding the white border: about 40 mm means 203 dpi; about 45 mm means 180 dpi.",
+    "Print a test page, then check the longest line that fits and measure the QR code’s black square, excluding the white border.",
   "printers.sample_hint":
     "Print a sample receipt with these settings. Check that the text, euro symbol and receipt width look correct.",
   "printers.drawer_attached": "Cash drawer attached",
@@ -2432,12 +2433,13 @@ export const es: Record<StringKey, string> = {
     "Imprime primero las tablas 0–15. Compara las dos líneas con los ejemplos de abajo y elige el primer código que coincida. Si no hay ninguno, imprime el siguiente rango.",
   "printers.agent_setup": "Abrir agente de impresión",
   "printers.calibrate": "Calibrar impresora",
-  "printers.calibration_progress": "Paso {step} de 3",
+  "printers.calibration_progress": "Paso {step} de 4",
   "printers.calibration_characters": "Elige el juego de caracteres",
   "printers.calibration_layout": "Ajusta el ancho y la resolución",
-  "printers.calibration_receipt": "Prueba el recibo y el cajón",
+  "printers.calibration_receipt": "Prueba el recibo",
+  "printers.calibration_drawer": "¿Esta impresora tiene un cajón?",
   "printers.resolution_hint":
-    "Elige el ancho del papel. Para comprobar la resolución, imprime una página de prueba y mide el cuadrado negro del código QR, sin el borde blanco: unos 40 mm indican 203 ppp; unos 45 mm indican 180 ppp.",
+    "Imprime una página de prueba, comprueba la línea más larga que cabe y mide el cuadrado negro del código QR, sin el borde blanco.",
   "printers.sample_hint":
     "Imprime un recibo de muestra con estos ajustes. Comprueba que el texto, el símbolo del euro y el ancho del recibo sean correctos.",
   "printers.drawer_attached": "Cajón portamonedas conectado",

@@ -172,6 +172,46 @@ export class PrintersScreen extends LitElement {
         gap: var(--wt-space-3);
         align-items: flex-end;
       }
+      .finder-examples {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-6);
+      }
+      .status-heading {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--wt-space-3);
+        margin-block: var(--wt-space-4);
+      }
+      .status-grid {
+        display: grid;
+        grid-template-columns: repeat(
+          auto-fit,
+          minmax(min(100%, calc(var(--wt-space-6) * 12)), 1fr)
+        );
+        gap: var(--wt-space-4);
+      }
+      .status-group {
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+        text-transform: uppercase;
+      }
+      .status-fields {
+        display: grid;
+        gap: var(--wt-space-4);
+        margin: 0;
+      }
+      .status-fields dt {
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+      .status-fields dd {
+        margin: 0;
+        font-weight: var(--wt-font-weight-bold);
+        overflow-wrap: anywhere;
+      }
       .field-row > * {
         flex: 1 1 calc(var(--wt-space-6) * 6);
         min-width: 0;
@@ -308,10 +348,12 @@ export class PrintersScreen extends LitElement {
   );
 
   @state() private view = "";
+  @state() private selectedPrinterId: string | null = null;
   readonly #url = new UrlStateController(
     this,
     () => {
       if (this.#url.read("dashboard") !== "printers") return;
+      this.selectedPrinterId = this.#url.read("printer");
       const view = this.#url.read("view");
       this.view =
         view !== null && ["queue", "printers", "agents"].includes(view)
@@ -348,6 +390,7 @@ export class PrintersScreen extends LitElement {
   @state() private printingSample = false;
   @state() private printingTableTest = false;
   @state() private tableBlockStart = 0;
+  @state() private widthLine = "";
   @state() private finderLocales: Partial<Record<number, SupportedLocale>> = {};
   @state() private finderChosenCode = "";
   #tableTestEpoch = 0;
@@ -881,6 +924,7 @@ export class PrintersScreen extends LitElement {
               hasCashDrawer: false,
               pendingJobs: 0,
               lastPrintAt: null,
+              lastPrintAgentId: null,
               active: true,
             },
       );
@@ -1352,6 +1396,7 @@ export class PrintersScreen extends LitElement {
     this.formErrors = {};
     this.errorKey = null;
     this.tableBlockStart = 0;
+    this.widthLine = "";
     this.finderLocales = {};
     this.finderChosenCode = "";
     this.#tableTestEpoch++;
@@ -1402,10 +1447,102 @@ export class PrintersScreen extends LitElement {
     </dashboard-row-actions>`;
   }
 
-  // This is the most recent inventory read, not a live presence indicator.
+  #printerObservation(p: Printer): Pick<DiscoveredPrinter, "agentName" | "lastSeenAt"> | undefined {
+    let latest: Pick<DiscoveredPrinter, "agentName" | "lastSeenAt"> | undefined;
+    const agent = this.agents.find(({ id }) => id === p.lastPrintAgentId);
+    if (agent && p.lastPrintAt) latest = { agentName: agent.name, lastSeenAt: p.lastPrintAt };
+    for (const device of this.discovered) {
+      if (device.printerId === p.id && (!latest || device.lastSeenAt > latest.lastSeenAt))
+        latest = device;
+    }
+    return latest;
+  }
+
+  #showPrinterStatus(id: string): void {
+    this.selectedPrinterId = id;
+    this.#url.write({ dashboard: "printers", view: this.view, printer: id });
+  }
+
+  #renderPrinterStatus(): TemplateResult {
+    const p = this.printers.find(({ id }) => id === this.selectedPrinterId);
+    const back = html`<wt-button
+      data-test="back-to-printers"
+      @click=${() => {
+        this.selectedPrinterId = null;
+        this.#url.write({ printer: null });
+      }}
+      >${t("action.back")}</wt-button
+    >`;
+    if (!p)
+      return html`${back}
+        <p role="status">
+          ${this.loading ? t("printers.table_loading") : codeMessage("printer.not_found")}
+        </p>`;
+    const seen = this.#printerObservation(p);
+    const field = (label: string, value: unknown, test = "") =>
+      html`<div>
+        <dt>${label}</dt>
+        <dd data-test=${test}>${value}</dd>
+      </div>`;
+    const registers = this.tills
+      .filter((till) => till.receiptPrinterId === p.id)
+      .map((till) => till.label);
+    return html`<section data-test="printer-status">
+      ${back}
+      <div class="status-heading">
+        <h1 class="title">${p.name}</h1>
+        <wt-button
+          variant="primary"
+          data-test="edit-printer-details"
+          @click=${(event: Event) => this.#openPrinter(p, event)}
+          >${t("action.edit")}</wt-button
+        >
+      </div>
+      <div class="status-grid">
+        <section>
+          <h2 class="status-group">${t("printers.status")}</h2>
+          <wt-card
+            ><dl class="status-fields">
+              ${field(t("printers.status"), t(p.active ? "printers.status_active" : "printers.status_inactive"))}
+              ${field(t("printers.pending_jobs"), p.pendingJobs)}
+              ${field(t("printers.last_print"), this.#timestamp(p.lastPrintAt))}
+              ${field(t("printers.last_seen_by"), p.transport === "cloud_poll" ? "—" : (seen?.agentName ?? t("printers.agent_unknown")))}
+              ${seen ? field(t("printers.last_seen"), this.#timestamp(seen.lastSeenAt)) : nothing}
+            </dl></wt-card
+          >
+        </section>
+        <section>
+          <h2 class="status-group">${t("printers.connection")}</h2>
+          <wt-card
+            ><dl class="status-fields">
+              ${field(t("printers.transport"), transportName(p.transport), `printer-transport-${p.id}`)}
+              ${field(t("printers.connection"), t(p.transport === "cloud_poll" ? "printers.connection_direct" : p.transport === "network_tcp" ? "printers.connection_network" : "printers.connection_roaming"), `printer-connection-${p.id}`)}
+              ${p.host ? field(t("printers.address"), `${p.host}${p.port === null ? "" : `:${p.port}`}`) : nothing}
+              ${p.localKey ? field(t("printers.local_key"), p.localKey) : nothing}
+              ${p.pollId ? field(t("printers.poll_id"), p.pollId) : nothing}
+            </dl></wt-card
+          >
+        </section>
+        <section>
+          <h2 class="status-group">${t("printers.calibrate")}</h2>
+          <wt-card
+            ><dl class="status-fields">
+              ${field(t("printers.paper_width"), t(p.paperWidth === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80"))}
+              ${field(t("printers.resolution"), t(p.resolution === "180dpi" ? "printers.resolution_180" : "printers.resolution_203"))}
+              ${field(t("printers.character_set"), characterSetOptions(currentLocale()).find(({ value }) => value === p.characterSet)?.label)}
+              ${field(t("printers.character_table"), p.characterTable)}
+              ${field(t("printers.drawer_attached"), t(p.hasCashDrawer ? "printers.yes" : "printers.no"), "printer-drawer")}
+              ${field(t("printers.cash_register"), registers.join(", ") || t("printers.no"), "printer-registers")}
+            </dl></wt-card
+          >
+        </section>
+      </div>
+    </section>`;
+  }
+
   #seenStatus(
     printerId: string,
-    device: DiscoveredPrinter | undefined,
+    device: Pick<DiscoveredPrinter, "agentName" | "lastSeenAt"> | undefined,
   ): TemplateResult | typeof nothing {
     if (device === undefined || device.agentName === null) return nothing;
     return html`<div data-test=${`printer-last-seen-${printerId}`} part="printer-meta">
@@ -1416,12 +1553,7 @@ export class PrintersScreen extends LitElement {
   }
 
   #renderPrintersSection(): TemplateResult {
-    const seen = new Map<string, DiscoveredPrinter>();
-    for (const device of this.discovered) {
-      if (device.printerId === null) continue;
-      const previous = seen.get(device.printerId);
-      if (!previous || device.lastSeenAt > previous.lastSeenAt) seen.set(device.printerId, device);
-    }
+    const seen = new Map(this.printers.map((p) => [p.id, this.#printerObservation(p)]));
     const columns: DataTableColumn<Printer>[] = [
       {
         key: "name",
@@ -1432,7 +1564,7 @@ export class PrintersScreen extends LitElement {
             variant="ghost"
             part="printer-name"
             data-test=${`printer-row-${p.id}`}
-            @click=${(event: Event) => this.#openPrinter(p, event)}
+            @click=${() => this.#showPrinterStatus(p.id)}
             >${p.name}</wt-button
           >`,
       },
@@ -1443,20 +1575,6 @@ export class PrintersScreen extends LitElement {
           html`<span data-test=${`printer-agent-${p.id}`}>
               ${p.transport === "cloud_poll" ? "—" : (seen.get(p.id)?.agentName ?? t("printers.agent_unknown"))} </span
             >${this.#seenStatus(p.id, seen.get(p.id))}`,
-      },
-      {
-        key: "connection",
-        label: t("printers.connection"),
-        cell: (p) =>
-          html`<span data-test=${`printer-connection-${p.id}`}
-            >${t(
-              p.transport === "cloud_poll"
-                ? "printers.connection_direct"
-                : p.transport === "network_tcp"
-                  ? "printers.connection_network"
-                  : "printers.connection_roaming",
-            )}</span
-          >`,
       },
       {
         key: "pending",
@@ -1485,26 +1603,6 @@ export class PrintersScreen extends LitElement {
         sortValue: (p) => p.lastPrintAt,
         cell: (p) => this.#timestamp(p.lastPrintAt),
       },
-      {
-        key: "till",
-        label: t("printers.cash_register"),
-        cell: (p) =>
-          this.tills.some((till) => till.receiptPrinterId === p.id)
-            ? t("printers.yes")
-            : t("printers.no"),
-      },
-      {
-        key: "type",
-        label: t("printers.transport"),
-        cell: (p) =>
-          html`<span data-test=${`printer-transport-${p.id}`}>${transportName(p.transport)}</span>`,
-      },
-      {
-        key: "address",
-        label: t("printers.address"),
-        cell: (p) => (p.host ? `${p.host}${p.port === null ? "" : `:${p.port}`}` : "—"),
-      },
-      { key: "device", label: t("printers.local_key"), cell: (p) => p.localKey ?? "—" },
       { key: "actions", label: t("printers.actions"), cell: (p) => this.#printerActions(p) },
     ];
     return html`<section>
@@ -1552,7 +1650,7 @@ export class PrintersScreen extends LitElement {
                     variant="ghost"
                     part="printer-name"
                     data-test=${`job-printer-${j.id}`}
-                    @click=${(event: Event) => this.#openPrinter(printer, event)}
+                    @click=${() => this.#showPrinterStatus(printer.id)}
                     >${printer.name}</wt-button
                   >`
                 : html`<span data-test=${`job-printer-${j.id}`}
@@ -1726,9 +1824,9 @@ export class PrintersScreen extends LitElement {
   #renderEditPrinter(): TemplateResult | typeof nothing {
     const p = this.editingPrinter;
     if (!p) return nothing;
-    const finderLocale = this.finderLocales[this.tableBlockStart];
-    const finder = finderLocale ? characterFinderOptions(finderLocale, this.tableBlockStart) : [];
-    const calibration = finderLocale ? characterCalibration(finderLocale) : null;
+    const finderLocale = this.finderLocales[this.tableBlockStart] ?? currentLocale();
+    const finder = characterFinderOptions(finderLocale, this.tableBlockStart);
+    const calibration = characterCalibration(finderLocale);
     const selectedCode =
       this.finderChosenCode === "plain"
         ? p.characterSet === "plain" && p.characterTable === 0
@@ -1761,7 +1859,7 @@ export class PrintersScreen extends LitElement {
         this.#closeTest();
         this.#restoreEditFocus();
       }}
-      @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep > 0 && this.calibrationStep < 3 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
+      @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep > 0 && this.calibrationStep < 4 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
     >
       <div class="form-fields">
         ${this.#renderFeedback()}
@@ -1811,23 +1909,51 @@ export class PrintersScreen extends LitElement {
           ?hidden=${this.calibrationStep !== 2}
         >
           <h2 class="title">${t("printers.calibration_layout")}</h2>
+          <p class="hint">${t("printers.resolution_hint")}</p>
+          <wt-button
+            variant="primary"
+            data-test=${`print-test-page-${p.id}`}
+            ?loading=${this.printingTest}
+            @click=${() => void this.#testPrint(p.id)}
+            >${t("printers.test_page")}</wt-button
+          >
+          <label class="setting-field">
+            ${t("printers.test_line_fits")}
+            <select
+              name="printer-width-line"
+              @change=${(e: Event) => {
+                this.widthLine = (e.target as HTMLSelectElement).value;
+                if (this.widthLine)
+                  this.#editPrinter(p.id, {
+                    paperWidth: ["A", "B"].includes(this.widthLine) ? "58mm" : "80mm",
+                  });
+              }}
+            >
+              <option value="" .selected=${this.widthLine === ""}>
+                ${t("printers.test_answer_choose")}
+              </option>
+              ${["A", "B", "C", "D"].map((line) => html`<option value=${line} .selected=${this.widthLine === line}>${line}</option>`)}
+            </select>
+          </label>
           <div class="field-row">
             <label class="setting-field"
               >${t("printers.paper_width")}
               <select
                 name="printer-paper-width"
                 .value=${p.paperWidth}
-                @change=${(e: Event) =>
+                @change=${(e: Event) => {
+                  this.widthLine = "";
                   this.#editPrinter(p.id, {
                     paperWidth: (e.target as HTMLSelectElement).value as PrintPaperWidth,
-                  })}
+                  });
+                }}
               >
                 <option value="80mm">${t("printers.paper_width_80")}</option>
                 <option value="58mm">${t("printers.paper_width_58")}</option>
               </select>
             </label>
             <label class="setting-field"
-              >${t("printers.resolution")}
+              >${t("printers.test_qr_help")}
               <select
                 name="printer-resolution"
                 .value=${p.resolution}
@@ -1836,18 +1962,11 @@ export class PrintersScreen extends LitElement {
                     resolution: (e.target as HTMLSelectElement).value as PrintResolution,
                   })}
               >
-                <option value="180dpi">${t("printers.resolution_180")}</option>
-                <option value="203dpi">${t("printers.resolution_203")}</option>
+                <option value="180dpi">${t("printers.test_qr_45")}</option>
+                <option value="203dpi">${t("printers.test_qr_40")}</option>
               </select>
             </label>
           </div>
-          <p class="hint">${t("printers.resolution_hint")}</p>
-          <wt-button
-            data-test=${`print-test-page-${p.id}`}
-            ?loading=${this.printingTest}
-            @click=${() => void this.#testPrint(p.id)}
-            >${t("printers.test_page")}</wt-button
-          >
         </div>
         <div
           data-test="calibration-step-1"
@@ -1874,25 +1993,24 @@ export class PrintersScreen extends LitElement {
               </select>
             </label>
             <wt-button
+              variant="primary"
               data-test=${`print-character-tables-${p.id}`}
               ?loading=${this.printingTableTest}
               @click=${() => void this.#testCharacterTables(p)}
               >${t("printers.character_table_test")}</wt-button
             >
           </div>
-          ${
-            calibration
-              ? calibration.finderEncodings.map(
-                  ({ label, characterSet }) =>
-                    html`<div class="hint" data-test=${`finder-expected-${label}`}>
-                      <strong>${label}:</strong>
-                      ${calibration.finderSampleLines.map(
-                        (line) => html`<div>${prepareText(line, characterSet)}</div>`,
-                      )}
-                    </div>`,
-                )
-              : nothing
-          }
+          <div class="finder-examples">
+            ${calibration.finderEncodings.map(
+              ({ label, characterSet }) =>
+                html`<div class="hint" data-test=${`finder-expected-${label}`}>
+                  <strong>${label}:</strong>
+                  ${calibration.finderSampleLines.map(
+                    (line) => html`<div>${prepareText(line, characterSet)}</div>`,
+                  )}
+                </div>`,
+            )}
+          </div>
           <label class="setting-field"
             >${t("printers.matching_code")}
             <select
@@ -1974,11 +2092,19 @@ export class PrintersScreen extends LitElement {
           <h2 class="title">${t("printers.calibration_receipt")}</h2>
           <p>${t("printers.sample_hint")}</p>
           <wt-button
+            variant="primary"
             data-test=${`print-sample-receipt-${p.id}`}
             ?loading=${this.printingSample}
             @click=${() => void this.#sampleReceipt(p)}
             >${t("printers.sample_receipt")}</wt-button
           >
+        </div>
+        <div
+          data-test="calibration-step-4"
+          class="form-fields"
+          ?hidden=${this.calibrationStep !== 4}
+        >
+          <h2 class="title">${t("printers.calibration_drawer")}</h2>
           <wt-switch
             name="printer-cash-drawer"
             label=${t("printers.drawer_attached")}
@@ -2047,7 +2173,7 @@ export class PrintersScreen extends LitElement {
           }
         </div>
         ${
-          this.calibrationStep > 0 && this.calibrationStep < 3
+          this.calibrationStep > 0 && this.calibrationStep < 4
             ? html`<wt-button
                 variant="primary"
                 data-test="calibration-next"
@@ -2286,25 +2412,29 @@ export class PrintersScreen extends LitElement {
   }
 
   override render(): TemplateResult {
-    return html`<h1 class="title">${t("printers.title")}</h1>
-      <wt-tabs
-        label=${t("printers.title")}
-        .value=${this.view}
-        .items=${[
-          { key: "queue", label: t("printers.jobs_title") },
-          { key: "printers", label: t("printers.list_title") },
-          { key: "agents", label: t("printers.agents_title") },
-        ]}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          if (event.target !== event.currentTarget) return;
-          this.view = event.detail.value;
-          this.#url.write({ dashboard: "printers", view: this.view });
-        }}
-      >
-        <div slot="queue">${this.#renderJobsSection()}</div>
-        <div slot="printers">${this.#renderPrintersSection()}</div>
-        <div slot="agents">${this.#renderAgentsSection()}</div> </wt-tabs
-      >${this.addingAgent || this.addingPrinter || this.editingAgent || this.editingPrinter ? nothing : this.#renderError()}
+    return html`${
+        this.selectedPrinterId
+          ? this.#renderPrinterStatus()
+          : html`<h1 class="title">${t("printers.title")}</h1>
+              <wt-tabs
+                label=${t("printers.title")}
+                .value=${this.view}
+                .items=${[
+                  { key: "queue", label: t("printers.jobs_title") },
+                  { key: "printers", label: t("printers.list_title") },
+                  { key: "agents", label: t("printers.agents_title") },
+                ]}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  if (event.target !== event.currentTarget) return;
+                  this.view = event.detail.value;
+                  this.#url.write({ dashboard: "printers", view: this.view });
+                }}
+              >
+                <div slot="queue">${this.#renderJobsSection()}</div>
+                <div slot="printers">${this.#renderPrintersSection()}</div>
+                <div slot="agents">${this.#renderAgentsSection()}</div>
+              </wt-tabs>`
+      }${this.addingAgent || this.addingPrinter || this.editingAgent || this.editingPrinter ? nothing : this.#renderError()}
       ${this.#renderAgentModal()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}
       <dashboard-print-job-preview
         .preview=${this.preview}

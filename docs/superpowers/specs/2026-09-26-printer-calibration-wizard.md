@@ -1,5 +1,25 @@
 # Printer calibration wizard
 
+## Follow-up, 26 September 2026
+
+The setup flow below records the original three-step design. Its follow-up uses four steps:
+choose characters, measure the paper and QR, test the receipt, then answer whether a cash drawer
+is attached. The measurement sheet restores the A/B/C/D width lines. You choose the longest
+unwrapped line and whether the QR is closer to 40 mm or 45 mm; the screen derives the settings.
+
+Finder options and the side-by-side W and 8 examples are available before you print. Printed and
+on-screen codes now use `06-W` and `06-8`. Historical hardware observations below retain the
+labels that were printed at the time.
+
+Click a printer name to open its status page, including connection details, calibration settings,
+drawer attachment and an Edit button. Drawer attachment and till assignment are separate fields.
+The most recent completed print supplies the observing agent when no newer discovery result exists.
+
+The print-agent setup page shows progress during Bluetooth scans and a retryable error when a
+scan fails. Command failures and simulated discovery refusals are tested; the Bluetooth radio and
+printer have not been verified in this follow-up. Bluetooth job delivery still needs the per-device
+connection implementation identified by `liveBtDevicePath` in `apps/print-agent/src/linux-devices.ts`.
+
 ## Setup flow
 
 You enter calibration immediately after adding or reactivating a printer. An existing printer's

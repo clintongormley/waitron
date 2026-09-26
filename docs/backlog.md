@@ -2137,6 +2137,14 @@ The Printers screen also gained a remembered status filter, one-click disable, l
 agent's setup page, and shows the agent that last saw each printer without implying it is bound to it.
 [Current design and physical evidence](superpowers/specs/2026-09-26-printer-calibration-wizard.md).
 
+**Calibration and status follow-up (2026-09-26, implemented on the `printers` branch):** four calibration steps separate
+the cash-drawer question from the receipt test. Finder codes use `nn-W`/`nn-8` and are available
+before printing; the paper-width lines are restored. Clicking a printer opens its status and
+connection details, with drawer attachment distinct from till assignment. Completed print jobs
+provide a last-seen agent when discovery has expired. Bluetooth scans show progress and report
+failures, but real Bluetooth discovery and delivery remain hardware-unverified; the per-device
+Bluetooth delivery connection is still unimplemented in `liveBtDevicePath`.
+
 - **The setup-page link is unproven on the box.** The print agent now builds it from
   `WAITRON_SETUP_URL` (set on the box as `WAITRON_PRINT_AGENT_SETUP_URL`, which `deploy/compose.yml`
   passes through), or from the first of `WAITRON_BOX_ADDRESSES` (`apps/print-agent/src/config.ts`); unit tests cover the parsing, but no review seat ran the deployed

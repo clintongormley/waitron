@@ -60,6 +60,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
+    lastPrintAgentId: null,
     active: true,
   },
   {
@@ -78,6 +79,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
+    lastPrintAgentId: null,
     active: false,
   },
   {
@@ -96,6 +98,7 @@ const printers: Printer[] = [
     hasCashDrawer: false,
     pendingJobs: 0,
     lastPrintAt: null,
+    lastPrintAgentId: null,
     active: false,
   },
 ];
@@ -318,7 +321,60 @@ async function chooseOption(el: PrintersScreen, name: string, value: string): Pr
 }
 
 describe("guided printer calibration", () => {
-  async function openStepThree(api: DashboardApi): Promise<PrintersScreen> {
+  it("offers matching codes before printing and saves a selected code", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openPrinter(el);
+    q(el, "[data-test=calibrate-printer]")!.click();
+    await flush(el);
+    expect(q(el, 'option[value="11-W"]')?.textContent?.trim()).toBe("11-W");
+    expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull();
+    expect(q(el, '[data-test="finder-expected-8"]')).not.toBeNull();
+    await chooseOption(el, "printer-matching-code", "11-W");
+    for (let step = 1; step < 4; step++) {
+      q(el, "[data-test=calibration-next]")!.click();
+      await flush(el);
+    }
+    expect(q(el, "[data-test=calibration-step-4]")?.checkVisibility()).toBe(true);
+    expect(q(el, "[data-test=calibration-step-3]")?.checkVisibility()).toBe(false);
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledWith("p1", { characterTable: 11 });
+    expect(api.testCharacterTables).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["A", "203dpi", "58mm"],
+    ["D", "180dpi", "80mm"],
+  ])(
+    "derives layout settings from the width and QR answers (%s)",
+    async (line, resolution, paperWidth) => {
+      const api = stubApi();
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await flush(el);
+      await openPrinter(el);
+      q(el, "[data-test=calibrate-printer]")!.click();
+      await flush(el);
+      q(el, "[data-test=calibration-next]")!.click();
+      await flush(el);
+      expect(q(el, 'select[name="printer-width-line"]')).not.toBeNull();
+      await chooseOption(el, "printer-width-line", line!);
+      await chooseOption(el, "printer-resolution", resolution!);
+      q(el, "[data-test=calibration-next]")!.click();
+      await flush(el);
+      q(el, "[data-test=print-sample-receipt-p1]")!.click();
+      await flush(el);
+      expect(api.sampleReceipt).toHaveBeenCalledWith("p1", {
+        paperWidth,
+        resolution,
+        characterSet: "wpc1252",
+        characterTable: 16,
+      });
+    },
+  );
+
+  async function openStepFour(api: DashboardApi): Promise<PrintersScreen> {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     await openPrinter(el);
@@ -328,8 +384,25 @@ describe("guided printer calibration", () => {
     await flush(el);
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
     return el;
   }
+
+  it("clears the width answer when paper width is changed directly", async () => {
+    const el = await openStepFour(stubApi());
+    for (let step = 4; step > 2; step--) {
+      q(el, "[data-test=calibration-back]")!.click();
+      await flush(el);
+    }
+    await chooseOption(el, "printer-width-line", "A");
+    const answer = q(el, '[name="printer-width-line"]') as HTMLSelectElement;
+    expect(answer.value).toBe("A");
+    expect((q(el, '[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("58mm");
+    await chooseOption(el, "printer-paper-width", "80mm");
+    expect(answer.value).toBe("");
+    expect(answer.selectedOptions[0]!.textContent!.trim()).toBe(t("printers.test_answer_choose"));
+  });
 
   it("opens the drawer only on an explicit test and records the operator's observation", async () => {
     let complete!: () => void;
@@ -341,14 +414,18 @@ describe("guided printer calibration", () => {
           }),
       ),
     });
-    const el = await openStepThree(api);
+    const el = await openStepFour(api);
     expect(q(el, "[data-test=test-printer-drawer]")).toBeNull();
     toggleSwitch(el, '[name="printer-cash-drawer"]', true);
     await flush(el);
     expect(api.testPrinterDrawer).not.toHaveBeenCalled();
+    q(el, "[data-test=calibration-back]")!.click();
+    await flush(el);
     q(el, "[data-test=print-sample-receipt-p1]")!.click();
     await flush(el);
     expect(api.testPrinterDrawer).not.toHaveBeenCalled();
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
     const button = q(el, "[data-test=test-printer-drawer]")!;
     button.click();
     button.click();
@@ -358,12 +435,12 @@ describe("guided printer calibration", () => {
     await flush(el);
     q(el, '[name="printer-drawer-result"][value="closed"]')!.click();
     await flush(el);
-    expect(q(el, '[data-test="calibration-step-3"]')!.textContent).toContain(
+    expect(q(el, '[data-test="calibration-step-4"]')!.textContent).toContain(
       t("printers.drawer_check"),
     );
     q(el, '[name="printer-drawer-result"][value="opened"]')!.click();
     await flush(el);
-    expect(q(el, '[data-test="calibration-step-3"]')!.textContent).not.toContain(
+    expect(q(el, '[data-test="calibration-step-4"]')!.textContent).not.toContain(
       t("printers.drawer_check"),
     );
     q(el, "[data-test=calibration-back]")!.click();
@@ -383,7 +460,10 @@ describe("guided printer calibration", () => {
       listPrinters: vi.fn().mockResolvedValue([{ ...printers[0]!, hasCashDrawer: true }]),
       testPrinterDrawer: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
     });
-    const el = await openStepThree(api);
+    const el = await openStepFour(api);
+    expect(q(el, '[name="printer-cash-drawer"]')!.shadowRoot!.querySelector("input")!.checked).toBe(
+      true,
+    );
     q(el, "[data-test=test-printer-drawer]")!.click();
     await flush(el);
     expect(text(el, "[data-test=edit-printer-modal] [role=alert]")).toBe(
@@ -412,7 +492,7 @@ describe("guided printer calibration", () => {
           }),
         ),
       });
-      const el = await openStepThree(api);
+      const el = await openStepFour(api);
       q(el, "[data-test=test-printer-drawer]")!.click();
       await flush(el);
       q(el, "[data-test=cancel-edit-printer]")!.click();
@@ -428,7 +508,7 @@ describe("guided printer calibration", () => {
 
   it("does not write unchanged calibration settings", async () => {
     const api = stubApi();
-    const el = await openStepThree(api);
+    const el = await openStepFour(api);
     q(el, "[data-test=save-printer-p1]")!.click();
     await flush(el);
     expect(api.updatePrinter).not.toHaveBeenCalled();
@@ -446,6 +526,8 @@ describe("guided printer calibration", () => {
     toggleSwitch(el, "[data-test=printer-active-p1]", false);
     await flush(el);
     q(el, "[data-test=calibrate-printer]")!.click();
+    await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
@@ -507,9 +589,9 @@ describe("guided printer calibration", () => {
     q(el, "[data-test=print-character-tables-p9]")!.click();
     await flush(el);
     await chooseOption(el, "printer-table-block", "0");
-    expect(q(el, 'option[value="8-06"]')).not.toBeNull();
+    expect(q(el, 'option[value="06-8"]')).not.toBeNull();
     expect(api.testCharacterTables).toHaveBeenCalledTimes(2);
-    await chooseOption(el, "printer-matching-code", "8-06");
+    await chooseOption(el, "printer-matching-code", "06-8");
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
     expect(q(el, "[data-test=calibration-step-2]")?.checkVisibility()).toBe(true);
@@ -526,6 +608,8 @@ describe("guided printer calibration", () => {
       characterSet: "pc858",
       characterTable: 6,
     });
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
     toggleSwitch(el, '[name="printer-cash-drawer"]', true);
     await flush(el);
     expect(api.updatePrinter).not.toHaveBeenCalled();
@@ -694,15 +778,47 @@ describe("printers-screen", () => {
     await flush(el);
 
     await filterPrinters(el, "all");
+    expect(text(el, "[data-test=printer-agent-p1]")).toBe("Sin observaciones recientes");
+    expect(text(el, "[data-test=printer-agent-p2]")).toBe("—");
+    q(el, "[data-test=printer-row-p1]")!.click();
+    await flush(el);
     expect(text(el, "[data-test=printer-transport-p1]")).toBe(
       transportName("network_tcp", "es-ES"),
     );
-    expect(text(el, "[data-test=printer-transport-p2]")).toBe(transportName("cloud_poll", "es-ES"));
-    expect(text(el, "[data-test=printer-agent-p1]")).toBe("Sin observaciones recientes");
-    expect(text(el, "[data-test=printer-agent-p2]")).toBe("—");
     expect(text(el, "[data-test=printer-connection-p1]")).toBe("Cualquier agente del local");
+    q(el, "[data-test=back-to-printers]")!.click();
+    await flush(el);
+    q(el, "[data-test=printer-row-p2]")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=printer-transport-p2]")).toBe(transportName("cloud_poll", "es-ES"));
     expect(text(el, "[data-test=printer-connection-p2]")).toBe("Directa (sin agente)");
+    q(el, "[data-test=back-to-printers]")!.click();
+    await flush(el);
+    q(el, "[data-test=printer-row-p3]")!.click();
+    await flush(el);
     expect(text(el, "[data-test=printer-connection-p3]")).toBe("Puede cambiar de agente");
+  });
+
+  it("ignores saved sort and filter settings for removed printer columns", async () => {
+    sessionStorage.setItem(
+      "printers:table",
+      JSON.stringify({
+        sortKey: "connection",
+        sortDirection: "descending",
+        filters: { address: "10.0.0.9", status: "" },
+      }),
+    );
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    await selectTab(el, "printers");
+    for (const id of ["p1", "p2", "p3"])
+      expect(q(el, `[data-test=printer-row-${id}]`)).not.toBeNull();
+    expect((q(el, '[name="status-filter"]') as HTMLSelectElement).value).toBe("");
+    expect(
+      (q(el, "[data-test=printers-table]") as import("@waitron/ui").WtDataTable).sortKey,
+    ).not.toBe("connection");
   });
 
   it("renders each job's status, attempts, resolved printer and last error", async () => {
@@ -1913,6 +2029,7 @@ describe("printers-screen", () => {
       hasCashDrawer: false,
       pendingJobs: 0,
       lastPrintAt: null,
+      lastPrintAgentId: null,
       active: true,
     };
     const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([usb]) });
@@ -1954,6 +2071,7 @@ describe("printers-screen", () => {
       hasCashDrawer: false,
       pendingJobs: 0,
       lastPrintAt: null,
+      lastPrintAgentId: null,
       active: true,
     };
     const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([usb]) });
@@ -2603,7 +2721,7 @@ it("keeps a disabled printer available when adding it again fails", async () => 
 });
 
 it.each(["printer-row-p1", "job-printer-j1"])(
-  "opens printer calibration from %s",
+  "opens printer status then its editor from %s",
   async (selector) => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi(),
@@ -2612,12 +2730,111 @@ it.each(["printer-row-p1", "job-printer-j1"])(
     await selectTab(el, selector.startsWith("printer-row") ? "printers" : "queue");
     q(el, `[data-test=${selector}]`)!.click();
     await flush(el);
+    expect(q(el, "[data-test=printer-status]")?.checkVisibility()).toBe(true);
+    expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
+    expect(text(el, "[data-test=printer-status]")).toContain("10.0.0.9:9100");
+    q(el, "[data-test=edit-printer-details]")!.click();
+    await flush(el);
     expect(q(el, "[data-test=edit-printer-modal]")?.checkVisibility()).toBe(true);
     expect((q(el, "[data-test=printer-name-p1]") as import("@waitron/ui").WtInput)?.value).toBe(
       "Cocina",
     );
   },
 );
+
+it("shows the saved drawer independently of register assignment and the delivering agent without discovery", async () => {
+  const api = stubApi({
+    listPrinters: vi.fn().mockResolvedValue([
+      {
+        ...printers[0]!,
+        hasCashDrawer: true,
+        lastPrintAgentId: "a1",
+        lastPrintAt: "2026-09-26T14:00:00.000Z",
+      },
+    ]),
+    listTills: vi.fn().mockResolvedValue([]),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  await selectTab(el, "printers");
+  expect(text(el, "[data-test=printer-agent-p1]")).toBe("Cocina agent");
+  q(el, "[data-test=printer-row-p1]")!.click();
+  await flush(el);
+  expect(text(el, "[data-test=printer-drawer]")).toBe(t("printers.yes"));
+  expect(text(el, "[data-test=printer-registers]")).toBe(t("printers.no"));
+  expect(text(el, "[data-test=printer-status]")).toContain("2026-09-26 14:00");
+});
+
+it("reopens printer status from its URL and reflects a saved drawer choice", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1?keep=yes");
+  let stored = { ...printers[0]! };
+  const api = stubApi({
+    listPrinters: vi.fn().mockImplementation(async () => [stored]),
+    updatePrinter: vi.fn().mockImplementation(async (_id, patch) => {
+      stored = { ...stored, ...patch };
+    }),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  expect(text(el, "[data-test=printer-drawer]")).toBe(t("printers.no"));
+  q(el, "[data-test=edit-printer-details]")!.click();
+  await flush(el);
+  toggleSwitch(el, '[name="printer-cash-drawer"]', true);
+  await flush(el);
+  q(el, "[data-test=save-printer-p1]")!.click();
+  await flush(el);
+  expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
+  expect(text(el, "[data-test=printer-drawer]")).toBe(t("printers.yes"));
+  q(el, "[data-test=back-to-printers]")!.click();
+  await flush(el);
+  expect(location.pathname).toBe("/manage/printers/view/printers");
+  expect(location.search).toBe("?keep=yes");
+  expect(q(el, "[data-test=printers-table]")!.checkVisibility()).toBe(true);
+  q(el, "[data-test=printer-row-p1]")!.click();
+  await flush(el);
+  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  history.replaceState(null, "", "/manage/printers/view/printers");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  expect(q(el, "[data-test=printer-status]")).toBeNull();
+});
+
+it("keeps printer status live without replacing an open editing draft", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=edit-printer-details]")!.click();
+  await flush(el);
+  typeField(el, "[data-test=printer-name-p1]", "Unsaved name");
+  vi.mocked(api.listPrinters).mockResolvedValue([
+    {
+      ...printers[0]!,
+      name: "Updated printer",
+      lastPrintAgentId: "a1",
+      lastPrintAt: "2026-09-26T16:00:00.000Z",
+    },
+  ]);
+  liveData.invalidate([{ type: "print_jobs", id: "j1" }]);
+  await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+  await flush(el);
+  expect(text(el, "[data-test=printer-status]")).toContain("Cocina agent");
+  expect(text(el, "[data-test=printer-status]")).toContain("2026-09-26 16:00");
+  expect((q(el, "[data-test=printer-name-p1]") as import("@waitron/ui").WtInput).value).toBe(
+    "Unsaved name",
+  );
+});
+
+it("explains an unknown printer URL and lets you return to the list", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/missing");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api: stubApi() });
+  await flush(el);
+  expect(text(el, '[role="status"]')).toContain(codeMessage("printer.not_found"));
+  q(el, "[data-test=back-to-printers]")!.click();
+  await flush(el);
+  expect(q(el, "[data-test=printer-row-p1]")).not.toBeNull();
+});
 
 it("shows the newest observing agent even when discovery entries arrive out of order", async () => {
   const device = discovered[1]!;
@@ -3019,14 +3236,14 @@ describe("printer layout settings", () => {
     await openPrinter(el, "p1");
     q(el, '[data-test="print-character-tables-p1"]')!.click();
     await flush(el);
-    await chooseOption(el, "printer-matching-code", "8-06");
+    await chooseOption(el, "printer-matching-code", "06-8");
     q(el, '[data-test="print-character-tables-p1"]')!.click();
     await flush(el);
-    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("8-06");
+    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("06-8");
     expect(api.testCharacterTables).toHaveBeenCalledTimes(2);
     await chooseOption(el, "printer-table-block", "16");
     await chooseOption(el, "printer-table-block", "0");
-    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("8-06");
+    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("06-8");
   });
 
   it("sets both saved text fields when switching from a matching code to plain letters", async () => {
@@ -3036,7 +3253,7 @@ describe("printer layout settings", () => {
     await openPrinter(el, "p1");
     q(el, '[data-test="print-character-tables-p1"]')!.click();
     await flush(el);
-    await chooseOption(el, "printer-matching-code", "8-06");
+    await chooseOption(el, "printer-matching-code", "06-8");
     await chooseOption(el, "printer-matching-code", "plain");
     expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe(
       "plain",
@@ -3060,25 +3277,25 @@ describe("printer layout settings", () => {
     expect(
       q(el, 'wt-disclosure[data-test="advanced-character-settings"]')!.hasAttribute("open"),
     ).toBe(false);
-    expect(q(el, '[data-test="finder-expected-W"]')).toBeNull();
+    expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull();
     q(el, '[data-test="print-character-tables-p1"]')!.click();
     await flush(el);
     expect(api.testCharacterTables).toHaveBeenLastCalledWith("p1", 0);
     expect(q(el, '[data-test="finder-expected-W"]')!.textContent).toContain("áéíóú ÁÉÍÓÚ ñÑ üÜ");
     expect(q(el, '[data-test="finder-expected-W"]')!.textContent).toContain("¿¡ € £ çÇ “ ” ‘ ’");
     await chooseOption(el, "printer-table-block", "16");
-    expect(q(el, 'select[name="printer-matching-code"] option[value="8-06"]')).toBeNull();
-    expect(q(el, '[data-test="finder-expected-W"]')).toBeNull();
+    expect(q(el, 'select[name="printer-matching-code"] option[value="06-8"]')).toBeNull();
+    expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull();
     q(el, '[data-test="print-character-tables-p1"]')!.click();
     await flush(el);
     expect(api.testCharacterTables).toHaveBeenLastCalledWith("p1", 16);
-    expect(q(el, 'select[name="printer-matching-code"] option[value="8-16"]')).not.toBeNull();
+    expect(q(el, 'select[name="printer-matching-code"] option[value="16-8"]')).not.toBeNull();
     expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("");
     await chooseOption(el, "printer-table-block", "0");
     q(el, '[data-test="print-character-tables-p1"]')!.click();
     await flush(el);
-    await chooseOption(el, "printer-matching-code", "8-06");
-    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("8-06");
+    await chooseOption(el, "printer-matching-code", "06-8");
+    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("06-8");
     expect((q(el, 'select[name="printer-character-set"]') as HTMLSelectElement).value).toBe(
       "pc858",
     );
@@ -3167,6 +3384,8 @@ describe("printer layout settings", () => {
       characterSet: "plain",
       characterTable: 0,
     });
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
     q(el, "[data-test=save-printer-p1]")!.click();
     await flush(el);
     expect(api.updatePrinter).toHaveBeenCalledWith("p1", {
@@ -3663,8 +3882,11 @@ describe("printers-screen tabs, tables and refresh edges", () => {
     await flush(el);
     await selectTab(el, "printers");
 
-    const row = q(el, "[data-test=printer-row-p1]")!.closest("tr")!;
-    const cells = Array.from(row.querySelectorAll("td")).map((cell) => cell.textContent!.trim());
+    q(el, "[data-test=printer-row-p1]")!.click();
+    await flush(el);
+    const cells = Array.from(q(el, "[data-test=printer-status]")!.querySelectorAll("dd")).map(
+      (cell) => cell.textContent!.trim(),
+    );
     expect(cells).toContain("10.0.0.9");
     expect(cells.some((cell) => cell.startsWith("10.0.0.9:"))).toBe(false);
   });
@@ -4110,7 +4332,7 @@ describe("printers-screen printer editor edges", () => {
         codeMessage("printer.not_found"),
       ),
     );
-    expect(q(el, '[data-test="finder-expected-W"]')).toBeNull();
+    expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull();
   });
 
   it("does not adopt a character-table page's result after the table range changed", async () => {
@@ -4130,8 +4352,10 @@ describe("printers-screen printer editor edges", () => {
 
     await vi.waitFor(() => expect(api.listRecentJobs).toHaveBeenCalledTimes(2));
     await flush(el);
-    expect(q(el, '[data-test="finder-expected-W"]')).toBeNull();
-    expect(q(el, 'select[name="printer-matching-code"] option[value="8-16"]')).toBeNull();
+    expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull();
+    expect(q(el, 'select[name="printer-matching-code"] option[value="16-8"]')).not.toBeNull();
+    expect(q(el, 'select[name="printer-matching-code"] option[value="00-8"]')).toBeNull();
+    expect((q(el, 'select[name="printer-matching-code"]') as HTMLSelectElement).value).toBe("");
   });
 
   it("does not adopt a test page's result after its dialog was cancelled", async () => {
@@ -4164,6 +4388,8 @@ describe("printers-screen printer editor edges", () => {
     await flush(el);
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
     q(el, "[data-test=save-printer-p1]")!.click();
     await vi.waitFor(() =>
       expect(api.updatePrinter).toHaveBeenCalledWith("p1", {
@@ -4188,7 +4414,7 @@ describe("printers-screen printer editor edges", () => {
     const { el, api } = await mountEditing("p1");
     q(el, "[data-test=print-character-tables-p1]")!.click();
     await vi.waitFor(() => expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull());
-    await chooseOption(el, "printer-matching-code", "8-06");
+    await chooseOption(el, "printer-matching-code", "06-8");
 
     await chooseOption(el, "printer-matching-code", "");
 
